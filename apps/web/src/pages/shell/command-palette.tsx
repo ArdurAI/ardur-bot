@@ -1,5 +1,3 @@
-import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
 import type { Bot } from "@ardurbot/contracts";
 import {
   Badge,
@@ -14,6 +12,8 @@ import {
   CommandShortcut,
   Kbd,
 } from "@ardurbot/ui-web";
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import { useEffect, useMemo, useState } from "react";
 
 function isApplePlatform() {

@@ -1,4 +1,3 @@
-import { ORPCError } from "@orpc/server";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import {
   createVoiceProvider,
@@ -22,6 +21,7 @@ import {
   type PrismaClient,
   selectSpaceVoicePreference,
 } from "@ardurbot/db";
+import { ORPCError } from "@orpc/server";
 import type { Context, Hono } from "hono";
 import { readBoundedBody } from "./http-body.js";
 import { withSerializableRetry } from "./serializable-retry.js";

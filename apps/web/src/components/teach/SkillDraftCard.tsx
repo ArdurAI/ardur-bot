@@ -1,7 +1,7 @@
-import { Trans } from "@lingui/react/macro";
 import type { SkillPlaybook } from "@ardurbot/contracts";
 import { formatSkillRunPrompt } from "@ardurbot/core";
 import { Button, Input, Label, Textarea } from "@ardurbot/ui-web";
+import { Trans } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
 

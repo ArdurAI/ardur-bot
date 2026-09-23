@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createMemoryState } from "@chat-adapter/state-memory";
 import type {
   AdapterContext,
   AdapterDescriptor,
@@ -12,6 +11,7 @@ import type {
   MessagingSendResult,
   MessagingSurface,
 } from "@ardurbot/adapter-kit";
+import { createMemoryState } from "@chat-adapter/state-memory";
 import type { Adapter, Message, Thread } from "chat";
 import { Chat } from "chat";
 

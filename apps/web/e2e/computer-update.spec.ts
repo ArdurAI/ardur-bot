@@ -1,12 +1,17 @@
-import { expect, test } from "@playwright/test";
 import type { ComputerUpdate } from "@ardurbot/contracts";
+import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
 
 test("computer maintenance shows durable background progress and failure recovery", async ({
   page,
 }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem("ardurbot.uiAppearance", "dark"));
-  await signup(page, `computer-update-${Date.now()}@ardurbot.test`, "password12", "Computer Update");
+  await signup(
+    page,
+    `computer-update-${Date.now()}@ardurbot.test`,
+    "password12",
+    "Computer Update",
+  );
   await completeOnboarding(page);
   const botId = activeBotId(page);
   let updates: ComputerUpdate[] = [];

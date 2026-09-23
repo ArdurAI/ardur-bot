@@ -1,4 +1,16 @@
 import { randomUUID } from "node:crypto";
+import type {
+  AdapterContext,
+  AgentRunRequest,
+  AgentRuntime,
+  AgentRuntimeEvent,
+  AgentSteeringMessage,
+  AgentToolCompletion,
+  AgentToolExecutionResult,
+  ConnectorTool,
+} from "@ardurbot/adapter-kit";
+import { usableModelId } from "@ardurbot/contracts";
+import { getLogger } from "@ardurbot/logging";
 import {
   Agent,
   type AgentMessage,
@@ -15,18 +27,6 @@ import {
   Type,
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import type {
-  AdapterContext,
-  AgentRunRequest,
-  AgentRuntime,
-  AgentRuntimeEvent,
-  AgentSteeringMessage,
-  AgentToolCompletion,
-  AgentToolExecutionResult,
-  ConnectorTool,
-} from "@ardurbot/adapter-kit";
-import { usableModelId } from "@ardurbot/contracts";
-import { getLogger } from "@ardurbot/logging";
 import { isToolPauseResult } from "./approval-effect.js";
 import { builtinAgentTools, DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";

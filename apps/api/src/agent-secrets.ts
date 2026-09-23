@@ -1,7 +1,7 @@
-import { ORPCError } from "@orpc/server";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { Prisma, type PrismaClient, withTransactionRetry } from "@ardurbot/db";
+import { ORPCError } from "@orpc/server";
 
 type AgentSecretDeps = {
   prisma: PrismaClient;

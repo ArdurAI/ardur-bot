@@ -1,4 +1,3 @@
-import { type CommandResult, Sandbox, TimeoutError } from "@e2b/desktop";
 import type {
   AdapterContext,
   CommandRequest,
@@ -15,6 +14,7 @@ import type {
   ScreenSession,
 } from "@ardurbot/adapter-kit";
 import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
+import { type CommandResult, Sandbox, TimeoutError } from "@e2b/desktop";
 import { sandboxIdleMs } from "./computer-idle.js";
 import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
 import {

@@ -291,7 +291,11 @@ describe("saveSupermemoryMemoryToContainers", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      saveSupermemoryMemoryToContainers("fact", ["ardurbot:workspace:ws-1", "ardurbot:bot-1"], config),
+      saveSupermemoryMemoryToContainers(
+        "fact",
+        ["ardurbot:workspace:ws-1", "ardurbot:bot-1"],
+        config,
+      ),
     ).resolves.toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     vi.unstubAllGlobals();

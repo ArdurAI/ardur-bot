@@ -1,8 +1,8 @@
+import { ChatMarkdown } from "@ardurbot/chat-ui/web";
+import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@ardurbot/ui-web";
 import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { ChatMarkdown } from "@ardurbot/chat-ui/web";
-import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@ardurbot/ui-web";
 import { Download, FileText, X } from "lucide-react";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import {

@@ -1,6 +1,6 @@
-import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { ModelConnectInput, ModelCredential, ThinkingLevel } from "@ardurbot/contracts";
 import { OPENAI_COMPATIBLE_PROVIDER_ID as CONTRACT_OPENAI_COMPAT } from "@ardurbot/contracts";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { modelIdSupportsImages, updateModelImageCapabilities } from "./model-vision.js";
 import { parseModelSecret, type StoredModelSecret, serializeModelSecret } from "./pi-oauth.js";
 import {

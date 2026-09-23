@@ -1,6 +1,5 @@
-import { Separator as SeparatorPrimitive } from "@base-ui/react/separator";
-
 import { cn } from "@ardurbot/ui-web/lib/utils";
+import { Separator as SeparatorPrimitive } from "@base-ui/react/separator";
 
 function Separator({ className, orientation = "horizontal", ...props }: SeparatorPrimitive.Props) {
   return (

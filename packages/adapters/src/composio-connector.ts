@@ -1,4 +1,3 @@
-import { Composio } from "@composio/core";
 import type {
   AdapterContext,
   ConnectedConnector,
@@ -10,6 +9,7 @@ import type {
   ManagedConnectorProvider,
 } from "@ardurbot/adapter-kit";
 import { getLogger } from "@ardurbot/logging";
+import { Composio } from "@composio/core";
 import {
   composioToolkitDirectory,
   mergeCatalogWithConnected,

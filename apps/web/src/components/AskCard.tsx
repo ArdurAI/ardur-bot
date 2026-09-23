@@ -1,9 +1,9 @@
-import { t } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { ThreadMessage } from "@ardurbot/contracts";
 import { isApprovalAskBlock, isSecretAskBlock, selectedAskActionLabel } from "@ardurbot/core";
 import { Button, Input } from "@ardurbot/ui-web";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useState } from "react";
 
 export type AskBlock = Extract<ThreadMessage["blocks"][number], { kind: "ask" }>;

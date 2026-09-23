@@ -1,5 +1,10 @@
 import type { TransactionalEmail, TransactionalEmailProvider } from "@ardurbot/adapter-kit";
-import { emailAllowed, isMessagingEmail, parseAllowlist, signupPolicyFromEnv } from "@ardurbot/core";
+import {
+  emailAllowed,
+  isMessagingEmail,
+  parseAllowlist,
+  signupPolicyFromEnv,
+} from "@ardurbot/core";
 import { bootstrapUserSpace, type PrismaClient } from "@ardurbot/db";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";

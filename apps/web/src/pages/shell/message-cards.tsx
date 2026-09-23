@@ -1,7 +1,7 @@
-import { Trans, useLingui } from "@lingui/react/macro";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { abortableDelay } from "@ardurbot/core";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@ardurbot/ui-web";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BuiCard, SuccessPop } from "../../components/ai/primitives";

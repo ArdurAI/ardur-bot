@@ -45,11 +45,15 @@ describe("resolveUpdaterConfig", () => {
 
   it("binds to loopback unless the deployment says otherwise, so a stray port is not a door", () => {
     expect(resolveUpdaterConfig({ ...base }).host).toBe("127.0.0.1");
-    expect(resolveUpdaterConfig({ ...base, ARDURBOT_UPDATER_HOST: "0.0.0.0" }).host).toBe("0.0.0.0");
+    expect(resolveUpdaterConfig({ ...base, ARDURBOT_UPDATER_HOST: "0.0.0.0" }).host).toBe(
+      "0.0.0.0",
+    );
   });
 
   it("refuses a deployment directory that is missing or relative", () => {
-    expect(() => resolveUpdaterConfig({ ARDURBOT_UPDATER_TOKEN: "t" })).toThrow(/ARDURBOT_DEPLOY_DIR/);
+    expect(() => resolveUpdaterConfig({ ARDURBOT_UPDATER_TOKEN: "t" })).toThrow(
+      /ARDURBOT_DEPLOY_DIR/,
+    );
     expect(() => resolveUpdaterConfig({ ...base, ARDURBOT_DEPLOY_DIR: "srv/ardurbot" })).toThrow(
       /ARDURBOT_DEPLOY_DIR/,
     );
@@ -69,7 +73,10 @@ describe("resolveUpdaterConfig", () => {
         ...base,
         ARDURBOT_COMPOSE_FILE: "infra/compose/docker-compose.prod.yml:ops/overlay.yml",
       }).composeFiles,
-    ).toEqual(["/srv/ardurbot/infra/compose/docker-compose.prod.yml", "/srv/ardurbot/ops/overlay.yml"]);
+    ).toEqual([
+      "/srv/ardurbot/infra/compose/docker-compose.prod.yml",
+      "/srv/ardurbot/ops/overlay.yml",
+    ]);
   });
 
   it("honours COMPOSE_PATH_SEPARATOR the way Compose does", () => {
@@ -105,7 +112,8 @@ describe("resolveUpdaterConfig", () => {
 
   it("appends the deployment's extra services to the built-in set", () => {
     expect(
-      resolveUpdaterConfig({ ...base, ARDURBOT_UPDATE_SERVICES: "supervisor, caddy" }).updateServices,
+      resolveUpdaterConfig({ ...base, ARDURBOT_UPDATE_SERVICES: "supervisor, caddy" })
+        .updateServices,
     ).toEqual(["api", "worker", "web", "supervisor", "caddy"]);
   });
 

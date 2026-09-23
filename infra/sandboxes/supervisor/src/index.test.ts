@@ -259,7 +259,11 @@ describe("sandbox supervisor input containment", () => {
 
   it("accepts the legacy workspace label without weakening container identity", () => {
     expect(
-      hasComputerIdentity({ "ardurbot.botId": "bot", "ardurbot.workspaceId": "space" }, "bot", "space"),
+      hasComputerIdentity(
+        { "ardurbot.botId": "bot", "ardurbot.workspaceId": "space" },
+        "bot",
+        "space",
+      ),
     ).toBe(true);
     expect(
       hasComputerIdentity(

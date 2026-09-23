@@ -3,11 +3,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  type ArdurBotDesktop,
+  type ArdurBotDesktopOAuthCallback,
   desktopOAuthCode,
   oauthStateOf,
   onDesktopOAuthCallback,
-  type ArdurBotDesktop,
-  type ArdurBotDesktopOAuthCallback,
   windowChromeKind,
 } from "./desktop.js";
 

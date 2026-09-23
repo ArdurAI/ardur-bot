@@ -29,7 +29,11 @@ function fixture() {
       process.platform === "darwin" ? script.replaceAll(" --reflink=auto", "") : script;
     return spawnSync(
       "bash",
-      ["-eu", "-c", portable.replaceAll("/tmp/ardurbot", runtime).replaceAll("/home/ardurbot", home)],
+      [
+        "-eu",
+        "-c",
+        portable.replaceAll("/tmp/ardurbot", runtime).replaceAll("/home/ardurbot", home),
+      ],
       {
         encoding: "utf8",
         timeout: 10_000,

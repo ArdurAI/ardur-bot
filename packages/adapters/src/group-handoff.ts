@@ -1,6 +1,10 @@
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import { MessageBlock } from "@ardurbot/contracts";
-import { botMessageHopExhausted, nextBotMessageHop, renderGroupMembersContext } from "@ardurbot/core";
+import {
+  botMessageHopExhausted,
+  nextBotMessageHop,
+  renderGroupMembersContext,
+} from "@ardurbot/core";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,

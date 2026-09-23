@@ -1,4 +1,3 @@
-import { useLingui } from "@lingui/react/macro";
 import type { Bot, BotSection } from "@ardurbot/contracts";
 import {
   DropdownMenu,
@@ -10,6 +9,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@ardurbot/ui-web";
+import { useLingui } from "@lingui/react/macro";
 import {
   Archive,
   Bell,

@@ -4,7 +4,6 @@ import { mkdir } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { serve } from "@hono/node-server";
 import {
   boundedSandboxCommandTimeoutMs,
   readBoundedJsonResponse,
@@ -14,6 +13,7 @@ import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { SERVICE_NAMES } from "@ardurbot/logging";
 import { createRootLogger } from "@ardurbot/logging/axiom";
 import { requestLogging } from "@ardurbot/logging/hono";
+import { serve } from "@hono/node-server";
 import Docker from "dockerode";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -315,7 +315,8 @@ app.post("/computers/:id/exec", async (c) => {
       c.req.header("x-ardurbot-bot-id"),
       c.req.header("x-ardurbot-space-id"),
     );
-    const screenId = c.req.header("x-ardurbot-screen-id") || c.req.header("x-ardurbot-bot-id") || id;
+    const screenId =
+      c.req.header("x-ardurbot-screen-id") || c.req.header("x-ardurbot-bot-id") || id;
     const screenIndex = computerScreens.get(id)?.get(screenId)?.index ?? 0;
     const layout = screenPorts(screenIndex);
     const result = await runContainerCommand(
@@ -698,7 +699,8 @@ app.delete("/computers/:id/screen", async (c) => {
       c.req.header("x-ardurbot-bot-id"),
       c.req.header("x-ardurbot-space-id"),
     );
-    const screenId = c.req.header("x-ardurbot-screen-id") || c.req.header("x-ardurbot-bot-id") || id;
+    const screenId =
+      c.req.header("x-ardurbot-screen-id") || c.req.header("x-ardurbot-bot-id") || id;
     const cancelRunWork = c.req.header("x-ardurbot-cancel-run-work") === "1";
     const screenLeaseId = c.req.header("x-ardurbot-screen-lease-id");
     await withComputerScreenLock(id, async () => {

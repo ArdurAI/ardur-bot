@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { access, lstat, open, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { serve } from "@hono/node-server";
 import type { ServerUpdateRun } from "@ardurbot/contracts";
 import {
   type ComposeUpdateStep,
@@ -36,6 +35,7 @@ import {
 import { type Logger, SERVICE_NAMES } from "@ardurbot/logging";
 import { createRootLogger } from "@ardurbot/logging/axiom";
 import { requestLogging } from "@ardurbot/logging/hono";
+import { serve } from "@hono/node-server";
 import { type Context, Hono } from "hono";
 import {
   readTagState,

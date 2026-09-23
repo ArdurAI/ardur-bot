@@ -246,7 +246,13 @@ describe("executor approval replay", () => {
     expect(resolved.call.args).toEqual({ text: "approved exactly" });
     expect(resolved.tool.route).toEqual(route);
     expect(
-      approvalReplayResourceError(resolved.tool.name, true, request, route, "__ardurbotCatalogTool"),
+      approvalReplayResourceError(
+        resolved.tool.name,
+        true,
+        request,
+        route,
+        "__ardurbotCatalogTool",
+      ),
     ).toBeUndefined();
     expect(
       approvalReplayResourceError(
@@ -267,7 +273,11 @@ describe("executor approval replay", () => {
       ),
     ).toContain("different connector resource");
     expect(
-      approvedReplayArgs(queue.take(resolved.tool.name), resolved.call.args, "__ardurbotCatalogTool"),
+      approvedReplayArgs(
+        queue.take(resolved.tool.name),
+        resolved.call.args,
+        "__ardurbotCatalogTool",
+      ),
     ).toEqual({ text: "approved exactly" });
     expect(queue.assertDrained).not.toThrow();
   });

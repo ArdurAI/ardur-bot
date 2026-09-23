@@ -15,7 +15,9 @@ export function WelcomePage() {
             <span className="h-6 w-[11px] rounded-full bg-card" />
             <span className="h-6 w-[11px] rounded-full bg-card" />
           </div>
-          <div className="text-[76px] leading-none tracking-[-0.03em] text-foreground">Ardur Bot</div>
+          <div className="text-[76px] leading-none tracking-[-0.03em] text-foreground">
+            Ardur Bot
+          </div>
         </div>
         <p className="max-w-[600px] text-center text-[27px] leading-[1.4] text-foreground/75">
           <Trans>

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { isLocalMcpHost } from "@ardurbot/contracts";
+import type { PrismaClient } from "@ardurbot/db";
 import type {
   OAuthClientProvider,
   OAuthDiscoveryState,
@@ -10,8 +12,6 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { isLocalMcpHost } from "@ardurbot/contracts";
-import type { PrismaClient } from "@ardurbot/db";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";

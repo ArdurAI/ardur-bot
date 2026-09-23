@@ -85,7 +85,11 @@ describe("computer loopback provision lifecycle", () => {
     const container = {
       inspect: vi.fn().mockResolvedValue({
         Config: {
-          Labels: { "ardurbot.managed": "true", "ardurbot.botId": "other", "ardurbot.spaceId": "other" },
+          Labels: {
+            "ardurbot.managed": "true",
+            "ardurbot.botId": "other",
+            "ardurbot.spaceId": "other",
+          },
         },
       }),
       stop: vi.fn(),
@@ -119,7 +123,11 @@ describe("computer loopback provision lifecycle", () => {
     const container = {
       inspect: vi.fn(async () => ({
         Config: {
-          Labels: { "ardurbot.managed": "true", "ardurbot.botId": "bot", "ardurbot.spaceId": "space" },
+          Labels: {
+            "ardurbot.managed": "true",
+            "ardurbot.botId": "bot",
+            "ardurbot.spaceId": "space",
+          },
         },
         State: { Running: running },
       })),
@@ -159,7 +167,11 @@ describe("computer loopback provision lifecycle", () => {
     const container = {
       inspect: vi.fn(async () => ({
         Config: {
-          Labels: { "ardurbot.managed": "true", "ardurbot.botId": "bot", "ardurbot.spaceId": "space" },
+          Labels: {
+            "ardurbot.managed": "true",
+            "ardurbot.botId": "bot",
+            "ardurbot.spaceId": "space",
+          },
         },
         State: { Running: true },
       })),
@@ -197,7 +209,11 @@ describe("computer loopback provision lifecycle", () => {
       Image: "test-image-id",
       Config: {
         User: hostComputerUser(),
-        Labels: { "ardurbot.managed": "true", "ardurbot.botId": "bot", "ardurbot.spaceId": "space" },
+        Labels: {
+          "ardurbot.managed": "true",
+          "ardurbot.botId": "bot",
+          "ardurbot.spaceId": "space",
+        },
       },
       HostConfig: {
         NetworkMode: computerNetworkNameFor("bot"),
@@ -384,7 +400,11 @@ describe("provisioning network rollback", () => {
       inspect: vi.fn().mockResolvedValue({
         Image: "old-image",
         Config: {
-          Labels: { "ardurbot.managed": "true", "ardurbot.botId": "bot", "ardurbot.spaceId": "space" },
+          Labels: {
+            "ardurbot.managed": "true",
+            "ardurbot.botId": "bot",
+            "ardurbot.spaceId": "space",
+          },
         },
         HostConfig: { PortBindings: {} },
       }),
@@ -511,7 +531,9 @@ describe("space computer limit enforcement", () => {
         if (labels.some((l: string) => l.startsWith("ardurbot.botId="))) {
           return [];
         }
-        return [{ Id: "c1", Labels: { "ardurbot.managed": "true", "ardurbot.spaceId": "space-1" } }];
+        return [
+          { Id: "c1", Labels: { "ardurbot.managed": "true", "ardurbot.spaceId": "space-1" } },
+        ];
       },
     );
 
@@ -566,7 +588,10 @@ describe("space computer limit enforcement", () => {
           ];
         }
         return [
-          { Id: existing.id, Labels: { "ardurbot.managed": "true", "ardurbot.spaceId": "space-1" } },
+          {
+            Id: existing.id,
+            Labels: { "ardurbot.managed": "true", "ardurbot.spaceId": "space-1" },
+          },
         ];
       },
     );

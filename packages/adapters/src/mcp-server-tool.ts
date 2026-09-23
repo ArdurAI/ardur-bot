@@ -1,7 +1,11 @@
 /** Shared logic for the agent-facing add_mcp_server tool. Pure and unit-tested;
  * the executor wires the parsed result into Prisma + the secret store. */
 
-import { McpRemoteEndpointSchema, type McpTransport, McpTransportSchema } from "@ardurbot/contracts";
+import {
+  McpRemoteEndpointSchema,
+  type McpTransport,
+  McpTransportSchema,
+} from "@ardurbot/contracts";
 import { deriveMcpSlug } from "@ardurbot/core";
 import { toStringRecord } from "./memory-provider-factory.js";
 

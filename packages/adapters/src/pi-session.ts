@@ -1,10 +1,10 @@
 import type { Dirent } from "node:fs";
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { getLogger } from "@ardurbot/logging";
 import { type AgentMessage, type Branch, JsonlSessionRepo } from "@earendil-works/pi-agent-core";
 import { BACKGROUND_CONTEXT } from "@earendil-works/pi-agent-core/harness/context";
 import { NodeExecutionEnv } from "@earendil-works/pi-agent-core/node";
-import { getLogger } from "@ardurbot/logging";
 
 export const PI_SESSION_RETENTION_DAYS = 30;
 export const PI_SESSION_MAX_FILES_PER_BOT = 100;

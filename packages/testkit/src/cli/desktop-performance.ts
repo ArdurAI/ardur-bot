@@ -5,6 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { brotliCompressSync, gzipSync } from "node:zlib";
+import { abortableDelay } from "@ardurbot/core";
+import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
+import { createThreadMessage, type PrismaClient } from "@ardurbot/db";
 import { serve } from "@hono/node-server";
 import {
   type CDPSession,
@@ -13,9 +16,6 @@ import {
   expect,
   type Page,
 } from "@playwright/test";
-import { abortableDelay } from "@ardurbot/core";
-import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
-import { createThreadMessage, type PrismaClient } from "@ardurbot/db";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { createApp } from "../../../../apps/api/src/app.ts";
 import {
@@ -526,14 +526,14 @@ async function measureInteractions(app: ElectronApplication, page: Page) {
   await page.keyboard.type("a".repeat(characterCount), { delay: 16 });
   await page.waitForFunction(
     (count) =>
-      ((window as typeof window & { __ardurbotKeyPaintSamples?: number[] }).__ardurbotKeyPaintSamples
-        ?.length ?? 0) >= count,
+      ((window as typeof window & { __ardurbotKeyPaintSamples?: number[] })
+        .__ardurbotKeyPaintSamples?.length ?? 0) >= count,
     characterCount,
   );
   const keyPaintMs = await page.evaluate(
     () =>
-      (window as typeof window & { __ardurbotKeyPaintSamples?: number[] }).__ardurbotKeyPaintSamples ??
-      [],
+      (window as typeof window & { __ardurbotKeyPaintSamples?: number[] })
+        .__ardurbotKeyPaintSamples ?? [],
   );
   const typingAfter = await cdpMetrics(session);
 

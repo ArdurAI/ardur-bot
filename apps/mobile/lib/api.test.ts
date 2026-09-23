@@ -78,7 +78,10 @@ describe("mobile API authentication", () => {
         body: JSON.stringify({ email: "ada@example.com", password: "correct horse" }),
       }),
     );
-    expect(SecureStore.setItemAsync).toHaveBeenCalledWith("ardurbot.session_token", "session-token");
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      "ardurbot.session_token",
+      "session-token",
+    );
     expect(resumeLiveNotifications).not.toHaveBeenCalled();
   });
 
@@ -1463,7 +1466,10 @@ describe("mobile API authentication", () => {
       storage.delete(key);
     });
     vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => {
-      if (key === "ardurbot.api_base" || (key === "ardurbot.space_id" && value === "space-support")) {
+      if (
+        key === "ardurbot.api_base" ||
+        (key === "ardurbot.space_id" && value === "space-support")
+      ) {
         throw new Error("device locked");
       }
       storage.set(key, value);

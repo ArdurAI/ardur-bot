@@ -1,6 +1,6 @@
-import { Trans, useLingui } from "@lingui/react/macro";
 import { type Bot, GROUP_MEMBER_MAX, GROUP_MEMBER_MIN, type Group } from "@ardurbot/contracts";
 import { BotAvatar, Button, Input } from "@ardurbot/ui-web";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 

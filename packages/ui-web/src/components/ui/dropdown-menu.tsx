@@ -1,5 +1,5 @@
-import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { cn } from "@ardurbot/ui-web/lib/utils";
+import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import type * as React from "react";
 

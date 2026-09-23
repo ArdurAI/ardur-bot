@@ -1,5 +1,5 @@
-import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { AgentRunRequest } from "@ardurbot/adapter-kit";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { buildModelConnectPlaintext, modelCredentialDto } from "./model-connect.js";
 import { modelAcceptsImageInput } from "./model-vision.js";

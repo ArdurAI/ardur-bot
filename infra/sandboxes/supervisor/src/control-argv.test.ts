@@ -100,9 +100,21 @@ describe("controller argv restrictions", () => {
     ["env", "DISPLAY=:8", "xdg-open", "https://example.com"],
     ["env", `DISPLAY=${display}`, "LD_PRELOAD=/tmp/unsafe", "xdg-open", "https://example.com"],
     ["env", `DISPLAY=${display}`, "ARDURBOT_BROWSER_PROFILE=/tmp/unsafe", "ardurbot-browser"],
-    ["env", `DISPLAY=${display}`, `ARDURBOT_BROWSER_PROFILE=${profile}/../other`, "ardurbot-browser"],
+    [
+      "env",
+      `DISPLAY=${display}`,
+      `ARDURBOT_BROWSER_PROFILE=${profile}/../other`,
+      "ardurbot-browser",
+    ],
     ["env", `DISPLAY=${display}`, `ARDURBOT_BROWSER_PROFILE=${profile}`, "sh", "-c", "true"],
-    ["env", `DISPLAY=${display}`, `ARDURBOT_BROWSER_PROFILE=${profile}`, "xdotool", "key", "Return"],
+    [
+      "env",
+      `DISPLAY=${display}`,
+      `ARDURBOT_BROWSER_PROFILE=${profile}`,
+      "xdotool",
+      "key",
+      "Return",
+    ],
     [
       "env",
       `DISPLAY=${display}`,

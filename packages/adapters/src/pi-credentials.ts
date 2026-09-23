@@ -1,3 +1,4 @@
+import type { AgentModelOAuthCredential } from "@ardurbot/adapter-kit";
 import type {
   AuthOperationOptions,
   Credential,
@@ -5,7 +6,6 @@ import type {
   CredentialStore,
   OAuthCredential,
 } from "@earendil-works/pi-ai";
-import type { AgentModelOAuthCredential } from "@ardurbot/adapter-kit";
 
 export function toOAuthCredential(value: AgentModelOAuthCredential): OAuthCredential {
   return { ...value, type: "oauth" };

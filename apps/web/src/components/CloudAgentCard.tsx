@@ -1,8 +1,8 @@
-import { Trans } from "@lingui/react/macro";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { cloudAgentHttpsUrl } from "@ardurbot/core";
 import { Badge } from "@ardurbot/ui-web/components/ui/badge";
 import { Card, CardContent } from "@ardurbot/ui-web/components/ui/card";
+import { Trans } from "@lingui/react/macro";
 
 export function CloudAgentCard({
   block,

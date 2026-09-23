@@ -7,7 +7,10 @@ describe("SmtpEmailProvider", () => {
   it("delivers product-authored content through the injected transport", async () => {
     const sendMail = vi.fn(async () => ({ messageId: "message-1" }));
     const provider = new SmtpEmailProvider(
-      { url: "smtps://user:secret@smtp.example.test:465", from: "Ardur Bot <no-reply@example.test>" },
+      {
+        url: "smtps://user:secret@smtp.example.test:465",
+        from: "Ardur Bot <no-reply@example.test>",
+      },
       { transport: { sendMail } as never },
     );
 

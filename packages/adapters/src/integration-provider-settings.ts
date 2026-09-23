@@ -1,4 +1,8 @@
-import type { AdapterContext, ConnectorCall, ManagedConnectorProvider } from "@ardurbot/adapter-kit";
+import type {
+  AdapterContext,
+  ConnectorCall,
+  ManagedConnectorProvider,
+} from "@ardurbot/adapter-kit";
 import {
   type IntegrationProviderConfig,
   IntegrationProviderConfigSchema,

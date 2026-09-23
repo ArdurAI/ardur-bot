@@ -1,7 +1,7 @@
-import { Trans, useLingui } from "@lingui/react/macro";
 import type { ThreadMessage, ThreadSnapshot } from "@ardurbot/contracts";
 import { isSecretAskBlock, narrateTool, speechFromBlocks, spokenDecision } from "@ardurbot/core";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@ardurbot/ui-web";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { dictation } from "../lib/dictation";
 import { speaker } from "../lib/tts";
