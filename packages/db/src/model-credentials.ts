@@ -126,3 +126,24 @@ export async function findModelCredential(
   const credential = await findNewestUserModelCredential(prisma, scope.userId, provider);
   return credential ? { ...credential, isDefault: false, defaultModel: null } : null;
 }
+
+/** A pin's connection is user-scoped and must never be replaced by a provider match. */
+export async function findBoundModelCredential(
+  prisma: PrismaClient,
+  scope: ModelCredentialScope,
+  provider: string,
+  credentialId: string,
+) {
+  const credential = await prisma.userModelCredential.findFirst({
+    where: { id: credentialId, userId: scope.userId, provider },
+  });
+  if (!credential) return null;
+  const preference = await prisma.spaceModelPreference.findFirst({
+    where: { spaceId: scope.spaceId, userId: scope.userId, credentialId },
+  });
+  return {
+    ...credential,
+    isDefault: preference?.isDefault ?? false,
+    defaultModel: usableModelId(preference?.modelId),
+  };
+}

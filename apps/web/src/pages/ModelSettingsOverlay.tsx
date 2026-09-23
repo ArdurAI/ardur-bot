@@ -45,17 +45,19 @@ export function ModelSettingsOverlay({
   onClose,
   embedded = false,
   localOwner = false,
+  initialProvider,
 }: {
   onClose: () => void;
   /** Render panel body only for the shared Settings shell. */
   embedded?: boolean;
   localOwner?: boolean;
+  initialProvider?: string;
 }) {
   const { t } = useLingui();
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
   const [credentials, setCredentials] = useState<ModelCredential[]>([]);
   const [me, setMe] = useState<Me | null>(null);
-  const [provider, setProvider] = useState("");
+  const [provider, setProvider] = useState(initialProvider ?? "");
   const [providerQuery, setProviderQuery] = useState("");
   const [modelId, setModelId] = useState("");
   const [showAllModels, setShowAllModels] = useState(false);

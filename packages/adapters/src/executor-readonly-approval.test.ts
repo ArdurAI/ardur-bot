@@ -161,6 +161,15 @@ function fixture({
       },
     ),
   };
+  const modelCredential = {
+    id: "model-connection",
+    userId: "user-1",
+    provider: "xai",
+    secretId: "model-secret",
+    label: "xai",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
   const prisma = {
     botMcpServer: { findFirst: vi.fn(async () => grant) },
     run: {
@@ -191,8 +200,15 @@ function fixture({
     message: { findMany: vi.fn(async () => []) },
     task: { findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt })) },
     connection: { findMany: vi.fn(async () => []) },
-    spaceModelPreference: { findFirst: vi.fn(async () => null) },
-    userModelCredential: { findFirst: vi.fn(async () => null) },
+    spaceModelPreference: {
+      findFirst: vi.fn(async () => ({
+        credential: modelCredential,
+        modelId: "grok-4.6",
+        isDefault: true,
+      })),
+    },
+    userModelCredential: { findFirst: vi.fn(async () => modelCredential) },
+    secret: { findFirst: vi.fn(async () => ({ id: "model-secret", ciphertext: "test-key" })) },
     deploymentSettings: {
       findUnique: vi.fn(async () => ({
         defaultModelProvider: "scripted",
@@ -230,6 +246,7 @@ function fixture({
   });
   const executor = createRunExecutor({
     prisma,
+    secretStore: { load: () => "test-key" },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
     connector: {
       discoverTools: async () =>

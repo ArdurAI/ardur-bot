@@ -9,7 +9,7 @@ import type {
   AgentToolExecutionResult,
   ConnectorTool,
 } from "@ardurbot/adapter-kit";
-import { usableModelId } from "@ardurbot/contracts";
+import { RuntimePinError, runtimePinProblem, usableModelId } from "@ardurbot/contracts";
 import { getLogger } from "@ardurbot/logging";
 import {
   Agent,
@@ -19,7 +19,7 @@ import {
 } from "@earendil-works/pi-agent-core";
 import {
   type Api,
-  clampThinkingLevel,
+  getSupportedThinkingLevels,
   type Model,
   type Models,
   type ModelThinkingLevel,
@@ -96,9 +96,17 @@ function thinkingLevelFor(
   model: Model<Api>,
   preferred?: ModelThinkingLevel | null,
 ): ModelThinkingLevel {
-  if (!model.reasoning) return "off";
-  if (preferred) return clampThinkingLevel(model, preferred);
-  return clampThinkingLevel(model, REASONING_MODEL_THINKING_LEVEL);
+  const effort = preferred ?? (model.reasoning ? REASONING_MODEL_THINKING_LEVEL : "off");
+  if (!getSupportedThinkingLevels(model).includes(effort)) {
+    throw new RuntimePinError(
+      runtimePinProblem(
+        { provider: model.provider, modelId: model.id, effort, credentialId: null, revision: 0 },
+        "pin-effort-unsupported",
+        "The pinned model does not support this effort.",
+      ),
+    );
+  }
+  return effort;
 }
 // Pi forwards these names to OpenAI Responses, whose function-name contract is
 // ^[a-zA-Z0-9_-]+$ with a maximum length of 64 characters.
@@ -183,6 +191,15 @@ export class PiAgentRuntime implements AgentRuntime {
       let resumeHost: ToolHost | undefined;
       try {
         const selectedModel = resolveRuntimeModel(request.model);
+        if (request.model.runtimePin && !selectedModel.model) {
+          throw new RuntimePinError(
+            runtimePinProblem(
+              request.model.runtimePin,
+              "pin-model-unknown",
+              "The pinned model is not available in this runtime.",
+            ),
+          );
+        }
         if (!selectedModel.model) {
           queue.push({
             type: "text",
@@ -192,6 +209,18 @@ export class PiAgentRuntime implements AgentRuntime {
           return;
         }
         const { models, model, apiKey } = selectedModel;
+        if (
+          request.model.runtimePin &&
+          !getSupportedThinkingLevels(model).includes(request.model.thinkingLevel!)
+        ) {
+          throw new RuntimePinError(
+            runtimePinProblem(
+              request.model.runtimePin,
+              "pin-effort-unsupported",
+              "The pinned model does not support this effort.",
+            ),
+          );
+        }
         const toolDefs = request.tools.length ? request.tools : builtinAgentTools;
         const nestedAgents = new Set<Agent>();
         const completionModel = modelForCompletion(model, request.model.maxTokens);
@@ -455,7 +484,11 @@ export class PiAgentRuntime implements AgentRuntime {
         queue.push(streamed.trim() ? { type: "done", text: streamed } : { type: "done" });
       } catch (error) {
         const message = sanitizeError(error instanceof Error ? error.message : String(error));
-        queue.fail(new ProviderError(message, classifyProviderError(error)));
+        queue.fail(
+          error instanceof RuntimePinError
+            ? error
+            : new ProviderError(message, classifyProviderError(error)),
+        );
       } finally {
         queue.close();
         if (trackedBudget) {
@@ -516,24 +549,57 @@ export function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
   model: Model<Api> | undefined;
   apiKey: string | undefined;
 } {
-  const provider = modelConfig.provider === "scripted" ? "openrouter" : modelConfig.provider;
+  const pinned = Boolean(modelConfig.runtimePin);
+  const provider =
+    !pinned && modelConfig.provider === "scripted" ? "openrouter" : modelConfig.provider;
   const envDefaultModel = process.env.PI_DEFAULT_MODEL?.trim();
   const envDefaultProvider = process.env.PI_DEFAULT_PROVIDER?.trim() || "openrouter";
   const requestedId =
-    modelConfig.id === "scripted" ? envDefaultModel || DEFAULT_OPENROUTER_MODEL_ID : modelConfig.id;
+    !pinned && modelConfig.id === "scripted"
+      ? envDefaultModel || DEFAULT_OPENROUTER_MODEL_ID
+      : modelConfig.id;
   const modelId = usableModelId(requestedId) ?? "";
+  if (pinned && provider === OPENAI_COMPATIBLE_PROVIDER_ID && !modelConfig.baseUrl) {
+    throw new RuntimePinError(
+      runtimePinProblem(
+        modelConfig.runtimePin!,
+        "pin-credential-missing",
+        "The pinned connection has no endpoint.",
+      ),
+    );
+  }
   const models = modelsForRequest({ model: modelConfig }, provider);
   let model = models.getModel(provider, modelId);
-  if (!model && provider !== "openrouter" && provider !== OPENAI_COMPATIBLE_PROVIDER_ID) {
+  if (
+    !pinned &&
+    !model &&
+    provider !== "openrouter" &&
+    provider !== OPENAI_COMPATIBLE_PROVIDER_ID
+  ) {
     model = models.getModel("openrouter", modelId);
   }
   if (
+    !pinned &&
     !model &&
     provider === "openrouter" &&
     envDefaultProvider === "openrouter" &&
     modelId === envDefaultModel
   ) {
     model = configuredOpenRouterModel(modelId);
+  }
+  if (
+    pinned &&
+    !modelConfig.oauth &&
+    !modelConfig.apiKey &&
+    modelConfig.provider !== OPENAI_COMPATIBLE_PROVIDER_ID
+  ) {
+    throw new RuntimePinError(
+      runtimePinProblem(
+        modelConfig.runtimePin!,
+        "pin-credential-missing",
+        "The pinned connection secret is missing.",
+      ),
+    );
   }
   const apiKey = modelConfig.oauth
     ? undefined
@@ -542,7 +608,7 @@ export function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
       : // Only OpenRouter may fall back to the OpenRouter env key. Handing it to
         // another provider would ship our key to a vendor it was not issued for.
         (modelConfig.apiKey ??
-        (provider === "openrouter" ? process.env.OPENROUTER_API_KEY : undefined));
+        (!pinned && provider === "openrouter" ? process.env.OPENROUTER_API_KEY : undefined));
   return { provider, modelId, models, model, apiKey };
 }
 

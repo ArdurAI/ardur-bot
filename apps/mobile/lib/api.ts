@@ -7,9 +7,11 @@ import type {
   MessageBlock,
   ModelCatalogEntry,
   ModelCredential,
+  RuntimeProblem,
   Space,
   SpaceNavigation,
 } from "@ardurbot/contracts";
+import { RuntimeProblemSchema } from "@ardurbot/contracts";
 import type { ThreadHistory } from "@ardurbot/core";
 import {
   aiConsentTarget,
@@ -724,6 +726,7 @@ export type MobileBot = Pick<
   | "unread"
   | "updatedAt"
   | "computerMode"
+  | "modelCredentialId"
   | "modelProvider"
   | "modelId"
   | "thinkingLevel"
@@ -786,7 +789,13 @@ export type MobileSnapshot = {
   cursor?: number;
   messages: MobileMessage[];
   olderCursor: number | null;
-  run: { id: string; botId?: string; status: string; error?: string | null } | null;
+  run: {
+    id: string;
+    botId?: string;
+    status: string;
+    error?: string | null;
+    runtimeProblem?: RuntimeProblem;
+  } | null;
   activeRuns?: Array<{ id: string; botId?: string; status: string }>;
   members?: MobileGroup["members"];
   computer?: {
@@ -1029,7 +1038,14 @@ export function applyMobileThreadEvent(
       // A failed run stays in run so the thread can say why it stopped (see reduceThreadSnapshot).
       run:
         endedRun && failure
-          ? { ...endedRun, status: "failed", error: failure }
+          ? {
+              ...endedRun,
+              status: "failed",
+              error: failure,
+              ...(RuntimeProblemSchema.safeParse(event.payload?.runtimeProblem).success
+                ? { runtimeProblem: RuntimeProblemSchema.parse(event.payload?.runtimeProblem) }
+                : {}),
+            }
           : primaryEnded
             ? (activeRuns?.[0] ?? null)
             : prev.run,

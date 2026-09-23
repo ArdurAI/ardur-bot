@@ -293,7 +293,7 @@ describe("runAutoReviewJudge instructions", () => {
   it("anchors the present moment in the judge system instructions", async () => {
     vi.resetModules();
     const { runAutoReviewJudge } = await import("./auto-review.js");
-    let captured: { instructions?: string } | undefined;
+    let captured: { instructions?: string; model?: unknown } | undefined;
     const runtime = {
       describe: () => ({ capabilities: { scripted: false } }),
       run: (request: { instructions?: string }) => {
@@ -309,6 +309,18 @@ describe("runAutoReviewJudge instructions", () => {
     };
     await runAutoReviewJudge({
       runtime: runtime as never,
+      model: {
+        provider: "xai",
+        id: "grok-4.6",
+        thinkingLevel: "high",
+        runtimePin: {
+          provider: "xai",
+          modelId: "grok-4.6",
+          effort: "high",
+          credentialId: "bound",
+          revision: 1,
+        },
+      },
       checker: { provider: "openrouter", model: "x" },
       prompt: "test",
       runId: "run",
@@ -319,6 +331,12 @@ describe("runAutoReviewJudge instructions", () => {
     });
     expect(captured?.instructions).toContain("Current date and time");
     expect(captured?.instructions).toContain("fast safety checker");
+    expect(captured?.model).toMatchObject({
+      provider: "xai",
+      id: "grok-4.6",
+      thinkingLevel: "high",
+      runtimePin: { credentialId: "bound", revision: 1 },
+    });
   });
 });
 

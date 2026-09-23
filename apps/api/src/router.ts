@@ -142,6 +142,7 @@ import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-sec
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
+import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
 import {
   executionBlocksUserTakeover,
@@ -987,6 +988,8 @@ export function createRouter(deps: RouterDeps) {
             modelProvider: source.modelProvider,
             modelId: source.modelId,
             thinkingLevel: source.thinkingLevel,
+            modelCredentialId: source.modelCredentialId,
+            modelPinRevision: source.modelPinRevision,
           })
           .catch((error: unknown) => {
             throw mapSpaceLifecycleError(error);
@@ -1030,68 +1033,7 @@ export function createRouter(deps: RouterDeps) {
           });
           if (!section) throw new IsolationError();
         }
-        if (input.modelProvider && input.modelId) {
-          const credential = await findModelCredential(
-            deps.prisma,
-            context.actor,
-            input.modelProvider,
-          );
-          if (!credential) {
-            throw new ORPCError("BAD_REQUEST", { message: "Connect that model provider first" });
-          }
-          const knownModels = [...listPiCatalog(), scriptedCatalogEntry];
-          const inCatalog = knownModels.some(
-            (item) => item.provider === input.modelProvider && item.id === input.modelId,
-          );
-          if (!inCatalog && credential.defaultModel !== input.modelId) {
-            throw new ORPCError("BAD_REQUEST", { message: "Unknown model for that provider" });
-          }
-        }
-        const thinkingLevel = input.thinkingLevel;
-        if (input.thinkingLevel) {
-          const provider =
-            input.modelProvider !== undefined ? input.modelProvider : existing.modelProvider;
-          const modelId = input.modelId !== undefined ? input.modelId : existing.modelId;
-          const me = await meDto(deps, context.actor);
-          const effectiveProvider = provider ?? me.defaultProvider;
-          const effectiveModelId = modelId ?? me.defaultModel;
-          if (effectiveProvider && effectiveModelId) {
-            const entry = listPiCatalog().find(
-              (item) => item.provider === effectiveProvider && item.id === effectiveModelId,
-            );
-            let allowed = entry?.thinkingLevels;
-            if (effectiveProvider === OPENAI_COMPATIBLE_PROVIDER_ID) {
-              allowed = ["off"];
-              const credential = await findModelCredential(
-                deps.prisma,
-                context.actor,
-                effectiveProvider,
-              );
-              if (credential && credential.defaultModel === effectiveModelId) {
-                const secret = await deps.prisma.secret.findFirst({
-                  where: { id: credential.secretId, userId: context.actor.userId, spaceId: null },
-                  select: { ciphertext: true },
-                });
-                if (secret) {
-                  try {
-                    allowed =
-                      modelCredentialDto(
-                        credential,
-                        deps.secrets.load(secret.ciphertext, credential.secretId),
-                      ).thinkingLevels ?? allowed;
-                  } catch {
-                    // Unreadable connections must not advertise reasoning support.
-                  }
-                }
-              }
-            }
-            if (allowed && !allowed.includes(input.thinkingLevel)) {
-              throw new ORPCError("BAD_REQUEST", {
-                message: `Thinking level must be one of: ${allowed.join(", ")}`,
-              });
-            }
-          }
-        }
+        const modelPinUpdate = await botModelPinUpdate(deps, context.actor, existing, input);
         if (!existing.thread) throw new IsolationError();
         await commitBotUpdate({
           prisma: deps.prisma,
@@ -1112,10 +1054,7 @@ export function createRouter(deps: RouterDeps) {
             sectionId: input.sectionId,
             voiceId: input.voiceId,
             autoSpeak: input.autoSpeak,
-            ...(input.modelProvider !== undefined
-              ? { modelProvider: input.modelProvider, modelId: input.modelId ?? null }
-              : {}),
-            ...(input.thinkingLevel !== undefined ? { thinkingLevel } : {}),
+            ...modelPinUpdate,
             ...(input.teamChatAmbientEnabled !== undefined
               ? { teamChatAmbientEnabled: input.teamChatAmbientEnabled }
               : {}),

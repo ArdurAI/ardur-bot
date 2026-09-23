@@ -710,6 +710,10 @@ msgstr ""
 msgid "Change password"
 msgstr "पासवर्ड बदलें"
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Change pin"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Changing…"
 msgstr "बदला जा रहा है…"
@@ -961,6 +965,7 @@ msgstr "पासवर्ड की पुष्टि करें"
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "कनेक्ट करें"
@@ -3575,6 +3580,10 @@ msgstr "चयनित मेमोरी प्रोवाइडर इस �
 #: src/pages/shell/bot-panel.tsx
 msgid "Thinking"
 msgstr "सोच रहा है"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."

@@ -43,6 +43,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Server integrations": "Интеграции сервера",
   "Set up Executor on your server in the web app.":
     "Настройте Executor на сервере в веб-приложении.",
+  "Change pin": "Изменить закреплённую модель",
   "Space default": "Пространство по умолчанию",
   "Stop all workers and confirm that provider operations have stopped before releasing this computer.":
     "Остановите всех воркеров и убедитесь, что операции провайдера остановлены, прежде чем освобождать этот компьютер.",

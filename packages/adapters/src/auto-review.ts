@@ -2,6 +2,7 @@ import type {
   AdapterContext,
   AdapterDescriptor,
   AgentModelOAuthCredential,
+  AgentRunModel,
   AgentRuntime,
   AutoReviewCapabilities,
   AutoReviewProvider,
@@ -266,6 +267,7 @@ export function buildAutoReviewPrompt(input: AutoReviewRequest): string {
 export async function runAutoReviewJudge(input: {
   runtime: AgentRuntime;
   checker: AutoReviewChecker;
+  model?: AgentRunModel;
   apiKey?: string;
   baseUrl?: string;
   reasoning?: boolean;
@@ -302,7 +304,7 @@ export async function runAutoReviewJudge(input: {
         ].join(" "),
         history: [],
         tools: [],
-        model: {
+        model: input.model ?? {
           provider: input.checker.provider,
           id: input.checker.model,
           apiKey: input.oauth ? undefined : input.apiKey,
@@ -349,6 +351,7 @@ export async function runAutoReviewJudge(input: {
 export type LlmAutoReviewOptions = {
   runtime: AgentRuntime;
   checker: AutoReviewChecker;
+  model?: AgentRunModel;
   apiKey?: string;
   baseUrl?: string;
   reasoning?: boolean;

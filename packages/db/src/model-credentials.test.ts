@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import {
+  findBoundModelCredential,
   findDefaultModelCredential,
   findModelCredential,
   newestModelCredentialOrder,
@@ -165,4 +166,52 @@ describe("selectSpaceModelPreference", () => {
       );
     },
   );
+});
+
+it("looks up a pinned connection by ID and user even when another endpoint serves the same model", async () => {
+  const bound = {
+    id: "chosen",
+    provider: "openai-compatible",
+    userId: "user",
+    secretId: "secret",
+    label: "Chosen server",
+  };
+  const findFirst = vi.fn(
+    async ({ where }: { where: { id: string; userId: string; provider: string } }) =>
+      where.id === bound.id && where.userId === bound.userId ? bound : null,
+  );
+  const preference = vi.fn(async () => ({ modelId: "same-model", isDefault: false }));
+  const prisma = {
+    userModelCredential: { findFirst },
+    spaceModelPreference: { findFirst: preference },
+  } as unknown as PrismaClient;
+  expect(
+    await findBoundModelCredential(
+      prisma,
+      { userId: "user", spaceId: "space" },
+      "openai-compatible",
+      "chosen",
+    ),
+  ).toMatchObject({ id: "chosen", defaultModel: "same-model" });
+  expect(preference).toHaveBeenCalledWith({
+    where: { spaceId: "space", userId: "user", credentialId: "chosen" },
+  });
+  preference.mockClear();
+  expect(
+    await findBoundModelCredential(
+      prisma,
+      { userId: "user", spaceId: "space" },
+      "openai-compatible",
+      "deleted",
+    ),
+  ).toBeNull();
+  expect(
+    await findBoundModelCredential(
+      prisma,
+      { userId: "other-user", spaceId: "space" },
+      "openai-compatible",
+      "chosen",
+    ),
+  ).toBeNull();
+  expect(preference).not.toHaveBeenCalled();
 });

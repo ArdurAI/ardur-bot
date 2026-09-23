@@ -691,7 +691,23 @@ describe("thread event reduction", () => {
       type: "run.failed",
       seq: 11,
       runId: failing.id,
-      payload: { error: "Provider is not configured: openrouter", providerErrorKind: "auth" },
+      payload: {
+        error: "Provider is not configured: openrouter",
+        providerErrorKind: "auth",
+        runtimeProblem: {
+          kind: "problem",
+          code: "pin-credential-missing",
+          pin: {
+            provider: "openrouter",
+            modelId: "model",
+            effort: "high",
+            credentialId: "deleted",
+            revision: 1,
+          },
+          reason: "Missing connection",
+          actions: ["connect", "change-pin"],
+        },
+      },
     });
 
     const next = reduceThreadSnapshot(initial, failed);
@@ -702,6 +718,10 @@ describe("thread event reduction", () => {
       status: "failed",
       error: "Provider is not configured: openrouter",
       providerErrorKind: "auth",
+    });
+    expect(next?.run?.runtimeProblem).toMatchObject({
+      code: "pin-credential-missing",
+      pin: { credentialId: "deleted", effort: "high" },
     });
     expect(threadRunError(next)).toBe("Provider is not configured: openrouter");
     expect(threadRunError(next, new Set([failing.id]))).toBeNull();

@@ -5,7 +5,7 @@ import type {
   SemanticMemoryResponse,
 } from "@ardurbot/adapter-kit";
 import { historyCompactJob } from "@ardurbot/adapter-kit";
-import type { MessageBlock } from "@ardurbot/contracts";
+import type { MessageBlock, RuntimeProblem } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import { describe, expect, it, vi } from "vitest";
@@ -235,7 +235,7 @@ function compactionHarness(
       userId: string;
       spaceId: string;
       botId?: string;
-    }) => Promise<AgentRunRequest["model"]>;
+    }) => Promise<AgentRunRequest["model"] | RuntimeProblem>;
     withMemoryProvider?: boolean;
     memoryConfig?: {
       defaultMemoryScope: string;
@@ -368,7 +368,15 @@ function compactionHarness(
     jobs: jobs as unknown as JobPublisher,
     memoryProviders,
     deploymentModelKey: options.deploymentModelKey,
-    ...(options.resolveModel ? { resolveModel: options.resolveModel } : {}),
+    resolveModel:
+      options.resolveModel ??
+      (options.deploymentModelKey
+        ? async () => ({
+            provider: "openrouter",
+            id: "openai/gpt-5.6-luna",
+            apiKey: options.deploymentModelKey,
+          })
+        : undefined),
   };
   return {
     thread,
@@ -480,10 +488,7 @@ describe("compactHistory", () => {
 
   it("compacts locally without a semantic memory provider", async () => {
     const harness = compactionHarness({
-      settings: {
-        defaultModelProvider: "openrouter",
-        defaultModelId: "deepseek/deepseek-v4-flash-0731",
-      },
+      deploymentModelKey: "openrouter-key",
       withMemoryProvider: false,
     });
 
@@ -772,7 +777,7 @@ describe("compactHistory", () => {
     installLogger(createLogger({ service: "ardurbot-worker", level: "off", sinks: [] }));
   });
 
-  it("falls back to the deployment's configured default model when no deployment key is available", async () => {
+  it("does not summarize from deployment settings without a scoped resolver", async () => {
     const harness = compactionHarness({
       settings: {
         defaultModelProvider: "openrouter",
@@ -782,15 +787,11 @@ describe("compactHistory", () => {
 
     await compactHistory(harness.deps, "thread-1");
 
-    const [request] = harness.runtime.run.mock.calls[0]!;
-    expect(request.model).toEqual({
-      provider: "openrouter",
-      id: "deepseek/deepseek-v4-flash-0731",
-      apiKey: undefined,
-    });
+    expect(harness.runtime.run).not.toHaveBeenCalled();
+    expect(harness.prisma.thread.updateMany).not.toHaveBeenCalled();
   });
 
-  it("uses PI_DEFAULT_MODEL as the platform default summarizer when it is configured", async () => {
+  it("keeps the resolved model when PI_DEFAULT_MODEL changes", async () => {
     const harness = compactionHarness({ deploymentModelKey: "openrouter-key" });
     const previous = process.env.PI_DEFAULT_MODEL;
     process.env.PI_DEFAULT_MODEL = "moonshotai/kimi-k2";
@@ -804,7 +805,7 @@ describe("compactHistory", () => {
     const [request] = harness.runtime.run.mock.calls[0]!;
     expect(request.model).toEqual({
       provider: "openrouter",
-      id: "moonshotai/kimi-k2",
+      id: "openai/gpt-5.6-luna",
       apiKey: "openrouter-key",
     });
   });
@@ -971,5 +972,26 @@ describe("compactHistory", () => {
     await compactHistory(harness.deps, "thread-1");
 
     expect(harness.jobs.enqueue).not.toHaveBeenCalled();
+  });
+  it("skips model calls and memory writes for a typed pin problem", async () => {
+    const harness = compactionHarness({
+      resolveModel: async () => ({
+        kind: "problem",
+        code: "pin-credential-missing",
+        pin: {
+          provider: "xai",
+          modelId: "grok-4.6",
+          effort: "high",
+          credentialId: "deleted",
+          revision: 1,
+        },
+        reason: "Missing connection",
+        actions: ["connect", "change-pin"],
+      }),
+    });
+    await compactHistory(harness.deps, "thread-1");
+    expect(harness.runtime.run).not.toHaveBeenCalled();
+    expect(harness.saveMemory).not.toHaveBeenCalled();
+    expect(harness.prisma.thread.updateMany).not.toHaveBeenCalled();
   });
 });

@@ -670,6 +670,7 @@ export async function createApp(
       const judge =
         env.teamChatJudgeProvider && env.teamChatJudgeModel
           ? new ModelTeamChatEngagementJudge({
+              resolvePinnedModel: executor.resolveModel,
               prisma,
               runtime,
               secrets,
@@ -680,6 +681,7 @@ export async function createApp(
               modelOverride: env.teamChatJudgeModel,
             })
           : new ModelTeamChatEngagementJudge({
+              resolvePinnedModel: executor.resolveModel,
               prisma,
               runtime,
               secrets,

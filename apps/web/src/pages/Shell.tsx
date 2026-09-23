@@ -11,9 +11,11 @@ import type {
   Group,
   Me,
   MessageReaction,
+  ModelCatalogEntry,
   ProductEvent,
   ProviderErrorKind,
   Routine,
+  RuntimeProblem,
   SearchHit,
   Space,
   SpaceMemoryConfig,
@@ -2252,7 +2254,9 @@ export function ShellPage() {
     writeBotsSidebarCollapsed(userId, collapsed);
   }
 
-  function openSettings(section: SettingsSection = "general") {
+  const [settingsProvider, setSettingsProvider] = useState<string | undefined>();
+  function openSettings(section: SettingsSection = "general", provider?: string) {
+    setSettingsProvider(provider);
     setSettingsSection(section);
     setSettingsOpen(true);
   }
@@ -3379,10 +3383,21 @@ export function ShellPage() {
             sendError={sendError}
             runError={displayedRunError}
             providerErrorKind={sendError ? undefined : activeSnapshot?.run?.providerErrorKind}
+            runtimeProblem={sendError ? undefined : activeSnapshot?.run?.runtimeProblem}
+            modelCatalog={modelSettings?.catalog}
+            onConnectPin={() =>
+              openSettings("models", activeSnapshot?.run?.runtimeProblem?.pin.provider ?? undefined)
+            }
             runErrorId={displayedRunErrorId}
             onRunErrorPresented={handleRunErrorPresented}
             onDismissError={dismissComposerError}
-            onChangeModel={active ? openBotModelSettings : undefined}
+            onChangeModel={() => {
+              const botId = activeSnapshot?.run?.runtimeProblem
+                ? activeSnapshot.run.botId
+                : active?.id;
+              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+              openBotModelSettings();
+            }}
             sending={sending}
             fileInputRef={fileInputRef}
             onAttachmentPick={onAttachmentPick}
@@ -4174,6 +4189,7 @@ export function ShellPage() {
             email={session.data?.user.email}
             usage={usage}
             initialSection={settingsSection}
+            initialProvider={settingsProvider}
             avatarStyle={bootstrapMe?.avatarStyle ?? "robot"}
             isDeploymentOwner={bootstrapMe?.isDeploymentOwner === true}
             sandboxProvider={bootstrapMe?.sandboxProvider}
@@ -4867,6 +4883,9 @@ const Composer = memo(function Composer({
   sendError,
   runError,
   providerErrorKind,
+  runtimeProblem,
+  modelCatalog,
+  onConnectPin,
   runErrorId,
   onRunErrorPresented,
   onDismissError,
@@ -4895,6 +4914,9 @@ const Composer = memo(function Composer({
   sendError: string | null;
   runError: string | null;
   providerErrorKind?: ProviderErrorKind;
+  runtimeProblem?: RuntimeProblem;
+  modelCatalog?: ModelCatalogEntry[];
+  onConnectPin?: () => void;
   runErrorId: string | null;
   onRunErrorPresented: (runId: string) => void;
   onDismissError: () => void;
@@ -5190,6 +5212,9 @@ const Composer = memo(function Composer({
           <ProviderErrorMessage
             text={sendError ?? runError ?? ""}
             providerErrorKind={providerErrorKind}
+            runtimeProblem={runtimeProblem}
+            catalog={modelCatalog}
+            onConnect={onConnectPin}
             onChangeModel={onChangeModel}
           />
           <button

@@ -1,6 +1,6 @@
 import type { Prisma } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
-import { storedRunFailureKind } from "./run-failure-kind.js";
+import { storedRunFailure, storedRunFailureKind } from "./run-failure-kind.js";
 
 it("loads the stored kind only for the matching failed run", async () => {
   const findFirst = vi
@@ -20,4 +20,29 @@ it("loads the stored kind only for the matching failed run", async () => {
   expect(await storedRunFailureKind(tx, run)).toBeUndefined();
   findFirst.mockResolvedValue({ payload: { providerErrorKind: "future-kind" } });
   expect(await storedRunFailureKind(tx, run)).toBeUndefined();
+});
+
+it("restores a typed pin problem after reload", async () => {
+  const runtimeProblem = {
+    kind: "problem",
+    code: "pin-credential-missing",
+    pin: {
+      provider: "xai",
+      modelId: "grok-4.6",
+      effort: "high",
+      credentialId: "deleted",
+      revision: 1,
+    },
+    reason: "Missing connection",
+    actions: ["connect", "change-pin"],
+  };
+  const tx = {
+    event: {
+      findFirst: vi.fn(async () => ({ payload: { runtimeProblem, error: "untrusted long text" } })),
+    },
+  } as unknown as Prisma.TransactionClient;
+  expect(await storedRunFailure(tx, { id: "run", threadId: "thread", status: "failed" })).toEqual({
+    runtimeProblem,
+    providerErrorKind: undefined,
+  });
 });

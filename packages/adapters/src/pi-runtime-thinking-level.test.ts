@@ -336,3 +336,11 @@ describe("Pi agent thinking level", () => {
     expect(fakeAgentState.abortCalls).toBe(0);
   });
 });
+
+it("rejects an unsupported explicit effort before constructing an agent", async () => {
+  fakeAgentState.thinkingLevels = [];
+  await expect(
+    runWithModel("grok-4.6", "xai", new AbortController().signal, "max"),
+  ).rejects.toMatchObject({ problem: { code: "pin-effort-unsupported", pin: { effort: "max" } } });
+  expect(fakeAgentState.thinkingLevels).toEqual([]);
+});

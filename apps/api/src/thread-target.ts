@@ -8,6 +8,7 @@ import {
   MessageBlock as MessageBlockSchema,
   type MessageReaction,
   type RunStatus,
+  RuntimePinSchema,
   type ThreadSnapshot,
 } from "@ardurbot/contracts";
 import {
@@ -41,7 +42,7 @@ import {
   resolveSendAttachments,
 } from "./artifacts.js";
 import { resolveBusyBotName, toComputerStatus } from "./computer-status.js";
-import { storedRunFailureKind } from "./run-failure-kind.js";
+import { storedRunFailure } from "./run-failure-kind.js";
 import { withSerializableRetry } from "./serializable-retry.js";
 import { loadMessagePage } from "./thread-message-pages.js";
 
@@ -404,7 +405,7 @@ export async function threadSnapshot(
           last,
           run: currentRun,
           liveEvents,
-          providerErrorKind: await storedRunFailureKind(tx, currentRun),
+          failure: await storedRunFailure(tx, currentRun),
         };
       }),
     ]);
@@ -417,7 +418,7 @@ export async function threadSnapshot(
       run: core.run
         ? {
             ...mapRun(core.run),
-            ...(core.providerErrorKind ? { providerErrorKind: core.providerErrorKind } : {}),
+            ...core.failure,
           }
         : null,
       computer: toComputerStatus(target.botId, target.bot.computer, busyBotName),
@@ -480,7 +481,7 @@ export async function threadSnapshot(
       messagePage,
       last,
       activeRuns,
-      providerErrorKind: await storedRunFailureKind(tx, terminalRun),
+      failure: await storedRunFailure(tx, terminalRun),
       terminalRun,
       liveEvents,
     };
@@ -500,7 +501,7 @@ export async function threadSnapshot(
       core.terminalRun?.status === "failed"
         ? {
             ...mapRun(core.terminalRun),
-            ...(core.providerErrorKind ? { providerErrorKind: core.providerErrorKind } : {}),
+            ...core.failure,
           }
         : primaryActiveRun
           ? mapRun(primaryActiveRun)
@@ -568,6 +569,7 @@ function mapRun(run: {
   routineId: string | null;
   modelProvider: string | null;
   modelId: string | null;
+  runtimePin?: unknown;
   error: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -581,6 +583,7 @@ function mapRun(run: {
     status: run.status as never,
     trigger: run.trigger as never,
     routineId: run.routineId ?? null,
+    runtimePin: RuntimePinSchema.safeParse(run.runtimePin).data ?? null,
     modelProvider: run.modelProvider,
     modelId: run.modelId,
     // Same display clamp as live run.failed events so a huge stored error cannot bypass it.

@@ -1,4 +1,4 @@
-import type { ConnectionCatalogItem, SandboxKind } from "@ardurbot/contracts";
+import type { ConnectionCatalogItem, RuntimePin, SandboxKind } from "@ardurbot/contracts";
 
 export interface AdapterContext {
   operationId: string;
@@ -347,6 +347,7 @@ export interface AgentSteeringMessage {
 }
 
 export interface AgentRunModel {
+  runtimePin?: RuntimePin;
   provider: string;
   id: string;
   apiKey?: string;
@@ -361,7 +362,7 @@ export interface AgentRunModel {
   maxTokens?: number;
   /** Context-window limit used when sizing prompts and completions. */
   contextWindow?: number;
-  /** Preferred thinking effort for reasoning models; clamped to the model’s supported set. */
+  /** Explicit thinking effort; unsupported values must fail without clamping. */
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | null;
   /** In-process OAuth credential from the encrypted store for this run. */
   oauth?: {

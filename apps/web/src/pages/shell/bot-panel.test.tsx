@@ -1,3 +1,4 @@
+import { modelPinOptionKey, parseModelPinOptionKey } from "@ardurbot/core";
 // @vitest-environment jsdom
 
 import type { Bot, ModelCatalogEntry, ModelCredential } from "@ardurbot/contracts";
@@ -151,9 +152,9 @@ describe("bot model settings", () => {
     await act(async () => root.render(settings()));
     expect([...modelSelect().options].map((option) => option.value)).toEqual([
       "",
-      "openai-codex::gpt-6-astra",
-      "openai-codex::gpt-6-sol",
-      "openai-codex::gpt-5.5",
+      modelPinOptionKey("openai-codex", "gpt-6-astra", "credential-test"),
+      modelPinOptionKey("openai-codex", "gpt-6-sol", "credential-test"),
+      modelPinOptionKey("openai-codex", "gpt-5.5", "credential-test"),
     ]);
     expect(modelSelect().value).toBe("");
     await save();
@@ -264,7 +265,7 @@ describe("effective bot model", () => {
     ).toEqual({
       label: "missing",
       providerLabel: "disconnected",
-      thinkingLevel: undefined,
+      thinkingLevel: "xhigh",
       isDefault: false,
       unavailable: true,
     });
@@ -293,7 +294,7 @@ describe("effective bot model", () => {
       isDefault: true,
     });
   });
-  it("clamps to supported thinking and shows off for models without reasoning", () => {
+  it("preserves the displayed default effort and shows off for models without reasoning", () => {
     expect(
       effectiveBotModel(bot, {
         ...state,
@@ -340,7 +341,7 @@ it("the quiet chip opens settings and refreshes the space default after settings
       />,
     ),
   );
-  expect(container.textContent).toContain("gpt-5.3-codex-spark · medium · not available");
+  expect(container.textContent).toContain("gpt-5.3-codex-spark · not available");
   expect(container.textContent).not.toContain("default");
   expect(api.list).toHaveBeenCalledOnce();
   expect(api.me).toHaveBeenCalledOnce();
@@ -387,8 +388,8 @@ it("reveals subscription models without changing the saved pin and describes eff
   const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
   expect(toggle?.parentElement?.textContent).toBe("Show all models");
   await act(async () => toggle?.click());
-  const spark = [...modelSelect().options].find((option) =>
-    option.value.endsWith("gpt-5.3-codex-spark"),
+  const spark = [...modelSelect().options].find(
+    (option) => parseModelPinOptionKey(option.value)?.modelId === "gpt-5.3-codex-spark",
   );
   expect(spark?.textContent).toContain("May not be available on your plan");
   expect(modelSelect().value).toBe("openai-codex::gpt-6-astra");
@@ -396,13 +397,19 @@ it("reveals subscription models without changing the saved pin and describes eff
   expect(effort?.closest("details")).toBeNull();
   expect(effort?.textContent).toContain("xhigh — very slow, very careful");
   await act(async () => {
-    modelSelect().value = "openai-codex::gpt-5.3-codex-spark";
+    modelSelect().value = modelPinOptionKey(
+      "openai-codex",
+      "gpt-5.3-codex-spark",
+      "credential-test",
+    );
     modelSelect().dispatchEvent(new Event("change", { bubbles: true }));
   });
   await save();
   expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ modelId: "gpt-5.3-codex-spark" }));
   await act(async () => toggle?.click());
-  expect(modelSelect().value).toBe("openai-codex::gpt-5.3-codex-spark");
+  expect(modelSelect().value).toBe(
+    modelPinOptionKey("openai-codex", "gpt-5.3-codex-spark", "credential-test"),
+  );
 });
 
 it("keeps disconnected and missing-catalog pins and effort during unrelated saves", async () => {
@@ -479,4 +486,116 @@ it("marks a pin missing from a connected catalog as unavailable", () => {
       { me, catalog, credentials },
     )?.unavailable,
   ).toBe(true);
+});
+
+it("renders a typed pin failure with labels and both repair actions", async () => {
+  const connect = vi.fn();
+  const change = vi.fn();
+  await act(async () =>
+    root.render(
+      <ProviderErrorMessage
+        text="opaque failure"
+        catalog={catalog}
+        runtimeProblem={{
+          kind: "problem",
+          code: "pin-credential-missing",
+          pin: {
+            provider: "openai-codex",
+            modelId: "gpt-6-astra",
+            effort: "high",
+            credentialId: "deleted",
+            revision: 1,
+          },
+          reason: "The connection was deleted.",
+          actions: ["connect", "change-pin"],
+        }}
+        onConnect={connect}
+        onChangeModel={change}
+      />,
+    ),
+  );
+  expect(container.querySelector("span")?.textContent).toBe(
+    "This bot is pinned to OpenAI Codex · GPT-6 Astra · high; connect it or change the pin.",
+  );
+  const buttons = [...container.querySelectorAll("button")];
+  expect(buttons.map((button) => button.textContent)).toEqual(["Connect", "Change pin"]);
+  await act(async () => {
+    buttons[0]!.click();
+    buttons[1]!.click();
+  });
+  expect(connect).toHaveBeenCalledOnce();
+  expect(change).toHaveBeenCalledOnce();
+});
+
+it("shows the requested unsupported effort instead of the nearest supported level", () => {
+  const model = effectiveBotModel(
+    {
+      ...bot,
+      modelProvider: "openai-codex",
+      modelId: "gpt-6-astra",
+      modelCredentialId: "credential-test",
+      thinkingLevel: "max",
+    },
+    { me, catalog, credentials },
+  );
+  expect(model).toMatchObject({ thinkingLevel: "max", unavailable: true });
+});
+
+it("keeps same-name custom endpoints distinct and saves the selected connection", async () => {
+  api.credentials.mockResolvedValue([
+    {
+      id: "first",
+      provider: "openai-compatible",
+      label: "First server",
+      hasKey: true,
+      modelId: "same-model",
+      isDefault: true,
+    },
+    {
+      id: "second",
+      provider: "openai-compatible",
+      label: "Second server",
+      hasKey: true,
+      modelId: "same-model",
+      isDefault: false,
+    },
+  ]);
+  await act(async () => root.render(settings()));
+  const options = [...modelSelect().options].filter(
+    (option) => parseModelPinOptionKey(option.value)?.modelId === "same-model",
+  );
+  expect(options).toHaveLength(2);
+  await act(async () => {
+    modelSelect().value = options[1]!.value;
+    modelSelect().dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({
+      modelProvider: "openai-compatible",
+      modelId: "same-model",
+      modelCredentialId: "second",
+    }),
+  );
+});
+
+it("keeps unsupported effort visible and unchanged during profile saves", async () => {
+  api.list.mockResolvedValue(
+    catalog.map((entry) => ({ ...entry, reasoning: false, thinkingLevels: ["off"] })),
+  );
+  await act(async () =>
+    root.render(
+      settings({
+        modelProvider: "openai-codex",
+        modelId: "gpt-6-astra",
+        modelCredentialId: "credential-test",
+        thinkingLevel: "high",
+      }),
+    ),
+  );
+  expect(container.querySelector<HTMLSelectElement>('select[id$="-thinking"]')?.value).toBe("high");
+  await save();
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({ thinkingLevel: "high", modelCredentialId: "credential-test" }),
+  );
 });

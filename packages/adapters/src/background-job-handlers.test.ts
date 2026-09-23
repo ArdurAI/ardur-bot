@@ -99,7 +99,7 @@ describe("createBackgroundJobHandlers", () => {
     );
   });
 
-  it("resolves the deployment model when no user credential is configured", async () => {
+  it("rejects a deployment fallback when no space connection is configured", async () => {
     const prisma = {
       spaceModelPreference: { findFirst: vi.fn(async () => null) },
       userModelCredential: { findFirst: vi.fn(async () => null) },
@@ -112,17 +112,10 @@ describe("createBackgroundJobHandlers", () => {
 
     await expect(
       executor.resolveModel({ userId: "user-1", spaceId: "workspace-1" }),
-    ).resolves.toEqual({
-      provider: "openrouter",
-      id: "openai/gpt-5.6-luna",
-      apiKey: "deployment-key",
-      baseUrl: undefined,
-      thinkingLevel: null,
-      oauth: undefined,
-    });
+    ).resolves.toMatchObject({ kind: "problem", code: "pin-incomplete" });
   });
 
-  it("preserves a configured local model when resolving background compaction", async () => {
+  it("does not use deployment settings to replace a missing space connection", async () => {
     const prisma = {
       spaceModelPreference: { findFirst: vi.fn(async () => null) },
       userModelCredential: { findFirst: vi.fn(async () => null) },
@@ -139,13 +132,6 @@ describe("createBackgroundJobHandlers", () => {
 
     await expect(
       executor.resolveModel({ userId: "user-1", spaceId: "workspace-1" }),
-    ).resolves.toEqual({
-      provider: "local",
-      id: "qwen3:4b",
-      apiKey: undefined,
-      baseUrl: undefined,
-      thinkingLevel: null,
-      oauth: undefined,
-    });
+    ).resolves.toMatchObject({ kind: "problem", code: "pin-incomplete" });
   });
 });

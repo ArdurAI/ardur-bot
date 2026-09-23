@@ -99,3 +99,37 @@ describe("consent grants", () => {
     );
   });
 });
+
+it("discloses a disconnected pin's intended provider without substituting the connected default", async () => {
+  const { deps, actor } = setup();
+  deps.env.agentRuntime = "pi";
+  vi.mocked(deps.prisma.bot.findMany).mockResolvedValue([
+    {
+      modelProvider: "anthropic",
+      modelId: "claude-opus-4-6",
+      thinkingLevel: "high",
+      modelCredentialId: null,
+      modelPinRevision: 0,
+    },
+  ] as never);
+  vi.mocked(deps.prisma.spaceModelPreference.findFirst).mockResolvedValue({
+    credential: { provider: "openai", secretId: "default-secret" },
+    modelId: "gpt-4o",
+    isDefault: true,
+  } as never);
+  const result = await aiConsentStatus(deps, actor, { botId: "bot", uses: ["model"] });
+  expect(result.recipients.map((recipient) => recipient.name)).toEqual(["Anthropic"]);
+});
+
+it("keeps the no-bot deployment onboarding recipient separate", async () => {
+  const { deps, actor } = setup();
+  deps.env.agentRuntime = "pi";
+  deps.env.deploymentModelKey = "test-key";
+  deps.env.defaultProvider = "openai";
+  deps.env.defaultModel = "gpt-4o";
+  expect(
+    (await aiConsentStatus(deps, actor, { uses: ["model"] })).recipients.map(
+      (recipient) => recipient.name,
+    ),
+  ).toEqual(["OpenAI"]);
+});

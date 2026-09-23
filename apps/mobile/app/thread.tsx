@@ -10,6 +10,7 @@ import {
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
   type MessageReaction,
+  runtimePinMessage,
 } from "@ardurbot/contracts";
 import {
   abortableDelay,
@@ -110,6 +111,7 @@ import {
   takePhoto,
 } from "../lib/pick-attachments";
 import { threadRefreshDelayMs } from "../lib/refresh";
+import { runtimePinRecovery } from "../lib/runtime-pin-recovery";
 import {
   type ThreadScrollAction,
   ThreadScrollBehavior,
@@ -1271,7 +1273,12 @@ function Thread() {
   }
 
   const answerableAskMessageId = latestAnswerableAskMessageId(snap);
-  const runError = snap?.run?.status === "failed" ? (snap.run.error ?? null) : null;
+  const runError =
+    snap?.run?.status === "failed"
+      ? snap.run.runtimeProblem
+        ? runtimePinMessage(snap.run.runtimeProblem.pin)
+        : (snap.run.error ?? null)
+      : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);
   const messagesById = useMemo(
     () => new Map((snap?.messages ?? []).map((message) => [message.id, message])),
@@ -1562,7 +1569,37 @@ function Thread() {
     >
       {error ? <Text style={{ color: tokens.mutedForeground, marginTop: 12 }}>{error}</Text> : null}
       {runError ? (
-        <Text style={{ color: tokens.destructive, marginTop: 12 }}>{runError}</Text>
+        <View style={{ marginTop: 12 }}>
+          <Text style={{ color: tokens.destructive }}>{runError}</Text>
+          {snap?.run?.runtimeProblem ? (
+            <View style={{ flexDirection: "row", gap: 16, marginTop: 8 }}>
+              <Text
+                accessibilityRole="button"
+                style={{ color: tokens.destructive }}
+                onPress={() =>
+                  router.push(
+                    runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
+                      .connect,
+                  )
+                }
+              >
+                {t("Connect")}
+              </Text>
+              <Text
+                accessibilityRole="button"
+                style={{ color: tokens.destructive }}
+                onPress={() =>
+                  router.push(
+                    runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
+                      .changePin,
+                  )
+                }
+              >
+                {t("Change pin")}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       ) : null}
       <View style={{ flex: 1, position: "relative" }}>
         {showPinnedPage ? (

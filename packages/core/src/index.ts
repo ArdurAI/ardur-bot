@@ -31,6 +31,7 @@ export * from "./messaging-commands.js";
 export * from "./messaging-prompts.js";
 export * from "./model-defaults.js";
 export * from "./model-oauth.js";
+export * from "./model-pin-choice.js";
 export * from "./model-probe.js";
 export * from "./model-providers.js";
 export * from "./response-bytes.js";

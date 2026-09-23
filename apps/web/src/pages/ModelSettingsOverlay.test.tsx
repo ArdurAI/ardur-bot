@@ -225,3 +225,21 @@ it("can reveal a provider whose entire catalog is hidden", async () => {
   await act(async () => toggle?.click());
   expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
 });
+
+it("opens the provider requested by a pin failure instead of the space default", async () => {
+  api.list.mockResolvedValue([
+    ...catalog,
+    {
+      provider: "xai",
+      providerName: "xAI",
+      id: "grok-4.6",
+      label: "Grok 4.6",
+      auth: "api-key",
+      billing: "",
+    },
+  ]);
+  await act(async () =>
+    root.render(<ModelSettingsOverlay embedded initialProvider="xai" onClose={() => undefined} />),
+  );
+  expect(picker().textContent).toBe("Grok 4.6");
+});

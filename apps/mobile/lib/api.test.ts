@@ -2110,15 +2110,33 @@ describe("mobile thread event reduction", () => {
       activeRuns: [runA, runB],
     };
 
+    const runtimeProblem = {
+      kind: "problem",
+      code: "pin-credential-missing",
+      pin: {
+        provider: "xai",
+        modelId: "grok-4.6",
+        effort: "high",
+        credentialId: "deleted",
+        revision: 1,
+      },
+      reason: "Missing connection",
+      actions: ["connect", "change-pin"],
+    };
     const next = applyMobileThreadEvent(initial, {
       type: "run.failed",
       seq: 11,
       runId: runB.id,
-      payload: { error: "member exploded" },
+      payload: { error: "member exploded", runtimeProblem },
     });
 
     expect(next?.activeRuns).toEqual([runA]);
-    expect(next?.run).toEqual({ id: runB.id, status: "failed", error: "member exploded" });
+    expect(next?.run).toEqual({
+      id: runB.id,
+      status: "failed",
+      error: "member exploded",
+      runtimeProblem,
+    });
     expect(next?.messages).toEqual([]);
   });
 

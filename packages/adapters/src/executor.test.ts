@@ -1412,7 +1412,7 @@ description: Prepare standup notes
     expect(finalizeRun).toHaveBeenCalledWith(
       expect.objectContaining({
         outcome: "failed",
-        error: "Connect a model in Settings before running bots.",
+        runtimeProblem: expect.objectContaining({ code: "pin-incomplete" }),
       }),
     );
     expect(runtimeRun).not.toHaveBeenCalled();
@@ -1446,16 +1446,27 @@ description: Prepare standup notes
           modelProvider: "xai",
           modelId: "grok-4.6",
           thinkingLevel: "high",
+          modelCredentialId: "credential-xai",
         })),
       },
       spaceModelPreference: { findFirst },
-      userModelCredential: { findFirst: vi.fn(async () => null) },
+      userModelCredential: {
+        findFirst: vi.fn(
+          async () =>
+            modelPreference({
+              provider: "xai",
+              secretId: "secret-xai",
+              modelId: "grok-4.6",
+              isDefault: false,
+            }).credential,
+        ),
+      },
       deploymentSettings: { findUnique: vi.fn(async () => null) },
-      secret: { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null) },
+      secret: { findFirst: vi.fn(async () => ({ id: "secret-xai", ciphertext: "test-key" })) },
     } as unknown as PrismaClient;
     const executor = createRunExecutor({
       prisma,
-      secretStore: { load: vi.fn(), put: vi.fn() },
+      secretStore: { load: vi.fn(() => "test-key"), put: vi.fn() },
     } as unknown as Parameters<typeof createRunExecutor>[0]);
 
     const model = await executor.resolveModel({
@@ -1471,7 +1482,7 @@ description: Prepare standup notes
     });
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ credential: { provider: "xai" } }),
+        where: expect.objectContaining({ credentialId: "credential-xai" }),
       }),
     );
   });
@@ -1493,11 +1504,11 @@ description: Prepare standup notes
     const prisma = {
       spaceModelPreference: { findFirst },
       userModelCredential: { findFirst: vi.fn(async () => null) },
-      secret: { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null) },
+      secret: { findFirst: vi.fn(async () => ({ id: "secret-xai", ciphertext: "test-key" })) },
     } as unknown as PrismaClient;
     const executor = createRunExecutor({
       prisma,
-      secretStore: { load: vi.fn(), put: vi.fn() },
+      secretStore: { load: vi.fn(() => "test-key"), put: vi.fn() },
     } as unknown as Parameters<typeof createRunExecutor>[0]);
 
     const model = await executor.resolveConnectedModel(
@@ -1560,18 +1571,13 @@ description: Prepare standup notes
 
   it("keeps image support for a separately enabled bot model override", async () => {
     const provider = "openai-compatible";
-    const findFirst = vi.fn(
-      async (args: { where: { credential?: { provider?: string }; isDefault?: boolean } }) => {
-        if (args.where.credential?.provider === provider || args.where.isDefault) {
-          return modelPreference({
-            provider,
-            secretId: "secret-openai-compatible",
-            modelId: "space-model",
-            isDefault: Boolean(args.where.isDefault),
-          });
-        }
-        return null;
-      },
+    const findFirst = vi.fn(async () =>
+      modelPreference({
+        provider,
+        secretId: "secret-openai-compatible",
+        modelId: bot.modelId,
+        isDefault: false,
+      }),
     );
     const plaintext = serializeModelSecret({
       kind: "openai_compatible",
@@ -1584,12 +1590,23 @@ description: Prepare standup notes
     const bot = {
       modelProvider: provider,
       modelId: "bot-vision-model",
-      thinkingLevel: null,
+      thinkingLevel: "off",
+      modelCredentialId: "credential-openai-compatible",
     };
     const prisma = {
       bot: { findFirst: vi.fn(async () => bot) },
       spaceModelPreference: { findFirst },
-      userModelCredential: { findFirst: vi.fn(async () => null) },
+      userModelCredential: {
+        findFirst: vi.fn(
+          async () =>
+            modelPreference({
+              provider,
+              secretId: "secret-openai-compatible",
+              modelId: bot.modelId,
+              isDefault: false,
+            }).credential,
+        ),
+      },
       deploymentSettings: { findUnique: vi.fn(async () => null) },
       secret: {
         findFirst: vi.fn(async () => ({
@@ -1646,6 +1663,7 @@ description: Prepare standup notes
           modelProvider: "xai",
           modelId: "grok-4.6",
           thinkingLevel: "high",
+          modelCredentialId: "credential-xai",
         })),
       },
       spaceModelPreference: { findFirst },
@@ -1666,21 +1684,11 @@ description: Prepare standup notes
     });
 
     expect(model).toMatchObject({
-      provider: "xai",
-      id: "grok-4.6",
-      thinkingLevel: "high",
-      apiKey: undefined,
+      kind: "problem",
+      code: "pin-credential-missing",
+      pin: { provider: "xai", modelId: "grok-4.6", effort: "high" },
     });
-    expect(findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ credential: { provider: "xai" } }),
-      }),
-    );
-    expect(findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ isDefault: true }),
-      }),
-    );
+    expect(findFirst).not.toHaveBeenCalled();
   });
 
   it("withholds the deployment key when settings name a different provider", async () => {
@@ -1705,8 +1713,7 @@ description: Prepare standup notes
 
     const model = await executor.resolveModel({ userId: "user-1", spaceId: "ws-1" });
 
-    expect(model.provider).toBe("anthropic");
-    expect(model.apiKey).toBeUndefined();
+    expect(model).toMatchObject({ kind: "problem", code: "pin-incomplete" });
   });
 
   it("keeps per-bot thinking when using the Space default model", async () => {
@@ -1730,11 +1737,11 @@ description: Prepare standup notes
       spaceModelPreference: { findFirst },
       userModelCredential: { findFirst: vi.fn(async () => null) },
       deploymentSettings: { findUnique: vi.fn(async () => null) },
-      secret: { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null) },
+      secret: { findFirst: vi.fn(async () => ({ id: "secret-or", ciphertext: "test-key" })) },
     } as unknown as PrismaClient;
     const executor = createRunExecutor({
       prisma,
-      secretStore: { load: vi.fn(), put: vi.fn() },
+      secretStore: { load: vi.fn(() => "test-key"), put: vi.fn() },
     } as unknown as Parameters<typeof createRunExecutor>[0]);
 
     const model = await executor.resolveModel({
