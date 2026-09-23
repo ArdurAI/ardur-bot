@@ -1,0 +1,17 @@
+name: Provider or computer request
+description: A model provider, subscription, or computer backend you want supported.
+labels: ["provider"]
+body:
+  - type: input
+    attributes:
+      label: Provider or backend
+      placeholder: "e.g. Ollama, Kimi Code, Podman, kind"
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: How it authenticates
+      description: API key, OAuth, CLI login, local socket. Link the vendor's terms if third-party apps are restricted.
+  - type: textarea
+    attributes:
+      label: Anything else

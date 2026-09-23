@@ -2,7 +2,7 @@
 
 ## Reporting vulnerabilities
 
-Email **security@rakazo.com** only. Do not open public GitHub issues for security bugs.
+Email **security@ardur.ai**. Do not open public GitHub issues for security bugs.
 
 Please include:
 
@@ -10,25 +10,17 @@ Please include:
 - Impact (what an attacker could do)
 - Whether the issue is already public
 
-We will acknowledge your report and work on a fix. Please do not file a public issue for unfixed vulnerabilities.
+We will acknowledge your report and work on a fix. Please do not file a public issue for
+unfixed vulnerabilities.
 
 ## Other contact
 
-- General support: **support@rakazo.com**
-- Maintainer: **elie@rakazo.com**
+- General questions: GitHub Discussions
+- Support: **support@ardur.ai**
 
 ## Scope
 
-This policy covers the Rakazo self-hosted product in **this repository**.
-
-Out of scope:
-
-- Third-party AI models and their APIs
-- Composio, E2B, and other external services
-- Operator misconfiguration (exposed secrets, open databases, weak passwords)
-
-## Supported versions
-
-We support security fixes on the current `main` branch and the latest release (beta).
-
-There is no bug bounty program at this time.
+Ardur Bot runs bots that use browsers, terminals and files on computers you control, and
+connects to model providers with your own subscriptions and keys. Anything that lets a bot,
+a connector, a prompt, or another user escape those boundaries is in scope: authentication,
+secret handling, sandbox isolation, host commands, and integrations.
