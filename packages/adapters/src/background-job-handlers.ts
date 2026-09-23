@@ -5,10 +5,10 @@ import type {
   JobPublisher,
   MessagingSurface,
   SandboxProvider,
-} from "@rakazo/adapter-kit";
-import { messagingDeliverJob } from "@rakazo/adapter-kit";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/adapter-kit";
+import { messagingDeliverJob } from "@ardurbot/adapter-kit";
+import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { expireComputerControl } from "./computer-control.js";

@@ -1,6 +1,6 @@
-import type { SandboxProvider } from "@rakazo/adapter-kit";
-import type { Actor } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
+import type { SandboxProvider } from "@ardurbot/adapter-kit";
+import type { Actor } from "@ardurbot/contracts";
+import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   cancelSupersededQueuedRuns,
@@ -2111,14 +2111,14 @@ describe("stopThreadRuns", () => {
     expect(execute).toHaveBeenCalledWith(
       expect.objectContaining({ providerRef: "computer-team" }),
       expect.objectContaining({
-        argv: expect.arrayContaining(["rakazo-cancel-run-work", "computer-db-team", "run-a"]),
+        argv: expect.arrayContaining(["ardurbot-cancel-run-work", "computer-db-team", "run-a"]),
       }),
       expect.objectContaining({ cancelRunWork: true, runId: "run-a", botId: "bot-a" }),
     );
     expect(execute).toHaveBeenCalledWith(
       expect.objectContaining({ providerRef: "computer-team" }),
       expect.objectContaining({
-        argv: expect.arrayContaining(["rakazo-cancel-run-work", "computer-db-team", "run-b"]),
+        argv: expect.arrayContaining(["ardurbot-cancel-run-work", "computer-db-team", "run-b"]),
       }),
       expect.objectContaining({ cancelRunWork: true, runId: "run-b", botId: "bot-b" }),
     );
@@ -2224,14 +2224,14 @@ describe("stopThreadRuns", () => {
     expect(execute).toHaveBeenCalledWith(
       expect.objectContaining({ providerRef: "computer-a" }),
       expect.objectContaining({
-        argv: expect.arrayContaining(["rakazo-cancel-run-work", "computer-db-a", "run-a"]),
+        argv: expect.arrayContaining(["ardurbot-cancel-run-work", "computer-db-a", "run-a"]),
       }),
       expect.objectContaining({ cancelRunWork: true, runId: "run-a", botId: "bot-a" }),
     );
     expect(execute).not.toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        argv: expect.arrayContaining(["rakazo-cancel-run-work", "computer-db-a", "run-b"]),
+        argv: expect.arrayContaining(["ardurbot-cancel-run-work", "computer-db-a", "run-b"]),
       }),
       expect.anything(),
     );

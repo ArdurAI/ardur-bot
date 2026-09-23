@@ -3,11 +3,11 @@ plugins {
   id 'expo-module-gradle-plugin'
 }
 
-group = 'com.rakazo.notifications'
+group = 'ai.ardur.bot.notifications'
 version = '0.1.0'
 
 android {
-  namespace 'com.rakazo.notifications'
+  namespace 'ai.ardur.bot.notifications'
   defaultConfig {
     versionName '0.1.0'
   }

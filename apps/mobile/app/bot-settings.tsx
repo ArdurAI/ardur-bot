@@ -6,7 +6,7 @@ import {
   type ComputerMode,
   normalizeCreateBotProfile,
   type ThinkingLevel,
-} from "@rakazo/contracts";
+} from "@ardurbot/contracts";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";

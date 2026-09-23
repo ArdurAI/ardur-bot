@@ -1,7 +1,7 @@
 import { isIP } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { isLocalMcpHost } from "@rakazo/contracts";
+import { isLocalMcpHost } from "@ardurbot/contracts";
 import { Agent } from "undici";
 import { combineSignals } from "./connector-safety.js";
 import {
@@ -301,7 +301,7 @@ async function withSerenityClient<T>(
       return response;
     },
   });
-  const client = new Client({ name: "rakazo", version: "0.1.0" }, { capabilities: {} });
+  const client = new Client({ name: "ardurbot", version: "0.1.0" }, { capabilities: {} });
   try {
     await client.connect(transport, { signal: requestSignal, timeout: SERENITY_TIMEOUT_MS });
     return await run(client, requestSignal);

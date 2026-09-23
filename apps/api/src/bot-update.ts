@@ -1,5 +1,5 @@
-import { appendEventInTransaction, type Prisma, type PrismaClient } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import { appendEventInTransaction, type Prisma, type PrismaClient } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 
 type AppendEvent = typeof appendEventInTransaction;
 

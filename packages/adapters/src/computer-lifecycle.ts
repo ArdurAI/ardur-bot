@@ -5,15 +5,15 @@ import type {
   ComputerRef,
   JobPublisher,
   SandboxProvider,
-} from "@rakazo/adapter-kit";
-import type { ComputerUpdate } from "@rakazo/contracts";
-import { ACTIVE_RUN_STATUSES, parseScreenLeaseId, screenLeaseId } from "@rakazo/core";
+} from "@ardurbot/adapter-kit";
+import type { ComputerUpdate } from "@ardurbot/contracts";
+import { ACTIVE_RUN_STATUSES, parseScreenLeaseId, screenLeaseId } from "@ardurbot/core";
 import {
   expireComputerExecutionLeases,
   type PrismaClient,
   parseComputerMode,
   type ThreadEvents,
-} from "@rakazo/db";
+} from "@ardurbot/db";
 import {
   clearInactiveUserComputerControl,
   expireComputerControl,

@@ -8,7 +8,7 @@ import type {
   SemanticMemoryResponse,
   SemanticMemoryResult,
   SemanticMemorySaveRequest,
-} from "@rakazo/adapter-kit";
+} from "@ardurbot/adapter-kit";
 import {
   classifySerenityEndpointTrust,
   forgetSerenity,
@@ -155,12 +155,12 @@ export function sanitizeSerenityBrainLabel(label: string): string {
 
 export function serenityBotEntity(botId: string, brainLabel = ""): string {
   const label = sanitizeSerenityBrainLabel(brainLabel);
-  return label ? `rakazo-bot/${label}/${botId}` : `rakazo-bot/${botId}`;
+  return label ? `ardurbot-bot/${label}/${botId}` : `ardurbot-bot/${botId}`;
 }
 
 export function serenitySpaceEntity(spaceId: string, brainLabel = ""): string {
   const label = sanitizeSerenityBrainLabel(brainLabel);
-  return label ? `rakazo-space/${label}/${spaceId}` : `rakazo-space/${spaceId}`;
+  return label ? `ardurbot-space/${label}/${spaceId}` : `ardurbot-space/${spaceId}`;
 }
 
 function durableEntities(
@@ -199,7 +199,7 @@ export class SerenityMemoryProvider implements SemanticMemoryProvider {
     request: SemanticMemoryRecallRequest,
     context: AdapterContext,
   ): Promise<SemanticMemoryResponse<SemanticMemoryResult[]>> {
-    // History compaction stays in Rakazo; Serenity is the durable brain only.
+    // History compaction stays in Ardur Bot; Serenity is the durable brain only.
     const entities = durableEntities(
       request.scope,
       request.botId,
@@ -263,7 +263,7 @@ export class SerenityMemoryProvider implements SemanticMemoryProvider {
       context.spaceId,
       this.connection.brainLabel,
     );
-    const provenance = `rakazo space:${context.spaceId} bot:${request.botId}`;
+    const provenance = `ardurbot space:${context.spaceId} bot:${request.botId}`;
     const results = await Promise.all(
       entities.map((entity) =>
         rememberSerenity(request.content, provenance, this.connection, {

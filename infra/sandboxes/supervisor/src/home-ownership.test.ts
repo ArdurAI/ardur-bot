@@ -24,7 +24,7 @@ afterEach(async () => {
 
 describe("computer home ownership", () => {
   it("rejects a missing home instead of creating it as root", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-missing-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "ardurbot-home-missing-"));
     roots.push(parent);
 
     await expect(
@@ -33,7 +33,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects a symlink as the home root", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-root-link-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "ardurbot-home-root-link-"));
     roots.push(parent);
     const outside = path.join(parent, "outside");
     const home = path.join(parent, "home");
@@ -44,7 +44,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects a writable regular file as the home root", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-file-root-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "ardurbot-home-file-root-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     await writeFile(home, "{}");
@@ -57,7 +57,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects an existing entry that the host-run computer cannot write", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-writable-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "ardurbot-home-writable-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const file = path.join(home, "profile.json");
@@ -73,7 +73,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects an owner-owned file that is not writable by that owner", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-owner-mode-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "ardurbot-home-owner-mode-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const file = path.join(home, "profile.json");
@@ -86,7 +86,7 @@ describe("computer home ownership", () => {
   });
 
   it("does not follow symlinks while checking host-run compatibility", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-writable-link-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "ardurbot-home-writable-link-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const outside = path.join(parent, "outside");
@@ -102,7 +102,7 @@ describe("computer home ownership", () => {
   it.skipIf(process.platform !== "linux")(
     "rejects an opened directory that was moved outside the home",
     async () => {
-      const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-moved-"));
+      const parent = await mkdtemp(path.join(tmpdir(), "ardurbot-home-moved-"));
       roots.push(parent);
       const home = path.join(parent, "home");
       const outside = path.join(parent, "outside");

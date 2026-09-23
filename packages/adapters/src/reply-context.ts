@@ -1,7 +1,7 @@
-import type { MessageBlock } from "@rakazo/contracts";
-import { REPLY_QUOTE_MAX_LENGTH } from "@rakazo/contracts";
-import { blocksToAgentHistoryText, messageReaction } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
+import type { MessageBlock } from "@ardurbot/contracts";
+import { REPLY_QUOTE_MAX_LENGTH } from "@ardurbot/contracts";
+import { blocksToAgentHistoryText, messageReaction } from "@ardurbot/core";
+import type { PrismaClient } from "@ardurbot/db";
 
 type QuotedMessage = { id: string; threadId: string; role: string; blocks: unknown };
 type ReplyMessage = QuotedMessage & {

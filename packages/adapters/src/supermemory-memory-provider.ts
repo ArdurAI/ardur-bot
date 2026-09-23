@@ -6,7 +6,7 @@ import type {
   SemanticMemoryResponse,
   SemanticMemoryResult,
   SemanticMemorySaveRequest,
-} from "@rakazo/adapter-kit";
+} from "@ardurbot/adapter-kit";
 import {
   deleteSupermemoryContainer,
   parseSupermemoryBaseUrl,
@@ -87,14 +87,14 @@ export function decodeLegacySupermemoryCredentials(
 }
 
 function durableContainerTags(scope: DurableMemoryScope, botId: string, spaceId: string): string[] {
-  const isolated = `rakazo:${botId}`;
+  const isolated = `ardurbot:${botId}`;
   // This external namespace predates the Space rename. Keep it stable so
   // existing durable memories remain recallable; the identifier is a Space ID.
-  return scope === "shared" ? [`rakazo:workspace:${spaceId}`, isolated] : [isolated];
+  return scope === "shared" ? [`ardurbot:workspace:${spaceId}`, isolated] : [isolated];
 }
 
 function historyContainerTag(botId: string, generation: number): string {
-  return `rakazo:${botId}:history:${generation}`;
+  return `ardurbot:${botId}:history:${generation}`;
 }
 
 function recallContainerTags(request: SemanticMemoryRecallRequest, spaceId: string): string[] {

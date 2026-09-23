@@ -58,7 +58,7 @@ async function selectAndRelease(
 
 test("selecting a text span quotes it into a reply", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `quote-${stamp}@rakazo.test`, "password12", "Quote Tester");
+  await signup(page, `quote-${stamp}@ardurbot.test`, "password12", "Quote Tester");
   await completeOnboarding(page);
 
   const transcript = page.getByTestId("transcript");
@@ -136,7 +136,7 @@ test("selecting a text span quotes it into a reply", async ({ page }, testInfo) 
 
 test("rendered markdown selections survive server quote derivation", async ({ page }) => {
   const stamp = Date.now();
-  await signup(page, `quote-markdown-${stamp}@rakazo.test`, "password12", "Quote Tester");
+  await signup(page, `quote-markdown-${stamp}@ardurbot.test`, "password12", "Quote Tester");
   await completeOnboarding(page);
 
   const transcript = page.getByTestId("transcript");
@@ -180,7 +180,7 @@ test("rendered markdown selections survive server quote derivation", async ({ pa
 
 test("a selection spanning two messages offers no quote action", async ({ page }) => {
   const stamp = Date.now();
-  await signup(page, `quote-span-${stamp}@rakazo.test`, "password12", "Quote Tester");
+  await signup(page, `quote-span-${stamp}@ardurbot.test`, "password12", "Quote Tester");
   await completeOnboarding(page);
 
   const transcript = page.getByTestId("transcript");

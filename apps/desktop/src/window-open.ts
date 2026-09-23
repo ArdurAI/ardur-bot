@@ -1,8 +1,8 @@
 const OAUTH_POPUP_NAMES = new Set([
-  "rakazo-app-connect",
-  "rakazo-mcp-oauth",
-  "rakazo-model-oauth",
-  "rakazo-plugin-connect",
+  "ardurbot-app-connect",
+  "ardurbot-mcp-oauth",
+  "ardurbot-model-oauth",
+  "ardurbot-plugin-connect",
 ]);
 
 export function shouldOpenInAppPopup(

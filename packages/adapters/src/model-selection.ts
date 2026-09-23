@@ -1,11 +1,11 @@
-import type { AgentRunRequest } from "@rakazo/adapter-kit";
-import type { Actor } from "@rakazo/contracts";
-import { usableModelId } from "@rakazo/contracts";
+import type { AgentRunRequest } from "@ardurbot/adapter-kit";
+import type { Actor } from "@ardurbot/contracts";
+import { usableModelId } from "@ardurbot/contracts";
 import {
   type findDefaultModelCredential,
   findModelCredential,
   type PrismaClient,
-} from "@rakazo/db";
+} from "@ardurbot/db";
 import { listPiCatalog, scriptedCatalogEntry } from "./pi-models.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
 

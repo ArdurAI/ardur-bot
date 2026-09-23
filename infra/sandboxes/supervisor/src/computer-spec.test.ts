@@ -67,22 +67,22 @@ describe("graphical computer spec", () => {
 
   it("creates a VNC desktop, not an alpine sleep fallback", () => {
     const options = containerCreateOptions({
-      name: "rakazo-bot-abc",
+      name: "ardurbot-bot-abc",
       image: COMPUTER_IMAGE,
       botId: "abc",
       spaceId: "ws",
-      homePath: "/var/rakazo/homes/abc",
-      networkMode: "rakazo_default",
+      homePath: "/var/ardurbot/homes/abc",
+      networkMode: "ardurbot_default",
     });
-    expect(options.Image).toBe("rakazo/computer:local");
+    expect(options.Image).toBe("ardurbot/computer:local");
     expect(options.Image).not.toMatch(/alpine/);
     expect(options).not.toHaveProperty("Entrypoint");
     expect(JSON.stringify(options)).not.toMatch(/sleep/);
-    expect(options.HostConfig.Binds).toEqual(["/var/rakazo/homes/abc:/home/rakazo"]);
+    expect(options.HostConfig.Binds).toEqual(["/var/ardurbot/homes/abc:/home/ardurbot"]);
     expect(options.Env).toContain(
-      "PATH=/home/rakazo/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "PATH=/home/ardurbot/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     );
-    expect(options.Env).toContain("NPM_CONFIG_PREFIX=/home/rakazo/.local");
+    expect(options.Env).toContain("NPM_CONFIG_PREFIX=/home/ardurbot/.local");
     expect(options.Env?.join("\n")).not.toMatch(/AXIOM_|LOG_LEVEL|LOG_FORMAT/);
     expect(options.ExposedPorts).toEqual({ "6080/tcp": {} });
     // Browser debugging stays inside the computer trust boundary.
@@ -104,7 +104,7 @@ describe("graphical computer spec", () => {
     expect(options.HostConfig.SecurityOpt).toEqual(["no-new-privileges:true"]);
     expect(options.HostConfig.PidsLimit).toBe(2048);
     expect(options.HostConfig.ReadonlyPaths).toContain("/usr/share/novnc");
-    expect(options.HostConfig.NetworkMode).toBe("rakazo_default");
+    expect(options.HostConfig.NetworkMode).toBe("ardurbot_default");
   });
 
   it("still publishes host ports when NetworkMode is a per-bot isolated network", () => {
@@ -114,10 +114,10 @@ describe("graphical computer spec", () => {
       image: COMPUTER_IMAGE,
       botId: "bot_isolation",
       spaceId: "ws",
-      homePath: "/var/rakazo/homes/bot_isolation",
+      homePath: "/var/ardurbot/homes/bot_isolation",
       networkMode,
     });
-    expect(networkMode).toMatch(/^rakazo-computer-bot_isolation-[0-9a-f]{32}$/);
+    expect(networkMode).toMatch(/^ardurbot-computer-bot_isolation-[0-9a-f]{32}$/);
     expect(options.HostConfig.NetworkMode).toBe(networkMode);
     expect(options.HostConfig.PortBindings["6080/tcp"]).toEqual([
       { HostIp: "127.0.0.1", HostPort: "0" },
@@ -133,7 +133,7 @@ describe("graphical computer spec", () => {
   it("lists prior network name variants for cleanup", () => {
     const names = computerNetworkNamesForCleanup("bot_1");
     expect(names[0]).toBe(computerNetworkNameFor("bot_1"));
-    expect(names).toContain("rakazo-computer-bot_1");
+    expect(names).toContain("ardurbot-computer-bot_1");
     expect(names.some((name) => /-[0-9a-f]{8}$/.test(name))).toBe(true);
     expect(names.some((name) => /-[0-9a-f]{32}$/.test(name))).toBe(true);
   });
@@ -149,31 +149,31 @@ describe("graphical computer spec", () => {
     const root = path.resolve(import.meta.dirname, "../../computer");
     const dockerfile = readFileSync(path.join(root, "Dockerfile"), "utf8");
     const start = readFileSync(path.join(root, "start.sh"), "utf8");
-    const browser = readFileSync(path.join(root, "rakazo-browser"), "utf8");
-    const desktop = readFileSync(path.join(root, "rakazo-browser.desktop"), "utf8");
+    const browser = readFileSync(path.join(root, "ardurbot-browser"), "utf8");
+    const desktop = readFileSync(path.join(root, "ardurbot-browser.desktop"), "utf8");
     expect(dockerfile).toMatch(/chromium/);
-    expect(dockerfile).toMatch(/rakazo-browser\.desktop/);
+    expect(dockerfile).toMatch(/ardurbot-browser\.desktop/);
     expect(dockerfile).toMatch(/control.py/);
     expect(dockerfile).toMatch(/USER 1000:1000/);
-    expect(start).toMatch(/rakazo-computer-control/);
-    expect(start).toMatch(/rakazo-browser/);
+    expect(start).toMatch(/ardurbot-computer-control/);
+    expect(start).toMatch(/ardurbot-browser/);
     expect(start).not.toMatch(/browser\.log/);
-    expect(start).toMatch(/xdg-mime default rakazo-browser\.desktop/);
+    expect(start).toMatch(/xdg-mime default ardurbot-browser\.desktop/);
     expect(start).toMatch(/register_browser_handler x-scheme-handler\/http/);
     expect(start).toMatch(/register_browser_handler x-scheme-handler\/https/);
     expect(start).toMatch(/register_browser_handler text\/html/);
     expect(start).toMatch(/xdg-mime query default/);
-    expect(start).toMatch(/failed to register rakazo-browser/);
+    expect(start).toMatch(/failed to register ardurbot-browser/);
     expect(start).toMatch(/failed to set default web browser/);
-    expect(start).toMatch(/xdg-settings set default-web-browser rakazo-browser\.desktop/);
-    expect(start).not.toMatch(/xdg-mime default rakazo-browser\.desktop .*\|\| true/);
+    expect(start).toMatch(/xdg-settings set default-web-browser ardurbot-browser\.desktop/);
+    expect(start).not.toMatch(/xdg-mime default ardurbot-browser\.desktop .*\|\| true/);
     expect(start).toMatch(/x11vnc .* -viewonly /);
     expect(browser).toMatch(/\.browser-profiles\/chromium/);
     expect(browser).toMatch(/chromium-screen-\$DISPLAY_NUM/);
     expect(browser).toMatch(/USER_DATA_DIR_SET/);
-    expect(browser).toMatch(/RAKAZO_BROWSER_PROFILE/);
-    expect(desktop).toMatch(/Exec=\/usr\/local\/bin\/rakazo-browser %U/);
-    expect(dockerfile).toMatch(/rakazo-page-browser/);
+    expect(browser).toMatch(/ARDURBOT_BROWSER_PROFILE/);
+    expect(desktop).toMatch(/Exec=\/usr\/local\/bin\/ardurbot-browser %U/);
+    expect(dockerfile).toMatch(/ardurbot-page-browser/);
     expect(browser).toMatch(/remote-debugging-port/);
     expect(desktop).toMatch(/x-scheme-handler\/http/);
     expect(desktop).toMatch(/x-scheme-handler\/https/);
@@ -184,23 +184,23 @@ describe("graphical computer spec", () => {
     "selects a display-specific browser profile and preserves explicit profiles",
     () => {
       const root = path.resolve(import.meta.dirname, "../../computer");
-      const temp = mkdtempSync(path.join(tmpdir(), "rakazo-browser-wrapper-"));
+      const temp = mkdtempSync(path.join(tmpdir(), "ardurbot-browser-wrapper-"));
       const bin = path.join(temp, "bin");
       const capture = path.join(temp, "args");
       const home = path.join(temp, "home");
       const chromium = path.join(bin, "chromium");
       mkdirSync(bin);
-      writeFileSync(chromium, '#!/bin/sh\nprintf "%s\\n" "$@" > "$RAKAZO_TEST_ARGS"\n');
+      writeFileSync(chromium, '#!/bin/sh\nprintf "%s\\n" "$@" > "$ARDURBOT_TEST_ARGS"\n');
       chmodSync(chromium, 0o755);
 
       const run = (display: string, args: string[] = []) => {
-        const result = spawnSync("sh", [path.join(root, "rakazo-browser"), ...args], {
+        const result = spawnSync("sh", [path.join(root, "ardurbot-browser"), ...args], {
           env: {
             ...process.env,
             DISPLAY: display,
             HOME: home,
             PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
-            RAKAZO_TEST_ARGS: capture,
+            ARDURBOT_TEST_ARGS: capture,
           },
           encoding: "utf8",
         });
@@ -235,13 +235,13 @@ describe("graphical computer spec", () => {
     "clears crashed state from Chromium preferences and Local State",
     () => {
       const root = path.resolve(import.meta.dirname, "../../computer");
-      const temp = mkdtempSync(path.join(tmpdir(), "rakazo-browser-crash-"));
+      const temp = mkdtempSync(path.join(tmpdir(), "ardurbot-browser-crash-"));
       const bin = path.join(temp, "bin");
       const home = path.join(temp, "home");
       const chromium = path.join(bin, "chromium");
       const capture = path.join(temp, "args");
       mkdirSync(bin);
-      writeFileSync(chromium, '#!/bin/sh\nprintf "%s\\n" "$@" > "$RAKAZO_TEST_ARGS"\n');
+      writeFileSync(chromium, '#!/bin/sh\nprintf "%s\\n" "$@" > "$ARDURBOT_TEST_ARGS"\n');
       chmodSync(chromium, 0o755);
 
       const profile = path.join(home, ".browser-profiles/chromium");
@@ -256,13 +256,13 @@ describe("graphical computer spec", () => {
       writeFileSync(localStatePath, '{\n  "profile": {\n    "exited_cleanly": false\n  }\n}\n');
 
       try {
-        const result = spawnSync("bash", [path.join(root, "rakazo-browser")], {
+        const result = spawnSync("bash", [path.join(root, "ardurbot-browser")], {
           env: {
             ...process.env,
             DISPLAY: ":1",
             HOME: home,
             PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
-            RAKAZO_TEST_ARGS: capture,
+            ARDURBOT_TEST_ARGS: capture,
           },
           encoding: "utf8",
         });
@@ -284,13 +284,13 @@ describe("graphical computer spec", () => {
 
         writeFileSync(prefsPath, '{\n  "profile": {\n    "exit_type": "Crashed"\n  }\n}\n');
         symlinkSync("testhost-12345", path.join(profile, "SingletonLock"));
-        const skipped = spawnSync("bash", [path.join(root, "rakazo-browser")], {
+        const skipped = spawnSync("bash", [path.join(root, "ardurbot-browser")], {
           env: {
             ...process.env,
             DISPLAY: ":1",
             HOME: home,
             PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
-            RAKAZO_TEST_ARGS: capture,
+            ARDURBOT_TEST_ARGS: capture,
           },
           encoding: "utf8",
         });
@@ -303,7 +303,7 @@ describe("graphical computer spec", () => {
   );
 
   it("keeps container names stable so a bot can resume", () => {
-    expect(containerNameFor("bot_1")).toBe("rakazo-bot-bot_1");
+    expect(containerNameFor("bot_1")).toBe("ardurbot-bot-bot_1");
     expect(containerNameFor("bot_1")).toBe(containerNameFor("bot_1"));
   });
 
@@ -356,7 +356,7 @@ describe("graphical computer spec", () => {
   });
 
   it("uses the container IP only for the internal screen network topology", () => {
-    const networkMode = "rakazo_default";
+    const networkMode = "ardurbot_default";
     expect(
       resolveScreenPublishTarget({
         screenNetwork: "internal",
@@ -369,8 +369,8 @@ describe("graphical computer spec", () => {
     expect(
       resolveScreenPublishTarget({
         screenNetwork: "isolated",
-        networkMode: "rakazo-computer-bot-1",
-        networks: { "rakazo-computer-bot-1": { IPAddress: "172.20.0.4" } },
+        networkMode: "ardurbot-computer-bot-1",
+        networks: { "ardurbot-computer-bot-1": { IPAddress: "172.20.0.4" } },
         hostPort: "49152",
         containerPort: "6080",
       }),
@@ -379,11 +379,11 @@ describe("graphical computer spec", () => {
 
   it("does not publish computer control port 7070 on the host", () => {
     const options = containerCreateOptions({
-      name: "rakazo-bot-ctrl",
+      name: "ardurbot-bot-ctrl",
       image: COMPUTER_IMAGE,
       botId: "ctrl",
       spaceId: "ws",
-      homePath: "/var/rakazo/homes/ctrl",
+      homePath: "/var/ardurbot/homes/ctrl",
     });
     expect(options.HostConfig.PortBindings["7070/tcp"]).toBeUndefined();
     expect(options.ExposedPorts["7070/tcp"]).toBeUndefined();
@@ -392,11 +392,11 @@ describe("graphical computer spec", () => {
 
   it("publishes the control port to loopback only when explicitly opted in", () => {
     const options = containerCreateOptions({
-      name: "rakazo-bot-ctrl",
+      name: "ardurbot-bot-ctrl",
       image: COMPUTER_IMAGE,
       botId: "ctrl",
       spaceId: "ws",
-      homePath: "/var/rakazo/homes/ctrl",
+      homePath: "/var/ardurbot/homes/ctrl",
       publishControlPort: true,
     });
     expect(options.ExposedPorts["7070/tcp"]).toEqual({});
@@ -406,7 +406,7 @@ describe("graphical computer spec", () => {
   });
 
   it("resolves computer control through the container network IP, never a host mapping", () => {
-    const networkMode = "rakazo_default";
+    const networkMode = "ardurbot_default";
     expect(
       resolveComputerControlEndpoint({
         token: "secret",
@@ -438,7 +438,7 @@ describe("graphical computer spec", () => {
   });
 
   it("resolves computer control through a published loopback port when provided", () => {
-    const networkMode = "rakazo_default";
+    const networkMode = "ardurbot_default";
     expect(
       resolveComputerControlEndpoint({
         token: "secret",
@@ -512,7 +512,7 @@ describe("graphical computer spec", () => {
   );
 
   it("does not fall back to the container IP when a published control port is required", () => {
-    const networkMode = "rakazo_default";
+    const networkMode = "ardurbot_default";
     expect(
       resolveComputerControlEndpoint({
         token: "secret",
@@ -553,11 +553,11 @@ describe("graphical computer spec", () => {
           "assert allow(['env', 'DISPLAY=:1', 'xdotool', 'click', '--repeat', '3', '4'], ':1')",
           "assert allow(['env', 'DISPLAY=:1', 'xdotool', 'type', '--clearmodifiers', '--', 'hi'], ':1')",
           "assert allow(['env', 'DISPLAY=:2', 'xdg-open', 'https://example.com'], ':2')",
-          "assert allow(['env', 'DISPLAY=:1', 'rakazo-browser'], ':1')",
-          "assert allow(['env', 'DISPLAY=:2', 'rakazo-browser', 'https://example.com'], ':2')",
+          "assert allow(['env', 'DISPLAY=:1', 'ardurbot-browser'], ':1')",
+          "assert allow(['env', 'DISPLAY=:2', 'ardurbot-browser', 'https://example.com'], ':2')",
           "assert allow(['env', 'DISPLAY=:1', 'xterm'], ':1')",
-          "assert long_lived(['env', 'DISPLAY=:1', 'rakazo-browser'])",
-          "assert long_lived(['env', 'DISPLAY=:1', 'rakazo-browser', 'https://example.com'])",
+          "assert long_lived(['env', 'DISPLAY=:1', 'ardurbot-browser'])",
+          "assert long_lived(['env', 'DISPLAY=:1', 'ardurbot-browser', 'https://example.com'])",
           "assert long_lived(['env', 'DISPLAY=:1', 'xterm'])",
           "assert long_lived(['env', 'DISPLAY=:1', 'xdg-open', 'https://example.com'])",
           "assert not long_lived(['env', 'DISPLAY=:1', 'xdotool', 'key', '--clearmodifiers', 'a'])",
@@ -633,9 +633,9 @@ describe("graphical computer spec", () => {
 
 describe("computer resource limits", () => {
   const KEYS = [
-    "RAKAZO_COMPUTER_MEMORY",
-    "RAKAZO_COMPUTER_CPUS",
-    "RAKAZO_COMPUTER_PIDS_LIMIT",
+    "ARDURBOT_COMPUTER_MEMORY",
+    "ARDURBOT_COMPUTER_CPUS",
+    "ARDURBOT_COMPUTER_PIDS_LIMIT",
   ] as const;
   const saved = new Map<string, string | undefined>();
 
@@ -654,11 +654,11 @@ describe("computer resource limits", () => {
   });
 
   const createInput = {
-    name: "rakazo-bot-x",
-    image: "rakazo/computer:local",
+    name: "ardurbot-bot-x",
+    image: "ardurbot/computer:local",
     botId: "bot-x",
     spaceId: "ws",
-    homePath: "/var/rakazo/homes/bot-x",
+    homePath: "/var/ardurbot/homes/bot-x",
   };
 
   it("caps memory and cpu by default and keeps #343's pids ceiling", () => {
@@ -671,9 +671,9 @@ describe("computer resource limits", () => {
 
   it("falls back to the defaults when a variable is blank", () => {
     // .env.example ships these keys blank; a blank value must read as "unset".
-    process.env.RAKAZO_COMPUTER_MEMORY = "";
-    process.env.RAKAZO_COMPUTER_CPUS = "  ";
-    process.env.RAKAZO_COMPUTER_PIDS_LIMIT = "";
+    process.env.ARDURBOT_COMPUTER_MEMORY = "";
+    process.env.ARDURBOT_COMPUTER_CPUS = "  ";
+    process.env.ARDURBOT_COMPUTER_PIDS_LIMIT = "";
     const { HostConfig } = containerCreateOptions(createInput);
     expect(HostConfig.Memory).toBe(2 * 1024 ** 3);
     expect(HostConfig.NanoCpus).toBe(2e9);
@@ -681,21 +681,21 @@ describe("computer resource limits", () => {
   });
 
   it("pins MemorySwap to Memory so the ceiling cannot be swapped past", () => {
-    process.env.RAKAZO_COMPUTER_MEMORY = "1536m";
+    process.env.ARDURBOT_COMPUTER_MEMORY = "1536m";
     const { HostConfig } = containerCreateOptions(createInput);
     expect(HostConfig.Memory).toBe(1536 * 1024 ** 2);
     expect(HostConfig.MemorySwap).toBe(1536 * 1024 ** 2);
   });
 
   it("accepts fractional CPUs", () => {
-    process.env.RAKAZO_COMPUTER_CPUS = "1.5";
+    process.env.ARDURBOT_COMPUTER_CPUS = "1.5";
     expect(containerCreateOptions(createInput).HostConfig.NanoCpus).toBe(1_500_000_000);
   });
 
   it("lets an operator opt out explicitly", () => {
-    process.env.RAKAZO_COMPUTER_MEMORY = "unlimited";
-    process.env.RAKAZO_COMPUTER_CPUS = "0";
-    process.env.RAKAZO_COMPUTER_PIDS_LIMIT = "none";
+    process.env.ARDURBOT_COMPUTER_MEMORY = "unlimited";
+    process.env.ARDURBOT_COMPUTER_CPUS = "0";
+    process.env.ARDURBOT_COMPUTER_PIDS_LIMIT = "none";
     const { HostConfig } = containerCreateOptions(createInput);
     expect(HostConfig.Memory).toBe(0);
     expect(HostConfig.NanoCpus).toBe(0);
@@ -703,44 +703,44 @@ describe("computer resource limits", () => {
   });
 
   it("rejects a malformed size instead of silently falling back", () => {
-    process.env.RAKAZO_COMPUTER_MEMORY = "2 gigs";
-    expect(() => containerCreateOptions(createInput)).toThrow(/RAKAZO_COMPUTER_MEMORY/);
+    process.env.ARDURBOT_COMPUTER_MEMORY = "2 gigs";
+    expect(() => containerCreateOptions(createInput)).toThrow(/ARDURBOT_COMPUTER_MEMORY/);
   });
 
   it("rejects a negative cpu count", () => {
-    process.env.RAKAZO_COMPUTER_CPUS = "-1";
-    expect(() => containerCreateOptions(createInput)).toThrow(/RAKAZO_COMPUTER_CPUS/);
+    process.env.ARDURBOT_COMPUTER_CPUS = "-1";
+    expect(() => containerCreateOptions(createInput)).toThrow(/ARDURBOT_COMPUTER_CPUS/);
   });
 
   it("rejects a pids limit that is not a positive integer", () => {
-    process.env.RAKAZO_COMPUTER_PIDS_LIMIT = "12.5";
-    expect(() => containerCreateOptions(createInput)).toThrow(/RAKAZO_COMPUTER_PIDS_LIMIT/);
+    process.env.ARDURBOT_COMPUTER_PIDS_LIMIT = "12.5";
+    expect(() => containerCreateOptions(createInput)).toThrow(/ARDURBOT_COMPUTER_PIDS_LIMIT/);
   });
 
   it("rejects a memory limit below Docker's 6 MiB minimum", () => {
     // The daemon refuses these at container creation, so accepting them here would turn a typo
     // into a 500 on the first bot rather than a startup failure naming the variable.
     for (const value of ["1", "1m", "5m", "5242880"]) {
-      process.env.RAKAZO_COMPUTER_MEMORY = value;
-      expect(() => containerCreateOptions(createInput)).toThrow(/RAKAZO_COMPUTER_MEMORY/);
+      process.env.ARDURBOT_COMPUTER_MEMORY = value;
+      expect(() => containerCreateOptions(createInput)).toThrow(/ARDURBOT_COMPUTER_MEMORY/);
     }
-    process.env.RAKAZO_COMPUTER_MEMORY = "6m";
+    process.env.ARDURBOT_COMPUTER_MEMORY = "6m";
     expect(containerCreateOptions(createInput).HostConfig.Memory).toBe(6 * 1024 ** 2);
   });
 
   it("rejects a CPU count that would floor to Docker's unlimited", () => {
     // Math.floor(1e-10 * 1e9) is 0, and 0 NanoCpus means uncapped. An accepted value must never
     // turn a ceiling into no ceiling.
-    process.env.RAKAZO_COMPUTER_CPUS = "0.0000000001";
-    expect(() => containerCreateOptions(createInput)).toThrow(/RAKAZO_COMPUTER_CPUS/);
+    process.env.ARDURBOT_COMPUTER_CPUS = "0.0000000001";
+    expect(() => containerCreateOptions(createInput)).toThrow(/ARDURBOT_COMPUTER_CPUS/);
   });
 
   it("rejects a CPU count that leaves the safe-integer NanoCpus range", () => {
     // 1e300 is finite, but Math.floor(1e300 * 1e9) is Infinity. 1e7 CPUs yields a non-safe
     // integer. Both must fail closed rather than reach HostConfig.NanoCpus.
     for (const value of ["1e300", "10000000"]) {
-      process.env.RAKAZO_COMPUTER_CPUS = value;
-      expect(() => containerCreateOptions(createInput)).toThrow(/RAKAZO_COMPUTER_CPUS/);
+      process.env.ARDURBOT_COMPUTER_CPUS = value;
+      expect(() => containerCreateOptions(createInput)).toThrow(/ARDURBOT_COMPUTER_CPUS/);
     }
   });
 
@@ -774,7 +774,7 @@ describe("computer home storage", () => {
       {
         Type: "volume",
         Source: "example_appdata",
-        Target: "/home/rakazo",
+        Target: "/home/ardurbot",
         VolumeOptions: { NoCopy: true, Subpath: "homes/bot" },
       },
     ]);

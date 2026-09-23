@@ -6,8 +6,8 @@ import type {
   ConnectorEvent,
   ConnectorTool,
   ManagedConnectorProvider,
-} from "@rakazo/adapter-kit";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/adapter-kit";
+import { getLogger } from "@ardurbot/logging";
 import { catalogToolPrefix } from "./approval-effect.js";
 import { collectPages, filterCatalog } from "./composio-connector.js";
 import {

@@ -1,10 +1,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { BoxSandboxProvider, E2BSandboxProvider, PiAgentRuntime } from "@rakazo/adapters";
-import type { RunStatus } from "@rakazo/contracts";
-import { isTerminal } from "@rakazo/core";
-import { loadRootEnv } from "@rakazo/core/node/load-root-env";
+import { BoxSandboxProvider, E2BSandboxProvider, PiAgentRuntime } from "@ardurbot/adapters";
+import type { RunStatus } from "@ardurbot/contracts";
+import { isTerminal } from "@ardurbot/core";
+import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { afterAll, describe, expect, it } from "vitest";
 import { sessionCookieHeader } from "./index.js";
 
@@ -31,7 +31,7 @@ describeE2b("live E2B canary", () => {
       signal: new AbortController().signal,
     };
     const computer = await sandbox.provision(
-      { botId: "canary", homePath: "/home/user/rakazo-home" },
+      { botId: "canary", homePath: "/home/user/ardurbot-home" },
       ctx,
     );
     try {
@@ -61,7 +61,7 @@ describeBox("live Box canary", () => {
       userId: "box-canary",
       signal: new AbortController().signal,
     };
-    const request = { botId: "box-canary", homePath: "/home/user/rakazo-home" };
+    const request = { botId: "box-canary", homePath: "/home/user/ardurbot-home" };
     let computer = await sandbox.provision(request, ctx);
     try {
       await sandbox.prepare(computer, ctx);
@@ -143,7 +143,7 @@ describePiApp("live OpenRouter product journey", () => {
 
   it("completes a bot turn through the API with the live model", async () => {
     const { createApp } = await import("../../../apps/api/src/app.ts");
-    dataDir = mkdtempSync(path.join(tmpdir(), "rakazo-pi-"));
+    dataDir = mkdtempSync(path.join(tmpdir(), "ardurbot-pi-"));
     const handles = await createApp({
       databaseUrl: process.env.DATABASE_URL!,
       dataDir,
@@ -152,7 +152,7 @@ describePiApp("live OpenRouter product journey", () => {
     });
     stop = handles.stop;
     const stamp = Date.now();
-    const email = `pi-${stamp}@rakazo.test`;
+    const email = `pi-${stamp}@ardurbot.test`;
     const signup = await handles.app.request("/api/auth/sign-up/email", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "http://127.0.0.1:5173" },

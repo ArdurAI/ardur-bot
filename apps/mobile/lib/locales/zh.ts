@@ -301,7 +301,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Loading…": "正在加载…",
   "Long press to pin or move to a section": "长按可置顶或移动到分组",
   "Long press to pin, move, or silence notifications": "长按可置顶、移动或静音通知",
-  "Enter your Rakazo server address.": "输入你的 Rakazo 服务器地址。",
+  "Enter your Ardur Bot server address.": "输入你的 Ardur Bot 服务器地址。",
   "Show less": "收起",
   Members: "成员",
   Max: "最高",
@@ -360,8 +360,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Photo library": "相册",
   Pin: "置顶",
   "Please try again.": "请重试。",
-  "Point this app at your self-hosted Rakazo origin, the same HTTPS URL you open in a browser.":
-    "将此应用指向你自托管的 Rakazo 源站，地址与你在浏览器中打开的 HTTPS URL 相同。",
+  "Point this app at your self-hosted Ardur Bot origin, the same HTTPS URL you open in a browser.":
+    "将此应用指向你自托管的 Ardur Bot 源站，地址与你在浏览器中打开的 HTTPS URL 相同。",
   Private: "私有",
   Providers: "提供商",
   "Public servers need https://. HTTP only works on your local network.":
@@ -419,10 +419,10 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Show more": "显示更多",
   "Show {label}": "显示 {label}",
   "Sign in": "登录",
-  "Sign in to Rakazo": "登录 Rakazo",
+  "Sign in to Ardur Bot": "登录 Ardur Bot",
   "Sign out": "退出登录",
   "Sign up": "注册",
-  "Sign up for Rakazo": "注册 Rakazo",
+  "Sign up for Ardur Bot": "注册 Ardur Bot",
   "Sign-in": "登录",
   "Sign-up": "注册",
   "Sign-in did not return a session": "登录未返回会话",
@@ -448,7 +448,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   Team: "团队",
   "Team Computer": "团队电脑",
   "That doesn’t look like a URL": "这看起来不像 URL",
-  "That URL did not look like a Rakazo server": "该地址看起来不是 Rakazo 服务器",
+  "That URL did not look like a Ardur Bot server": "该地址看起来不是 Ardur Bot 服务器",
   "That URL is missing a host": "该地址缺少主机名",
   "The server changed while starting the request": "请求开始时服务器已更改",
   "This permanently deletes your account, bots, conversations, memories, files, and saved connections. This cannot be undone.":
@@ -538,8 +538,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Open in full window": "在全窗口中打开",
   "OpenAPI JSON": "OpenAPI JSON",
   "Opened its thread.": "已打开其对话。",
-  "Paste the OpenAI-compatible address from your server. Rakazo adds /v1 if needed.":
-    "粘贴你服务器的 OpenAI 兼容地址。如有需要，Rakazo 会自动补上 /v1。",
+  "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed.":
+    "粘贴你服务器的 OpenAI 兼容地址。如有需要，Ardur Bot 会自动补上 /v1。",
   Paused: "已暂停",
   Prompt: "提示词",
   "Recording a live demonstration needs desktop or web with the full computer view. You can still ask this bot to run saved skills from chat.":
@@ -553,8 +553,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "this model": "此模型",
   "This removes every message and stops current work. The bot, computer, memory, and routines are kept.":
     "这将删除所有消息并停止当前工作。Bot、电脑、记忆和例行任务会保留。",
-  "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider.":
-    "Rakazo 暂不支持此订阅登录。请使用部署凭据或选择其他提供商。",
+  "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider.":
+    "Ardur Bot 暂不支持此订阅登录。请使用部署凭据或选择其他提供商。",
   "Tool sources": "工具源",
   Tools: "工具",
   Uninstall: "卸载",

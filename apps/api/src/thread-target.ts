@@ -1,6 +1,6 @@
 import { ORPCError } from "@orpc/server";
-import { type JobPublisher, runContinueJob, type SandboxProvider } from "@rakazo/adapter-kit";
-import { cancelComputerRunWork, screenLeaseIdForRun, toComputerRef } from "@rakazo/adapters";
+import { type JobPublisher, runContinueJob, type SandboxProvider } from "@ardurbot/adapter-kit";
+import { cancelComputerRunWork, screenLeaseIdForRun, toComputerRef } from "@ardurbot/adapters";
 import {
   type Actor,
   GROUP_MEMBER_MIN,
@@ -10,15 +10,15 @@ import {
   type MessageReaction,
   type RunStatus,
   type ThreadSnapshot,
-} from "@rakazo/contracts";
+} from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   isActive,
   projectMessages,
   resolveGroupTargetBotIds,
   runFailureError,
-} from "@rakazo/core";
-import { deriveMessageQuote } from "@rakazo/core/message-quote";
+} from "@ardurbot/core";
+import { deriveMessageQuote } from "@ardurbot/core/message-quote";
 import {
   answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
@@ -32,8 +32,8 @@ import {
   type PrismaClient,
   type ThreadEvents,
   touchGroupUpdatedAt,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import {
   buildSendPrompt,
   buildUserMessageBlocks,

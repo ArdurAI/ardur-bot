@@ -1,11 +1,11 @@
-import type { AdapterContext, ConnectorCall, ManagedConnectorProvider } from "@rakazo/adapter-kit";
+import type { AdapterContext, ConnectorCall, ManagedConnectorProvider } from "@ardurbot/adapter-kit";
 import {
   type IntegrationProviderConfig,
   IntegrationProviderConfigSchema,
   type IntegrationProviderId,
   IntegrationProviderIdSchema,
-} from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
+} from "@ardurbot/contracts";
+import type { PrismaClient } from "@ardurbot/db";
 import { ComposioConnector } from "./composio-connector.js";
 import { PipedreamConnector } from "./pipedream-connector.js";
 import type { EncryptedSecretStore } from "./secrets.js";

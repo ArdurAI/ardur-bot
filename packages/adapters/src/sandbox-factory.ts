@@ -1,4 +1,4 @@
-import type { SandboxProvider } from "@rakazo/adapter-kit";
+import type { SandboxProvider } from "@ardurbot/adapter-kit";
 import { BoxSandboxEmulator } from "./box-emulator.js";
 import { BoxSandboxProvider } from "./box-sandbox.js";
 import { DaytonaSandboxEmulator } from "./daytona-emulator.js";

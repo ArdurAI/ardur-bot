@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "./client.js";
 
 /** Group turns use channel inputs and their own outputs, never private thread history. */

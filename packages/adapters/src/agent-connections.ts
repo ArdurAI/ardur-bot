@@ -1,16 +1,16 @@
-import type { JobPublisher } from "@rakazo/adapter-kit";
-import { messagingDeliverJob, runContinueJob } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
+import type { JobPublisher } from "@ardurbot/adapter-kit";
+import { messagingDeliverJob, runContinueJob } from "@ardurbot/adapter-kit";
+import type { MessageBlock } from "@ardurbot/contracts";
 import {
   botMessageHopExhausted,
   buildBotMessageWakePrompt,
   clampBotMessage,
   nextBotMessageHop,
   sanitizeMessagingLabel,
-} from "@rakazo/core";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { appendEventInTransaction, createThreadMessageInTransaction } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/core";
+import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { appendEventInTransaction, createThreadMessageInTransaction } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { currentBotMessageHop } from "./bot-messages.js";
 
 export interface AgentConnectionDeps {

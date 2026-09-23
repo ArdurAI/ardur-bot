@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { ChatMarkdown } from "@rakazo/chat-ui/web";
+import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type {
   AgentSkillCatalogEntry,
   Bot,
@@ -22,7 +22,7 @@ import type {
   ThreadMessage,
   ThreadSnapshot,
   VoiceStatus,
-} from "@rakazo/contracts";
+} from "@ardurbot/contracts";
 import {
   ATTACHMENT_ALLOWED_MIME_TYPES,
   ATTACHMENT_MAX_BYTES,
@@ -31,7 +31,7 @@ import {
   MESSAGE_REACTIONS,
   type MessageReaction,
   normalizeCreateBotProfile,
-} from "@rakazo/contracts";
+} from "@ardurbot/contracts";
 import {
   attachmentsForThread,
   buildComposerMentionOptions,
@@ -58,7 +58,7 @@ import {
   speechFromBlocks,
   truncateSlashDescription,
   userVisibleMessages,
-} from "@rakazo/core";
+} from "@ardurbot/core";
 import {
   AvatarStyleProvider,
   BotAvatar,
@@ -77,7 +77,7 @@ import {
   PopoverContent,
   PopoverTrigger,
   resolvePersonaColorDef,
-} from "@rakazo/ui-web";
+} from "@ardurbot/ui-web";
 import {
   ArrowDown,
   ArrowUp,
@@ -304,7 +304,7 @@ function voiceStatusRefreshTimeout(): Promise<never> {
 
 function collapsedSidebarSectionsStorageKey(userId: string | null | undefined): string | null {
   if (!userId) return null;
-  return `rakazo:collapsed-sidebar-sections:${userId}`;
+  return `ardurbot:collapsed-sidebar-sections:${userId}`;
 }
 
 function readCollapsedSidebarSections(userId: string | null | undefined): Set<string> {

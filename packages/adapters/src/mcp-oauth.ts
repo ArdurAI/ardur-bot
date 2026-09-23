@@ -10,8 +10,8 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { isLocalMcpHost } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
+import { isLocalMcpHost } from "@ardurbot/contracts";
+import type { PrismaClient } from "@ardurbot/db";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -204,7 +204,7 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
     const applicationType = hostname === "localhost" || hostname === "127.0.0.1" ? "native" : "web";
     return {
       redirect_uris: [redirectUri],
-      client_name: "Rakazo",
+      client_name: "Ardur Bot",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
@@ -448,7 +448,7 @@ export class McpOAuthBroker {
       authProvider: provider,
       fetch: networkFetch.fetch,
     });
-    const client = new Client({ name: "rakazo-oauth", version: "0.1.0" });
+    const client = new Client({ name: "ardurbot-oauth", version: "0.1.0" });
     const signal = AbortSignal.timeout(15_000);
     try {
       await client.connect(transport, { signal, timeout: 15_000 });

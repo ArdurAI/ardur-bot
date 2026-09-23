@@ -4,8 +4,8 @@ import {
   type SearchHit,
   type SpaceBot,
   type SpaceGroup,
-} from "@rakazo/contracts";
-import { botColors } from "@rakazo/ui-tokens";
+} from "@ardurbot/contracts";
+import { botColors } from "@ardurbot/ui-tokens";
 import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {

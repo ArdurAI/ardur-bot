@@ -1,4 +1,4 @@
-import type { AdapterContext } from "@rakazo/adapter-kit";
+import type { AdapterContext } from "@ardurbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   classifySerenityConnectionSettings,
@@ -62,11 +62,11 @@ function provider(allowWrites = true, brainLabel = "") {
 
 describe("SerenityMemoryProvider", () => {
   it("keeps bot and space entity namespaces inside the adapter", () => {
-    expect(serenityBotEntity("bot-1")).toBe("rakazo-bot/bot-1");
-    expect(serenitySpaceEntity("workspace-1")).toBe("rakazo-space/workspace-1");
-    expect(serenityBotEntity("bot-1", "Personal Brain")).toBe(`rakazo-bot/${PERSONAL_BRAIN}/bot-1`);
+    expect(serenityBotEntity("bot-1")).toBe("ardurbot-bot/bot-1");
+    expect(serenitySpaceEntity("workspace-1")).toBe("ardurbot-space/workspace-1");
+    expect(serenityBotEntity("bot-1", "Personal Brain")).toBe(`ardurbot-bot/${PERSONAL_BRAIN}/bot-1`);
     expect(serenitySpaceEntity("workspace-1", "Personal Brain")).toBe(
-      `rakazo-space/${PERSONAL_BRAIN}/workspace-1`,
+      `ardurbot-space/${PERSONAL_BRAIN}/workspace-1`,
     );
   });
 
@@ -155,7 +155,7 @@ describe("SerenityMemoryProvider", () => {
         {
           factId: "fact-1",
           fact: "Prefer conventional commits.",
-          provenance: "user told rakazo",
+          provenance: "user told ardurbot",
         },
       ],
     });
@@ -172,15 +172,15 @@ describe("SerenityMemoryProvider", () => {
           memory: "Prefer conventional commits.",
           score: 1,
           id: "fact-1",
-          provenance: "user told rakazo",
-          entity: "rakazo-bot/bot-1",
+          provenance: "user told ardurbot",
+          entity: "ardurbot-bot/bot-1",
         },
       ],
     });
     expect(recallSerenityMock).toHaveBeenCalledWith(
       "commits",
       expect.objectContaining({ endpoint: "http://127.0.0.1:8787/mcp" }),
-      expect.objectContaining({ entity: "rakazo-bot/bot-1", limit: 5 }),
+      expect.objectContaining({ entity: "ardurbot-bot/bot-1", limit: 5 }),
     );
   });
 
@@ -202,8 +202,8 @@ describe("SerenityMemoryProvider", () => {
 
     expect(result).toEqual({ ok: true, value: undefined });
     expect(rememberSerenityMock.mock.calls.map((call) => call[3]?.entity)).toEqual([
-      "rakazo-space/workspace-1",
-      "rakazo-bot/bot-1",
+      "ardurbot-space/workspace-1",
+      "ardurbot-bot/bot-1",
     ]);
   });
 
@@ -230,8 +230,8 @@ describe("SerenityMemoryProvider", () => {
     );
 
     expect(rememberSerenityMock.mock.calls.map((call) => call[3]?.entity)).toEqual([
-      `rakazo-space/${PERSONAL_BRAIN}/workspace-1`,
-      `rakazo-bot/${PERSONAL_BRAIN}/bot-1`,
+      `ardurbot-space/${PERSONAL_BRAIN}/workspace-1`,
+      `ardurbot-bot/${PERSONAL_BRAIN}/bot-1`,
     ]);
   });
 
@@ -248,7 +248,7 @@ describe("SerenityMemoryProvider", () => {
       allowWrites: true,
     });
     await labeled.forget(
-      { id: "fact-9", entity: `rakazo-bot/${PERSONAL_BRAIN}/bot-1`, reason: "cleanup" },
+      { id: "fact-9", entity: `ardurbot-bot/${PERSONAL_BRAIN}/bot-1`, reason: "cleanup" },
       context,
     );
     expect(forgetSerenityMock).toHaveBeenCalledWith(
@@ -330,7 +330,7 @@ describe("SerenityMemoryProvider", () => {
           score: 1,
           id: "fact-space-1",
           provenance: "space policy",
-          entity: `rakazo-space/${PERSONAL_BRAIN}/workspace-1`,
+          entity: `ardurbot-space/${PERSONAL_BRAIN}/workspace-1`,
         },
       ],
     });

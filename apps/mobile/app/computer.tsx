@@ -1,4 +1,4 @@
-import type { ComputerMode, ComputerReleaseReason } from "@rakazo/contracts";
+import type { ComputerMode, ComputerReleaseReason } from "@ardurbot/contracts";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";

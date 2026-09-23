@@ -1,5 +1,5 @@
 import { PassThrough, Readable } from "node:stream";
-import { resolveSupervisorToken } from "@rakazo/core";
+import { resolveSupervisorToken } from "@ardurbot/core";
 import { beforeEach, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({ exec: vi.fn(), inspect: vi.fn() }));
@@ -18,14 +18,14 @@ beforeEach(() => {
   mock.inspect.mockReset();
   mock.inspect.mockResolvedValue({
     Config: {
-      Labels: { "rakazo.managed": "true", "rakazo.botId": "home", "rakazo.spaceId": "space" },
+      Labels: { "ardurbot.managed": "true", "ardurbot.botId": "home", "ardurbot.spaceId": "space" },
     },
   });
   mock.exec.mockImplementation(async (options: { Cmd: string[] }) => ({
     start: async () =>
       Readable.from([
         Buffer.from(
-          options.Cmd.includes("/usr/local/bin/rakazo-page-browser")
+          options.Cmd.includes("/usr/local/bin/ardurbot-page-browser")
             ? JSON.stringify({
                 ok: true,
                 url: "https://example.test",
@@ -46,10 +46,10 @@ async function snapshot(id: string, screen: string, lease: string, home = "home"
     headers: {
       authorization: `Bearer ${resolveSupervisorToken(process.env)}`,
       "content-type": "application/json",
-      "x-rakazo-bot-id": home,
-      "x-rakazo-space-id": "space",
-      "x-rakazo-screen-id": screen,
-      "x-rakazo-screen-lease-id": lease,
+      "x-ardurbot-bot-id": home,
+      "x-ardurbot-space-id": "space",
+      "x-ardurbot-screen-id": screen,
+      "x-ardurbot-screen-lease-id": lease,
     },
     body: JSON.stringify({ command: "snapshot" }),
   });
@@ -65,9 +65,9 @@ it("resolves the owned display and refuses an older fence before running the hel
   expect(mock.exec.mock.calls.at(-1)?.[0]).toMatchObject({
     Env: [
       "DISPLAY=:2",
-      "RAKAZO_CDP_PORT=9223",
-      "HOME=/home/rakazo",
-      "RAKAZO_BROWSER_WATCH_STDIN=1",
+      "ARDURBOT_CDP_PORT=9223",
+      "HOME=/home/ardurbot",
+      "ARDURBOT_BROWSER_WATCH_STDIN=1",
     ],
   });
   mock.exec.mockClear();
@@ -113,7 +113,7 @@ it("closes helper stdin when the request is cancelled", async () => {
   });
   const defaultExec = mock.exec.getMockImplementation()!;
   mock.exec.mockImplementation(async (options: { Cmd: string[]; AttachStdin?: boolean }) => {
-    if (!options.Cmd.includes("/usr/local/bin/rakazo-page-browser")) return defaultExec(options);
+    if (!options.Cmd.includes("/usr/local/bin/ardurbot-page-browser")) return defaultExec(options);
     expect(options.AttachStdin).toBe(true);
     return {
       start: async (options: { stdin: boolean }) => {
@@ -130,8 +130,8 @@ it("closes helper stdin when the request is cancelled", async () => {
     headers: {
       authorization: `Bearer ${resolveSupervisorToken(process.env)}`,
       "content-type": "application/json",
-      "x-rakazo-bot-id": "home",
-      "x-rakazo-space-id": "space",
+      "x-ardurbot-bot-id": "home",
+      "x-ardurbot-space-id": "space",
     },
     body: JSON.stringify({ command: "act", actions: [{ kind: "click", ref: "test-ref" }] }),
   });

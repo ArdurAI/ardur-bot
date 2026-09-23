@@ -21,8 +21,8 @@ import type {
   SandboxProvider,
   ScreenRequest,
   ScreenSession,
-} from "@rakazo/adapter-kit";
-import { boundedSandboxCommandTimeoutMs } from "@rakazo/core";
+} from "@ardurbot/adapter-kit";
+import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
 import { screenSessionKey } from "./computer-screens.js";
 import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
 import {
@@ -130,7 +130,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 
     const sandbox = await this.client.create(
       {
-        labels: { botId: request.botId, rakazo: "computer" },
+        labels: { botId: request.botId, ardurbot: "computer" },
         envVars: { VNC_RESOLUTION: "1280x800" },
         autoStopInterval: 0,
         autoDeleteInterval: -1,
@@ -403,7 +403,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
     if (cached) return cached;
     const home = (await sandbox.getUserHomeDir()) ?? (await sandbox.getWorkDir());
     if (!home) throw new Error("Daytona did not report a sandbox home directory");
-    const root = path.posix.join(home, "rakazo-home");
+    const root = path.posix.join(home, "ardurbot-home");
     if (this.boxes.get(sandbox.id) === sandbox) this.workspaceRoots.set(sandbox.id, root);
     return root;
   }
@@ -547,7 +547,7 @@ function daytonaCwd(root: string, cwd: string | undefined): string {
     !cwd ||
     cwd === "." ||
     cwd === "/" ||
-    cwd === "/home/rakazo" ||
+    cwd === "/home/ardurbot" ||
     cwd === "/home/user" ||
     cwd === "/home/daytona" ||
     cwd === root

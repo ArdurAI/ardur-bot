@@ -8,8 +8,8 @@ import type {
   ConnectorProvider,
   ConnectorTool,
   ManagedConnectorProvider,
-} from "@rakazo/adapter-kit";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/adapter-kit";
+import { getLogger } from "@ardurbot/logging";
 import {
   composioToolkitDirectory,
   mergeCatalogWithConnected,
@@ -345,7 +345,7 @@ export class ComposioConnector implements ComposioProvider {
   }
 
   private async loadDirectory(): Promise<ToolkitDirectoryEntry[]> {
-    const session = await this.sessionFor("__rakazo_catalog__");
+    const session = await this.sessionFor("__ardurbot_catalog__");
     const toolkits = await collectPages((cursor) => session.toolkits({ limit: 50, cursor }));
     return toolkits.map((toolkit) => ({
       slug: toolkit.slug,

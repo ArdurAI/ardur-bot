@@ -15,16 +15,16 @@ afterEach(async () => {
 
 describe("createDb", () => {
   it("caps the pg pool and swallows idle-client errors so they cannot crash the process", () => {
-    const { pool } = createDb("postgres://rakazo:rakazo@127.0.0.1:9/rakazo", {
+    const { pool } = createDb("postgres://ardurbot:ardurbot@127.0.0.1:9/ardurbot", {
       poolMax: 3,
-      applicationName: "rakazo-test",
+      applicationName: "ardurbot-test",
     });
     pools.push(pool);
 
     expect(pool.options.max).toBe(3);
     expect(pool.options.connectionTimeoutMillis).toBe(10_000);
     expect(pool.options.idleTimeoutMillis).toBe(0);
-    expect(pool.options.application_name).toBe("rakazo-test");
+    expect(pool.options.application_name).toBe("ardurbot-test");
     expect(pool.listenerCount("error")).toBeGreaterThan(0);
     expect(pool.listenerCount("connect")).toBeGreaterThan(0);
 
@@ -32,7 +32,7 @@ describe("createDb", () => {
   });
 
   it("defaults to a four-connection pool", () => {
-    const { pool } = createDb("postgres://rakazo:rakazo@127.0.0.1:9/rakazo");
+    const { pool } = createDb("postgres://ardurbot:ardurbot@127.0.0.1:9/ardurbot");
     pools.push(pool);
     expect(pool.options.max).toBe(4);
   });
@@ -99,15 +99,15 @@ describe("retryOnTooManyConnections", () => {
 
 describe("createPool", () => {
   it("builds a bounded pool with connect-retry and idle-error listeners", () => {
-    const pool = createPool("postgres://rakazo:rakazo@127.0.0.1:9/rakazo", {
+    const pool = createPool("postgres://ardurbot:ardurbot@127.0.0.1:9/ardurbot", {
       poolMax: 2,
-      applicationName: "rakazo-pool-test",
+      applicationName: "ardurbot-pool-test",
     });
     pools.push(pool);
     expect(pool.options.max).toBe(2);
     expect(pool.options.connectionTimeoutMillis).toBe(10_000);
     expect(pool.options.idleTimeoutMillis).toBe(0);
-    expect(pool.options.application_name).toBe("rakazo-pool-test");
+    expect(pool.options.application_name).toBe("ardurbot-pool-test");
     expect(pool.listenerCount("error")).toBeGreaterThan(0);
     expect(pool.listenerCount("connect")).toBeGreaterThan(0);
     expect(() => pool.emit("error", new Error("idle client lost"))).not.toThrow();

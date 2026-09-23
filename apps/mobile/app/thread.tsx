@@ -1,16 +1,16 @@
-import { ChatMarkdown } from "@rakazo/chat-ui/native";
+import { ChatMarkdown } from "@ardurbot/chat-ui/native";
 import type {
   AgentSkillCatalogEntry,
   Connection,
   ConnectionCatalogItem,
   MessageBlock,
   Routine,
-} from "@rakazo/contracts";
+} from "@ardurbot/contracts";
 import {
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
   type MessageReaction,
-} from "@rakazo/contracts";
+} from "@ardurbot/contracts";
 import {
   abortableDelay,
   attachmentsForThread,
@@ -30,7 +30,7 @@ import {
   serializeComposerPrompt,
   truncateSlashDescription,
   userVisibleMessages,
-} from "@rakazo/core";
+} from "@ardurbot/core";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";

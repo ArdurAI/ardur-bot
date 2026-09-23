@@ -10,13 +10,13 @@ import type {
   RealtimeFanout,
   SandboxProvider,
   TransactionalEmailProvider,
-} from "@rakazo/adapter-kit";
+} from "@ardurbot/adapter-kit";
 import type {
   ComposioProvider,
   ConnectorRegistry,
   DestinationEmulator,
   RemoteConnectorDependencies,
-} from "@rakazo/adapters";
+} from "@ardurbot/adapters";
 import {
   applyMessagingOutboundStatus,
   ChatSdkMessagingSurface,
@@ -62,10 +62,10 @@ import {
   SmtpEmailProvider,
   SpaceMemoryProviderResolver,
   toTeamChatInbound,
-} from "@rakazo/adapters";
-import { blockedAuthPaths, createAuth } from "@rakazo/auth";
-import { signupPolicyFromEnv } from "@rakazo/core";
-import type { Pool, PrismaClient } from "@rakazo/db";
+} from "@ardurbot/adapters";
+import { blockedAuthPaths, createAuth } from "@ardurbot/auth";
+import { signupPolicyFromEnv } from "@ardurbot/core";
+import type { Pool, PrismaClient } from "@ardurbot/db";
 import {
   createDb,
   createPool,
@@ -73,17 +73,17 @@ import {
   parsePositiveInteger,
   provisionMessagingIdentity,
   requireMembership,
-} from "@rakazo/db";
-import type { Logger } from "@rakazo/logging";
+} from "@ardurbot/db";
+import type { Logger } from "@ardurbot/logging";
 import {
   createServiceLogger,
   enrichLogContext,
   getLogger,
   installLogger,
   SERVICE_NAMES,
-} from "@rakazo/logging";
-import { requestLogging } from "@rakazo/logging/hono";
-import { MarkdownMemoryStore } from "@rakazo/memory";
+} from "@ardurbot/logging";
+import { requestLogging } from "@ardurbot/logging/hono";
+import { MarkdownMemoryStore } from "@ardurbot/memory";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { AppEnv } from "./env.js";
@@ -156,7 +156,7 @@ export async function createApp(
     ? { prisma: prismaOverride, pool: undefined }
     : createDb(env.databaseUrl, {
         poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 4),
-        applicationName: "rakazo-api",
+        applicationName: "ardurbot-api",
       });
   const { prisma } = created;
   const realtime =
@@ -205,7 +205,7 @@ export async function createApp(
   if (!inMemoryJobs && !created.pool) {
     ownedJobPool = createPool(env.databaseUrl, {
       poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 4),
-      applicationName: "rakazo-api-jobs",
+      applicationName: "ardurbot-api-jobs",
     });
   }
   const jobPool = created.pool ?? ownedJobPool;
@@ -316,7 +316,7 @@ export async function createApp(
     email,
     onEmailError: (error) => getLogger().error("transactional email delivery failed", error),
     extraOrigins: [
-      "rakazo://",
+      "ardurbot://",
       "exp://",
       "exp://*",
       "http://localhost:8081",
@@ -509,7 +509,7 @@ export async function createApp(
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
   app.use("/rpc/*", async (c, next) => {
     const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
-    const requestedSpaceId = c.req.header("x-rakazo-space-id");
+    const requestedSpaceId = c.req.header("x-ardurbot-space-id");
     const actor = session?.user
       ? await requireMembership(prisma, session.user.id, requestedSpaceId).catch(() => null)
       : null;
@@ -529,7 +529,7 @@ export async function createApp(
     const actor = await requireMembership(
       prisma,
       session.user.id,
-      c.req.header("x-rakazo-space-id"),
+      c.req.header("x-ardurbot-space-id"),
     ).catch(() => null);
     if (actor) enrichLogContext({ "user.id": actor.userId, "space.id": actor.spaceId });
     return actor;
@@ -866,7 +866,7 @@ export async function createApp(
 function isTrustedOrigin(origin: string, env: AppEnv) {
   if (!origin) return true;
   if (origin === env.webOrigin || origin === env.apiUrl || origin === env.authUrl) return true;
-  if (origin.startsWith("rakazo://") || origin.startsWith("exp://")) return true;
+  if (origin.startsWith("ardurbot://") || origin.startsWith("exp://")) return true;
   try {
     const host = new URL(origin).hostname;
     return isLoopbackHost(host);

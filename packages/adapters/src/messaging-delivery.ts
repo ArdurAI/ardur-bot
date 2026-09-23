@@ -3,13 +3,13 @@ import type {
   JobPublisher,
   MessagingOutboundStatus,
   MessagingSurface,
-} from "@rakazo/adapter-kit";
-import { messagingDeliverJob, runContinueJob } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
-import { botMessageHopExhausted, nextBotMessageHop } from "@rakazo/core";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { appendEventInTransaction, createThreadMessageInTransaction } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/adapter-kit";
+import { messagingDeliverJob, runContinueJob } from "@ardurbot/adapter-kit";
+import type { MessageBlock } from "@ardurbot/contracts";
+import { botMessageHopExhausted, nextBotMessageHop } from "@ardurbot/core";
+import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { appendEventInTransaction, createThreadMessageInTransaction } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 
 /**
  * Margin under vendor consecutive-outbound caps (sendblue enforces one hard):

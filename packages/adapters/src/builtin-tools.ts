@@ -1,10 +1,10 @@
-import type { ConnectorTool } from "@rakazo/adapter-kit";
+import type { ConnectorTool } from "@ardurbot/adapter-kit";
 import {
   BotSecretDestination,
   BotSecretName,
   SecretAskPurpose,
   SecretHttpRequest,
-} from "@rakazo/contracts";
+} from "@ardurbot/contracts";
 import { z } from "zod";
 
 export const DELEGATION_TOOL_NAMES = new Set([

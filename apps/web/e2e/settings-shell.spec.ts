@@ -6,7 +6,7 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
 }, testInfo) => {
   const stamp = Date.now();
   const userName = `Settings shell ${stamp}`;
-  await signup(page, `settings-shell-${stamp}@rakazo.test`, "password12", userName);
+  await signup(page, `settings-shell-${stamp}@ardurbot.test`, "password12", userName);
   await completeOnboarding(page);
 
   await page.getByTestId("user-menu-trigger").click();

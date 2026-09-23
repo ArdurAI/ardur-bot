@@ -1,4 +1,4 @@
-import type { MessageBlock, ThreadMessage } from "@rakazo/contracts";
+import type { MessageBlock, ThreadMessage } from "@ardurbot/contracts";
 
 export interface PeerMessage {
   messageId: string;

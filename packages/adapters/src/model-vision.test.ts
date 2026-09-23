@@ -44,7 +44,7 @@ describe("model vision gating for computer tools", () => {
   });
 
   it("treats unknown models as text-only", () => {
-    expect(modelAcceptsImageInput("openrouter", "rakazo-test/unknown-future-model")).toBe(false);
+    expect(modelAcceptsImageInput("openrouter", "ardurbot-test/unknown-future-model")).toBe(false);
   });
 
   it("keeps explicit image capability scoped to the selected model", () => {

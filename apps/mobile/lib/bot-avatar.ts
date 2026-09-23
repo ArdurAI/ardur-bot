@@ -1,6 +1,6 @@
-import type { ParsedBotAvatar } from "@rakazo/contracts";
-import { parseBotAvatarValue } from "@rakazo/contracts";
-import { resolvePersonaColorDef, shippedBotAvatarShapePath } from "@rakazo/core";
+import type { ParsedBotAvatar } from "@ardurbot/contracts";
+import { parseBotAvatarValue } from "@ardurbot/contracts";
+import { resolvePersonaColorDef, shippedBotAvatarShapePath } from "@ardurbot/core";
 
 export type MobileBotAvatarPresentation =
   | Exclude<ParsedBotAvatar, { kind: "shape" }>

@@ -1,5 +1,5 @@
-import type { MessageBlock } from "@rakazo/contracts";
-import { isToolActivityBlock } from "@rakazo/core";
+import type { MessageBlock } from "@ardurbot/contracts";
+import { isToolActivityBlock } from "@ardurbot/core";
 
 export function isCenteredAgentEvent(blocks: readonly MessageBlock[]): boolean {
   return blocks.some(

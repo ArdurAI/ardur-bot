@@ -1,21 +1,21 @@
-appId: com.rakazo.app
-name: Rakazo mobile smoke
+appId: ai.ardur.bot
+name: Ardur Bot mobile smoke
 ---
 - launchApp:
     clearState: true
 
-- assertVisible: "Sign in to Rakazo"
+- assertVisible: "Sign in to Ardur Bot"
 - assertVisible: "Sign up"
 - tapOn: "Sign up"
-- assertVisible: "Sign up for Rakazo"
+- assertVisible: "Sign up for Ardur Bot"
 - assertVisible: "Name"
 - tapOn: "Sign in"
-- assertVisible: "Sign in to Rakazo"
+- assertVisible: "Sign in to Ardur Bot"
 - tapOn: "Email"
-- inputText: ${RAKAZO_E2E_EMAIL}
+- inputText: ${ARDURBOT_E2E_EMAIL}
 - tapOn: "Password"
-- inputText: ${RAKAZO_E2E_PASSWORD}
-- tapOn: "Sign in to Rakazo"
+- inputText: ${ARDURBOT_E2E_PASSWORD}
+- tapOn: "Sign in to Ardur Bot"
 - tapOn: "Sign in"
 
 - extendedWaitUntil:
@@ -24,7 +24,7 @@ name: Rakazo mobile smoke
 - tapOn: "New bot"
 - assertVisible: "Name this bot"
 - tapOn: "Name this bot"
-- inputText: ${RAKAZO_E2E_BOT_NAME}
+- inputText: ${ARDURBOT_E2E_BOT_NAME}
 - hideKeyboard
 - tapOn: "Create"
 
@@ -32,9 +32,9 @@ name: Rakazo mobile smoke
     visible: "Message…"
     timeout: 30000
 - tapOn: "Message…"
-- inputText: ${RAKAZO_E2E_MESSAGE}
+- inputText: ${ARDURBOT_E2E_MESSAGE}
 - pressKey: Enter
-- assertVisible: ${RAKAZO_E2E_MESSAGE}
+- assertVisible: ${ARDURBOT_E2E_MESSAGE}
 
 - tapOn: "Bot actions"
 - tapOn: "Open computer"

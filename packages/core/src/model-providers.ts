@@ -1,4 +1,4 @@
-import type { ModelCatalogEntry } from "@rakazo/contracts";
+import type { ModelCatalogEntry } from "@ardurbot/contracts";
 
 export const POPULAR_MODEL_PROVIDER_IDS = [
   "openrouter",

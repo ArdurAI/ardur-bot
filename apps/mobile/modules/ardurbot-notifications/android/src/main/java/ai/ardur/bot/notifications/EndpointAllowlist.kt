@@ -1,4 +1,4 @@
-package com.rakazo.notifications
+package ai.ardur.bot.notifications
 
 import java.net.URI
 

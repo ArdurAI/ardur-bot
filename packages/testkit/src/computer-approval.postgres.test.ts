@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ComposioEmulator, FakeSandboxProvider } from "@rakazo/adapters";
+import { ComposioEmulator, FakeSandboxProvider } from "@ardurbot/adapters";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "./index.js";
 import { type ModelEmulatorStep, startModelEmulator } from "./model-emulator.js";
@@ -15,7 +15,7 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
   beforeAll(() => {
     // Use the existing compatible-endpoint capability declaration so the real
     // executor exposes computer tools without mocking its model vision gate.
-    vi.stubEnv("RAKAZO_OPENAI_COMPATIBLE_VISION_MODELS", "offline-fixture");
+    vi.stubEnv("ARDURBOT_OPENAI_COMPATIBLE_VISION_MODELS", "offline-fixture");
   });
   afterAll(() => vi.unstubAllEnvs());
 
@@ -89,7 +89,7 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
           },
         ],
       });
-      const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-computer-approval-"));
+      const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-computer-approval-"));
       let stop: (() => Promise<void>) | undefined;
       try {
         const { createApp } = await import("../../../apps/api/src/app.ts");
@@ -116,7 +116,7 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
           method: "POST",
           headers: { "content-type": "application/json", origin: fixtureOrigin },
           body: JSON.stringify({
-            email: `computer-approval-${randomUUID()}@rakazo.test`,
+            email: `computer-approval-${randomUUID()}@ardurbot.test`,
             password: "password12",
             name: "Computer approval fixture",
           }),

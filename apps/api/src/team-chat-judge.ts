@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
-import type { AgentModelOAuthCredential, AgentRuntime } from "@rakazo/adapter-kit";
+import type { AgentModelOAuthCredential, AgentRuntime } from "@ardurbot/adapter-kit";
 import {
   type EncryptedSecretStore,
   formatCurrentTimeInstruction,
   resolveModelAuth,
   serializeModelSecret,
   toOAuthCredential,
-} from "@rakazo/adapters";
-import { findDefaultModelCredential, findModelCredential, type PrismaClient } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/adapters";
+import { findDefaultModelCredential, findModelCredential, type PrismaClient } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 
 const MAX_RULES_CHARS = 4_000;
 const MAX_MESSAGES = 20;

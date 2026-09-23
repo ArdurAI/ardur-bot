@@ -5,8 +5,8 @@ import type {
   Bot,
   ExternalConversation,
   ExternalConversationPolicy,
-} from "@rakazo/contracts";
-import { Button } from "@rakazo/ui-web";
+} from "@ardurbot/contracts";
+import { Button } from "@ardurbot/ui-web";
 import { RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { SuccessPop } from "../components/ai/primitives";

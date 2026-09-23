@@ -1,4 +1,4 @@
-import type { SpaceMemoryConfig } from "@rakazo/contracts";
+import type { SpaceMemoryConfig } from "@ardurbot/contracts";
 import type { ComponentType } from "react";
 import { SerenitySettingsForm } from "./SerenitySettingsForm";
 import { SupermemorySettingsForm } from "./SupermemorySettingsForm";

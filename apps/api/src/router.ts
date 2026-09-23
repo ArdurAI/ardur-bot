@@ -8,7 +8,7 @@ import type {
   JobPublisher,
   MemoryStore,
   SandboxProvider,
-} from "@rakazo/adapter-kit";
+} from "@ardurbot/adapter-kit";
 import {
   computerControlExpireJobKey,
   messagingDeliverJob,
@@ -16,7 +16,7 @@ import {
   routineWakeupJob,
   runContinueJob,
   runJobKey,
-} from "@rakazo/adapter-kit";
+} from "@ardurbot/adapter-kit";
 import type {
   CloudAgentConnection,
   ComposioProvider,
@@ -27,7 +27,7 @@ import type {
   MemoryProviderResolver,
   PiOAuthLogins,
   RemoteConnectorDependencies,
-} from "@rakazo/adapters";
+} from "@ardurbot/adapters";
 import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
@@ -80,15 +80,15 @@ import {
   toComputerRef,
   touchRunningComputer,
   verifyMcpInstall,
-} from "@rakazo/adapters";
-import type { Auth } from "@rakazo/auth";
-import type { Actor, ComputerStatus, McpServer, Me, SpaceNavigation } from "@rakazo/contracts";
+} from "@ardurbot/adapters";
+import type { Auth } from "@ardurbot/auth";
+import type { Actor, ComputerStatus, McpServer, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
   appContract,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
-} from "@rakazo/contracts";
+} from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   AttachmentValidationError,
@@ -97,8 +97,8 @@ import {
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
-} from "@rakazo/core";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+} from "@ardurbot/core";
+import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   appendEventInTransaction,
   BotSectionNameConflictError,
@@ -136,8 +136,8 @@ import {
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
   touchGroupUpdatedAt,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";

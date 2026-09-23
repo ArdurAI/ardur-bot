@@ -1,7 +1,7 @@
-import type { JobPublisher, MessagingInboundMessage } from "@rakazo/adapter-kit";
-import { messagingDeliverJob, runContinueJob } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
-import { parseMessagingCommand, sanitizeMessagingLabel } from "@rakazo/core";
+import type { JobPublisher, MessagingInboundMessage } from "@ardurbot/adapter-kit";
+import { messagingDeliverJob, runContinueJob } from "@ardurbot/adapter-kit";
+import type { MessageBlock } from "@ardurbot/contracts";
+import { parseMessagingCommand, sanitizeMessagingLabel } from "@ardurbot/core";
 import type {
   MessagingIdentityRequest,
   Prisma,
@@ -9,13 +9,13 @@ import type {
   ProvisionedMessagingIdentity,
   SignupPolicyEnv,
   ThreadEvents,
-} from "@rakazo/db";
+} from "@ardurbot/db";
 import {
   createThreadMessage,
   normalizeMessagingLinkCode,
   redeemMessagingLinkCode,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import {
   MESSAGE_ROUTING_REARMED_REASON,
   MESSAGE_ROUTING_REASON,
@@ -555,7 +555,7 @@ async function handleChannelEvent(
           idempotencyKey: `intro:${channel.id}`,
           kind: "intro",
           threadId: channel.threadId,
-          body: "Hi. This line hosts Rakazo personal agents. Some people in this group haven't messaged it yet; send any message to this line first if you want your own agent here.",
+          body: "Hi. This line hosts Ardur Bot personal agents. Some people in this group haven't messaged it yet; send any message to this line first if you want your own agent here.",
         },
       ],
       skipDuplicates: true,
@@ -646,7 +646,7 @@ async function inviteMember(
         idempotencyKey: `invite:${channel.id}:${identity.id}`,
         kind: "dm",
         identityId: identity.id,
-        body: `"${name}" was linked to your Rakazo agent. Reply YES to let your agent join the conversation there, or NO to stay out.`,
+        body: `"${name}" was linked to your Ardur Bot agent. Reply YES to let your agent join the conversation there, or NO to stay out.`,
       },
     ],
     skipDuplicates: true,

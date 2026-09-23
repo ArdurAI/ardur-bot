@@ -4,10 +4,10 @@ import type {
   ConnectorEvent,
   ConnectorProvider,
   ConnectorTool,
-} from "@rakazo/adapter-kit";
-import { isLocalMcpHost } from "@rakazo/contracts";
-import type { McpServer, PrismaClient, ThreadEvents } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@ardurbot/adapter-kit";
+import { isLocalMcpHost } from "@ardurbot/contracts";
+import type { McpServer, PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { catalogToolPrefix } from "./approval-effect.js";
 import { redactConnectorPayload, sanitizeConnectorError } from "./connector-safety.js";
 import { appendToolCompletionAudit } from "./executor.js";
@@ -327,7 +327,7 @@ export class McpConnector implements ConnectorProvider {
     server: McpServer,
     context: AdapterContext,
   ): Promise<{ session: McpSession; material: OAuthMaterial }> {
-    const session = new McpSession({ name: `rakazo-${server.slug}` });
+    const session = new McpSession({ name: `ardurbot-${server.slug}` });
     // Hoisted so a throw after the secret is decoded can still hand the material out.
     let material: OAuthMaterial | undefined;
     try {

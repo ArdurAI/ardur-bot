@@ -1,4 +1,4 @@
-import type { ProductEvent } from "@rakazo/contracts";
+import type { ProductEvent } from "@ardurbot/contracts";
 import { i18n } from "./i18n";
 
 export type BrowserNotificationPermission = "default" | "denied" | "granted";

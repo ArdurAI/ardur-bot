@@ -1,5 +1,5 @@
-import type { ThreadMessage } from "@rakazo/contracts";
-import { REPLY_QUOTE_MAX_LENGTH } from "@rakazo/contracts";
+import type { ThreadMessage } from "@ardurbot/contracts";
+import { REPLY_QUOTE_MAX_LENGTH } from "@ardurbot/contracts";
 
 function truncateQuote(value: string): string {
   const truncated = value.slice(0, REPLY_QUOTE_MAX_LENGTH);
