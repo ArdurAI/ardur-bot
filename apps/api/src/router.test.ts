@@ -6,7 +6,8 @@ import type { PrismaClient } from "@ardurbot/db";
 import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import { RPCHandler } from "@orpc/server/fetch";
 import { describe, expect, it, vi } from "vitest";
-import { createRouter, type RouterDeps } from "./router.js";
+import type { RouterDeps } from "./router.js";
+import { createRouter } from "./router.js";
 
 describe("account preferences", () => {
   function preferencesDeps(avatarStyle: string) {
@@ -1025,6 +1026,70 @@ describe("model credential persistence", () => {
     );
     return response;
   }
+
+  it.each([undefined, "gpt-5.3-codex-spark", "gpt-6-sol"])(
+    "normalizes the Codex connection default %s",
+    async (modelId) => {
+      const { upsert, handler } = persistDeps();
+      const response = await call(handler, "models/connect", {
+        provider: "openai-codex",
+        apiKey: "test-credential",
+        modelId,
+      });
+      expect(response.status).toBe(200);
+      const expected = modelId === "gpt-6-sol" ? modelId : "gpt-6-astra";
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ modelId: expected }),
+          update: expect.objectContaining({ modelId: expected }),
+        }),
+      );
+      await expect(response.json()).resolves.toEqual({
+        json: expect.objectContaining({ modelId: expected }),
+      });
+    },
+  );
+
+  it.each([undefined, "gpt-5.3-codex-spark", "gpt-6-sol"])(
+    "normalizes the completed Codex OAuth default %s",
+    async (modelId) => {
+      const { upsert, finish, handler } = persistDeps();
+      finish.mockImplementation(async (_loginId, _actor, persist) => ({
+        status: "connected",
+        value: await persist({
+          provider: "openai-codex",
+          modelId,
+          credential: {
+            type: "oauth",
+            access: "test-access",
+            refresh: "test-refresh",
+            expires: Date.now() + 60_000,
+          },
+          signal: new AbortController().signal,
+        }),
+      }));
+      const response = await call(handler, "models/finishOAuth", { loginId: "test-login" });
+      expect(response.status).toBe(200);
+      const expected = modelId === "gpt-6-sol" ? modelId : "gpt-6-astra";
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ modelId: expected }),
+          update: expect.objectContaining({ modelId: expected }),
+        }),
+      );
+    },
+  );
+
+  it("still rejects an invalid connection before persistence", async () => {
+    const { upsert, handler } = persistDeps();
+    const response = await call(handler, "models/connect", {
+      provider: "openai-codex",
+      modelId: "gpt-5.3-codex-spark",
+      apiKey: "short",
+    });
+    expect(response.status).toBe(400);
+    expect(upsert).not.toHaveBeenCalled();
+  });
 
   it("does not persist a stringified null model id from subscription sign-in", async () => {
     const { upsert, finish, handler } = persistDeps();

@@ -10,6 +10,7 @@ import type {
   ConnectionCatalogItem,
   Group,
   Me,
+  MessageReaction,
   ProductEvent,
   Routine,
   SearchHit,
@@ -26,13 +27,12 @@ import {
   ATTACHMENT_MAX_COUNT,
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
-  type MessageReaction,
   normalizeCreateBotProfile,
 } from "@ardurbot/contracts";
+import type { ComposerMention, SlashActionId } from "@ardurbot/core";
 import {
   attachmentsForThread,
   buildComposerMentionOptions,
-  type ComposerMention,
   clampMentionHighlightIndex,
   cronFromPreset,
   groupBotsForSidebar,
@@ -49,13 +49,13 @@ import {
   resolveMentionPickerKey,
   runThreadSubscription,
   SLASH_ACTIONS,
-  type SlashActionId,
   searchHitThreadTarget,
   serializeComposerPrompt,
   speechFromBlocks,
   truncateSlashDescription,
   userVisibleMessages,
 } from "@ardurbot/core";
+import type { GroupAvatarMember } from "@ardurbot/ui-web";
 import {
   AvatarStyleProvider,
   BotAvatar,
@@ -66,7 +66,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   GroupAvatar,
-  type GroupAvatarMember,
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
@@ -110,13 +109,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import type { ClipboardEvent, DragEvent, MutableRefObject, RefObject } from "react";
 import {
-  type ClipboardEvent,
-  type DragEvent,
   lazy,
-  type MutableRefObject,
   memo,
-  type RefObject,
   Suspense,
   useCallback,
   useEffect,
@@ -204,10 +200,10 @@ import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
+import type { RoutineDraftState } from "./RoutineEditor";
 import {
   draftFromRoutine,
   emptyRoutineDraft,
-  type RoutineDraftState,
   RoutineEditor,
   RoutineListHeader,
   RoutineListRow,
@@ -215,6 +211,7 @@ import {
 } from "./RoutineEditor";
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
+import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { BotCreatePicker } from "./shell/bot-picker";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
@@ -234,6 +231,7 @@ import {
   ChoiceCard,
   McpApprovalCard,
 } from "./shell/message-cards";
+import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { WindowChrome } from "./WindowChrome";
 
 const BotContextMenu = lazy(() =>
@@ -366,6 +364,14 @@ export function ShellPage() {
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<Panel>(null);
+  const [modelFocusRequest, setModelFocusRequest] = useState(0);
+  useEffect(() => {
+    if (panel !== "settings") setModelFocusRequest(0);
+  }, [panel]);
+  function openBotModelSettings() {
+    setModelFocusRequest((request) => request + 1);
+    setPanel("settings");
+  }
   const [peerConversation, setPeerConversation] = useState<{
     peerBotId: string;
     peerBotName: string;
@@ -3248,7 +3254,10 @@ export function ShellPage() {
             <button
               type="button"
               data-testid="bot-settings-trigger"
-              onClick={() => setPanel(inGroup ? "group-settings" : "settings")}
+              onClick={() => {
+                setModelFocusRequest(0);
+                setPanel(inGroup ? "group-settings" : "settings");
+              }}
               className="app-no-drag flex min-w-0 items-center gap-3"
             >
               {inGroup ? (
@@ -3272,6 +3281,15 @@ export function ShellPage() {
                 </span>
               </span>
             </button>
+            {active ? (
+              <BotModelChip
+                key={bootstrapMe?.spaceId}
+                bot={active}
+                spaceId={bootstrapMe?.spaceId}
+                settingsOpen={settingsOpen}
+                onClick={openBotModelSettings}
+              />
+            ) : null}
           </div>
           <div className="flex items-center gap-1">
             {!inGroup && active ? (
@@ -3357,6 +3375,7 @@ export function ShellPage() {
             runErrorId={displayedRunErrorId}
             onRunErrorPresented={handleRunErrorPresented}
             onDismissError={dismissComposerError}
+            onChangeModel={active ? openBotModelSettings : undefined}
             sending={sending}
             fileInputRef={fileInputRef}
             onAttachmentPick={onAttachmentPick}
@@ -3587,6 +3606,7 @@ export function ShellPage() {
               <BotSettings
                 key={active.id}
                 bot={active}
+                modelFocusRequest={modelFocusRequest}
                 memoryProviderConfigured={memoryProviderConfig != null}
                 onSkillsChange={setAgentSkills}
                 onSave={async ({ computerMode, ...patch }) => {
@@ -3836,6 +3856,7 @@ export function ShellPage() {
               setBotMenu(null);
             }}
             onEdit={() => {
+              setModelFocusRequest(0);
               navigate(contextBot ? `/app/${contextBot.id}` : `/app/g/${contextGroup!.id}`);
               setPanel(contextBot ? "settings" : "group-settings");
               setBotMenu(null);
@@ -4831,6 +4852,7 @@ const Composer = memo(function Composer({
   runErrorId,
   onRunErrorPresented,
   onDismissError,
+  onChangeModel,
   sending,
   fileInputRef,
   onAttachmentPick,
@@ -4857,6 +4879,7 @@ const Composer = memo(function Composer({
   runErrorId: string | null;
   onRunErrorPresented: (runId: string) => void;
   onDismissError: () => void;
+  onChangeModel?: () => void;
   sending: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
   onAttachmentPick: (files: FileList | null) => void | Promise<void>;
@@ -5145,7 +5168,7 @@ const Composer = memo(function Composer({
           data-testid="composer-error"
           className="mb-3 flex items-center gap-2 rounded-[14px] border border-destructive/40 bg-destructive/10 px-4 py-2 text-[13px] text-destructive"
         >
-          <span className="min-w-0 flex-1">{sendError ?? runError}</span>
+          <ProviderErrorMessage text={sendError ?? runError ?? ""} onChangeModel={onChangeModel} />
           <button
             type="button"
             aria-label={t`Dismiss error`}

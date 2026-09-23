@@ -11,7 +11,11 @@ import {
   parseModelMaxImagesPerPrompt,
   parseModelMaxTokens,
 } from "@ardurbot/contracts";
-import { createModelProbe, initialModelProbeState } from "@ardurbot/core";
+import {
+  createModelProbe,
+  initialModelProbeState,
+  recommendedDefaultModelId,
+} from "@ardurbot/core";
 import {
   Button,
   Dialog,
@@ -27,17 +31,11 @@ import {
 } from "@ardurbot/ui-web";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { ChevronDown, X } from "lucide-react";
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  type RefObject,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { localizedProviderHint } from "../lib/localized-provider-hint";
 import type { ModelCatalogEntry, ModelCredential } from "../lib/model-auth";
+import { availableProviderModels } from "../lib/model-options";
 import { rpc } from "../lib/rpc";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
 
@@ -110,17 +108,18 @@ export function ModelSettingsOverlay({
         ? provider
         : (nextMe.defaultProvider ?? nextCatalog[0]?.provider ?? "");
     const nextCredential = nextCredentials.find((entry) => entry.provider === nextProvider);
+    const nextModels = availableProviderModels(nextCatalog, nextProvider);
     const nextModel =
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID
         ? (nextCredential?.modelId ??
           (nextMe.defaultProvider === OPENAI_COMPATIBLE_PROVIDER_ID ? nextMe.defaultModel : "") ??
           "")
-        : (nextCatalog.find((entry) => entry.provider === nextProvider && entry.id === modelId)
-            ?.id ??
-          nextCatalog.find(
-            (entry) => entry.provider === nextProvider && entry.id === nextMe.defaultModel,
-          )?.id ??
-          nextCatalog.find((entry) => entry.provider === nextProvider)?.id ??
+        : (nextModels.find((entry) => entry.id === modelId)?.id ??
+          nextModels.find((entry) => entry.id === nextMe.defaultModel)?.id ??
+          recommendedDefaultModelId(
+            nextProvider,
+            nextModels.map((entry) => entry.id),
+          ) ??
           "");
     setCatalog(nextCatalog);
     setCredentials(nextCredentials);
@@ -163,7 +162,7 @@ export function ModelSettingsOverlay({
     return [...grouped].map(([id, entries]) => ({
       id,
       name: entries[0]?.providerName ?? id,
-      entries,
+      entries: availableProviderModels(entries, id),
     }));
   }, [catalog]);
   const filteredGroups = useMemo(() => {
@@ -176,8 +175,14 @@ export function ModelSettingsOverlay({
         .includes(query),
     );
   }, [groups, providerQuery]);
-  const modelsForProvider = catalog.filter((entry) => entry.provider === provider);
-  const selected = modelsForProvider.find((entry) => entry.id === modelId) ?? modelsForProvider[0];
+  const modelsForProvider = availableProviderModels(catalog, provider);
+  const recommendedId = recommendedDefaultModelId(
+    provider,
+    modelsForProvider.map((entry) => entry.id),
+  );
+  const selected =
+    modelsForProvider.find((entry) => entry.id === modelId) ??
+    modelsForProvider.find((entry) => entry.id === recommendedId);
   selectedLabelRef.current = selected?.label;
   const isOpenAiCompatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
   const credential = credentials.find((entry) => entry.provider === provider);
@@ -222,7 +227,10 @@ export function ModelSettingsOverlay({
     setModelId(
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID
         ? (nextCredential?.modelId ?? "")
-        : (catalog.find((entry) => entry.provider === nextProvider)?.id ?? ""),
+        : (recommendedDefaultModelId(
+            nextProvider,
+            availableProviderModels(catalog, nextProvider).map((entry) => entry.id),
+          ) ?? ""),
     );
     setBaseUrl(
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID ? (nextCredential?.baseUrl ?? "") : "",

@@ -40,7 +40,6 @@ import {
   computerSupportsUpdate,
   computerUpdateView,
   createVoiceProvider,
-  defaultCatalogModelId,
   deletePushToken,
   deploymentAutoReviewDefault,
   destroyBot,
@@ -94,8 +93,10 @@ import {
   containsSecret,
   expandSkillReferencesInPrompt,
   hasMixedOneShotSchedule,
+  isModelUnavailableOnSubscription,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
+  recommendedDefaultModelId,
 } from "@ardurbot/core";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
@@ -5165,10 +5166,20 @@ async function persistModelCredential(
               },
             });
         throwIfAborted(input.signal);
+        const requestedModel = usableModelId(input.modelId);
         const defaultModel =
-          usableModelId(input.modelId) ??
-          defaultCatalogModelId(input.provider) ??
-          usableModelId(deps.env.defaultModel);
+          (requestedModel && !isModelUnavailableOnSubscription(input.provider, requestedModel)
+            ? requestedModel
+            : recommendedDefaultModelId(
+                input.provider,
+                listPiCatalog()
+                  .filter(
+                    (entry) =>
+                      entry.provider === input.provider &&
+                      !isModelUnavailableOnSubscription(input.provider, entry.id),
+                  )
+                  .map((entry) => entry.id),
+              )) ?? usableModelId(deps.env.defaultModel);
         await selectSpaceModelPreference(tx, actor, credential.id, defaultModel);
         throwIfAborted(input.signal);
         if (existing) {

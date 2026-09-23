@@ -26,6 +26,7 @@ import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import { availableProviderModels, unavailableSubscriptionModel } from "../../lib/model-options";
 import { rpc } from "../../lib/rpc";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
 
@@ -188,6 +189,7 @@ export function CreateBotForm({
 
 export function BotSettings({
   bot,
+  modelFocusRequest = 0,
   memoryProviderConfigured,
   onSkillsChange,
   onSave,
@@ -195,6 +197,7 @@ export function BotSettings({
   onClear,
 }: {
   bot: Bot;
+  modelFocusRequest?: number;
   onSkillsChange: (skills: AgentSkillCatalogEntry[]) => void;
   memoryProviderConfigured: boolean;
   onSave: (patch: {
@@ -217,6 +220,15 @@ export function BotSettings({
 }) {
   const { t } = useLingui();
   const [advancedOpened, setAdvancedOpened] = useState(false);
+  const advancedRef = useRef<HTMLDetailsElement>(null);
+  const modelRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (!modelFocusRequest) return;
+    if (advancedRef.current) advancedRef.current.open = true;
+    setAdvancedOpened(true);
+    modelRef.current?.focus();
+    modelRef.current?.scrollIntoView({ block: "nearest" });
+  }, [modelFocusRequest]);
   const ids = useId();
   const [name, setName] = useState(bot.name);
   const [title, setTitle] = useState(bot.title);
@@ -273,16 +285,24 @@ export function BotSettings({
   }> = [];
   const seenOptions = new Set<string>();
   for (const credential of credentials) {
-    const providerModels = catalog.filter(
-      (entry) => entry.provider === credential.provider && !entry.placeholder,
+    const providerModels = availableProviderModels(catalog, credential.provider).filter(
+      (entry) => !entry.placeholder,
     );
     const credentialInCatalog = Boolean(
-      credential.modelId && providerModels.some((entry) => entry.id === credential.modelId),
+      credential.modelId &&
+        catalog.some(
+          (entry) =>
+            entry.provider === credential.provider &&
+            entry.id === credential.modelId &&
+            !entry.placeholder,
+        ),
     );
     // Catalog providers expand to every model for that connection. Free-form
     // credentials (model id not in the catalog) stay a single connected pair.
     const options =
-      credential.modelId && !credentialInCatalog
+      credential.modelId &&
+      !credentialInCatalog &&
+      !unavailableSubscriptionModel(catalog, credential.provider, credential.modelId)
         ? [
             {
               key: modelOptionKey(credential.provider, credential.modelId),
@@ -325,6 +345,17 @@ export function BotSettings({
     []
   ).filter((level) => level !== "off");
   const defaultThinkingLevel = effectiveCredential?.thinkingLevel ?? "medium";
+  const unavailableDefault = unavailableSubscriptionModel(
+    catalog,
+    me?.defaultProvider,
+    me?.defaultModel,
+  );
+  const selectedModel = parseModelOptionKey(modelKey);
+  const unavailableSelection = unavailableSubscriptionModel(
+    catalog,
+    selectedModel?.provider,
+    selectedModel?.modelId,
+  );
 
   async function executeSave(patchOverrides?: {
     name?: string;
@@ -469,6 +500,7 @@ export function BotSettings({
         />
       </div>
       <details
+        ref={advancedRef}
         data-testid="bot-settings-advanced"
         className="group mt-5"
         onToggle={(event) => {
@@ -493,6 +525,7 @@ export function BotSettings({
         <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
           <Trans>Model</Trans>
           <NativeSelect
+            ref={modelRef}
             id={`${ids}-model`}
             className="mt-2 w-full"
             value={modelKey}
@@ -504,12 +537,15 @@ export function BotSettings({
             <NativeSelectOption value="">
               {t`Space default`}
               {me?.defaultModel
-                ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel})`
+                ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel}${
+                    unavailableDefault ? t` — not available on your account` : ""
+                  })`
                 : ""}
             </NativeSelectOption>
             {modelKey && !connectedOptions.some((option) => option.key === modelKey) ? (
               <NativeSelectOption value={modelKey}>
                 {parseModelOptionKey(modelKey)?.modelId ?? modelKey}
+                {unavailableSelection ? t` (not available on your account)` : ""}
               </NativeSelectOption>
             ) : null}
             {connectedOptions.map((option) => (
