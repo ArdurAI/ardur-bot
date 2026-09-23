@@ -52,7 +52,7 @@ test("the model chip and provider error open the bot model control", async ({ pa
   });
   await page.reload();
   const chip = page.getByRole("button", {
-    name: "Change model: GPT-6 Astra · medium",
+    name: "Change model: Codex · GPT-6 Astra · medium",
     exact: true,
   });
   await expect(chip).toBeVisible();
@@ -67,7 +67,35 @@ test("the model chip and provider error open the bot model control", async ({ pa
     "OpenAI Codex · GPT-6 Astra",
     "OpenAI Codex · GPT-6 Sol",
   ]);
+  await expect(settings.getByRole("combobox", { name: "Thinking", exact: true })).toBeVisible();
+  await expect(
+    settings.getByRole("combobox", { name: "Thinking", exact: true }).locator("option"),
+  ).toContainText([
+    "Default",
+    "low — quick",
+    "medium — balances",
+    "high — slower",
+    "xhigh — very slow",
+  ]);
+  await settings.getByLabel("Show all models").check();
+  await expect(model.locator("option").last()).toContainText("May not be available on your plan");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(
+    await page
+      .getByTestId("side-panel")
+      .evaluate((node) => getComputedStyle(node).transitionProperty),
+  ).not.toContain("width");
   await captureScreenshot(page, testInfo, "bot-model-control-focused");
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
+
+  await page
+    .locator("aside")
+    .first()
+    .getByRole("button", { name: /Chief/ })
+    .first()
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Model & effort", exact: true }).click();
+  await expect(model).toBeFocused();
   await page.getByRole("button", { name: "Close panel", exact: true }).click();
 
   const message =

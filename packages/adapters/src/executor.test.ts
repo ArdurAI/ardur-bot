@@ -1625,7 +1625,7 @@ description: Prepare standup notes
     });
   });
 
-  it("falls back to the Space default when the override provider has no credential", async () => {
+  it("keeps the pin and does not borrow the default provider credential", async () => {
     const findFirst = vi.fn(
       async (args: { where: { credential?: { provider?: string }; isDefault?: boolean } }) => {
         if (args.where.credential?.provider === "xai") return null;
@@ -1666,10 +1666,10 @@ description: Prepare standup notes
     });
 
     expect(model).toMatchObject({
-      provider: "openrouter",
-      id: "deepseek/deepseek-v4-flash-0731",
-      // Override thinking must drop with the override provider/credential unit.
-      thinkingLevel: null,
+      provider: "xai",
+      id: "grok-4.6",
+      thinkingLevel: "high",
+      apiKey: undefined,
     });
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({

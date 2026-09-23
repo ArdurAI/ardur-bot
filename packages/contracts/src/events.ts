@@ -2,6 +2,7 @@ import * as z from "zod";
 import { BotSecretDestination } from "./bot-secrets.js";
 import { Id } from "./ids.js";
 import { McpTransportSchema } from "./mcp.js";
+import { RunFailurePayloadSchema } from "./provider-errors.js";
 
 export const ProductEventType = z.enum([
   "thread.message.created",
@@ -269,17 +270,26 @@ export const MessageBlock = z.discriminatedUnion("kind", [
 ]);
 export type MessageBlock = z.infer<typeof MessageBlock>;
 
-export const ProductEventSchema = z.object({
-  id: Id,
-  spaceId: Id,
-  threadId: Id,
-  botId: Id,
-  seq: z.number().int().nonnegative(),
-  type: ProductEventType,
-  runId: Id.optional(),
-  createdAt: z.string(),
-  payload: z.record(z.string(), z.unknown()),
-});
+export const ProductEventSchema = z
+  .object({
+    id: Id,
+    spaceId: Id,
+    threadId: Id,
+    botId: Id,
+    seq: z.number().int().nonnegative(),
+    type: ProductEventType,
+    runId: Id.optional(),
+    createdAt: z.string(),
+    payload: z.record(z.string(), z.unknown()),
+  })
+  .superRefine((event, ctx) => {
+    if (event.type !== "run.failed" || event.payload.providerErrorKind === undefined) return;
+    const result = RunFailurePayloadSchema.safeParse(event.payload);
+    if (!result.success) {
+      for (const issue of result.error.issues)
+        ctx.addIssue({ ...issue, path: ["payload", ...issue.path] });
+    }
+  });
 export type ProductEvent = z.infer<typeof ProductEventSchema>;
 
 export const ThreadMessageSchema = z.object({

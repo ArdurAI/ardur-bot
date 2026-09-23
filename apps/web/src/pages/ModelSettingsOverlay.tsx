@@ -33,10 +33,12 @@ import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { ChevronDown, X } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { ShowAllModels } from "../components/ShowAllModels";
 import { localizedProviderHint } from "../lib/localized-provider-hint";
 import type { ModelCatalogEntry, ModelCredential } from "../lib/model-auth";
-import { availableProviderModels } from "../lib/model-options";
+import { availableProviderModels, unavailableSubscriptionModel } from "../lib/model-options";
 import { rpc } from "../lib/rpc";
+import { thinkingLevelOptions } from "../lib/thinking-level-options";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
 
 export function ModelSettingsOverlay({
@@ -56,6 +58,7 @@ export function ModelSettingsOverlay({
   const [provider, setProvider] = useState("");
   const [providerQuery, setProviderQuery] = useState("");
   const [modelId, setModelId] = useState("");
+  const [showAllModels, setShowAllModels] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [reasoning, setReasoning] = useState(false);
@@ -108,13 +111,14 @@ export function ModelSettingsOverlay({
         ? provider
         : (nextMe.defaultProvider ?? nextCatalog[0]?.provider ?? "");
     const nextCredential = nextCredentials.find((entry) => entry.provider === nextProvider);
-    const nextModels = availableProviderModels(nextCatalog, nextProvider);
+    const nextModels = availableProviderModels(nextCatalog, nextProvider, showAllModels);
     const nextModel =
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID
         ? (nextCredential?.modelId ??
           (nextMe.defaultProvider === OPENAI_COMPATIBLE_PROVIDER_ID ? nextMe.defaultModel : "") ??
           "")
-        : (nextModels.find((entry) => entry.id === modelId)?.id ??
+        : (nextCatalog.find((entry) => entry.provider === nextProvider && entry.id === modelId)
+            ?.id ??
           nextModels.find((entry) => entry.id === nextMe.defaultModel)?.id ??
           recommendedDefaultModelId(
             nextProvider,
@@ -162,9 +166,10 @@ export function ModelSettingsOverlay({
     return [...grouped].map(([id, entries]) => ({
       id,
       name: entries[0]?.providerName ?? id,
-      entries: availableProviderModels(entries, id),
+      source: entries[0]!,
+      entries: availableProviderModels(entries, id, id === provider && showAllModels),
     }));
-  }, [catalog]);
+  }, [catalog, provider, showAllModels]);
   const filteredGroups = useMemo(() => {
     const query = providerQuery.trim().toLowerCase();
     if (!query) return groups;
@@ -175,13 +180,17 @@ export function ModelSettingsOverlay({
         .includes(query),
     );
   }, [groups, providerQuery]);
-  const modelsForProvider = availableProviderModels(catalog, provider);
+  const hasHiddenModels = catalog.some(
+    (entry) =>
+      entry.provider === provider && unavailableSubscriptionModel(catalog, provider, entry.id),
+  );
+  const modelsForProvider = availableProviderModels(catalog, provider, showAllModels);
   const recommendedId = recommendedDefaultModelId(
     provider,
     modelsForProvider.map((entry) => entry.id),
   );
   const selected =
-    modelsForProvider.find((entry) => entry.id === modelId) ??
+    catalog.find((entry) => entry.provider === provider && entry.id === modelId) ??
     modelsForProvider.find((entry) => entry.id === recommendedId);
   selectedLabelRef.current = selected?.label;
   const isOpenAiCompatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
@@ -218,6 +227,7 @@ export function ModelSettingsOverlay({
     selectionRevisionRef.current += 1;
     const nextCredential = credentials.find((entry) => entry.provider === nextProvider);
     setProvider(nextProvider);
+    setShowAllModels(false);
     setReasoning(nextCredential?.reasoning ?? false);
     setThinkingLevel(nextCredential?.thinkingLevel ?? null);
     setMaxTokens(String(nextCredential?.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS));
@@ -442,7 +452,7 @@ export function ModelSettingsOverlay({
                       <span className="mt-0.5 block text-[12px] text-muted-foreground/80">
                         <Plural value={group.entries.length} one="# model" other="# models" />
                         {" · "}
-                        {localizedProviderHint(group.entries[0]!)}
+                        {localizedProviderHint(group.source)}
                       </span>
                     </span>
                     {connected ? (
@@ -464,6 +474,9 @@ export function ModelSettingsOverlay({
         <div ref={detailScrollRef} className="rk-scroll min-h-0 min-w-0 flex-1 overflow-y-auto">
           {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
           {notice ? <p className="mb-4 text-sm text-success">{notice}</p> : null}
+          {hasHiddenModels ? (
+            <ShowAllModels checked={showAllModels} onChange={setShowAllModels} />
+          ) : null}
           {selected ? (
             <>
               <div className="block text-[13.5px] text-muted-foreground">
@@ -569,14 +582,7 @@ export function ModelSettingsOverlay({
                         setThinkingLevel(value as ThinkingLevel | null);
                         setNotice(null);
                       }}
-                      thinkingLevelOptions={[
-                        { value: "minimal", label: t`Minimal` },
-                        { value: "low", label: t`Low` },
-                        { value: "medium", label: t`Medium` },
-                        { value: "high", label: t`High` },
-                        { value: "xhigh", label: t`Extra high` },
-                        { value: "max", label: t`Max` },
-                      ]}
+                      thinkingLevelOptions={thinkingLevelOptions()}
                       thinkingLevelLabel={t`Reasoning effort`}
                       thinkingLevelDefaultLabel={t`Default`}
                       maxTokens={maxTokens}
@@ -615,7 +621,11 @@ export function ModelSettingsOverlay({
                       <Trans>Model</Trans>
                     </span>
                     <ModelPicker
-                      options={modelsForProvider}
+                      options={
+                        modelsForProvider.some((entry) => entry.id === selected.id)
+                          ? modelsForProvider
+                          : [selected, ...modelsForProvider]
+                      }
                       value={selected.id}
                       onChange={(nextModelId) => {
                         cancelOAuthAttempt();
@@ -838,11 +848,11 @@ export function ModelSettingsOverlay({
             <p className="text-muted-foreground">
               <Trans>Loading model catalog…</Trans>
             </p>
-          ) : (
+          ) : !hasHiddenModels ? (
             <p className="text-muted-foreground">
               <Trans>No model catalog is available.</Trans>
             </p>
-          )}
+          ) : null}
         </div>
       </div>
     </>
@@ -1172,7 +1182,14 @@ function ModelOption({
       onClick={() => choose(index)}
       onKeyDown={(event) => onOptionKeyDown(event, index)}
     >
-      <span className="min-w-0 truncate">{option.label}</span>
+      <span className="min-w-0 truncate">
+        {option.label}
+        {unavailableSubscriptionModel([option], option.provider, option.id) ? (
+          <span className="block text-[12px] text-muted-foreground">
+            <Trans>May not be available on your plan</Trans>
+          </span>
+        ) : null}
+      </span>
       {option.billing.toLowerCase().includes("free") ? (
         <span className="shrink-0 text-[12px] text-muted-foreground">{t`Free`}</span>
       ) : null}

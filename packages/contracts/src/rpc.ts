@@ -230,7 +230,7 @@ export const appContract = {
       .input(z.object({ loginId: z.string() }))
       .output(z.object({ ok: z.literal(true) })),
     setDefault: oc
-      .input(z.object({ provider: z.string(), modelId: z.string() }))
+      .input(z.object({ provider: z.string(), modelId: z.string().optional() }))
       .output(z.object({ ok: z.literal(true) })),
   },
   bots: {

@@ -1,4 +1,5 @@
 import type { RealtimeFanout } from "@ardurbot/adapter-kit";
+import type { RunFailurePayload } from "@ardurbot/contracts";
 import {
   type BotSecretDestination,
   type MessageBlock,
@@ -119,7 +120,7 @@ export type FinalizeRunInput = FinalizeRunBase &
         blocks: MessageBlock[];
         markUnread?: boolean;
       }
-    | { outcome: "failed"; error: string }
+    | ({ outcome: "failed"; error: string } & RunFailurePayload)
   );
 
 export interface PauseRunForInput {
@@ -1117,7 +1118,13 @@ async function finalizeRunOnce(
       botId: input.botId,
       type: input.outcome === "completed" ? "run.completed" : "run.failed",
       runId: input.runId,
-      payload: input.outcome === "completed" ? {} : { error: input.error },
+      payload:
+        input.outcome === "completed"
+          ? {}
+          : {
+              error: input.error,
+              ...(input.providerErrorKind ? { providerErrorKind: input.providerErrorKind } : {}),
+            },
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
     if (input.outcome === "completed") {

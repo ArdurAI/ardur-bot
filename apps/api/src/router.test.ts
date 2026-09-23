@@ -1012,7 +1012,7 @@ describe("model credential persistence", () => {
         agentRuntime: "pi",
       },
     } as unknown as RouterDeps;
-    return { upsert, finish, deps, handler: new RPCHandler(createRouter(deps)) };
+    return { upsert, finish, deps, tx, handler: new RPCHandler(createRouter(deps)) };
   }
 
   async function call(handler: RPCHandler<never>, path: string, body: unknown): Promise<Response> {
@@ -1028,7 +1028,7 @@ describe("model credential persistence", () => {
   }
 
   it.each([undefined, "gpt-5.3-codex-spark", "gpt-6-sol"])(
-    "normalizes the Codex connection default %s",
+    "recommends only for an omitted Codex connection choice %s",
     async (modelId) => {
       const { upsert, handler } = persistDeps();
       const response = await call(handler, "models/connect", {
@@ -1037,7 +1037,7 @@ describe("model credential persistence", () => {
         modelId,
       });
       expect(response.status).toBe(200);
-      const expected = modelId === "gpt-6-sol" ? modelId : "gpt-6-astra";
+      const expected = modelId ?? "gpt-6-astra";
       expect(upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({ modelId: expected }),
@@ -1051,7 +1051,7 @@ describe("model credential persistence", () => {
   );
 
   it.each([undefined, "gpt-5.3-codex-spark", "gpt-6-sol"])(
-    "normalizes the completed Codex OAuth default %s",
+    "preserves an explicit completed Codex OAuth choice %s",
     async (modelId) => {
       const { upsert, finish, handler } = persistDeps();
       finish.mockImplementation(async (_loginId, _actor, persist) => ({
@@ -1070,11 +1070,29 @@ describe("model credential persistence", () => {
       }));
       const response = await call(handler, "models/finishOAuth", { loginId: "test-login" });
       expect(response.status).toBe(200);
-      const expected = modelId === "gpt-6-sol" ? modelId : "gpt-6-astra";
+      const expected = modelId ?? "gpt-6-astra";
       expect(upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({ modelId: expected }),
           update: expect.objectContaining({ modelId: expected }),
+        }),
+      );
+    },
+  );
+
+  it.each([undefined, "", "gpt-5.3-codex-spark", "gpt-6-sol"])(
+    "sets a default without replacing explicit choice %s",
+    async (modelId) => {
+      const { tx, upsert, handler } = persistDeps();
+      tx.userModelCredential.findFirst.mockResolvedValue({ id: "cred-1" } as never);
+      const response = await call(handler, "models/setDefault", {
+        provider: "openai-codex",
+        modelId,
+      });
+      expect(response.status).toBe(200);
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ modelId: modelId || "gpt-6-astra" }),
         }),
       );
     },

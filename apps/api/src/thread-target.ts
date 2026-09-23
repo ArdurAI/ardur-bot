@@ -41,6 +41,7 @@ import {
   resolveSendAttachments,
 } from "./artifacts.js";
 import { resolveBusyBotName, toComputerStatus } from "./computer-status.js";
+import { storedRunFailureKind } from "./run-failure-kind.js";
 import { withSerializableRetry } from "./serializable-retry.js";
 import { loadMessagePage } from "./thread-message-pages.js";
 
@@ -398,7 +399,13 @@ export async function threadSnapshot(
                 orderBy: { seq: "asc" },
               })
             : [];
-        return { messagePage, last, run: currentRun, liveEvents };
+        return {
+          messagePage,
+          last,
+          run: currentRun,
+          liveEvents,
+          providerErrorKind: await storedRunFailureKind(tx, currentRun),
+        };
       }),
     ]);
     return {
@@ -407,7 +414,12 @@ export async function threadSnapshot(
       cursor: core.last?.seq ?? -1,
       messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents),
       olderCursor: core.messagePage.olderCursor,
-      run: core.run ? mapRun(core.run) : null,
+      run: core.run
+        ? {
+            ...mapRun(core.run),
+            ...(core.providerErrorKind ? { providerErrorKind: core.providerErrorKind } : {}),
+          }
+        : null,
       computer: toComputerStatus(target.botId, target.bot.computer, busyBotName),
     };
   }
@@ -463,11 +475,13 @@ export async function threadSnapshot(
             orderBy: { seq: "asc" },
           })
         : [];
+    const terminalRun = pickLatestTerminalRun(recentTerminals);
     return {
       messagePage,
       last,
       activeRuns,
-      terminalRun: pickLatestTerminalRun(recentTerminals),
+      providerErrorKind: await storedRunFailureKind(tx, terminalRun),
+      terminalRun,
       liveEvents,
     };
   });
@@ -484,7 +498,10 @@ export async function threadSnapshot(
     // still active or start late. A newer completed/cancelled terminal clears it.
     run:
       core.terminalRun?.status === "failed"
-        ? mapRun(core.terminalRun)
+        ? {
+            ...mapRun(core.terminalRun),
+            ...(core.providerErrorKind ? { providerErrorKind: core.providerErrorKind } : {}),
+          }
         : primaryActiveRun
           ? mapRun(primaryActiveRun)
           : null,

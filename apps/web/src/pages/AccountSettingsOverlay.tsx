@@ -24,6 +24,7 @@ import {
   setUiAppearance,
 } from "../lib/ui-appearance";
 import { UI_LOCALE_LABELS, UI_LOCALES, type UiLocale } from "../lib/ui-locale";
+import { SettingsSupportLinks } from "./settings-support-links";
 
 export type SettingsGeneralProps = {
   email?: string | null;
@@ -162,6 +163,8 @@ export function GeneralSettingsPanels({
           <Trans>Server integrations</Trans>
         </Button>
       ) : null}
+
+      <SettingsSupportLinks />
 
       <details data-testid="advanced-settings" className="group rounded-xl border border-border">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 text-[14px] text-foreground/75">

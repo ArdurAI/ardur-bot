@@ -191,3 +191,37 @@ it.each(["api-key", "both"] as const)("keeps Spark available for %s auth", async
   await act(async () => picker().click());
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(4);
 });
+
+it("reveals a selectable subscription model with a muted plan hint", async () => {
+  await render();
+  const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  expect(toggle?.parentElement?.textContent).toBe("Show all models");
+  await act(async () => toggle?.click());
+  await act(async () => picker().click());
+  const spark = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
+    (option) => option.textContent?.includes("GPT-5.3 Codex Spark"),
+  );
+  expect(spark?.textContent).toContain("May not be available on your plan");
+  expect(spark?.querySelector(".text-muted-foreground")).not.toBeNull();
+  await act(async () => spark?.click());
+  expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
+  await act(async () => toggle?.click());
+  expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((entry) => entry.textContent === "Sign in")
+      ?.click(),
+  );
+  expect(api.signIn).toHaveBeenCalledWith(
+    expect.objectContaining({ modelId: "gpt-5.3-codex-spark" }),
+  );
+});
+
+it("can reveal a provider whose entire catalog is hidden", async () => {
+  api.list.mockResolvedValue([catalog[0]]);
+  await render();
+  const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  expect(toggle).not.toBeNull();
+  await act(async () => toggle?.click());
+  expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
+});

@@ -12,7 +12,11 @@ import {
   parseModelMaxTokens,
   type ThinkingLevel,
 } from "@ardurbot/contracts";
-import { createModelProbe, initialModelProbeState } from "@ardurbot/core";
+import {
+  createModelProbe,
+  initialModelProbeState,
+  recommendedDefaultModelId,
+} from "@ardurbot/core";
 import {
   Button,
   Input,
@@ -29,6 +33,7 @@ import { useNavigate } from "react-router-dom";
 import { IntegrationSetup } from "../components/integrations/IntegrationSetup";
 import type { ModelCatalogEntry } from "../lib/model-auth";
 import { rpc } from "../lib/rpc";
+import { thinkingLevelOptions } from "../lib/thinking-level-options";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
 
 const CUSTOM_MODEL_OPTION = "__ardurbot_custom_model__";
@@ -149,12 +154,16 @@ export function OnboardingPage() {
       .then(([me, models, integrations]) => {
         setIntegrationSetup(integrations);
         setCatalog(models);
+        const defaultProvider = me.defaultProvider ?? models[0]?.provider ?? "";
+        const recommendedId = recommendedDefaultModelId(
+          defaultProvider,
+          models.filter((entry) => entry.provider === defaultProvider).map((entry) => entry.id),
+        );
         const preferred =
           models.find(
             (entry) => entry.provider === me.defaultProvider && entry.id === me.defaultModel,
           ) ??
-          models.find((entry) => entry.provider === me.defaultProvider) ??
-          models[0];
+          models.find((entry) => entry.provider === defaultProvider && entry.id === recommendedId);
         if (preferred) {
           setProvider(preferred.provider);
           setModelId(preferred.provider === OPENAI_COMPATIBLE_PROVIDER_ID ? "" : preferred.id);
@@ -180,7 +189,16 @@ export function OnboardingPage() {
     [catalog, provider],
   );
 
-  const selected = modelsForProvider.find((entry) => entry.id === modelId) ?? modelsForProvider[0];
+  const selected =
+    modelsForProvider.find((entry) => entry.id === modelId) ??
+    modelsForProvider.find(
+      (entry) =>
+        entry.id ===
+        recommendedDefaultModelId(
+          provider,
+          modelsForProvider.map((entry) => entry.id),
+        ),
+    );
   const isOpenAiCompatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
   const subscriptionSignIn = selected?.signIn !== undefined;
   const acceptsKey = selected?.auth !== "oauth";
@@ -234,7 +252,10 @@ export function OnboardingPage() {
     setModelId(
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID
         ? ""
-        : (catalog.find((item) => item.provider === nextProvider)?.id ?? ""),
+        : (recommendedDefaultModelId(
+            nextProvider,
+            catalog.filter((item) => item.provider === nextProvider).map((item) => item.id),
+          ) ?? ""),
     );
     setBaseUrl("");
     setReasoning(false);
@@ -504,14 +525,7 @@ export function OnboardingPage() {
                     onThinkingLevelChange={(value) =>
                       setThinkingLevel(value as ThinkingLevel | null)
                     }
-                    thinkingLevelOptions={[
-                      { value: "minimal", label: t`Minimal` },
-                      { value: "low", label: t`Low` },
-                      { value: "medium", label: t`Medium` },
-                      { value: "high", label: t`High` },
-                      { value: "xhigh", label: t`Extra high` },
-                      { value: "max", label: t`Max` },
-                    ]}
+                    thinkingLevelOptions={thinkingLevelOptions()}
                     thinkingLevelLabel={t`Reasoning effort`}
                     thinkingLevelDefaultLabel={t`Default`}
                     maxTokens={maxTokens}

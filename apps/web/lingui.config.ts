@@ -11,4 +11,7 @@ export default defineConfig({
     },
   ],
   compileNamespace: "es",
+  // Keep file references but not line numbers: every edit shifted hundreds of
+  // reference lines per catalog and made upstream merges conflict on .po files.
+  formatOptions: { origins: true, lineNumbers: false },
 });

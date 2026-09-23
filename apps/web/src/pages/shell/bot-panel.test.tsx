@@ -38,6 +38,7 @@ vi.mock("@ardurbot/ui-web", () => ({
   Switch: () => null,
 }));
 
+import { useModelSettings } from "../../lib/use-model-settings";
 import { BotModelChip, effectiveBotModel } from "./bot-model-chip";
 import { BotSettings } from "./bot-panel";
 import { ProviderErrorMessage } from "./provider-error-message";
@@ -175,6 +176,9 @@ describe("bot model settings", () => {
       expect(modelSelect().value).toBe(override ? "openai-codex::gpt-5.3-codex-spark" : "");
       const selected = modelSelect().options[modelSelect().selectedIndex];
       expect(selected?.textContent).toContain("not available on your account");
+      expect(container.textContent).toContain(
+        "This model is not available on your account. Choose another model.",
+      );
       expect(onSave).not.toHaveBeenCalled();
       await save();
       expect(onSave).toHaveBeenCalledWith(
@@ -211,9 +215,10 @@ describe("bot model settings", () => {
     expect(modelSelect().textContent).toContain("custom-model");
   });
 
-  it("opens Advanced and focuses the model control on each request", async () => {
+  it("focuses Model above collapsed Advanced on each request", async () => {
     await act(async () => root.render(settings({}, 1)));
-    expect(container.querySelector("details")?.open).toBe(true);
+    expect(container.querySelector("details")?.open).toBe(false);
+    expect(modelSelect().closest("details")).toBeNull();
     expect(document.activeElement).toBe(modelSelect());
     await act(async () => root.render(settings({}, 2)));
     expect(document.activeElement).toBe(modelSelect());
@@ -225,6 +230,8 @@ describe("effective bot model", () => {
   it("shows the catalog label and default reasoning effort", () => {
     expect(effectiveBotModel(bot, state)).toEqual({
       label: "GPT-6 Astra",
+      providerLabel: "Codex",
+      unavailable: false,
       thinkingLevel: "medium",
       isDefault: true,
     });
@@ -240,15 +247,27 @@ describe("effective bot model", () => {
         { ...bot, modelProvider: "openai-codex", modelId: "gpt-6-sol", thinkingLevel: "xhigh" },
         state,
       ),
-    ).toEqual({ label: "gpt-6-sol", thinkingLevel: "xhigh", isDefault: false });
+    ).toEqual({
+      label: "gpt-6-sol",
+      providerLabel: "Codex",
+      unavailable: false,
+      thinkingLevel: "xhigh",
+      isDefault: false,
+    });
   });
-  it("falls back when the override provider is disconnected", () => {
+  it("keeps a disconnected pin visible with a warning", () => {
     expect(
       effectiveBotModel(
         { ...bot, modelProvider: "disconnected", modelId: "missing", thinkingLevel: "xhigh" },
         state,
       ),
-    ).toEqual({ label: "GPT-6 Astra", thinkingLevel: "medium", isDefault: true });
+    ).toEqual({
+      label: "missing",
+      providerLabel: "disconnected",
+      thinkingLevel: undefined,
+      isDefault: false,
+      unavailable: true,
+    });
   });
   it("uses custom connection labels and configured thinking", () => {
     expect(
@@ -266,7 +285,13 @@ describe("effective bot model", () => {
           },
         ],
       }),
-    ).toEqual({ label: "custom-model", thinkingLevel: "low", isDefault: true });
+    ).toEqual({
+      label: "custom-model",
+      providerLabel: "openai-compatible",
+      unavailable: false,
+      thinkingLevel: "low",
+      isDefault: true,
+    });
   });
   it("clamps to supported thinking and shows off for models without reasoning", () => {
     expect(
@@ -291,15 +316,35 @@ describe("effective bot model", () => {
 
 it("the quiet chip opens settings and refreshes the space default after settings close", async () => {
   const onClick = vi.fn();
-  const chip = (settingsOpen: boolean) => (
-    <BotModelChip bot={bot} spaceId="space-test" settingsOpen={settingsOpen} onClick={onClick} />
-  );
+  function ShellModels({ settingsOpen, active = bot }: { settingsOpen: boolean; active?: Bot }) {
+    const modelSettings = useModelSettings("space-test", settingsOpen);
+    return <BotModelChip bot={active} settings={modelSettings} onClick={onClick} />;
+  }
+  const chip = (settingsOpen: boolean) => <ShellModels settingsOpen={settingsOpen} />;
   await act(async () => root.render(chip(false)));
   const button = container.querySelector("button");
-  expect(button?.textContent).toBe("GPT-6 Astra · mediumdefault");
-  expect(button?.getAttribute("aria-label")).toBe("Change model: GPT-6 Astra · medium");
+  expect(button?.textContent).toBe("Codex · GPT-6 Astra · mediumdefault");
+  expect(button?.getAttribute("aria-label")).toBe("Change model: Codex · GPT-6 Astra · medium");
   await act(async () => button?.click());
   expect(onClick).toHaveBeenCalledOnce();
+  await act(async () =>
+    root.render(
+      <ShellModels
+        settingsOpen={false}
+        active={{
+          ...bot,
+          id: "bot-next",
+          modelProvider: "openai-codex",
+          modelId: "gpt-5.3-codex-spark",
+        }}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain("gpt-5.3-codex-spark · medium · not available");
+  expect(container.textContent).not.toContain("default");
+  expect(api.list).toHaveBeenCalledOnce();
+  expect(api.me).toHaveBeenCalledOnce();
+  expect(api.credentials).toHaveBeenCalledOnce();
   await act(async () => root.render(chip(true)));
   api.me.mockResolvedValue({ ...me, defaultModel: "gpt-6-sol" });
   await act(async () => root.render(chip(false)));
@@ -331,4 +376,107 @@ it("does not show a model action for unrelated errors or a missing bot", async (
   expect(container.querySelector("button")).toBeNull();
   await act(async () => root.render(<ProviderErrorMessage text="Unknown model" />));
   expect(container.querySelector("button")).toBeNull();
+});
+
+it("reveals subscription models without changing the saved pin and describes effort", async () => {
+  await act(async () =>
+    root.render(
+      settings({ modelProvider: "openai-codex", modelId: "gpt-6-astra", thinkingLevel: "xhigh" }),
+    ),
+  );
+  const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  expect(toggle?.parentElement?.textContent).toBe("Show all models");
+  await act(async () => toggle?.click());
+  const spark = [...modelSelect().options].find((option) =>
+    option.value.endsWith("gpt-5.3-codex-spark"),
+  );
+  expect(spark?.textContent).toContain("May not be available on your plan");
+  expect(modelSelect().value).toBe("openai-codex::gpt-6-astra");
+  const effort = container.querySelector<HTMLSelectElement>('select[id$="-thinking"]');
+  expect(effort?.closest("details")).toBeNull();
+  expect(effort?.textContent).toContain("xhigh — very slow, very careful");
+  await act(async () => {
+    modelSelect().value = "openai-codex::gpt-5.3-codex-spark";
+    modelSelect().dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ modelId: "gpt-5.3-codex-spark" }));
+  await act(async () => toggle?.click());
+  expect(modelSelect().value).toBe("openai-codex::gpt-5.3-codex-spark");
+});
+
+it("keeps disconnected and missing-catalog pins and effort during unrelated saves", async () => {
+  api.credentials.mockResolvedValue([]);
+  await act(async () =>
+    root.render(
+      settings({ modelProvider: "openai-codex", modelId: "missing-model", thinkingLevel: "xhigh" }),
+    ),
+  );
+  expect(modelSelect().selectedOptions[0]?.textContent).toContain("not available on your account");
+  await save();
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({
+      modelProvider: "openai-codex",
+      modelId: "missing-model",
+      thinkingLevel: "xhigh",
+    }),
+  );
+});
+
+it("uses Shell metadata for the panel without loading it again", async () => {
+  const props = settings().props;
+  await act(async () =>
+    root.render(<BotSettings {...props} modelSettings={{ me, catalog, credentials }} />),
+  );
+  expect(modelSelect().options.length).toBeGreaterThan(1);
+  expect(api.list).not.toHaveBeenCalled();
+  expect(api.me).not.toHaveBeenCalled();
+  expect(api.credentials).not.toHaveBeenCalled();
+});
+
+it("offers recovery from the event kind, even when the message cannot be classified", async () => {
+  await act(async () =>
+    root.render(
+      <ProviderErrorMessage
+        text="Access denied"
+        providerErrorKind="model-unavailable"
+        onChangeModel={vi.fn()}
+      />,
+    ),
+  );
+  expect(container.querySelector("button")?.textContent).toBe("Change model");
+  await act(async () =>
+    root.render(
+      <ProviderErrorMessage
+        text="Model not supported"
+        providerErrorKind="other"
+        onChangeModel={vi.fn()}
+      />,
+    ),
+  );
+  expect(container.querySelector("button")).toBeNull();
+});
+
+it("trusts a ready deployment default without claiming a disconnected bot pin is available", () => {
+  const state = { me: { ...me, needsModel: false }, catalog, credentials: [] };
+  expect(effectiveBotModel(bot, state)?.unavailable).toBe(false);
+  expect(
+    effectiveBotModel(
+      { ...bot, modelProvider: me.defaultProvider, modelId: me.defaultModel },
+      state,
+    )?.unavailable,
+  ).toBe(true);
+  expect(
+    effectiveBotModel(bot, { ...state, me: { ...state.me, defaultModel: "gpt-5.3-codex-spark" } })
+      ?.unavailable,
+  ).toBe(true);
+});
+
+it("marks a pin missing from a connected catalog as unavailable", () => {
+  expect(
+    effectiveBotModel(
+      { ...bot, modelProvider: "openai-codex", modelId: "missing-model" },
+      { me, catalog, credentials },
+    )?.unavailable,
+  ).toBe(true);
 });
