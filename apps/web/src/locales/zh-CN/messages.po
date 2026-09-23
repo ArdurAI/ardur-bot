@@ -175,6 +175,7 @@ msgstr ""
 msgid "Access token (optional)"
 msgstr "访问令牌（可选）"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Account"
 msgstr "账户"
@@ -182,6 +183,10 @@ msgstr "账户"
 #: src/pages/shell/bot-panel.tsx
 msgid "Account default"
 msgstr "账户默认"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Account details are unavailable."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Account label"
@@ -314,6 +319,7 @@ msgstr ""
 msgid "Adding…"
 msgstr "正在添加…"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -339,6 +345,10 @@ msgstr "Agent 连接"
 #: src/pages/McpServersOverlay.tsx
 msgid "Agents:"
 msgstr "Agent："
+
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Allow"
+msgstr ""
 
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
@@ -433,6 +443,11 @@ msgstr "外观"
 msgid "Approval boundaries"
 msgstr "审批边界"
 
+#. placeholder {0}: tool.id
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Approval for {0}"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Approve"
@@ -493,8 +508,16 @@ msgstr "购买前询问"
 msgid "Ask before sending external email"
 msgstr "发送外部邮件前询问"
 
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Ask first"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
+msgstr ""
+
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "asks first"
 msgstr ""
 
 #. placeholder {0}: preset.time
@@ -522,6 +545,10 @@ msgstr "授权码或回调 URL"
 #: src/pages/shell/message-cards.tsx
 msgid "Authorization timed out. Please try again."
 msgstr "授权超时，请重试。"
+
+#: src/pages/McpOAuthCallback.tsx
+msgid "Authorization was cancelled. Try connecting again."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"
@@ -551,6 +578,7 @@ msgstr "头像工作室"
 msgid "Avatars"
 msgstr "头像"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
@@ -609,6 +637,11 @@ msgstr ""
 msgid "Bot to link"
 msgstr "要关联的 Bot"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Bots"
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "默认情况下 Bot 会直接执行。只有当你想先审核某类操作时，才添加例外。"
@@ -636,6 +669,7 @@ msgstr "无法连接服务器。"
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -741,6 +775,10 @@ msgstr "选择 Bot…"
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "设置新密码"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Choose bots and the tools they can use."
+msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
@@ -861,6 +899,7 @@ msgstr "颜色"
 msgid "Color {color}"
 msgstr "颜色 {color}"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Coming soon"
 msgstr "即将推出"
@@ -873,6 +912,7 @@ msgstr "命令"
 msgid "Complete"
 msgstr "完成"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -921,6 +961,7 @@ msgstr "确认删除"
 msgid "Confirm password"
 msgstr "确认密码"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -957,6 +998,10 @@ msgstr "连接此提供方，作为你的个人模型。"
 msgid "Connect Treg"
 msgstr "连接 Treg"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Connect your account."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -983,8 +1028,8 @@ msgid "Connected and using {0}."
 msgstr "已连接并使用 {0}。"
 
 #: src/pages/shell/message-cards.tsx
-msgid "Connected. Its tools are available from your next message."
-msgstr "已连接，下一条消息起即可使用其工具。"
+msgid "Connected. Review tools in MCP settings."
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1059,8 +1104,8 @@ msgid "Could not complete action"
 msgstr ""
 
 #: src/pages/McpOAuthCallback.tsx
-msgid "Could not complete OAuth"
-msgstr "无法完成 OAuth"
+msgid "Could not complete authorization. Try connecting again."
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
@@ -1075,6 +1120,10 @@ msgstr "无法连接"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Could not connect {0}"
 msgstr "无法连接 {0}"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Could not connect or load integrations."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not connect this provider"
@@ -1191,9 +1240,17 @@ msgstr "无法加载 MCP 服务器"
 msgid "Could not load model settings"
 msgstr "无法加载模型设置"
 
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Could not load or save tools."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "无法加载技能"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Could not load this account’s tools."
+msgstr ""
 
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "Could not load this chat."
@@ -1286,6 +1343,10 @@ msgstr "无法保存群组"
 #: src/pages/Onboarding.tsx
 msgid "Could not save model"
 msgstr "无法保存模型"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Could not save or load access."
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Could not save routine"
@@ -1571,6 +1632,7 @@ msgstr ""
 msgid "Direct MCP"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1615,6 +1677,10 @@ msgstr "Docker"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker 限制对你电脑的访问，以提高安全性。使用{hostLabel}时，Bot 可以处理你的本地文件并使用本地工具。"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Documentation"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Don’t have an account?"
@@ -1799,6 +1865,10 @@ msgstr "正在查找…"
 msgid "Finish signing in at <0>{0}</0>. The final page may not load; paste its URL or code here."
 msgstr "在 <0>{0}</0> 完成登录。最后一页可能无法加载；把 URL 或代码粘贴到这里。"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Finish signing in in your browser."
+msgstr ""
+
 #: src/components/CloudAgentCard.tsx
 msgid "finished"
 msgstr "已完成"
@@ -1847,6 +1917,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Git event"
 msgstr "Git 事件"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "GitLab host"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -1976,6 +2050,7 @@ msgid "Integration options"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "集成"
@@ -2102,6 +2177,10 @@ msgstr ""
 msgid "Loading voice providers…"
 msgstr "正在加载语音提供方…"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Loading your tools."
+msgstr ""
+
 #: src/App.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
@@ -2133,6 +2212,10 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "请确认这台电脑上没有仍在运行的任务。"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Manage"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manage MCP servers"
@@ -2539,10 +2622,6 @@ msgstr "现在"
 msgid "Now using {0}."
 msgstr "正在使用 {0}。"
 
-#: src/pages/McpOAuthCallback.tsx
-msgid "OAuth authorization was cancelled."
-msgstr "OAuth 授权已取消。"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth connected"
 msgstr "OAuth 已连接"
@@ -2581,6 +2660,10 @@ msgstr "打开"
 #: src/pages/Shell.tsx
 msgid "Open {0}"
 msgstr "打开 {0}"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Open documentation"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Open in full window"
@@ -2752,6 +2835,10 @@ msgstr "回应"
 msgid "Reactions"
 msgstr "表情回应"
 
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Read"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Read replies aloud"
 msgstr "朗读回复"
@@ -2759,6 +2846,10 @@ msgstr "朗读回复"
 #: src/pages/KnowledgeSection.tsx
 msgid "read-only"
 msgstr "只读"
+
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Reads can run without asking once you allow them. Writes always ask."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -2999,6 +3090,18 @@ msgstr "返回 Ardur Bot"
 msgid "rev {0}"
 msgstr "版本 {0}"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "Review tools"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Review tools before your bots can use this account."
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "撤销"
@@ -3052,11 +3155,17 @@ msgstr "运行中 · 停止"
 msgid "Running…"
 msgstr "正在运行…"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Runs on"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -3180,6 +3289,10 @@ msgstr "正在发送…"
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr "Sentry 告警"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Server"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/AccountSettingsOverlay.tsx
@@ -3456,6 +3569,10 @@ msgstr "测试运行"
 msgid "The API did not come back. Refresh this page."
 msgstr "API 未恢复。请刷新此页面。"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "The connection was cancelled."
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
 msgstr "所选记忆提供方在此构建中不可用。"
@@ -3516,6 +3633,10 @@ msgstr "此服务器未请求浏览器授权。"
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "此服务器已连接。请先断开再重新授权。"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "This service needs client registration before you can connect."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
 msgstr "此订阅登录在 Ardur Bot 中尚不可用。请使用部署凭据或选择其他提供方。"
@@ -3548,6 +3669,9 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg token"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "重试"
@@ -3660,6 +3784,10 @@ msgstr ""
 msgid "Use this model"
 msgstr "使用此模型"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Use your GitLab host"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "校验并添加"
@@ -3742,6 +3870,10 @@ msgstr "Bot 应在哪里运行？"
 msgid "Working…"
 msgstr "处理中…"
 
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Write"
+msgstr ""
+
 #: src/lib/thinking-level-options.ts
 msgid "xhigh — very slow, very careful"
 msgstr ""
@@ -3765,6 +3897,14 @@ msgstr "可以关闭此窗口。"
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "你已接管"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Your account is connected."
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Your bots can use the selected tools."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Your email address"

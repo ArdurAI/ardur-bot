@@ -4,6 +4,7 @@ import type {
   ConnectorCall,
   ConnectorTool,
 } from "@ardurbot/adapter-kit";
+import type { SpaceToolPolicies } from "@ardurbot/contracts";
 import type { ActionApprovalRule } from "@ardurbot/core";
 import {
   approvalEffectKey,
@@ -57,6 +58,7 @@ function fixture({
     description: "Test assistant",
   },
   shutdownSignal,
+  integration = false,
 }: {
   name?: string;
   catalog?: boolean;
@@ -67,6 +69,7 @@ function fixture({
   prompt?: string;
   bot?: { name: string; title: string; description: string };
   shutdownSignal?: AbortSignal;
+  integration?: boolean;
 } = {}) {
   const tool: ConnectorTool = {
     name,
@@ -77,7 +80,33 @@ function fixture({
       properties: { id: { type: "string" } },
       required: ["id"],
     },
-    route: { connectorId: "demo", resourceId: "resource-1", toolName: name },
+    route: {
+      connectorId: integration ? "mcp" : "demo",
+      resourceId: "resource-1",
+      resourceRevision: 1,
+      toolName: name,
+    },
+  };
+  const grant = {
+    allowAllTools: false,
+    needsReview: false,
+    allowedTools: [name],
+    server: {
+      enabled: true,
+      catalogId: "github",
+      connectionState: "connected",
+      revision: 1,
+      spaceAllowedTools: [name],
+      spaceToolPolicies: {} as SpaceToolPolicies,
+      manifest: {
+        capturedAt: "2026-09-23T00:00:00.000Z",
+        serverVersion: null,
+        account: null,
+        tools: [
+          { id: name, description: "Synthetic test tool", inputSchemaDigest: "a".repeat(64) },
+        ],
+      },
+    },
   };
   const effects: Effect[] = [];
   const results: unknown[] = [];
@@ -142,6 +171,7 @@ function fixture({
     updatedAt: new Date(0),
   };
   const prisma = {
+    botMcpServer: { findFirst: vi.fn(async () => grant) },
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
@@ -244,6 +274,7 @@ function fixture({
     shutdownSignal,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
   return {
+    grant,
     effects,
     results,
     execute,
@@ -510,4 +541,85 @@ describe("connector read-only metadata and approval enforcement", () => {
       expect(f.pauseRunForInput).not.toHaveBeenCalled();
     });
   });
+});
+
+describe("catalog policy at the executor gate", () => {
+  it.each([
+    [false, "user"],
+    [true, "user"],
+    [false, "webhook"],
+    [true, "webhook"],
+  ] as const)(
+    "runs owner-allowed reads without pausing or auto-review (lazy=%s, trigger=%s)",
+    async (catalog, trigger) => {
+      const name = "synthetic_fetch_item";
+      const f = fixture({ integration: true, catalog, name, autoReview: true, trigger });
+      f.grant.server.spaceToolPolicies = { [name]: "allow" };
+      reviewMock.mockReset();
+      await f.run();
+      expect(f.execute).toHaveBeenCalledOnce();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(reviewMock).not.toHaveBeenCalled();
+    },
+  );
+  it.each([false, true])(
+    "still pauses writes with a forged owner allow and names the manifest action (lazy=%s)",
+    async (catalog) => {
+      const name = "synthetic_create_comment";
+      const f = fixture({ integration: true, catalog, name });
+      f.grant.server.spaceToolPolicies = { [name]: "allow" };
+      f.grant.server.manifest.tools[0]!.description =
+        "Create a pull request comment. Includes a comment body.";
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              text: "GitHub · create a pull request comment",
+              detail: name,
+              actions: [
+                { id: "allow", label: "Allow once" },
+                { id: "deny", label: "Deny" },
+              ],
+            }),
+          ],
+        }),
+      );
+    },
+  );
+  it.each([false, true])(
+    "requires owner approval despite an allow rule and auto-review (lazy=%s)",
+    async (catalog) => {
+      const name = "synthetic_get_item";
+      const f = fixture({
+        integration: true,
+        catalog,
+        name,
+        autoReview: true,
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: name }],
+      });
+      reviewMock.mockReset();
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      expect(isApprovalPausedResult(f.results[0])).toBe(true);
+      expect(reviewMock).not.toHaveBeenCalled();
+    },
+  );
+  it.each([false, true])(
+    "rejects revoked grants even during an approved replay (lazy=%s)",
+    async (catalog) => {
+      const f = fixture({ integration: true, catalog });
+      await f.run();
+      expect(f.effects).toHaveLength(1);
+      f.effects[0]!.status = "approved";
+      f.grant.allowedTools = [];
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.results.at(-1)).toMatchObject({
+        error: expect.stringContaining("no longer granted"),
+      });
+    },
+  );
 });

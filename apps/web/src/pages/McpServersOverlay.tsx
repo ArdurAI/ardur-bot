@@ -25,6 +25,7 @@ import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { McpToolReview } from "../components/integrations/catalog/McpToolReview";
 import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
 import { rpc } from "../lib/rpc";
 
@@ -41,6 +42,7 @@ function oauthActionLabel(server: McpServer, pending: boolean): string {
 
 export function McpServersOverlay({ onClose }: { onClose: () => void }) {
   const { t } = useLingui();
+  const [reviewing, setReviewing] = useState<McpServer | null>(null);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [bots, setBots] = useState<Bot[]>([]);
   const [botAssignments, setBotAssignments] = useState<Record<string, BotMcpServer[]>>({});
@@ -153,7 +155,7 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
             botId,
             assignments: [
               ...existing,
-              { serverId: created.id, allowAllTools: true, allowedTools: [] },
+              { serverId: created.id, allowAllTools: false, needsReview: true, allowedTools: [] },
             ],
           });
         }),
@@ -202,7 +204,10 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
     const assigned = current.some((entry) => entry.serverId === server.id);
     const next = assigned
       ? current.filter((entry) => entry.serverId !== server.id)
-      : [...current, { serverId: server.id, allowAllTools: true, allowedTools: [] }];
+      : [
+          ...current,
+          { serverId: server.id, allowAllTools: false, needsReview: true, allowedTools: [] },
+        ];
     try {
       const updated = await rpc.mcp.assignments.replace({ botId, assignments: next });
       setBotAssignments((map) => ({ ...map, [botId]: updated }));
@@ -250,6 +255,15 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
         showCloseButton={false}
         className="flex max-h-[calc(100%-2rem)] w-[960px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl bg-card p-0 sm:max-w-[960px]"
       >
+        {reviewing ? (
+          <McpToolReview
+            server={reviewing}
+            bots={bots}
+            assignments={botAssignments}
+            onClose={() => setReviewing(null)}
+            onSaved={refresh}
+          />
+        ) : null}
         <DialogHeader className="flex-row items-center justify-between border-b border-border px-6 py-5">
           <DialogTitle className="text-xl text-foreground">
             <Trans>MCP servers</Trans>
@@ -472,6 +486,14 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
                           })}
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setReviewing(server)}
+                          >
+                            <Trans>Review tools</Trans>
+                          </Button>
                           {server.transport !== "stdio" ? (
                             <>
                               <Button

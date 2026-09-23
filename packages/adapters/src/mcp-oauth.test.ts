@@ -469,6 +469,7 @@ describe("MCP OAuth", () => {
       ),
       put: vi.fn(async () => ({ id: "secret-next", ciphertext: "encrypted-next" })),
     };
+    Object.assign(prisma, { mcpOAuthSession: oauthSessionStore() });
     const broker = new McpOAuthBroker(prisma as never, secrets as never, TEST_NETWORK);
 
     await broker.disconnect({
@@ -743,4 +744,73 @@ describe("MCP setup with an existing access token", () => {
       expect(secrets.put).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("catalog OAuth revocation fences", () => {
+  it("rejects a restored OAuth callback from an older connection revision", async () => {
+    const sessions = oauthSessionStore();
+    sessions.findFirst.mockResolvedValue({
+      id: "session",
+      serverId: "server",
+      spaceId: "space",
+      userId: "owner",
+      endpoint: "https://example.test/mcp",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+      oauthCiphertext: "encrypted",
+      createdAt: new Date(),
+    });
+    const db = {
+      mcpOAuthSession: sessions,
+      mcpServer: {
+        findFirst: vi.fn(async () => ({
+          id: "server",
+          endpoint: "https://example.test/mcp",
+          enabled: true,
+          catalogId: "github",
+          revision: 2,
+        })),
+      },
+    };
+    const fetch = vi.fn();
+    const broker = new McpOAuthBroker(
+      db as never,
+      { load: () => JSON.stringify({ oauth: { authorizationRevision: 1 } }) } as never,
+      { ...TEST_NETWORK, fetch },
+    );
+    await expect(
+      broker.complete({
+        sessionId: "session",
+        state: "session",
+        code: "synthetic-code",
+        spaceId: "space",
+        userId: "owner",
+      }),
+    ).rejects.toThrow("invalid or expired");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("cannot persist a token refresh after the connection was disabled or replaced", async () => {
+    const tx = { $executeRaw: vi.fn(), mcpServer: { findFirst: vi.fn(async () => null) } };
+    const db = { $transaction: vi.fn(async (callback) => callback(tx)) };
+    const put = vi.fn();
+    const broker = new McpOAuthBroker(db as never, { put } as never);
+    const provider = await broker.providerFor(
+      {
+        id: "server",
+        endpoint: "https://example.test/mcp",
+        secretId: null,
+        catalogId: "github",
+        revision: 1,
+      },
+      { spaceId: "space", userId: "owner" },
+      { material: { oauth: {} } },
+    );
+    await expect(
+      provider!.saveTokens({ access_token: "synthetic-token", token_type: "bearer" }),
+    ).rejects.toThrow("unavailable");
+    expect(tx.mcpServer.findFirst).toHaveBeenCalledWith({
+      where: { id: "server", spaceId: "space", userId: "owner", enabled: true, revision: 1 },
+      select: { endpoint: true, secretId: true },
+    });
+    expect(put).not.toHaveBeenCalled();
+  });
 });

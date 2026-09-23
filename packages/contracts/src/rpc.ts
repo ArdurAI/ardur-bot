@@ -77,6 +77,13 @@ import {
 import { ProductEventSchema } from "./events.js";
 import { Id, IsoDate } from "./ids.js";
 import {
+  IntegrationConnectionSchema,
+  IntegrationDescriptorSchema,
+  IntegrationGrantSchema,
+  IntegrationManifestSchema,
+  SpaceToolPoliciesSchema,
+} from "./integration-catalog.js";
+import {
   IntegrationProviderConfigSchema,
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
@@ -554,8 +561,42 @@ export const appContract = {
       .output(CapabilityInstallSchema),
     remove: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
   },
+  integrations: {
+    list: oc.output(
+      z.object({
+        catalog: z.array(IntegrationDescriptorSchema),
+        connections: z.array(IntegrationConnectionSchema),
+      }),
+    ),
+    connect: oc
+      .input(
+        z.object({ catalogId: Id, connectionId: Id.optional(), host: z.string().url().optional() }),
+      )
+      .output(
+        z.object({
+          connection: IntegrationConnectionSchema,
+          authorizationUrl: z.string().url().nullable(),
+          sessionId: z.string().nullable(),
+        }),
+      ),
+    assign: oc
+      .input(
+        z.object({
+          connectionId: Id,
+          botIds: z.array(Id).max(500),
+          toolIds: z.array(z.string().min(1).max(200)).max(2000),
+          spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
+        }),
+      )
+      .output(z.array(IntegrationGrantSchema)),
+    grants: oc.input(z.object({ connectionId: Id })).output(z.array(IntegrationGrantSchema)),
+    revoke: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
+    cancel: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
+    discover: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
+  },
   mcp: {
     servers: {
+      tools: oc.input(z.object({ serverId: Id })).output(IntegrationManifestSchema),
       list: oc.output(z.array(McpServerSchema)),
       create: oc.input(McpServerConfigInput).output(McpServerSchema),
       update: oc
@@ -579,7 +620,11 @@ export const appContract = {
             assignments: z.array(
               z.object({
                 serverId: Id,
-                allowAllTools: z.boolean().default(true),
+                allowAllTools: z
+                  .boolean()
+                  .default(false)
+                  .refine((value) => !value, "Choose explicit tools"),
+                needsReview: z.boolean().default(false),
                 allowedTools: z.array(z.string().min(1).max(200)).max(500).default([]),
               }),
             ),

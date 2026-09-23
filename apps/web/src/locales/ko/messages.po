@@ -175,6 +175,7 @@ msgstr ""
 msgid "Access token (optional)"
 msgstr "액세스 토큰(선택 사항)"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Account"
 msgstr "계정"
@@ -182,6 +183,10 @@ msgstr "계정"
 #: src/pages/shell/bot-panel.tsx
 msgid "Account default"
 msgstr "계정 기본값"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Account details are unavailable."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Account label"
@@ -314,6 +319,7 @@ msgstr ""
 msgid "Adding…"
 msgstr "추가 중…"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -339,6 +345,10 @@ msgstr "Agent 연결"
 #: src/pages/McpServersOverlay.tsx
 msgid "Agents:"
 msgstr "사용 Bot:"
+
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Allow"
+msgstr ""
 
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
@@ -433,6 +443,11 @@ msgstr "모양"
 msgid "Approval boundaries"
 msgstr "승인이 필요한 범위"
 
+#. placeholder {0}: tool.id
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Approval for {0}"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Approve"
@@ -493,8 +508,16 @@ msgstr "결제하기 전에 확인"
 msgid "Ask before sending external email"
 msgstr "외부 이메일을 보내기 전에 확인"
 
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Ask first"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
+msgstr ""
+
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "asks first"
 msgstr ""
 
 #. placeholder {0}: preset.time
@@ -522,6 +545,10 @@ msgstr "인증 코드 또는 돌아온 페이지 주소"
 #: src/pages/shell/message-cards.tsx
 msgid "Authorization timed out. Please try again."
 msgstr "인증 시간이 만료되었습니다. 다시 시도해 주세요."
+
+#: src/pages/McpOAuthCallback.tsx
+msgid "Authorization was cancelled. Try connecting again."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"
@@ -551,6 +578,7 @@ msgstr "아바타 스튜디오"
 msgid "Avatars"
 msgstr "아바타"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
@@ -609,6 +637,11 @@ msgstr ""
 msgid "Bot to link"
 msgstr "연결할 Bot"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Bots"
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "Bot은 기본적으로 묻지 않고 작업합니다. 먼저 확인하고 싶은 작업만 예외로 추가하세요."
@@ -636,6 +669,7 @@ msgstr "서버에 연결할 수 없습니다."
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -741,6 +775,10 @@ msgstr "Bot 선택…"
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "새 비밀번호 선택"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Choose bots and the tools they can use."
+msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
@@ -861,6 +899,7 @@ msgstr "색상"
 msgid "Color {color}"
 msgstr "색상 {color}"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Coming soon"
 msgstr "준비 중"
@@ -873,6 +912,7 @@ msgstr "실행 명령"
 msgid "Complete"
 msgstr "완료"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -921,6 +961,7 @@ msgstr "삭제 확인"
 msgid "Confirm password"
 msgstr "비밀번호 확인"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -957,6 +998,10 @@ msgstr "이 AI 서비스를 연결하면 내 기본 모델로 사용할 수 있�
 msgid "Connect Treg"
 msgstr "Treg 연결"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Connect your account."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -983,8 +1028,8 @@ msgid "Connected and using {0}."
 msgstr "{0}에 연결하고 기본 모델로 설정했습니다."
 
 #: src/pages/shell/message-cards.tsx
-msgid "Connected. Its tools are available from your next message."
-msgstr "연결되었습니다. 다음 메시지부터 이 도구를 사용할 수 있습니다."
+msgid "Connected. Review tools in MCP settings."
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1059,8 +1104,8 @@ msgid "Could not complete action"
 msgstr ""
 
 #: src/pages/McpOAuthCallback.tsx
-msgid "Could not complete OAuth"
-msgstr "OAuth 인증을 완료하지 못했습니다."
+msgid "Could not complete authorization. Try connecting again."
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
@@ -1075,6 +1120,10 @@ msgstr "연결하지 못했습니다."
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Could not connect {0}"
 msgstr "{0}에 연결하지 못했습니다."
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Could not connect or load integrations."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not connect this provider"
@@ -1191,9 +1240,17 @@ msgstr "MCP 서버 목록을 불러오지 못했습니다."
 msgid "Could not load model settings"
 msgstr "AI 모델 설정을 불러오지 못했습니다."
 
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Could not load or save tools."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "스킬을 불러오지 못했습니다"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Could not load this account’s tools."
+msgstr ""
 
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "Could not load this chat."
@@ -1286,6 +1343,10 @@ msgstr "그룹을 저장하지 못했습니다."
 #: src/pages/Onboarding.tsx
 msgid "Could not save model"
 msgstr "AI 모델을 저장하지 못했습니다."
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Could not save or load access."
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Could not save routine"
@@ -1571,6 +1632,7 @@ msgstr ""
 msgid "Direct MCP"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1615,6 +1677,10 @@ msgstr "Docker"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker는 보안을 위해 컴퓨터 접근을 제한합니다. {hostLabel}에서는 Bot이 로컬 파일과 도구로 작업할 수 있습니다."
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Documentation"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Don’t have an account?"
@@ -1799,6 +1865,10 @@ msgstr "찾는 중…"
 msgid "Finish signing in at <0>{0}</0>. The final page may not load; paste its URL or code here."
 msgstr "<0>{0}</0>에서 로그인을 마치세요. 마지막 페이지가 열리지 않아도 괜찮습니다. 그 페이지의 URL이나 코드를 여기에 붙여넣으세요."
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Finish signing in in your browser."
+msgstr ""
+
 #: src/components/CloudAgentCard.tsx
 msgid "finished"
 msgstr "완료"
@@ -1847,6 +1917,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Git event"
 msgstr "Git 이벤트"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "GitLab host"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -1976,6 +2050,7 @@ msgid "Integration options"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "앱·도구 연동"
@@ -2102,6 +2177,10 @@ msgstr ""
 msgid "Loading voice providers…"
 msgstr "음성 서비스를 불러오는 중…"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Loading your tools."
+msgstr ""
+
 #: src/App.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
@@ -2133,6 +2212,10 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "이 컴퓨터에서 실행 중인 작업이 없는지 확인하세요."
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Manage"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manage MCP servers"
@@ -2539,10 +2622,6 @@ msgstr "지금"
 msgid "Now using {0}."
 msgstr "이제 {0} 모델을 사용합니다."
 
-#: src/pages/McpOAuthCallback.tsx
-msgid "OAuth authorization was cancelled."
-msgstr "OAuth 인증이 취소되었습니다."
-
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth connected"
 msgstr "OAuth 연결됨"
@@ -2581,6 +2660,10 @@ msgstr "열기"
 #: src/pages/Shell.tsx
 msgid "Open {0}"
 msgstr "{0} 열기"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Open documentation"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Open in full window"
@@ -2752,6 +2835,10 @@ msgstr "반응하기"
 msgid "Reactions"
 msgstr "반응"
 
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Read"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Read replies aloud"
 msgstr "답변을 자동으로 읽기"
@@ -2759,6 +2846,10 @@ msgstr "답변을 자동으로 읽기"
 #: src/pages/KnowledgeSection.tsx
 msgid "read-only"
 msgstr "읽기 전용"
+
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Reads can run without asking once you allow them. Writes always ask."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -2999,6 +3090,18 @@ msgstr "Ardur Bot로 돌아가기"
 msgid "rev {0}"
 msgstr "리비전 {0}"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "Review tools"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Review tools before your bots can use this account."
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "연결 해제"
@@ -3052,11 +3155,17 @@ msgstr "실행 중 · 중지"
 msgid "Running…"
 msgstr "실행 중…"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Runs on"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -3180,6 +3289,10 @@ msgstr "보내는 중…"
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr "Sentry 알림"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Server"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/AccountSettingsOverlay.tsx
@@ -3456,6 +3569,10 @@ msgstr "테스트 실행"
 msgid "The API did not come back. Refresh this page."
 msgstr "API가 다시 작동하지 않습니다. 이 페이지를 새로 고침하세요."
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "The connection was cancelled."
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
 msgstr "선택한 기억 서비스는 현재 빌드에서 사용할 수 없습니다."
@@ -3516,6 +3633,10 @@ msgstr "이 서버는 브라우저 인증을 요청하지 않았습니다."
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "이 서버는 이미 연결되어 있습니다. 다시 인증하려면 먼저 연결을 해제하세요."
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "This service needs client registration before you can connect."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
 msgstr "이 구독 로그인 방식은 아직 Ardur Bot에서 지원되지 않습니다. 서버에 설정된 인증 정보를 사용하거나 다른 서비스를 선택하세요."
@@ -3548,6 +3669,9 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg 토큰"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "다시 시도"
@@ -3660,6 +3784,10 @@ msgstr ""
 msgid "Use this model"
 msgstr "이 모델 사용"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Use your GitLab host"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "확인 후 추가"
@@ -3742,6 +3870,10 @@ msgstr "Bot을 어디에서 실행할까요?"
 msgid "Working…"
 msgstr "처리 중…"
 
+#: src/components/integrations/catalog/ToolPicker.tsx
+msgid "Write"
+msgstr ""
+
 #: src/lib/thinking-level-options.ts
 msgid "xhigh — very slow, very careful"
 msgstr ""
@@ -3765,6 +3897,14 @@ msgstr "이 창을 닫아도 됩니다."
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "직접 조작 중"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Your account is connected."
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Your bots can use the selected tools."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Your email address"

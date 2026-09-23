@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { allowlistDrift, McpConnector } from "./mcp-connector.js";
-import { type McpOAuthBroker, StoredMcpOAuthProvider } from "./mcp-oauth.js";
+import type { McpOAuthBroker } from "./mcp-oauth.js";
+import { StoredMcpOAuthProvider } from "./mcp-oauth.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -12,6 +13,7 @@ const SERVER = {
   secretId: null,
   args: [],
   revision: 1,
+  enabled: true,
 };
 
 const ASSIGNMENT = {
@@ -19,8 +21,16 @@ const ASSIGNMENT = {
   serverId: "server-1",
   spaceId: "w1",
   userId: "u1",
-  allowAllTools: true,
-  allowedTools: [],
+  allowAllTools: false,
+  needsReview: false,
+  allowedTools: [
+    "echo",
+    "__catalog_search",
+    "__catalog_load",
+    "__catalog_execute",
+    ...Array.from({ length: 30 }, (_, index) => `tool_${index}`),
+    ...Array.from({ length: 30 }, (_, index) => `tool_${String(index).padStart(2, "0")}`),
+  ],
   server: SERVER,
 };
 

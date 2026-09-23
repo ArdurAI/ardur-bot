@@ -4,22 +4,45 @@ import { redactSecrets } from "@ardurbot/core";
 const MAX_APPROVAL_SUMMARY_LENGTH = 500;
 const MAX_APPROVAL_DETAIL_LENGTH = 4_000;
 
+export type IntegrationApprovalAction = {
+  vendorName: string;
+  toolId: string;
+  description: string;
+};
+
 export function buildApprovalAskBlock(
   effectId: string,
   toolName: string,
   args: Record<string, unknown>,
   secrets: string[],
-  options?: { reviewReason?: string },
+  options?: {
+    reviewReason?: string;
+    allowAlways?: boolean;
+    integration?: IntegrationApprovalAction;
+  },
 ): MessageBlock {
-  const summary = describeApprovalAction(toolName, args);
-  const detail = formatApprovalDetail(toolName, args, options?.reviewReason);
+  const summary = options?.integration
+    ? describeIntegrationAction(options.integration, args)
+    : describeApprovalAction(toolName, args);
+  const detail = [
+    options?.integration
+      ? [...new Set([options.integration.toolId, toolName])].join(" · ")
+      : undefined,
+    formatApprovalDetail(toolName, args, options?.reviewReason),
+  ]
+    .filter(Boolean)
+    .join("\n");
   const safeDetail = detail ? redactSecrets(detail, secrets) : undefined;
   return {
     kind: "ask",
     approvalEffectId: effectId,
     text: truncate(
       redactSecrets(
-        toolName === "create_space" ? `${summary}?` : `Review before ${summary}`,
+        options?.integration
+          ? summary
+          : toolName === "create_space"
+            ? `${summary}?`
+            : `Review before ${summary}`,
         secrets,
       ),
       MAX_APPROVAL_SUMMARY_LENGTH,
@@ -34,10 +57,43 @@ export function buildApprovalAskBlock(
           ]
         : [
             { id: "allow", label: "Allow once" },
-            { id: "always", label: "Always allow this tool" },
+            ...(options?.allowAlways === false
+              ? []
+              : [{ id: "always", label: "Always allow this tool" }]),
             { id: "deny", label: "Deny" },
           ],
   };
+}
+
+function describeIntegrationAction(
+  integration: IntegrationApprovalAction,
+  args: Record<string, unknown>,
+): string {
+  // Manifest prose is display data, never Markdown or instructions for the executor.
+  const description =
+    integration.description.trim().split(/\n|(?<=[.!?])\s/)[0] ||
+    integration.toolId.replace(/[_-]+/g, " ");
+  const plain = description
+    .replace(/<[^>]*>/g, "")
+    .replace(/[\\`*_[\]#]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[.!?]+$/, "");
+  const action = plain.replace(/^[A-Z](?=[a-z])/, (letter) => letter.toLowerCase());
+  const repo =
+    typeof args.repo === "string" && typeof args.owner === "string"
+      ? `${args.owner}/${args.repo}`
+      : typeof args.repository === "string"
+        ? args.repository
+        : undefined;
+  const number = args.pull_number ?? args.issue_number;
+  const reference =
+    typeof number === "number" && Number.isSafeInteger(number) && number > 0
+      ? `#${number}`
+      : typeof number === "string" && /^\d+$/.test(number)
+        ? `#${number}`
+        : "";
+  const target = repo ? `${repo}${reference}` : pickScopeLabel(args);
+  return `${integration.vendorName} · ${action}${target ? ` on ${target}` : ""}`;
 }
 
 function describeApprovalAction(toolName: string, args: Record<string, unknown>): string {

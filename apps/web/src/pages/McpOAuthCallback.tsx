@@ -21,7 +21,7 @@ export function McpOAuthCallbackPage() {
     const code = params.get("code");
     const state = params.get("state");
     if (!code || !state) {
-      setError(params.get("error_description") ?? t`OAuth authorization was cancelled.`);
+      setError(t`Authorization was cancelled. Try connecting again.`);
       return;
     }
     if (handledState.current === state) return;
@@ -30,7 +30,7 @@ export function McpOAuthCallbackPage() {
       .complete({ sessionId: state, code, state })
       .then(() => {
         const channel = new BroadcastChannel(POPUP_NAME);
-        channel.postMessage({ type: "mcp-oauth-complete" });
+        channel.postMessage({ type: "mcp-oauth-complete", sessionId: state });
         channel.close();
         if (window.name === POPUP_NAME) {
           setDone(true);
@@ -39,9 +39,7 @@ export function McpOAuthCallbackPage() {
         }
         navigate("/app?mcp_oauth=connected", { replace: true });
       })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : t`Could not complete OAuth`),
-      );
+      .catch(() => setError(t`Could not complete authorization. Try connecting again.`));
   }, [navigate, params, t]);
   const showReturn = Boolean(error) && window.name !== POPUP_NAME;
   return (

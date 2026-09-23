@@ -5,12 +5,14 @@ import type {
   ConnectorProvider,
   ConnectorTool,
 } from "@ardurbot/adapter-kit";
-import { isLocalMcpHost } from "@ardurbot/contracts";
+import { IntegrationManifestSchema, isLocalMcpHost } from "@ardurbot/contracts";
 import type { McpServer, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { catalogToolPrefix } from "./approval-effect.js";
 import { redactConnectorPayload, sanitizeConnectorError } from "./connector-safety.js";
 import { appendToolCompletionAudit } from "./executor.js";
+import { grantedMcpTools } from "./integration-access.js";
+import { captureIntegrationManifest, inputSchemaDigest } from "./integration-manifest.js";
 import {
   CATALOG_EXECUTE,
   catalogEntries,
@@ -69,6 +71,21 @@ function reportAllowlistDrift(
 }
 
 export class McpConnector implements ConnectorProvider {
+  private static readonly active = new Set<McpConnector>();
+
+  /** Close process-local sessions; other workers are fenced by the persisted revision. */
+  static async invalidateConnection(
+    serverId: string,
+    owner: { spaceId: string; userId: string },
+  ): Promise<void> {
+    const key = `${serverId} ${owner.spaceId} ${owner.userId}`;
+    await Promise.all(
+      [...McpConnector.active].map(async (connector) => {
+        await connector.connecting.get(key)?.promise.catch(() => undefined);
+        await connector.evict(key);
+      }),
+    );
+  }
   private readonly sessions = new Map<string, SessionEntry>();
   private readonly connecting = new Map<string, PendingSession>();
   // Discovery runs more than once per run: once up front, then again on every lazy
@@ -85,7 +102,9 @@ export class McpConnector implements ConnectorProvider {
       events?: Pick<ThreadEvents, "append">;
     } = {},
     private readonly oauth?: McpOAuthBroker,
-  ) {}
+  ) {
+    McpConnector.active.add(this);
+  }
 
   describe() {
     return {
@@ -130,19 +149,46 @@ export class McpConnector implements ConnectorProvider {
       assignments.map(async (assignment): Promise<ConnectorTool[]> => {
         const startedAt = Date.now();
         try {
+          if (
+            !grantedMcpTools(
+              assignment,
+              Array.isArray(assignment.allowedTools)
+                ? assignment.allowedTools.filter((id): id is string => typeof id === "string")
+                : [],
+            ).length
+          )
+            return [];
           const session = await this.sessionFor(assignment.server, context);
           const listed = await session.listTools({ signal: context.signal });
           reportAllowlistDrift(assignment, listed.tools, context);
+          const material = this.sessions.get(this.sessionKey(assignment.server, context))?.material;
+          const secretValues = material ? oauthMaterialSecrets(material) : [];
+          const granted = new Set(
+            grantedMcpTools(
+              assignment,
+              listed.tools.map((tool) => tool.name),
+            ),
+          );
+          const manifest = IntegrationManifestSchema.safeParse(assignment.server.manifest);
           return listed.tools
             .filter(
               (tool) =>
-                assignment.allowAllTools ||
-                (assignment.allowedTools as unknown[]).includes(tool.name),
+                granted.has(tool.name) &&
+                (!assignment.server.catalogId ||
+                  (manifest.success &&
+                    manifest.data.tools.some(
+                      (captured) =>
+                        captured.id === tool.name &&
+                        captured.inputSchemaDigest === inputSchemaDigest(tool.inputSchema),
+                    ))),
             )
             .map((tool) => ({
               name: `mcp__${assignment.server.slug}__${tool.name}`,
-              description: tool.description ?? tool.name,
-              inputSchema: tool.inputSchema as Record<string, unknown>,
+              description: sanitizeConnectorError(tool.description ?? tool.name, secretValues),
+              inputSchema: redactConnectorPayload(tool.inputSchema, secretValues) as Record<
+                string,
+                unknown
+              >,
               route: {
                 connectorId: "mcp",
                 resourceId: assignment.serverId,
@@ -251,9 +297,10 @@ export class McpConnector implements ConnectorProvider {
     });
     if (
       !assignment ||
-      (!assignment.allowAllTools &&
-        !(assignment.allowedTools as unknown[]).includes(call.route.toolName))
+      !grantedMcpTools(assignment, [call.route.toolName]).length ||
+      (assignment.server.catalogId && call.route.resourceRevision !== assignment.server.revision)
     ) {
+      await this.evict(`${call.route.resourceId} ${context.spaceId} ${context.userId}`);
       yield { type: "error", message: "MCP tool is not assigned to this bot" };
       return;
     }
@@ -265,6 +312,31 @@ export class McpConnector implements ConnectorProvider {
     try {
       const session = await this.sessionFor(assignment.server, context);
       material = this.sessions.get(sessionKey)?.material;
+      if (assignment.server.catalogId) {
+        const manifest = IntegrationManifestSchema.parse(assignment.server.manifest);
+        const listed = await session.listTools({ signal: context.signal });
+        const live = listed.tools.find((tool) => tool.name === call.route?.toolName);
+        const captured = manifest.tools.find((tool) => tool.id === call.route?.toolName);
+        if (
+          !live ||
+          !captured ||
+          captured.inputSchemaDigest !== inputSchemaDigest(live.inputSchema)
+        ) {
+          throw new Error("The tool changed. Review tools before continuing.");
+        }
+        // Recheck after discovery: revocation must also fence an already-open session.
+        const current = await this.prisma.botMcpServer.findFirst({
+          where: {
+            id: assignment.id,
+            spaceId: context.spaceId,
+            userId: context.userId,
+            server: { enabled: true, revision: assignment.server.revision },
+          },
+          include: { server: true },
+        });
+        if (!current || !grantedMcpTools(current, [call.route.toolName]).length)
+          throw new Error("MCP tool is not assigned to this bot");
+      }
       const result = await session.callTool(call.route.toolName, call.args, {
         signal: context.signal,
       });
@@ -278,7 +350,20 @@ export class McpConnector implements ConnectorProvider {
     }
   }
 
+  /** Owner-scoped settings discovery; callers must check ownership before passing the row. */
+  async inspectServer(server: McpServer, context: AdapterContext) {
+    const session = await this.sessionFor(server, context);
+    const listed = await session.listTools({ signal: context.signal });
+    const material = this.sessions.get(this.sessionKey(server, context))?.material;
+    return captureIntegrationManifest(
+      listed.tools,
+      session.serverVersion(),
+      material ? oauthMaterialSecrets(material) : [],
+    );
+  }
+
   async close(): Promise<void> {
+    McpConnector.active.delete(this);
     await Promise.allSettled([...this.connecting.values()].map(({ promise }) => promise));
     await Promise.all([...this.sessions.values()].map(({ session }) => session.close()));
     this.sessions.clear();

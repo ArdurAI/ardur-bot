@@ -148,7 +148,7 @@ function ruleSpecificity(rule: ActionApprovalRule): number {
   }
 }
 
-export type ActionApprovalSource = "require_approval" | "always_allow" | "default";
+export type ActionApprovalSource = "require_approval" | "always_allow" | "default" | "space_policy";
 
 export type ActionApprovalResolved = {
   decision: "ask" | "allow";
@@ -161,13 +161,20 @@ export function resolveActionApprovalDetail(input: {
   toolName: string;
   connectorKind?: string;
   rules: ActionApprovalRule[];
+  integrationApproval?: "ask-first" | "allow";
 }): ActionApprovalResolved {
+  if (input.integrationApproval === "ask-first")
+    return { decision: "ask", source: "space_policy", matchingRules: [] };
   const connectorKind = input.connectorKind ?? connectorKindFromToolName(input.toolName);
   const matchingRules = input.rules.filter((rule) =>
     ruleMatches(rule, input.toolName, connectorKind),
   );
   if (matchingRules.length === 0) {
-    return { decision: "allow", source: "default", matchingRules };
+    return {
+      decision: "allow",
+      source: input.integrationApproval === "allow" ? "space_policy" : "default",
+      matchingRules,
+    };
   }
 
   const highestSpecificity = Math.max(...matchingRules.map(ruleSpecificity));

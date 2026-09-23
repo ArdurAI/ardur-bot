@@ -1075,6 +1075,11 @@ model McpServer {
   updatedAt     DateTime          @updatedAt
   assignments   BotMcpServer[]
   oauthSessions McpOAuthSession[]
+  catalogId     String?
+  connectionState String          @default("not-connected")
+  manifest      Json?
+  spaceAllowedTools Json          @default("[]")
+  spaceToolPolicies Json          @default("{}")
 
   @@unique([spaceId, userId, slug])
   @@index([spaceId, userId])
@@ -1106,7 +1111,8 @@ model BotMcpServer {
   serverId      String
   server        McpServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
   userId        String
-  allowAllTools Boolean   @default(true)
+  allowAllTools Boolean   @default(false)
+  needsReview   Boolean   @default(false)
   allowedTools  Json      @default("[]")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

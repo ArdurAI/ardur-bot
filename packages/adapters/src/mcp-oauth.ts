@@ -17,6 +17,7 @@ import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 
 type OAuthState = {
+  authorizationRevision?: number;
   tokens?: OAuthTokens;
   obtainedAt?: number;
   clientInformation?: OAuthClientInformationMixed;
@@ -159,7 +160,13 @@ const COMMON_CONFIG_VALUES = new Set([
   "async",
 ]);
 
-type ServerRef = { id: string; endpoint: string | null; secretId: string | null };
+type ServerRef = {
+  id: string;
+  endpoint: string | null;
+  secretId: string | null;
+  catalogId?: string | null;
+  revision?: number;
+};
 type ActorRef = { spaceId: string; userId: string };
 
 export class McpReauthorizationRequiredError extends Error {
@@ -430,6 +437,8 @@ export class McpOAuthBroker {
     const sessionId = randomUUID();
     const context = { spaceId: input.spaceId, userId: input.userId };
     const loaded = await this.loadMaterial(server, context);
+    if (server.catalogId)
+      loaded.material.oauth = { ...loaded.material.oauth, authorizationRevision: server.revision };
     let authorizationUrl: URL | undefined;
     const provider = this.createProvider(server, context, loaded, {
       redirectUri: input.redirectUri,
@@ -516,7 +525,7 @@ export class McpOAuthBroker {
     state: string;
     spaceId: string;
     userId: string;
-  }): Promise<void> {
+  }): Promise<string> {
     await this.sweepExpiredPending();
     if (input.state !== input.sessionId) {
       throw new Error("MCP OAuth session is invalid or expired");
@@ -549,6 +558,8 @@ export class McpOAuthBroker {
         material: this.read(session.oauthCiphertext, session.id),
         ...(server.secretId ? { secretId: server.secretId } : {}),
       };
+      if (server.catalogId && loaded.material.oauth?.authorizationRevision !== server.revision)
+        throw new Error("MCP OAuth session is invalid or expired");
       pending = {
         serverId: server.id,
         spaceId: input.spaceId,
@@ -592,6 +603,7 @@ export class McpOAuthBroker {
       where: { id: pending.serverId },
       data: { revision: { increment: 1 } },
     });
+    return pending.serverId;
   }
 
   private async sweepExpiredPending(): Promise<void> {
@@ -612,6 +624,17 @@ export class McpOAuthBroker {
   }
 
   async disconnect(input: { serverId: string; spaceId: string; userId: string }): Promise<void> {
+    for (const [id, pending] of this.pending) {
+      if (
+        pending.serverId === input.serverId &&
+        pending.spaceId === input.spaceId &&
+        pending.userId === input.userId
+      )
+        this.discardPending(id, pending);
+    }
+    await this.prisma.mcpOAuthSession.deleteMany({
+      where: { serverId: input.serverId, spaceId: input.spaceId, userId: input.userId },
+    });
     const server = await this.prisma.mcpServer.findFirst({
       where: { id: input.serverId, spaceId: input.spaceId, userId: input.userId },
     });
@@ -648,7 +671,14 @@ export class McpOAuthBroker {
       server.id,
       loaded.material,
       async (material) => {
-        await this.replaceMaterial(server.id, material, context, false, server.endpoint);
+        await this.replaceMaterial(
+          server.id,
+          material,
+          context,
+          false,
+          server.endpoint,
+          server.catalogId ? server.revision : undefined,
+        );
       },
       options,
     );
@@ -660,6 +690,7 @@ export class McpOAuthBroker {
     context: ActorRef,
     incrementRevision: boolean,
     expectedEndpoint?: string | null,
+    expectedRevision?: number,
   ): Promise<string | undefined> {
     return this.prisma.$transaction(async (tx) => {
       // Serialize every credential rotation across API instances. OAuth
@@ -671,6 +702,8 @@ export class McpOAuthBroker {
           id: serverId,
           spaceId: context.spaceId,
           userId: context.userId,
+          ...(expectedEndpoint !== undefined ? { enabled: true } : {}),
+          ...(expectedRevision !== undefined ? { revision: expectedRevision } : {}),
         },
         select: { endpoint: true, secretId: true },
       });

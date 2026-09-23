@@ -1,0 +1,83 @@
+import type { IntegrationDescriptor } from "@ardurbot/contracts";
+import { IntegrationDescriptorSchema } from "@ardurbot/contracts";
+
+const common = {
+  transport: "remote-http",
+  authKind: "oauth",
+  requiredInputs: [],
+  verifiedAt: "2026-09-23",
+  serverVersion: null,
+  placement: "backend",
+  defaultAllowedTools: [],
+  toolPolicies: {},
+} as const;
+
+export function validateIntegrationDescriptor(value: unknown): IntegrationDescriptor {
+  return IntegrationDescriptorSchema.parse(value);
+}
+
+export const integrationCatalog: readonly IntegrationDescriptor[] = [
+  {
+    ...common,
+    id: "github",
+    name: "GitHub",
+    vendor: "github",
+    available: true,
+    riskClass: "collaboration",
+    endpoint: "https://api.githubcopilot.com/mcp/",
+    docsUrl: "https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md",
+  },
+  {
+    ...common,
+    id: "gitlab",
+    name: "GitLab",
+    vendor: "gitlab",
+    available: true,
+    riskClass: "collaboration",
+    endpoint: "https://gitlab.com/api/v4/mcp",
+    requiredInputs: [{ id: "host", type: "url", required: false, advanced: true }],
+    docsUrl: "https://docs.gitlab.com/user/model_context_protocol/mcp_server/",
+  },
+  {
+    ...common,
+    id: "atlassian",
+    name: "Atlassian",
+    vendor: "atlassian",
+    available: true,
+    riskClass: "collaboration",
+    endpoint: "https://mcp.atlassian.com/v2/mcp",
+    docsUrl:
+      "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/",
+  },
+  ...[
+    ["jenkins", "Jenkins", "https://www.jenkins.io/doc/"],
+    ["kubernetes", "Kubernetes", "https://kubernetes.io/docs/"],
+    ["aws", "AWS", "https://docs.aws.amazon.com/"],
+    ["google-cloud", "Google Cloud", "https://cloud.google.com/docs"],
+    ["azure", "Azure", "https://learn.microsoft.com/azure/"],
+  ].map(([id, name, docsUrl]) => ({
+    ...common,
+    id,
+    name,
+    vendor: id,
+    docsUrl,
+    available: false,
+    riskClass: "infrastructure",
+  })),
+].map(validateIntegrationDescriptor);
+
+export function integrationById(id: string): IntegrationDescriptor | undefined {
+  return integrationCatalog.find((entry) => entry.id === id);
+}
+
+export function connectableIntegration(id: string, host?: string): IntegrationDescriptor {
+  const descriptor = integrationById(id);
+  if (!descriptor?.available) throw new Error("This integration is not available yet.");
+  if (!host) return validateIntegrationDescriptor(descriptor);
+  if (id !== "gitlab") throw new Error("This integration does not support a custom host.");
+  const url = new URL(host);
+  if (url.pathname !== "/" || url.search || url.hash || url.username || url.password) {
+    throw new Error("Enter the HTTPS host without a path or credentials.");
+  }
+  return validateIntegrationDescriptor({ ...descriptor, endpoint: `${url.origin}/api/v4/mcp` });
+}
