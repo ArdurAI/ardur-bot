@@ -1,26 +1,12 @@
 name: publish-server-image
 
 # Release tags publish the source-addressed image used by in-app updates plus the human-readable
-# semver tags. Main publishes `edge`. Pull requests build with a read-only token and an isolated
-# cache, so untrusted code can validate the images without receiving package-publish authority.
+# semver tags. Nothing publishes on branch pushes or pull requests; run it by hand with
+# workflow_dispatch when an `edge` image is wanted.
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  pull_request:
-    paths:
-      - ".dockerignore"
-      - ".github/workflows/publish-server-image.yml"
-      - "apps/**"
-      - "infra/compose/**"
-      - "infra/sandboxes/computer/**"
-      - "infra/updater/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
   workflow_dispatch:
-
 permissions:
   contents: read
 
