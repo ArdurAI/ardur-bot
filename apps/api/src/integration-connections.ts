@@ -11,10 +11,21 @@ import {
   integrationCatalog,
   McpConnector,
 } from "@ardurbot/adapters";
-import type { Actor, IntegrationConnection, IntegrationManifest } from "@ardurbot/contracts";
-import { IntegrationManifestSchema, IntegrationStateSchema } from "@ardurbot/contracts";
+import type {
+  Actor,
+  IntegrationConnection,
+  IntegrationManifest,
+  SpaceToolPolicies,
+} from "@ardurbot/contracts";
+import {
+  IntegrationManifestSchema,
+  IntegrationStateSchema,
+  SpaceToolPoliciesSchema,
+} from "@ardurbot/contracts";
+import { integrationToolKind } from "@ardurbot/core";
 import type { McpServer, PrismaClient } from "@ardurbot/db";
 import { IsolationError, Prisma } from "@ardurbot/db";
+import { ORPCError } from "@orpc/server";
 
 type Owner = Pick<Actor, "spaceId" | "userId">;
 
@@ -26,6 +37,7 @@ export function connectionDto(server: McpServer, needsReview = false): Integrati
     state: IntegrationStateSchema.parse(server.connectionState),
     manifest: manifest.success ? manifest.data : null,
     needsReview,
+    spaceToolPolicies: SpaceToolPoliciesSchema.safeParse(server.spaceToolPolicies).data ?? {},
   };
 }
 
@@ -187,6 +199,7 @@ export class IntegrationConnections {
             manifest,
             connectionState: "connected",
             spaceAllowedTools: [],
+            spaceToolPolicies: {},
             revision: { increment: 1 },
           },
         });
@@ -225,7 +238,15 @@ export class IntegrationConnections {
     }));
   }
 
-  async assign(actor: Owner, input: { connectionId: string; botIds: string[]; toolIds: string[] }) {
+  async assign(
+    actor: Owner,
+    input: {
+      connectionId: string;
+      botIds: string[];
+      toolIds: string[];
+      spaceToolPolicies?: SpaceToolPolicies;
+    },
+  ) {
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${input.connectionId}))`;
       const server = await tx.mcpServer.findFirst({
@@ -249,6 +270,34 @@ export class IntegrationConnections {
       );
       if (input.toolIds.some((id) => !names.has(id)))
         throw new Error("Review the available tools and try again.");
+      let spaceToolPolicies: SpaceToolPolicies | undefined;
+      if (input.spaceToolPolicies !== undefined) {
+        const member = await tx.spaceMember.findUnique({
+          where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
+        });
+        if (member?.role !== "owner")
+          throw new ORPCError("FORBIDDEN", {
+            message: "Only the space owner can change read approvals.",
+          });
+        const parsed = SpaceToolPoliciesSchema.safeParse(input.spaceToolPolicies);
+        if (!parsed.success)
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Review the tool policies and try again.",
+          });
+        spaceToolPolicies = parsed.data;
+        const tools = new Map(manifest.data.tools.map((tool) => [tool.id, tool]));
+        for (const [id, approval] of Object.entries(spaceToolPolicies)) {
+          const tool = tools.get(id);
+          if (!tool || !names.has(id))
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Review the available tools and try again.",
+            });
+          if (approval === "allow" && integrationToolKind(tool.id, tool.description) !== "read")
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Writes always ask. Only read tools can be allowed without asking.",
+            });
+        }
+      }
       const botIds = [...new Set(input.botIds)];
       const bots = await tx.bot.findMany({
         where: {
@@ -278,7 +327,11 @@ export class IntegrationConnections {
         });
       await tx.mcpServer.update({
         where: { id: server.id },
-        data: { spaceAllowedTools: toolIds, revision: { increment: 1 } },
+        data: {
+          spaceAllowedTools: toolIds,
+          ...(spaceToolPolicies === undefined ? {} : { spaceToolPolicies }),
+          revision: { increment: 1 },
+        },
       });
       await this.invalidateApprovals(tx, actor, server);
     });
@@ -297,6 +350,7 @@ export class IntegrationConnections {
           connectionState: state,
           manifest: Prisma.DbNull,
           spaceAllowedTools: [],
+          spaceToolPolicies: {},
           revision: { increment: 1 },
         },
       });

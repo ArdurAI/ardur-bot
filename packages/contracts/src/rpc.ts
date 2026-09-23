@@ -81,6 +81,7 @@ import {
   IntegrationDescriptorSchema,
   IntegrationGrantSchema,
   IntegrationManifestSchema,
+  SpaceToolPoliciesSchema,
 } from "./integration-catalog.js";
 import {
   IntegrationProviderConfigSchema,
@@ -584,6 +585,7 @@ export const appContract = {
           connectionId: Id,
           botIds: z.array(Id).max(500),
           toolIds: z.array(z.string().min(1).max(200)).max(2000),
+          spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
         }),
       )
       .output(z.array(IntegrationGrantSchema)),

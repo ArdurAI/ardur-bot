@@ -32,6 +32,7 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
     connectionState: "connected",
     manifest,
     spaceAllowedTools: [],
+    spaceToolPolicies: {},
   } as unknown as McpServer;
   let grants: Array<{
     botId: string;
@@ -72,6 +73,7 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
   };
   const db = {
     mcpServer,
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
     bot: {
       findMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.filter((id) => id === "bot").map((id) => ({ id })),
@@ -205,6 +207,7 @@ describe("catalog connection lifecycle", () => {
       connectionId: "connection",
       botIds: ["bot"],
       toolIds: ["synthetic_read"],
+      spaceToolPolicies: { synthetic_read: "allow" },
     });
     vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
     await f.service.capture(actor, "connection");
@@ -212,6 +215,7 @@ describe("catalog connection lifecycle", () => {
       { botId: "bot", toolIds: [], needsReview: true },
     ]);
     expect(f.row().spaceAllowedTools).toEqual([]);
+    expect(f.row().spaceToolPolicies).toEqual({});
     expect(f.row().revision).toBe(3);
   });
 
@@ -251,6 +255,76 @@ describe("catalog connection lifecycle", () => {
     await f.service.assign(actor, { connectionId: "connection", botIds: [], toolIds: [] });
     expect(await f.service.grants(actor, "connection")).toEqual([]);
   });
+  it("persists owner read policies, returns them, preserves omitted policies and supports Ask first", async () => {
+    const f = fixture();
+    const input = { connectionId: "connection", botIds: ["bot"], toolIds: ["synthetic_read"] };
+    await f.service.assign(actor, { ...input, spaceToolPolicies: { synthetic_read: "allow" } });
+    expect(f.row().spaceToolPolicies).toEqual({ synthetic_read: "allow" });
+    expect((await f.service.list(actor)).connections[0]?.spaceToolPolicies).toEqual({
+      synthetic_read: "allow",
+    });
+    await f.service.assign(actor, input);
+    expect(f.row().spaceToolPolicies).toEqual({ synthetic_read: "allow" });
+    await f.service.assign(actor, { ...input, spaceToolPolicies: { synthetic_read: "ask-first" } });
+    expect(f.row().spaceToolPolicies).toEqual({ synthetic_read: "ask-first" });
+    expect(f.row().revision).toBe(4);
+    expect(f.db.externalEffect.updateMany).toHaveBeenCalledTimes(3);
+    expect(f.db.spaceMember.findUnique).toHaveBeenCalledWith({ where: { spaceId_userId: actor } });
+  });
+  it.each(["member", "admin"])(
+    "rejects policy updates from a space %s before any mutation",
+    async (role) => {
+      const f = fixture();
+      f.db.spaceMember.findUnique.mockResolvedValue({ role });
+      await expect(
+        f.service.assign(actor, {
+          connectionId: "connection",
+          botIds: ["bot"],
+          toolIds: ["synthetic_read"],
+          spaceToolPolicies: { synthetic_read: "allow" },
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(f.db.botMcpServer.deleteMany).not.toHaveBeenCalled();
+      expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    ["synthetic_update", "Synthetic write"],
+    ["synthetic_read", "Read and delete an item"],
+    ["synthetic_opaque", "An unknown action"],
+  ])("rejects owner allow for write-classified %s before any mutation", async (id, description) => {
+    const f = fixture();
+    f.setRow({ manifest: { ...manifest, tools: [{ ...manifest.tools[0]!, id, description }] } });
+    await expect(
+      f.service.assign(actor, {
+        connectionId: "connection",
+        botIds: ["bot"],
+        toolIds: [id],
+        spaceToolPolicies: { [id]: "allow" },
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(f.row().spaceToolPolicies).toEqual({});
+    expect(f.db.botMcpServer.deleteMany).not.toHaveBeenCalled();
+    expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+  });
+  it("rejects uncaptured and malformed policies", async () => {
+    const f = fixture();
+    for (const policies of [
+      { absent_read: "allow" },
+      { synthetic_read: "invalid" },
+      { synthetic_read: { approval: "allow" } },
+    ]) {
+      await expect(
+        f.service.assign(actor, {
+          connectionId: "connection",
+          botIds: [],
+          toolIds: [],
+          spaceToolPolicies: policies as never,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    }
+    expect(f.db.botMcpServer.deleteMany).not.toHaveBeenCalled();
+  });
   it("rejects foreign owners, bots, uncaptured tools, and unconnected accounts", async () => {
     const f = fixture();
     for (const other of [
@@ -286,11 +360,13 @@ describe("catalog connection lifecycle", () => {
     "revokes access, OAuth attempts and pending approvals into %s",
     async (state) => {
       const f = fixture();
+      f.setRow({ spaceToolPolicies: { synthetic_read: "allow" } });
       await f.service.revoke(actor, "connection", state);
       expect(f.row()).toMatchObject({
         enabled: false,
         connectionState: state,
         spaceAllowedTools: [],
+        spaceToolPolicies: {},
         revision: 2,
       });
       expect(f.db.botMcpServer.deleteMany).toHaveBeenCalled();

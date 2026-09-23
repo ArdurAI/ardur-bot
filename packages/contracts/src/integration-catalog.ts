@@ -84,6 +84,11 @@ export const IntegrationManifestSchema = z
   .strict();
 export type IntegrationManifest = z.infer<typeof IntegrationManifestSchema>;
 
+export const SpaceToolPoliciesSchema = z
+  .record(z.string().min(1).max(200), z.enum(["ask-first", "allow"]))
+  .refine((policies) => Object.keys(policies).length <= 2000, "Too many tool policies");
+export type SpaceToolPolicies = z.infer<typeof SpaceToolPoliciesSchema>;
+
 export const IntegrationStateSchema = z.enum([
   "not-connected",
   "awaiting-consent",
@@ -98,6 +103,7 @@ export const IntegrationConnectionSchema = z.object({
   state: IntegrationStateSchema,
   manifest: IntegrationManifestSchema.nullable(),
   needsReview: z.boolean(),
+  spaceToolPolicies: SpaceToolPoliciesSchema.default({}),
 });
 export type IntegrationConnection = z.infer<typeof IntegrationConnectionSchema>;
 export const IntegrationGrantSchema = z.object({

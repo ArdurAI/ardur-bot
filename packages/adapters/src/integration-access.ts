@@ -1,8 +1,9 @@
 import type { AdapterContext, ConnectorRoute } from "@ardurbot/adapter-kit";
-import { IntegrationManifestSchema } from "@ardurbot/contracts";
+import { IntegrationManifestSchema, SpaceToolPoliciesSchema } from "@ardurbot/contracts";
 import type { IntegrationApproval } from "@ardurbot/core";
 import { approvalFor, effectiveTools } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
+import type { IntegrationApprovalAction } from "./approval-ask.js";
 import { integrationById } from "./integration-catalog.js";
 
 export function stringTools(value: unknown): string[] {
@@ -19,6 +20,7 @@ export type McpGrant = {
     connectionState?: string;
     manifest?: unknown;
     spaceAllowedTools?: unknown;
+    spaceToolPolicies?: unknown;
   };
 };
 
@@ -47,8 +49,18 @@ export async function integrationApprovalForCall(
   context: Pick<AdapterContext, "spaceId" | "userId" | "botId">,
   args: Record<string, unknown>,
 ): Promise<IntegrationApproval | undefined> {
+  return (await integrationApprovalDetailsForCall(prisma, route, context, args))?.approval;
+}
+
+/** Keep the display metadata and policy bound to the same authorized connection snapshot. */
+export async function integrationApprovalDetailsForCall(
+  prisma: PrismaClient,
+  route: ConnectorRoute | undefined,
+  context: Pick<AdapterContext, "spaceId" | "userId" | "botId">,
+  args: Record<string, unknown>,
+): Promise<{ approval: IntegrationApproval; integration?: IntegrationApprovalAction } | undefined> {
   if (route?.connectorId !== "mcp" || !route.resourceId) return undefined;
-  if (!context.botId) return "disabled";
+  if (!context.botId) return { approval: "disabled" };
   const assignment = await prisma.botMcpServer.findFirst({
     where: {
       botId: context.botId,
@@ -59,12 +71,18 @@ export async function integrationApprovalForCall(
     },
     include: { server: true },
   });
-  if (!assignment || !grantedMcpTools(assignment, [route.toolName]).length) return "disabled";
+  if (!assignment || !grantedMcpTools(assignment, [route.toolName]).length)
+    return { approval: "disabled" };
   if (!assignment.server.catalogId) return undefined;
-  if (route.resourceRevision !== assignment.server.revision) return "disabled";
+  if (route.resourceRevision !== assignment.server.revision) return { approval: "disabled" };
   const descriptor = integrationById(assignment.server.catalogId);
   const manifest = IntegrationManifestSchema.safeParse(assignment.server.manifest);
-  if (!descriptor || !manifest.success) return "disabled";
+  if (!descriptor || !manifest.success) return { approval: "disabled" };
   const tool = manifest.data.tools.find((tool) => tool.id === route.toolName);
-  return tool ? approvalFor(descriptor, tool.id, args, tool.description) : "disabled";
+  if (!tool) return { approval: "disabled" };
+  const policies = SpaceToolPoliciesSchema.safeParse(assignment.server.spaceToolPolicies);
+  return {
+    approval: approvalFor(descriptor, tool.id, args, tool.description, policies.data ?? {}),
+    integration: { vendorName: descriptor.name, toolId: tool.id, description: tool.description },
+  };
 }

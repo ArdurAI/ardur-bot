@@ -1,4 +1,5 @@
 import type { AdapterContext, ConnectorCall } from "@ardurbot/adapter-kit";
+import type { SpaceToolPolicies } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { grantedMcpTools, integrationApprovalForCall } from "./integration-access.js";
 import { captureIntegrationManifest } from "./integration-manifest.js";
@@ -39,6 +40,7 @@ function fixture() {
       transport: "streamable_http",
       secretId: null,
       spaceAllowedTools: tools.map((tool) => tool.name),
+      spaceToolPolicies: {} as SpaceToolPolicies,
     },
   };
   const calls: string[] = [];
@@ -113,6 +115,35 @@ const lazy = (name: string): ConnectorCall => ({
 });
 
 describe("MCP integration authorization", () => {
+  it("uses fresh owner policies only for granted reads, without changing the intersection", async () => {
+    const f = fixture();
+    const id = tools[0]!.name;
+    const check = () => integrationApprovalForCall(f.db as never, direct(id).route, context, {});
+    expect(await check()).toBe("ask-first");
+    f.assignment.server.spaceToolPolicies = { [id]: "allow" };
+    expect(await check()).toBe("allow");
+    f.assignment.server.spaceToolPolicies = { [id]: "ask-first" };
+    expect(await check()).toBe("ask-first");
+    f.assignment.server.spaceToolPolicies = { [id]: "allow" };
+    f.assignment.server.spaceAllowedTools = [];
+    expect(await check()).toBe("disabled");
+    f.assignment.server.spaceAllowedTools = [id];
+    f.assignment.allowedTools = [];
+    expect(await check()).toBe("disabled");
+    f.assignment.allowedTools = [id];
+    f.assignment.server.manifest = { ...manifest, tools: [] };
+    expect(await check()).toBe("disabled");
+    await f.connector.close();
+  });
+  it("falls back to asking for malformed stored policies", async () => {
+    const f = fixture();
+    const id = tools[0]!.name;
+    f.assignment.server.spaceToolPolicies = { [id]: { approval: "allow" } } as never;
+    expect(await integrationApprovalForCall(f.db as never, direct(id).route, context, {})).toBe(
+      "ask-first",
+    );
+    await f.connector.close();
+  });
   it("uses the vendor, space, and bot intersection in discovery and direct execution", async () => {
     const f = fixture();
     f.assignment.allowedTools = [tools[0]!.name, tools[1]!.name, "absent"];

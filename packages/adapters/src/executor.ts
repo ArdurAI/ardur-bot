@@ -212,7 +212,7 @@ import {
   selectCompactedHistory,
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
-import { integrationApprovalForCall } from "./integration-access.js";
+import { integrationApprovalDetailsForCall } from "./integration-access.js";
 import {
   assertConnectorToolArgs,
   CATALOG_EXECUTE,
@@ -1938,20 +1938,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }
             }
           }
-          const integrationApproval = await integrationApprovalForCall(
+          const integrationDetails = await integrationApprovalDetailsForCall(
             deps.prisma,
             connectorCall.route,
             context,
             args,
           );
+          const integrationApproval = integrationDetails?.approval;
           if (integrationApproval === "disabled")
             return { error: "This tool is no longer granted. Review tools in Settings." };
           const viaConnector = !BUILTIN_AGENT_TOOL_NAMES.has(name);
-          const requiresUnattendedApproval = unattendedTriggerToolRequiresApproval(
-            run.trigger,
-            name,
-            viaConnector,
-          );
+          const requiresUnattendedApproval =
+            integrationApproval !== "allow" &&
+            unattendedTriggerToolRequiresApproval(run.trigger, name, viaConnector);
           const requiresApprovalByDefault =
             requiresUnattendedApproval || toolRequiresApproval(name, viaConnector);
           const requiresMandatoryApproval =
@@ -2206,6 +2205,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 buildApprovalAskBlock(applied!.effect.id, name, args, runSecrets, {
                   reviewReason,
                   allowAlways: !requiresMandatoryApproval,
+                  integration: integrationDetails?.integration,
                 }),
               ],
             });

@@ -3,6 +3,7 @@ import type {
   IntegrationConnection,
   IntegrationDescriptor,
   IntegrationGrant,
+  SpaceToolPolicies,
 } from "@ardurbot/contracts";
 import { Button, Checkbox } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
@@ -27,6 +28,9 @@ export function IntegrationManage({
   const [grants, setGrants] = useState<IntegrationGrant[]>([]);
   const [botIds, setBotIds] = useState<string[]>([]);
   const [toolIds, setToolIds] = useState<string[]>([]);
+  const [spaceToolPolicies, setSpaceToolPolicies] = useState<SpaceToolPolicies>(
+    connection.spaceToolPolicies,
+  );
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -41,6 +45,7 @@ export function IntegrationManage({
       ]);
       setBots(bots.filter((bot) => !bot.archivedAt));
       setGrants(grants);
+      setSpaceToolPolicies(connection.spaceToolPolicies);
       setBotIds(grants.map((grant) => grant.botId));
       // A shared editor must never silently broaden different bots' grants.
       setToolIds(
@@ -65,6 +70,9 @@ export function IntegrationManage({
         connectionId: connection.id,
         botIds,
         toolIds,
+        ...(JSON.stringify(spaceToolPolicies) === JSON.stringify(connection.spaceToolPolicies)
+          ? {}
+          : { spaceToolPolicies }),
       });
       setGrants(updated);
       setSaved(true);
@@ -150,6 +158,11 @@ export function IntegrationManage({
               manifest={connection.manifest}
               selected={toolIds}
               disabled={busy}
+              spaceToolPolicies={spaceToolPolicies}
+              onPolicyChange={(policies) => {
+                setSaved(false);
+                setSpaceToolPolicies(policies);
+              }}
               onChange={(ids) => {
                 setSaved(false);
                 setToolIds(ids);

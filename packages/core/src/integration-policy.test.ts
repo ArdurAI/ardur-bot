@@ -26,6 +26,47 @@ const descriptor: IntegrationDescriptor = {
 };
 
 describe("integration policy", () => {
+  it("prefers a reviewed read, then an owner read allow, then ask-first", () => {
+    expect(approvalFor(descriptor, "read_item", {}, "", { read_item: "ask-first" })).toBe("allow");
+    expect(approvalFor(descriptor, "list_unknown", {}, "", { list_unknown: "allow" })).toBe(
+      "allow",
+    );
+    expect(approvalFor(descriptor, "list_unknown", {}, "", { list_unknown: "ask-first" })).toBe(
+      "ask-first",
+    );
+    expect(approvalFor(descriptor, "list_unknown", {})).toBe("ask-first");
+  });
+  it("never uses owner policies to allow writes, unavailable or disabled tools", () => {
+    for (const [id, description] of [
+      ["create_item", ""],
+      ["get_item", "Read and delete an item"],
+      ["opaque", ""],
+    ]) {
+      expect(approvalFor(descriptor, id!, {}, description, { [id!]: "allow" })).toBe("ask-first");
+    }
+    expect(approvalFor(descriptor, "blocked", {}, "", { blocked: "allow" })).toBe("disabled");
+    expect(
+      approvalFor({ ...descriptor, available: false }, "read_item", {}, "", { read_item: "allow" }),
+    ).toBe("disabled");
+  });
+  it.each(["action", "operation", "method", "command"])(
+    "keeps the %s argument guard above owner approval",
+    (key) => {
+      for (const value of ["delete", "unknown", { action: "get" }, null]) {
+        expect(
+          approvalFor(descriptor, "list_unknown", { [key]: value }, "", { list_unknown: "allow" }),
+        ).toBe("ask-first");
+      }
+      expect(
+        approvalFor(descriptor, "list_unknown", { [key]: "get" }, "", { list_unknown: "allow" }),
+      ).toBe("allow");
+    },
+  );
+  it("ignores inherited owner policies", () => {
+    expect(
+      approvalFor(descriptor, "list_unknown", {}, "", Object.create({ list_unknown: "allow" })),
+    ).toBe("ask-first");
+  });
   it("intersects all three grants and treats empty grants as none", () => {
     expect(effectiveTools(["a", "b", "a", "c"], ["a", "b"], ["a", "c"])).toEqual(["a"]);
     for (const grants of [
@@ -74,6 +115,31 @@ describe("integration policy", () => {
         checkerConfigured: true,
       }),
     ).toBe("ask");
+  });
+  it("honors an integration read allow without auto-review while retaining explicit ask rules", () => {
+    const resolved = resolveActionApprovalDetail({
+      toolName: "synthetic_fetch_item",
+      integrationApproval: "allow",
+      rules: [],
+    });
+    expect(resolved).toMatchObject({ decision: "allow", source: "space_policy" });
+    expect(
+      planActionGate({
+        resolved,
+        consequential: true,
+        autoReviewEnabled: true,
+        checkerConfigured: true,
+      }),
+    ).toBe("allow");
+    expect(
+      resolveActionApprovalDetail({
+        toolName: "synthetic_fetch_item",
+        integrationApproval: "allow",
+        rules: [
+          { effect: "require_approval", matchKind: "tool", matchValue: "synthetic_fetch_item" },
+        ],
+      }),
+    ).toMatchObject({ decision: "ask" });
   });
   it("groups unknown and compound tools conservatively", () => {
     expect(integrationToolKind("get_item", "Read an item")).toBe("read");

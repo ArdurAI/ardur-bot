@@ -30,6 +30,18 @@ vi.mock("@lingui/react/macro", () => ({
 vi.mock("@ardurbot/ui-web", () => {
   const Container = (props: ComponentProps<"div">) => <div {...props} />;
   return {
+    Toggle: ({
+      pressed,
+      onPressedChange,
+      variant: _variant,
+      size: _size,
+      ...props
+    }: ComponentProps<"button"> & {
+      pressed: boolean;
+      onPressedChange: (pressed: boolean) => void;
+      variant?: string;
+      size?: string;
+    }) => <button {...props} aria-pressed={pressed} onClick={() => onPressedChange(!pressed)} />,
     Card: Container,
     CardContent: Container,
     CardHeader: Container,
@@ -99,6 +111,7 @@ const connected: IntegrationConnection = {
   catalogId: "github",
   state: "connected",
   needsReview: false,
+  spaceToolPolicies: {},
   manifest: {
     capturedAt: "2026-09-23T00:00:00.000Z",
     serverVersion: null,
@@ -199,7 +212,7 @@ describe("Settings integration catalog", () => {
     const checks = [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
     expect(checks).toHaveLength(3);
     expect(checks.every((input) => !input.checked)).toBe(true);
-    expect(container.textContent?.match(/asks first/g)).toHaveLength(2);
+    expect(container.textContent?.match(/asks first/g)).toHaveLength(1);
     await click(container.querySelector('[aria-label="Helper"]')!);
     await click(container.querySelector('[aria-label="synthetic_update"]')!);
     await click(button("Save"));
@@ -214,6 +227,33 @@ describe("Settings integration catalog", () => {
     expect(
       button("Connect", container.querySelector('[data-testid="integration-github"]')!),
     ).toBeDefined();
+  });
+  it("loads, changes, saves and reopens a per-connection read approval", async () => {
+    connections = [{ ...connected, spaceToolPolicies: { synthetic_read: "allow" } }];
+    api.grants.mockResolvedValue([
+      { botId: "bot", toolIds: ["synthetic_read"], needsReview: false },
+    ]);
+    api.assign.mockImplementation(async (input) => {
+      connections = [{ ...connected, spaceToolPolicies: input.spaceToolPolicies }];
+      return [{ botId: "bot", toolIds: input.toolIds, needsReview: false }];
+    });
+    await mount();
+    await click(button("Manage"));
+    const approval = () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Approval for synthetic_read"]')!;
+    expect(approval().textContent).toBe("Allow");
+    await click(approval());
+    expect(approval().textContent).toBe("Ask first");
+    await click(button("Save"));
+    expect(api.assign).toHaveBeenCalledWith({
+      connectionId: "connection",
+      botIds: ["bot"],
+      toolIds: ["synthetic_read"],
+      spaceToolPolicies: { synthetic_read: "ask-first" },
+    });
+    await click(button("Back"));
+    await click(button("Manage"));
+    expect(approval().textContent).toBe("Ask first");
   });
   it("shows registration help and review state with one primary action", async () => {
     connections = [

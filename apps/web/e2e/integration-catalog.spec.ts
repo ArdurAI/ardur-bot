@@ -13,6 +13,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     catalogId: "github",
     state: "connected",
     needsReview: false,
+    spaceToolPolicies: {},
     manifest: {
       capturedAt: "2026-09-23T00:00:00.000Z",
       serverVersion: null,
@@ -51,7 +52,9 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     connections = [connection];
     await route.fulfill({ json: { json: { ok: true } } });
   });
-  let assigned: { botIds: string[]; toolIds: string[] } | undefined;
+  let assigned:
+    | { botIds: string[]; toolIds: string[]; spaceToolPolicies: Record<string, string> }
+    | undefined;
   await page.route("**/rpc/integrations/assign", async (route) => {
     assigned = route.request().postDataJSON().json;
     await route.fulfill({
@@ -80,7 +83,18 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
   await expect(
     settings.getByRole("checkbox", { name: "synthetic_update", exact: true }),
   ).not.toBeChecked();
-  await expect(settings.getByText("asks first", { exact: true })).toHaveCount(2);
+  await expect(settings.getByText("asks first", { exact: true })).toHaveCount(1);
+  await expect(
+    settings.getByRole("button", { name: "Approval for synthetic_update", exact: true }),
+  ).toHaveCount(0);
+  await settings.getByRole("checkbox", { name: "synthetic_read", exact: true }).check();
+  const approval = settings.getByRole("button", {
+    name: "Approval for synthetic_read",
+    exact: true,
+  });
+  await expect(approval).toHaveText("Ask first");
+  await approval.click();
+  await expect(approval).toHaveText("Allow");
   await settings
     .getByRole("group", { name: "Bots", exact: true })
     .getByRole("checkbox")
@@ -90,6 +104,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
   await settings.getByRole("button", { name: "Save", exact: true }).click();
   await expect(settings.getByText("Your bots can use the selected tools.")).toBeVisible();
   expect(assigned?.botIds).toHaveLength(1);
-  expect(assigned?.toolIds).toEqual(["synthetic_update"]);
+  expect(assigned?.toolIds).toEqual(["synthetic_read", "synthetic_update"]);
+  expect(assigned?.spaceToolPolicies).toEqual({ synthetic_read: "allow" });
   await captureScreenshot(page, testInfo, "settings-integration-tools");
 });

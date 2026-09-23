@@ -25,6 +25,7 @@ function fixture() {
     updatedAt: new Date(),
   };
   const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
     bot: { findFirst: vi.fn(async () => ({ id: "bot" })) },
     mcpServer: { findFirst: vi.fn(async () => ({ id: "server", catalogId: "github" })) },
     botMcpServer: { upsert: vi.fn(async () => assignment) },
@@ -55,6 +56,47 @@ function fixture() {
 }
 
 describe("integration RPC boundaries", () => {
+  it.each([
+    ["synthetic_write", "Write an item"],
+    ["synthetic_read", "Read and delete an item"],
+  ])("rejects owner allow for write-classified %s through the API", async (id, description) => {
+    const f = fixture();
+    f.prisma.mcpServer.findFirst.mockResolvedValueOnce({
+      id: "server",
+      catalogId: "github",
+      enabled: true,
+      connectionState: "connected",
+      manifest: {
+        capturedAt: "2026-09-23T00:00:00.000Z",
+        serverVersion: null,
+        account: null,
+        tools: [{ id, description, inputSchemaDigest: "a".repeat(64) }],
+      },
+    } as never);
+    const response = await f.request("integrations/assign", {
+      connectionId: "server",
+      botIds: [],
+      toolIds: [id],
+      spaceToolPolicies: { [id]: "allow" },
+    });
+    expect(response?.status).toBe(400);
+    expect(await response?.text()).toContain("Writes always ask");
+    expect(f.prisma.botMcpServer.upsert).not.toHaveBeenCalled();
+  });
+  it("rejects malformed policies at the RPC boundary", async () => {
+    const f = fixture();
+    expect(
+      (
+        await f.request("integrations/assign", {
+          connectionId: "server",
+          botIds: [],
+          toolIds: [],
+          spaceToolPolicies: { synthetic_read: "always" },
+        })
+      )?.status,
+    ).toBe(400);
+    expect(f.prisma.$transaction).not.toHaveBeenCalled();
+  });
   it("keeps onboarding and approval-card assignments empty until tool review", async () => {
     const f = fixture();
     const response = await f.request("mcp/assignments/approve", {

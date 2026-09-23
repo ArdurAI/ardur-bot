@@ -5,6 +5,7 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./packages/testkit/src/pin-test-env.ts"],
     include: [
+      "scripts/*.test.ts",
       ".agents/skills/pr-watch/*.test.ts",
       "packages/*/src/**/*.test.{ts,tsx}",
       "infra/sandboxes/supervisor/src/**/*.test.ts",

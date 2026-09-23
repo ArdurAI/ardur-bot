@@ -2,6 +2,62 @@ import { describe, expect, it } from "vitest";
 import { buildApprovalAskBlock } from "./approval-ask.js";
 
 describe("buildApprovalAskBlock", () => {
+  it("names a vendor and manifest action with a repository target, keeping raw ids in detail", () => {
+    const block = buildApprovalAskBlock(
+      "effect",
+      "mcp__synthetic__synthetic_write",
+      {
+        owner: "ardurai",
+        repo: "ardur-bot",
+        issue_number: 12,
+      },
+      [],
+      {
+        integration: {
+          vendorName: "GitHub",
+          toolId: "synthetic_write",
+          description: "Create a pull request comment. Extra instructions are not a title.",
+        },
+        allowAlways: false,
+      },
+    );
+    expect(block).toMatchObject({
+      text: "GitHub · create a pull request comment on ardurai/ardur-bot#12",
+      detail: "synthetic_write · mcp__synthetic__synthetic_write",
+    });
+  });
+  it("redacts and bounds integration descriptions and targets without rendering manifest Markdown", () => {
+    const block = buildApprovalAskBlock(
+      "effect",
+      "synthetic_write",
+      { repository: "secret-repo" },
+      ["secret-repo", "secret-description"],
+      {
+        integration: {
+          vendorName: "Synthetic",
+          toolId: "synthetic_write",
+          description: `**Create** <b>a</b> [comment] secret-description ${"x".repeat(1000)}`,
+        },
+      },
+    );
+    expect(block.kind).toBe("ask");
+    if (block.kind !== "ask") throw new Error("expected ask");
+    expect(block.text).toContain("Synthetic · create a comment");
+    expect(block.text.length).toBeLessThanOrEqual(501);
+    expect(JSON.stringify(block)).not.toContain("secret-description");
+    expect(JSON.stringify(block)).not.toContain("secret-repo");
+    expect(block.detail).toBe("synthetic_write");
+  });
+  it("handles empty descriptions and non-repository targets without inventing a vendor action", () => {
+    expect(
+      buildApprovalAskBlock("effect", "synthetic_write", { title: "An item" }, [], {
+        integration: { vendorName: "Synthetic", toolId: "synthetic_write", description: "" },
+      }),
+    ).toMatchObject({
+      text: "Synthetic · synthetic write on An item",
+      detail: "synthetic_write\ntitle: An item",
+    });
+  });
   it("binds the approval to its effect and redacts secrets", () => {
     const block = buildApprovalAskBlock(
       "effect-1",

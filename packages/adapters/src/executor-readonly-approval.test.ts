@@ -4,6 +4,7 @@ import type {
   ConnectorCall,
   ConnectorTool,
 } from "@ardurbot/adapter-kit";
+import type { SpaceToolPolicies } from "@ardurbot/contracts";
 import type { ActionApprovalRule } from "@ardurbot/core";
 import {
   approvalEffectKey,
@@ -96,6 +97,7 @@ function fixture({
       connectionState: "connected",
       revision: 1,
       spaceAllowedTools: [name],
+      spaceToolPolicies: {} as SpaceToolPolicies,
       manifest: {
         capturedAt: "2026-09-23T00:00:00.000Z",
         serverVersion: null,
@@ -525,6 +527,50 @@ describe("connector read-only metadata and approval enforcement", () => {
 });
 
 describe("catalog policy at the executor gate", () => {
+  it.each([
+    [false, "user"],
+    [true, "user"],
+    [false, "webhook"],
+    [true, "webhook"],
+  ] as const)(
+    "runs owner-allowed reads without pausing or auto-review (lazy=%s, trigger=%s)",
+    async (catalog, trigger) => {
+      const name = "synthetic_fetch_item";
+      const f = fixture({ integration: true, catalog, name, autoReview: true, trigger });
+      f.grant.server.spaceToolPolicies = { [name]: "allow" };
+      reviewMock.mockReset();
+      await f.run();
+      expect(f.execute).toHaveBeenCalledOnce();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(reviewMock).not.toHaveBeenCalled();
+    },
+  );
+  it.each([false, true])(
+    "still pauses writes with a forged owner allow and names the manifest action (lazy=%s)",
+    async (catalog) => {
+      const name = "synthetic_create_comment";
+      const f = fixture({ integration: true, catalog, name });
+      f.grant.server.spaceToolPolicies = { [name]: "allow" };
+      f.grant.server.manifest.tools[0]!.description =
+        "Create a pull request comment. Includes a comment body.";
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              text: "GitHub · create a pull request comment",
+              detail: name,
+              actions: [
+                { id: "allow", label: "Allow once" },
+                { id: "deny", label: "Deny" },
+              ],
+            }),
+          ],
+        }),
+      );
+    },
+  );
   it.each([false, true])(
     "requires owner approval despite an allow rule and auto-review (lazy=%s)",
     async (catalog) => {

@@ -1,6 +1,10 @@
-import type { IntegrationDescriptor, IntegrationManifest } from "@ardurbot/contracts";
+import type {
+  IntegrationDescriptor,
+  IntegrationManifest,
+  SpaceToolPolicies,
+} from "@ardurbot/contracts";
 import { approvalFor, integrationToolKind } from "@ardurbot/core";
-import { Checkbox } from "@ardurbot/ui-web";
+import { Checkbox, Toggle } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useId } from "react";
 
@@ -10,12 +14,16 @@ export function ToolPicker({
   selected,
   onChange,
   disabled = false,
+  spaceToolPolicies = {},
+  onPolicyChange,
 }: {
   manifest: IntegrationManifest;
   descriptor?: IntegrationDescriptor;
   selected: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
+  spaceToolPolicies?: SpaceToolPolicies;
+  onPolicyChange?: (policies: SpaceToolPolicies) => void;
 }) {
   const { t } = useLingui();
   const controlId = useId();
@@ -31,14 +39,19 @@ export function ToolPicker({
             <legend className="mb-2 text-sm font-medium">
               {kind === "read" ? t`Read` : t`Write`}
             </legend>
+            {kind === "read" && descriptor && onPolicyChange ? (
+              <p className="text-xs text-muted-foreground">{t`Reads can run without asking once you allow them. Writes always ask.`}</p>
+            ) : null}
             {tools.map((tool) => {
               const approval = descriptor
-                ? approvalFor(descriptor, tool.id, {}, tool.description)
+                ? approvalFor(descriptor, tool.id, {}, tool.description, spaceToolPolicies)
                 : undefined;
+              const reviewedRead = descriptor
+                ? approvalFor(descriptor, tool.id, {}, tool.description) === "allow"
+                : false;
               return (
-                <label
+                <div
                   key={tool.id}
-                  htmlFor={`${controlId}-${tool.id}`}
                   className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm"
                 >
                   <Checkbox
@@ -52,13 +65,38 @@ export function ToolPicker({
                       )
                     }
                   />
-                  <span className="min-w-0 flex-1 break-words" title={tool.description}>
+                  <label
+                    htmlFor={`${controlId}-${tool.id}`}
+                    className="min-w-0 flex-1 break-words"
+                    title={tool.description}
+                  >
                     {tool.id}
-                  </span>
-                  {approval === "ask-first" ? (
+                  </label>
+                  {kind === "read" && descriptor && onPolicyChange ? (
+                    <Toggle
+                      size="sm"
+                      variant="outline"
+                      aria-label={t`Approval for ${tool.id}`}
+                      pressed={approval === "allow"}
+                      disabled={
+                        disabled ||
+                        !selected.includes(tool.id) ||
+                        approval === "disabled" ||
+                        reviewedRead
+                      }
+                      onPressedChange={(allow) =>
+                        onPolicyChange({
+                          ...spaceToolPolicies,
+                          [tool.id]: allow ? "allow" : "ask-first",
+                        })
+                      }
+                    >
+                      {approval === "allow" ? t`Allow` : t`Ask first`}
+                    </Toggle>
+                  ) : approval === "ask-first" ? (
                     <span className="shrink-0 text-xs text-muted-foreground">{t`asks first`}</span>
                   ) : null}
-                </label>
+                </div>
               );
             })}
           </fieldset>

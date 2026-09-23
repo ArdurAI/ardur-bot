@@ -1,4 +1,4 @@
-import type { IntegrationDescriptor } from "@ardurbot/contracts";
+import type { IntegrationDescriptor, SpaceToolPolicies } from "@ardurbot/contracts";
 
 export type IntegrationApproval = "ask-first" | "allow" | "disabled";
 
@@ -15,7 +15,7 @@ export function effectiveTools(
 const WRITE =
   /comment|post|create|merge|deploy|delete|update|transition|trigger|cancel|write|remove|send|execute|mutat|publish|archive|approve|assign|edit|patch|upload|push|commit|revoke|grant/i;
 
-/** Display grouping is descriptive; it never confers read approval. */
+/** Classification alone never confers approval; an explicit read policy is still required. */
 export function integrationToolKind(id: string, description: string): "read" | "write" {
   return !WRITE.test(`${id} ${description}`) && /get|list|search|find|read|fetch/i.test(id)
     ? "read"
@@ -27,6 +27,7 @@ export function approvalFor(
   toolId: string,
   args: Record<string, unknown>,
   description = "",
+  spaceToolPolicies: SpaceToolPolicies = {},
 ): IntegrationApproval {
   if (!descriptor.available) return "disabled";
   const policy = descriptor.toolPolicies[toolId];
@@ -41,5 +42,10 @@ export function approvalFor(
     )
   )
     return "ask-first";
-  return policy?.approval === "allow" && policy.risk === "reviewed-read" ? "allow" : "ask-first";
+  if (policy?.approval === "allow" && policy.risk === "reviewed-read") return "allow";
+  return integrationToolKind(toolId, description) === "read" &&
+    Object.hasOwn(spaceToolPolicies, toolId) &&
+    spaceToolPolicies[toolId] === "allow"
+    ? "allow"
+    : "ask-first";
 }

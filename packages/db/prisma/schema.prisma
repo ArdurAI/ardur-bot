@@ -1076,6 +1076,7 @@ model McpServer {
   connectionState String          @default("not-connected")
   manifest      Json?
   spaceAllowedTools Json          @default("[]")
+  spaceToolPolicies Json          @default("{}")
 
   @@unique([spaceId, userId, slug])
   @@index([spaceId, userId])

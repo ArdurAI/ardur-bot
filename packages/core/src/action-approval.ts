@@ -170,7 +170,11 @@ export function resolveActionApprovalDetail(input: {
     ruleMatches(rule, input.toolName, connectorKind),
   );
   if (matchingRules.length === 0) {
-    return { decision: "allow", source: "default", matchingRules };
+    return {
+      decision: "allow",
+      source: input.integrationApproval === "allow" ? "space_policy" : "default",
+      matchingRules,
+    };
   }
 
   const highestSpecificity = Math.max(...matchingRules.map(ruleSpecificity));
