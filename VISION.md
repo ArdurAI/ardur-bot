@@ -1,70 +1,118 @@
 # Vision
 
-Ardur Bot exists so that people can own AI teammates that persist, use computers, and finish work beyond a single chat.
-It serves people who want capable agents without surrendering their choice of models, infrastructure, or where their data lives.
-It owns exactly one thing: the durable home in which each AI teammate's identity, conversation, memory, routines, and computer remain available over time.
+Ardur Bot exists so that people can own a team of AI bots that keep working, on models and
+computers they choose, without surrendering their subscriptions, their data, or their judgment.
 
-## Persistent teammates, not disposable chats
+It is a fork of Rakazo, and it keeps Rakazo's core: a bot is a continuing identity with one
+visible conversation, durable memory, routines, and a computer. What Ardur Bot adds is a
+promise about **who does the work and where**: every bot is pinned to a provider, model and
+effort level that the owner chose, using the owner's own subscriptions and keys, and that pin
+never silently changes.
 
-A bot is a continuing identity with one visible conversation and durable working state.
-A bot works in the background, returns with a result, and asks for help only when it needs information, judgment, authorization, or protected input.
-Useful work lands in the destination where it belongs instead of ending as an unsupported claim in chat.
-Changes that reduce bots to prompt presets or isolated one-off tasks work against the product.
+## Who uses it, and what "better" means to each of them
 
-## Ownership includes choice
+Every change should be able to answer: which of these people does it help, on which task, and
+how would they notice?
 
-The complete core product runs on infrastructure controlled by its operator under an open-source license.
-No hosted vendor is required for models, computers, memory, voice, integrations, or another core workflow.
-External services remain optional choices behind provider-neutral contracts, and new providers reuse shared contracts and deterministic offline conformance tests.
-Bot state remains inspectable, exportable, recoverable, and portable across provider failure or replacement.
-A managed Ardur Bot service may improve convenience, but it does not become a hidden dependency of the self-hosted core.
+### The operator (non-technical)
 
-## One product across every surface
+Runs a team, a practice, a shop, or a household. Pays for ChatGPT or Claude already. Has never
+opened a terminal and does not want to.
 
-Web, Electron, mobile, and messaging surfaces expose the same bots and durable state through shared product contracts.
-Core workflows work on every applicable surface or degrade safely for an explicit reason.
-Shared behavior, orchestration, and reusable interface logic live in shared packages.
-Platform-specific code is reserved for native navigation, storage, permissions, and interactions that genuinely differ.
+- Wants: install in minutes, sign in with the subscription she already has, describe a bot's
+  job in plain words, watch it work, approve before anything is sent, and see a plain summary of
+  what happened.
+- Fears: words like provider, model, effort, token, Docker; raw error text; anything that looks
+  like a config file.
+- Typical tasks: email and calendar triage, weekly reports, form filling, research summaries,
+  reminders that actually do the thing.
+- "Better" looks like: sensible defaults that work the first time; every error is one sentence
+  plus one button; progress she can see; undo.
 
-## Computers are durable places
+### The builder (technical)
 
-A computer is persistent working state even when its underlying process, container, or virtual machine is suspended or replaced.
-A Team Computer shares files, installed tools, and a canonical browser identity among bots inside the same trust boundary.
-Ardur Bot gives each concurrently active Team bot a separate live desktop and browser process when the provider supports it, and unsupported providers expose the limitation instead of silently coupling control.
-Browser sign-ins are checkpointed into the shared identity and become available to desktops opened or restarted after that checkpoint.
-Concurrent Chromium processes do not write directly to one profile directory, and generation fencing prevents older desktops from overwriting newer shared state.
-A Private Computer remains the explicit choice when files, browser identity, or working state must not be shared with other bots.
-Computer resources start lazily and are released when inactive so configured capacity does not become permanently reserved memory.
-User takeover grants exclusive control of one bot's screen without unnecessarily blocking other bots on their own screens.
+Developer or ops engineer. Wants control and no magic.
 
-## Calm on the surface, rigorous underneath
+- Wants: choose provider, model and effort per bot; MCP servers and connectors; computers on
+  Docker, Podman or Kubernetes; cron routines; logs; cost per bot; keyboard shortcuts; export
+  and import of bot configurations; a self-hosted server with the desktop app pointed at it.
+- Fears: hidden fallbacks, lock-in, opaque failures, settings spread across five places.
+- Typical tasks: a review bot on the strongest model at the highest effort, a CI watcher, a
+  runbook executor, PR triage, log analysis.
+- "Better" looks like: everything reachable from Settings, everything inspectable, nothing
+  happening that the UI did not show.
 
-Chat shows the bot's response, useful progress, results, and genuine requests for help rather than its internal tool lifecycle.
-The interface removes explanatory copy and persistent chrome unless they change a decision, and advanced capability appears progressively when relevant.
-Frontends express intent and render state while the backend owns orchestration, authorization, validation, retries, recovery, and provider translation.
-Routines remain scheduled prompts rather than becoming a visual workflow language.
-Implementation complexity is acceptable only when it protects a real boundary or makes the user experience simpler and more reliable.
+### The researcher (research-grade)
 
-## Trust is explicit and verified
+Analyst, scientist, or writer doing long, rigorous work.
 
-Spaces are authorization boundaries across which private chats, files, memory, computers, and integrations do not mix implicitly.
-Sharing a bot transfers an intentional configuration, not its computer, credentials, files, private memory, or history.
-Consequential actions respect explicit approval policy, and uncertain automated review fails toward asking rather than silently acting.
-Authentication, secret handling, sandbox boundaries, host commands, and integrations are treated as security-sensitive product behavior.
-Important effects are verified independently, recovery preserves known-good user state, and core tests remain deterministic and offline by default.
+- Wants: several bots in parallel on different models, compared side by side; sources and
+  citations kept; memory that can be read and edited; exports; provenance (which model and
+  version produced this, at what effort); routines that run for weeks.
+- Fears: invented citations, silent model substitution, lost context, results that cannot be
+  reproduced.
+- Typical tasks: literature sweeps, multi-step analysis, experiment tracking, drafting with
+  sources.
+- "Better" looks like: pins that fail closed with a clear message rather than quietly using a
+  different model; the model and effort visible at a glance; everything a bot read and wrote
+  available afterwards.
+
+### The team lead
+
+Shares bots across a space with a few colleagues.
+
+- Wants: approval policies, an audit trail, cost by bot and provider, simple roles.
+- "Better" looks like: one place to see what every bot did today and what it cost.
+
+### The local-first user
+
+Runs Ollama and keeps data at home.
+
+- Wants: local models as a first-class choice, computers on the host machine, and a clear
+  indicator of what leaves the machine and what does not.
+- "Better" looks like: no cloud requirement for the core loop, and honesty about the rest.
+
+## Principles that follow
+
+1. **Defaults that work the first time.** A new user with one subscription should reach a
+   working bot without choosing anything technical. When a choice is unavoidable, recommend one.
+2. **Simple surface, deep settings one click away.** The chat shows the bot, the work, and
+   genuine requests for help. Everything else lives in Settings, organised by what the user is
+   trying to do, not by how the code is organised.
+3. **Every error is a sentence and an action.** Never show raw JSON or a stack trace to the
+   user. Say what happened, what it means, and offer the fix.
+4. **Pins are promises.** A bot's provider, model, effort, runtime and computer are what the
+   owner set. If they cannot be honoured, the bot stops and says why. No silent fallback.
+5. **Visible but quiet.** The model and effort in use are always one glance away, and never in
+   the way.
+6. **Fast, and it feels fast.** Feedback within a tenth of a second, streaming output, no
+   layout jumps, motion that explains a change and respects reduce-motion.
+7. **Same product everywhere.** Windows, macOS, Linux, web and mobile expose the same bots and
+   the same settings, or say plainly what a platform cannot do.
+8. **Your subscriptions, honestly.** Use each provider the way its terms allow. Never store or
+   route a subscription token the vendor has not permitted a third-party app to use.
+9. **Show the work.** Every run leaves a record a person can read: what the bot read, called,
+   changed and spent.
+
+## Before every commit
+
+Answer these in the commit message or the pull request; if the answers are "nobody" and
+"nothing", the change probably does not belong.
+
+- Which persona benefits, on which task?
+- What did the user see before, and what do they see now?
+- Did any error get turned from text into a sentence plus an action?
+- Does it keep the promise of the pin (no new fallback)?
+- Performance: did anything get slower, heavier, or janky?
+- Does it work on all three desktop platforms, or say why not?
+- Is there a test for the new behaviour?
 
 ## Current decisions
 
-This file records current product truth rather than an append-only decision log, and Git history preserves decisions that are later replaced.
-One bot has one continuous visible thread because continuity is part of its identity, while internal runs and attempts remain implementation detail.
-Team Computers share a persisted browser identity and isolate simultaneous live desktops when supported because shared login state and safe concurrency are both required.
-Private Computers isolate the entire working home because some trust boundaries must be stronger than collaboration convenience.
-Connections belong to the user or space rather than requiring repetitive per-bot setup because bots differ through role and state, not account plumbing.
+This file records current product truth. Git history keeps what it replaced.
 
-## Scope
-
-Ardur Bot is not a model provider, a hosted-only service, a general virtual-machine manager, a visual workflow builder, or a CI system.
-Ardur Bot does not promise that a trusted host computer or third-party destination is isolated from data deliberately sent to it.
-Implementation plans and technical documentation explain mechanics, but this file is authoritative when product direction conflicts with an older plan.
-A change aligns when it strengthens persistent useful work, user ownership, safe autonomy, shared product behavior, or calm interaction without weakening an explicit boundary.
-A change should be resisted when it creates mandatory lock-in, fragments the product by surface, exposes internal machinery as user burden, weakens ownership or isolation, or adds capability without a durable place in a bot's work.
+- Rakazo's mechanics (bots, groups, routines, computers, approvals, memory) are kept and
+  credited; see NOTICE and docs/decisions/ADR-001-fork-and-rename.md.
+- Claude subscriptions are used only through the user's own unmodified `claude` binary. The
+  inherited Claude.ai OAuth login is removed from Ardur Bot builds.
+- Work lands on `dev`; `main` moves only after a human has verified a build.
