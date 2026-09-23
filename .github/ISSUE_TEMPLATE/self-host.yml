@@ -7,9 +7,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        For **security vulnerabilities**, email [security@ardur.ai](mailto:security@ardur.ai). See [SECURITY.md](https://github.com/ArdurAI/ardur-bot/blob/main/SECURITY.md).
+        For **security vulnerabilities**, email [security@ardur.ai](mailto:security@ardur.ai). See [SECURITY.md](https://github.com/ardurai/ardur-bot/blob/main/SECURITY.md).
 
-        Setup steps are in [README.md](https://github.com/ArdurAI/ardur-bot/blob/main/README.md). Do not paste `.env` contents or API keys.
+        Setup steps are in [README.md](https://github.com/ardurai/ardur-bot/blob/main/README.md). Do not paste `.env` contents or API keys.
 
   - type: dropdown
     id: step

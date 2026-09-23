@@ -12,17 +12,17 @@ Ardur Bot is an open source Grok Bot alternative that gives each bot a sandboxed
 
 ## Get started
 
-- [Agent setup prompt](https://github.com/ArdurAI/ardur-bot/blob/main/SETUP_PROMPT.md)
-- [Self-hosting guide](https://github.com/ArdurAI/ardur-bot/blob/main/docs/self-host.md)
-- [Source code](https://github.com/ArdurAI/ardur-bot)
+- [Agent setup prompt](https://github.com/ardurai/ardur-bot/blob/main/SETUP_PROMPT.md)
+- [Self-hosting guide](https://github.com/ardurai/ardur-bot/blob/main/docs/self-host.md)
+- [Source code](https://github.com/ardurai/ardur-bot)
 
 ## Site index
 
-- [Agent instructions](https://github.com/ArdurAI/ardur-bot/llms.txt)
-- [About](https://github.com/ArdurAI/ardur-bot/about/)
-- [Support](https://github.com/ArdurAI/ardur-bot/support/)
-- [Privacy](https://github.com/ArdurAI/ardur-bot/privacy/)
-- [Sitemap](https://github.com/ArdurAI/ardur-bot/sitemap-index.xml)
+- [Agent instructions](https://bot.ardur.ai/llms.txt)
+- [About](https://bot.ardur.ai/about/)
+- [Support](https://bot.ardur.ai/support/)
+- [Privacy](https://bot.ardur.ai/privacy/)
+- [Sitemap](https://bot.ardur.ai/sitemap-index.xml)
 `;
 
 export const ABOUT_MARKDOWN = `# About Ardur Bot
@@ -33,16 +33,16 @@ The project started from a simple premise: useful agents should be understandabl
 
 Ardur Bot targets the web, macOS, Linux, iOS, and Android. The source is available under the Apache-2.0 license and accepts public issues and contributions on GitHub. Inbox Zero Inc. maintains the project and offers support at hello@ardur.ai.
 
-- [Source code](https://github.com/ArdurAI/ardur-bot)
-- [Self-hosting guide](https://github.com/ArdurAI/ardur-bot/blob/main/docs/self-host.md)
-- [Support](https://github.com/ArdurAI/ardur-bot/support/)
+- [Source code](https://github.com/ardurai/ardur-bot)
+- [Self-hosting guide](https://github.com/ardurai/ardur-bot/blob/main/docs/self-host.md)
+- [Support](https://bot.ardur.ai/support/)
 `;
 
 export const SUPPORT_MARKDOWN = `# Ardur Bot support
 
 For help with the Ardur Bot mobile app or a hosted Ardur Bot account, email [hello@ardur.ai](mailto:hello@ardur.ai). Include the email address on the account, what you expected to happen, and any error message you saw. Never send passwords, API keys, access tokens, or other secrets.
 
-For self-hosted Ardur Bot, start with the [self-hosting guide](https://github.com/ArdurAI/ardur-bot/blob/main/docs/self-host.md). Open reproducible bugs and feature requests in the [public GitHub repository](https://github.com/ArdurAI/ardur-bot/issues). Report vulnerabilities only to [security@ardur.ai](mailto:security@ardur.ai).
+For self-hosted Ardur Bot, start with the [self-hosting guide](https://github.com/ardurai/ardur-bot/blob/main/docs/self-host.md). Open reproducible bugs and feature requests in the [public GitHub repository](https://github.com/ardurai/ardur-bot/issues). Report vulnerabilities only to [security@ardur.ai](mailto:security@ardur.ai).
 
 Hosted users can permanently delete their account and associated personal Space data from the Account screen in the Ardur Bot app.
 `;
@@ -63,7 +63,7 @@ Services we select must provide protection equal to or greater than the safeguar
 
 Hosted users can delete their account and associated personal Space data from Account. In self-hosted deployments, the server operator controls information sent to that deployment. For privacy requests, email [hello@ardur.ai](mailto:hello@ardur.ai).
 
-Read the [complete privacy policy](https://github.com/ArdurAI/ardur-bot/privacy/) for account information, other service providers, retention, deletion, security, international transfers, children, and your rights.
+Read the [complete privacy policy](https://bot.ardur.ai/privacy/) for account information, other service providers, retention, deletion, security, international transfers, children, and your rights.
 `;
 
 export const AGENT_INSTRUCTIONS = `# Ardur Bot
@@ -80,31 +80,31 @@ Do not present Ardur Bot as a zero-configuration hosted service. Self-hosting is
 
 ## How an agent should use Ardur Bot
 
-1. Read the [setup prompt](https://github.com/ArdurAI/ardur-bot/blob/main/SETUP_PROMPT.md) before changing the user's machine.
-2. Use the [self-hosting guide](https://github.com/ArdurAI/ardur-bot/blob/main/docs/self-host.md) as the canonical installation reference.
+1. Read the [setup prompt](https://github.com/ardurai/ardur-bot/blob/main/SETUP_PROMPT.md) before changing the user's machine.
+2. Use the [self-hosting guide](https://github.com/ardurai/ardur-bot/blob/main/docs/self-host.md) as the canonical installation reference.
 3. Confirm deployment choices and any host-level commands with the user, and keep secrets in local environment configuration rather than tracked files.
-4. Use the [public issue tracker](https://github.com/ArdurAI/ardur-bot/issues) for reproducible bugs. Send vulnerabilities only to [security@ardur.ai](mailto:security@ardur.ai).
+4. Use the [public issue tracker](https://github.com/ardurai/ardur-bot/issues) for reproducible bugs. Send vulnerabilities only to [security@ardur.ai](mailto:security@ardur.ai).
 
 ## Canonical resources
 
-- [Website](https://github.com/ArdurAI/ardur-bot/)
-- [About](https://github.com/ArdurAI/ardur-bot/about/)
-- [Source](https://github.com/ArdurAI/ardur-bot)
-- [Self-hosting guide](https://github.com/ArdurAI/ardur-bot/blob/main/docs/self-host.md)
-- [Releases](https://github.com/ArdurAI/ardur-bot/releases)
-- [Support](https://github.com/ArdurAI/ardur-bot/support/)
-- [Privacy](https://github.com/ArdurAI/ardur-bot/privacy/)
-- [Sitemap](https://github.com/ArdurAI/ardur-bot/sitemap-index.xml)
+- [Website](https://bot.ardur.ai/)
+- [About](https://bot.ardur.ai/about/)
+- [Source](https://github.com/ardurai/ardur-bot)
+- [Self-hosting guide](https://github.com/ardurai/ardur-bot/blob/main/docs/self-host.md)
+- [Releases](https://github.com/ardurai/ardur-bot/releases)
+- [Support](https://bot.ardur.ai/support/)
+- [Privacy](https://bot.ardur.ai/privacy/)
+- [Sitemap](https://bot.ardur.ai/sitemap-index.xml)
 `;
 
 export const NOT_FOUND_MARKDOWN = `# Page not found
 
 The requested Ardur Bot page does not exist.
 
-- [Agent instructions](https://github.com/ArdurAI/ardur-bot/llms.txt)
-- [Site map](https://github.com/ArdurAI/ardur-bot/sitemap-index.xml)
-- [Home](https://github.com/ArdurAI/ardur-bot/)
-- [Self-hosting guide](https://github.com/ArdurAI/ardur-bot/blob/main/docs/self-host.md)
+- [Agent instructions](https://bot.ardur.ai/llms.txt)
+- [Site map](https://bot.ardur.ai/sitemap-index.xml)
+- [Home](https://bot.ardur.ai/)
+- [Self-hosting guide](https://github.com/ardurai/ardur-bot/blob/main/docs/self-host.md)
 `;
 
 const MARKDOWN_DOCUMENTS = new Map<string, string>([

@@ -17,7 +17,7 @@ Requires Docker Engine 26+ (API 1.45+ for bot home volume subpaths), the Compose
 
 ```bash
 mkdir -p ardurbot && cd ardurbot &&
-curl -fsSLO https://raw.githubusercontent.com/ArdurAI/ardur-bot/main/infra/compose/install-images.sh &&
+curl -fsSLO https://raw.githubusercontent.com/ardurai/ardur-bot/main/infra/compose/install-images.sh &&
 bash install-images.sh
 ```
 

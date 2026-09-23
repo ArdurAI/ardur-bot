@@ -1,5 +1,5 @@
 /** The repository a stock Ardur Bot deployment tracks. */
-export const OFFICIAL_REPO_URL = "https://github.com/ArdurAI/ardur-bot";
+export const OFFICIAL_REPO_URL = "https://github.com/ardurai/ardur-bot";
 export const DEFAULT_UPDATE_BRANCH = "main";
 export const DEFAULT_UPDATE_REMOTE = "origin";
 
@@ -80,7 +80,7 @@ function normalizeRepoPath(raw: string): string | null {
   return segments.join("/");
 }
 
-/** `github.com/ArdurAI/ardur-bot` for every spelling of the same remote, for comparison only. */
+/** `github.com/ardurai/ardur-bot` for every spelling of the same remote, for comparison only. */
 export function repoIdentity(url: string): string | null {
   const normalized = normalizeRepoUrl(url);
   if ("error" in normalized) return null;

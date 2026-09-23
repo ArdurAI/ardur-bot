@@ -7,7 +7,7 @@ import { resolveWwwPort } from "./www-port.mjs";
 const wwwPort = resolveWwwPort();
 
 export default defineConfig({
-  site: "https://github.com/ArdurAI/ardur-bot",
+  site: "https://bot.ardur.ai",
   output: "static",
   i18n: {
     defaultLocale: "en",

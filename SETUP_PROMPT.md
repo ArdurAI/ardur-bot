@@ -38,7 +38,7 @@ Setup:
 
 1. Create the directory if needed and enter it.
 2. Download and inspect this installer (do not clone the repository):
-   https://raw.githubusercontent.com/ArdurAI/ardur-bot/main/infra/compose/install-images.sh
+   https://raw.githubusercontent.com/ardurai/ardur-bot/main/infra/compose/install-images.sh
    If that host is unreachable, use a mirror URL (e.g. set `ARDURBOT_INSTALLER_URL` to
    `https://example.com/mirror/ardurbot/infra/compose/install-images.sh` and curl that instead).
 3. Run `bash install-images.sh --prepare-only`. It downloads the Compose and environment example
@@ -70,7 +70,7 @@ Use this for development, Docker sandboxes on the host, or Electron.
 ```text
 Set up Ardur Bot locally and leave it running in a usable state.
 
-Repository: https://github.com/ArdurAI/ardur-bot.git
+Repository: https://github.com/ardurai/ardur-bot.git
 
 Work like a careful onboarding engineer: perform the setup yourself, explain only decisions or blockers, and verify the product through the UI rather than stopping after dependency installation.
 

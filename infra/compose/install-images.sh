@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-DOWNLOAD_BASE="${ARDURBOT_DOWNLOAD_BASE:-https://raw.githubusercontent.com/ArdurAI/ardur-bot/main/infra/compose}"
+DOWNLOAD_BASE="${ARDURBOT_DOWNLOAD_BASE:-https://raw.githubusercontent.com/ardurai/ardur-bot/main/infra/compose}"
 while [[ "$DOWNLOAD_BASE" == */ ]]; do
   DOWNLOAD_BASE="${DOWNLOAD_BASE%/}"
 done

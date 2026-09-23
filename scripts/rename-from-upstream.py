@@ -15,7 +15,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
-SKIP_FILES = {"NOTICE", "scripts/rename-from-upstream.py"}
+SKIP_FILES = {
+    "NOTICE", "README.md", "CONTRIBUTING.md", "CHANGELOG.md", "SECURITY.md",
+    "scripts/rename-from-upstream.py",
+}
 SKIP_PREFIXES = ("docs/decisions/",)
 BINARY_EXT = {
     ".png", ".jpg", ".jpeg", ".gif", ".ico", ".icns", ".webp", ".woff", ".woff2",
@@ -24,10 +27,10 @@ BINARY_EXT = {
 
 CONTENT_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"([A-Za-z0-9._-]+)@rakazo\.com\b"), r"\1@ardur.ai"),
-    (re.compile(r"https://(?:www\.)?rakazo\.com"), "https://github.com/ArdurAI/ardur-bot"),
-    (re.compile(r"\brakazo\.com\b"), "github.com/ArdurAI/ardur-bot"),
+    (re.compile(r"https://(?:www\.)?rakazo\.com"), "https://bot.ardur.ai"),
+    (re.compile(r"\brakazo\.com\b"), "bot.ardur.ai"),
     (re.compile(r"ghcr\.io/elie222/rakazo"), "ghcr.io/ardurai/ardur-bot"),
-    (re.compile(r"elie222/rakazo"), "ArdurAI/ardur-bot"),
+    (re.compile(r"elie222/rakazo"), "ardurai/ardur-bot"),
     (re.compile(r"dev\.rakazo\.desktop"), "ai.ardur.bot.desktop"),
     (re.compile(r"com\.rakazo\.app"), "ai.ardur.bot"),
     (re.compile(r"com\.rakazo\.notifications"), "ai.ardur.bot.notifications"),

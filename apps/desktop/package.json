@@ -80,8 +80,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "elie222",
-        "repo": "ardurbot"
+        "owner": "ArdurAI",
+        "repo": "ardur-bot"
       }
     ]
   }

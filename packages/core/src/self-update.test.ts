@@ -18,7 +18,7 @@ import {
 describe("normalizeRepoUrl", () => {
   it("accepts the official repository and https forks", () => {
     expect(normalizeRepoUrl(OFFICIAL_REPO_URL)).toEqual({
-      url: "https://github.com/ArdurAI/ardur-bot",
+      url: "https://github.com/ardurai/ardur-bot",
     });
     expect(normalizeRepoUrl("  https://github.com/me/ardurbot.git/  ")).toEqual({
       url: "https://github.com/me/ardurbot.git",
@@ -69,18 +69,18 @@ describe("normalizeRepoUrl", () => {
 
 describe("repoIdentity", () => {
   it("treats every spelling of the same remote as one repository", () => {
-    const identity = "github.com/ArdurAI/ardur-bot";
-    expect(repoIdentity("https://github.com/ArdurAI/ardur-bot")).toBe(identity);
-    expect(repoIdentity("https://github.com/ArdurAI/ardur-bot.git")).toBe(identity);
-    expect(repoIdentity("git@github.com:ArdurAI/ardur-bot.git")).toBe(identity);
-    expect(repoIdentity("ssh://git@github.com/Elie222/Ardur Bot")).toBe(identity);
+    const identity = "github.com/ardurai/ardur-bot";
+    expect(repoIdentity("https://github.com/ardurai/ardur-bot")).toBe(identity);
+    expect(repoIdentity("https://github.com/ardurai/ardur-bot.git")).toBe(identity);
+    expect(repoIdentity("git@github.com:ardurai/ardur-bot.git")).toBe(identity);
+    expect(repoIdentity("ssh://git@github.com/ArdurAI/Ardur-Bot")).toBe(identity);
     expect(repoIdentity("not a url")).toBeNull();
   });
 
   it("only calls the real upstream official", () => {
-    expect(isOfficialRepoUrl("git@github.com:ArdurAI/ardur-bot.git")).toBe(true);
+    expect(isOfficialRepoUrl("git@github.com:ardurai/ardur-bot.git")).toBe(true);
     expect(isOfficialRepoUrl("https://github.com/attacker/ardurbot")).toBe(false);
-    expect(isOfficialRepoUrl("https://githubb.com/ArdurAI/ardur-bot")).toBe(false);
+    expect(isOfficialRepoUrl("https://githubb.com/ardurai/ardur-bot")).toBe(false);
   });
 });
 
