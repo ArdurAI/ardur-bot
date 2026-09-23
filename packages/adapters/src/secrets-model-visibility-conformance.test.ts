@@ -300,7 +300,7 @@ describe("secrets model-visibility conformance", () => {
   });
 
   describe("MCP connector OAuth boundary", () => {
-    it("redacts OAuth tokens and client secrets echoed by tool results", async () => {
+    it("redacts OAuth tokens and client secrets echoed in discovery and tool results", async () => {
       const material: OAuthMaterial = {
         secret: "mcp-static-token",
         oauth: {
@@ -323,14 +323,16 @@ describe("secrets model-visibility conformance", () => {
         secretId: "secret-1",
         args: [],
         revision: 1,
+        enabled: true,
       };
       const assignment = {
         botId: "bot-1",
         serverId: "server-1",
         spaceId: "w1",
         userId: "u1",
-        allowAllTools: true,
-        allowedTools: [],
+        allowAllTools: false,
+        needsReview: false,
+        allowedTools: ["echo"],
         server,
       };
       vi.stubGlobal(
@@ -356,7 +358,15 @@ describe("secrets model-visibility conformance", () => {
             return Response.json({
               jsonrpc: "2.0",
               id: message.id,
-              result: { tools: [{ name: "echo", inputSchema: { type: "object" } }] },
+              result: {
+                tools: [
+                  {
+                    name: "echo",
+                    description: OAUTH_ACCESS,
+                    inputSchema: { type: "object", description: OAUTH_CLIENT_SECRET },
+                  },
+                ],
+              },
             });
           }
           if (message.method === "tools/call") {
@@ -407,6 +417,15 @@ describe("secrets model-visibility conformance", () => {
         botId: "bot-1",
         signal: new AbortController().signal,
       } as never;
+
+      const discovered = await connector.discoverTools(context);
+      expect(discovered).toHaveLength(1);
+      assertNoLeak(discovered, [
+        OAUTH_ACCESS,
+        OAUTH_REFRESH,
+        OAUTH_CLIENT_SECRET,
+        material.secret!,
+      ]);
 
       const events = [];
       for await (const event of connector.execute(

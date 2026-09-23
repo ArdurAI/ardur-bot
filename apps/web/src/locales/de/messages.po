@@ -167,10 +167,11 @@ msgstr ""
 msgid "Access token"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:354
+#: src/pages/McpServersOverlay.tsx:368
 msgid "Access token (optional)"
 msgstr "Zugriffstoken (optional)"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx:98
 #: src/pages/AccountSettingsOverlay.tsx:83
 msgid "Account"
 msgstr "Konto"
@@ -178,6 +179,10 @@ msgstr "Konto"
 #: src/pages/shell/bot-panel.tsx:625
 msgid "Account default"
 msgstr "Kontostandard"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx:99
+msgid "Account details are unavailable."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx:583
 msgid "Account label"
@@ -239,15 +244,15 @@ msgstr ""
 msgid "Add a schedule, webhook, GitHub, or message trigger to run this routine."
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:108
+#: src/pages/McpServersOverlay.tsx:110
 msgid "Add a server name."
 msgstr "Gib einen Servernamen ein."
 
-#: src/pages/McpServersOverlay.tsx:116
+#: src/pages/McpServersOverlay.tsx:118
 msgid "Add a stdio command."
 msgstr "Gib einen stdio-Befehl ein."
 
-#: src/pages/McpServersOverlay.tsx:112
+#: src/pages/McpServersOverlay.tsx:114
 msgid "Add an HTTPS server URL."
 msgstr "Gib eine HTTPS-Server-URL ein."
 
@@ -284,8 +289,8 @@ msgstr "OpenAPI hinzufügen"
 msgid "Add remote MCP server"
 msgstr "Remote-MCP-Server hinzufügen"
 
-#: src/pages/McpServersOverlay.tsx:275
-#: src/pages/McpServersOverlay.tsx:415
+#: src/pages/McpServersOverlay.tsx:289
+#: src/pages/McpServersOverlay.tsx:429
 msgid "Add server"
 msgstr "Server hinzufügen"
 
@@ -309,15 +314,16 @@ msgstr ""
 msgid "Added"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:415
+#: src/pages/McpServersOverlay.tsx:429
 #: src/pages/PluginsOverlay.tsx:451
 #: src/pages/PluginsOverlay.tsx:467
 #: src/pages/PluginsOverlay.tsx:615
 msgid "Adding…"
 msgstr "Wird hinzugefügt…"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:169
 #: src/pages/AccountSettingsOverlay.tsx:170
-#: src/pages/McpServersOverlay.tsx:342
+#: src/pages/McpServersOverlay.tsx:356
 #: src/pages/ModelSettingsOverlay.tsx:564
 #: src/pages/Onboarding.tsx:501
 #: src/pages/PluginsOverlay.tsx:836
@@ -338,8 +344,8 @@ msgstr "Agent-Computer"
 msgid "Agent connections"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:385
-#: src/pages/McpServersOverlay.tsx:452
+#: src/pages/McpServersOverlay.tsx:399
+#: src/pages/McpServersOverlay.tsx:466
 msgid "Agents:"
 msgstr "Agents:"
 
@@ -467,7 +473,7 @@ msgstr "Archiviert"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "Archiviert. Chat, Erinnerungen und Dateien bleiben erhalten."
 
-#: src/pages/McpServersOverlay.tsx:316
+#: src/pages/McpServersOverlay.tsx:330
 msgid "Arguments"
 msgstr "Argumente"
 
@@ -506,6 +512,10 @@ msgstr "Vor dem Senden externer E-Mails nachfragen"
 msgid "Ask the server owner to configure this provider."
 msgstr ""
 
+#: src/components/integrations/catalog/ToolPicker.tsx:59
+msgid "asks first"
+msgstr ""
+
 #. placeholder {0}: preset.time
 #: src/pages/RoutineSchedule.tsx:155
 #: src/pages/RoutineSchedule.tsx:158
@@ -533,6 +543,10 @@ msgstr "Autorisierungscode oder Callback-URL"
 #: src/pages/shell/message-cards.tsx:188
 msgid "Authorization timed out. Please try again."
 msgstr "Zeitüberschreitung bei der Autorisierung. Versuche es erneut."
+
+#: src/pages/McpOAuthCallback.tsx:24
+msgid "Authorization was cancelled. Try connecting again."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx:233
 #: src/pages/shell/message-cards.tsx:398
@@ -563,6 +577,7 @@ msgstr "Avatar-Studio"
 msgid "Avatars"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx:95
 #: src/pages/PluginsOverlay.tsx:540
 #: src/pages/RoutineEditor.tsx:260
 msgid "Back"
@@ -621,6 +636,11 @@ msgstr "Bot-Bildschirmvorschau"
 msgid "Bot to link"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx:127
+#: src/components/integrations/catalog/McpToolReview.tsx:91
+msgid "Bots"
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx:115
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "Bots handeln standardmäßig ohne Nachfrage. Füge nur dann eine Ausnahme hinzu, wenn du eine Aktionsart zuerst prüfen möchtest."
@@ -649,6 +669,7 @@ msgstr "Server nicht erreichbar."
 #: src/components/AskCard.tsx:186
 #: src/components/ComputerMaintenanceActions.tsx:97
 #: src/components/ComputerUpdateProgress.tsx:233
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:154
 #: src/components/teach/TeachComputerOverlay.tsx:254
 #: src/pages/KnowledgeSection.tsx:212
 #: src/pages/KnowledgeSection.tsx:438
@@ -759,6 +780,10 @@ msgstr ""
 msgid "Choose a new password"
 msgstr "Wähle ein neues Passwort"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx:124
+msgid "Choose bots and the tools they can use."
+msgstr ""
+
 #: src/pages/shell/avatar-studio-popover.tsx:271
 msgid "Choose file"
 msgstr "Datei wählen"
@@ -819,12 +844,12 @@ msgstr "Bildvorschau schließen"
 msgid "Close integrations"
 msgstr "Integrationen schließen"
 
-#: src/pages/McpServersOverlay.tsx:258
+#: src/pages/McpServersOverlay.tsx:272
 msgid "Close MCP servers"
 msgstr "MCP-Server schließen"
 
 #: src/pages/MemorySettingsOverlay.tsx:168
-#: src/pages/SettingsOverlay.tsx:100
+#: src/pages/SettingsOverlay.tsx:114
 msgid "Close memory settings"
 msgstr "Erinnerungseinstellungen schließen"
 
@@ -833,7 +858,7 @@ msgid "Close messaging settings"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx:385
-#: src/pages/SettingsOverlay.tsx:98
+#: src/pages/SettingsOverlay.tsx:112
 msgid "Close model settings"
 msgstr "Modelleinstellungen schließen"
 
@@ -849,11 +874,11 @@ msgstr "Panel schließen"
 msgid "Close preview"
 msgstr "Vorschau schließen"
 
-#: src/pages/SettingsOverlay.tsx:103
+#: src/pages/SettingsOverlay.tsx:117
 msgid "Close user settings"
 msgstr "Benutzereinstellungen schließen"
 
-#: src/pages/SettingsOverlay.tsx:102
+#: src/pages/SettingsOverlay.tsx:116
 #: src/pages/VoiceSettingsOverlay.tsx:179
 msgid "Close voice settings"
 msgstr "Stimmeinstellungen schließen"
@@ -879,11 +904,12 @@ msgstr "Farbe"
 msgid "Color {color}"
 msgstr "Farbe {color}"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:133
 #: src/pages/RoutineEditor.tsx:455
 msgid "Coming soon"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:305
+#: src/pages/McpServersOverlay.tsx:319
 msgid "Command"
 msgstr "Befehl"
 
@@ -891,7 +917,8 @@ msgstr "Befehl"
 msgid "Complete"
 msgstr "Abschließen"
 
-#: src/pages/SettingsOverlay.tsx:88
+#: src/components/integrations/catalog/IntegrationManage.tsx:101
+#: src/pages/SettingsOverlay.tsx:102
 #: src/pages/Shell.tsx:6186
 #: src/pages/shell/bot-panel.tsx:57
 msgid "Computer"
@@ -925,12 +952,12 @@ msgstr "Computer sind aus. Setze SANDBOX_PROVIDER=docker mit SANDBOX_SUPERVISOR_
 msgid "Configured by deployment"
 msgstr "Durch die Bereitstellung konfiguriert"
 
-#: src/pages/McpServersOverlay.tsx:421
+#: src/pages/McpServersOverlay.tsx:435
 msgid "Configured servers"
 msgstr "Konfigurierte Server"
 
 #: src/pages/KnowledgeSection.tsx:450
-#: src/pages/McpServersOverlay.tsx:506
+#: src/pages/McpServersOverlay.tsx:528
 msgid "Confirm delete"
 msgstr "Löschen bestätigen"
 
@@ -939,6 +966,7 @@ msgstr "Löschen bestätigen"
 msgid "Confirm password"
 msgstr "Passwort bestätigen"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:165
 #: src/components/integrations/IntegrationSetup.tsx:222
 #: src/components/integrations/IntegrationSetup.tsx:267
 #: src/components/integrations/IntegrationSetup.tsx:291
@@ -965,7 +993,7 @@ msgstr "Executor verbinden"
 msgid "Connect MCP server “{name}”"
 msgstr "MCP-Server „{name}“ verbinden"
 
-#: src/pages/McpServersOverlay.tsx:39
+#: src/pages/McpServersOverlay.tsx:40
 msgid "Connect OAuth"
 msgstr "OAuth verbinden"
 
@@ -977,9 +1005,13 @@ msgstr "Verbinde diesen Anbieter, um ihn als persönliches Modell zu verwenden."
 msgid "Connect Treg"
 msgstr "Treg verbinden"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:109
+msgid "Connect your account."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx:164
 #: src/components/integrations/IntegrationSetup.tsx:267
-#: src/pages/McpOAuthCallback.tsx:54
+#: src/pages/McpOAuthCallback.tsx:52
 #: src/pages/MemorySettingsOverlay.tsx:191
 #: src/pages/ModelSettingsOverlay.tsx:450
 #: src/pages/shell/message-cards.tsx:225
@@ -1005,12 +1037,12 @@ msgid "Connected and using {0}."
 msgstr "Verbunden, {0} wird verwendet."
 
 #: src/pages/shell/message-cards.tsx:412
-msgid "Connected. Its tools are available from your next message."
-msgstr "Verbunden. Die Tools sind ab deiner nächsten Nachricht verfügbar."
+msgid "Connected. Review tools in MCP settings."
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx:222
 #: src/components/integrations/IntegrationSetup.tsx:361
-#: src/pages/McpServersOverlay.tsx:38
+#: src/pages/McpServersOverlay.tsx:39
 #: src/pages/memory-providers/SerenitySettingsForm.tsx:107
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx:82
 #: src/pages/shell/message-cards.tsx:398
@@ -1049,7 +1081,7 @@ msgstr "Kopieren"
 msgid "Could not add"
 msgstr "Hinzufügen fehlgeschlagen"
 
-#: src/pages/McpServersOverlay.tsx:170
+#: src/pages/McpServersOverlay.tsx:172
 msgid "Could not add MCP server"
 msgstr "MCP-Server konnte nicht hinzugefügt werden"
 
@@ -1081,9 +1113,9 @@ msgstr "Unterhaltung konnte nicht geleert werden"
 msgid "Could not complete action"
 msgstr ""
 
-#: src/pages/McpOAuthCallback.tsx:43
-msgid "Could not complete OAuth"
-msgstr "OAuth konnte nicht abgeschlossen werden"
+#: src/pages/McpOAuthCallback.tsx:42
+msgid "Could not complete authorization. Try connecting again."
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx:70
 msgid "Could not complete the update. Try again."
@@ -1098,6 +1130,10 @@ msgstr "Verbindung fehlgeschlagen"
 #: src/pages/MemorySettingsOverlay.tsx:119
 msgid "Could not connect {0}"
 msgstr "Verbindung mit {0} fehlgeschlagen"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:116
+msgid "Could not connect or load integrations."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx:343
 msgid "Could not connect this provider"
@@ -1144,7 +1180,7 @@ msgstr "Bot konnte nicht gelöscht werden"
 msgid "Could not delete group"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:225
+#: src/pages/McpServersOverlay.tsx:230
 msgid "Could not delete MCP server"
 msgstr "MCP-Server konnte nicht gelöscht werden"
 
@@ -1164,7 +1200,7 @@ msgstr ""
 msgid "Could not disconnect memory provider"
 msgstr "Erinnerungsanbieter konnte nicht getrennt werden"
 
-#: src/pages/McpServersOverlay.tsx:236
+#: src/pages/McpServersOverlay.tsx:241
 msgid "Could not disconnect OAuth"
 msgstr "OAuth-Verbindung konnte nicht getrennt werden"
 
@@ -1211,7 +1247,7 @@ msgstr ""
 msgid "Could not load integrations"
 msgstr "Integrationen konnten nicht geladen werden"
 
-#: src/pages/McpServersOverlay.tsx:82
+#: src/pages/McpServersOverlay.tsx:84
 msgid "Could not load MCP servers"
 msgstr "MCP-Server konnten nicht geladen werden"
 
@@ -1219,9 +1255,17 @@ msgstr "MCP-Server konnten nicht geladen werden"
 msgid "Could not load model settings"
 msgstr "Modelleinstellungen konnten nicht geladen werden"
 
+#: src/components/integrations/catalog/McpToolReview.tsx:86
+msgid "Could not load or save tools."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx:302
 msgid "Could not load skill"
 msgstr "Skill konnte nicht geladen werden"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:103
+msgid "Could not load this account’s tools."
+msgstr ""
 
 #: src/pages/PeerMessagesOverlay.tsx:110
 msgid "Could not load this chat."
@@ -1318,6 +1362,10 @@ msgstr "Gruppe konnte nicht gespeichert werden"
 msgid "Could not save model"
 msgstr "Modell konnte nicht gespeichert werden"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx:111
+msgid "Could not save or load access."
+msgstr ""
+
 #: src/pages/Shell.tsx:3748
 msgid "Could not save routine"
 msgstr "Routine konnte nicht gespeichert werden"
@@ -1354,7 +1402,7 @@ msgstr "E-Mail zum Zurücksetzen konnte nicht gesendet werden"
 msgid "Could not send that"
 msgstr "Senden fehlgeschlagen"
 
-#: src/pages/McpServersOverlay.tsx:194
+#: src/pages/McpServersOverlay.tsx:196
 msgid "Could not start OAuth"
 msgstr "OAuth konnte nicht gestartet werden"
 
@@ -1374,7 +1422,7 @@ msgstr "Kontrolle konnte nicht übernommen werden"
 msgid "Could not update"
 msgstr "Aktualisierung fehlgeschlagen"
 
-#: src/pages/McpServersOverlay.tsx:210
+#: src/pages/McpServersOverlay.tsx:215
 msgid "Could not update agent access"
 msgstr "Agent-Zugriff konnte nicht aktualisiert werden"
 
@@ -1463,7 +1511,7 @@ msgstr "Wird erstellt…"
 msgid "Credential"
 msgstr "Zugangsdaten"
 
-#: src/pages/McpServersOverlay.tsx:34
+#: src/pages/McpServersOverlay.tsx:35
 #: src/pages/PluginsOverlay.tsx:1133
 msgid "credential saved"
 msgstr "Zugangsdaten gespeichert"
@@ -1533,7 +1581,7 @@ msgstr "Standardbereich"
 
 #: src/pages/BotContextMenu.tsx:148
 #: src/pages/KnowledgeSection.tsx:450
-#: src/pages/McpServersOverlay.tsx:508
+#: src/pages/McpServersOverlay.tsx:530
 #: src/pages/RoutineEditor.tsx:301
 #: src/pages/Shell.tsx:3068
 #: src/pages/Shell.tsx:3099
@@ -1611,7 +1659,8 @@ msgstr ""
 msgid "Direct MCP"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:493
+#: src/components/integrations/catalog/IntegrationManage.tsx:167
+#: src/pages/McpServersOverlay.tsx:515
 #: src/pages/MemorySettingsOverlay.tsx:211
 #: src/pages/VoiceSettingsOverlay.tsx:289
 msgid "Disconnect"
@@ -1652,6 +1701,10 @@ msgstr "Docker"
 #: src/pages/HostComputerPrompt.tsx:63
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker begrenzt für mehr Sicherheit den Zugriff auf deinen Computer. Wenn {hostLabel} verwendet wird, können Bots mit deinen lokalen Dateien und Werkzeugen arbeiten."
+
+#: src/components/integrations/catalog/IntegrationManage.tsx:108
+msgid "Documentation"
+msgstr ""
 
 #: src/pages/Auth.tsx:221
 msgid "Don’t have an account?"
@@ -1853,6 +1906,10 @@ msgstr "Suche läuft…"
 msgid "Finish signing in at <0>{0}</0>. The final page may not load; paste its URL or code here."
 msgstr "Schließe die Anmeldung unter <0>{0}</0> ab. Die letzte Seite wird möglicherweise nicht geladen; füge ihre URL oder den Code hier ein."
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:97
+msgid "Finish signing in in your browser."
+msgstr ""
+
 #: src/components/CloudAgentCard.tsx:34
 msgid "finished"
 msgstr "abgeschlossen"
@@ -1862,7 +1919,7 @@ msgstr "abgeschlossen"
 msgid "Finished."
 msgstr "Fertig."
 
-#: src/pages/McpOAuthCallback.tsx:56
+#: src/pages/McpOAuthCallback.tsx:54
 msgid "Finishing MCP connection…"
 msgstr "MCP-Verbindung wird abgeschlossen…"
 
@@ -1882,8 +1939,8 @@ msgstr "Kostenlos"
 msgid "Fullscreen"
 msgstr "Vollbild"
 
-#: src/pages/SettingsOverlay.tsx:83
-#: src/pages/SettingsOverlay.tsx:94
+#: src/pages/SettingsOverlay.tsx:96
+#: src/pages/SettingsOverlay.tsx:108
 msgid "General"
 msgstr "Allgemein"
 
@@ -1903,6 +1960,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx:470
 #: src/pages/RoutineEditor.tsx:586
 msgid "Git event"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:179
+msgid "GitLab host"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx:204
@@ -1940,12 +2001,12 @@ msgstr ""
 msgid "header"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:367
+#: src/pages/McpServersOverlay.tsx:381
 #: src/pages/PluginsOverlay.tsx:1054
 msgid "Header name"
 msgstr "Header-Name"
 
-#: src/pages/McpServersOverlay.tsx:372
+#: src/pages/McpServersOverlay.tsx:386
 msgid "Header value"
 msgstr "Header-Wert"
 
@@ -2037,6 +2098,7 @@ msgid "Integration options"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx:679
+#: src/pages/SettingsOverlay.tsx:97
 #: src/pages/Shell.tsx:3117
 msgid "Integrations"
 msgstr "Integrationen"
@@ -2166,6 +2228,10 @@ msgstr ""
 msgid "Loading voice providers…"
 msgstr "Stimmanbieter werden geladen…"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx:116
+msgid "Loading your tools."
+msgstr ""
+
 #: src/App.tsx:65
 #: src/pages/IntegrationSetup.tsx:72
 #: src/pages/Onboarding.tsx:379
@@ -2199,6 +2265,10 @@ msgstr "Niedrig"
 #: src/components/ComputerUpdateProgress.tsx:228
 msgid "Make sure nothing is still running on this computer."
 msgstr "Stelle sicher, dass auf diesem Computer nichts mehr läuft."
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:147
+msgid "Manage"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx:1159
 msgid "Manage MCP servers"
@@ -2249,7 +2319,7 @@ msgstr "Maximale Ausgabetokens"
 msgid "MCP endpoint"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:255
+#: src/pages/McpServersOverlay.tsx:269
 msgid "MCP servers"
 msgstr "MCP-Server"
 
@@ -2269,7 +2339,7 @@ msgstr "Mitglieder ({GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX} auswählen)"
 
 #: src/pages/KnowledgeSection.tsx:39
 #: src/pages/MemorySettingsOverlay.tsx:159
-#: src/pages/SettingsOverlay.tsx:85
+#: src/pages/SettingsOverlay.tsx:99
 msgid "Memory"
 msgstr "Erinnerungen"
 
@@ -2382,7 +2452,7 @@ msgstr "Modell aktualisiert."
 
 #: src/pages/LocalSettings.tsx:36
 #: src/pages/ModelSettingsOverlay.tsx:378
-#: src/pages/SettingsOverlay.tsx:84
+#: src/pages/SettingsOverlay.tsx:98
 msgid "Models"
 msgstr "Modelle"
 
@@ -2534,7 +2604,7 @@ msgstr "Keine passenden Modelle"
 msgid "No MCP or API tool sources installed yet."
 msgstr "Noch keine MCP- oder API-Toolquellen installiert."
 
-#: src/pages/McpServersOverlay.tsx:426
+#: src/pages/McpServersOverlay.tsx:440
 msgid "No MCP servers yet."
 msgstr "Noch keine MCP-Server."
 
@@ -2616,19 +2686,15 @@ msgstr "Jetzt"
 msgid "Now using {0}."
 msgstr "Jetzt wird {0} verwendet."
 
-#: src/pages/McpOAuthCallback.tsx:24
-msgid "OAuth authorization was cancelled."
-msgstr "OAuth-Autorisierung wurde abgebrochen."
-
-#: src/pages/McpServersOverlay.tsx:32
+#: src/pages/McpServersOverlay.tsx:33
 msgid "OAuth connected"
 msgstr "OAuth verbunden"
 
-#: src/pages/McpOAuthCallback.tsx:52
+#: src/pages/McpOAuthCallback.tsx:50
 msgid "OAuth connection failed"
 msgstr "OAuth-Verbindung fehlgeschlagen"
 
-#: src/pages/McpServersOverlay.tsx:33
+#: src/pages/McpServersOverlay.tsx:34
 msgid "OAuth expired"
 msgstr ""
 
@@ -2655,6 +2721,10 @@ msgstr "Öffnen"
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx:2826
 msgid "Open {0}"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:140
+msgid "Open documentation"
 msgstr ""
 
 #: src/pages/Shell.tsx:3492
@@ -2695,7 +2765,7 @@ msgstr "Optional"
 msgid "Optional controls most people never need"
 msgstr "Optionale Einstellungen, die die meisten nie benötigen"
 
-#: src/pages/McpServersOverlay.tsx:376
+#: src/pages/McpServersOverlay.tsx:390
 msgid "Optional header value"
 msgstr "Optionaler Header-Wert"
 
@@ -2831,6 +2901,10 @@ msgstr "Reagieren"
 msgid "Reactions"
 msgstr "Reaktionen"
 
+#: src/components/integrations/catalog/ToolPicker.tsx:32
+msgid "Read"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx:614
 msgid "Read replies aloud"
 msgstr "Antworten vorlesen"
@@ -2856,7 +2930,7 @@ msgstr ""
 msgid "Recent"
 msgstr "Kürzlich"
 
-#: src/pages/McpServersOverlay.tsx:39
+#: src/pages/McpServersOverlay.tsx:40
 msgid "Reconnect OAuth"
 msgstr "OAuth erneut verbinden"
 
@@ -3077,7 +3151,7 @@ msgstr "Jetzt erneut versuchen"
 msgid "Retry screen"
 msgstr ""
 
-#: src/pages/McpOAuthCallback.tsx:62
+#: src/pages/McpOAuthCallback.tsx:60
 msgid "Return to Ardur Bot"
 msgstr "Zurück zu Ardur Bot"
 
@@ -3085,6 +3159,18 @@ msgstr "Zurück zu Ardur Bot"
 #: src/pages/KnowledgeSection.tsx:180
 msgid "rev {0}"
 msgstr "Rev. {0}"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:147
+#: src/components/integrations/catalog/IntegrationManage.tsx:161
+#: src/components/integrations/catalog/McpToolReview.tsx:83
+#: src/pages/McpServersOverlay.tsx:495
+msgid "Review tools"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:100
+#: src/components/integrations/catalog/IntegrationManage.tsx:123
+msgid "Review tools before your bots can use this account."
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx:324
 msgid "Revoke"
@@ -3141,11 +3227,17 @@ msgstr "Wird ausgeführt · Stoppen"
 msgid "Running…"
 msgstr "Wird ausgeführt…"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx:100
+msgid "Runs on"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx:532
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr ""
 
 #: src/components/AskCard.tsx:157
+#: src/components/integrations/catalog/IntegrationManage.tsx:161
+#: src/components/integrations/catalog/McpToolReview.tsx:117
 #: src/components/teach/SkillDraftCard.tsx:142
 #: src/pages/ExternalConversationSettings.tsx:255
 #: src/pages/GroupPanel.tsx:236
@@ -3280,27 +3372,31 @@ msgstr "Wird gesendet…"
 msgid "Sentry alert"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx:101
+msgid "Server"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx:132
 #: src/pages/AccountSettingsOverlay.tsx:162
 #: src/pages/LocalSettings.tsx:42
 msgid "Server integrations"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx:282
+#: src/pages/McpServersOverlay.tsx:296
 msgid "Server name"
 msgstr "Servername"
 
 #: src/components/integrations/IntegrationSetup.tsx:282
 #: src/components/integrations/IntegrationSetup.tsx:300
-#: src/pages/McpServersOverlay.tsx:329
+#: src/pages/McpServersOverlay.tsx:343
 #: src/pages/ModelSettingsOverlay.tsx:473
 #: src/pages/Onboarding.tsx:415
 msgid "Server URL"
 msgstr "Server-URL"
 
 #: src/pages/MessagingSettingsOverlay.tsx:361
-#: src/pages/SettingsOverlay.tsx:94
-#: src/pages/SettingsOverlay.tsx:149
+#: src/pages/SettingsOverlay.tsx:108
+#: src/pages/SettingsOverlay.tsx:163
 #: src/pages/Shell.tsx:3139
 #: src/pages/Shell.tsx:3146
 #: src/pages/Shell.tsx:3442
@@ -3490,7 +3586,7 @@ msgstr "Anlernen beenden"
 msgid "Stopped."
 msgstr "Gestoppt."
 
-#: src/pages/McpServersOverlay.tsx:361
+#: src/pages/McpServersOverlay.tsx:375
 msgid "Stored encrypted"
 msgstr "Verschlüsselt gespeichert"
 
@@ -3572,6 +3668,10 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:105
+msgid "The connection was cancelled."
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx:245
 msgid "The selected memory provider is not available in this build."
 msgstr "Der ausgewählte Erinnerungsanbieter ist in diesem Build nicht verfügbar."
@@ -3617,13 +3717,17 @@ msgstr "Dieser Link zum Zurücksetzen ist ungültig oder abgelaufen"
 msgid "This server cannot be assigned without a bot."
 msgstr "Dieser Server kann ohne Bot nicht zugewiesen werden."
 
-#: src/pages/McpServersOverlay.tsx:189
+#: src/pages/McpServersOverlay.tsx:191
 msgid "This server did not request browser authorization."
 msgstr "Dieser Server hat keine Browserautorisierung angefordert."
 
-#: src/pages/McpServersOverlay.tsx:185
+#: src/pages/McpServersOverlay.tsx:187
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "Dieser Server ist bereits verbunden. Trenne zuerst die Verbindung, um ihn erneut zu autorisieren."
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:107
+msgid "This service needs client registration before you can connect."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx:811
 msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
@@ -3658,6 +3762,10 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg-Token"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:120
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:160
+#: src/components/integrations/catalog/IntegrationManage.tsx:112
+#: src/components/integrations/catalog/McpToolReview.tsx:87
 #: src/pages/Onboarding.tsx:690
 msgid "Try again"
 msgstr "Erneut versuchen"
@@ -3727,7 +3835,7 @@ msgstr ""
 msgid "Updated"
 msgstr ""
 
-#: src/pages/SettingsOverlay.tsx:89
+#: src/pages/SettingsOverlay.tsx:103
 msgid "Updates"
 msgstr "Updates"
 
@@ -3750,7 +3858,7 @@ msgid "Upload"
 msgstr "Hochladen"
 
 #: src/pages/AccountSettingsOverlay.tsx:203
-#: src/pages/SettingsOverlay.tsx:87
+#: src/pages/SettingsOverlay.tsx:101
 #: src/pages/Shell.tsx:3151
 #: src/pages/Shell.tsx:3162
 msgid "Usage"
@@ -3774,6 +3882,10 @@ msgstr ""
 msgid "Use this model"
 msgstr "Dieses Modell verwenden"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:176
+msgid "Use your GitLab host"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx:1092
 msgid "Verify and add"
 msgstr "Prüfen und hinzufügen"
@@ -3782,7 +3894,7 @@ msgstr "Prüfen und hinzufügen"
 msgid "Verifying…"
 msgstr "Wird geprüft…"
 
-#: src/pages/SettingsOverlay.tsx:86
+#: src/pages/SettingsOverlay.tsx:100
 #: src/pages/Shell.tsx:5465
 #: src/pages/Shell.tsx:5466
 #: src/pages/shell/bot-panel.tsx:618
@@ -3863,6 +3975,10 @@ msgstr "Wo sollen Bots ausgeführt werden?"
 msgid "Working…"
 msgstr "Wird verarbeitet…"
 
+#: src/components/integrations/catalog/ToolPicker.tsx:32
+msgid "Write"
+msgstr ""
+
 #: src/pages/Shell.tsx:5597
 msgid "Yesterday"
 msgstr "Gestern"
@@ -3872,17 +3988,25 @@ msgstr "Gestern"
 msgid "You"
 msgstr "Du"
 
-#: src/pages/McpOAuthCallback.tsx:69
+#: src/pages/McpOAuthCallback.tsx:67
 msgid "You can close this tab if it does not redirect automatically."
 msgstr "Du kannst diesen Tab schließen, wenn du nicht automatisch weitergeleitet wirst."
 
-#: src/pages/McpOAuthCallback.tsx:67
+#: src/pages/McpOAuthCallback.tsx:65
 msgid "You can close this window."
 msgstr "Du kannst dieses Fenster schließen."
 
 #: src/pages/Shell.tsx:4269
 msgid "You have control"
 msgstr "Du hast die Kontrolle"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx:101
+msgid "Your account is connected."
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx:121
+msgid "Your bots can use the selected tools."
+msgstr ""
 
 #: src/pages/Auth.tsx:157
 msgid "Your email address"

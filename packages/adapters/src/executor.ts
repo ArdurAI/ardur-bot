@@ -212,6 +212,7 @@ import {
   selectCompactedHistory,
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
+import { integrationApprovalForCall } from "./integration-access.js";
 import {
   assertConnectorToolArgs,
   CATALOG_EXECUTE,
@@ -1936,6 +1937,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }
             }
           }
+          const integrationApproval = await integrationApprovalForCall(
+            deps.prisma,
+            connectorCall.route,
+            context,
+            args,
+          );
+          if (integrationApproval === "disabled")
+            return { error: "This tool is no longer granted. Review tools in Settings." };
           const viaConnector = !BUILTIN_AGENT_TOOL_NAMES.has(name);
           const requiresUnattendedApproval = unattendedTriggerToolRequiresApproval(
             run.trigger,
@@ -1945,7 +1954,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const requiresApprovalByDefault =
             requiresUnattendedApproval || toolRequiresApproval(name, viaConnector);
           const requiresMandatoryApproval =
-            requiresUnattendedApproval || toolRequiresExplicitApproval(name);
+            integrationApproval === "ask-first" ||
+            requiresUnattendedApproval ||
+            toolRequiresExplicitApproval(name);
           const connectorKind = connectorKindFromToolName(
             name,
             connectedPlugins.map((plugin) => plugin.provider),
@@ -1956,6 +1967,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 toolName: name,
                 connectorKind,
                 rules: await loadApprovalRules(),
+                integrationApproval,
               });
           const autoReviewPref = requiresMandatoryApproval
             ? false
@@ -2192,6 +2204,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               blocks: [
                 buildApprovalAskBlock(applied!.effect.id, name, args, runSecrets, {
                   reviewReason,
+                  allowAlways: !requiresMandatoryApproval,
                 }),
               ],
             });

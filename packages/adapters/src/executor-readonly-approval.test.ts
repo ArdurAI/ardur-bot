@@ -57,6 +57,7 @@ function fixture({
     description: "Test assistant",
   },
   shutdownSignal,
+  integration = false,
 }: {
   name?: string;
   catalog?: boolean;
@@ -67,6 +68,7 @@ function fixture({
   prompt?: string;
   bot?: { name: string; title: string; description: string };
   shutdownSignal?: AbortSignal;
+  integration?: boolean;
 } = {}) {
   const tool: ConnectorTool = {
     name,
@@ -77,7 +79,32 @@ function fixture({
       properties: { id: { type: "string" } },
       required: ["id"],
     },
-    route: { connectorId: "demo", resourceId: "resource-1", toolName: name },
+    route: {
+      connectorId: integration ? "mcp" : "demo",
+      resourceId: "resource-1",
+      resourceRevision: 1,
+      toolName: name,
+    },
+  };
+  const grant = {
+    allowAllTools: false,
+    needsReview: false,
+    allowedTools: [name],
+    server: {
+      enabled: true,
+      catalogId: "github",
+      connectionState: "connected",
+      revision: 1,
+      spaceAllowedTools: [name],
+      manifest: {
+        capturedAt: "2026-09-23T00:00:00.000Z",
+        serverVersion: null,
+        account: null,
+        tools: [
+          { id: name, description: "Synthetic test tool", inputSchemaDigest: "a".repeat(64) },
+        ],
+      },
+    },
   };
   const effects: Effect[] = [];
   const results: unknown[] = [];
@@ -133,6 +160,7 @@ function fixture({
     ),
   };
   const prisma = {
+    botMcpServer: { findFirst: vi.fn(async () => grant) },
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
@@ -227,6 +255,7 @@ function fixture({
     shutdownSignal,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
   return {
+    grant,
     effects,
     results,
     execute,
@@ -493,4 +522,41 @@ describe("connector read-only metadata and approval enforcement", () => {
       expect(f.pauseRunForInput).not.toHaveBeenCalled();
     });
   });
+});
+
+describe("catalog policy at the executor gate", () => {
+  it.each([false, true])(
+    "requires owner approval despite an allow rule and auto-review (lazy=%s)",
+    async (catalog) => {
+      const name = "synthetic_get_item";
+      const f = fixture({
+        integration: true,
+        catalog,
+        name,
+        autoReview: true,
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: name }],
+      });
+      reviewMock.mockReset();
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      expect(isApprovalPausedResult(f.results[0])).toBe(true);
+      expect(reviewMock).not.toHaveBeenCalled();
+    },
+  );
+  it.each([false, true])(
+    "rejects revoked grants even during an approved replay (lazy=%s)",
+    async (catalog) => {
+      const f = fixture({ integration: true, catalog });
+      await f.run();
+      expect(f.effects).toHaveLength(1);
+      f.effects[0]!.status = "approved";
+      f.grant.allowedTools = [];
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.results.at(-1)).toMatchObject({
+        error: expect.stringContaining("no longer granted"),
+      });
+    },
+  );
 });

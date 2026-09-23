@@ -1,4 +1,4 @@
-import type { AgentToolCompletion, ConnectorTool } from "@ardurbot/adapter-kit";
+import type { AgentToolCompletion, ConnectorRoute, ConnectorTool } from "@ardurbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fakeAgentState = vi.hoisted(() => ({
@@ -11,7 +11,8 @@ const fakeAgentState = vi.hoisted(() => ({
     | "parent-limit"
     | "parent-parallel"
     | "ask-pause"
-    | "nested-ask-pause",
+    | "nested-ask-pause"
+    | "nested-integration",
   emitFinalAfterFollowUp: true,
   abortCount: 0,
   tools: [] as Array<{
@@ -70,6 +71,16 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
         return;
       }
 
+      if (fakeAgentState.mode === "nested-integration") {
+        const delegation = this.tools.find((tool) => tool.name === "run_subagent");
+        if (delegation)
+          await delegation.execute("delegate", { name: "helper", task: "Read a synthetic item" });
+        else
+          fakeAgentState.toolResult = await this.tools
+            .find((tool) => tool.name === "synthetic_read")!
+            .execute("nested-call", {});
+        return;
+      }
       if (fakeAgentState.mode === "dispatch") {
         const target =
           this.tools.find((tool) => tool.name === fakeAgentState.invoke.name) ?? this.tools[0];
@@ -254,7 +265,9 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
   registerOpenAiCompatibleRuntime: (models: unknown) => models,
 }));
 
+import { approvalPausedToolResult } from "./approval-effect.js";
 import { toolCompletionAuditPayload } from "./executor.js";
+import { integrationApprovalForCall } from "./integration-access.js";
 import { maxToolCallsPerTurn, PiAgentRuntime } from "./pi-runtime.js";
 import { TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
 
@@ -1456,4 +1469,112 @@ describe("Pi connector tool dispatch", () => {
       "call-1",
     );
   });
+});
+
+describe("nested integration access", () => {
+  it.each([false, true])(
+    "uses the parent grant and approval boundary (revoked=%s)",
+    async (revoked) => {
+      fakeAgentState.mode = "nested-integration";
+      const route: ConnectorRoute = {
+        connectorId: "mcp",
+        resourceId: "connection",
+        resourceRevision: 1,
+        toolName: "synthetic_read",
+      };
+      const db = {
+        botMcpServer: {
+          findFirst: vi.fn(async () => ({
+            allowAllTools: false,
+            needsReview: false,
+            allowedTools: revoked ? [] : ["synthetic_read"],
+            server: {
+              enabled: true,
+              catalogId: "github",
+              connectionState: "connected",
+              revision: 1,
+              spaceAllowedTools: ["synthetic_read"],
+              manifest: {
+                capturedAt: "2026-09-23T00:00:00.000Z",
+                serverVersion: null,
+                account: null,
+                tools: [
+                  {
+                    id: "synthetic_read",
+                    description: "Synthetic test tool",
+                    inputSchemaDigest: "a".repeat(64),
+                  },
+                ],
+              },
+            },
+          })),
+        },
+      };
+      const context = {
+        operationId: "nested",
+        traceId: "nested",
+        spaceId: "space",
+        userId: "owner",
+        botId: "bot",
+        signal: new AbortController().signal,
+      };
+      const transport = vi.fn();
+      const decisions: unknown[] = [];
+      const executeTool = vi.fn(
+        async (
+          _name: string,
+          args: Record<string, unknown>,
+          _id: string,
+          resolvedRoute?: ConnectorRoute,
+        ) => {
+          const decision = await integrationApprovalForCall(
+            db as never,
+            resolvedRoute,
+            context,
+            args,
+          );
+          decisions.push(decision);
+          if (decision === "disabled") return { error: "Tool is not granted" };
+          if (decision === "ask-first") return approvalPausedToolResult();
+          return transport();
+        },
+      );
+      for await (const _event of new PiAgentRuntime().run(
+        {
+          botId: "bot",
+          threadId: "thread",
+          runId: "nested",
+          prompt: "Delegate",
+          instructions: "Use a helper",
+          history: [],
+          tools: [
+            { name: "run_subagent", description: "Delegate", inputSchema: { type: "object" } },
+            {
+              name: "synthetic_read",
+              description: "Synthetic read",
+              inputSchema: { type: "object" },
+              route,
+            },
+          ],
+          model: { provider: "test", id: "dispatch-test-model" },
+          executeTool,
+        },
+        context,
+      )) {
+        /* Drain the real nested runtime. */
+      }
+      expect(decisions).toEqual([revoked ? "disabled" : "ask-first"]);
+      expect(transport).not.toHaveBeenCalled();
+      expect(db.botMcpServer.findFirst).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          botId: "bot",
+          spaceId: "space",
+          userId: "owner",
+          serverId: "connection",
+        }),
+        include: { server: true },
+      });
+      fakeAgentState.mode = "dispatch";
+    },
+  );
 });

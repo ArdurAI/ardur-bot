@@ -1,9 +1,21 @@
 import type { AvatarStyle, SpaceMemoryConfig } from "@ardurbot/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
-import { Brain, CloudDownload, Cpu, Gauge, Monitor, Settings, Volume2, XIcon } from "lucide-react";
-import { type ComponentType, useEffect, useRef, useState } from "react";
+import {
+  Brain,
+  CloudDownload,
+  Cpu,
+  Gauge,
+  Monitor,
+  Plug,
+  Settings,
+  Volume2,
+  XIcon,
+} from "lucide-react";
+import type { ComponentType } from "react";
+import { useEffect, useRef, useState } from "react";
 import { computersAreUnavailable } from "../components/ComputersUnavailableHint";
+import { IntegrationCatalog } from "../components/integrations/catalog/IntegrationCatalog";
 import {
   ComputerSettingsPanel,
   GeneralSettingsPanels,
@@ -15,6 +27,7 @@ import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
 
 export type SettingsSection =
+  | "integrations"
   | "general"
   | "models"
   | "memory"
@@ -81,6 +94,7 @@ export function SettingsOverlay({
 
   const navItems: NavItem[] = [
     { id: "general", label: t`General`, icon: Settings },
+    { id: "integrations", label: t`Integrations`, icon: Plug },
     { id: "models", label: t`Models`, icon: Cpu },
     { id: "memory", label: t`Memory`, icon: Brain },
     { id: "voice", label: t`Voice`, icon: Volume2 },
@@ -194,6 +208,7 @@ export function SettingsOverlay({
                   : "rk-scroll overflow-y-auto overscroll-contain px-6 pb-6 pt-5 sm:px-8 sm:pb-8"
               }`}
             >
+              {section === "integrations" ? <IntegrationCatalog /> : null}
               {section === "general" ? (
                 <GeneralSettingsPanels
                   email={email}

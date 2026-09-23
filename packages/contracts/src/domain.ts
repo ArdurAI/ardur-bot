@@ -701,6 +701,7 @@ export const BotMcpServerSchema = z.object({
   botId: Id,
   serverId: Id,
   allowAllTools: z.boolean(),
+  needsReview: z.boolean().default(false),
   allowedTools: z.array(z.string().min(1).max(200)),
   createdAt: z.string(),
   updatedAt: z.string(),

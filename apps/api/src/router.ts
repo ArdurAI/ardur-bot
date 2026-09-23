@@ -150,6 +150,7 @@ import {
   toComputerStatus,
 } from "./computer-status.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
+import { IntegrationConnections } from "./integration-connections.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
 import {
   disconnectMemoryProvider,
@@ -403,6 +404,7 @@ function mcpAssignmentDto(row: {
   serverId: string;
   allowAllTools: boolean;
   allowedTools: unknown;
+  needsReview?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -410,10 +412,12 @@ function mcpAssignmentDto(row: {
     id: row.id,
     botId: row.botId,
     serverId: row.serverId,
-    allowAllTools: row.allowAllTools,
-    allowedTools: Array.isArray(row.allowedTools)
-      ? row.allowedTools.filter((item): item is string => typeof item === "string")
-      : [],
+    allowAllTools: false,
+    needsReview: row.needsReview === true || row.allowAllTools,
+    allowedTools:
+      !row.needsReview && !row.allowAllTools && Array.isArray(row.allowedTools)
+        ? row.allowedTools.filter((item): item is string => typeof item === "string")
+        : [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -456,6 +460,8 @@ export interface RouterDeps {
     updaterToken?: string;
     imageTag?: string;
     integrationsCatalogUrl?: string;
+    mcpStdioEnabled?: boolean;
+    mcpStdioAllowedCommands?: string[];
   };
 }
 
@@ -482,6 +488,14 @@ export function createRouter(deps: RouterDeps) {
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
+  const integrations = new IntegrationConnections(
+    deps.prisma,
+    mcpOAuth,
+    deps.secrets,
+    deps.env.webOrigin,
+    deps.remoteConnectors,
+    { stdioEnabled: deps.env.mcpStdioEnabled, allowedCommands: deps.env.mcpStdioAllowedCommands },
+  );
   const groupRepos = createGroupRepos(deps.prisma);
   const taughtSkills = createTaughtSkillsService({
     prisma: deps.prisma,
@@ -986,7 +1000,8 @@ export function createRouter(deps: RouterDeps) {
               userId: context.actor.userId,
               botId: duplicate.id,
               serverId: assignment.serverId,
-              allowAllTools: assignment.allowAllTools,
+              allowAllTools: false,
+              needsReview: assignment.needsReview || assignment.allowAllTools,
               allowedTools: assignment.allowedTools as Prisma.InputJsonValue,
             })),
           });
@@ -2854,8 +2869,33 @@ export function createRouter(deps: RouterDeps) {
         return { ok: true as const };
       }),
     },
+    integrations: {
+      list: authed.integrations.list.handler(({ context }) => integrations.list(context.actor)),
+      connect: authed.integrations.connect.handler(({ context, input }) =>
+        integrations.connect(context.actor, input),
+      ),
+      assign: authed.integrations.assign.handler(({ context, input }) =>
+        integrations.assign(context.actor, input),
+      ),
+      grants: authed.integrations.grants.handler(({ context, input }) =>
+        integrations.grants(context.actor, input.connectionId),
+      ),
+      revoke: authed.integrations.revoke.handler(({ context, input }) =>
+        integrations.revoke(context.actor, input.connectionId),
+      ),
+      cancel: authed.integrations.cancel.handler(({ context, input }) =>
+        integrations.revoke(context.actor, input.connectionId, "cancelled"),
+      ),
+      discover: authed.integrations.discover.handler(async ({ context, input }) => {
+        await integrations.capture(context.actor, input.connectionId);
+        return { ok: true as const };
+      }),
+    },
     mcp: {
       servers: {
+        tools: authed.mcp.servers.tools.handler(({ context, input }) =>
+          integrations.tools(context.actor, input.serverId),
+        ),
         list: authed.mcp.servers.list.handler(async ({ context }) => {
           const rows = await deps.prisma.mcpServer.findMany({
             where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
@@ -2940,6 +2980,10 @@ export function createRouter(deps: RouterDeps) {
               },
             });
             if (!existing) throw new IsolationError();
+            if (existing.catalogId)
+              throw new ORPCError("BAD_REQUEST", {
+                message: "Manage this connection in Integrations.",
+              });
             const existingSecret = existing.secretId
               ? await tx.secret.findFirst({
                   where: {
@@ -3132,7 +3176,8 @@ export function createRouter(deps: RouterDeps) {
                 userId: context.actor.userId,
                 botId: bot.id,
                 serverId: server.id,
-                allowAllTools: true,
+                allowAllTools: false,
+                needsReview: true,
                 allowedTools: [],
               },
               update: {},
@@ -3174,7 +3219,8 @@ export function createRouter(deps: RouterDeps) {
                   userId: context.actor.userId,
                   botId: bot.id,
                   serverId: assignment.serverId,
-                  allowAllTools: assignment.allowAllTools,
+                  allowAllTools: false,
+                  needsReview: assignment.needsReview,
                   allowedTools: assignment.allowedTools as Prisma.InputJsonValue,
                 })),
               });
@@ -3210,15 +3256,16 @@ export function createRouter(deps: RouterDeps) {
         }),
         complete: authed.mcp.oauth.complete.handler(async ({ context, input }) => {
           try {
-            await mcpOAuth.complete({
+            const serverId = await mcpOAuth.complete({
               ...input,
               spaceId: context.actor.spaceId,
               userId: context.actor.userId,
             });
+            if (serverId) await integrations.capture(context.actor, serverId);
             return { ok: true as const };
-          } catch (error) {
+          } catch {
             throw new ORPCError("BAD_REQUEST", {
-              message: error instanceof Error ? error.message : "Could not complete MCP OAuth",
+              message: "Could not complete authorization. Try connecting again.",
             });
           }
         }),

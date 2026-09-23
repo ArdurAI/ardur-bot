@@ -21,15 +21,24 @@ export async function connectMcpOauth(serverId: string): Promise<McpOauthResult>
     redirectUri: `${window.location.origin}/mcp/oauth/callback`,
   });
   if (started.status !== "authorization_required") return started.status;
-  const popup = window.open(
-    started.authorizationUrl,
-    MCP_OAUTH_CHANNEL,
-    "popup,width=560,height=720",
-  );
+  return waitForMcpOauth(started.authorizationUrl, undefined, started.sessionId);
+}
+
+export async function waitForMcpOauth(
+  authorizationUrl: string,
+  existingPopup?: Window | null,
+  sessionId?: string | null,
+): Promise<McpOauthResult> {
+  const popup =
+    existingPopup === undefined
+      ? window.open(authorizationUrl, MCP_OAUTH_CHANNEL, "popup,width=560,height=720")
+      : existingPopup;
+  if (existingPopup) existingPopup.location.href = authorizationUrl;
   if (!popup) {
     // Popup blocked: navigate this tab instead; the callback page returns to /app.
-    window.location.assign(started.authorizationUrl);
-    return "cancelled";
+    window.location.assign(authorizationUrl);
+    // Navigation owns completion; do not cancel the server-side session.
+    return "authorization_not_requested";
   }
   return await new Promise<McpOauthResult>((resolve) => {
     const channel = new BroadcastChannel(MCP_OAUTH_CHANNEL);
@@ -53,7 +62,9 @@ export async function connectMcpOauth(serverId: string): Promise<McpOauthResult>
       finish("cancelled");
     }, MCP_OAUTH_TIMEOUT_MS);
     channel.onmessage = (event: MessageEvent) => {
-      if ((event.data as { type?: string } | null)?.type !== "mcp-oauth-complete") return;
+      const data = event.data as { type?: string; sessionId?: string } | null;
+      if (data?.type !== "mcp-oauth-complete" || (sessionId && data.sessionId !== sessionId))
+        return;
       finish("connected");
     };
   });

@@ -71,3 +71,8 @@ describe("buildApprovalAskBlock", () => {
     expect(block.detail).toContain("stay separate from other spaces");
   });
 });
+
+it("omits permanent allow for a mandatory catalog approval", () => {
+  const block = buildApprovalAskBlock("effect", "synthetic_write", {}, [], { allowAlways: false });
+  expect(block).toMatchObject({ actions: [{ id: "allow" }, { id: "deny" }] });
+});

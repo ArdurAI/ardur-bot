@@ -2,19 +2,14 @@ import { isLocalMcpHost } from "@ardurbot/contracts";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import {
-  StdioClientTransport,
-  type StdioServerParameters,
-} from "@modelcontextprotocol/sdk/client/stdio.js";
+import type { StdioServerParameters } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult, ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import { combineSignals } from "./connector-safety.js";
-import {
-  createSafeRemoteFetch,
-  type RemoteTransportDependencies,
-  type SafeRemoteFetch,
-} from "./remote-mcp.js";
+import type { RemoteTransportDependencies, SafeRemoteFetch } from "./remote-mcp.js";
+import { createSafeRemoteFetch } from "./remote-mcp.js";
 
 export type McpRemoteTransport = "streamable-http" | "sse";
 
@@ -352,7 +347,23 @@ export class McpSession {
 
   async listTools(options?: { signal?: AbortSignal }): Promise<ListToolsResult> {
     this.assertConnected();
-    return this.client.listTools({}, { signal: options?.signal });
+    const tools: ListToolsResult["tools"] = [];
+    const cursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const page = await this.client.listTools({ cursor }, { signal: options?.signal });
+      tools.push(...page.tools);
+      if (tools.length > 2000) throw new Error("MCP tool manifest is too large");
+      cursor = page.nextCursor;
+      if (cursors.size >= 100) throw new Error("MCP tool pagination exceeded the page limit");
+      if (cursor && cursors.has(cursor)) throw new Error("MCP tool pagination repeated a cursor");
+      if (cursor) cursors.add(cursor);
+    } while (cursor);
+    return { tools };
+  }
+
+  serverVersion(): string | null {
+    return this.client.getServerVersion()?.version ?? null;
   }
 
   async callTool(
