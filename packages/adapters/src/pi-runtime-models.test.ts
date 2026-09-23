@@ -124,3 +124,66 @@ describe("resolveRuntimeModel", () => {
     expect(resolved.provider).toBe("anthropic");
   });
 });
+
+it("does not look up a pinned model on OpenRouter under another provider", () => {
+  const pin = {
+    provider: "xai",
+    modelId: "openai/gpt-5.6-luna",
+    effort: "high",
+    credentialId: "connection",
+    revision: 1,
+  };
+  const result = resolveRuntimeModel({
+    provider: pin.provider,
+    id: pin.modelId,
+    apiKey: "test-key",
+    runtimePin: pin,
+  });
+  expect(result.provider).toBe("xai");
+  expect(result.model).toBeUndefined();
+});
+
+it("rejects a pinned request without its key before environment credential recovery", () => {
+  const pin = {
+    provider: "openrouter",
+    modelId: "openai/gpt-5.6-luna",
+    effort: "high",
+    credentialId: "connection",
+    revision: 1,
+  };
+  expect(() =>
+    resolveRuntimeModel({ provider: pin.provider, id: pin.modelId, runtimePin: pin }),
+  ).toThrow(
+    expect.objectContaining({
+      problem: expect.objectContaining({ code: "pin-credential-missing", pin }),
+    }),
+  );
+});
+
+it("requires the bound endpoint for a pinned keyless custom model", () => {
+  const pin = {
+    provider: "openai-compatible",
+    modelId: "local-model",
+    effort: "off",
+    credentialId: "connection",
+    revision: 1,
+  };
+  expect(() =>
+    resolveRuntimeModel({ provider: pin.provider, id: pin.modelId, runtimePin: pin }),
+  ).toThrow(
+    expect.objectContaining({
+      problem: expect.objectContaining({ code: "pin-credential-missing" }),
+    }),
+  );
+  expect(
+    resolveRuntimeModel({
+      provider: pin.provider,
+      id: pin.modelId,
+      runtimePin: pin,
+      baseUrl: "http://localhost:8080/v1",
+    }),
+  ).toMatchObject({
+    model: { provider: pin.provider, id: pin.modelId, baseUrl: "http://localhost:8080/v1" },
+    apiKey: "local",
+  });
+});

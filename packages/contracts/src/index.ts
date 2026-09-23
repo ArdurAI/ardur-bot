@@ -14,4 +14,5 @@ export * from "./provider-errors.js";
 export * from "./reactions.js";
 export * from "./rpc.js";
 export * from "./runs.js";
+export * from "./runtime-pins.js";
 export * from "./search.js";

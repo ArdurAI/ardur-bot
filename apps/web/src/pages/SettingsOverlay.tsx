@@ -34,6 +34,7 @@ export function SettingsOverlay({
   name,
   usage,
   initialSection = "general",
+  initialProvider,
   avatarStyle,
   onAvatarStyleChange,
   isDeploymentOwner = false,
@@ -49,6 +50,7 @@ export function SettingsOverlay({
   name: string;
   usage?: { runs: number; inputTokens: number; outputTokens: number } | null;
   initialSection?: SettingsSection;
+  initialProvider?: string;
   avatarStyle: AvatarStyle;
   onAvatarStyleChange: (style: AvatarStyle) => Promise<void>;
   isDeploymentOwner?: boolean;
@@ -215,7 +217,11 @@ export function SettingsOverlay({
                 <UpdatesSettingsPanel isDeploymentOwner={isDeploymentOwner} />
               ) : null}
               {section === "models" ? (
-                <ModelSettingsOverlay embedded onClose={requestClose} />
+                <ModelSettingsOverlay
+                  initialProvider={initialProvider}
+                  embedded
+                  onClose={requestClose}
+                />
               ) : null}
               {section === "memory" ? (
                 <MemorySettingsOverlay

@@ -12,6 +12,11 @@ import {
   BOT_TITLE_MAX_LENGTH,
 } from "@ardurbot/contracts";
 import {
+  modelPinOptionKey as modelOptionKey,
+  parseModelPinOptionKey as parseModelOptionKey,
+  spaceDefaultEffort,
+} from "@ardurbot/core";
+import {
   Button,
   Input,
   NativeSelect,
@@ -217,6 +222,7 @@ export function BotSettings({
     voiceId?: string | null;
     modelProvider?: string | null;
     modelId?: string | null;
+    modelCredentialId?: string | null;
     thinkingLevel?: ThinkingLevel | null;
   }) => Promise<void>;
   onExport: () => Promise<void>;
@@ -242,7 +248,9 @@ export function BotSettings({
   const [voiceId, setVoiceId] = useState(bot.voiceId ?? "");
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [modelKey, setModelKey] = useState(
-    bot.modelProvider && bot.modelId ? modelOptionKey(bot.modelProvider, bot.modelId) : "",
+    bot.modelProvider && bot.modelId
+      ? modelOptionKey(bot.modelProvider, bot.modelId, bot.modelCredentialId)
+      : "",
   );
   const [thinkingLevel, setThinkingLevel] = useState(bot.thinkingLevel ?? "");
   const loadedSettings = useModelSettings(undefined, false, modelSettings === undefined);
@@ -302,14 +310,14 @@ export function BotSettings({
         !unavailableSubscriptionModel(catalog, credential.provider, credential.modelId))
         ? [
             {
-              key: modelOptionKey(credential.provider, credential.modelId),
+              key: modelOptionKey(credential.provider, credential.modelId, credential.id),
               provider: credential.provider,
               modelId: credential.modelId,
               label: `${credential.label} · ${credential.modelId}`,
             },
           ]
         : providerModels.map((entry) => ({
-            key: modelOptionKey(entry.provider, entry.id),
+            key: modelOptionKey(entry.provider, entry.id, credential.id),
             provider: entry.provider,
             modelId: entry.id,
             label: `${entry.providerName ?? entry.provider} · ${entry.label}`,
@@ -333,15 +341,16 @@ export function BotSettings({
           (entry) => entry.provider === effectiveProvider && entry.id === effectiveModelId,
         )
       : undefined;
-  const effectiveCredential = credentials.find(
-    (entry) => entry.provider === effectiveProvider && entry.modelId === effectiveModelId,
+  const effectiveCredential = credentials.find((entry) =>
+    parseModelOptionKey(modelKey)?.credentialId
+      ? entry.id === parseModelOptionKey(modelKey)?.credentialId
+      : entry.provider === effectiveProvider && entry.modelId === effectiveModelId,
   );
-  const thinkingOptions = (
-    effectiveCredential?.thinkingLevels ??
-    effectiveEntry?.thinkingLevels ??
-    []
-  ).filter((level) => level !== "off");
-  const defaultThinkingLevel = effectiveCredential?.thinkingLevel ?? "medium";
+  const supportedThinking =
+    effectiveCredential?.thinkingLevels ?? effectiveEntry?.thinkingLevels ?? [];
+  const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) => level !== "off");
+  const defaultThinkingLevel =
+    effectiveCredential?.thinkingLevel ?? spaceDefaultEffort(undefined, supportedThinking);
   const unavailableDefault = metadata ? spaceDefaultUnavailable(metadata) : false;
   const selectedModel = parseModelOptionKey(modelKey);
   const unavailableSelection =
@@ -386,12 +395,12 @@ export function BotSettings({
         voiceId: voiceId || null,
         modelProvider: selected?.provider ?? null,
         modelId: selected?.modelId ?? null,
+        modelCredentialId: selected
+          ? (selected.credentialId ?? bot.modelCredentialId ?? null)
+          : null,
         ...(modelMetaReady
           ? {
-              thinkingLevel:
-                thinkingOptions.length || (modelKey ? unavailableSelection : unavailableDefault)
-                  ? ((thinkingLevel || null) as ThinkingLevel | null)
-                  : null,
+              thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
             }
           : {}),
       });
@@ -547,7 +556,7 @@ export function BotSettings({
           <Trans>This model is not available on your account. Choose another model.</Trans>
         </p>
       ) : null}
-      {thinkingOptions.length ? (
+      {thinkingOptions.length || thinkingLevel ? (
         <label htmlFor={`${ids}-thinking`} className={fieldLabelClass}>
           <Trans>Thinking</Trans>
           <NativeSelect
@@ -559,6 +568,11 @@ export function BotSettings({
             <NativeSelectOption value="">
               {t`Default (${thinkingLevelDescription(defaultThinkingLevel)})`}
             </NativeSelectOption>
+            {thinkingLevel && !thinkingOptions.includes(thinkingLevel as ThinkingLevel) ? (
+              <NativeSelectOption value={thinkingLevel}>
+                {thinkingLevelDescription(thinkingLevel as ThinkingLevel)}
+              </NativeSelectOption>
+            ) : null}
             {thinkingOptions.map((level) => (
               <NativeSelectOption key={level} value={level}>
                 {thinkingLevelDescription(level)}
@@ -676,16 +690,6 @@ export function BotSettings({
       </div>
     </div>
   );
-}
-
-function modelOptionKey(provider: string, modelId: string) {
-  return `${provider}::${modelId}`;
-}
-
-function parseModelOptionKey(key: string) {
-  const separator = key.indexOf("::");
-  if (separator <= 0) return null;
-  return { provider: key.slice(0, separator), modelId: key.slice(separator + 2) };
 }
 
 function catalogLabel(

@@ -676,6 +676,10 @@ msgstr ""
 msgid "Change password"
 msgstr "修改密码"
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Change pin"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Changing…"
 msgstr "正在修改…"
@@ -920,6 +924,7 @@ msgstr "确认密码"
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "连接"
@@ -3458,6 +3463,10 @@ msgstr "所选记忆提供方在此构建中不可用。"
 #: src/pages/shell/bot-panel.tsx
 msgid "Thinking"
 msgstr "思考"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."

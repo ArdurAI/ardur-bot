@@ -433,6 +433,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Space actions for {name}": "{name} 的空间操作",
   "This removes the empty space for everyone.": "这将为所有人删除此空空间。",
   "Space created": "空间已创建",
+  "Change pin": "更改固定模型",
   "Space default": "空间默认",
   "Speak + transcribe": "朗读并转写",
   "Speak message": "朗读消息",

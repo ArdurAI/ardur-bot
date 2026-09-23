@@ -4,6 +4,7 @@ import { ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
+import { RuntimePinSchema, RuntimeProblemSchema } from "./runtime-pins.js";
 
 export const ComputerModeSchema = z.enum(["team", "dedicated"]);
 export type ComputerMode = z.infer<typeof ComputerModeSchema>;
@@ -67,6 +68,8 @@ export const BotSchema = z.object({
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
   thinkingLevel: ThinkingLevelSchema.nullable(),
+  modelCredentialId: z.string().nullable().optional(),
+  modelPinRevision: z.number().int().nonnegative().optional(),
   teamChatAmbientEnabled: z.boolean(),
   teamChatRules: z.string(),
   webhookConfigured: z.boolean(),
@@ -324,6 +327,7 @@ export const UpdateBotInput = z
     modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
     modelId: z.string().trim().min(1).max(200).nullable().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
+    modelCredentialId: z.string().min(1).nullable().optional(),
     teamChatAmbientEnabled: z.boolean().optional(),
     teamChatRules: z.string().max(TEAM_CHAT_RULES_MAX_LENGTH).optional(),
   })
@@ -841,6 +845,8 @@ export const RunSchema = z.object({
   modelId: z.string().nullable(),
   error: z.string().nullable(),
   providerErrorKind: ProviderErrorKindSchema.optional(),
+  runtimeProblem: RuntimeProblemSchema.optional(),
+  runtimePin: RuntimePinSchema.nullable().optional(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),
   createdAt: z.string(),

@@ -105,6 +105,15 @@ function fixture(runId = "run-1") {
       },
     ),
   };
+  const modelCredential = {
+    id: "model-connection",
+    userId: "user-1",
+    provider: "xai",
+    secretId: "model-secret",
+    label: "xai",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
   const prisma = {
     run: {
       findUnique: vi.fn(async () => run),
@@ -136,8 +145,15 @@ function fixture(runId = "run-1") {
       findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Update shared state" })),
     },
     connection: { findMany: vi.fn(async () => []) },
-    spaceModelPreference: { findFirst: vi.fn(async () => null) },
-    userModelCredential: { findFirst: vi.fn(async () => null) },
+    spaceModelPreference: {
+      findFirst: vi.fn(async () => ({
+        credential: modelCredential,
+        modelId: "grok-4.6",
+        isDefault: true,
+      })),
+    },
+    userModelCredential: { findFirst: vi.fn(async () => modelCredential) },
+    secret: { findFirst: vi.fn(async () => ({ id: "model-secret", ciphertext: "test-key" })) },
     deploymentSettings: {
       findUnique: vi.fn(async () => ({
         defaultModelProvider: "scripted",
@@ -195,6 +211,7 @@ function fixture(runId = "run-1") {
   });
   const executor = createRunExecutor({
     prisma,
+    secretStore: { load: () => "test-key" },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
     connector: {
       discoverTools: async () => [],
@@ -217,6 +234,8 @@ function fixture(runId = "run-1") {
 
   return {
     executor,
+    prisma,
+    runRecord: run,
     runtimeRun,
     finalizeRun,
     effects,
@@ -557,4 +576,89 @@ it("persists a sanitized typed provider failure through the executor", async () 
       providerErrorKind: "model-unavailable",
     }),
   );
+});
+
+it.each(["deleted-connection", "missing-secret", "unsupported-effort", "partial-pin"])(
+  "stops %s before model or tool work without retry",
+  async (scenario) => {
+    const f = fixture();
+    const original = await f.prisma.bot.findUniqueOrThrow();
+    const pin = {
+      modelProvider: "xai",
+      modelId: "grok-4.6",
+      thinkingLevel: scenario === "unsupported-effort" ? "max" : "high",
+      modelCredentialId: scenario === "partial-pin" ? null : "model-connection",
+      modelPinRevision: 1,
+    };
+    f.prisma.bot.findUniqueOrThrow.mockResolvedValue({ ...original, ...pin });
+    if (scenario === "deleted-connection")
+      f.prisma.userModelCredential.findFirst.mockResolvedValue(null!);
+    if (scenario === "missing-secret") f.prisma.secret.findFirst.mockResolvedValue(null!);
+    f.setCalls([
+      {
+        name: "remember",
+        args: { path: "MEMORY.md", content: "never written" },
+        executionId: "call",
+      },
+    ]);
+    await f.executor.continueRun("run-1", "worker-1");
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    expect(f.memoryCommit).not.toHaveBeenCalled();
+    expect(f.effects).toEqual([]);
+    expect(f.prisma.attempt.update).not.toHaveBeenCalled();
+    expect(f.finalizeRun).toHaveBeenCalledOnce();
+    expect(f.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: "failed",
+        runtimeProblem: expect.objectContaining({
+          kind: "problem",
+          code:
+            scenario === "unsupported-effort"
+              ? "pin-effort-unsupported"
+              : scenario === "partial-pin"
+                ? "pin-incomplete"
+                : "pin-credential-missing",
+        }),
+      }),
+    );
+  },
+);
+
+it("retries the run snapshot after the bot pin and space default change", async () => {
+  const f = fixture();
+  await f.run();
+  const first = f.runtimeRun.mock.calls[0]![0].model;
+  const original = await f.prisma.bot.findUniqueOrThrow();
+  f.prisma.bot.findUniqueOrThrow.mockResolvedValue({
+    ...original,
+    modelProvider: "missing",
+    modelId: "other",
+    thinkingLevel: "max",
+    modelCredentialId: "deleted",
+  } as typeof original);
+  f.prisma.spaceModelPreference.findFirst.mockResolvedValue(null!);
+  await f.run();
+  expect(f.runtimeRun.mock.calls[1]![0].model.runtimePin).toEqual(first.runtimePin);
+  expect(f.runtimeRun.mock.calls[1]![0].model.thinkingLevel).toBe(first.thinkingLevel);
+  expect(f.prisma.userModelCredential.findFirst).toHaveBeenLastCalledWith({
+    where: { id: "model-connection", userId: "user-1", provider: "xai" },
+  });
+});
+
+it("keeps a malformed snapshot failed across retries instead of binding the current bot", async () => {
+  const f = fixture();
+  const runtimePin = { provider: "xai", modelId: "old-model" };
+  Object.assign(f.runRecord, { runtimePin });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    f.runRecord.status = "queued";
+    await f.executor.continueRun("run-1", "worker-1");
+    expect(f.runRecord).toMatchObject({ runtimePin });
+    expect(f.finalizeRun).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        runtimeProblem: expect.objectContaining({ code: "pin-incomplete" }),
+      }),
+    );
+  }
+  expect(f.runtimeRun).not.toHaveBeenCalled();
+  expect(f.effects).toEqual([]);
 });

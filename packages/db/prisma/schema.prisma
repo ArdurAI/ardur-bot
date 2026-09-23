@@ -368,6 +368,8 @@ model Bot {
   modelProvider     String?
   modelId           String?
   thinkingLevel     String?
+  modelCredentialId String?
+  modelPinRevision  Int @default(0)
   webhookSecretId   String?
   teamChatAmbientEnabled Boolean @default(false)
   teamChatRules          String  @default("")
@@ -566,6 +568,7 @@ model Run {
   userId               String
   status               String
   trigger              String
+  runtimePin           Json?
   modelProvider        String?
   modelId              String?
   error                String?

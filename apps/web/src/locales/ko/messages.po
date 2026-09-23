@@ -676,6 +676,10 @@ msgstr ""
 msgid "Change password"
 msgstr "비밀번호 변경"
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Change pin"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Changing…"
 msgstr "변경 중…"
@@ -920,6 +924,7 @@ msgstr "비밀번호 확인"
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "연결"
@@ -3458,6 +3463,10 @@ msgstr "선택한 기억 서비스는 현재 빌드에서 사용할 수 없습�
 #: src/pages/shell/bot-panel.tsx
 msgid "Thinking"
 msgstr "생각 깊이"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."

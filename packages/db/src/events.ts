@@ -1124,6 +1124,7 @@ async function finalizeRunOnce(
           : {
               error: input.error,
               ...(input.providerErrorKind ? { providerErrorKind: input.providerErrorKind } : {}),
+              ...(input.runtimeProblem ? { runtimeProblem: input.runtimeProblem } : {}),
             },
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
@@ -1150,7 +1151,10 @@ async function finalizeRunOnce(
         data: { runId: null },
       });
     }
-    const continuationRunId = await createSteeringContinuation(tx, input);
+    const continuationRunId =
+      input.outcome === "failed" && input.runtimeProblem
+        ? null
+        : await createSteeringContinuation(tx, input);
     await tx.bot.update({ where: { id: input.botId }, data: { updatedAt: now } });
     return { threadId: lastEvent.threadId, seq: lastEvent.seq, continuationRunId };
   });

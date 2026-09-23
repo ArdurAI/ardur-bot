@@ -7,7 +7,7 @@ import type {
   ThreadMessagePage,
   ThreadSnapshot,
 } from "@ardurbot/contracts";
-import { ProviderErrorKindSchema } from "@ardurbot/contracts";
+import { ProviderErrorKindSchema, RuntimeProblemSchema } from "@ardurbot/contracts";
 import {
   isActive,
   isRunTerminalEvent,
@@ -398,6 +398,7 @@ export function reduceThreadSnapshot(
               ...endedRun,
               status: "failed",
               error: failure,
+              runtimeProblem: RuntimeProblemSchema.safeParse(event.payload.runtimeProblem).data,
               providerErrorKind: ProviderErrorKindSchema.safeParse(event.payload.providerErrorKind)
                 .data,
             }

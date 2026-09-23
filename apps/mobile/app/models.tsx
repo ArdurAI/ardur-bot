@@ -12,7 +12,7 @@ import {
   parseModelMaxTokens,
 } from "@ardurbot/contracts";
 import { createModelProbe, featuredModelProviders, initialModelProbeState } from "@ardurbot/core";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -62,6 +62,7 @@ type ModelSelection = {
 };
 
 export default function Models() {
+  const { provider: requestedProvider } = useLocalSearchParams<{ provider?: string }>();
   const styles = useThemedStyles(createModelsStyles);
   const { t } = useI18n();
   const colorScheme = useResolvedAppearance();
@@ -153,7 +154,7 @@ export default function Models() {
 
   useFocusEffect(
     useCallback(() => {
-      void load()
+      void load({ provider: requestedProvider })
         .catch((err: unknown) =>
           setError(err instanceof Error ? err.message : t("Could not load model settings")),
         )
@@ -162,7 +163,7 @@ export default function Models() {
         modelProbe.invalidate();
         cancelOAuth();
       };
-    }, [cancelOAuth, load]),
+    }, [cancelOAuth, load, requestedProvider]),
   );
 
   const groups = useMemo(() => {

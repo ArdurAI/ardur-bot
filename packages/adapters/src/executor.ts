@@ -27,7 +27,7 @@ import {
   routineWakeupJob,
   runContinueJob,
 } from "@ardurbot/adapter-kit";
-import type { MessageBlock, RunStatus } from "@ardurbot/contracts";
+import type { MessageBlock, RunStatus, RuntimePin } from "@ardurbot/contracts";
 import {
   ATTACHMENT_MAX_BYTES,
   BOT_DESCRIPTION_MAX_LENGTH,
@@ -37,6 +37,8 @@ import {
   BotSecretSubmission,
   isAttachmentImageMimeType,
   OPENAI_COMPATIBLE_PROVIDER_ID,
+  RuntimePinError,
+  runtimePinProblem,
 } from "@ardurbot/contracts";
 import {
   type ActionApprovalRule,
@@ -87,7 +89,6 @@ import {
   createSpaceForMember,
   createThreadMessageInTransaction,
   effectiveMemoryScope,
-  findDefaultModelCredential,
   findModelCredential,
   InvalidSpaceNameError,
   isTooManyDatabaseConnections,
@@ -225,11 +226,7 @@ import {
 import { loadAgentMemoryContext } from "./memory-context.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { selectMemoryTools } from "./memory-tools.js";
-import {
-  isCatalogModelChoice,
-  selectConfiguredModel,
-  validateConnectedModelChoice,
-} from "./model-selection.js";
+import { isCatalogModelChoice, validateConnectedModelChoice } from "./model-selection.js";
 import {
   filterImageReturningComputerTools,
   IMAGE_RETURNING_COMPUTER_TOOLS,
@@ -256,6 +253,7 @@ import {
 import { classifyProviderError } from "./provider-error.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
+import { resolveRunModelPin } from "./run-model-pin.js";
 import {
   commitConsumedRunSecret,
   normalizeSecretAskPurpose,
@@ -539,12 +537,6 @@ export function isProtectedComputerLifecycleCommand(command: string): boolean {
 
 /** Cap the roster so a large Space cannot flood the prompt. */
 const BOT_DIRECTORY_LIMIT = 40;
-const MISSING_MODEL_MESSAGE = "Connect a model in Settings before running bots.";
-
-function runtimeFallbackModel(runtime: AgentRuntime) {
-  return runtime.describe().capabilities.scripted ? { provider: "scripted", id: "scripted" } : null;
-}
-
 export interface ExecutorDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
@@ -887,70 +879,62 @@ export function createRunExecutor(deps: ExecutorDeps) {
         : undefined,
     };
   };
+  const resolvePin = (
+    scope: { userId: string; spaceId: string },
+    bot: Parameters<typeof resolveRunModelPin>[0]["bot"],
+    snapshot?: unknown,
+    registerSecrets?: (values: string[]) => void,
+  ) =>
+    resolveRunModelPin({
+      prisma: deps.prisma,
+      scope,
+      bot,
+      snapshot,
+      scripted: Boolean(deps.runtime?.describe().capabilities.scripted),
+      loadKey: async (credential, pin) => {
+        const key = await resolveModelKey(
+          deps,
+          scope.userId,
+          scope.spaceId,
+          credential,
+          pin.provider!,
+          pin.modelId!,
+          registerSecrets,
+          pin,
+        );
+        if (
+          pin.provider !== "scripted" &&
+          pin.provider !== OPENAI_COMPATIBLE_PROVIDER_ID &&
+          !key.oauth &&
+          !key.apiKey?.trim()
+        ) {
+          throw new RuntimePinError(
+            runtimePinProblem(
+              pin,
+              "pin-credential-missing",
+              "The pinned connection secret is missing.",
+            ),
+          );
+        }
+        registerSecrets?.(key.redact);
+        return {
+          ...key,
+          provider: pin.provider!,
+          id: pin.modelId!,
+          apiKey: key.oauth ? undefined : key.apiKey,
+          oauth: key.oauth ? { credential: key.oauth, persist: key.persistOAuth } : undefined,
+        };
+      },
+    });
   return {
     resolveConnectedModel,
-    async resolveModel(scope: {
-      userId: string;
-      spaceId: string;
-      botId?: string;
-    }): Promise<AgentRunRequest["model"]> {
-      const override = scope.botId
+    async resolveModel(scope: { userId: string; spaceId: string; botId?: string }) {
+      const bot = scope.botId
         ? await deps.prisma.bot.findFirst({
-            where: {
-              id: scope.botId,
-              userId: scope.userId,
-              spaceId: scope.spaceId,
-            },
-            select: { modelProvider: true, modelId: true, thinkingLevel: true },
+            where: { id: scope.botId, userId: scope.userId, spaceId: scope.spaceId },
           })
         : null;
-      const hasOverride = Boolean(override?.modelProvider && override.modelId);
-      const [overrideCredential, defaultCredential, settings] = await Promise.all([
-        hasOverride
-          ? findModelCredential(deps.prisma, scope, override!.modelProvider!, override!.modelId)
-          : Promise.resolve(null),
-        findDefaultModelCredential(deps.prisma, scope),
-        deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
-      ]);
-      const selected = selectConfiguredModel({
-        bot: override,
-        overrideCredential,
-        defaultCredential,
-        settings,
-        deployment: deps.deploymentModelKey ? resolveDeploymentModel() : null,
-      });
-      const { credential, thinkingLevel } = selected;
-      let { provider, id } = selected;
-      if (!provider || !id) {
-        const runtimeFallback = runtimeFallbackModel(deps.runtime);
-        provider ??= runtimeFallback?.provider;
-        id ??= runtimeFallback?.id ?? null;
-      }
-      if (!provider || !id) throw new Error(MISSING_MODEL_MESSAGE);
-      // The key is resolved for the provider that won above, not before it is known.
-      const resolved = await resolveModelKey(
-        deps,
-        scope.userId,
-        scope.spaceId,
-        credential,
-        provider,
-        id,
-      );
-      return {
-        provider,
-        id,
-        apiKey: resolved.oauth ? undefined : resolved.apiKey,
-        baseUrl: resolved.baseUrl,
-        reasoning: resolved.reasoning,
-        maxTokens: resolved.maxTokens,
-        contextWindow: resolved.contextWindow,
-        acceptsImages: resolved.acceptsImages,
-        maxImagesPerPrompt: resolved.maxImagesPerPrompt,
-        thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
-        oauth: resolved.oauth
-          ? { credential: resolved.oauth, persist: resolved.persistOAuth }
-          : undefined,
-      };
+      return resolvePin(scope, bot);
     },
 
     async wakeRoutine(routineId: string, scheduledFor: string) {
@@ -1201,8 +1185,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
           peerMessage,
           task,
           storedConnections,
-          defaultCredential,
-          settings,
           configuredMemory,
           savedSkills,
           agentSkills,
@@ -1229,8 +1211,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
               status: true,
             },
           }),
-          findDefaultModelCredential(deps.prisma, run),
-          deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
           deps.memoryProviders.resolve(run.spaceId),
           deps.prisma.taughtSkill.findMany({
             where: { botId: run.botId, spaceId: run.spaceId, status: "saved" },
@@ -1250,11 +1230,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const agentEnvironment = decryptAgentEnvironment(agentSecretRows, deps.secretStore);
         runSecrets.push(...Object.values(agentEnvironment));
         const agentEnvironmentInstruction = formatAgentEnvironmentInstruction(agentEnvironment);
-        const hasModelOverride = Boolean(bot.modelProvider && bot.modelId);
-        const overrideCredential =
-          hasModelOverride && bot.modelProvider
-            ? await findModelCredential(deps.prisma, run, bot.modelProvider, bot.modelId)
-            : null;
+        const selected = await resolvePin(run, bot, run.runtimePin, (values) =>
+          runSecrets.push(...values),
+        );
+        const captured = await deps.prisma.run.updateMany({
+          where: { id: runId, status: "running", leaseOwner: workerId, leaseFence: fence },
+          data: {
+            runtimePin: run.runtimePin ?? selected.pin,
+            modelProvider: selected.pin.provider,
+            modelId: selected.pin.modelId,
+          },
+        });
+        if (captured.count !== 1) return;
+        if (selected.kind === "problem") throw new RuntimePinError(selected);
+        const resolved = selected;
+        const runModelProvider = selected.provider;
+        const runModelId = selected.id;
         runAbortController = new AbortController();
         if (!leaseValid) runAbortController.abort();
         if (deps.shutdownSignal?.aborted) runAbortController.abort(deps.shutdownSignal.reason);
@@ -1417,71 +1408,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }),
           );
         }
-        const runDeployment = deps.deploymentModelKey ? resolveDeploymentModel() : null;
-        const runtimeFallback = runtimeFallbackModel(deps.runtime);
-        const selected = selectConfiguredModel({
-          bot,
-          overrideCredential,
-          defaultCredential,
-          settings,
-          deployment: runDeployment,
-        });
-        const { credential, thinkingLevel } = selected;
-        const runModelProvider = selected.provider ?? runtimeFallback?.provider;
-        const runModelId = selected.id ?? runtimeFallback?.id;
-        if (!runModelProvider || !runModelId) {
-          const failed = await deps.events.finalizeRun({
-            spaceId: run.spaceId,
-            threadId: thread.id,
-            botId: bot.id,
-            runId,
-            taskId: run.taskId,
-            attemptId: attempt.id,
-            leaseOwner: workerId,
-            leaseFence: fence,
-            outcome: "failed",
-            error: MISSING_MODEL_MESSAGE,
-          });
-          if (!failed) return;
-          if (failed.continuationRunId) {
-            await deps.jobs
-              .enqueue(runContinueJob(failed.continuationRunId))
-              .catch((error) => getLogger().error("steering continuation enqueue", error));
-          }
-          if (run.trigger === "bot_message") {
-            await returnBotMessageOutcome(
-              deps,
-              { ...run, sourceMessageId: run.sourceMessageId },
-              { id: bot.id, name: bot.name },
-              `Could not complete the delegated request: ${MISSING_MODEL_MESSAGE}`,
-              "status",
-            ).catch((error) => getLogger().error("bot message failure return", error));
-          }
-          if (!failed.continuationRunId) {
-            await notifyRun(deps, run, {
-              kind: "failure",
-              title: `${bot.name} failed`,
-              body: MISSING_MODEL_MESSAGE,
-              botId: bot.id,
-              threadId: thread.id,
-            });
-          }
-          return;
-        }
-        const resolved = await resolveModelKey(
-          deps,
-          run.userId,
-          run.spaceId,
-          credential,
-          runModelProvider,
-          runModelId,
-          (values) => runSecrets.push(...values),
-        );
-        runSecrets.push(...resolved.redact);
-        await deps.prisma.run.updateMany({
-          where: { id: runId, status: "running", leaseOwner: workerId, leaseFence: fence },
-          data: { modelProvider: runModelProvider, modelId: runModelId },
-        });
         if (!bot.computer) throw new Error("Bot has no computer");
         const storedComputer = bot.computer;
         const computerMode = parseComputerMode(storedComputer.scope);
@@ -1962,10 +1888,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? false
             : await loadAutoReviewPreference();
           const injectedReview = requiresMandatoryApproval ? undefined : deps.autoReview;
-          const checker = requiresMandatoryApproval ? undefined : resolveAutoReviewChecker();
+          const reviewUsesRunPin =
+            resolveAutoReviewProviderKind() === "llm" &&
+            !(
+              process.env.ARDURBOT_AUTO_REVIEW_PROVIDER?.trim() &&
+              process.env.ARDURBOT_AUTO_REVIEW_MODEL?.trim()
+            );
+          const checker = requiresMandatoryApproval
+            ? undefined
+            : reviewUsesRunPin
+              ? { provider: resolved.provider, model: resolved.id }
+              : resolveAutoReviewChecker();
           const checkerConfigured =
             autoReviewPref &&
             (Boolean(injectedReview) ||
+              reviewUsesRunPin ||
               (checker
                 ? isAutoReviewCheckerConfigured({}) ||
                   Boolean(
@@ -2049,29 +1986,34 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 if (kind === "jev" || kind === "scripted") {
                   provider = createAutoReviewProvider(kind);
                 } else {
-                  const reviewCredential = await findModelCredential(
-                    deps.prisma,
-                    { userId: run.userId, spaceId: run.spaceId },
-                    checker!.provider,
-                    checker!.model,
-                  );
-                  const judgeKey = await resolveModelKey(
-                    deps,
-                    run.userId,
-                    run.spaceId,
-                    reviewCredential,
-                    checker!.provider,
-                    checker!.model,
-                    (values) => runSecrets.push(...values),
-                  );
+                  const reviewCredential = reviewUsesRunPin
+                    ? null
+                    : await findModelCredential(
+                        deps.prisma,
+                        { userId: run.userId, spaceId: run.spaceId },
+                        checker!.provider,
+                        checker!.model,
+                      );
+                  const judgeKey = reviewUsesRunPin
+                    ? null
+                    : await resolveModelKey(
+                        deps,
+                        run.userId,
+                        run.spaceId,
+                        reviewCredential,
+                        checker!.provider,
+                        checker!.model,
+                        (values) => runSecrets.push(...values),
+                      );
                   provider = createAutoReviewProvider("llm", {
                     llm: {
                       runtime: deps.runtime,
                       checker: checker!,
-                      apiKey: judgeKey.oauth ? undefined : judgeKey.apiKey,
-                      baseUrl: judgeKey.baseUrl,
-                      reasoning: judgeKey.reasoning,
-                      oauth: judgeKey.oauth
+                      model: reviewUsesRunPin ? resolved : undefined,
+                      apiKey: judgeKey?.oauth ? undefined : judgeKey?.apiKey,
+                      baseUrl: judgeKey?.baseUrl,
+                      reasoning: judgeKey?.reasoning,
+                      oauth: judgeKey?.oauth
                         ? { credential: judgeKey.oauth, persist: judgeKey.persistOAuth }
                         : undefined,
                       runId,
@@ -3672,21 +3614,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               history: runtimeHistory,
               currentTurnImages,
               tools,
-              model: {
-                provider: runModelProvider,
-                id: runModelId,
-                apiKey: resolved.oauth ? undefined : resolved.apiKey,
-                baseUrl: resolved.baseUrl,
-                reasoning: resolved.reasoning,
-                maxTokens: resolved.maxTokens,
-                contextWindow: resolved.contextWindow,
-                acceptsImages: resolved.acceptsImages,
-                maxImagesPerPrompt: resolved.maxImagesPerPrompt,
-                thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
-                oauth: resolved.oauth
-                  ? { credential: resolved.oauth, persist: resolved.persistOAuth }
-                  : undefined,
-              },
+              model: resolved,
               resumeFromCheckpoint: takeoverResume?.checkpoint,
               script,
               allowSilentEmpty: allowSilentEmptyRun,
@@ -4263,6 +4191,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             outcome: "failed",
             error: message,
             providerErrorKind: classifyProviderError(error),
+            ...(error instanceof RuntimePinError ? { runtimeProblem: error.problem } : {}),
           });
           if (!failed) return;
           if (failed.continuationRunId) {
@@ -4290,6 +4219,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       } catch (setupError) {
+        if (setupError instanceof RuntimePinError) {
+          await deps.events.finalizeRun({
+            spaceId: run.spaceId,
+            threadId: run.threadId,
+            botId: run.botId,
+            runId,
+            taskId: run.taskId,
+            attemptId: attempt.id,
+            leaseOwner: workerId,
+            leaseFence: fence,
+            outcome: "failed",
+            error: setupError.message,
+            runtimeProblem: setupError.problem,
+          });
+          return;
+        }
         const computerBusy = setupError instanceof ComputerBusyError;
         const retryForever = computerBusy || isTooManyDatabaseConnections(setupError);
         if (!computerBusy) {
@@ -5004,6 +4949,7 @@ async function resolveModelKey(
   provider: string,
   modelId: string,
   registerSecrets?: (values: string[]) => void,
+  pin?: RuntimePin,
 ): Promise<{
   apiKey?: string;
   baseUrl?: string;
@@ -5022,7 +4968,14 @@ async function resolveModelKey(
       const row = await deps.prisma.secret.findFirst({
         where: { id: credential.secretId, userId, spaceId: null },
       });
-      if (!row) return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
+      if (!row)
+        throw new RuntimePinError(
+          runtimePinProblem(
+            pin ?? { provider, modelId, effort: null, credentialId: null, revision: 0 },
+            "pin-credential-missing",
+            "The pinned connection secret is missing.",
+          ),
+        );
       const plaintext = deps.secretStore.load(row.ciphertext, row.id);
       registerSecrets?.(secretValuesToRedact(parseModelSecret(plaintext)));
       const persist = async (next: string) => {
@@ -5107,7 +5060,11 @@ async function resolveModelKey(
       };
     });
   }
-  return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
+  if (pin && provider !== "scripted")
+    throw new RuntimePinError(
+      runtimePinProblem(pin, "pin-credential-missing", "The pinned connection is missing."),
+    );
+  return { apiKey: pin ? undefined : deploymentKeyFor(deps, provider), redact: [] };
 }
 
 async function withModelCredentialLock<T>(key: string, fn: () => Promise<T>): Promise<T> {

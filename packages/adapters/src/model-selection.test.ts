@@ -1,13 +1,7 @@
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
-import {
-  defaultCatalogModelId,
-  selectConfiguredModel,
-  validateConnectedModelChoice,
-} from "./model-selection.js";
-
-type SelectionInput = Parameters<typeof selectConfiguredModel>[0];
+import { selectConfiguredModel, validateConnectedModelChoice } from "./model-selection.js";
 
 function credential(provider: string, defaultModel: string | null) {
   return {
@@ -23,119 +17,79 @@ function credential(provider: string, defaultModel: string | null) {
   };
 }
 
-const spaceCredential = credential("space-provider", "space-model");
-const overrideCredential = credential("bot-provider", "stored-model");
-const bot = { modelProvider: "bot-provider", modelId: "bot-model", thinkingLevel: "high" };
-const defaults: SelectionInput = {
-  bot: null,
-  overrideCredential: null,
-  defaultCredential: spaceCredential,
-  settings: { defaultModelProvider: "settings-provider", defaultModelId: "settings-model" },
-  deployment: { provider: "deployment-provider", model: "deployment-model" },
+const pin = {
+  provider: "xai",
+  modelId: "grok-4.6",
+  effort: "high",
+  credentialId: "credential-xai",
+  revision: 1,
 };
+const connected = credential("xai", "grok-4.6");
 
 describe("configured model selection", () => {
-  it.each<{
-    name: string;
-    input: Partial<SelectionInput>;
-    expected: ReturnType<typeof selectConfiguredModel>;
-  }>([
-    {
-      name: "uses the bot's model with its own credential",
-      input: { bot, overrideCredential },
-      expected: {
-        provider: "bot-provider",
-        id: "bot-model",
-        credential: overrideCredential,
-        thinkingLevel: "high",
-      },
+  it("honors the complete pin without substitution", () => {
+    expect(selectConfiguredModel({ pin, credential: connected })).toMatchObject({
+      kind: "resolved",
+      pin,
+      provider: "xai",
+      id: "grok-4.6",
+      thinkingLevel: "high",
+      credential: connected,
+    });
+  });
+  it("fails on a missing or deleted credential", () => {
+    expect(selectConfiguredModel({ pin, credential: null })).toMatchObject({
+      kind: "problem",
+      code: "pin-credential-missing",
+      pin,
+      actions: ["connect", "change-pin"],
+    });
+  });
+  it.each(["provider", "modelId", "effort", "credentialId"] as const)(
+    "rejects a partial pin missing %s",
+    (field) => {
+      const requested = { ...pin, [field]: null };
+      expect(selectConfiguredModel({ pin: requested, credential: connected })).toMatchObject({
+        kind: "problem",
+        code: "pin-incomplete",
+        pin: requested,
+      });
     },
-    {
-      name: "preserves the pin when its provider has no credential",
-      input: { bot },
-      expected: {
-        provider: "bot-provider",
-        id: "bot-model",
-        credential: null,
-        thinkingLevel: "high",
-      },
+  );
+  it.each(["null", "undefined", ""])("rejects a sentinel model %s", (modelId) => {
+    expect(
+      selectConfiguredModel({ pin: { ...pin, modelId }, credential: connected }),
+    ).toMatchObject({ code: "pin-incomplete" });
+  });
+  it("rejects unknown models instead of selecting the catalog's first", () => {
+    expect(
+      selectConfiguredModel({ pin: { ...pin, modelId: "not-a-model" }, credential: connected }),
+    ).toMatchObject({ code: "pin-model-unknown" });
+  });
+  it.each(["max", "off", "invented"])(
+    "rejects unsupported effort %s without clamping",
+    (effort) => {
+      expect(
+        selectConfiguredModel({ pin: { ...pin, effort }, credential: connected }),
+      ).toMatchObject({ code: "pin-effort-unsupported", pin: { effort } });
     },
-    {
-      name: "keeps bot thinking with the Space default",
-      input: { bot: { modelProvider: null, modelId: null, thinkingLevel: "high" } },
-      expected: {
-        provider: "space-provider",
-        id: "space-model",
-        credential: spaceCredential,
-        thinkingLevel: "high",
-      },
-    },
-    {
-      name: "does not select an incomplete bot override",
-      input: { bot: { ...bot, modelId: null }, overrideCredential },
-      expected: {
-        provider: "space-provider",
-        id: "space-model",
-        credential: spaceCredential,
-        thinkingLevel: "high",
-      },
-    },
-    {
-      name: "uses settings before deployment defaults without inventing a credential",
-      input: { defaultCredential: null },
-      expected: {
-        provider: "settings-provider",
-        id: "settings-model",
-        credential: null,
-        thinkingLevel: null,
-      },
-    },
-    {
-      name: "uses deployment defaults when no stored configuration exists",
-      input: { defaultCredential: null, settings: null },
-      expected: {
-        provider: "deployment-provider",
-        id: "deployment-model",
-        credential: null,
-        thinkingLevel: null,
-      },
-    },
-    {
-      name: "leaves missing configuration for the caller's runtime fallback or failure path",
-      input: { defaultCredential: null, settings: null, deployment: null },
-      expected: {
-        provider: undefined,
-        id: null,
-        credential: null,
-        thinkingLevel: null,
-      },
-    },
-    {
-      name: "skips a literal null model id and uses the provider catalog instead",
-      input: {
-        defaultCredential: credential("anthropic", "null"),
-        settings: null,
-        deployment: null,
-      },
-      expected: {
-        provider: "anthropic",
-        id: defaultCatalogModelId("anthropic"),
-        credential: credential("anthropic", "null"),
-        thinkingLevel: null,
-      },
-    },
-    {
-      name: "does not treat a sentinel bot override as a selected model",
-      input: { bot: { ...bot, modelId: "null" }, overrideCredential },
-      expected: {
-        provider: "space-provider",
-        id: "space-model",
-        credential: spaceCredential,
-        thinkingLevel: "high",
-      },
-    },
-  ])("$name", ({ input, expected }) => {
-    expect(selectConfiguredModel({ ...defaults, ...input })).toEqual(expected);
+  );
+  it("does not accept another same-provider connection with the same custom model", () => {
+    const custom = {
+      ...pin,
+      provider: "openai-compatible",
+      modelId: "same-model",
+      effort: "off",
+      credentialId: "chosen-server",
+    };
+    const other = { ...credential("openai-compatible", "same-model"), id: "other-server" };
+    expect(selectConfiguredModel({ pin: custom, credential: other })).toMatchObject({
+      code: "pin-credential-missing",
+      pin: custom,
+    });
+    expect(
+      selectConfiguredModel({ pin: custom, credential: { ...other, id: "chosen-server" } }),
+    ).toMatchObject({ kind: "resolved", pin: custom });
   });
 });
 

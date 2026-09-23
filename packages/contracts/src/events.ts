@@ -283,7 +283,11 @@ export const ProductEventSchema = z
     payload: z.record(z.string(), z.unknown()),
   })
   .superRefine((event, ctx) => {
-    if (event.type !== "run.failed" || event.payload.providerErrorKind === undefined) return;
+    if (
+      event.type !== "run.failed" ||
+      (event.payload.providerErrorKind === undefined && event.payload.runtimeProblem === undefined)
+    )
+      return;
     const result = RunFailurePayloadSchema.safeParse(event.payload);
     if (!result.success) {
       for (const issue of result.error.issues)

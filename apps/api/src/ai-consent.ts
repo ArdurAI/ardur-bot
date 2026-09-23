@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import {
   aiRecipient,
   cloudAgentsEnabled,
+  credentialForPin,
+  hasBotPin,
   parseModelSecret,
-  selectConfiguredModel,
+  requestedBotPin,
   toStringRecord,
 } from "@ardurbot/adapters";
 import type { Actor, AiConsentQuery, AiConsentStatus, AiRecipient } from "@ardurbot/contracts";
@@ -48,7 +50,13 @@ export async function aiConsentStatus(
               archivedAt: null,
               ...(botIds ? { id: { in: botIds } } : {}),
             },
-            select: { modelProvider: true, modelId: true, thinkingLevel: true },
+            select: {
+              modelProvider: true,
+              modelId: true,
+              thinkingLevel: true,
+              modelCredentialId: true,
+              modelPinRevision: true,
+            },
           })
         : [],
       uses.includes("voice")
@@ -83,17 +91,27 @@ export async function aiConsentStatus(
       : null;
     const selected = await Promise.all(
       (target ? bots : [null, ...bots]).map(async (bot) => {
-        const overrideCredential =
-          bot?.modelProvider && bot.modelId
-            ? await findModelCredential(deps.prisma, actor, bot.modelProvider, bot.modelId)
-            : null;
-        return selectConfiguredModel({
-          bot,
-          overrideCredential,
-          defaultCredential,
-          settings,
-          deployment,
-        });
+        if (bot && hasBotPin(bot)) {
+          const pin = requestedBotPin(bot);
+          return {
+            provider: pin.provider,
+            id: pin.modelId,
+            credential: await credentialForPin(deps.prisma, actor, pin),
+            thinkingLevel: pin.effort,
+          };
+        }
+        // No-bot onboarding may describe a suggested deployment; a bot only inherits
+        // the explicitly selected space connection, never another recipient.
+        return {
+          provider:
+            defaultCredential?.provider ??
+            (!bot ? (settings?.defaultModelProvider ?? deployment?.provider) : null),
+          id:
+            defaultCredential?.defaultModel ??
+            (!bot ? (settings?.defaultModelId ?? deployment?.model) : null),
+          credential: defaultCredential,
+          thinkingLevel: bot?.thinkingLevel ?? null,
+        };
       }),
     );
     // Connected models remain reachable by helpers during a targeted bot run.

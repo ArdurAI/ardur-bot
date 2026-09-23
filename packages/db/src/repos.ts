@@ -50,6 +50,8 @@ function mapBot(
     computer: { scope: string } | null;
     voiceId?: string | null;
     autoSpeak?: boolean;
+    modelCredentialId?: string | null;
+    modelPinRevision?: number;
     modelProvider?: string | null;
     modelId?: string | null;
     thinkingLevel?: string | null;
@@ -90,6 +92,8 @@ function mapBot(
     modelProvider: bot.modelProvider ?? null,
     modelId: bot.modelId ?? null,
     thinkingLevel: (bot.thinkingLevel as Bot["thinkingLevel"]) ?? null,
+    modelCredentialId: bot.modelCredentialId ?? null,
+    modelPinRevision: bot.modelPinRevision ?? 0,
     teamChatAmbientEnabled: bot.teamChatAmbientEnabled ?? false,
     teamChatRules: bot.teamChatRules ?? "",
     webhookConfigured: Boolean(bot.webhookSecretId),
@@ -387,6 +391,8 @@ export function createRepos(prisma: PrismaClient) {
         modelProvider?: string | null;
         modelId?: string | null;
         thinkingLevel?: string | null;
+        modelCredentialId?: string | null;
+        modelPinRevision?: number;
         initialMessage?: {
           role: "user" | "bot" | "system";
           blocks: MessageBlock[];
@@ -404,6 +410,8 @@ export function createRepos(prisma: PrismaClient) {
       let modelProvider = input.modelProvider ?? null;
       let modelId = input.modelId ?? null;
       let thinkingLevel = input.thinkingLevel ?? null;
+      let modelCredentialId = input.modelCredentialId ?? null;
+      let modelPinRevision = input.modelPinRevision ?? 0;
       if (input.parentBotId) {
         const parent = await prisma.bot.findFirst({
           where: {
@@ -415,6 +423,8 @@ export function createRepos(prisma: PrismaClient) {
         if (!parent) throw new IsolationError();
         if (!modelId) {
           modelProvider = parent.modelProvider ?? null;
+          modelCredentialId = parent.modelCredentialId ?? null;
+          modelPinRevision = parent.modelPinRevision ?? 0;
           modelId = parent.modelId ?? null;
         }
         if (thinkingLevel == null) thinkingLevel = parent.thinkingLevel ?? null;
@@ -456,6 +466,8 @@ export function createRepos(prisma: PrismaClient) {
               modelProvider,
               modelId,
               thinkingLevel,
+              modelCredentialId,
+              modelPinRevision,
             },
           });
           const thread = await tx.thread.create({

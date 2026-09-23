@@ -1,44 +1,45 @@
 import type { Bot } from "@ardurbot/contracts";
-import { ThinkingLevelSchema } from "@ardurbot/contracts";
+import { spaceDefaultEffort } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
 import type { ModelSettings } from "../../lib/use-model-settings";
 
 export function effectiveBotModel(
-  bot: Pick<Bot, "modelProvider" | "modelId" | "thinkingLevel">,
+  bot: Pick<Bot, "modelProvider" | "modelId" | "thinkingLevel" | "modelCredentialId">,
   { me, catalog, credentials }: ModelSettings,
 ) {
-  const hasOverride = Boolean(bot.modelProvider && bot.modelId);
+  const hasOverride = Boolean(
+    bot.modelProvider != null || bot.modelId != null || bot.modelCredentialId != null,
+  );
   const useOverride = hasOverride;
   const provider = useOverride ? bot.modelProvider : me.defaultProvider;
   const modelId = useOverride ? bot.modelId : me.defaultModel;
   if (!provider || !modelId) return null;
   const entry = catalog.find((item) => item.provider === provider && item.id === modelId);
-  const credential = credentials.find(
-    (item) => item.provider === provider && item.modelId === modelId,
+  const credential = credentials.find((item) =>
+    bot.modelCredentialId
+      ? item.id === bot.modelCredentialId && item.provider === provider
+      : item.provider === provider && item.modelId === modelId,
   );
   const levels = credential?.thinkingLevels ?? entry?.thinkingLevels;
   const reasoning = credential?.reasoning ?? entry?.reasoning;
-  const preferred = bot.thinkingLevel ?? credential?.thinkingLevel ?? "medium";
-  // Match the runtime's nearest supported level, preferring a higher level first.
-  const orderedLevels = ThinkingLevelSchema.options;
-  const index = orderedLevels.indexOf(preferred);
   const thinkingLevel =
-    reasoning === false
-      ? "off"
-      : levels
-        ? [...orderedLevels.slice(index), ...orderedLevels.slice(0, index).reverse()].find(
-            (level) => levels.includes(level),
-          )
-        : undefined;
+    bot.thinkingLevel ??
+    (useOverride
+      ? undefined
+      : (credential?.thinkingLevel ?? spaceDefaultEffort(reasoning, levels)));
   return {
     label: entry?.label ?? modelId,
     providerLabel: provider === "openai-codex" ? "Codex" : (entry?.providerName ?? provider),
     thinkingLevel,
     isDefault: !useOverride,
     unavailable: useOverride
-      ? modelUnavailable({ catalog, credentials }, provider, modelId)
+      ? Boolean(
+          (bot.modelCredentialId && !credential) ||
+            (thinkingLevel && levels && !levels.includes(thinkingLevel)) ||
+            modelUnavailable({ catalog, credentials }, provider, modelId),
+        )
       : spaceDefaultUnavailable({ me, catalog, credentials }),
   };
 }

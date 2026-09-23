@@ -122,3 +122,79 @@ test("the model chip and provider error open the bot model control", async ({ pa
   await error.getByRole("button", { name: "Change model", exact: true }).click();
   await expect(model).toBeFocused();
 });
+
+test("a pin failure opens its provider settings and the bot model control", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `pin-recovery-${Date.now()}@ardurbot.test`, "password12", "Pin Recovery");
+  await completeOnboarding(page);
+  await page.route("**/rpc/models/list", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            provider: "xai",
+            providerName: "xAI",
+            id: "grok-4.6",
+            label: "Grok 4.6",
+            auth: "api-key",
+            billing: "",
+            reasoning: true,
+            thinkingLevels: ["low", "medium", "high"],
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/rpc/threads/get", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const pin = {
+      provider: "xai",
+      modelId: "grok-4.6",
+      effort: "high",
+      credentialId: "deleted",
+      revision: 1,
+    };
+    body.json.run = {
+      id: "pin-failed",
+      botId: body.json.botId,
+      threadId: body.json.threadId,
+      taskId: "pin-task",
+      status: "failed",
+      trigger: "user",
+      routineId: null,
+      modelProvider: pin.provider,
+      modelId: pin.modelId,
+      runtimePin: pin,
+      error: "Pinned connection missing",
+      runtimeProblem: {
+        kind: "problem",
+        code: "pin-credential-missing",
+        pin,
+        reason: "The connection was deleted.",
+        actions: ["connect", "change-pin"],
+      },
+      startedAt: null,
+      completedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText(
+    "This bot is pinned to xAI · Grok 4.6 · high; connect it or change the pin.",
+  );
+  await captureScreenshot(page, testInfo, "pin-failure-recovery");
+  await error.getByRole("button", { name: "Change pin", exact: true }).click();
+  await expect(
+    page.getByTestId("bot-settings").getByRole("combobox", { name: "Model", exact: true }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
+  await error.getByRole("button", { name: "Connect", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Models", { exact: true }).first()).toBeVisible();
+  await expect(dialog.getByText("xAI", { exact: true }).first()).toBeVisible();
+  await captureScreenshot(page, testInfo, "pin-connect-provider");
+});

@@ -119,6 +119,19 @@ describe("finalizeRun", () => {
           outcome: "failed",
           error: "failed",
           providerErrorKind: "model-unavailable",
+          runtimeProblem: {
+            kind: "problem",
+            code: "pin-credential-missing",
+            pin: {
+              provider: "xai",
+              modelId: "grok-4.6",
+              effort: "high",
+              credentialId: "deleted",
+              revision: 1,
+            },
+            reason: "Missing connection",
+            actions: ["connect", "change-pin"],
+          },
         },
         { publish } as never,
       ),
@@ -129,7 +142,14 @@ describe("finalizeRun", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           type: "run.failed",
-          payload: { error: "failed", providerErrorKind: "model-unavailable" },
+          payload: {
+            error: "failed",
+            providerErrorKind: "model-unavailable",
+            runtimeProblem: expect.objectContaining({
+              code: "pin-credential-missing",
+              pin: expect.objectContaining({ credentialId: "deleted" }),
+            }),
+          },
         }),
       }),
     );

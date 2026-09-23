@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AgentModelOAuthCredential, AgentRuntime } from "@ardurbot/adapter-kit";
+import type { AgentRunModel, AgentRuntime } from "@ardurbot/adapter-kit";
 import {
   type EncryptedSecretStore,
   formatCurrentTimeInstruction,
@@ -7,7 +7,8 @@ import {
   serializeModelSecret,
   toOAuthCredential,
 } from "@ardurbot/adapters";
-import { findDefaultModelCredential, findModelCredential, type PrismaClient } from "@ardurbot/db";
+import type { RuntimeProblem } from "@ardurbot/contracts";
+import { findModelCredential, type PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 
 const MAX_RULES_CHARS = 4_000;
@@ -111,6 +112,11 @@ interface ModelTeamChatEngagementJudgeDeps {
   providerOverride?: string;
   modelOverride?: string;
   timeoutMs?: number;
+  resolvePinnedModel?: (scope: {
+    userId: string;
+    spaceId: string;
+    botId: string;
+  }) => Promise<AgentRunModel | RuntimeProblem>;
 }
 
 export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
@@ -177,45 +183,26 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
     }
   }
 
-  private async resolveModel(bot: TeamChatEngagementInput["bot"]): Promise<{
-    model: {
-      provider: string;
-      id: string;
-      apiKey?: string;
-      baseUrl?: string;
-      oauth?: {
-        credential: AgentModelOAuthCredential;
-        persist?: (credential: AgentModelOAuthCredential) => Promise<void>;
-      };
-    };
-  } | null> {
-    const settings = await this.deps.prisma.deploymentSettings.findUnique({
-      where: { id: "default" },
-    });
-    const scope = { userId: bot.userId, spaceId: bot.spaceId };
-    const defaultCredential = await findDefaultModelCredential(this.deps.prisma, scope);
-    const requestedProvider = this.deps.providerOverride ?? bot.modelProvider;
-    const requestedModel = this.deps.modelOverride ?? bot.modelId;
-    const overrideCredential = requestedProvider
-      ? await findModelCredential(this.deps.prisma, scope, requestedProvider)
-      : null;
-    const explicitJudgeOverride = Boolean(this.deps.providerOverride && this.deps.modelOverride);
-    const useOverride = Boolean(
-      requestedProvider && requestedModel && (explicitJudgeOverride || overrideCredential),
+  private async resolveModel(
+    bot: TeamChatEngagementInput["bot"],
+  ): Promise<{ model: AgentRunModel } | null> {
+    const provider = this.deps.providerOverride;
+    const modelId = this.deps.modelOverride;
+    if (!provider || !modelId) {
+      if (provider || modelId || !this.deps.resolvePinnedModel) return null;
+      const selected = await this.deps.resolvePinnedModel({
+        userId: bot.userId,
+        spaceId: bot.spaceId,
+        botId: bot.id,
+      });
+      return "provider" in selected ? { model: selected } : null;
+    }
+    const credential = await findModelCredential(
+      this.deps.prisma,
+      { userId: bot.userId, spaceId: bot.spaceId },
+      provider,
+      modelId,
     );
-    const credential = useOverride ? overrideCredential : defaultCredential;
-    const provider =
-      (useOverride ? requestedProvider : null) ??
-      credential?.provider ??
-      settings?.defaultModelProvider ??
-      this.deps.deploymentProvider;
-    const modelId =
-      (useOverride ? requestedModel : null) ??
-      credential?.defaultModel ??
-      settings?.defaultModelId ??
-      this.deps.deploymentModel;
-    if (!provider || !modelId) return null;
-
     if (!credential) {
       const apiKey =
         provider === this.deps.deploymentProvider ? this.deps.deploymentModelKey : undefined;

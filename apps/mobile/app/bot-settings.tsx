@@ -7,6 +7,11 @@ import {
   normalizeCreateBotProfile,
   type ThinkingLevel,
 } from "@ardurbot/contracts";
+import {
+  modelPinOptionKey as modelOptionKey,
+  parseModelPinOptionKey as parseModelOptionKey,
+  spaceDefaultEffort,
+} from "@ardurbot/core";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -75,7 +80,7 @@ export default function BotSettingsScreen() {
         setComputerMode(next.computerMode);
         setModelKey(
           next.modelProvider && next.modelId
-            ? modelOptionKey(next.modelProvider, next.modelId)
+            ? modelOptionKey(next.modelProvider, next.modelId, next.modelCredentialId)
             : "",
         );
         setThinkingLevel(next.thinkingLevel ?? "");
@@ -116,14 +121,14 @@ export default function BotSettingsScreen() {
         credential.modelId && !credentialInCatalog
           ? [
               {
-                key: modelOptionKey(credential.provider, credential.modelId),
+                key: modelOptionKey(credential.provider, credential.modelId, credential.id),
                 provider: credential.provider,
                 modelId: credential.modelId,
                 label: `${credential.label} · ${credential.modelId}`,
               },
             ]
           : providerModels.map((entry) => ({
-              key: modelOptionKey(entry.provider, entry.id),
+              key: modelOptionKey(entry.provider, entry.id, credential.id),
               provider: entry.provider,
               modelId: entry.id,
               label: `${entry.providerName ?? entry.provider} · ${entry.label}`,
@@ -149,14 +154,17 @@ export default function BotSettingsScreen() {
           (entry) => entry.provider === effectiveProvider && entry.id === effectiveModelId,
         )
       : undefined;
-  const effectiveCredential = credentials.find(
-    (entry) => entry.provider === effectiveProvider && entry.modelId === effectiveModelId,
+  const effectiveCredential = credentials.find((entry) =>
+    parseModelOptionKey(modelKey)?.credentialId
+      ? entry.id === parseModelOptionKey(modelKey)?.credentialId
+      : entry.provider === effectiveProvider && entry.modelId === effectiveModelId,
   );
-  const thinkingOptions = (
-    effectiveCredential?.thinkingLevels ??
-    effectiveEntry?.thinkingLevels ??
-    []
-  ).filter((level) => level !== "off");
+  const supportedThinking =
+    effectiveCredential?.thinkingLevels ?? effectiveEntry?.thinkingLevels ?? [];
+  const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) => level !== "off");
+  const defaultThinkingLevel =
+    effectiveCredential?.thinkingLevel ?? spaceDefaultEffort(undefined, supportedThinking);
+  const defaultThinkingLabel = `${t("Default")} (${thinkingLevelLabel(defaultThinkingLevel, t)})`;
 
   const spaceDefaultLabel = me?.defaultModel
     ? `${t("Space default")} (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel})`
@@ -178,19 +186,22 @@ export default function BotSettingsScreen() {
 
   const thinkingChoices: PickerChoice[] = useMemo(
     () => [
-      { key: "", label: t("Default (medium)") },
+      { key: "", label: defaultThinkingLabel },
+      ...(thinkingLevel && !thinkingOptions.includes(thinkingLevel as ThinkingLevel)
+        ? [{ key: thinkingLevel, label: thinkingLevelLabel(thinkingLevel as ThinkingLevel, t) }]
+        : []),
       ...thinkingOptions.map((level) => ({
         key: level,
         label: thinkingLevelLabel(level, t),
       })),
     ],
-    [t, thinkingOptions],
+    [t, thinkingOptions, thinkingLevel, defaultThinkingLabel],
   );
 
   const selectedModelLabel =
     modelChoices.find((choice) => choice.key === modelKey)?.label ?? spaceDefaultLabel;
   const selectedThinkingLabel =
-    thinkingChoices.find((choice) => choice.key === thinkingLevel)?.label ?? t("Default (medium)");
+    thinkingChoices.find((choice) => choice.key === thinkingLevel)?.label ?? defaultThinkingLabel;
 
   function selectModel(key: string) {
     if (key === modelKey) return;
@@ -240,6 +251,7 @@ export default function BotSettingsScreen() {
         color?: string;
         modelProvider?: string | null;
         modelId?: string | null;
+        modelCredentialId?: string | null;
         thinkingLevel?: ThinkingLevel | null;
       } = { botId };
       if (profile.name !== bot.name) input.name = profile.name;
@@ -252,16 +264,16 @@ export default function BotSettingsScreen() {
       if (color !== bot.color) input.color = color;
       const modelChanged =
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||
-        (selected?.modelId ?? null) !== (bot.modelId ?? null);
+        (selected?.modelId ?? null) !== (bot.modelId ?? null) ||
+        (selected?.credentialId ?? null) !== (bot.modelCredentialId ?? null);
       const thinkingChanged = (thinkingLevel || null) !== (bot.thinkingLevel ?? null);
       if (modelChanged) {
         input.modelProvider = selected?.provider ?? null;
         input.modelId = selected?.modelId ?? null;
+        input.modelCredentialId = selected?.credentialId ?? null;
       }
       if (modelMetaReady && (modelChanged || thinkingChanged)) {
-        input.thinkingLevel = thinkingOptions.length
-          ? ((thinkingLevel || null) as ThinkingLevel | null)
-          : null;
+        input.thinkingLevel = (thinkingLevel || null) as ThinkingLevel | null;
       }
       if (computerMode !== bot.computerMode) {
         await rpc(
@@ -421,7 +433,7 @@ export default function BotSettingsScreen() {
             >
               <Text style={{ color: tokens.foreground }}>{selectedModelLabel}</Text>
             </Pressable>
-            {thinkingOptions.length ? (
+            {thinkingOptions.length || thinkingLevel ? (
               <>
                 <Text
                   style={{
@@ -477,16 +489,6 @@ export default function BotSettingsScreen() {
       </ScrollView>
     </>
   );
-}
-
-function modelOptionKey(provider: string, modelId: string) {
-  return `${provider}::${modelId}`;
-}
-
-function parseModelOptionKey(key: string) {
-  const separator = key.indexOf("::");
-  if (separator <= 0) return null;
-  return { provider: key.slice(0, separator), modelId: key.slice(separator + 2) };
 }
 
 function catalogLabel(

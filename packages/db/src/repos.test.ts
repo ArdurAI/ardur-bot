@@ -34,6 +34,56 @@ const baseBot = {
   computer: null,
 };
 
+describe("createRepos.createBot model pins", () => {
+  it.each(["child", "duplicate"])(
+    "preserves the complete %s pin in storage and the DTO",
+    async (kind) => {
+      const pin = {
+        modelProvider: "openai-compatible",
+        modelId: "same-model",
+        thinkingLevel: "high",
+        modelCredentialId: "exact-endpoint",
+        modelPinRevision: 4,
+      };
+      let stored = { ...baseBot, ...pin };
+      const tx = {
+        $queryRaw: vi.fn(async () => []),
+        spaceMember: {
+          findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
+        },
+        computer: { upsert: vi.fn(async () => ({ id: "computer" })) },
+        bot: {
+          aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
+          create: vi.fn(async ({ data }: { data: typeof pin }) => {
+            stored = { ...baseBot, ...data };
+            return stored;
+          }),
+          findFirstOrThrow: vi.fn(async () => stored),
+        },
+        thread: { create: vi.fn(async () => baseBot.thread) },
+        browserProfile: { create: vi.fn(async () => ({})) },
+        memoryDocument: { create: vi.fn(async () => ({})) },
+      };
+      const prisma = {
+        bot: { findFirst: vi.fn(async () => ({ ...baseBot, ...pin })) },
+        deploymentSettings: { findUnique: vi.fn(async () => null) },
+        $transaction: vi.fn((work: (client: typeof tx) => Promise<unknown>) => work(tx)),
+      };
+      const result = await createRepos(prisma as unknown as PrismaClient).createBot(actor, {
+        name: "Copy",
+        title: "",
+        description: "",
+        instructions: "",
+        color: baseBot.color,
+        notifyOnFinish: false,
+        ...(kind === "child" ? { parentBotId: baseBot.id } : pin),
+      });
+      expect(stored).toMatchObject(pin);
+      expect(result).toMatchObject(pin);
+    },
+  );
+});
+
 function reposFor(memoryScope: string | null) {
   const prisma = {
     bot: {
