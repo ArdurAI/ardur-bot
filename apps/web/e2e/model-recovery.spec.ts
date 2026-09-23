@@ -1,6 +1,84 @@
-import type { Me, ModelCatalogEntry } from "@ardurbot/contracts";
+import type { Bot, Me, ModelCatalogEntry } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+
+test("an unbound legacy pin asks which connection to use", async ({ page }, testInfo) => {
+  await signup(page, `legacy-pin-${Date.now()}@ardurbot.test`, "password12", "Legacy Pin");
+  await completeOnboarding(page);
+  await page.route("**/rpc/bots/list", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: Bot[] };
+    body.json = body.json.map((bot) => ({
+      ...bot,
+      modelProvider: "xai",
+      modelId: "grok-4.6",
+      modelCredentialId: null,
+      modelPinRevision: 0,
+      thinkingLevel: null,
+    }));
+    await route.fulfill({ response, json: body });
+  });
+  await page.route("**/rpc/models/list", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            provider: "xai",
+            providerName: "xAI",
+            id: "grok-4.6",
+            label: "Grok 4.6",
+            auth: "api-key",
+            billing: "",
+            reasoning: true,
+            thinkingLevels: ["low", "medium", "high"],
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/rpc/models/credentials", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            id: "first",
+            provider: "xai",
+            label: "First connection",
+            hasKey: true,
+            isDefault: true,
+          },
+          {
+            id: "second",
+            provider: "xai",
+            label: "Second connection",
+            hasKey: true,
+            isDefault: false,
+          },
+        ],
+      },
+    }),
+  );
+  await page.reload();
+  await page
+    .locator("aside")
+    .first()
+    .getByRole("button", { name: /Chief/ })
+    .first()
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Model & effort", exact: true }).click();
+  const settings = page.getByTestId("bot-settings");
+  const model = settings.getByRole("combobox", { name: "Model", exact: true });
+  await expect(model).toHaveValue("xai::grok-4.6");
+  await expect(model.locator("option:checked")).toHaveText(
+    "xai · grok-4.6 (not available on your account)",
+  );
+  await expect(
+    settings.getByText("This bot's connection needs to be chosen. Pick the connection to use."),
+  ).toBeVisible();
+  await expect(model).toContainText("First connection · Grok 4.6");
+  await expect(model).toContainText("Second connection · Grok 4.6");
+  await captureScreenshot(page, testInfo, "legacy-pin-connection-choice");
+});
 
 test("the model chip and provider error open the bot model control", async ({ page }, testInfo) => {
   await signup(page, `model-recovery-${Date.now()}@ardurbot.test`, "password12", "Model Recovery");

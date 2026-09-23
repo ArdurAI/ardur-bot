@@ -42,6 +42,7 @@ export const ProductEventType = z.enum([
   "usage.recorded",
   "bot.spawned",
   "bot.updated",
+  "bot.pinBackfilled",
   "bot.archived",
   "bot.deleted",
   "group.created",

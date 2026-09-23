@@ -91,6 +91,18 @@ export function findNewestUserModelCredential(
   });
 }
 
+/** Migration callers must count connections instead of choosing the newest one. */
+export function findUserModelCredentials(
+  prisma: Pick<PrismaClient, "userModelCredential">,
+  userId: string,
+  provider: string,
+) {
+  return prisma.userModelCredential.findMany({
+    where: { userId, provider },
+    orderBy: newestModelCredentialOrder,
+  });
+}
+
 export async function findModelCredential(
   prisma: PrismaClient,
   scope: ModelCredentialScope,

@@ -16,6 +16,7 @@
     "format": "biome check --write .",
     "db:generate": "pnpm --filter @ardurbot/db generate",
     "db:migrate": "pnpm --filter @ardurbot/db migrate",
+    "db:backfill-pins": "tsx apps/api/src/backfill-runtime-pins-cli.ts",
     "sandbox:build": "docker build -t ardurbot/computer:local infra/sandboxes/computer",
     "test": "vitest run",
     "test:compose-smoke": "bash infra/compose/run-smokes.sh",

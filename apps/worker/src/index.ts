@@ -5,6 +5,7 @@ import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 loadRootEnv();
 
 import {
+  backfillRuntimePins,
   ChatSdkMessagingSurface,
   createBackgroundJobHandlers,
   createCloudAgentConnection,
@@ -74,6 +75,7 @@ async function main() {
     publisher: pool,
   });
   const secrets = new EncryptedSecretStore(resolveEncryptionKey(process.env));
+  await backfillRuntimePins({ prisma, secrets, logger });
   const events = createThreadEvents(prisma, realtime, {
     runSecretWriter: createRunSecretWriter(secrets),
   });

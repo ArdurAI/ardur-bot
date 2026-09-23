@@ -45,6 +45,8 @@ export async function botModelPinUpdate(
     throw new ORPCError("BAD_REQUEST", { message: "Choose a provider and model." });
   const unchanged = provider === existing.modelProvider && modelId === existing.modelId;
   const credentialId = input.modelCredentialId ?? (unchanged ? existing.modelCredentialId : null);
+  if (unchanged && !credentialId)
+    throw new ORPCError("BAD_REQUEST", { message: "Choose the connection to use." });
   const credential = credentialId
     ? await findBoundModelCredential(deps.prisma, actor, provider, credentialId)
     : await findModelCredential(deps.prisma, actor, provider, modelId);

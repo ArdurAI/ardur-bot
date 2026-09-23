@@ -148,6 +148,81 @@ async function save() {
 }
 
 describe("bot model settings", () => {
+  it.each([0, 2])(
+    "asks for a connection with %i available and never preselects one",
+    async (count) => {
+      api.credentials.mockResolvedValue(
+        count
+          ? [
+              { ...credentials[0], id: "first", label: "First connection" },
+              { ...credentials[0], id: "second", label: "Second connection" },
+            ]
+          : [],
+      );
+      await act(async () =>
+        root.render(
+          settings({
+            modelProvider: "openai-codex",
+            modelId: "gpt-6-sol",
+            modelCredentialId: null,
+            modelPinRevision: 0,
+            thinkingLevel: null,
+          }),
+        ),
+      );
+      const select = modelSelect();
+      expect(select.value).toBe("openai-codex::gpt-6-sol");
+      expect(select.selectedOptions[0]?.textContent).toBe(
+        "openai-codex · gpt-6-sol (not available on your account)",
+      );
+      expect(select.selectedOptions[0]?.className).toContain("text-muted-foreground");
+      const prompt = [...container.querySelectorAll("p")].find(
+        (item) =>
+          item.textContent ===
+          "This bot's connection needs to be chosen. Pick the connection to use.",
+      );
+      expect(prompt).toBeDefined();
+      expect(prompt?.nextElementSibling?.textContent).toContain("Save");
+      expect(onSave).not.toHaveBeenCalled();
+      await save();
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelProvider: "openai-codex",
+          modelId: "gpt-6-sol",
+          modelCredentialId: null,
+          thinkingLevel: null,
+        }),
+      );
+      if (count) {
+        expect(select.textContent).toContain("First connection · gpt-6-sol");
+        expect(select.textContent).toContain("Second connection · gpt-6-sol");
+        await act(async () => {
+          select.value = modelPinOptionKey("openai-codex", "gpt-6-sol", "second");
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        expect(container.textContent).not.toContain("This bot's connection needs to be chosen.");
+        await save();
+        expect(onSave).toHaveBeenLastCalledWith(
+          expect.objectContaining({ modelCredentialId: "second" }),
+        );
+      }
+    },
+  );
+
+  it("does not ask to choose a connection for an already bound pin", async () => {
+    await act(async () =>
+      root.render(
+        settings({
+          modelProvider: "openai-codex",
+          modelId: "gpt-6-sol",
+          modelCredentialId: "credential-test",
+          modelPinRevision: 1,
+          thinkingLevel: "high",
+        }),
+      ),
+    );
+    expect(container.textContent).not.toContain("This bot's connection needs to be chosen.");
+  });
   it("does not reintroduce a stored Spark credential as a free-form option", async () => {
     await act(async () => root.render(settings()));
     expect([...modelSelect().options].map((option) => option.value)).toEqual([
@@ -178,7 +253,9 @@ describe("bot model settings", () => {
       const selected = modelSelect().options[modelSelect().selectedIndex];
       expect(selected?.textContent).toContain("not available on your account");
       expect(container.textContent).toContain(
-        "This model is not available on your account. Choose another model.",
+        override
+          ? "This bot's connection needs to be chosen. Pick the connection to use."
+          : "This model is not available on your account. Choose another model.",
       );
       expect(onSave).not.toHaveBeenCalled();
       await save();

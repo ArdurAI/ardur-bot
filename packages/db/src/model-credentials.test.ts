@@ -4,9 +4,20 @@ import {
   findBoundModelCredential,
   findDefaultModelCredential,
   findModelCredential,
+  findUserModelCredentials,
   newestModelCredentialOrder,
   selectSpaceModelPreference,
 } from "./model-credentials.js";
+
+it("lists every same-provider connection only for the requested owner", async () => {
+  const findMany = vi.fn().mockResolvedValue([{ id: "first" }, { id: "second" }]);
+  const prisma = { userModelCredential: { findMany } } as unknown as PrismaClient;
+  expect(await findUserModelCredentials(prisma, "owner", "xai")).toHaveLength(2);
+  expect(findMany).toHaveBeenCalledWith({
+    where: { userId: "owner", provider: "xai" },
+    orderBy: newestModelCredentialOrder,
+  });
+});
 
 describe("findDefaultModelCredential", () => {
   it("resolves the default from the active space preference", async () => {

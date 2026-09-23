@@ -34,6 +34,23 @@ function fixture() {
 }
 
 describe("run pin snapshots", () => {
+  it("resolves a null legacy snapshot from the backfilled bot pin", async () => {
+    const f = fixture();
+    expect(
+      await resolveRunModelPin({
+        ...f,
+        snapshot: null,
+        bot: {
+          modelProvider: pin.provider,
+          modelId: pin.modelId,
+          thinkingLevel: pin.effort,
+          modelCredentialId: pin.credentialId,
+          modelPinRevision: 1,
+        },
+      }),
+    ).toMatchObject({ kind: "resolved", pin: { ...pin, revision: 1 } });
+    expect(f.loadKey).toHaveBeenCalledOnce();
+  });
   it("fails an incomplete recorded snapshot without replacing it with the current bot pin", async () => {
     const f = fixture();
     expect(

@@ -320,7 +320,11 @@ export function BotSettings({
             key: modelOptionKey(entry.provider, entry.id, credential.id),
             provider: entry.provider,
             modelId: entry.id,
-            label: `${entry.providerName ?? entry.provider} · ${entry.label}`,
+            label: `${
+              credentials.filter((item) => item.provider === credential.provider).length > 1
+                ? credential.label
+                : (entry.providerName ?? entry.provider)
+            } · ${entry.label}`,
           }));
     for (const option of options) {
       if (seenOptions.has(option.key)) continue;
@@ -341,9 +345,10 @@ export function BotSettings({
           (entry) => entry.provider === effectiveProvider && entry.id === effectiveModelId,
         )
       : undefined;
+  const selectedModel = parseModelOptionKey(modelKey);
   const effectiveCredential = credentials.find((entry) =>
-    parseModelOptionKey(modelKey)?.credentialId
-      ? entry.id === parseModelOptionKey(modelKey)?.credentialId
+    selectedModel
+      ? entry.id === selectedModel.credentialId
       : entry.provider === effectiveProvider && entry.modelId === effectiveModelId,
   );
   const supportedThinking =
@@ -352,10 +357,11 @@ export function BotSettings({
   const defaultThinkingLevel =
     effectiveCredential?.thinkingLevel ?? spaceDefaultEffort(undefined, supportedThinking);
   const unavailableDefault = metadata ? spaceDefaultUnavailable(metadata) : false;
-  const selectedModel = parseModelOptionKey(modelKey);
+  const needsConnection = Boolean(selectedModel && !selectedModel.credentialId);
   const unavailableSelection =
-    modelMetaReady &&
-    modelUnavailable({ catalog, credentials }, selectedModel?.provider, selectedModel?.modelId);
+    needsConnection ||
+    (modelMetaReady &&
+      modelUnavailable({ catalog, credentials }, selectedModel?.provider, selectedModel?.modelId));
 
   async function executeSave(patchOverrides?: {
     name?: string;
@@ -521,7 +527,11 @@ export function BotSettings({
               : ""}
           </NativeSelectOption>
           {modelKey && !connectedOptions.some((option) => option.key === modelKey) ? (
-            <NativeSelectOption value={modelKey}>
+            <NativeSelectOption
+              value={modelKey}
+              className={unavailableSelection ? "text-muted-foreground" : undefined}
+            >
+              {needsConnection ? `${selectedModel?.provider} · ` : ""}
               {parseModelOptionKey(modelKey)?.modelId ?? modelKey}
               {unavailableSelection ? t` (not available on your account)` : ""}
             </NativeSelectOption>
@@ -551,7 +561,7 @@ export function BotSettings({
       ) ? (
         <ShowAllModels checked={showAllModels} onChange={setShowAllModels} />
       ) : null}
-      {(modelKey ? unavailableSelection : unavailableDefault) ? (
+      {!needsConnection && (modelKey ? unavailableSelection : unavailableDefault) ? (
         <p className="mt-2 text-[12px] text-muted-foreground">
           <Trans>This model is not available on your account. Choose another model.</Trans>
         </p>
@@ -661,6 +671,11 @@ export function BotSettings({
         ) : null}
       </details>
       {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
+      {needsConnection ? (
+        <p className="mt-2 text-[12px] text-muted-foreground">
+          <Trans>This bot's connection needs to be chosen. Pick the connection to use.</Trans>
+        </p>
+      ) : null}
       <div className="mt-5 flex flex-col items-start gap-3">
         <Button
           disabled={saving}

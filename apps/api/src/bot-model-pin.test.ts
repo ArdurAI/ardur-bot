@@ -39,6 +39,32 @@ function fixture() {
   return { deps, findFirst, credential };
 }
 describe("bot pin editing", () => {
+  it("preserves an unchanged legacy pin during a profile save", async () => {
+    const { deps, findFirst } = fixture();
+    const legacy = { ...existing, modelProvider: "xai", modelId: "grok-4.6" };
+    expect(await botModelPinUpdate(deps, actor, legacy, { botId: "bot", ...legacy })).toEqual({});
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
+  it("requires a connection choice before changing an unbound legacy pin's effort", async () => {
+    const { deps, findFirst } = fixture();
+    const legacy = { ...existing, modelProvider: "xai", modelId: "grok-4.6" };
+    await expect(
+      botModelPinUpdate(deps, actor, legacy, {
+        botId: "bot",
+        thinkingLevel: "high",
+      }),
+    ).rejects.toThrow("Choose the connection to use.");
+    expect(findFirst).not.toHaveBeenCalled();
+    expect(deps.prisma.spaceModelPreference.findFirst).not.toHaveBeenCalled();
+    expect(
+      await botModelPinUpdate(deps, actor, legacy, {
+        botId: "bot",
+        thinkingLevel: "high",
+        modelCredentialId: "selected",
+      }),
+    ).toMatchObject({ modelCredentialId: "selected", thinkingLevel: "high" });
+  });
   it("materializes a complete choice including suggested effort and a revision", async () => {
     const { deps, findFirst } = fixture();
     expect(

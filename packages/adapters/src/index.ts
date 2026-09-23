@@ -4,6 +4,7 @@ export * from "./ai-consent.js";
 export * from "./artifacts.js";
 export * from "./auto-review.js";
 export * from "./auto-review-factory.js";
+export * from "./backfill-runtime-pins.js";
 export * from "./background-job-handlers.js";
 export * from "./bot-avatar.js";
 export * from "./bot-messages.js";

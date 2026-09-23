@@ -66,6 +66,37 @@ The full design, with file references and open verification gates, is the hub pa
 
 ## Consequences
 
+### Legacy pin upgrade (P1a-1b)
+
+Before the API serves requests or the worker consumes jobs, `backfillRuntimePins` binds legacy
+bots with a saved provider, no connection binding, and pin revision zero. Operators can also
+run `pnpm db:backfill-pins` after applying database migrations, using the deployment's database
+and encryption configuration.
+
+Only an owner's single connection for the saved provider can be bound. The model is retained.
+An explicit bot effort is retained; otherwise the connection's stored effort is used, followed
+by `spaceDefaultEffort` for the model's catalog entry or custom connection capabilities. Models
+without reasoning use `off`. Each binding increments the revision to one and records both a
+`bot.pinBackfilled` event containing the pin and a system message in the bot's conversation.
+These writes share a serializable transaction and a conditional revision-zero update, so
+repeated or concurrent starts cannot bind a bot twice. No credentials or secret values are
+included in the audit event or summary log; the event identifies the connection by its ID.
+
+Rows with zero or multiple matching owner connections remain unchanged. Rows whose previous
+effort cannot be determined, or whose owner-scoped thread is missing, also remain unchanged.
+The summary reports bound, missing-connection, multiple-connection, and skipped counts. A bot
+with an unbound override keeps its saved provider/model visible and asks the owner to choose
+a connection. A later invocation can reconsider an unchanged revision-zero row; a row with a
+binding or a later revision is never rewritten by this migration.
+
+Saving an unchanged legacy pin does not choose a connection. Changing its effort requires an
+explicit connection choice, so an unrelated profile edit cannot pick a connection implicitly.
+
+Queued or paused runs with no saved runtime pin resolve from the bot after the backfill. A
+run with a non-null snapshot retains that snapshot, including any failure it describes.
+
+### Runtime consequences
+
 - Disconnections and unsupported selections become visible, actionable failures instead of
   quiet substitutions. Existing tests that expect fallback behaviour are reversed.
 - Every runtime adapter needs versioned offline conformance tests (a fake `claude`
