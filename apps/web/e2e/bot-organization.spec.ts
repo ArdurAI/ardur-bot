@@ -222,7 +222,7 @@ test("group chats share every context-menu action", async ({ page }, testInfo) =
     "Pin",
     "Move to",
     "Mark as Unread",
-    "Edit Profile",
+    "Bot settings",
     "Duplicate",
     "Clear conversation",
     "Archive",
@@ -287,6 +287,6 @@ test("group chats share every context-menu action", async ({ page }, testInfo) =
   await page.setViewportSize({ width: 1280, height: 800 });
 
   await group.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Edit Profile", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Bot settings", exact: true }).click();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "group-settings");
 });

@@ -55,6 +55,7 @@ import {
   type PiSessionHandle,
   type PiSessionRecorder,
 } from "./pi-session.js";
+import { classifyProviderError, ProviderError } from "./provider-error.js";
 import { textContentArg } from "./tool-text.js";
 
 const running = new Map<string, { controller: AbortController; work: Promise<void> }>();
@@ -410,7 +411,10 @@ export class PiAgentRuntime implements AgentRuntime {
         const budgetExceeded = host.toolCallBudget.exceeded;
         const error = agent.state.errorMessage;
         if (error && !budgetExceeded) {
-          throw new Error(sanitizeProviderError(model.provider, error));
+          throw new ProviderError(
+            sanitizeProviderError(model.provider, error),
+            classifyProviderError(error),
+          );
         }
         if (budgetExceeded) {
           const budgetMessage = toolCallBudgetExceededMessage(host.toolCallBudget.limit);
@@ -451,7 +455,7 @@ export class PiAgentRuntime implements AgentRuntime {
         queue.push(streamed.trim() ? { type: "done", text: streamed } : { type: "done" });
       } catch (error) {
         const message = sanitizeError(error instanceof Error ? error.message : String(error));
-        queue.fail(new Error(message));
+        queue.fail(new ProviderError(message, classifyProviderError(error)));
       } finally {
         queue.close();
         if (trackedBudget) {

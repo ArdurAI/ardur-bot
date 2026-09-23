@@ -1,6 +1,7 @@
 import type { AgentRunRequest } from "@ardurbot/adapter-kit";
 import type { Actor } from "@ardurbot/contracts";
 import { usableModelId } from "@ardurbot/contracts";
+import { recommendedDefaultModelId } from "@ardurbot/core";
 import {
   type findDefaultModelCredential,
   findModelCredential,
@@ -18,7 +19,14 @@ export function isCatalogModelChoice(provider: string, modelId: string) {
 }
 
 export function defaultCatalogModelId(provider: string): string | null {
-  return usableModelId(listPiCatalog().find((item) => item.provider === provider)?.id);
+  return (
+    recommendedDefaultModelId(
+      provider,
+      listPiCatalog()
+        .filter((item) => item.provider === provider)
+        .map((item) => item.id),
+    ) ?? null
+  );
 }
 
 export async function validateConnectedModelChoice(
@@ -61,8 +69,8 @@ export function selectConfiguredModel(input: {
 }) {
   const { bot, overrideCredential, defaultCredential, settings, deployment } = input;
   const hasOverride = Boolean(bot?.modelProvider && usableModelId(bot.modelId));
-  // The override provider, model and credential must win together.
-  const useOverride = Boolean(hasOverride && overrideCredential);
+  // A pin keeps its provider and model even if its credential disappears.
+  const useOverride = hasOverride;
   const credential = useOverride ? overrideCredential : defaultCredential;
   return {
     provider:
@@ -77,10 +85,6 @@ export function selectConfiguredModel(input: {
       usableModelId(settings?.defaultModelId) ??
       usableModelId(deployment?.model),
     credential,
-    // Preserve bot thinking for the Space default; drop it for an unavailable override.
-    thinkingLevel:
-      hasOverride && !useOverride
-        ? null
-        : ((bot?.thinkingLevel as AgentRunRequest["model"]["thinkingLevel"]) ?? null),
+    thinkingLevel: (bot?.thinkingLevel as AgentRunRequest["model"]["thinkingLevel"]) ?? null,
   };
 }

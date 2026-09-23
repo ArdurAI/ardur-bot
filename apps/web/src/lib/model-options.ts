@@ -1,7 +1,11 @@
 import type { ModelCatalogEntry } from "@ardurbot/contracts";
 import { isModelUnavailableOnSubscription, recommendedModelIds } from "@ardurbot/core";
 
-export function availableProviderModels(catalog: ModelCatalogEntry[], provider: string) {
+export function availableProviderModels(
+  catalog: ModelCatalogEntry[],
+  provider: string,
+  showAll = false,
+) {
   const preferences = Object.hasOwn(recommendedModelIds, provider)
     ? (recommendedModelIds[provider] ?? [])
     : [];
@@ -13,7 +17,8 @@ export function availableProviderModels(catalog: ModelCatalogEntry[], provider: 
     .filter(
       (entry) =>
         entry.provider === provider &&
-        !(entry.auth === "oauth" && isModelUnavailableOnSubscription(provider, entry.id)),
+        (showAll ||
+          !(entry.auth === "oauth" && isModelUnavailableOnSubscription(provider, entry.id))),
     )
     .sort((a, b) => rank(a.id) - rank(b.id));
 }

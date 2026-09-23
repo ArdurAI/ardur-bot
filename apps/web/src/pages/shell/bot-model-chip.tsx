@@ -1,23 +1,16 @@
-import type { Bot, Me, ModelCatalogEntry, ModelCredential } from "@ardurbot/contracts";
+import type { Bot } from "@ardurbot/contracts";
 import { ThinkingLevelSchema } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useEffect, useState } from "react";
-import { rpc } from "../../lib/rpc";
-
-type ModelSettings = {
-  me: Pick<Me, "defaultProvider" | "defaultModel">;
-  catalog: ModelCatalogEntry[];
-  credentials: ModelCredential[];
-};
+import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
+import type { ModelSettings } from "../../lib/use-model-settings";
 
 export function effectiveBotModel(
   bot: Pick<Bot, "modelProvider" | "modelId" | "thinkingLevel">,
   { me, catalog, credentials }: ModelSettings,
 ) {
   const hasOverride = Boolean(bot.modelProvider && bot.modelId);
-  const useOverride =
-    hasOverride && credentials.some((entry) => entry.provider === bot.modelProvider);
+  const useOverride = hasOverride;
   const provider = useOverride ? bot.modelProvider : me.defaultProvider;
   const modelId = useOverride ? bot.modelId : me.defaultModel;
   if (!provider || !modelId) return null;
@@ -27,10 +20,7 @@ export function effectiveBotModel(
   );
   const levels = credential?.thinkingLevels ?? entry?.thinkingLevels;
   const reasoning = credential?.reasoning ?? entry?.reasoning;
-  const preferred =
-    (hasOverride && !useOverride ? null : bot.thinkingLevel) ??
-    credential?.thinkingLevel ??
-    "medium";
+  const preferred = bot.thinkingLevel ?? credential?.thinkingLevel ?? "medium";
   // Match the runtime's nearest supported level, preferring a higher level first.
   const orderedLevels = ThinkingLevelSchema.options;
   const index = orderedLevels.indexOf(preferred);
@@ -42,44 +32,35 @@ export function effectiveBotModel(
             (level) => levels.includes(level),
           )
         : undefined;
-  return { label: entry?.label ?? modelId, thinkingLevel, isDefault: !useOverride };
+  return {
+    label: entry?.label ?? modelId,
+    providerLabel: provider === "openai-codex" ? "Codex" : (entry?.providerName ?? provider),
+    thinkingLevel,
+    isDefault: !useOverride,
+    unavailable: useOverride
+      ? modelUnavailable({ catalog, credentials }, provider, modelId)
+      : spaceDefaultUnavailable({ me, catalog, credentials }),
+  };
 }
 
 export function BotModelChip({
   bot,
-  spaceId,
-  settingsOpen,
+  settings,
   onClick,
 }: {
   bot: Bot;
-  spaceId?: string;
-  settingsOpen: boolean;
+  settings: ModelSettings | null;
   onClick: () => void;
 }) {
   const { t } = useLingui();
-  const [settings, setSettings] = useState<ModelSettings | null>(null);
-  useEffect(() => {
-    if (settingsOpen) return;
-    let cancelled = false;
-    void Promise.all([rpc.me(), rpc.models.list(), rpc.models.credentials()])
-      .then(([me, catalog, credentials]) => {
-        if (!cancelled) setSettings({ me, catalog, credentials });
-      })
-      .catch(() => {
-        if (!cancelled) setSettings(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [spaceId, settingsOpen]);
   const model = settings ? effectiveBotModel(bot, settings) : null;
   if (!model) return null;
-  const label = model.thinkingLevel ? `${model.label} · ${model.thinkingLevel}` : model.label;
+  const label = `${model.providerLabel} · ${model.label}${model.thinkingLevel ? ` · ${model.thinkingLevel}` : ""}${model.unavailable ? t` · not available` : ""}`;
   return (
     <Button
       variant="ghost"
       size="xs"
-      className="app-no-drag min-w-0 shrink font-normal text-muted-foreground"
+      className={`app-no-drag min-w-0 shrink font-normal ${model.unavailable ? "text-warning" : "text-muted-foreground"}`}
       aria-label={t`Change model: ${label}`}
       onClick={onClick}
     >

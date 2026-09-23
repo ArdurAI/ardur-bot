@@ -7,6 +7,7 @@ import type {
   ThreadMessagePage,
   ThreadSnapshot,
 } from "@ardurbot/contracts";
+import { ProviderErrorKindSchema } from "@ardurbot/contracts";
 import {
   isActive,
   isRunTerminalEvent,
@@ -393,7 +394,13 @@ export function reduceThreadSnapshot(
       // why it stopped, matching what threads.get returns on the next load.
       run:
         endedRun && failure
-          ? { ...endedRun, status: "failed", error: failure }
+          ? {
+              ...endedRun,
+              status: "failed",
+              error: failure,
+              providerErrorKind: ProviderErrorKindSchema.safeParse(event.payload.providerErrorKind)
+                .data,
+            }
           : primaryEnded
             ? (activeRuns?.[0] ?? null)
             : prev.run,

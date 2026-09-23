@@ -118,12 +118,21 @@ describe("finalizeRun", () => {
           leaseFence: 1,
           outcome: "failed",
           error: "failed",
+          providerErrorKind: "model-unavailable",
         },
         { publish } as never,
       ),
     ).resolves.toEqual({ continuationRunId: null });
     expect(transaction).toHaveBeenCalledTimes(2);
     expect(createEvent).toHaveBeenCalledOnce();
+    expect(createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: "run.failed",
+          payload: { error: "failed", providerErrorKind: "model-unavailable" },
+        }),
+      }),
+    );
     expect(publish).toHaveBeenCalledOnce();
   });
 });

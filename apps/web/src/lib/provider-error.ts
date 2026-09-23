@@ -1,11 +1,16 @@
+import type { ProviderErrorKind } from "@ardurbot/contracts";
+
 // Only messages that talk about the model itself offer "Change model"; an unrelated
 // "not supported" (an image input, a tool) must not send the user to the model picker.
 const MODEL_UNAVAILABLE =
-  /\bmodel\b[^.\n]*\b(not supported|not available|does not exist|not found|unknown|invalid|unsupported)\b|\b(unknown|invalid|unsupported) model\b/i;
+  /\bmodel\b(?:\s+["'`][^"'`\n]+["'`]|\s+[\w./:-]+)?\s+(?:is\s+)?(?:not supported|not available|does not exist|not found|unknown)\b|\bunknown model\b/i;
 
-export function parseProviderError(text: string): {
+export function parseProviderError(
+  text: string,
+  providerErrorKind?: ProviderErrorKind,
+): {
   message: string;
-  kind: "model-unavailable" | "other";
+  kind: ProviderErrorKind;
 } {
   let message = text;
   try {
@@ -30,6 +35,6 @@ export function parseProviderError(text: string): {
   }
   return {
     message,
-    kind: MODEL_UNAVAILABLE.test(message) ? "model-unavailable" : "other",
+    kind: providerErrorKind ?? (MODEL_UNAVAILABLE.test(message) ? "model-unavailable" : "other"),
   };
 }

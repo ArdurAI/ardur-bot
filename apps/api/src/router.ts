@@ -40,6 +40,7 @@ import {
   computerSupportsUpdate,
   computerUpdateView,
   createVoiceProvider,
+  defaultCatalogModelId,
   deletePushToken,
   deploymentAutoReviewDefault,
   destroyBot,
@@ -93,10 +94,8 @@ import {
   containsSecret,
   expandSkillReferencesInPrompt,
   hasMixedOneShotSchedule,
-  isModelUnavailableOnSubscription,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
-  recommendedDefaultModelId,
 } from "@ardurbot/core";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
@@ -913,7 +912,8 @@ export function createRouter(deps: RouterDeps) {
               provider: login.provider,
               plaintext: serializeModelSecret({ kind: "oauth", credential: login.credential }),
               label: login.label ?? "ChatGPT Plus/Pro",
-              modelId: login.modelId,
+              modelId:
+                usableModelId(login.modelId) ?? defaultCatalogModelId(login.provider) ?? undefined,
               signal: login.signal,
             });
           },
@@ -943,7 +943,12 @@ export function createRouter(deps: RouterDeps) {
                   message: `No model credential is connected for ${input.provider}.`,
                 });
               }
-              await selectSpaceModelPreference(tx, context.actor, credential.id, input.modelId);
+              await selectSpaceModelPreference(
+                tx,
+                context.actor,
+                credential.id,
+                usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider),
+              );
             },
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           ),
@@ -5215,18 +5220,9 @@ async function persistModelCredential(
         throwIfAborted(input.signal);
         const requestedModel = usableModelId(input.modelId);
         const defaultModel =
-          (requestedModel && !isModelUnavailableOnSubscription(input.provider, requestedModel)
-            ? requestedModel
-            : recommendedDefaultModelId(
-                input.provider,
-                listPiCatalog()
-                  .filter(
-                    (entry) =>
-                      entry.provider === input.provider &&
-                      !isModelUnavailableOnSubscription(input.provider, entry.id),
-                  )
-                  .map((entry) => entry.id),
-              )) ?? usableModelId(deps.env.defaultModel);
+          requestedModel ??
+          defaultCatalogModelId(input.provider) ??
+          usableModelId(deps.env.defaultModel);
         await selectSpaceModelPreference(tx, actor, credential.id, defaultModel);
         throwIfAborted(input.signal);
         if (existing) {

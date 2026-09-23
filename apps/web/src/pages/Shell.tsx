@@ -12,6 +12,7 @@ import type {
   Me,
   MessageReaction,
   ProductEvent,
+  ProviderErrorKind,
   Routine,
   SearchHit,
   Space,
@@ -196,6 +197,8 @@ import {
   transcriptMovedDown,
 } from "../lib/transcript-scroll";
 import { speaker } from "../lib/tts";
+import { useModelSettings } from "../lib/use-model-settings";
+import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
@@ -232,6 +235,7 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import { SidebarSettings } from "./shell/sidebar-settings";
 import { WindowChrome } from "./WindowChrome";
 
 const BotContextMenu = lazy(() =>
@@ -444,6 +448,7 @@ export function ShellPage() {
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  useSettingsShortcut(() => openSettings("general"));
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [messagingSettingsOpen, setMessagingSettingsOpen] = useState(false);
   const [messagingSurfaceEnabled, setMessagingSurfaceEnabled] = useState(false);
@@ -541,6 +546,7 @@ export function ShellPage() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [initialBotsLoaded, setInitialBotsLoaded] = useState(false);
   const [bootstrapMe, setBootstrapMe] = useState<Me | null>();
+  const modelSettings = useModelSettings(bootstrapMe?.spaceId, settingsOpen, Boolean(bootstrapMe));
   const [routineDraft, setRoutineDraft] = useState<RoutineDraftState>(emptyRoutineDraft());
   const [routineWebhookSecret, setRoutineWebhookSecret] = useState<string | null>(null);
   const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
@@ -2642,7 +2648,7 @@ export function ShellPage() {
         data-testid="bots-sidebar"
         data-collapsed={botsSidebarCollapsed ? "true" : "false"}
         inert={botsSidebarCollapsed && !mobileSidebarOpen ? true : undefined}
-        className={`absolute inset-y-0 start-0 z-40 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,width,opacity] md:static md:z-auto md:translate-x-0 ${
+        className={`absolute inset-y-0 start-0 z-40 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,opacity] motion-reduce:transition-none md:static md:z-auto md:translate-x-0 ${
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
         } ${
           botsSidebarCollapsed
@@ -3117,6 +3123,7 @@ export function ShellPage() {
             <Trans>Integrations</Trans>
           </span>
         </button>
+        <SidebarSettings onClick={() => openSettings("general")} />
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
           <PopoverTrigger
             data-testid="user-menu-trigger"
@@ -3285,8 +3292,7 @@ export function ShellPage() {
               <BotModelChip
                 key={bootstrapMe?.spaceId}
                 bot={active}
-                spaceId={bootstrapMe?.spaceId}
-                settingsOpen={settingsOpen}
+                settings={modelSettings}
                 onClick={openBotModelSettings}
               />
             ) : null}
@@ -3372,6 +3378,7 @@ export function ShellPage() {
             attachmentNotice={attachmentNotice}
             sendError={sendError}
             runError={displayedRunError}
+            providerErrorKind={sendError ? undefined : activeSnapshot?.run?.providerErrorKind}
             runErrorId={displayedRunErrorId}
             onRunErrorPresented={handleRunErrorPresented}
             onDismissError={dismissComposerError}
@@ -3424,7 +3431,7 @@ export function ShellPage() {
       <aside
         data-testid="side-panel"
         data-panel={panel ?? "closed"}
-        className={`absolute inset-y-0 end-0 z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-background transition-[width] duration-150 ease-out md:relative ${
+        className={`absolute inset-y-0 end-0 z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-background md:relative ${
           panel && (active || activeGroup || panel === "create")
             ? "w-full max-w-[384px] border-s border-sidebar-border md:w-[384px] md:max-w-none"
             : "pointer-events-none w-0"
@@ -3607,6 +3614,7 @@ export function ShellPage() {
                 key={active.id}
                 bot={active}
                 modelFocusRequest={modelFocusRequest}
+                modelSettings={modelSettings}
                 memoryProviderConfigured={memoryProviderConfig != null}
                 onSkillsChange={setAgentSkills}
                 onSave={async ({ computerMode, ...patch }) => {
@@ -3861,6 +3869,15 @@ export function ShellPage() {
               setPanel(contextBot ? "settings" : "group-settings");
               setBotMenu(null);
             }}
+            onModelEffort={
+              contextBot
+                ? () => {
+                    navigate(`/app/${contextBot.id}`);
+                    openBotModelSettings();
+                    setBotMenu(null);
+                  }
+                : undefined
+            }
             onDuplicate={() => {
               setBotMenu(null);
               const request = contextBot
@@ -4849,6 +4866,7 @@ const Composer = memo(function Composer({
   attachmentNotice,
   sendError,
   runError,
+  providerErrorKind,
   runErrorId,
   onRunErrorPresented,
   onDismissError,
@@ -4876,6 +4894,7 @@ const Composer = memo(function Composer({
   attachmentNotice: string | null;
   sendError: string | null;
   runError: string | null;
+  providerErrorKind?: ProviderErrorKind;
   runErrorId: string | null;
   onRunErrorPresented: (runId: string) => void;
   onDismissError: () => void;
@@ -5168,7 +5187,11 @@ const Composer = memo(function Composer({
           data-testid="composer-error"
           className="mb-3 flex items-center gap-2 rounded-[14px] border border-destructive/40 bg-destructive/10 px-4 py-2 text-[13px] text-destructive"
         >
-          <ProviderErrorMessage text={sendError ?? runError ?? ""} onChangeModel={onChangeModel} />
+          <ProviderErrorMessage
+            text={sendError ?? runError ?? ""}
+            providerErrorKind={providerErrorKind}
+            onChangeModel={onChangeModel}
+          />
           <button
             type="button"
             aria-label={t`Dismiss error`}

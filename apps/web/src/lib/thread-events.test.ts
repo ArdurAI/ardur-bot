@@ -691,7 +691,7 @@ describe("thread event reduction", () => {
       type: "run.failed",
       seq: 11,
       runId: failing.id,
-      payload: { error: "Provider is not configured: openrouter" },
+      payload: { error: "Provider is not configured: openrouter", providerErrorKind: "auth" },
     });
 
     const next = reduceThreadSnapshot(initial, failed);
@@ -701,6 +701,7 @@ describe("thread event reduction", () => {
       id: failing.id,
       status: "failed",
       error: "Provider is not configured: openrouter",
+      providerErrorKind: "auth",
     });
     expect(threadRunError(next)).toBe("Provider is not configured: openrouter");
     expect(threadRunError(next, new Set([failing.id]))).toBeNull();

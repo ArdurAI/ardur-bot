@@ -254,6 +254,7 @@ import {
   renderPlotSpecToSvg,
   searchChartCatalog,
 } from "./plot-tool.js";
+import { classifyProviderError } from "./provider-error.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 import {
@@ -4274,6 +4275,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             leaseFence: fence,
             outcome: "failed",
             error: message,
+            providerErrorKind: classifyProviderError(error),
           });
           if (!failed) return;
           if (failed.continuationRunId) {

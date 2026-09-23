@@ -13,13 +13,10 @@ describe("parseProviderError", () => {
     expect(parseProviderError(text)).toEqual({ message, kind: "model-unavailable" });
   });
 
-  it.each([
-    "UNKNOWN MODEL",
-    "Model does not exist",
-    "Model not available",
-    "Invalid model",
-    "Model not found",
-  ])("recognizes %s", (text) => expect(parseProviderError(text).kind).toBe("model-unavailable"));
+  it.each(["UNKNOWN MODEL", "Model does not exist", "Model not available", "Model not found"])(
+    "recognizes %s",
+    (text) => expect(parseProviderError(text).kind).toBe("model-unavailable"),
+  );
 
   it("keeps unrelated errors out of model recovery", () => {
     expect(parseProviderError('{"error":{"message":"Rate limit exceeded"}}')).toEqual({
@@ -32,6 +29,9 @@ describe("parseProviderError", () => {
     "Image input is not supported by this connection.",
     "Tool calls are not available on this plan.",
     "This file type is unsupported.",
+    "Model tool calls are not supported",
+    "Model image input is not available",
+    "Invalid model response JSON",
   ])("does not offer model recovery for an unrelated %s", (text) => {
     expect(parseProviderError(text).kind).toBe("other");
   });
@@ -55,4 +55,10 @@ describe("parseProviderError", () => {
       kind: "other",
     });
   });
+});
+
+it("treats an explicit server kind as authoritative", () => {
+  expect(parseProviderError("Model not supported", "rate-limit").kind).toBe("rate-limit");
+  expect(parseProviderError("Model not supported", "other").kind).toBe("other");
+  expect(parseProviderError("Access denied", "model-unavailable").kind).toBe("model-unavailable");
 });

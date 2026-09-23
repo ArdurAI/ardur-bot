@@ -245,7 +245,7 @@ describe("threadSnapshot", () => {
       $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
       message: { findMany: vi.fn().mockResolvedValue([]) },
       event: {
-        findFirst: vi.fn().mockResolvedValue(null),
+        findFirst: vi.fn().mockResolvedValue({ payload: { providerErrorKind: "auth" } }),
         findMany: findManyEvents,
       },
       run: { findFirst: findFirstRun },
@@ -288,6 +288,7 @@ describe("threadSnapshot", () => {
         id: "run-failed",
         status: "failed",
         error: "Provider is not configured: openrouter",
+        providerErrorKind: "auth",
       }),
     );
     expect(findManyEvents).not.toHaveBeenCalled();

@@ -1,5 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { formatElapsed } from "./primitives";
+import { formatElapsed, Shimmer, SuccessPop } from "./primitives";
 
 describe("formatElapsed", () => {
   it("formats sub-minute elapsed time to one decimal second", () => {
@@ -29,4 +31,16 @@ describe("formatElapsed", () => {
     expect(formatElapsed(startedAt, later)).toBe("42.3s");
     expect(formatElapsed(startedAt, later + 60_000)).toBe("1m 42.3s");
   });
+});
+
+it("keeps shimmer text and success content visible without motion", () => {
+  const shimmer = renderToStaticMarkup(createElement(Shimmer, null, "Working"));
+  expect(shimmer).toContain("motion-reduce:animate-none");
+  expect(shimmer).toContain("motion-reduce:bg-none");
+  expect(shimmer).toContain("motion-reduce:text-muted-foreground");
+  expect(shimmer).toContain("Working");
+  const success = renderToStaticMarkup(createElement(SuccessPop, { label: "Saved" }));
+  expect(success.match(/motion-reduce:animate-none/g)).toHaveLength(2);
+  expect(success).toContain("Saved");
+  expect(success).not.toContain('style="animation');
 });

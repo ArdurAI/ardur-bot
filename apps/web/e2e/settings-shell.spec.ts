@@ -18,7 +18,26 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await captureScreenshot(page, testInfo, "settings-account-menu-lean");
   await page.keyboard.press("Escape");
 
-  const settings = await openUserSettings(page);
+  await page
+    .locator("aside")
+    .first()
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByTestId("user-settings");
+  for (const [name, href] of [
+    ["Report an issue", "https://github.com/ArdurAI/ardur-bot/issues/new/choose"],
+    ["Discussions", "https://github.com/ArdurAI/ardur-bot/discussions"],
+  ]) {
+    const link = settings.getByRole("link", { name, exact: true });
+    await expect(link).toHaveAttribute("href", href!);
+    await expect(link).toHaveAttribute("target", "_blank");
+  }
+  await page.getByRole("button", { name: "Close user settings" }).click();
+  await page.keyboard.press("Control+,");
+  await expect(settings).toBeVisible();
+  await page.getByRole("button", { name: "Close user settings" }).click();
+  await page.keyboard.press("Meta+,");
+  await expect(settings).toBeVisible();
   await expect(settings.getByTestId("settings-nav")).toBeVisible();
   await expect(settings.getByTestId("settings-nav-general")).toHaveAttribute(
     "aria-current",

@@ -1,4 +1,4 @@
-import type { AgentRunRequest } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import {
   legacyScopedToolEffectIdempotencyKey,
   toolEffectIdempotencyKey,
@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "./auto-review.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
+import { ProviderError } from "./provider-error.js";
 
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
@@ -183,7 +184,9 @@ function fixture(runId = "run-1") {
   });
   const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
   let calls: ToolCall[] = [];
-  const runtimeRun = vi.fn(async function* (request: AgentRunRequest) {
+  const runtimeRun = vi.fn(async function* (
+    request: AgentRunRequest,
+  ): AsyncGenerator<AgentRuntimeEvent> {
     for (const call of calls) {
       const result = await request.executeTool!(call.name, call.args, call.executionId);
       results.push(result);
@@ -213,6 +216,9 @@ function fixture(runId = "run-1") {
   } as unknown as Parameters<typeof createRunExecutor>[0]);
 
   return {
+    executor,
+    runtimeRun,
+    finalizeRun,
     effects,
     results,
     scratchpadRows,
@@ -535,4 +541,20 @@ describe("mutating tool effect idempotency keys", () => {
     expect(f.effects).toHaveLength(1);
     expect(f.results[0]).toEqual({ ok: true, legacy: true });
   });
+});
+
+it("persists a sanitized typed provider failure through the executor", async () => {
+  const f = fixture();
+  f.runtimeRun.mockImplementation(async function* () {
+    yield { type: "text" as const, text: "" };
+    throw new ProviderError("Access denied", "model-unavailable");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "failed",
+      error: "Access denied",
+      providerErrorKind: "model-unavailable",
+    }),
+  );
 });
