@@ -37,6 +37,10 @@ export interface ArdurBotDesktopOAuthCallback {
 }
 
 export interface ArdurBotDesktop {
+  memoryFolders?: {
+    available: () => Promise<boolean>;
+    select: (spaceId: string) => Promise<{ path: string } | null>;
+  };
   /** Only the isolated local settings window is authorized to call this bridge. */
   localSettings?: {
     request: (pathname: string, body: string) => Promise<{ status: number; body: string }>;

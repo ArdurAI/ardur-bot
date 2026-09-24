@@ -10,6 +10,12 @@ import { runCorrelatedJob, unwrapJobPayload, wrapJobPayload } from "@ardurbot/lo
 import { makeWorkerUtils, type Runner, run, type WorkerUtils } from "graphile-worker";
 import type { Pool } from "pg";
 
+function memoryDeliveryQueue(job: BackgroundJob): string | undefined {
+  return job.name === "memory.deliver"
+    ? `memory.document:${job.payload.spaceId}:${job.payload.documentId}`
+    : undefined;
+}
+
 // Share the caller's pg.Pool instead of opening a separate connectionString-based
 // pool per graphile-worker component: three independent pools per worker process
 // (Prisma + publisher + runner) triples the connection footprint against Postgres'
@@ -25,6 +31,7 @@ export class GraphileJobPublisher implements JobPublisher {
     await utils.addJob(job.name, wrapJobPayload(job.payload), {
       runAt: job.availableAt,
       jobKey: job.replaceKey,
+      ...(job.name === "memory.deliver" ? { queueName: memoryDeliveryQueue(job) } : {}),
     });
   }
 
@@ -180,6 +187,7 @@ interface QueuedJob {
   payload: unknown;
   availableAt?: Date;
   replaceKey?: string;
+  queueName?: string;
 }
 
 function toQueuedJob(job: BackgroundJob): QueuedJob {
@@ -188,6 +196,7 @@ function toQueuedJob(job: BackgroundJob): QueuedJob {
     payload: wrapJobPayload(job.payload),
     availableAt: job.availableAt,
     replaceKey: job.replaceKey,
+    queueName: memoryDeliveryQueue(job),
   };
 }
 
@@ -197,6 +206,7 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
   private readonly scheduled = new Map<ReturnType<typeof setTimeout>, QueuedJob>();
   private readonly keyed = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly active = new Set<Promise<void>>();
+  private readonly serial = new Map<string, Promise<void>>();
   private readonly closingJobs: QueuedJob[] = [];
   private draining: Promise<void> | undefined;
   private closed = false;
@@ -260,14 +270,22 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
 
   private dispatch(handlers: BackgroundJobHandlers, job: QueuedJob): Promise<void> {
     const unpacked = unwrapJobPayload(job.payload);
-    const active = runCorrelatedJob({
-      name: job.name,
-      payload: unpacked.payload,
-      correlation: unpacked.correlation,
-      run: () => dispatchBackgroundJob(handlers, job.name, unpacked.payload),
-    }).catch(() => undefined);
+    const runJob = () =>
+      runCorrelatedJob({
+        name: job.name,
+        payload: unpacked.payload,
+        correlation: unpacked.correlation,
+        run: () => dispatchBackgroundJob(handlers, job.name, unpacked.payload),
+      }).catch(() => undefined);
+    const previous = job.queueName ? this.serial.get(job.queueName) : undefined;
+    const active = previous ? previous.then(runJob) : runJob();
+    if (job.queueName) this.serial.set(job.queueName, active);
     this.active.add(active);
-    void active.finally(() => this.active.delete(active));
+    void active.finally(() => {
+      this.active.delete(active);
+      if (job.queueName && this.serial.get(job.queueName) === active)
+        this.serial.delete(job.queueName);
+    });
     return active;
   }
 

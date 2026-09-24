@@ -23,6 +23,7 @@ import {
   createCloudAgentConnection,
   createConnectorStack,
   createJobReconciler,
+  createMemoryLifecycle,
   createMessagingContextLoader,
   createMessagingTeamChatSender,
   createRunExecutor,
@@ -55,6 +56,7 @@ import {
   pushTokenPath,
   reconcileCloudAgents,
   reconcileComputerUpdates,
+  reconcileMemoryDelivery,
   removePiUserSessions,
   ScriptedAgentRuntime,
   SmtpEmailProvider,
@@ -81,7 +83,6 @@ import {
   SERVICE_NAMES,
 } from "@ardurbot/logging";
 import { requestLogging } from "@ardurbot/logging/hono";
-import { MarkdownMemoryStore } from "@ardurbot/memory";
 import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
@@ -238,7 +239,8 @@ export async function createApp(
   const oauthLogins = new PiOAuthLogins();
   const home = new LocalAgentHomeStore(env.dataDir);
   const artifacts = new LocalArtifactStore(env.dataDir);
-  const memory = new MarkdownMemoryStore(prisma);
+  const memoryLifecycleDeps = { prisma, secrets, jobs, dataDir: env.dataDir };
+  const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
   const mcp = new McpConnector(
     prisma,
     secrets,
@@ -364,6 +366,7 @@ export async function createApp(
     runtime,
     sandbox,
     memory,
+    memoryDocuments,
     memoryProviders,
     home,
     artifacts,
@@ -407,6 +410,7 @@ export async function createApp(
     jobs,
     events,
     workerId: "api",
+    memoryDocuments,
     runtime,
     secretStore: secrets,
     memoryProviders,
@@ -423,6 +427,7 @@ export async function createApp(
         jobs,
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
+        reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
       })
     : undefined;
   reconciler?.start();
@@ -435,6 +440,7 @@ export async function createApp(
     jobs,
     sandbox,
     memory,
+    memoryDocuments,
     memoryProviders,
     home,
     secrets,

@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "documents": [
+    {
+      "id": "memory-demo-shared",
+      "revisions": [
+        {
+          "documentId": "memory-demo-shared",
+          "revision": 1,
+          "scopeKey": {
+            "kind": "user",
+            "spaceId": "fixture-space",
+            "userId": "fixture-user"
+          },
+          "path": "project-preferences.md",
+          "content": "Use metric units in the example project.",
+          "author": {
+            "kind": "bot",
+            "userId": "fixture-user",
+            "botId": "fixture-bot"
+          },
+          "model": {
+            "provider": "fixture",
+            "modelId": "local-model",
+            "effort": "high"
+          },
+          "runId": "fixture-run",
+          "threadId": "fixture-thread",
+          "references": ["https://example.test/evidence"],
+          "createdAt": "2026-01-01T12:00:00.000Z",
+          "deletedAt": null
+        },
+        {
+          "documentId": "memory-demo-shared",
+          "revision": 2,
+          "scopeKey": {
+            "kind": "user",
+            "spaceId": "fixture-space",
+            "userId": "fixture-user"
+          },
+          "path": "project-preferences.md",
+          "content": "Use metric units and UTC timestamps in the example project.",
+          "author": {
+            "kind": "bot",
+            "userId": "fixture-user",
+            "botId": "fixture-bot"
+          },
+          "model": {
+            "provider": "fixture",
+            "modelId": "local-model",
+            "effort": "high"
+          },
+          "runId": "fixture-run",
+          "threadId": "fixture-thread",
+          "references": ["https://example.test/evidence"],
+          "createdAt": "2026-01-02T12:00:00.000Z",
+          "deletedAt": null
+        }
+      ]
+    },
+    {
+      "id": "memory-demo-private",
+      "revisions": [
+        {
+          "documentId": "memory-demo-private",
+          "revision": 1,
+          "scopeKey": {
+            "kind": "bot",
+            "spaceId": "fixture-space",
+            "userId": "fixture-user",
+            "botId": "fixture-bot"
+          },
+          "path": "private-preference.md",
+          "content": "Keep this example preference private to the selected bot.",
+          "author": {
+            "kind": "bot",
+            "userId": "fixture-user",
+            "botId": "fixture-bot"
+          },
+          "model": {
+            "provider": "fixture",
+            "modelId": "local-model",
+            "effort": "high"
+          },
+          "runId": "fixture-run",
+          "threadId": "fixture-thread",
+          "references": ["https://example.test/evidence"],
+          "createdAt": "2026-01-01T12:00:00.000Z",
+          "deletedAt": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import type { DurableMemoryScope, SemanticMemoryProvider } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
+import { UnavailableMemoryProvider } from "./memory/unavailable-provider.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import {
   classifySerenityConnectionSettings,
@@ -8,6 +9,8 @@ import {
   SERENITY_PROVIDER_ID,
   serenityRequiresDeploymentOwner,
 } from "./serenity-memory-provider.js";
+
+export { selectDocumentStore } from "./memory/document-store-factory.js";
 
 export { MemoryProviderDeploymentOwnerRequiredError } from "./serenity-memory-provider.js";
 
@@ -34,6 +37,7 @@ export interface PreparedMemoryProviderConnection {
 }
 
 export interface ConfiguredMemoryProvider {
+  generation?: number;
   provider: SemanticMemoryProvider;
   defaultScope: DurableMemoryScope;
 }
@@ -160,23 +164,35 @@ export class SpaceMemoryProviderResolver implements MemoryProviderResolver {
       where: { spaceId },
       include: { secret: true },
     });
-    if (!config) return null;
-    const settings = toStringRecord(config.settings);
-    if (memoryProviderRequiresDeploymentOwner(config.provider, settings)) {
-      const deployment = await this.prisma.deploymentSettings.findUnique({
-        where: { id: "default" },
-        select: { ownerUserId: true },
-      });
-      // Also disable pre-existing local configurations authored outside the deployment boundary.
-      if (!deployment?.ownerUserId || deployment.ownerUserId !== config.userId) return null;
-    }
-    const credentials = decodeCredentials(
-      config.provider,
-      this.secrets.load(config.secret.ciphertext, config.secret.id),
-    );
-    return {
-      provider: createMemoryProvider(config.provider, settings, credentials),
-      defaultScope: config.defaultMemoryScope === "shared" ? "shared" : "isolated",
+    if (!config || config.provider === "builtin") return null;
+    const selected = {
+      generation: config.generation,
+      defaultScope:
+        config.defaultMemoryScope === "shared" ? ("shared" as const) : ("isolated" as const),
     };
+    try {
+      const settings = toStringRecord(config.settings);
+      if (memoryProviderRequiresDeploymentOwner(config.provider, settings)) {
+        const deployment = await this.prisma.deploymentSettings.findUnique({
+          where: { id: "default" },
+          select: { ownerUserId: true },
+        });
+        if (!deployment?.ownerUserId || deployment.ownerUserId !== config.userId)
+          return { ...selected, provider: new UnavailableMemoryProvider(config.provider) };
+      }
+      if (!config.secret)
+        return { ...selected, provider: new UnavailableMemoryProvider(config.provider) };
+      const credentials = decodeCredentials(
+        config.provider,
+        this.secrets.load(config.secret.ciphertext, config.secret.id),
+      );
+      return {
+        ...selected,
+        provider: createMemoryProvider(config.provider, settings, credentials),
+      };
+    } catch {
+      // Document saves still commit and queue for this exact destination; no fallback or credential leak.
+      return { ...selected, provider: new UnavailableMemoryProvider(config.provider) };
+    }
   }
 }

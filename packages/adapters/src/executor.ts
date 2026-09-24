@@ -101,6 +101,7 @@ import {
   type ThreadEvents,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
 import { parse as parseShellCommand } from "shell-quote";
 import {
   connectAgent,
@@ -224,6 +225,7 @@ import {
   needsOAuthProbe,
   parseMcpServerToolArgs,
 } from "./mcp-server-tool.js";
+import { forgetRunMemory, recallRunMemory, saveRunMemory } from "./memory/run-memory.js";
 import { loadAgentMemoryContext } from "./memory-context.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { selectMemoryTools } from "./memory-tools.js";
@@ -544,6 +546,7 @@ export interface ExecutorDeps {
   runtime: AgentRuntime;
   sandbox: SandboxProvider;
   memory: MemoryStore;
+  memoryDocuments?: MemoryService;
   memoryProviders: MemoryProviderResolver;
   home: AgentHomeStore;
   artifacts?: ArtifactStore;
@@ -1271,7 +1274,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
           storedConnections,
           connectedComposio.map((connection) => connection.provider),
         );
-        const context = {
+        const context: MemoryOperationContext & { botId: string; runId: string } = {
+          memoryGeneration:
+            configuredMemory?.generation ??
+            (deps.memoryDocuments
+              ? await deps.memoryDocuments.generation({
+                  operationId: runId,
+                  traceId: runId,
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  signal: runAbortController.signal,
+                })
+              : undefined),
+          memoryModel: {
+            provider: selected.provider,
+            modelId: selected.id,
+            effort: selected.pin.effort,
+          },
+          threadId: thread.id,
+          knownSecrets: runSecrets,
           operationId: runId,
           traceId: runId,
           spaceId: run.spaceId,
@@ -1363,7 +1384,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           semanticMemory &&
           memoryScope &&
           thread.historyCompactedUpToSeq != null
-            ? semanticMemory.recall(
+            ? recallRunMemory(
+                deps.memoryDocuments,
+                semanticMemory,
                 {
                   query: task.prompt,
                   scope: memoryScope,
@@ -2875,7 +2898,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             });
           }
           if (name === "recall_memory") {
-            return semanticMemory!.recall(
+            return recallRunMemory(
+              deps.memoryDocuments,
+              semanticMemory!,
               {
                 query: String(args.query ?? ""),
                 scope: memoryScope!,
@@ -2890,36 +2915,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "save_memory") {
             return finish(
-              await semanticMemory!.save(
-                {
-                  content: String(args.content ?? ""),
-                  scope: memoryScope!,
-                  botId: bot.id,
-                  source: { kind: "durable" },
-                },
+              await saveRunMemory(
+                deps,
+                { content: String(args.content ?? ""), shared: memoryScope === "shared" },
                 context,
               ),
             );
           }
           if (name === "forget_memory") {
-            if (!semanticMemory?.forget) {
-              return finish({
-                error: "This memory provider does not support forgetting individual facts.",
-              });
-            }
             return finish(
-              await semanticMemory.forget(
-                {
-                  id: String(args.id ?? ""),
-                  ...(typeof args.entity === "string" && args.entity.trim()
-                    ? { entity: args.entity.trim() }
-                    : {}),
-                  ...(typeof args.reason === "string" && args.reason.trim()
-                    ? { reason: args.reason.trim() }
-                    : {}),
-                },
-                context,
-              ),
+              await forgetRunMemory(deps.memoryDocuments, String(args.id ?? ""), context),
             );
           }
           if (name === "list_secrets") return listBotSecrets(deps.prisma, run);

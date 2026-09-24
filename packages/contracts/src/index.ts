@@ -10,6 +10,7 @@ export * from "./integration-catalog.js";
 export * from "./integration-settings.js";
 export * from "./local-settings.js";
 export * from "./mcp.js";
+export * from "./memory-documents.js";
 export * from "./openai-compatible-ui.js";
 export * from "./provider-errors.js";
 export * from "./reactions.js";

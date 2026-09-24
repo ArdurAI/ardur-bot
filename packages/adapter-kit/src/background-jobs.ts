@@ -7,6 +7,13 @@ import type {
 } from "./types.js";
 
 const payloadSchemas = {
+  "memory.deliver": z.object({
+    spaceId: z.string().min(1),
+    userId: z.string().min(1),
+    documentId: z.string().min(1),
+    revision: z.number().int().positive(),
+    generation: z.number().int().nonnegative(),
+  }),
   "run.continue": z.object({ runId: z.string().min(1) }),
   "routine.wakeup": z.object({
     routineId: z.string().min(1),

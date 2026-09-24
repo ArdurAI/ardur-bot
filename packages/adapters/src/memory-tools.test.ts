@@ -20,9 +20,9 @@ describe("selectMemoryTools", () => {
     expect(names).toEqual(["remember", "shell"]);
   });
 
-  it("keeps semantic memory tools and drops native remember when configured", () => {
+  it("keeps remember available alongside configured semantic tools", () => {
     const names = selectMemoryTools(allThree, true).map((t) => t.name);
-    expect(names).toEqual(["recall_memory", "save_memory", "forget_memory", "shell"]);
+    expect(names).toEqual(["remember", "recall_memory", "save_memory", "forget_memory", "shell"]);
   });
 
   it("is a no-op for tool lists with no memory tools at all", () => {

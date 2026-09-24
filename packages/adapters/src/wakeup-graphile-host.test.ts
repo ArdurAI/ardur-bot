@@ -4,16 +4,43 @@ import type { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const run = vi.hoisted(() => vi.fn());
+const makeWorkerUtils = vi.hoisted(() => vi.fn());
 
 vi.mock("graphile-worker", () => ({
   run: (...args: unknown[]) => run(...args),
-  makeWorkerUtils: vi.fn(),
+  makeWorkerUtils,
 }));
 
-import { databaseCapacityBackoffMs, GraphileJobWorkerHost } from "./wakeup.js";
+import {
+  databaseCapacityBackoffMs,
+  GraphileJobPublisher,
+  GraphileJobWorkerHost,
+} from "./wakeup.js";
+
+it("puts all revisions and generations of one document in the same Graphile queue", async () => {
+  const addJob = vi.fn();
+  makeWorkerUtils.mockResolvedValueOnce({ addJob, release: vi.fn() });
+  const publisher = new GraphileJobPublisher({} as Pool);
+  for (const generation of [1, 2])
+    await publisher.enqueue({
+      name: "memory.deliver",
+      payload: {
+        spaceId: "space",
+        userId: "user",
+        documentId: "doc",
+        revision: generation,
+        generation,
+      },
+    });
+  expect(addJob).toHaveBeenCalledTimes(2);
+  for (const call of addJob.mock.calls)
+    expect(call[2]).toMatchObject({ queueName: "memory.document:space:doc" });
+  await publisher.close();
+});
 
 function handlers(): BackgroundJobHandlers {
   return {
+    "memory.deliver": async () => undefined,
     "run.continue": vi.fn(async () => undefined),
     "routine.wakeup": vi.fn(async () => undefined),
     "computer.update": vi.fn(async () => undefined),

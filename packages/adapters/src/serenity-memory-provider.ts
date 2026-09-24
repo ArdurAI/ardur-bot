@@ -12,6 +12,7 @@ import type {
 import {
   classifySerenityEndpointTrust,
   forgetSerenity,
+  MAX_SERENITY_FACT_CHARS,
   normalizeSerenityEndpoint,
   parseSerenityEndpoint,
   probeSerenity,
@@ -23,6 +24,10 @@ import {
 } from "./serenity-client.js";
 
 export const SERENITY_PROVIDER_ID = "serenity";
+function documentEntity(spaceId: string, id: string, label: string) {
+  const namespace = sanitizeSerenityBrainLabel(label);
+  return `ardurbot-document/${namespace ? `${namespace}/` : ""}${spaceId}/${id}`;
+}
 
 /** Thrown when prepare would probe a private endpoint without deployment-owner authorization. */
 export class MemoryProviderDeploymentOwnerRequiredError extends Error {
@@ -200,12 +205,11 @@ export class SerenityMemoryProvider implements SemanticMemoryProvider {
     context: AdapterContext,
   ): Promise<SemanticMemoryResponse<SemanticMemoryResult[]>> {
     // History compaction stays in Ardur Bot; Serenity is the durable brain only.
-    const entities = durableEntities(
-      request.scope,
-      request.botId,
-      context.spaceId,
-      this.connection.brainLabel,
-    );
+    const entities = request.documentIds
+      ? request.documentIds.map((id) =>
+          documentEntity(context.spaceId, id, this.connection.brainLabel),
+        )
+      : durableEntities(request.scope, request.botId, context.spaceId, this.connection.brainLabel);
     const results = await Promise.all(
       entities.map(async (entity) => ({
         entity,
@@ -257,6 +261,22 @@ export class SerenityMemoryProvider implements SemanticMemoryProvider {
           "Serenity writes are disabled for this Space. Enable writing in Memory settings to save durable facts.",
       };
     }
+    if (request.source.documentId) {
+      if (request.content.length > MAX_SERENITY_FACT_CHARS)
+        return { ok: false, error: "This document is too long for the selected indexing service." };
+      const deleted = await this.deleteDocument({ documentId: request.source.documentId }, context);
+      if (!deleted.ok) return deleted;
+      const provenance = `[ardur-memory:${request.source.documentId}:${request.source.revision}]`;
+      const saved = await rememberSerenity(request.content, provenance, this.connection, {
+        entity: documentEntity(
+          context.spaceId,
+          request.source.documentId,
+          this.connection.brainLabel,
+        ),
+        signal: context.signal,
+      });
+      return saved.ok ? { ok: true, value: undefined } : saved;
+    }
     const entities = durableEntities(
       request.scope,
       request.botId,
@@ -284,6 +304,27 @@ export class SerenityMemoryProvider implements SemanticMemoryProvider {
   ): Promise<SemanticMemoryResponse> {
     // History generations are never written to Serenity.
     return { ok: true, value: undefined };
+  }
+
+  async deleteDocument(
+    request: { documentId: string },
+    context: AdapterContext,
+  ): Promise<SemanticMemoryResponse> {
+    if (!this.connection.allowWrites)
+      return { ok: false, error: "Enable writing in Memory settings." };
+    const found = await recallSerenity(request.documentId, this.connection, {
+      entity: documentEntity(context.spaceId, request.documentId, this.connection.brainLabel),
+      limit: 100,
+      signal: context.signal,
+    });
+    if (!found.ok) return found;
+    for (const fact of found.value) {
+      const result = await forgetSerenity(fact.factId, this.connection, { signal: context.signal });
+      if (!result.ok) return result;
+    }
+    return found.value.length < 100
+      ? { ok: true, value: undefined }
+      : { ok: false, error: "Memory cleanup is incomplete. Retry." };
   }
 
   async forget(

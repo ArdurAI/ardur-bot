@@ -17,6 +17,9 @@ importers:
 
   .:
     devDependencies:
+      '@ardurbot/testkit':
+        specifier: workspace:*
+        version: link:packages/testkit
       '@biomejs/biome':
         specifier: 2.5.13
         version: 2.5.13
@@ -533,6 +536,9 @@ importers:
       '@ardurbot/logging':
         specifier: workspace:*
         version: link:../logging
+      '@ardurbot/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@asciidev/box-sdk':
         specifier: 0.0.34
         version: 0.0.34
@@ -816,6 +822,15 @@ importers:
       '@ardurbot/db':
         specifier: workspace:*
         version: link:../db
+      '@ardurbot/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@ardurbot/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ardurbot/logging':
+        specifier: workspace:*
+        version: link:../logging
     devDependencies:
       typescript:
         specifier: 7.0.2
@@ -841,6 +856,9 @@ importers:
       '@ardurbot/db':
         specifier: workspace:*
         version: link:../db
+      '@ardurbot/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@hono/node-server':
         specifier: 2.1.1
         version: 2.1.1(hono@4.13.7)
