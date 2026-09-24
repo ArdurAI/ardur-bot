@@ -54,7 +54,9 @@ export function HostComputerSettings() {
   return (
     <section className="space-y-3 py-4" data-testid="host-computer-settings">
       <h4 className="text-sm font-medium">
-        {desktop?.platform === "darwin" ? t`This Mac` : t`This computer`}
+        {(status.health?.platform ?? desktop?.platform) === "darwin"
+          ? t`This Mac`
+          : t`This computer`}
       </h4>
       <p className="text-sm text-muted-foreground">
         <Trans>Host service:</Trans>{" "}
@@ -65,6 +67,20 @@ export function HostComputerSettings() {
             : t`Not set up`}
         {status.connected && versions.length ? ` · ${versions.join(" · ")}` : ""}
       </p>
+      {status.connected && status.health?.environment ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            <Trans>Tools:</Trans>{" "}
+            {status.health.environment.tools.map((tool) => tool.name).join(", ") ||
+              t`None detected`}
+          </p>
+          {status.health.environment.diagnostic ? (
+            <p className="text-sm text-destructive" role="alert">
+              {status.health.environment.diagnostic}
+            </p>
+          ) : null}
+        </>
+      ) : null}
       {roots.length ? (
         <ul className="space-y-2">
           {roots.map((root) => (
@@ -89,7 +105,7 @@ export function HostComputerSettings() {
         </p>
       ) : null}
       <div className="flex gap-2">
-        {desktop?.host && (!status.configured || (local && !status.connected)) ? (
+        {desktop?.host && !status.connected && (!status.configured || local) ? (
           <Button disabled={busy} onClick={() => void perform(() => desktop.host!.setup())}>
             <Trans>Set up</Trans>
           </Button>

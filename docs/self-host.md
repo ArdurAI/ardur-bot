@@ -192,8 +192,62 @@ DAYTONA_API_KEY=          # when SANDBOX_PROVIDER=daytona
 BOX_API_KEY=              # when SANDBOX_PROVIDER=box
 ```
 
-To use an operator-controlled OpenAI-compatible server such as Ollama, LM Studio, llama.cpp, or
-MLX, list its model IDs and an endpoint that both the API and worker processes can reach:
+### Ollama
+
+Open **Settings → Models → Ollama**, then **Test**. The result shows the server version and
+installed models. **Save** stores a keyless connection. Choose an installed model and use it as
+the space default, or select it under **Local** in a bot's model settings to pin that bot.
+No Ardur Bot environment variables or hand-entered model list are required.
+
+Source deployments default to `http://127.0.0.1:11434`. Packaged **This computer** deployments
+use `http://host.docker.internal:11434`, because the API and worker run in containers. The
+published Compose file sets the generic deployment kind and adds
+`extra_hosts: ["host.docker.internal:host-gateway"]` to both services. Docker Desktop resolves
+that host name on macOS and Windows; Docker Engine uses the gateway mapping on Linux. On Linux,
+Ollama must listen on an interface reachable from the container gateway, with access restricted
+to the intended clients. The mapping alone cannot reach a service bound only to host loopback.
+See Docker's [host access documentation](https://docs.docker.com/reference/cli/docker/container/run/#add-entries-to-container-hosts-file---add-host)
+and [Compose extra_hosts reference](https://docs.docker.com/reference/compose-file/services/#extra_hosts).
+
+The deployment owner can open **Pull model**, enter a name or choose `qwen3:0.6b` or
+`llama3.2:1b`, and watch download progress. **Cancel** closes the pull request. Ollama retains
+partial layers for a later retry; cancelling is not model deletion. These IDs are listed in the
+[Qwen3 library](https://ollama.com/library/qwen3:0.6b) and
+[Llama 3.2 library](https://ollama.com/library/llama3.2:1b). Pulls use network bandwidth and local
+disk space. Mobile displays the connection and installed models without connection or pull controls.
+
+Discovery uses the native API's [List Local Models](https://github.com/ollama/ollama/blob/main/docs/api.md#list-local-models),
+[Show Model Information](https://github.com/ollama/ollama/blob/main/docs/api.md#show-model-information),
+and [Version](https://github.com/ollama/ollama/blob/main/docs/api.md#version) sections. Model names
+and optional parameter sizes come from `models[].name` and `models[].details.parameter_size`.
+Image and thinking support come from `capabilities`; the context limit comes from the model's
+`model_info` family `context_length`. Missing capabilities remain disabled. Missing or ambiguous
+context metadata prevents a pin from running; the legacy local environment fallback is not used.
+[Pull a Model](https://github.com/ollama/ollama/blob/main/docs/api.md#pull-a-model) documents the
+streamed `status`, optional `digest`, `completed`, and `total` fields.
+
+Inference reuses the guarded OpenAI-compatible transport at `/v1`. Ollama's native
+[`think` field](https://github.com/ollama/ollama/blob/main/docs/api.md#generate-a-chat-completion)
+and [thinking controls](https://docs.ollama.com/capabilities/thinking) vary by model; Qwen3 and
+DeepSeek R1 are documented thinking examples, while some newer models expose named levels.
+This adapter offers **On** and **Off**, not named effort levels. Pin effort `none` maps to
+`reasoning_effort: "none"` (thinking off), and `low`, `medium`, and `high` all map to
+`reasoning_effort: "medium"` (thinking on) through Ollama's
+[OpenAI compatibility mapping](https://docs.ollama.com/api/openai-compatibility#v1chatcompletions).
+When `/api/show` includes `thinking.values`, Off is offered only if it includes `false`.
+The existing bot field stores Off as `off`; the Ollama runtime snapshot records `none`.
+Models without the `thinking` capability store null effort and display **Effort: not applicable**.
+
+The credential store contains the URL and no API key. Its historical `hasKey` flag means the
+connection is configured; the inference adapter supplies the same non-secret `local` placeholder as
+other keyless transports so Pi does not hide the provider. Each run rechecks its installed model
+and capabilities. A missing model stops with **Change pin** and cannot select a hosted model.
+
+### OpenAI-compatible server
+
+To use the legacy deployment-configured provider for an operator-controlled OpenAI-compatible
+server such as LM Studio, llama.cpp, or MLX, list its model IDs and an endpoint that both the
+API and worker processes can reach:
 
 ```env
 ARDURBOT_LOCAL_MODELS=qwen3:4b,llama3.1:8b,qwen3-vl

@@ -1,7 +1,7 @@
 {
   "name": "@ardurbot/desktop",
   "productName": "Ardur Bot",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/main.js",
@@ -61,6 +61,13 @@
       {
         "from": "../host-service/dist/host-service.cjs",
         "to": "host-service/host-service.cjs"
+      },
+      {
+        "from": "../host-service/dist/native/${os}_${arch}",
+        "to": "host-service/native/${os}_${arch}",
+        "filter": [
+          "koffi.node"
+        ]
       }
     ],
     "extraMetadata": {

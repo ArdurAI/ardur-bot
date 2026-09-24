@@ -60,10 +60,17 @@ The full design, with file references and open verification gates, is the hub pa
    are never transferred.
 6. **Packaged deployments reach host binaries through a narrowly authorised host service**
    managed by the desktop app but surviving its window: it connects outward to the API over
-   an authenticated WebSocket, accepts logical operations only (never arbitrary commands,
-   binaries, arguments or environment), spawns approved absolute binaries without a shell,
-   confines working directories to registered roots, bounds concurrency and size, and reports
-   health without credentials.
+   an authenticated WebSocket and accepts versioned logical operations. For computer
+   commands, "approved absolute binaries" means executable names resolved by the host
+   from the owner's captured login PATH, never caller-supplied executable paths.
+   The host spawns them with `shell: false`, including `bash -c` when the executor
+   sends a shell command. The owner's Ask-first rules guard consequential commands;
+   a shell grammar or an echo/pwd/whoami allowlist is not the approval policy.
+   Working directories remain confined to registered roots, caller environment and
+   pty overrides remain refused, and concurrency and output stay bounded. Native
+   runtime arguments remain adapter-owned. OS discovery variables are allowlisted,
+   the real home and saved CLI sign-ins remain available, and health reports tools
+   and login-profile failures without credentials. See [host environment policy](../host-service.md#owner-environment-and-tool-inventory).
 
 ## Consequences
 

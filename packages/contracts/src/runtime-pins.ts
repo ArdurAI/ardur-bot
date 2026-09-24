@@ -84,7 +84,15 @@ export function runtimePinMessage(
 ): string {
   const runtime =
     pin.runtimeKind && pin.runtimeKind !== "pi" ? `${runtimeNames[pin.runtimeKind]} · ` : "";
-  return `This bot is pinned to ${runtime}${labels?.provider ?? pin.provider ?? "an unset provider"} · ${labels?.model ?? pin.modelId ?? "an unset model"} · ${pin.effort ?? "an unset effort"}; connect it or change the pin.`;
+  const effort =
+    pin.provider === "ollama"
+      ? pin.effort === null
+        ? "effort not applicable"
+        : pin.effort === "none" || pin.effort === "off"
+          ? "thinking off"
+          : "thinking on"
+      : (pin.effort ?? "an unset effort");
+  return `This bot is pinned to ${runtime}${labels?.provider ?? pin.provider ?? "an unset provider"} · ${labels?.model ?? pin.modelId ?? "an unset model"} · ${effort}; connect it or change the pin.`;
 }
 
 /** Carries a configuration failure across adapter boundaries without losing its type. */

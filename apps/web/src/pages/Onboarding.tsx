@@ -31,6 +31,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IntegrationSetup } from "../components/integrations/IntegrationSetup";
+import { OllamaSettings } from "../components/OllamaSettings";
 import type { ModelCatalogEntry } from "../lib/model-auth";
 import { rpc } from "../lib/rpc";
 import { thinkingLevelOptions } from "../lib/thinking-level-options";
@@ -429,260 +430,283 @@ export function OnboardingPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="mt-6 block text-sm text-foreground">
-              {isOpenAiCompatible ? (
-                <>
-                  <label htmlFor={`${fieldId}-base-url`} className="block font-medium">
-                    <Trans>Server URL</Trans>
-                    <Input
-                      id={`${fieldId}-base-url`}
-                      value={baseUrl}
-                      onChange={(e) => updateBaseUrl(e.target.value)}
-                      aria-label={t`OpenAI-compatible server URL`}
-                      placeholder="http://127.0.0.1:8000/v1"
-                      autoComplete="off"
-                      className="mt-2"
-                    />
-                  </label>
-                  <div className="mt-3">
-                    <Button
-                      variant="outline"
-                      disabled={probing || !baseUrl.trim()}
-                      onClick={() => void probeServerModels()}
-                    >
-                      {probing ? <Trans>Finding…</Trans> : <Trans>Find models</Trans>}
-                    </Button>
-                  </div>
-                  <div className="mt-4 block">
-                    <span className="font-medium">
-                      <Trans>Model</Trans>
-                    </span>
-                    {probeModels.length && !manualModelId ? (
-                      <Select
-                        value={modelId}
-                        onValueChange={(value) => {
-                          if (typeof value !== "string") return;
-                          const next = value;
-                          if (next === CUSTOM_MODEL_OPTION) {
-                            setManualModelId(true);
-                            setModelId("");
-                          } else {
-                            setManualModelId(false);
-                            setModelId(next);
-                          }
+            {provider === "ollama" ? (
+              <div className="mt-6">
+                <OllamaSettings
+                  onChanged={async () => {
+                    setCatalog(await rpc.models.list());
+                  }}
+                  onReady={() => setStep(nextStepAfterModel(needsIntegrationSetup))}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="mt-6 block text-sm text-foreground">
+                  {isOpenAiCompatible ? (
+                    <>
+                      <label htmlFor={`${fieldId}-base-url`} className="block font-medium">
+                        <Trans>Server URL</Trans>
+                        <Input
+                          id={`${fieldId}-base-url`}
+                          value={baseUrl}
+                          onChange={(e) => updateBaseUrl(e.target.value)}
+                          aria-label={t`OpenAI-compatible server URL`}
+                          placeholder="http://127.0.0.1:8000/v1"
+                          autoComplete="off"
+                          className="mt-2"
+                        />
+                      </label>
+                      <div className="mt-3">
+                        <Button
+                          variant="outline"
+                          disabled={probing || !baseUrl.trim()}
+                          onClick={() => void probeServerModels()}
+                        >
+                          {probing ? <Trans>Finding…</Trans> : <Trans>Find models</Trans>}
+                        </Button>
+                      </div>
+                      <div className="mt-4 block">
+                        <span className="font-medium">
+                          <Trans>Model</Trans>
+                        </span>
+                        {probeModels.length && !manualModelId ? (
+                          <Select
+                            value={modelId}
+                            onValueChange={(value) => {
+                              if (typeof value !== "string") return;
+                              const next = value;
+                              if (next === CUSTOM_MODEL_OPTION) {
+                                setManualModelId(true);
+                                setModelId("");
+                              } else {
+                                setManualModelId(false);
+                                setModelId(next);
+                              }
+                            }}
+                            items={probeModelItems}
+                          >
+                            <SelectTrigger
+                              aria-label={t`Models from server`}
+                              className="mt-2 w-full"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {probeModels.map((id) => (
+                                <SelectItem key={id} value={id}>
+                                  {id}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value={CUSTOM_MODEL_OPTION}>
+                                <Trans>Other model…</Trans>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            value={modelId}
+                            onChange={(e) => {
+                              setManualModelId(true);
+                              setModelId(e.target.value);
+                            }}
+                            aria-label={t`Model id`}
+                            placeholder="exact-model-id"
+                            className="mt-2"
+                          />
+                        )}
+                        {probeModels.length && manualModelId ? (
+                          <Button
+                            variant="link"
+                            size="xs"
+                            className="mt-2 px-0 text-muted-foreground"
+                            onClick={() => {
+                              setManualModelId(false);
+                              setModelId(probeModels[0] ?? "");
+                            }}
+                          >
+                            <Trans>Use a found model</Trans>
+                          </Button>
+                        ) : null}
+                      </div>
+                      <ModelThinkingOptions
+                        reasoning={reasoning}
+                        onReasoningChange={(value) => {
+                          setReasoning(value);
+                          if (!value) setThinkingLevel(null);
                         }}
-                        items={probeModelItems}
+                        advancedLabel={t`Advanced`}
+                        thinkingLabel={t`Supports thinking`}
+                        thinkingLevel={thinkingLevel}
+                        onThinkingLevelChange={(value) =>
+                          setThinkingLevel(value as ThinkingLevel | null)
+                        }
+                        thinkingLevelOptions={thinkingLevelOptions()}
+                        thinkingLevelLabel={t`Reasoning effort`}
+                        thinkingLevelDefaultLabel={t`Default`}
+                        maxTokens={maxTokens}
+                        onMaxTokensChange={setMaxTokens}
+                        maxTokensLabel={t`Maximum output tokens`}
+                        contextWindow={contextWindow}
+                        onContextWindowChange={setContextWindow}
+                        contextWindowLabel={t`Context limit`}
+                        supportsImages={supportsImages}
+                        onSupportsImagesChange={setSupportsImages}
+                        imagesLabel={t`Supports images`}
+                        maxImagesPerPrompt={maxImagesPerPrompt}
+                        onMaxImagesPerPromptChange={setMaxImagesPerPrompt}
+                        maxImagesLabel={t`Maximum images per request`}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-medium">
+                        <Trans>Model</Trans>
+                      </span>
+                      <Select
+                        value={selected?.id ?? modelId}
+                        onValueChange={(value) => {
+                          if (typeof value !== "string" || !value) return;
+                          if (value === modelId) return;
+                          cancelOAuthAttempt();
+                          setModelId(value);
+                        }}
+                        items={modelItems}
                       >
-                        <SelectTrigger aria-label={t`Models from server`} className="mt-2 w-full">
+                        <SelectTrigger aria-label={t`Model`} className="mt-2 w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {probeModels.map((id) => (
-                            <SelectItem key={id} value={id}>
-                              {id}
+                          {modelsForProvider.map((entry) => (
+                            <SelectItem key={`${entry.provider}:${entry.id}`} value={entry.id}>
+                              {entry.label}
                             </SelectItem>
                           ))}
-                          <SelectItem value={CUSTOM_MODEL_OPTION}>
-                            <Trans>Other model…</Trans>
-                          </SelectItem>
                         </SelectContent>
                       </Select>
+                    </>
+                  )}
+                </div>
+                {subscriptionSignIn ? (
+                  <div className="mt-4">
+                    {oauth ? (
+                      <div className="rounded-lg border border-border px-3.5 py-3">
+                        {oauth.mode === "auth-url" ? (
+                          <>
+                            <p className="text-sm text-muted-foreground">
+                              <Trans>
+                                Finish signing in at{" "}
+                                <a
+                                  href={oauth.verificationUri}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-foreground underline"
+                                >
+                                  {new URL(oauth.verificationUri).hostname}
+                                </a>
+                                . The final page may not load; paste its URL or code here.
+                              </Trans>
+                            </p>
+                            <div className="mt-3 flex items-center gap-2">
+                              <Input
+                                value={pasteCode}
+                                onChange={(e) => setPasteCode(e.target.value)}
+                                aria-label={t`Authorization code or callback URL`}
+                                autoComplete="off"
+                                spellCheck={false}
+                                placeholder="http://localhost:53692/callback?code=…"
+                              />
+                              <Button
+                                disabled={!pasteCode.trim()}
+                                onClick={() => void submitOAuthCode()}
+                              >
+                                <Trans>Submit</Trans>
+                              </Button>
+                            </div>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              <Trans>Waiting for sign-in…</Trans>
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm text-muted-foreground">
+                              <Trans>
+                                Enter this code at{" "}
+                                <a
+                                  href={oauth.verificationUri}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-foreground underline"
+                                >
+                                  {oauth.verificationUri.replace(/^https:\/\//, "")}
+                                </a>
+                              </Trans>
+                            </p>
+                            <p className="mt-2 font-mono text-[22px] tracking-[0.2em] text-foreground">
+                              {oauth.userCode}
+                            </p>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              <Trans>Waiting for sign-in…</Trans>
+                            </p>
+                          </>
+                        )}
+                      </div>
                     ) : (
+                      <Button
+                        disabled={oauthPending}
+                        onClick={() => beginSelectedSubscriptionSignIn()}
+                      >
+                        {oauthPending ? <Trans>Starting…</Trans> : signInLabel}
+                      </Button>
+                    )}
+                  </div>
+                ) : null}
+                {acceptsKey ? (
+                  isOpenAiCompatible ? (
+                    <details className="mt-4 text-sm text-muted-foreground">
+                      <summary className="w-fit cursor-pointer select-none">
+                        <Trans>API key</Trans>
+                      </summary>
                       <Input
-                        value={modelId}
-                        onChange={(e) => {
-                          setManualModelId(true);
-                          setModelId(e.target.value);
-                        }}
-                        aria-label={t`Model id`}
-                        placeholder="exact-model-id"
+                        aria-label={t`API key`}
+                        value={apiKey}
+                        onChange={(e) => updateApiKey(e.target.value)}
+                        placeholder={t`Optional`}
+                        type="password"
+                        autoComplete="new-password"
                         className="mt-2"
                       />
-                    )}
-                    {probeModels.length && manualModelId ? (
-                      <Button
-                        variant="link"
-                        size="xs"
-                        className="mt-2 px-0 text-muted-foreground"
-                        onClick={() => {
-                          setManualModelId(false);
-                          setModelId(probeModels[0] ?? "");
-                        }}
-                      >
-                        <Trans>Use a found model</Trans>
-                      </Button>
-                    ) : null}
-                  </div>
-                  <ModelThinkingOptions
-                    reasoning={reasoning}
-                    onReasoningChange={(value) => {
-                      setReasoning(value);
-                      if (!value) setThinkingLevel(null);
-                    }}
-                    advancedLabel={t`Advanced`}
-                    thinkingLabel={t`Supports thinking`}
-                    thinkingLevel={thinkingLevel}
-                    onThinkingLevelChange={(value) =>
-                      setThinkingLevel(value as ThinkingLevel | null)
-                    }
-                    thinkingLevelOptions={thinkingLevelOptions()}
-                    thinkingLevelLabel={t`Reasoning effort`}
-                    thinkingLevelDefaultLabel={t`Default`}
-                    maxTokens={maxTokens}
-                    onMaxTokensChange={setMaxTokens}
-                    maxTokensLabel={t`Maximum output tokens`}
-                    contextWindow={contextWindow}
-                    onContextWindowChange={setContextWindow}
-                    contextWindowLabel={t`Context limit`}
-                    supportsImages={supportsImages}
-                    onSupportsImagesChange={setSupportsImages}
-                    imagesLabel={t`Supports images`}
-                    maxImagesPerPrompt={maxImagesPerPrompt}
-                    onMaxImagesPerPromptChange={setMaxImagesPerPrompt}
-                    maxImagesLabel={t`Maximum images per request`}
-                  />
-                </>
-              ) : (
-                <>
-                  <span className="font-medium">
-                    <Trans>Model</Trans>
-                  </span>
-                  <Select
-                    value={selected?.id ?? modelId}
-                    onValueChange={(value) => {
-                      if (typeof value !== "string" || !value) return;
-                      if (value === modelId) return;
-                      cancelOAuthAttempt();
-                      setModelId(value);
-                    }}
-                    items={modelItems}
-                  >
-                    <SelectTrigger aria-label={t`Model`} className="mt-2 w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {modelsForProvider.map((entry) => (
-                        <SelectItem key={`${entry.provider}:${entry.id}`} value={entry.id}>
-                          {entry.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </>
-              )}
-            </div>
-            {subscriptionSignIn ? (
-              <div className="mt-4">
-                {oauth ? (
-                  <div className="rounded-lg border border-border px-3.5 py-3">
-                    {oauth.mode === "auth-url" ? (
-                      <>
-                        <p className="text-sm text-muted-foreground">
-                          <Trans>
-                            Finish signing in at{" "}
-                            <a
-                              href={oauth.verificationUri}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-foreground underline"
-                            >
-                              {new URL(oauth.verificationUri).hostname}
-                            </a>
-                            . The final page may not load; paste its URL or code here.
-                          </Trans>
-                        </p>
-                        <div className="mt-3 flex items-center gap-2">
-                          <Input
-                            value={pasteCode}
-                            onChange={(e) => setPasteCode(e.target.value)}
-                            aria-label={t`Authorization code or callback URL`}
-                            autoComplete="off"
-                            spellCheck={false}
-                            placeholder="http://localhost:53692/callback?code=…"
-                          />
-                          <Button
-                            disabled={!pasteCode.trim()}
-                            onClick={() => void submitOAuthCode()}
-                          >
-                            <Trans>Submit</Trans>
-                          </Button>
-                        </div>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          <Trans>Waiting for sign-in…</Trans>
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm text-muted-foreground">
-                          <Trans>
-                            Enter this code at{" "}
-                            <a
-                              href={oauth.verificationUri}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-foreground underline"
-                            >
-                              {oauth.verificationUri.replace(/^https:\/\//, "")}
-                            </a>
-                          </Trans>
-                        </p>
-                        <p className="mt-2 font-mono text-[22px] tracking-[0.2em] text-foreground">
-                          {oauth.userCode}
-                        </p>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          <Trans>Waiting for sign-in…</Trans>
-                        </p>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <Button disabled={oauthPending} onClick={() => beginSelectedSubscriptionSignIn()}>
-                    {oauthPending ? <Trans>Starting…</Trans> : signInLabel}
+                    </details>
+                  ) : (
+                    <label
+                      htmlFor={`${fieldId}-api-key`}
+                      className="mt-4 block text-sm font-medium text-foreground"
+                    >
+                      {subscriptionSignIn ? (
+                        <Trans>Or paste an API key</Trans>
+                      ) : (
+                        <Trans>API key</Trans>
+                      )}
+                      <Input
+                        id={`${fieldId}-api-key`}
+                        value={apiKey}
+                        onChange={(e) => updateApiKey(e.target.value)}
+                        placeholder="sk-…"
+                        type="password"
+                        autoComplete="new-password"
+                        className="mt-2"
+                      />
+                    </label>
+                  )
+                ) : null}
+                {notice ? <p className="mt-3 text-sm text-success">{notice}</p> : null}
+                {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+                <div className="mt-6 flex gap-3">
+                  <Button disabled={!canSaveModel} onClick={() => void saveModel()}>
+                    <Trans>Continue</Trans>
                   </Button>
-                )}
-              </div>
-            ) : null}
-            {acceptsKey ? (
-              isOpenAiCompatible ? (
-                <details className="mt-4 text-sm text-muted-foreground">
-                  <summary className="w-fit cursor-pointer select-none">
-                    <Trans>API key</Trans>
-                  </summary>
-                  <Input
-                    aria-label={t`API key`}
-                    value={apiKey}
-                    onChange={(e) => updateApiKey(e.target.value)}
-                    placeholder={t`Optional`}
-                    type="password"
-                    autoComplete="new-password"
-                    className="mt-2"
-                  />
-                </details>
-              ) : (
-                <label
-                  htmlFor={`${fieldId}-api-key`}
-                  className="mt-4 block text-sm font-medium text-foreground"
-                >
-                  {subscriptionSignIn ? <Trans>Or paste an API key</Trans> : <Trans>API key</Trans>}
-                  <Input
-                    id={`${fieldId}-api-key`}
-                    value={apiKey}
-                    onChange={(e) => updateApiKey(e.target.value)}
-                    placeholder="sk-…"
-                    type="password"
-                    autoComplete="new-password"
-                    className="mt-2"
-                  />
-                </label>
-              )
-            ) : null}
-            {notice ? <p className="mt-3 text-sm text-success">{notice}</p> : null}
-            {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
-            <div className="mt-6 flex gap-3">
-              <Button disabled={!canSaveModel} onClick={() => void saveModel()}>
-                <Trans>Continue</Trans>
-              </Button>
-            </div>
+                </div>
+              </>
+            )}
           </div>
         ) : null}
         {step === "integrations" ? (

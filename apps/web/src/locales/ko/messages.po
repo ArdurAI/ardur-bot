@@ -883,6 +883,7 @@ msgstr "서버에 연결할 수 없습니다."
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -1002,6 +1003,7 @@ msgid "Checked"
 msgstr ""
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Checking…"
 msgstr "확인 중…"
@@ -1497,6 +1499,10 @@ msgstr ""
 msgid "Could not complete authorization. Try connecting again."
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
+msgid "Could not complete the request."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr ""
@@ -1659,6 +1665,10 @@ msgstr "AI 모델 설정을 불러오지 못했습니다."
 
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Could not load Ollama."
 msgstr ""
 
 #: src/components/integrations/catalog/McpToolReview.tsx
@@ -2326,6 +2336,10 @@ msgstr "수정 후 보내기"
 msgid "Effort"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Effort: not applicable"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "이메일"
@@ -2697,6 +2711,10 @@ msgstr ""
 msgid "Host service:"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Hosted providers"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
 msgstr "시간"
@@ -2781,6 +2799,10 @@ msgstr "입력값"
 
 #: src/pages/TeamBoard.tsx
 msgid "Inputs and boundaries"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Installed models"
 msgstr ""
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -3022,6 +3044,7 @@ msgid "Loading…"
 msgstr "불러오는 중…"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Local"
 msgstr "로컬"
 
@@ -3272,6 +3295,10 @@ msgstr ""
 msgid "Model id"
 msgstr "모델 ID"
 
+#: src/components/OllamaSettings.tsx
+msgid "Model name"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model options"
 msgstr "모델 선택지"
@@ -3490,6 +3517,10 @@ msgstr "{peerBotName}와의 메시지가 아직 없습니다."
 msgid "No model catalog is available."
 msgstr "사용 가능한 모델 목록이 없습니다."
 
+#: src/components/OllamaSettings.tsx
+msgid "No models installed. Pull one to start."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "검색된 AI 서비스가 없습니다."
@@ -3522,6 +3553,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "트리거 없음"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "None detected"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
@@ -3622,8 +3657,20 @@ msgstr ""
 msgid "Obsidian vault"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Off"
+msgstr ""
+
 #: src/lib/thinking-level-options.ts
 msgid "off — no extra thinking"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Ollama server URL"
+msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+msgid "On"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -3926,6 +3973,14 @@ msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Publish directly"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Pull"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Pull model"
 msgstr ""
 
 #: src/components/CloudAgentCard.tsx
@@ -4462,6 +4517,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
@@ -4665,6 +4721,7 @@ msgid "Server name"
 msgstr "서버 이름"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/components/OllamaSettings.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -5021,6 +5078,7 @@ msgstr ""
 msgid "Terminal is not available on this computer"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "시험 실행"
@@ -5196,6 +5254,10 @@ msgstr "도구 소스"
 msgid "Tools"
 msgstr ""
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Tools:"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr ""
@@ -5345,6 +5407,7 @@ msgstr ""
 msgid "Use this location"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "이 모델 사용"

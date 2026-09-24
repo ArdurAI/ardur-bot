@@ -742,3 +742,138 @@ it.each([
     expect(modelSelect().value).toBe("saved-model");
   },
 );
+
+describe("Ollama pin visibility", () => {
+  it("does not resurrect a missing installed model from its saved default", () => {
+    const settings = {
+      me: { defaultProvider: "ollama", defaultModel: "qwen3:8b" },
+      catalog: [],
+      credentials: [
+        {
+          id: "connection",
+          provider: "ollama",
+          modelId: "qwen3:8b",
+          label: "Ollama",
+          hasKey: true,
+          isDefault: true,
+        },
+      ],
+    };
+    expect(
+      effectiveBotModel(
+        {
+          ...bot,
+          modelProvider: "ollama",
+          modelId: "qwen3:8b",
+          modelCredentialId: "connection",
+          thinkingLevel: "low",
+        },
+        settings,
+      ),
+    ).toMatchObject({ unavailable: true });
+  });
+  it("labels null effort as not applicable for non-thinking Ollama models", () => {
+    const settings = {
+      me: { defaultProvider: "ollama", defaultModel: "llama3.2:1b" },
+      catalog: [
+        {
+          provider: "ollama",
+          providerName: "Ollama",
+          id: "llama3.2:1b",
+          label: "llama3.2:1b",
+          billing: "",
+          reasoning: false,
+          thinkingLevels: [],
+        },
+      ],
+      credentials: [
+        {
+          id: "connection",
+          provider: "ollama",
+          modelId: "llama3.2:1b",
+          label: "Ollama",
+          hasKey: true,
+          isDefault: true,
+        },
+      ],
+    };
+    expect(
+      effectiveBotModel(
+        {
+          ...bot,
+          modelProvider: "ollama",
+          modelId: "llama3.2:1b",
+          modelCredentialId: "connection",
+          thinkingLevel: null,
+        },
+        settings,
+      ),
+    ).toMatchObject({ unavailable: false, effortLabel: "not applicable" });
+  });
+});
+
+it("offers only binary thinking controls under Local and saves null for a non-thinking model", async () => {
+  const ollamaModels: ModelCatalogEntry[] = [
+    {
+      provider: "ollama",
+      providerName: "Ollama",
+      id: "qwen3:8b",
+      label: "qwen3:8b · 8.2B",
+      billing: "",
+      reasoning: true,
+      thinkingLevels: ["off", "low", "medium", "high"],
+      credentialId: "connection",
+    },
+    {
+      provider: "ollama",
+      providerName: "Ollama",
+      id: "llama3.2:1b",
+      label: "llama3.2:1b · 1B",
+      billing: "",
+      reasoning: false,
+      thinkingLevels: [],
+      credentialId: "connection",
+    },
+  ];
+  api.list.mockResolvedValue(ollamaModels);
+  api.credentials.mockResolvedValue([
+    {
+      id: "connection",
+      provider: "ollama",
+      modelId: "qwen3:8b",
+      label: "Ollama",
+      hasKey: true,
+      isDefault: true,
+    },
+  ]);
+  await act(async () =>
+    root.render(
+      settings({
+        modelProvider: "ollama",
+        modelId: "qwen3:8b",
+        modelCredentialId: "connection",
+        thinkingLevel: "low",
+      }),
+    ),
+  );
+  const effort = container.querySelector<HTMLSelectElement>('select[id$="-thinking"]')!;
+  expect([...effort.options].map((option) => option.textContent)).toEqual(["Off", "On"]);
+  expect(effort.value).toBe("medium");
+  expect(modelSelect().querySelector('optgroup[label="Local"]')?.textContent).toContain(
+    "qwen3:8b · 8.2B",
+  );
+  await act(async () => {
+    modelSelect().value = modelPinOptionKey("ollama", "llama3.2:1b", "connection");
+    modelSelect().dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(container.textContent).toContain("Effort: not applicable");
+  expect(container.querySelector('select[id$="-thinking"]')).toBeNull();
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      modelProvider: "ollama",
+      modelId: "llama3.2:1b",
+      thinkingLevel: null,
+    }),
+  );
+});
