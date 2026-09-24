@@ -32,7 +32,9 @@ describe("desktop preload bridge", () => {
     expect(globalName).toBe("ardurbotDesktop");
     expect(bridge.platform).toBe("linux");
     expect(Object.keys(bridge).sort()).toEqual([
+      "devices",
       "localSettings",
+      "memoryFolders",
       "oauth",
       "platform",
       "update",
@@ -56,6 +58,8 @@ describe("desktop preload bridge", () => {
     await bridge.update.check();
     await bridge.update.download();
     await bridge.update.install();
+    await bridge.memoryFolders?.available();
+    await bridge.memoryFolders?.select("space-fixture");
     expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
       "desktop.oauth.open",
       "desktop.oauth.cancel",
@@ -67,14 +71,19 @@ describe("desktop preload bridge", () => {
       "desktop.update.check",
       "desktop.update.download",
       "desktop.update.install",
+      "desktop.memoryFolders.available",
+      "desktop.memoryFolders.select",
     ]);
+    expect(invoke).toHaveBeenCalledWith("desktop.memoryFolders.select", "space-fixture");
   });
 
   it("keeps setup off the app bridge so a connected server cannot re-point the app", () => {
     const { exposeInMainWorld } = runPreload("preload.cjs");
     const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, Record<string, unknown>];
     expect(Object.keys(bridge).sort()).toEqual([
+      "devices",
       "localSettings",
+      "memoryFolders",
       "oauth",
       "platform",
       "update",

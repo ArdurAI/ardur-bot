@@ -363,6 +363,36 @@ describe("LocalStackController", () => {
     ]);
   });
 
+  it("adds the memory override and recreates only authenticated API and worker services", async () => {
+    let registered = false;
+    const stack = controller({
+      exists: (file) =>
+        file === "/usr/bin/docker" || (registered && file.endsWith("docker-compose.memory.json")),
+    });
+    await stack.start();
+    registered = true;
+    calls.length = 0;
+    await stack.applyMemoryFolders();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.args).toEqual([
+      "compose",
+      "--env-file",
+      STACK_ENV_FILE,
+      "-f",
+      STACK_COMPOSE_FILE,
+      "-f",
+      "docker-compose.memory.json",
+      "--project-name",
+      STACK_PROJECT_NAME,
+      "up",
+      "-d",
+      "--no-deps",
+      "--wait",
+      "api",
+      "worker",
+    ]);
+  });
+
   it("installs the compose project and walks every phase to ready", async () => {
     const stack = controller();
     expect(stack.state()).toEqual(initialStackState("v1.2.3"));

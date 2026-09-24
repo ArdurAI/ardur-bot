@@ -15,6 +15,7 @@ import {
   createRepos,
   createThreadMessageInTransaction,
   expireComputerExecutionLeases,
+  inheritedRemoteOrigin,
   type Prisma,
   type PrismaClient,
   withTransactionRetry,
@@ -172,6 +173,8 @@ async function ensureSpawnRun(
       });
       return tx.run.create({
         data: {
+          ...(await inheritedRemoteOrigin(tx, input.sourceRunId)),
+
           spaceId: input.spaceId,
           botId: input.botId,
           threadId: input.threadId,

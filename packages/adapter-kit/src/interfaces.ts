@@ -217,6 +217,10 @@ export interface MemoryStore {
 
 /** Optional semantic memory. Durable Markdown memory remains owned by MemoryStore. */
 export interface SemanticMemoryProvider {
+  deleteDocument?(
+    request: { documentId: string; botId: string; scope: "isolated" | "shared" },
+    context: AdapterContext,
+  ): Promise<SemanticMemoryResponse>;
   describe(): AdapterDescriptor<SemanticMemoryCapabilities>;
   recall(
     request: SemanticMemoryRecallRequest,

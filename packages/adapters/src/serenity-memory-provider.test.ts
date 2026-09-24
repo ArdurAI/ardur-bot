@@ -61,6 +61,52 @@ function provider(allowWrites = true, brainLabel = "") {
 }
 
 describe("SerenityMemoryProvider", () => {
+  it("replaces document facts with revision provenance and scopes deletion to that document", async () => {
+    recallSerenityMock.mockResolvedValue({
+      ok: true,
+      value: [{ factId: "old", fact: "Old", provenance: "[ardur-memory:doc:1]" }],
+    });
+    forgetSerenityMock.mockResolvedValue({
+      ok: true,
+      value: { id: "old", expired: true, reason: null },
+    });
+    rememberSerenityMock.mockResolvedValue({ ok: true, value: { factId: "new" } } as never);
+    const selected = provider();
+    expect(
+      await selected.save(
+        {
+          content: "Fact",
+          scope: "shared",
+          botId: "bot-1",
+          source: { kind: "durable", documentId: "doc", revision: 2 },
+        },
+        context,
+      ),
+    ).toMatchObject({ ok: true });
+    expect(recallSerenityMock).toHaveBeenCalledWith(
+      "doc",
+      expect.anything(),
+      expect.objectContaining({ entity: "ardurbot-document/workspace-1/doc" }),
+    );
+    expect(forgetSerenityMock).toHaveBeenCalledWith("old", expect.anything(), expect.anything());
+    expect(rememberSerenityMock).toHaveBeenCalledWith(
+      "Fact",
+      "[ardur-memory:doc:2]",
+      expect.anything(),
+      expect.objectContaining({ entity: "ardurbot-document/workspace-1/doc" }),
+    );
+    recallSerenityMock.mockResolvedValue({
+      ok: true,
+      value: Array.from({ length: 100 }, (_, i) => ({
+        factId: `fact-${i}`,
+        fact: "Fact",
+        provenance: "fixture",
+      })),
+    });
+    expect(await selected.deleteDocument({ documentId: "doc" }, context)).toMatchObject({
+      ok: false,
+    });
+  });
   it("keeps bot and space entity namespaces inside the adapter", () => {
     expect(serenityBotEntity("bot-1")).toBe("ardurbot-bot/bot-1");
     expect(serenitySpaceEntity("workspace-1")).toBe("ardurbot-space/workspace-1");

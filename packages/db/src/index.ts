@@ -4,6 +4,8 @@ export * from "./client.js";
 export * from "./command-blocks.js";
 export * from "./computers.js";
 export * from "./credential-secrets.js";
+export * from "./device-grants.js";
+export * from "./dispatch.js";
 export * from "./events.js";
 export * from "./external-conversations.js";
 export * from "./groups.js";

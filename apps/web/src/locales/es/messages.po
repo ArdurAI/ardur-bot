@@ -63,6 +63,13 @@ msgstr "Conexión {0}"
 msgid "{0} default"
 msgstr ""
 
+#. placeholder {0}: preview.documents
+#. placeholder {1}: preview.revisions
+#: src/pages/MemoryImportExport.tsx
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "{0} documents, {1} revisions"
+msgstr ""
+
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} handling"
@@ -334,6 +341,10 @@ msgstr "Avanzado"
 msgid "Advanced..."
 msgstr "Avanzado..."
 
+#: src/pages/MemoryHistory.tsx
+msgid "After"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Agent computer"
 msgstr "Computadora del agente"
@@ -364,6 +375,18 @@ msgstr "Permitir el conector {0} sin preguntar"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow {0} without asking"
 msgstr "Permitir {0} sin preguntar"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow actions after presence confirmation"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow delegation"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow device"
+msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow email actions without asking"
@@ -408,6 +431,10 @@ msgstr "Permitir siempre esta herramienta"
 #: src/components/AskCard.tsx
 msgid "Always allowed"
 msgstr "Siempre permitido"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Another service"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Answer"
@@ -545,6 +572,10 @@ msgstr "Adjuntar archivo"
 msgid "Attachment"
 msgstr "Archivo adjunto"
 
+#: src/pages/MemoryHistory.tsx
+msgid "Author"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Authorization code or callback URL"
@@ -609,6 +640,10 @@ msgstr "URL base"
 msgid "Bearer token"
 msgstr "Token Bearer"
 
+#: src/pages/MemoryHistory.tsx
+msgid "Before"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Block link copied."
 msgstr ""
@@ -627,6 +662,7 @@ msgid "bot"
 msgstr "bot"
 
 #: src/pages/IntegrationSetup.tsx
+#: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Bot"
@@ -674,6 +710,10 @@ msgstr ""
 msgid "Browse MCP servers"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Built-in"
+msgstr ""
+
 #: src/pages/CallView.tsx
 msgid "Call"
 msgstr "Llamar"
@@ -688,6 +728,7 @@ msgstr "No se puede alcanzar el servidor."
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -799,6 +840,10 @@ msgstr ""
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "Elegir archivo"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Choose folder"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
@@ -986,6 +1031,16 @@ msgstr "Confirmar eliminación"
 msgid "Confirm password"
 msgstr "Confirmar contraseña"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Confirm the phone fingerprint here before allowing it."
+msgstr ""
+
+#. placeholder {0}: conflict.path
+#: src/pages/MemoryImportExport.tsx
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Conflict: {0}"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Confluence space keys or IDs"
 msgstr ""
@@ -1033,7 +1088,6 @@ msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1112,6 +1166,10 @@ msgstr ""
 msgid "Copy output"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Copy pairing details"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
 msgstr "No se pudo agregar"
@@ -1124,9 +1182,17 @@ msgstr "No se pudo agregar el servidor MCP"
 msgid "Could not approve this server"
 msgstr "No se pudo aprobar este servidor"
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not attach the folder. Retry."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not authorize this app"
 msgstr "No se pudo autorizar esta app"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not change memory location. Check the folder and preview again."
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Could not change password"
@@ -1135,6 +1201,14 @@ msgstr "No se pudo cambiar la contraseña"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not change the default model"
 msgstr "No se pudo cambiar el modelo predeterminado"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not change the default scope. Retry."
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Could not change this document. Reload and try again."
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
@@ -1161,13 +1235,16 @@ msgstr ""
 msgid "Could not connect"
 msgstr "No se pudo conectar"
 
-#. placeholder {0}: registration.name
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Could not connect {0}"
-msgstr "No se pudo conectar {0}"
-
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not connect or load integrations."
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not connect the memory service. Check the connection and retry."
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not connect the memory service. Preview again and retry."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1231,10 +1308,6 @@ msgstr "No se pudo eliminar la habilidad"
 msgid "Could not delete space"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Could not disconnect memory provider"
-msgstr "No se pudo desconectar el proveedor de memoria"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not disconnect OAuth"
 msgstr "No se pudo desconectar OAuth"
@@ -1256,6 +1329,14 @@ msgstr "No se pudo descargar {0}. Inténtalo de nuevo."
 msgid "Could not download {name}. Try again."
 msgstr "No se pudo descargar {name}. Inténtalo de nuevo."
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Could not export memory. Retry."
+msgstr ""
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Could not import these documents. Check scopes and conflicts, then preview again."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "No se pudo instalar el conector"
@@ -1274,6 +1355,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "Could not load history. Retry."
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1335,6 +1420,10 @@ msgstr "No se pudo alcanzar el servidor"
 msgid "Could not reach this model server"
 msgstr "No se pudo alcanzar este servidor de modelos"
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Could not read this memory bundle. Choose a valid export."
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not remove"
 msgstr "No se pudo quitar"
@@ -1366,6 +1455,10 @@ msgstr "No se pudo renderizar el gráfico"
 #: src/pages/Auth.tsx
 msgid "Could not reset password"
 msgstr "No se pudo restablecer la contraseña"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Could not restore this revision. Reload and try again."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
@@ -1465,10 +1558,6 @@ msgstr "No se pudo actualizar la computadora"
 msgid "Could not update reaction"
 msgstr "No se pudo actualizar la reacción"
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Could not update the default memory scope"
-msgstr "No se pudo actualizar el alcance de memoria predeterminado"
-
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "No se pudo cargar la configuración de mensajería"
@@ -1552,6 +1641,10 @@ msgstr "credencial guardada"
 #: src/pages/PluginsOverlay.tsx
 msgid "Credentials are encrypted and never sent to the model."
 msgstr "Las credenciales se cifran y nunca se envían al modelo."
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Credentials are stored encrypted on your server."
+msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron"
@@ -1662,6 +1755,7 @@ msgid "Denied"
 msgstr "Denegado"
 
 #: src/components/AskCard.tsx
+#: src/pages/DevicesSettings.tsx
 msgid "Deny"
 msgstr "Denegar"
 
@@ -1685,18 +1779,40 @@ msgstr ""
 msgid "Desktop update"
 msgstr ""
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Destination scope"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Details"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device name"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device permissions"
+msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Devices"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Devices are unavailable; reconnect to your home."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnect"
 msgstr "Desconectar"
 
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnecting…"
 msgstr "Desconectando…"
@@ -1735,8 +1851,16 @@ msgstr "Docker"
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker limita el acceso a tu computadora para mayor seguridad. Usar {hostLabel} permite que los bots trabajen con tus archivos y herramientas locales."
 
+#: src/pages/KnowledgeSection.tsx
+msgid "Document"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Documentation"
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Documents"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -1801,6 +1925,10 @@ msgstr "Correo"
 msgid "Engage when... Ignore..."
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enter a code instead"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
 msgstr ""
@@ -1863,6 +1991,10 @@ msgstr "Cada semana"
 msgid "Executor token"
 msgstr "Token de Executor"
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Existing documents keep their scope."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
 msgstr "Expandir"
@@ -1872,6 +2004,11 @@ msgstr "Expandir"
 msgid "Expand {0}"
 msgstr "Expandir {0}"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Expires in five minutes."
+msgstr ""
+
+#: src/pages/MemoryImportExport.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Exportar"
@@ -1999,6 +2136,14 @@ msgstr ""
 msgid "Git event"
 msgstr "Evento de Git"
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Git repository"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Git repository: Coming next."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
 msgstr ""
@@ -2069,6 +2214,18 @@ msgstr "Ocultar contraseña"
 msgid "high — slower, checks more carefully"
 msgstr ""
 
+#: src/pages/KnowledgeSection.tsx
+msgid "History"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Home fingerprint"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Home link"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
 msgstr "hora"
@@ -2102,12 +2259,24 @@ msgstr ""
 msgid "Image upload area"
 msgstr "Área de carga de imagen"
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Import"
+msgstr ""
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Import memory bundle"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Import OpenAPI JSON"
 msgstr "Importar JSON de OpenAPI"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Indexing sends documents to {locationLine}."
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -2157,7 +2326,6 @@ msgstr "Cantidad del intervalo"
 msgid "Interval unit"
 msgstr "Unidad del intervalo"
 
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
 msgstr "Aislado"
@@ -2186,6 +2354,10 @@ msgstr "ahora mismo"
 msgid "Keep memories"
 msgstr "Conservar memorias"
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Keep scope"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "Clave"
@@ -2197,6 +2369,14 @@ msgstr "Conocimientos"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Language"
 msgstr "Idioma"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Last present"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Last used"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
@@ -2234,6 +2414,10 @@ msgstr "Escuchando…"
 msgid "Load earlier messages"
 msgstr "Cargar mensajes anteriores"
 
+#: src/pages/MemoryHistory.tsx
+msgid "Load more history to compare."
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Loading activity…"
 msgstr "Cargando actividad…"
@@ -2241,10 +2425,6 @@ msgstr "Cargando actividad…"
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading integrations…"
 msgstr "Cargando integraciones…"
-
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Loading memory settings…"
-msgstr "Cargando configuración de memoria…"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
@@ -2307,6 +2487,10 @@ msgstr "Asegúrate de que no quede nada en ejecución en este ordenador."
 msgid "Manage"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Manage devices from the home owner account."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Manage MCP servers"
 msgstr "Gestionar servidores MCP"
@@ -2314,10 +2498,6 @@ msgstr "Gestionar servidores MCP"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Manage messaging settings"
 msgstr "Administrar configuración de mensajería"
-
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Manage the Space semantic memory provider."
-msgstr "Administra el proveedor de memoria semántica del Space."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
@@ -2379,9 +2559,25 @@ msgstr "Miembros (elige {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 msgid "Memory"
 msgstr "Memoria"
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Memory folder on your server"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Memory location"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Memory location and documents"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Memory scope"
 msgstr "Alcance de memoria"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Memory service"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Mentions"
@@ -2453,6 +2649,7 @@ msgstr "minuto"
 msgid "minutes"
 msgstr "minutos"
 
+#: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -2507,6 +2704,14 @@ msgstr ""
 msgid "More computer actions"
 msgstr "Más acciones de computadora"
 
+#: src/pages/KnowledgeSection.tsx
+msgid "More documents"
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "More history"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "Muévelas a tu memoria compartida."
@@ -2514,6 +2719,10 @@ msgstr "Muévelas a tu memoria compartida."
 #: src/pages/BotContextMenu.tsx
 msgid "Move to"
 msgstr "Mover a"
+
+#: src/pages/MemoryImportExport.tsx
+msgid "My documents"
+msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/Auth.tsx
@@ -2546,6 +2755,10 @@ msgstr "Necesita toma de control"
 
 #: src/pages/Shell.tsx
 msgid "Needs you"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Never"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -2612,6 +2825,10 @@ msgstr "Aún no hay apps de chat vinculadas."
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "No destinations found."
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "No embedding service is configured."
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
@@ -2744,6 +2961,14 @@ msgstr "Falló la conexión OAuth"
 msgid "OAuth expired"
 msgstr "OAuth expirado"
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Obsidian Sync may copy this folder to your other devices"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Obsidian vault"
+msgstr ""
+
 #: src/lib/thinking-level-options.ts
 msgid "off — no extra thinking"
 msgstr ""
@@ -2756,6 +2981,14 @@ msgstr "Con un horario"
 #: src/pages/RoutineSchedule.tsx
 msgid "on the 1st at {0}"
 msgstr "el día 1 a las {0}"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "On this device"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "On your server"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Only empty spaces can be deleted. Delete its bots and groups first."
@@ -2854,6 +3087,14 @@ msgstr "Otro modelo…"
 msgid "PagerDuty incident"
 msgstr "Incidente de PagerDuty"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Pair device"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Pairing code"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Parent page"
 msgstr ""
@@ -2919,6 +3160,14 @@ msgstr "POST a"
 msgid "Preview {0}"
 msgstr "Vista previa de {0}"
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Preview import"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Preview migration"
+msgstr ""
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Previous"
 msgstr ""
@@ -2926,6 +3175,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "Privado"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Private to each bot"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Private workspace with its own bots and groups."
@@ -2935,7 +3188,6 @@ msgstr ""
 msgid "Project ID"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Provider"
 msgstr "Proveedor"
@@ -3131,6 +3383,10 @@ msgstr "Eliminado, pero falló la actualización de la lista"
 msgid "Removing…"
 msgstr "Quitando…"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Rename"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/dialogs.tsx
@@ -3210,6 +3466,7 @@ msgstr "Restableciendo…"
 msgid "Restart to update"
 msgstr ""
 
+#: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
 msgid "Restore"
 msgstr "Restaurar"
@@ -3220,6 +3477,10 @@ msgstr "Restaura el último espacio de trabajo guardado. Se pierde el trabajo si
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Retry"
 msgstr ""
 
 #: src/App.tsx
@@ -3252,9 +3513,19 @@ msgstr ""
 msgid "Review tools before your bots can use this account."
 msgstr ""
 
+#. placeholder {0}: revision.revision
+#: src/pages/MemoryHistory.tsx
+msgid "Revision {0}"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "Revocar"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Revoked"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Robot"
@@ -3276,6 +3547,10 @@ msgstr "Rutina"
 #: src/pages/RoutineEditor.tsx
 msgid "Routines"
 msgstr "Rutinas"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Run"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Run at"
@@ -3317,6 +3592,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -3330,8 +3606,17 @@ msgstr "Guardar"
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/ExternalConversationSettings.tsx
+#: src/pages/MemoryHistory.tsx
 msgid "Saved"
 msgstr "Guardado"
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Saved locally. Indexing failed."
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Saved locally. Indexing pending."
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
@@ -3503,7 +3788,6 @@ msgstr "Ayuda de configuración"
 msgid "Shape"
 msgstr "Forma"
 
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "Compartido"
@@ -3511,10 +3795,6 @@ msgstr "Compartido"
 #: src/pages/shell/dialogs.tsx
 msgid "Shared chat with 2-6 bots. They all reply in the same thread."
 msgstr ""
-
-#: src/pages/KnowledgeSection.tsx
-msgid "Shared documents"
-msgstr "Documentos compartidos"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -3606,6 +3886,11 @@ msgstr "Predeterminado del Space"
 #: src/pages/CallView.tsx
 msgid "Space interrupts · Esc hangs up"
 msgstr "Space interrumpe · Esc cuelga"
+
+#: src/pages/MemoryImportExport.tsx
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Space shared"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Spaces"
@@ -3775,8 +4060,8 @@ msgid "The connection was cancelled."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
-msgid "The selected memory provider is not available in this build."
-msgstr "El proveedor de memoria seleccionado no está disponible en esta build."
+msgid "The service may use its own embedding providers. Check its settings before saving private documents."
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Thinking"
@@ -3802,6 +4087,10 @@ msgstr ""
 msgid "This cannot be undone."
 msgstr "Esto no se puede deshacer."
 
+#: src/pages/DevicesSettings.tsx
+msgid "This change could not finish; try again."
+msgstr ""
+
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "Este chat es de solo lectura"
@@ -3824,6 +4113,10 @@ msgstr "esta Mac"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "This path is on your server, which may be a different machine."
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -3998,6 +4291,10 @@ msgstr ""
 msgid "Use default guidance"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Use this location"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "Usar este modelo"
@@ -4131,6 +4428,10 @@ msgstr "Tu dirección de correo"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "Tu nombre"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Your phone can reach this Mac on your network."
+msgstr ""
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

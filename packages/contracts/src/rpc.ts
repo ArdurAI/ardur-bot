@@ -3,6 +3,7 @@ import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
 import { CommandBlockSchema } from "./command-blocks.js";
+import { devicesContract, pairingContract } from "./dispatch.js";
 import {
   ActionApprovalRuleSchema,
   ActionAutoReviewSettingsSchema,
@@ -37,7 +38,6 @@ import {
   IntegrationCatalogResultSchema,
   McpServerConfigInput,
   McpServerSchema,
-  MemoryDocumentSchema,
   MemoryScopeSchema,
   MeSchema,
   MessagingAgentConnectionSchema,
@@ -92,6 +92,15 @@ import {
   IntegrationProviderConfigSchema,
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
+import {
+  MemoryBundleSchema,
+  MemoryDocumentHeadSchema,
+  MemoryDocumentPageSchema,
+  MemoryHistoryPageSchema,
+  MemoryImportPreviewSchema,
+  MemoryPageInput,
+  MemoryScopeRemapSchema,
+} from "./memory-documents.js";
 import { MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { SearchQueryOutputSchema } from "./search.js";
@@ -157,6 +166,8 @@ const threadSendInput = threadTarget
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
 export const appContract = {
+  devices: devicesContract,
+  pairing: pairingContract,
   commands: {
     list: oc
       .input(z.object({ runId: Id, query: z.string().max(256).optional() }))
@@ -412,12 +423,63 @@ export const appContract = {
     heartbeat: oc.input(botId).output(z.object({ ok: z.literal(true) })),
   },
   memory: {
-    list: oc
-      .input(z.object({ botId: Id.optional(), scope: z.enum(["bot", "user"]).optional() }))
-      .output(z.array(MemoryDocumentSchema)),
+    list: oc.input(MemoryPageInput).output(MemoryDocumentPageSchema),
     update: oc
-      .input(z.object({ documentId: Id, content: z.string() }))
-      .output(MemoryDocumentSchema),
+      .input(
+        z.object({
+          documentId: Id,
+          content: z.string().max(1_000_000),
+          expectedRevision: z.number().int().positive(),
+        }),
+      )
+      .output(MemoryDocumentHeadSchema),
+    history: oc
+      .input(
+        z.object({
+          documentId: Id,
+          cursor: z.number().int().positive().optional(),
+          limit: z.number().int().min(1).max(100).default(50),
+        }),
+      )
+      .output(MemoryHistoryPageSchema),
+    restore: oc
+      .input(
+        z.object({
+          documentId: Id,
+          revision: z.number().int().positive(),
+          expectedRevision: z.number().int().positive(),
+        }),
+      )
+      .output(MemoryDocumentHeadSchema),
+    delete: oc
+      .input(z.object({ documentId: Id, expectedRevision: z.number().int().positive() }))
+      .output(MemoryDocumentHeadSchema),
+    retry: oc.input(z.object({ documentId: Id })).output(MemoryDocumentHeadSchema),
+    export: oc.output(MemoryBundleSchema),
+    import: oc
+      .input(
+        z.object({
+          bundle: MemoryBundleSchema,
+          remapping: MemoryScopeRemapSchema.optional(),
+          expectedHash: z.string().optional(),
+        }),
+      )
+      .output(MemoryImportPreviewSchema),
+    location: oc
+      .input(
+        z.object({
+          location: z.enum(["postgres", "obsidian"]),
+          folder: z.string().optional(),
+          expectedGeneration: z.number().int().nonnegative(),
+          expectedHash: z.string().optional(),
+        }),
+      )
+      .output(
+        MemoryImportPreviewSchema.extend({
+          generation: z.number(),
+          config: SpaceMemoryConfigSchema.nullable(),
+        }),
+      ),
     exportMarkdown: oc.input(z.object({ botId: Id.optional() })).output(z.string()),
     providerConfig: oc.output(SpaceMemoryConfigSchema.nullable()),
     connectProvider: oc
@@ -427,6 +489,8 @@ export const appContract = {
           settings: z.record(z.string(), z.string()),
           credentials: z.record(z.string(), z.string()),
           defaultMemoryScope: MemoryScopeSchema.default("isolated"),
+          expectedGeneration: z.number().int().nonnegative().optional(),
+          expectedHash: z.string().optional(),
         }),
       )
       .output(SpaceMemoryConfigSchema),

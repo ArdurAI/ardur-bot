@@ -12,6 +12,7 @@ import {
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
+  inheritedRemoteOrigin,
   type PrismaClient,
   withTransactionRetry,
 } from "@ardurbot/db";
@@ -244,6 +245,8 @@ export async function messageBot(
         });
         const nextRun = await tx.run.create({
           data: {
+            ...(await inheritedRemoteOrigin(tx, run.id)),
+
             spaceId: run.spaceId,
             botId: target.id,
             threadId: targetThreadId,

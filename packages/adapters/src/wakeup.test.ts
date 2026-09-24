@@ -4,6 +4,7 @@ import { InMemoryJobQueue } from "./wakeup.js";
 
 function handlers(): BackgroundJobHandlers {
   return {
+    "memory.deliver": async () => undefined,
     "run.continue": vi.fn(async () => undefined),
     "routine.wakeup": vi.fn(async () => undefined),
     "computer.update": vi.fn(async () => undefined),
@@ -18,6 +19,43 @@ function handlers(): BackgroundJobHandlers {
 
 describe("InMemoryJobQueue", () => {
   afterEach(() => vi.useRealTimers());
+
+  it("serializes memory revisions across generations without blocking other documents", async () => {
+    vi.useFakeTimers();
+    const queue = new InMemoryJobQueue();
+    const target = handlers();
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const seen: string[] = [];
+    target["memory.deliver"] = async (job) => {
+      seen.push(`${job.documentId}:${job.revision}`);
+      if (job.documentId === "first" && job.revision === 1) await blocked;
+    };
+    await queue.start(target);
+    for (const [documentId, revision, generation] of [
+      ["first", 1, 1],
+      ["first", 2, 2],
+      ["second", 1, 1],
+    ] as const) {
+      await queue.enqueue({
+        name: "memory.deliver",
+        payload: {
+          spaceId: "space",
+          userId: "user",
+          documentId,
+          revision,
+          generation,
+        },
+      });
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    expect(seen).toEqual(["first:1", "second:1"]);
+    release();
+    await queue.close();
+    expect(seen).toEqual(["first:1", "second:1", "first:2"]);
+  });
 
   it("delivers delayed jobs", async () => {
     vi.useFakeTimers();

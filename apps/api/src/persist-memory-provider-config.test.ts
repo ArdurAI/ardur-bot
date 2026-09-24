@@ -55,6 +55,9 @@ function makeDeps(
   );
   const deleteConfig = vi.fn().mockResolvedValue({ id: "cfg-1" });
   const prisma = {
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    bot: { findMany: vi.fn().mockResolvedValue([]) },
+    memoryDocument: { findMany: vi.fn().mockResolvedValue([]) },
     spaceMember: {
       findUnique: vi
         .fn()
@@ -253,7 +256,7 @@ describe("persistMemoryProviderConfig", () => {
         }),
       }),
     );
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       provider: "supermemory",
       settings: { mode: "cloud", baseUrl: "https://api.supermemory.ai" },
       defaultMemoryScope: "isolated",
@@ -343,7 +346,7 @@ describe("disconnectMemoryProvider", () => {
   });
 
   it("disconnects an existing provider and removes its secret in the same transaction", async () => {
-    const { deps, transaction, deleteConfig, secretDeleteMany } = makeDeps({
+    const { deps, transaction, update, secretDeleteMany } = makeDeps({
       existing: { id: "cfg-1", secretId: "secret-old" },
     });
 
@@ -352,7 +355,10 @@ describe("disconnectMemoryProvider", () => {
     expect(transaction).toHaveBeenCalledExactlyOnceWith(expect.any(Function), {
       isolationLevel: "Serializable",
     });
-    expect(deleteConfig).toHaveBeenCalledWith({ where: { id: "cfg-1" } });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "cfg-1" },
+      data: { provider: "builtin", settings: {}, secretId: null, generation: { increment: 1 } },
+    });
     expect(secretDeleteMany).toHaveBeenCalledWith({ where: { id: "secret-old" } });
   });
 

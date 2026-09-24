@@ -34,7 +34,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("SpaceMemoryProviderResolver", () => {
   it.each([null, "another-user"])(
-    "disables saved local configurations without current deployment-owner authorization: %s",
+    "fails closed for saved local configurations without current deployment-owner authorization: %s",
     async (ownerUserId) => {
       const fetchMock = vi.fn();
       vi.stubGlobal("fetch", fetchMock);
@@ -44,7 +44,14 @@ describe("SpaceMemoryProviderResolver", () => {
         ownerUserId,
       });
 
-      await expect(resolver.resolve("workspace-1")).resolves.toBeNull();
+      const configured = await resolver.resolve("workspace-1");
+      expect(configured?.provider.describe().id).toBe("supermemory");
+      await expect(
+        configured?.provider.recall(
+          { query: "fact", botId: "bot", scope: "isolated", limit: 1 },
+          {} as never,
+        ),
+      ).resolves.toMatchObject({ ok: false });
       expect(secrets.load).not.toHaveBeenCalled();
       expect(fetchMock).not.toHaveBeenCalled();
     },
@@ -80,7 +87,20 @@ describe("SpaceMemoryProviderResolver", () => {
       baseUrl: "http://127.0.0.1:8123/internal-action#",
       ownerUserId: "config-author",
     });
-    await expect(resolver.resolve("workspace-1")).rejects.toThrow(/base URL/);
+    const configured = await resolver.resolve("workspace-1");
+    expect(configured?.provider.describe().id).toBe("supermemory");
+    expect(
+      await configured!.provider.recall(
+        { query: "fact", scope: "isolated", botId: "bot-1", limit: 1 },
+        {
+          spaceId: "workspace-1",
+          userId: "config-author",
+          operationId: "fixture",
+          traceId: "fixture",
+          signal: new AbortController().signal,
+        },
+      ),
+    ).toMatchObject({ ok: false });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

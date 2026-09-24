@@ -4,7 +4,9 @@
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./memory-conformance": "./src/memory-conformance.ts",
+    "./memory-fakes": "./src/memory-fakes.ts"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",
@@ -18,7 +20,8 @@
     "@ardurbot/core": "workspace:*",
     "@ardurbot/db": "workspace:*",
     "@testcontainers/postgresql": "12.1.0",
-    "pngjs": "7.0.0"
+    "pngjs": "7.0.0",
+    "@ardurbot/memory": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

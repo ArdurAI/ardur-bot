@@ -31,7 +31,13 @@ import {
   stackDir,
   stackResourceDir,
 } from "./local-stack.js";
+import {
+  memoryFolderBridgeAllowed,
+  nativeMemoryFolderDependencies,
+  registerMemoryFolder,
+} from "./memory-folders.js";
 import { oauthCallbackFrom } from "./oauth-callback.js";
+import { RemoteListener } from "./remote-listener.js";
 import {
   bundledRendererCandidates,
   contentType,
@@ -111,6 +117,7 @@ const desktopUpdater = new DesktopUpdateController(
 );
 let launchUpdateCheckScheduled = false;
 let localStack: LocalStackController;
+const remoteListener = new RemoteListener();
 
 markOnce("rk:main:module-evaluated");
 if (PERFORMANCE_USER_DATA) {
@@ -881,6 +888,7 @@ async function openAppOnce(targetUrl: string) {
     const created = createWindow(targetUrl, target.partition);
     win = created.win;
     await created.loaded;
+    if (currentTargetUrl !== targetUrl) await remoteListener.stop();
     currentTargetUrl = targetUrl;
     setupError = null;
     // Keep the previous window until the caller commits (after setup.json is written).
@@ -1129,7 +1137,82 @@ app.whenReady().then(async () => {
       );
     },
   );
+  const devicesWindowAllowed = (event: Electron.IpcMainInvokeEvent) =>
+    mainWindow !== null &&
+    windowFrom(event) === mainWindow &&
+    event.senderFrame === event.sender.mainFrame &&
+    currentSetup?.mode === "new" &&
+    currentTargetUrl !== null &&
+    new URL(event.senderFrame.url).origin === new URL(currentTargetUrl).origin;
+  ipcMain.handle("desktop.devices.state", (event) =>
+    devicesWindowAllowed(event) ? remoteListener.state() : { enabled: false, hints: [] },
+  );
+  ipcMain.handle("desktop.devices.setEnabled", async (event, enabled: unknown) => {
+    if (!devicesWindowAllowed(event) || typeof enabled !== "boolean")
+      throw new Error("Open Devices on your Mac.");
+    if (!enabled) return remoteListener.stop();
+    const target = new URL(localStack.webUrl()).origin;
+    const token = await readStackToken(stackDir(app.getPath("userData")));
+    if (!token || !(await localStack.matchesDesiredStack()))
+      throw new Error("Start your home before pairing a phone.");
+    const response = await net.fetch(`${target}/local/device-listener`, {
+      method: "POST",
+      headers: { "x-ardurbot-desktop-stack-token": token },
+      redirect: "error",
+      bypassCustomProtocolHandlers: true,
+    });
+    if (!response.ok) throw new Error("Update your home before pairing a phone.");
+    const material = (await response.json()) as {
+      certificate: string;
+      privateKey: string;
+      certificateFingerprint: string;
+    };
+    return remoteListener.start({ target, ...material });
+  });
   ipcMain.handle("desktop.platform", () => process.platform);
+  ipcMain.handle("desktop.memoryFolders.available", (event) =>
+    memoryFolderBridgeAllowed({
+      mainWindow: fromMainWindow(event),
+      mainFrame: event.senderFrame === event.sender.mainFrame,
+      mode: currentSetup?.mode,
+      frameUrl: event.senderFrame?.url ?? "",
+      localUrl: localStack.webUrl(),
+    }),
+  );
+  let selectingMemoryFolder = false;
+  ipcMain.handle("desktop.memoryFolders.select", async (event, spaceId: unknown) => {
+    if (
+      !memoryFolderBridgeAllowed({
+        mainWindow: fromMainWindow(event),
+        mainFrame: event.senderFrame === event.sender.mainFrame,
+        mode: currentSetup?.mode,
+        frameUrl: event.senderFrame?.url ?? "",
+        localUrl: localStack.webUrl(),
+      }) ||
+      typeof spaceId !== "string" ||
+      selectingMemoryFolder
+    )
+      throw new Error("Memory folders require the local desktop stack.");
+    selectingMemoryFolder = true;
+    try {
+      return await registerMemoryFolder(
+        spaceId,
+        nativeMemoryFolderDependencies(
+          stackDir(userDataDir),
+          async () => {
+            const selected = await dialog.showOpenDialog({
+              title: "Choose an empty memory folder",
+              properties: ["openDirectory", "createDirectory"],
+            });
+            return selected.canceled ? null : (selected.filePaths[0] ?? null);
+          },
+          () => localStack.applyMemoryFolders(),
+        ),
+      );
+    } finally {
+      selectingMemoryFolder = false;
+    }
+  });
   ipcMain.handle("desktop.window.close", (event) => {
     windowFrom(event)?.close();
   });
@@ -1358,5 +1441,6 @@ app.on("before-quit", () => {
   quitting = true;
   clearTimeout(warmWindowTimer);
   // Containers keep running; only an in-flight pull/up is cut short.
+  void remoteListener.stop();
   localStack?.abort();
 });

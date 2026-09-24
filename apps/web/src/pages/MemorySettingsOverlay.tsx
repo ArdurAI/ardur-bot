@@ -1,4 +1,4 @@
-import type { SpaceMemoryConfig } from "@ardurbot/contracts";
+import type { MemoryImportPreview, SpaceMemoryConfig } from "@ardurbot/contracts";
 import {
   Button,
   Dialog,
@@ -6,54 +6,30 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
-  Field,
-  FieldLabel,
+  Input,
   NativeSelect,
   NativeSelectOption,
-  Toggle,
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { SpaceMemorySection } from "./KnowledgeSection";
+import type { MemoryProviderConnectionDraft } from "./memory-providers/registry";
 import {
   defaultMemoryProviderSettings,
   MEMORY_PROVIDER_SETTINGS,
-  type MemoryProviderConnectionDraft,
   memoryProviderSettings,
 } from "./memory-providers/registry";
 
-function ScopePicker({
-  value,
-  disabled,
-  onChange,
-}: {
-  value: "isolated" | "shared";
-  disabled: boolean;
-  onChange: (scope: "isolated" | "shared") => void;
-}) {
-  return (
-    <div className="text-[13.5px] text-muted-foreground">
-      <Trans>Default scope</Trans>
-      <div className="mt-2 flex gap-2">
-        {(["isolated", "shared"] as const).map((option) => (
-          <Toggle
-            key={option}
-            variant="outline"
-            pressed={value === option}
-            disabled={disabled}
-            onPressedChange={() => onChange(option)}
-            className="flex-1 font-normal text-muted-foreground aria-pressed:text-foreground"
-          >
-            {option === "isolated" ? <Trans>Isolated</Trans> : <Trans>Shared</Trans>}
-          </Toggle>
-        ))}
-      </div>
-    </div>
-  );
+type Location = "postgres" | "obsidian" | "service";
+function configuredLocation(config: SpaceMemoryConfig | null | undefined): Location {
+  return config?.provider && config.provider !== "builtin"
+    ? "service"
+    : config?.documentStore === "obsidian"
+      ? "obsidian"
+      : "postgres";
 }
-
 export function MemorySettingsOverlay({
   onClose,
   config,
@@ -64,104 +40,167 @@ export function MemorySettingsOverlay({
   onClose: () => void;
   config: SpaceMemoryConfig | null | undefined;
   onConfigChange: (config: SpaceMemoryConfig | null) => void;
-  /** Render panel body only for the shared Settings shell. */
   embedded?: boolean;
   onBusyChange?: (busy: boolean) => void;
 }) {
   const { t } = useLingui();
-  const providerSelectId = useId();
-  const defaultRegistration = defaultMemoryProviderSettings();
-  const [selectedProvider, setSelectedProvider] = useState(
-    config?.provider ?? defaultRegistration.id,
+  const locationId = useId();
+  const scopeId = useId();
+  const [location, setLocation] = useState<Location>(() => configuredLocation(config));
+  const [provider, setProvider] = useState(
+    config?.provider && config.provider !== "builtin"
+      ? config.provider
+      : defaultMemoryProviderSettings().id,
   );
-  const [defaultScope, setDefaultScope] = useState<"isolated" | "shared">(
+  const [scope, setScope] = useState<"isolated" | "shared">(
     config?.defaultMemoryScope ?? "isolated",
   );
-  const [pending, setPending] = useState<"connect" | "disconnect" | "scope" | null>(null);
+  const [folder, setFolder] = useState(config?.documentSettings.folder ?? "");
+  const [localDesktop, setLocalDesktop] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const [preview, setPreview] = useState<MemoryImportPreview | null>(null);
+  const [pendingConnection, setPendingConnection] = useState<MemoryProviderConnectionDraft | null>(
+    null,
+  );
+  const [refresh, setRefresh] = useState(0);
+  const registration = memoryProviderSettings(provider);
   useEffect(() => {
-    if (config) {
-      setSelectedProvider(config.provider);
-      setDefaultScope(config.defaultMemoryScope);
-      return;
-    }
-    if (config === null && !memoryProviderSettings(selectedProvider)) {
-      setSelectedProvider(defaultRegistration.id);
-    }
-  }, [config, defaultRegistration.id, selectedProvider]);
-
-  const registration = memoryProviderSettings(config?.provider ?? selectedProvider);
-  const busy = pending !== null;
-
+    let active = true;
+    void window.ardurbotDesktop?.memoryFolders
+      ?.available()
+      .then((available) => {
+        if (active) setLocalDesktop(available);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
   useEffect(() => {
+    setLocation(configuredLocation(config));
+    setFolder(config?.documentSettings.folder ?? "");
+    setScope(config?.defaultMemoryScope ?? "isolated");
+    setPreview(null);
+  }, [config]);
+  useEffect(() => {
+    onBusyChange?.(busy);
     return () => onBusyChange?.(false);
-  }, [onBusyChange]);
-
-  function markPending(next: "connect" | "disconnect" | "scope" | null) {
-    setPending(next);
-    onBusyChange?.(next !== null);
+  }, [busy, onBusyChange]);
+  async function chooseFolder() {
+    setBusy(true);
+    setError(null);
+    try {
+      const me = await rpc.me();
+      const selected = await window.ardurbotDesktop?.memoryFolders?.select(me.spaceId);
+      if (selected) {
+        setFolder(selected.path);
+        setPreview(null);
+      }
+    } catch {
+      setError(t`Could not attach the folder. Retry.`);
+    } finally {
+      setBusy(false);
+    }
   }
-
+  async function migrate(write: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await rpc.memory.location({
+        location: location === "obsidian" ? "obsidian" : "postgres",
+        ...(location === "obsidian" ? { folder } : {}),
+        expectedGeneration: config?.generation ?? 0,
+        ...(write && preview ? { expectedHash: preview.hash } : {}),
+      });
+      if (result.config) {
+        onConfigChange(result.config);
+        setRefresh((value) => value + 1);
+        setPreview(null);
+      } else setPreview(result);
+    } catch {
+      setError(t`Could not change memory location. Check the folder and preview again.`);
+      setPreview(null);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function connect(draft: MemoryProviderConnectionDraft) {
     if (!registration) return false;
+    setBusy(true);
     setError(null);
-    markPending("connect");
+    try {
+      const result = await rpc.memory.location({
+        location: "postgres",
+        expectedGeneration: config?.generation ?? 0,
+      });
+      setPreview(result);
+      setPendingConnection(draft);
+      return false;
+    } catch {
+      setError(t`Could not connect the memory service. Check the connection and retry.`);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function confirmConnection() {
+    if (!pendingConnection || !preview || !registration) return;
+    setBusy(true);
+    setError(null);
     try {
       const next = await rpc.memory.connectProvider({
         provider: registration.id,
-        ...draft,
-        defaultMemoryScope: defaultScope,
+        ...pendingConnection,
+        defaultMemoryScope: scope,
+        expectedGeneration: config?.generation ?? 0,
+        expectedHash: preview.hash,
       });
       onConfigChange(next);
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t`Could not connect ${registration.name}`);
-      return false;
+      setPendingConnection(null);
+      setPreview(null);
+      setRefresh((value) => value + 1);
+    } catch {
+      setError(t`Could not connect the memory service. Preview again and retry.`);
+      setPreview(null);
+      setPendingConnection(null);
     } finally {
-      markPending(null);
+      setBusy(false);
     }
   }
-
-  async function disconnect() {
+  async function changeScope(value: "isolated" | "shared") {
+    setScope(value);
+    if (!config) return;
+    setBusy(true);
     setError(null);
-    markPending("disconnect");
     try {
-      await rpc.memory.disconnectProvider();
-      onConfigChange(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t`Could not disconnect memory provider`);
+      onConfigChange(await rpc.memory.setDefaultScope({ defaultMemoryScope: value }));
+    } catch {
+      setError(t`Could not change the default scope. Retry.`);
     } finally {
-      markPending(null);
+      setBusy(false);
     }
   }
-
-  async function updateDefaultScope(scope: "isolated" | "shared") {
-    if (scope === defaultScope) return;
-    setError(null);
-    markPending("scope");
-    try {
-      const next = await rpc.memory.setDefaultScope({ defaultMemoryScope: scope });
-      onConfigChange(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t`Could not update the default memory scope`);
-    } finally {
-      markPending(null);
-    }
-  }
-
+  const activeLocation = configuredLocation(config);
+  const changed =
+    location !== activeLocation ||
+    (location === "obsidian" && folder !== config?.documentSettings.folder);
+  const locationLine =
+    activeLocation === "service"
+      ? (memoryProviderSettings(config!.provider)?.name ?? config!.provider)
+      : localDesktop
+        ? t`On this device`
+        : t`On your server`;
   const body = (
     <>
       {!embedded ? (
-        <div className="flex items-start justify-between px-6 pt-6 sm:px-8 sm:pt-7">
+        <div className="flex items-center justify-between px-6 pt-6">
           <div>
-            <DialogTitle className="text-2xl font-medium text-foreground">
+            <DialogTitle>
               <Trans>Memory</Trans>
             </DialogTitle>
-            <DialogDescription className="mt-1 text-[13.5px] text-muted-foreground/70">
-              {registration?.description ?? (
-                <Trans>Manage the Space semantic memory provider.</Trans>
-              )}
+            <DialogDescription className="sr-only">
+              <Trans>Memory location and documents</Trans>
             </DialogDescription>
           </div>
           <DialogClose
@@ -172,107 +211,208 @@ export function MemorySettingsOverlay({
             <XIcon />
           </DialogClose>
         </div>
-      ) : (
-        <p className="px-6 pt-1 text-[13.5px] text-muted-foreground/70 sm:px-8">
-          {registration?.description ?? <Trans>Manage the Space semantic memory provider.</Trans>}
-        </p>
-      )}
-
-      <div className="rk-scroll min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
-        {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
-
-        {config === undefined ? (
-          <p className="text-sm text-muted-foreground">
-            <Trans>Loading memory settings…</Trans>
+      ) : null}
+      <div className="rk-scroll min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8">
+        {error ? (
+          <p role="alert" className="mb-3 text-sm text-destructive">
+            {error}
           </p>
-        ) : config ? (
-          <div className="rounded-xl border border-border px-4 py-3">
-            <div className="text-[12.5px] uppercase tracking-[0.08em] text-muted-foreground/80">
-              <Trans>Connected</Trans>
-            </div>
-            <div className="mt-1 text-[15px] text-foreground">
-              {registration?.connectedLabel(config) ?? config.provider}
-            </div>
-            <div className="mt-3">
-              <ScopePicker
-                value={defaultScope}
-                disabled={busy}
-                onChange={(scope) => void updateDefaultScope(scope)}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
+        ) : null}
+        <label htmlFor={locationId} className="text-sm">
+          <Trans>Memory location</Trans>
+        </label>
+        <NativeSelect
+          id={locationId}
+          className="mt-2 w-full"
+          value={location}
+          disabled={busy || config === undefined}
+          onChange={(event) => {
+            setLocation(event.target.value as Location);
+            setPreview(null);
+            setPendingConnection(null);
+          }}
+        >
+          <NativeSelectOption value="postgres">
+            <Trans>Built-in</Trans>
+          </NativeSelectOption>
+          <NativeSelectOption value="obsidian">
+            <Trans>Obsidian vault</Trans>
+          </NativeSelectOption>
+          <NativeSelectOption value="git" disabled>
+            <Trans>Git repository</Trans>
+          </NativeSelectOption>
+          <NativeSelectOption value="service">
+            <Trans>Another service</Trans>
+          </NativeSelectOption>
+        </NativeSelect>
+        <p className="mt-2 text-sm text-muted-foreground">{locationLine}</p>
+        <details className="mt-2 text-xs text-muted-foreground">
+          <summary>
+            <Trans>Details</Trans>
+          </summary>
+          <p>
+            <Trans>Git repository: Coming next.</Trans>
+          </p>
+          <p>
+            {activeLocation === "service"
+              ? t`Indexing sends documents to ${locationLine}.`
+              : t`No embedding service is configured.`}
+          </p>
+          {activeLocation === "service" ? (
+            <p>
+              <Trans>
+                The service may use its own embedding providers. Check its settings before saving
+                private documents.
+              </Trans>
+            </p>
+          ) : null}
+          <label htmlFor={scopeId}>
+            <Trans>Default scope</Trans>
+            <NativeSelect
+              id={scopeId}
+              value={scope}
               disabled={busy}
-              onClick={() => void disconnect()}
-              className="mt-3"
+              onChange={(event) => void changeScope(event.target.value as "isolated" | "shared")}
             >
-              {pending === "disconnect" ? <Trans>Disconnecting…</Trans> : <Trans>Disconnect</Trans>}
-            </Button>
-          </div>
-        ) : registration ? (
-          <>
-            {MEMORY_PROVIDER_SETTINGS.length > 1 ? (
-              <Field className="mb-4">
-                <FieldLabel htmlFor={providerSelectId}>
-                  <Trans>Provider</Trans>
-                </FieldLabel>
-                <NativeSelect
-                  id={providerSelectId}
-                  className="w-full"
-                  value={selectedProvider}
-                  disabled={busy}
-                  onChange={(event) => setSelectedProvider(event.target.value)}
-                >
-                  {MEMORY_PROVIDER_SETTINGS.map((entry) => (
-                    <NativeSelectOption key={entry.id} value={entry.id}>
-                      {entry.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </Field>
-            ) : null}
-
-            <div className="mb-4">
-              <ScopePicker value={defaultScope} disabled={busy} onChange={setDefaultScope} />
-            </div>
-
-            <registration.SettingsForm busy={busy} onConnect={connect} />
-          </>
-        ) : (
-          <p className="text-sm text-destructive">
-            <Trans>The selected memory provider is not available in this build.</Trans>
+              <NativeSelectOption value="isolated">
+                <Trans>Private to each bot</Trans>
+              </NativeSelectOption>
+              <NativeSelectOption value="shared">
+                <Trans>Space shared</Trans>
+              </NativeSelectOption>
+            </NativeSelect>
+          </label>
+          <p>
+            <Trans>Existing documents keep their scope.</Trans>
           </p>
-        )}
-        <SpaceMemorySection />
+          {activeLocation === "service" ? (
+            <p>
+              <Trans>Credentials are stored encrypted on your server.</Trans>
+            </p>
+          ) : null}
+          {location === "obsidian" ? (
+            <p>
+              <Trans>Obsidian Sync may copy this folder to your other devices</Trans>
+            </p>
+          ) : null}
+        </details>
+        {location === "obsidian" ? (
+          <div className="mt-4 space-y-2">
+            {localDesktop ? (
+              <Button variant="outline" disabled={busy} onClick={() => void chooseFolder()}>
+                <Trans>Choose folder</Trans>
+              </Button>
+            ) : (
+              <>
+                <Input
+                  aria-label={t`Memory folder on your server`}
+                  value={folder}
+                  disabled={busy}
+                  onChange={(event) => {
+                    setFolder(event.target.value);
+                    setPreview(null);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  <Trans>This path is on your server, which may be a different machine.</Trans>
+                </p>
+              </>
+            )}
+            {folder ? <p className="break-all text-xs text-muted-foreground">{folder}</p> : null}
+          </div>
+        ) : null}
+        {changed && location !== "service" ? (
+          <div className="mt-3 space-y-2">
+            <Button
+              variant="outline"
+              disabled={busy || (location === "obsidian" && !folder)}
+              onClick={() => void migrate(false)}
+            >
+              <Trans>Preview migration</Trans>
+            </Button>
+            {preview ? (
+              <>
+                <p className="text-sm">
+                  <Trans>
+                    {preview.documents} documents, {preview.revisions} revisions
+                  </Trans>
+                </p>
+                <p className="break-all font-mono text-xs">{preview.hash}</p>
+                {preview.conflicts.map((conflict) => (
+                  <p key={conflict.id} className="text-sm text-destructive">
+                    <Trans>Conflict: {conflict.path}</Trans>
+                  </p>
+                ))}
+                <Button
+                  disabled={busy || preview.conflicts.length > 0}
+                  onClick={() => void migrate(true)}
+                >
+                  <Trans>Use this location</Trans>
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+        {location === "service" ? (
+          <div className="mt-4 space-y-3">
+            <NativeSelect
+              aria-label={t`Memory service`}
+              value={provider}
+              disabled={busy}
+              onChange={(event) => {
+                setProvider(event.target.value);
+                setPendingConnection(null);
+                setPreview(null);
+              }}
+            >
+              {MEMORY_PROVIDER_SETTINGS.map((entry) => (
+                <NativeSelectOption key={entry.id} value={entry.id}>
+                  {entry.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            {registration ? <registration.SettingsForm busy={busy} onConnect={connect} /> : null}
+            {pendingConnection && preview ? (
+              <div className="space-y-2">
+                <p>
+                  <Trans>
+                    {preview.documents} documents, {preview.revisions} revisions
+                  </Trans>
+                </p>
+                <p className="break-all font-mono text-xs">{preview.hash}</p>
+                <Button
+                  disabled={busy || preview.conflicts.length > 0}
+                  onClick={() => void confirmConnection()}
+                >
+                  <Trans>Use this location</Trans>
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <SpaceMemorySection key={refresh} />
       </div>
     </>
   );
-
-  if (embedded) {
+  if (embedded)
     return (
       <div data-testid="memory-settings" className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {body}
       </div>
     );
-  }
-
   return (
     <Dialog
       open
       onOpenChange={(open, details) => {
-        if (open) return;
-        if (busy) {
-          details.cancel();
-          return;
+        if (!open) {
+          if (busy) details.cancel();
+          else onClose();
         }
-        onClose();
       }}
     >
       <DialogContent
         showCloseButton={false}
-        className="flex max-h-[min(760px,calc(100%-2rem))] w-[560px] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-h-[min(760px,calc(100%-5rem))] sm:max-w-[calc(100%-5rem)]"
+        className="flex max-h-[min(760px,calc(100%-2rem))] w-[560px] flex-col gap-0 overflow-hidden p-0"
       >
         {body}
       </DialogContent>

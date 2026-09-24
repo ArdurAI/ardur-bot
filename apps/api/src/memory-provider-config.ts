@@ -1,18 +1,23 @@
 import type { SecretStore } from "@ardurbot/adapter-kit";
 import {
+  authenticatedMemoryAccess,
   classifyMemoryProviderSettings,
+  lockMemorySpace,
   MemoryProviderDeploymentOwnerRequiredError,
   memoryProviderRequiresDeploymentOwner,
   prepareMemoryProviderConnection,
+  selectDocumentStore,
   toStringRecord,
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { findSpaceMemoryConfig, Prisma, type PrismaClient } from "@ardurbot/db";
+import { bundleHash } from "@ardurbot/memory";
 import { ORPCError } from "@orpc/server";
 import { withSerializableRetry } from "./serializable-retry.js";
 
 export interface MemoryProviderConfigDeps {
   prisma: PrismaClient;
+  dataDir?: string;
   secrets: Pick<SecretStore, "put">;
   /** Test seam: override DNS/trust classification without probing. */
   classifySettings?: (
@@ -25,7 +30,7 @@ export interface MemoryProviderConfigDeps {
   ) => ReturnType<typeof prepareMemoryProviderConnection>;
 }
 
-async function requireSpaceOwner(prisma: PrismaClient, actor: Actor): Promise<void> {
+export async function requireSpaceOwner(prisma: PrismaClient, actor: Actor): Promise<void> {
   const member = await prisma.spaceMember.findUnique({
     where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
     select: { role: true },
@@ -42,6 +47,8 @@ export async function persistMemoryProviderConfig(
     settings: Record<string, string>;
     credentials: Record<string, string>;
     defaultMemoryScope: "isolated" | "shared";
+    expectedGeneration?: number;
+    expectedHash?: string;
   },
 ) {
   await requireSpaceOwner(deps.prisma, actor);
@@ -95,7 +102,46 @@ export async function persistMemoryProviderConfig(
   const config = await withSerializableRetry(() =>
     deps.prisma.$transaction(
       async (tx) => {
+        await lockMemorySpace(tx, actor.spaceId);
         const existing = await findSpaceMemoryConfig(tx, actor.spaceId);
+        if (
+          input.expectedGeneration !== undefined &&
+          input.expectedGeneration !== (existing?.generation ?? 0)
+        )
+          throw new ORPCError("CONFLICT", {
+            message: "The memory location changed. Preview it again.",
+          });
+        if (
+          existing?.documentStore === "obsidian" &&
+          toStringRecord(existing.documentSettings).ownerUserId !== actor.userId
+        )
+          throw new ORPCError("FORBIDDEN");
+        const access = await authenticatedMemoryAccess(tx, {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          operationId: "memory-provider",
+          traceId: "memory-provider",
+          signal: new AbortController().signal,
+        });
+        const source = await selectDocumentStore(tx, existing, deps.dataDir ?? "./data");
+        const bundle = await source.exportBundle(access);
+        if (
+          (bundle.documents.length > 0 || input.expectedHash !== undefined) &&
+          input.expectedHash !== bundleHash(bundle)
+        )
+          throw new ORPCError("CONFLICT", {
+            message: "Preview the memory migration before connecting.",
+          });
+        const target = await selectDocumentStore(tx, null, deps.dataDir ?? "./data");
+        await target.importBundle(
+          bundle,
+          {
+            status: "pending",
+            generation: (existing?.generation ?? 0) + 1,
+            provider: prepared.provider,
+          },
+          access,
+        );
         const secret = await tx.secret.create({
           data: {
             id: stored.id,
@@ -116,6 +162,9 @@ export async function persistMemoryProviderConfig(
             defaultMemoryScope: input.defaultMemoryScope,
           },
           update: {
+            generation: { increment: 1 },
+            documentStore: "postgres",
+            documentSettings: {},
             userId: actor.userId,
             provider: prepared.provider,
             settings: prepared.settings,
@@ -123,8 +172,8 @@ export async function persistMemoryProviderConfig(
             defaultMemoryScope: input.defaultMemoryScope,
           },
         });
-        if (existing && existing.secretId !== secret.id) {
-          await tx.secret.deleteMany({ where: { id: existing.secretId } });
+        if (existing?.secretId && existing.secretId !== secret.id) {
+          if (existing.secretId) await tx.secret.deleteMany({ where: { id: existing.secretId } });
         }
         return updated;
       },
@@ -140,22 +189,32 @@ export async function updateMemoryProviderDefaultScope(
   defaultMemoryScope: "isolated" | "shared",
 ) {
   await requireSpaceOwner(deps.prisma, actor);
-  const existing = await findSpaceMemoryConfig(deps.prisma, actor.spaceId);
-  if (!existing) throw new ORPCError("NOT_FOUND");
-  const updated = await deps.prisma.spaceMemoryConfig.update({
-    where: { id: existing.id },
-    data: { defaultMemoryScope },
+  const updated = await deps.prisma.$transaction(async (tx) => {
+    await lockMemorySpace(tx, actor.spaceId);
+    const existing = await findSpaceMemoryConfig(tx, actor.spaceId);
+    if (!existing) throw new ORPCError("NOT_FOUND");
+    return tx.spaceMemoryConfig.update({
+      where: { id: existing.id },
+      data: { defaultMemoryScope },
+    });
   });
   return serializeSpaceMemoryConfig(updated);
 }
 
 export function serializeSpaceMemoryConfig(config: {
   provider: string;
+  generation?: number;
+  documentStore?: string;
+  documentSettings?: unknown;
   settings: unknown;
   defaultMemoryScope: string;
   updatedAt: Date;
 }) {
   return {
+    generation: config.generation ?? 0,
+    documentStore:
+      config.documentStore === "obsidian" ? ("obsidian" as const) : ("postgres" as const),
+    documentSettings: toStringRecord(config.documentSettings),
     provider: config.provider,
     settings: toStringRecord(config.settings),
     defaultMemoryScope: config.defaultMemoryScope as "isolated" | "shared",
@@ -168,10 +227,14 @@ export async function disconnectMemoryProvider(deps: MemoryProviderConfigDeps, a
   await withSerializableRetry(() =>
     deps.prisma.$transaction(
       async (tx) => {
+        await lockMemorySpace(tx, actor.spaceId);
         const existing = await findSpaceMemoryConfig(tx, actor.spaceId);
         if (!existing) return;
-        await tx.spaceMemoryConfig.delete({ where: { id: existing.id } });
-        await tx.secret.deleteMany({ where: { id: existing.secretId } });
+        await tx.spaceMemoryConfig.update({
+          where: { id: existing.id },
+          data: { provider: "builtin", settings: {}, secretId: null, generation: { increment: 1 } },
+        });
+        if (existing.secretId) await tx.secret.deleteMany({ where: { id: existing.secretId } });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     ),

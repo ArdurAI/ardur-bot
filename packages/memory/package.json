@@ -16,7 +16,10 @@
   },
   "dependencies": {
     "@ardurbot/adapter-kit": "workspace:*",
-    "@ardurbot/db": "workspace:*"
+    "@ardurbot/db": "workspace:*",
+    "@ardurbot/contracts": "workspace:*",
+    "@ardurbot/core": "workspace:*",
+    "@ardurbot/logging": "workspace:*"
   },
   "devDependencies": {
     "typescript": "7.0.2",

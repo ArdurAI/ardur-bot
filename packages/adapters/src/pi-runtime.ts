@@ -966,6 +966,11 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
       let failure: unknown;
       try {
         result = await (async () => {
+          const authorization = await host.request.authorizeTool?.(tool.name);
+          if (authorization) {
+            if (isToolPauseResult(authorization)) host.pausePending = true;
+            return authorization;
+          }
           if (tool.name === "request_takeover") {
             host.pausePending = true;
             host.queue.push({

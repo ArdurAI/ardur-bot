@@ -20,7 +20,9 @@
     "@ardurbot/db": "workspace:*",
     "@ardurbot/logging": "workspace:*",
     "@ardurbot/memory": "workspace:*",
-    "hono": "4.13.7"
+    "hono": "4.13.7",
+    "node-forge": "1.4.0",
+    "zod": "4.6.2"
   },
   "devDependencies": {
     "typescript": "7.0.2",

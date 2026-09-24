@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createPrivateKey, randomUUID, sign, X509Certificate } from "node:crypto";
 import { rm } from "node:fs/promises";
 import type {
   AgentRuntime,
@@ -23,6 +23,7 @@ import {
   createCloudAgentConnection,
   createConnectorStack,
   createJobReconciler,
+  createMemoryLifecycle,
   createMessagingContextLoader,
   createMessagingTeamChatSender,
   createRunExecutor,
@@ -30,6 +31,7 @@ import {
   createRunSecretWriter,
   createWebProvider,
   destroyBot,
+  deviceThreadProjection,
   EmailEmulator,
   EncryptedSecretStore,
   ExpoPushProvider,
@@ -55,6 +57,7 @@ import {
   pushTokenPath,
   reconcileCloudAgents,
   reconcileComputerUpdates,
+  reconcileMemoryDelivery,
   removePiUserSessions,
   ScriptedAgentRuntime,
   SmtpEmailProvider,
@@ -62,6 +65,7 @@ import {
   toTeamChatInbound,
 } from "@ardurbot/adapters";
 import { blockedAuthPaths, createAuth } from "@ardurbot/auth";
+import { homeSignedText, LOCAL_SETTINGS_TOKEN_HEADER } from "@ardurbot/contracts";
 import { signupPolicyFromEnv } from "@ardurbot/core";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import {
@@ -81,7 +85,6 @@ import {
   SERVICE_NAMES,
 } from "@ardurbot/logging";
 import { requestLogging } from "@ardurbot/logging/hono";
-import { MarkdownMemoryStore } from "@ardurbot/memory";
 import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
@@ -89,13 +92,15 @@ import { cors } from "hono/cors";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
-import { mountLocalSettings } from "./local-settings.js";
+import { ensureInstanceIdentity } from "./instance-identity.js";
+import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
 import {
   createMessagingInboundHandler,
   teamChatSenderCanWakeMessageRoutines,
   wakeMessageRoutines,
 } from "./messaging-inbound.js";
 import { mountMessagingWebhookRoutes } from "./messaging-webhook.js";
+import { mountRemoteDevices } from "./remote-devices.js";
 import { mountApiRequestBodyLimits } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
 import { mountScreenTarget } from "./screen-proxy.js";
@@ -172,6 +177,7 @@ export async function createApp(
         })
       : new InMemoryRealtimeFanout());
   const secrets = new EncryptedSecretStore(env.encryptionKey);
+  const instance = await ensureInstanceIdentity(prisma, secrets);
   await backfillRuntimePins({ prisma, secrets, logger });
   const events = createThreadEvents(prisma, realtime, {
     runSecretWriter: createRunSecretWriter(secrets),
@@ -241,7 +247,8 @@ export async function createApp(
   const oauthLogins = new PiOAuthLogins();
   const home = new LocalAgentHomeStore(env.dataDir);
   const artifacts = new LocalArtifactStore(env.dataDir);
-  const memory = new MarkdownMemoryStore(prisma);
+  const memoryLifecycleDeps = { prisma, secrets, jobs, dataDir: env.dataDir };
+  const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
   const mcp = new McpConnector(
     prisma,
     secrets,
@@ -367,6 +374,7 @@ export async function createApp(
     runtime,
     sandbox,
     memory,
+    memoryDocuments,
     memoryProviders,
     home,
     artifacts,
@@ -410,6 +418,7 @@ export async function createApp(
     jobs,
     events,
     workerId: "api",
+    memoryDocuments,
     runtime,
     secretStore: secrets,
     memoryProviders,
@@ -426,6 +435,7 @@ export async function createApp(
         jobs,
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
+        reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
       })
     : undefined;
   reconciler?.start();
@@ -444,6 +454,7 @@ export async function createApp(
     jobs,
     sandbox,
     memory,
+    memoryDocuments,
     memoryProviders,
     home,
     secrets,
@@ -535,6 +546,48 @@ export async function createApp(
     return auth.handler(c.req.raw);
   });
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
+  app.post("/local/device-listener", async (c) => {
+    c.header("cache-control", "no-store");
+    if (!validLocalSettingsToken(env.desktopStackToken, c.req.header(LOCAL_SETTINGS_TOKEN_HEADER)))
+      return c.json({ message: "Open device settings on your Mac." }, 403);
+    return c.json({
+      certificate: instance.certificate,
+      privateKey: secrets.load(instance.privateKeyCiphertext, instance.instanceId),
+      certificateFingerprint: instance.certificateFingerprint,
+      instanceId: instance.instanceId,
+    });
+  });
+  const homePrivateKey = createPrivateKey(
+    secrets.load(instance.privateKeyCiphertext, instance.instanceId),
+  );
+  mountRemoteDevices(app, {
+    prisma,
+    events,
+    jobs,
+    publicUrl: env.webOrigin,
+    homeProof: (challenge) => ({
+      certificate: new X509Certificate(instance.certificate).raw.toString("base64"),
+      signature: sign(
+        "sha256",
+        Buffer.from(homeSignedText(instance.instanceId, instance.fingerprint, challenge)),
+        homePrivateKey,
+      ).toString("base64"),
+    }),
+    read: async (grant, procedure, input) => {
+      const actor = await requireMembership(prisma, grant.userId, grant.spaceId);
+      const { response } = await rpc.handle(
+        new Request(`http://home/rpc/${procedure}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ json: input }),
+        }),
+        { prefix: "/rpc", context: { actor } },
+      );
+      if (!response?.ok) throw new Error("This view is unavailable from this device.");
+      const result = (await response.json()) as { json: unknown };
+      return deviceThreadProjection(result.json, grant.spaceId);
+    },
+  });
   app.use("/rpc/*", async (c, next) => {
     const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
     const requestedSpaceId = c.req.header("x-ardurbot-space-id");

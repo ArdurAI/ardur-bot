@@ -1,4 +1,9 @@
-import type { AgentSkill, AgentSkillCatalogEntry, MemoryDocument } from "@ardurbot/contracts";
+import type {
+  AgentSkill,
+  AgentSkillCatalogEntry,
+  MemoryDocumentHead,
+  MemoryPage,
+} from "@ardurbot/contracts";
 import {
   Button,
   Skeleton,
@@ -12,6 +17,8 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { downloadArtifactBytes } from "../lib/artifact-open";
 import { rpc } from "../lib/rpc";
+import { MemoryHistory } from "./MemoryHistory";
+import { MemoryImportExport } from "./MemoryImportExport";
 
 const fieldClass = "mt-2 w-full font-mono text-[13px] leading-relaxed";
 
@@ -45,7 +52,7 @@ export function KnowledgeSection({
         <TabsContent value="memory">
           <MemoryDocumentList
             key={botId}
-            load={() => rpc.memory.list({ botId, scope: "bot" })}
+            load={(cursor) => rpc.memory.list({ botId, scope: "bot", cursor })}
             exportFilename="memory.md"
             testId="bot-knowledge-memory"
           />
@@ -60,16 +67,39 @@ export function KnowledgeSection({
 
 /** The space's shared memory documents, mounted in the Memory settings overlay. */
 export function SpaceMemorySection() {
+  const [generation, setGeneration] = useState(0);
   return (
     <div className="mt-6" data-testid="space-memory-documents">
-      <div className="mb-2 text-[12.5px] uppercase tracking-[0.08em] text-muted-foreground">
-        <Trans>Shared documents</Trans>
-      </div>
-      <MemoryDocumentList
-        load={() => rpc.memory.list({ scope: "user" })}
-        exportFilename="space-memory.md"
-        testId="space-memory-list"
-      />
+      <Tabs defaultValue="documents">
+        <TabsList aria-label="Memory">
+          <TabsTrigger value="documents">
+            <Trans>Documents</Trans>
+          </TabsTrigger>
+          <TabsTrigger value="skills">
+            <Trans>Skills</Trans>
+          </TabsTrigger>
+        </TabsList>
+        <div className="h-[440px] overflow-auto">
+          <TabsContent
+            value="documents"
+            className="motion-safe:animate-in motion-safe:fade-in duration-100 motion-reduce:animate-none"
+          >
+            <MemoryImportExport onImported={() => setGeneration((value) => value + 1)} />
+            <MemoryDocumentList
+              key={generation}
+              load={(cursor) => rpc.memory.list({ cursor, includeDeleted: true })}
+              exportFilename="space-memory.md"
+              testId="space-memory-list"
+            />
+          </TabsContent>
+          <TabsContent
+            value="skills"
+            className="motion-safe:animate-in motion-safe:fade-in duration-100 motion-reduce:animate-none"
+          >
+            <AgentSkills onSkillsChange={() => undefined} />
+          </TabsContent>
+        </div>
+      </Tabs>
     </div>
   );
 }
@@ -79,13 +109,15 @@ function MemoryDocumentList({
   exportFilename,
   testId,
 }: {
-  load: () => Promise<MemoryDocument[]>;
+  load: (cursor?: string) => Promise<MemoryPage>;
   exportFilename: string;
   testId: string;
 }) {
   const { t } = useLingui();
   const [loading, setLoading] = useState(true);
-  const [docs, setDocs] = useState<MemoryDocument[]>([]);
+  const [docs, setDocs] = useState<MemoryDocumentHead[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -100,7 +132,8 @@ function MemoryDocumentList({
       .current()
       .then((list) => {
         if (current !== generation.current) return;
-        setDocs(list);
+        setDocs(list.items);
+        setCursor(list.nextCursor);
         setLoading(false);
       })
       .catch(() => {
@@ -114,18 +147,23 @@ function MemoryDocumentList({
     };
   }, [t]);
 
-  function openDoc(doc: MemoryDocument) {
+  function openDoc(doc: MemoryDocumentHead) {
     setOpenId(doc.id);
+    setHistoryOpen(Boolean(doc.deletedAt));
     setDraft(doc.content);
     setError(null);
   }
 
-  async function save(doc: MemoryDocument) {
+  async function save(doc: MemoryDocumentHead) {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      const updated = await rpc.memory.update({ documentId: doc.id, content: draft });
+      const updated = await rpc.memory.update({
+        documentId: doc.id,
+        content: draft,
+        expectedRevision: doc.revision,
+      });
       setDocs((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
       setOpenId(null);
     } catch {
@@ -142,13 +180,54 @@ function MemoryDocumentList({
     try {
       // Re-fetch through the section's own loader so the file is current,
       // then sync the list so the export matches what is displayed.
-      const fresh = await loadRef.current();
+      const fresh: MemoryDocumentHead[] = [];
+      let after: string | undefined;
+      do {
+        const page = await loadRef.current(after);
+        fresh.push(...page.items);
+        after = page.nextCursor ?? undefined;
+      } while (after);
       generation.current += 1;
       setDocs(fresh);
-      const markdown = fresh.map((doc) => `# ${doc.path}\n\n${doc.content}`).join("\n\n");
+      setCursor(null);
+      const markdown = fresh
+        .filter((doc) => !doc.deletedAt)
+        .map((doc) => `# ${doc.path}\n\n${doc.content}`)
+        .join("\n\n");
       downloadArtifactBytes(exportFilename, "text/markdown", new TextEncoder().encode(markdown));
     } catch {
       setError(t`Could not load`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadMore() {
+    if (!cursor || busy) return;
+    setBusy(true);
+    try {
+      const page = await loadRef.current(cursor);
+      setDocs((current) => [...current, ...page.items]);
+      setCursor(page.nextCursor);
+    } catch {
+      setError(t`Could not load`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function changeDocument(action: () => Promise<MemoryDocumentHead>) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await action();
+      setDocs((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      if (updated.deletedAt) {
+        setDraft("");
+        setHistoryOpen(true);
+      }
+    } catch {
+      setError(t`Could not change this document. Reload and try again.`);
     } finally {
       setBusy(false);
     }
@@ -181,22 +260,67 @@ function MemoryDocumentList({
               </span>
             </span>
           </Button>
+          {doc.delivery.status !== "delivered" ? (
+            <div className="flex items-center gap-2 px-2.5 text-xs text-muted-foreground">
+              <span>
+                {doc.delivery.status === "failed" ? (
+                  <Trans>Saved locally. Indexing failed.</Trans>
+                ) : (
+                  <Trans>Saved locally. Indexing pending.</Trans>
+                )}
+              </span>
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void changeDocument(() => rpc.memory.retry({ documentId: doc.id }))}
+              >
+                <Trans>Retry</Trans>
+              </Button>
+            </div>
+          ) : null}
           {openId === doc.id ? (
             <div className="px-2.5 pb-2">
-              <Textarea
-                aria-label={doc.path}
-                disabled={busy}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                rows={Math.min(16, Math.max(4, draft.split("\n").length + 1))}
-                className={fieldClass}
-                dir="auto"
-              />
+              <div className="mb-2 flex gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => setHistoryOpen(false)}
+                  disabled={Boolean(doc.deletedAt)}
+                >
+                  <Trans>Document</Trans>
+                </Button>
+                <Button variant="ghost" onClick={() => setHistoryOpen(true)}>
+                  <Trans>History</Trans>
+                </Button>
+              </div>
+              {historyOpen ? (
+                <MemoryHistory
+                  document={doc}
+                  onChange={(updated) => {
+                    setDocs((current) =>
+                      current.map((entry) => (entry.id === updated.id ? updated : entry)),
+                    );
+                    setDraft(updated.content);
+                    setHistoryOpen(false);
+                  }}
+                />
+              ) : (
+                <div className="h-80">
+                  <Textarea
+                    aria-label={doc.path}
+                    disabled={busy}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    rows={Math.min(16, Math.max(4, draft.split("\n").length + 1))}
+                    className={`${fieldClass} h-full resize-none`}
+                    dir="auto"
+                  />
+                </div>
+              )}
               <div className="mt-2 flex gap-2">
                 <Button
                   variant="ghost"
                   type="button"
-                  disabled={busy || draft === doc.content}
+                  disabled={busy || historyOpen || Boolean(doc.deletedAt) || draft === doc.content}
                   onClick={() => void save(doc)}
                   className="rounded-lg bg-muted px-3 py-1.5 text-[13px] text-foreground disabled:opacity-50"
                 >
@@ -211,11 +335,30 @@ function MemoryDocumentList({
                 >
                   <Trans>Cancel</Trans>
                 </Button>
+                {!doc.deletedAt ? (
+                  <Button
+                    variant="ghost"
+                    className="text-destructive"
+                    disabled={busy}
+                    onClick={() =>
+                      void changeDocument(() =>
+                        rpc.memory.delete({ documentId: doc.id, expectedRevision: doc.revision }),
+                      )
+                    }
+                  >
+                    <Trans>Delete</Trans>
+                  </Button>
+                ) : null}
               </div>
             </div>
           ) : null}
         </div>
       ))}
+      {cursor ? (
+        <Button variant="ghost" disabled={busy} onClick={() => void loadMore()}>
+          <Trans>More documents</Trans>
+        </Button>
+      ) : null}
       {docs.length ? (
         <Button
           variant="ghost"
