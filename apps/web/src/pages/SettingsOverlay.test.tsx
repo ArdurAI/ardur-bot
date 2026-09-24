@@ -245,7 +245,7 @@ it("searches capability rows and opens Skills through the registry", async () =>
       .find((button) => button.textContent === "Skills have moved to Customize")!
       .click(),
   );
-  await waitForSettings(() => container.textContent!.includes("Existing skills"));
+  await waitForSettings(() => container.textContent!.includes("Created by you"));
   expect(container.querySelector('[data-settings-section="skills"]')).not.toBeNull();
 });
 
