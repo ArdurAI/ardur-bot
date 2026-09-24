@@ -33,6 +33,7 @@ import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { ChevronDown, X } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { OllamaSettings } from "../components/OllamaSettings";
 import { ShowAllModels } from "../components/ShowAllModels";
 import { localizedProviderHint } from "../lib/localized-provider-hint";
 import type { ModelCatalogEntry, ModelCredential } from "../lib/model-auth";
@@ -169,7 +170,9 @@ export function ModelSettingsOverlay({
       id,
       name: entries[0]?.providerName ?? id,
       source: entries[0]!,
-      entries: availableProviderModels(entries, id, id === provider && showAllModels),
+      entries: availableProviderModels(entries, id, id === provider && showAllModels).filter(
+        (entry) => id !== "ollama" || !entry.placeholder,
+      ),
     }));
   }, [catalog, provider, showAllModels]);
   const filteredGroups = useMemo(() => {
@@ -482,7 +485,9 @@ export function ModelSettingsOverlay({
           {hasHiddenModels ? (
             <ShowAllModels checked={showAllModels} onChange={setShowAllModels} />
           ) : null}
-          {selected ? (
+          {provider === "ollama" ? (
+            <OllamaSettings onChanged={refresh} />
+          ) : selected ? (
             <>
               <div className="block text-[13.5px] text-muted-foreground">
                 {isOpenAiCompatible ? (
@@ -932,7 +937,10 @@ function ModelPicker({
   const groups = useMemo(() => {
     const grouped = new Map<string, ModelCatalogEntry[]>();
     for (const option of filteredOptions) {
-      const key = option.providerName ?? option.provider;
+      const key =
+        option.provider === "ollama" || option.provider === "local"
+          ? "Local"
+          : (option.providerName ?? option.provider);
       const list = grouped.get(key);
       if (list) list.push(option);
       else grouped.set(key, [option]);

@@ -1,4 +1,4 @@
-import type { ModelOAuthBegin, ThinkingLevel } from "@ardurbot/contracts";
+import type { ModelOAuthBegin, OllamaStatus, ThinkingLevel } from "@ardurbot/contracts";
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
@@ -26,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { OllamaConnection } from "../components/ollama-connection";
 import { type MobileMe, type MobileModel, type MobileModelCredential, rpc } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
@@ -66,6 +67,7 @@ export default function Models() {
   const styles = useThemedStyles(createModelsStyles);
   const { t } = useI18n();
   const colorScheme = useResolvedAppearance();
+  const [ollama, setOllama] = useState<OllamaStatus | null>(null);
   const [catalog, setCatalog] = useState<MobileModel[]>([]);
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
   const [me, setMe] = useState<MobileMe | null>(null);
@@ -135,6 +137,8 @@ export default function Models() {
           )?.id ??
           nextCatalog.find((entry) => entry.provider === nextProvider)?.id ??
           "");
+    const ollamaState = await rpc<OllamaStatus>("models/ollama");
+    setOllama(ollamaState);
     setMe(nextMe);
     setCatalog(nextCatalog);
     setCredentials(nextCredentials);
@@ -528,7 +532,9 @@ export default function Models() {
           ) : null}
         </View>
 
-        {selected ? (
+        {provider === "ollama" ? (
+          <OllamaConnection status={ollama} />
+        ) : selected ? (
           <>
             {!isOpenAiCompatible ? <Text style={styles.sectionTitle}>{t("Model")}</Text> : null}
             {isOpenAiCompatible ? (

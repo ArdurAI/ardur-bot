@@ -56,6 +56,15 @@ it("shows versions and registered folders, and revokes before clearing desktop s
       roots: ["/fixture/projects"],
       claude: { version: "2.1.259" },
       codex: { version: "0.156.1" },
+      environment: {
+        tools: [
+          { name: "gh", status: "signed in" },
+          { name: "kubectl", status: "not checked" },
+          { name: "docker", status: "not checked" },
+        ],
+        diagnostic:
+          "Your login shell profile failed to load (zsh, exit 1); commands run with a default PATH",
+      },
     },
   });
   window.ardurbotDesktop = {
@@ -74,6 +83,10 @@ it("shows versions and registered folders, and revokes before clearing desktop s
     "Host service: Connected · claude 2.1.259 · codex 0.156.1",
   );
   expect(container.textContent).toContain("/fixture/projects");
+  expect(container.textContent).toContain("Tools: gh, kubectl, docker");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    "Your login shell profile failed to load (zsh, exit 1)",
+  );
   const disconnect = [...container.querySelectorAll("button")].find(
     (button) => button.textContent === "Disconnect this computer",
   )!;

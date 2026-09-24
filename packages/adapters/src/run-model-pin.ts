@@ -30,7 +30,11 @@ export async function resolveRunModelPin(input: {
   bot: BotPinFields | null;
   snapshot?: unknown;
   scripted: boolean;
-  loadKey: (credential: Credential, pin: RuntimePin) => Promise<AgentRunModel>;
+  loadKey: (
+    credential: Credential,
+    pin: RuntimePin,
+    selectDefaultEffort?: boolean,
+  ) => Promise<AgentRunModel>;
 }): Promise<ResolvedRunPin | RuntimeProblem> {
   const { bot } = input;
   let pin: RuntimePin;
@@ -77,15 +81,26 @@ export async function resolveRunModelPin(input: {
       provider: credential?.provider ?? (input.scripted ? "scripted" : null),
       modelId: credential?.defaultModel ?? (input.scripted ? "scripted" : null),
       effort:
-        bot?.thinkingLevel ?? spaceDefaultEffort(entry?.reasoning ?? false, entry?.thinkingLevels),
+        credential?.provider === "ollama" && bot?.thinkingLevel === "off"
+          ? "none"
+          : (bot?.thinkingLevel ??
+            spaceDefaultEffort(entry?.reasoning ?? false, entry?.thinkingLevels)),
       credentialId: credential?.id ?? (input.scripted ? "scripted" : null),
       revision: bot?.modelPinRevision ?? 0,
     };
     // A custom space default displays the effort stored with its connection.
-    if (credential?.provider === "openai-compatible" && !bot?.thinkingLevel) {
+    if (
+      (credential?.provider === "openai-compatible" || credential?.provider === "ollama") &&
+      !bot?.thinkingLevel
+    ) {
       try {
-        loadedModel = await input.loadKey(credential, pin);
-        pin.effort = loadedModel.thinkingLevel ?? (loadedModel.reasoning ? "medium" : "off");
+        loadedModel = await input.loadKey(credential, pin, credential.provider === "ollama");
+        pin.effort =
+          credential.provider === "ollama"
+            ? loadedModel.reasoning
+              ? "medium"
+              : null
+            : (loadedModel.thinkingLevel ?? (loadedModel.reasoning ? "medium" : "off"));
       } catch (error) {
         if (error instanceof RuntimePinError) return error.problem;
         throw error;

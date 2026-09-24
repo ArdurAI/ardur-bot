@@ -8,7 +8,8 @@
       "types": "./src/index.ts",
       "development": "./src/index.ts",
       "default": "./src/index.ts"
-    }
+    },
+    "./testing/delegation": "./src/delegation-test-fixture.ts"
   },
   "scripts": {
     "generate": "prisma generate",

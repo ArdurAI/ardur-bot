@@ -16,6 +16,7 @@ export async function prepareDelegation(
   input: {
     spaceId: string;
     userId: string;
+    comparisonId?: string;
     parentRunId: string;
     actingBotId: string;
     actingName: string;
@@ -90,6 +91,7 @@ export async function prepareDelegation(
     record,
     runData: {
       ...(await inheritedRemoteOrigin(tx, parent.id)),
+      comparisonId: record.comparisonId,
       delegationId: record.id,
       delegationRootTaskId: record.rootTaskId,
       runtimePin: admittedSnapshot.pin,

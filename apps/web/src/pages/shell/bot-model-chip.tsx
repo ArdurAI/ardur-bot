@@ -47,6 +47,14 @@ export function effectiveBotModel(
     label: entry?.label ?? modelId,
     providerLabel: provider === "openai-codex" ? "Codex" : (entry?.providerName ?? provider),
     thinkingLevel,
+    effortLabel:
+      provider === "ollama"
+        ? reasoning
+          ? thinkingLevel === "off"
+            ? "off"
+            : "on"
+          : "not applicable"
+        : undefined,
     isDefault: !useOverride,
     unavailable: useOverride
       ? Boolean(
@@ -70,7 +78,7 @@ export function BotModelChip({
   const { t } = useLingui();
   const model = effectiveBotModel(bot, settings);
   if (!model) return null;
-  const label = `${bot.runtimeKind && bot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${model.thinkingLevel ? ` · ${model.thinkingLevel}` : ""}${model.unavailable ? t` · not available` : ""}`;
+  const label = `${bot.runtimeKind && bot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${model.effortLabel ? ` · ${model.effortLabel}` : model.thinkingLevel ? ` · ${model.thinkingLevel}` : ""}${model.unavailable ? t` · not available` : ""}`;
   return (
     <Button
       variant="ghost"

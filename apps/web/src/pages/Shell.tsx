@@ -207,6 +207,7 @@ import { useModelSettings } from "../lib/use-model-settings";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
+import { CompareStart } from "./CompareStart";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
 import type { RoutineDraftState } from "./RoutineEditor";
@@ -3438,6 +3439,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         {active || activeGroup ? (
           <Composer
             key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
+            comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
             activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
             running={composerRunning}
             disabled={Boolean(recordingSkill)}
@@ -4944,6 +4946,7 @@ const QuoteSelectionButton = memo(function QuoteSelectionButton({
 });
 
 const Composer = memo(function Composer({
+  comparisonBotId,
   activeName,
   running,
   disabled,
@@ -4975,6 +4978,7 @@ const Composer = memo(function Composer({
   onSlashOpen,
   onSlashAction,
 }: {
+  comparisonBotId?: string;
   activeName?: string;
   running: boolean;
   disabled?: boolean;
@@ -5438,6 +5442,20 @@ const Composer = memo(function Composer({
             );
           })}
         </div>
+      ) : null}
+      {comparisonBotId ? (
+        <CompareStart
+          botId={comparisonBotId}
+          text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
+          files={pendingAttachments.map((item) => item.file)}
+          disabled={disabled || sending}
+          onCreated={() => {
+            setDraft("");
+            setSelectedSkill(null);
+            setSelectedMentions([]);
+            for (const item of pendingAttachments) onRemoveAttachment(item);
+          }}
+        />
       ) : null}
       <div
         data-testid="composer-bar"

@@ -27,6 +27,15 @@ vi.mock("./runtimes/codex-app-server-runtime.js", async (original) => ({
     models: [],
   }),
 }));
+vi.mock("./host-environment.js", async (original) => ({
+  ...(await original<object>()),
+  getHostEnvironment: async () => ({ env: { PATH: process.env.PATH } }),
+  inspectHostEnvironment: async () => ({
+    tools: [{ name: "gh", version: "2.80.0", status: "signed in" }],
+    diagnostic:
+      "Your login shell profile failed to load (zsh, exit 1); commands run with a default PATH",
+  }),
+}));
 const roots: string[] = [];
 const agents: HostAgent[] = [];
 afterEach(async () => {
@@ -231,4 +240,13 @@ describe("host process operations", () => {
     );
     expect(frames.some((frame) => frame.type === "stream" && frame.channel === "file")).toBe(false);
   });
+});
+
+it("reports the host inventory through health and the run-scoped environment operation", async () => {
+  const { agent, frames } = await fixture();
+  const health = await agent.health();
+  expect(health.environment?.tools[0]).toMatchObject({ name: "gh", status: "signed in" });
+  await agent.receive(request({ op: "computer.environment", homeKey: "bot" }));
+  await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
+  expect(frames[0]).toMatchObject({ type: "stream", channel: "result", data: health.environment });
 });
