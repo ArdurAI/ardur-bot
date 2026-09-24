@@ -441,7 +441,12 @@ describe("destroyBot", () => {
     });
     expect(cancel).toHaveBeenCalledWith("run:group-run");
     expect(releaseScreen).toHaveBeenCalledWith(
-      { id: "screen-1", botId: "team-home", kind: "fake", providerRef: "screen-1" },
+      expect.objectContaining({
+        id: "screen-1",
+        botId: "team-home",
+        kind: "fake",
+        providerRef: "screen-1",
+      }),
       expect.objectContaining({
         operationId: "destroy-group-run:bot-2",
         botId: "bot-2",
