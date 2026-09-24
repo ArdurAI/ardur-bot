@@ -9,6 +9,7 @@ import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   IsolationError,
+  inheritedRemoteOrigin,
   lockOwnedGroup,
   type PrismaClient,
   touchGroupUpdatedAt,
@@ -149,6 +150,8 @@ export async function handoffToGroupBot(
     });
     const nextRun = await tx.run.create({
       data: {
+        ...(await inheritedRemoteOrigin(tx, run.id)),
+
         spaceId: run.spaceId,
         botId: targetId,
         threadId: run.threadId,

@@ -365,6 +365,18 @@ msgstr "Allow {0} connector without asking"
 msgid "Allow {0} without asking"
 msgstr "Allow {0} without asking"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Allow actions after presence confirmation"
+msgstr "Allow actions after presence confirmation"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow delegation"
+msgstr "Allow delegation"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow device"
+msgstr "Allow device"
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow email actions without asking"
 msgstr "Allow email actions without asking"
@@ -973,6 +985,10 @@ msgstr "Confirm delete"
 msgid "Confirm password"
 msgstr "Confirm password"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Confirm the phone fingerprint here before allowing it."
+msgstr "Confirm the phone fingerprint here before allowing it."
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Confluence space keys or IDs"
 msgstr "Confluence space keys or IDs"
@@ -1082,6 +1098,10 @@ msgstr "Continue with email"
 #: src/pages/Shell.tsx
 msgid "Copy"
 msgstr "Copy"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Copy pairing details"
+msgstr "Copy pairing details"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -1633,6 +1653,7 @@ msgid "Denied"
 msgstr "Denied"
 
 #: src/components/AskCard.tsx
+#: src/pages/DevicesSettings.tsx
 msgid "Deny"
 msgstr "Deny"
 
@@ -1655,6 +1676,22 @@ msgstr "Desktop app"
 #: src/components/DesktopUpdates.tsx
 msgid "Desktop update"
 msgstr "Desktop update"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device name"
+msgstr "Device name"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device permissions"
+msgstr "Device permissions"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Devices"
+msgstr "Devices"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Devices are unavailable; reconnect to your home."
+msgstr "Devices are unavailable; reconnect to your home."
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
@@ -1772,6 +1809,10 @@ msgstr "Email"
 msgid "Engage when... Ignore..."
 msgstr "Engage when... Ignore..."
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enter a code instead"
+msgstr "Enter a code instead"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
 msgstr "Enter a valid destination and save again."
@@ -1842,6 +1883,10 @@ msgstr "Expand"
 #: src/pages/Shell.tsx
 msgid "Expand {0}"
 msgstr "Expand {0}"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Expires in five minutes."
+msgstr "Expires in five minutes."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
@@ -2028,6 +2073,14 @@ msgstr "Hide password"
 msgid "high — slower, checks more carefully"
 msgstr "high — slower, checks more carefully"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Home fingerprint"
+msgstr "Home fingerprint"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Home link"
+msgstr "Home link"
+
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
 msgstr "hour"
@@ -2157,6 +2210,14 @@ msgstr "Knowledge"
 msgid "Language"
 msgstr "Language"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Last present"
+msgstr "Last present"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Last used"
+msgstr "Last used"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
 msgstr "Later"
@@ -2264,6 +2325,10 @@ msgstr "Make sure nothing is still running on this computer."
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Manage"
 msgstr "Manage"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Manage devices from the home owner account."
+msgstr "Manage devices from the home owner account."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manage MCP servers"
@@ -2505,6 +2570,10 @@ msgstr "Needs takeover"
 #: src/pages/Shell.tsx
 msgid "Needs you"
 msgstr "Needs you"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Never"
+msgstr "Never"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
@@ -2788,6 +2857,14 @@ msgstr "Other model…"
 msgid "PagerDuty incident"
 msgstr "PagerDuty incident"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Pair device"
+msgstr "Pair device"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Pairing code"
+msgstr "Pairing code"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Parent page"
 msgstr "Parent page"
@@ -3057,6 +3134,10 @@ msgstr "Removed, but list refresh failed"
 msgid "Removing…"
 msgstr "Removing…"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Rename"
+msgstr "Rename"
+
 #: src/pages/BotContextMenu.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/dialogs.tsx
@@ -3166,9 +3247,14 @@ msgstr "Review tools"
 msgid "Review tools before your bots can use this account."
 msgstr "Review tools before your bots can use this account."
 
+#: src/pages/DevicesSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "Revoke"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Revoked"
+msgstr "Revoked"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Robot"
@@ -3231,6 +3317,7 @@ msgstr "Runs when this bot receives a verified message from this provider."
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -3670,6 +3757,10 @@ msgstr "This bot's connection needs to be chosen. Pick the connection to use."
 msgid "This cannot be undone."
 msgstr "This cannot be undone."
 
+#: src/pages/DevicesSettings.tsx
+msgid "This change could not finish; try again."
+msgstr "This change could not finish; try again."
+
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "This chat is view-only"
@@ -3995,6 +4086,10 @@ msgstr "Your email address"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "Your name"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Your phone can reach this Mac on your network."
+msgstr "Your phone can reach this Mac on your network."
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

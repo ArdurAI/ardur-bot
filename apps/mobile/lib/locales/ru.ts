@@ -1,4 +1,35 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Claude subscriptions are not supported here yet; use an API key.":
+    "Подписки Claude здесь пока не поддерживаются; используйте API-ключ.",
+  "Could not load integrations.": "Не удалось загрузить интеграции.",
+  "Other integrations": "Другие интеграции",
+  "Reconnect with an API key": "Подключить заново с API-ключом",
+  "Try again": "Попробовать ещё раз",
+  "Certificate fingerprint": "Отпечаток сертификата",
+  "Confirm this phone fingerprint in Devices at home.":
+    "Подтвердите отпечаток этого телефона в разделе «Устройства» на домашнем компьютере.",
+  "Copy the certificate fingerprint from Devices at home.":
+    "Скопируйте отпечаток сертификата из раздела «Устройства» на домашнем компьютере.",
+  Discard: "Отменить отправку",
+  "Enter your HTTPS home address.": "Введите HTTPS-адрес домашнего компьютера.",
+  "Home address": "Адрес домашнего компьютера",
+  "Home is unreachable.": "Домашний компьютер недоступен.",
+  Pair: "Подключить",
+  "Pair device": "Подключить устройство",
+  "Pairing code": "Код подключения",
+  Retry: "Повторить",
+  "Scan QR code": "Сканировать QR-код",
+  "Scan the pairing code again.": "Отсканируйте код подключения ещё раз.",
+  "The previous session could not be cleared; try again.":
+    "Не удалось удалить предыдущий сеанс; попробуйте ещё раз.",
+  "The stop request was sent, but the thread could not refresh: {detail}":
+    "Запрос остановки отправлен, но обновить диалог не удалось: {detail}",
+  "This home could not be saved; try again.":
+    "Не удалось сохранить домашний компьютер; попробуйте ещё раз.",
+  "Waiting for home": "Ожидание домашнего компьютера",
+  Stopping: "Остановка",
+  Stopped: "Остановлено",
+  Accepted: "Принято",
   "Update your server to use AI data sharing in this mobile version.":
     "Обновите сервер, чтобы использовать обмен данными с ИИ в этой версии мобильного приложения.",
   "Ask the server owner to configure this provider.":

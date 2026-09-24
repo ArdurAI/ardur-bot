@@ -38,6 +38,12 @@ http://{$ARDURBOT_HOST:app.example.com} {
 		}
 	}
 
+	handle /device/* {
+		reverse_proxy api:3100 {
+			import deploy_retry
+		}
+	}
+
 	handle /rpc/* {
 		reverse_proxy api:3100 {
 			import deploy_retry

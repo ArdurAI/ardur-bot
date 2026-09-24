@@ -86,6 +86,7 @@ import {
 } from "@ardurbot/core/node/approval-effect-key";
 import {
   appendEventInTransaction,
+  confirmDispatchStop,
   createSpaceForMember,
   createThreadMessageInTransaction,
   effectiveMemoryScope,
@@ -252,6 +253,13 @@ import {
   searchChartCatalog,
 } from "./plot-tool.js";
 import { classifyProviderError } from "./provider-error.js";
+import {
+  bindDeviceApproval,
+  DispatchStopRequested,
+  enforceRemoteExecution,
+  revalidateDeviceApprovalExecution,
+  stopRemoteComputerWork,
+} from "./remote-execution.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
@@ -1069,6 +1077,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
       const run = await deps.prisma.run.findUnique({ where: { id: runId } });
       if (!run) return;
       if (isTerminal(run.status as RunStatus)) return;
+      if (run.cancelRequestedAt && run.status === "queued" && !run.startedAt) {
+        await confirmDispatchStop(deps.prisma, runId);
+        return;
+      }
       let { resumeCheckpoint, heldForTakeover, resumeHeldLease, takeoverResume } =
         takeoverContinuePlan(run);
 
@@ -1148,6 +1160,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
       let screenRelease: { computer: ComputerRef; context: AdapterContext } | undefined;
       let runAbortController: AbortController | null = null;
       let detachShutdown: (() => void) | undefined;
+      const stopPoll = setInterval(() => {
+        void deps.prisma.run
+          .findUnique({ where: { id: runId }, select: { cancelRequestedAt: true } })
+          .then((current) => {
+            if (current?.cancelRequestedAt) runAbortController?.abort(new DispatchStopRequested());
+          })
+          .catch(() => runAbortController?.abort());
+      }, 1_000);
+      stopPoll.unref?.();
       const heartbeat = setInterval(() => {
         void Promise.all([
           renewRunLease(deps, runId, workerId, fence),
@@ -1414,6 +1435,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const computerMode = parseComputerMode(storedComputer.scope);
         const computer = await provisionComputer(deps, storedComputer.id, context, "bot");
         screenRelease = { computer, context };
+        if (run.cancelRequestedAt) throw new DispatchStopRequested();
         scheduleComputerSleep(deps.jobs, storedComputer.id);
         const workspaceCheckpoint = createRunWorkspaceCheckpoint(() =>
           checkpointRunComputerWorkspace(deps, storedComputer, computer, context),
@@ -1674,6 +1696,34 @@ export function createRunExecutor(deps: ExecutorDeps) {
           return occurrence;
         };
 
+        const checkCeiling = (name: string) =>
+          enforceRemoteExecution({
+            prisma: deps.prisma,
+            runId,
+            tool: name,
+            pause: async (reason, action) => {
+              await workspaceCheckpoint.flush();
+              const paused = await deps.events.pauseRunForInput({
+                spaceId: run.spaceId,
+                threadId: run.threadId,
+                botId: run.botId,
+                runId,
+                attemptId: attempt.id,
+                leaseOwner: workerId,
+                leaseFence: fence,
+                blocks: [
+                  {
+                    kind: "ask",
+                    text: reason,
+                    status: "pending",
+                    actions: [{ id: "remote-retry", label: action }],
+                  },
+                ],
+              });
+              if (!paused) throw new Error("This task could not pause; try again at home.");
+            },
+          });
+
         const applyTool = async (
           name: string,
           args: Record<string, unknown>,
@@ -1864,6 +1914,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }
             }
           }
+          const enforceCeiling = () => checkCeiling(name);
+          if (!(await enforceCeiling())) return pauseForApproval();
           const integrationDetails = await integrationApprovalDetailsForCall(
             deps.prisma,
             connectorCall.route,
@@ -2117,6 +2169,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const claimOrReturn = async (
             from: "approved" | "intended",
           ): Promise<unknown | undefined> => {
+            if (!(await enforceCeiling())) return pauseForApproval();
+            if (from === "approved")
+              await revalidateDeviceApprovalExecution(deps.prisma, applied!.effect.id, runId, name);
             const claim = from === "approved" ? claimApprovedEffect : claimIntendedEffect;
             if (await claim(deps.prisma, applied!.effect.id)) {
               claimedEffect = true;
@@ -2141,6 +2196,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return pauseForApproval();
             }
             await workspaceCheckpoint.flush();
+            await bindDeviceApproval(deps.prisma, run, applied!.effect);
             const paused = await deps.events.pauseRunForInput({
               spaceId: run.spaceId,
               threadId: run.threadId,
@@ -2152,7 +2208,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               blocks: [
                 buildApprovalAskBlock(applied!.effect.id, name, args, runSecrets, {
                   reviewReason,
-                  allowAlways: !requiresMandatoryApproval,
+                  allowAlways: !requiresMandatoryApproval && !run.originDeviceGrantId,
                   integration: integrationDetails?.integration,
                 }),
               ],
@@ -2239,6 +2295,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const early = await claimOrReturn("intended");
             if (early !== undefined) return early;
           }
+          if (!(await enforceCeiling())) return pauseForApproval();
           const persistEffectResult = (result: unknown) =>
             applied
               ? completeEffect(
@@ -3642,6 +3699,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               script,
               allowSilentEmpty: allowSilentEmptyRun,
               emptyResponseText,
+              authorizeTool: scripted
+                ? undefined
+                : async (name) => ((await checkCeiling(name)) ? undefined : pauseForApproval()),
               executeTool: scripted ? undefined : applyTool,
               resolveModel: scripted
                 ? undefined
@@ -4195,6 +4255,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             getLogger().error("history.compact enqueue failed", error);
           }
         } catch (error) {
+          const stopping = await deps.prisma.run.findUnique({
+            where: { id: runId },
+            select: { cancelRequestedAt: true },
+          });
+          if (error instanceof DispatchStopRequested || stopping?.cancelRequestedAt) return;
           if (!terminalCheckpointComplete) {
             await workspaceCheckpoint.flush().catch(() => undefined);
           }
@@ -4307,14 +4372,30 @@ export function createRunExecutor(deps: ExecutorDeps) {
       } finally {
         detachShutdown?.();
         clearInterval(heartbeat);
-        if (!retainComputerLease) {
-          if (screenRelease) {
+        clearInterval(stopPoll);
+        const stopping = await deps.prisma.run.findUnique({
+          where: { id: runId },
+          select: { cancelRequestedAt: true },
+        });
+        const stopConfirmed =
+          Boolean(stopping?.cancelRequestedAt) &&
+          Boolean(screenRelease) &&
+          (await stopRemoteComputerWork(
+            deps.sandbox,
+            screenRelease!.computer,
+            leaseTarget.computerId!,
+            runId,
+            screenRelease!.context,
+          ));
+        if (!retainComputerLease || stopping?.cancelRequestedAt) {
+          if (screenRelease && !stopConfirmed) {
             await deps.sandbox
               .releaseScreen?.(screenRelease.computer, screenRelease.context)
               .catch(() => undefined);
           }
           await releaseComputerExecutionLease(deps.prisma, computerLease).catch(() => undefined);
         }
+        if (stopConfirmed) await confirmDispatchStop(deps.prisma, runId);
         await deps.prisma.attempt
           .updateMany({
             where: { id: attempt.id, status: "running" },

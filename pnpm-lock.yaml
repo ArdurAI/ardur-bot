@@ -41,6 +41,12 @@ importers:
 
   apps/api:
     dependencies:
+      zod:
+        specifier: 4.6.2
+        version: 4.6.2
+      node-forge:
+        specifier: 1.4.0
+        version: 1.4.0
       '@ardurbot/adapter-kit':
         specifier: workspace:*
         version: link:../../packages/adapter-kit
@@ -251,6 +257,9 @@ importers:
 
   apps/web:
     dependencies:
+      toqr:
+        specifier: 0.1.1
+        version: 0.1.1
       '@ardurbot/chat-ui':
         specifier: workspace:*
         version: link:../../packages/chat-ui

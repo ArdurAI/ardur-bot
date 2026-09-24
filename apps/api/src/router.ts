@@ -166,6 +166,7 @@ import {
   promptFocus,
   startOnboarding,
 } from "./onboarding.js";
+import { createRemoteDevices } from "./remote-devices.js";
 import { listSpaceRuns } from "./runs.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
 import { querySpaceSearch } from "./search.js";
@@ -486,6 +487,7 @@ function mapSpaceLifecycleError(error: unknown): unknown {
 
 export function createRouter(deps: RouterDeps) {
   const os = implement(appContract).$context<{ actor: Actor | null; signal?: AbortSignal }>();
+  const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
@@ -514,6 +516,23 @@ export function createRouter(deps: RouterDeps) {
   });
 
   return os.router({
+    devices: {
+      list: authed.devices.list.handler(({ context }) => remoteDevices.list(context.actor)),
+      rename: authed.devices.rename.handler(({ context, input }) =>
+        remoteDevices.rename(context.actor, input),
+      ),
+      revoke: authed.devices.revoke.handler(({ context, input }) =>
+        remoteDevices.revoke(context.actor, input),
+      ),
+    },
+    pairing: {
+      start: authed.pairing.start.handler(({ context, input }) =>
+        remoteDevices.start(context.actor, input),
+      ),
+      confirm: authed.pairing.confirm.handler(({ context, input }) =>
+        remoteDevices.confirm(context.actor, input),
+      ),
+    },
     aiConsent: {
       status: authed.aiConsent.status.handler(({ context, input }) =>
         aiConsentStatus(deps, context.actor, input),

@@ -95,11 +95,19 @@ export class RunHistoryWriteError extends Error {
 export async function assertRunCanWriteHistory(
   tx: Prisma.TransactionClient,
   runId?: string,
-): Promise<{ status: string; startedAt: Date | null } | undefined> {
+): Promise<
+  | {
+      status: string;
+      startedAt: Date | null;
+      originDeviceGrantId: string | null;
+      remoteRootTaskId: string | null;
+    }
+  | undefined
+> {
   if (!runId) return;
   const run = await tx.run.findUnique({
     where: { id: runId },
-    select: { status: true, startedAt: true },
+    select: { status: true, startedAt: true, originDeviceGrantId: true, remoteRootTaskId: true },
   });
   if (!run || run.status === "cancelled") {
     throw new RunHistoryWriteError();

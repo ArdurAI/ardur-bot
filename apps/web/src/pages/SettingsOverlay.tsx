@@ -22,11 +22,13 @@ import {
   UpdatesSettingsPanel,
   UsageSettingsPanel,
 } from "./AccountSettingsOverlay";
+import { DevicesSettings } from "./DevicesSettings";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
 
 export type SettingsSection =
+  | "devices"
   | "integrations"
   | "general"
   | "models"
@@ -96,6 +98,7 @@ export function SettingsOverlay({
 
   const navItems: NavItem[] = [
     { id: "general", label: t`General`, icon: Settings },
+    { id: "devices", label: t`Devices`, icon: Monitor },
     { id: "integrations", label: t`Integrations`, icon: Plug },
     { id: "models", label: t`Models`, icon: Cpu },
     { id: "memory", label: t`Memory`, icon: Brain },
@@ -210,6 +213,7 @@ export function SettingsOverlay({
                   : "rk-scroll overflow-y-auto overscroll-contain px-6 pb-6 pt-5 sm:px-8 sm:pb-8"
               }`}
             >
+              {section === "devices" ? <DevicesSettings owner={isDeploymentOwner} /> : null}
               {section === "integrations" ? <IntegrationCatalog /> : null}
               {section === "general" ? (
                 <GeneralSettingsPanels

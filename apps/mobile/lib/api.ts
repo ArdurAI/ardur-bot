@@ -32,6 +32,7 @@ import {
 } from "@ardurbot/core";
 import * as SecureStore from "expo-secure-store";
 import { promptAiConsent } from "./ai-consent";
+import { deviceRpc, dispatchClient } from "./dispatch";
 import type { EndpointResult } from "./endpoint";
 import { defaultApiBase, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
@@ -493,6 +494,12 @@ async function fetchMobileJson<T>(
 }
 
 export async function signOut() {
+  if (await dispatchClient.loadHome()) {
+    await dispatchClient.unpair();
+    await clearSessionToken();
+    await clearSpace();
+    return;
+  }
   await rpc("notifications/unregisterPush").catch(() => undefined);
   const headers = await authHeaders();
   const controller = new AbortController();
@@ -564,6 +571,8 @@ export async function rpc<T>(
     skipSpaceAuthRecovery?: boolean;
   } = {},
 ): Promise<T> {
+  const pairedHome = await dispatchClient.loadHome();
+  if (pairedHome) return deviceRpc<T>(pairedHome, proc, body);
   const requestSpaceGeneration = spaceSelectionGeneration;
   const uses = aiDataUsesForProcedure(proc, body);
   const consentContext =
@@ -914,6 +923,14 @@ export async function subscribeThread(
   onEvent: (event: ThreadEvent) => void,
   signal: AbortSignal,
 ) {
+  if (await dispatchClient.loadHome()) {
+    // Foreground snapshots already poll through signed requests; no owner SSE session is sent.
+    await new Promise<void>((resolve) => {
+      if (signal.aborted) resolve();
+      else signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    return;
+  }
   const res = await fetch(`${currentApiBase()}/rpc/threads/subscribe`, {
     method: "POST",
     headers: {

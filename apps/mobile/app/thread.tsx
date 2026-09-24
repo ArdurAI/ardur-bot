@@ -61,6 +61,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppConnectCard } from "../components/AppConnectCard";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
+import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
   type MarkdownArtifactPreviewTarget,
@@ -1194,7 +1195,9 @@ function Thread() {
     } catch (err) {
       if (isCurrentTarget(targetBotId, targetGroupId)) {
         const detail = err instanceof Error ? err.message : t("Failed to refresh");
-        setError(t("Work stopped, but the thread could not refresh: {detail}", { detail }));
+        setError(
+          t("The stop request was sent, but the thread could not refresh: {detail}", { detail }),
+        );
       }
     } finally {
       setSending(false);
@@ -1567,6 +1570,7 @@ function Thread() {
       keyboardVerticalOffset={headerHeight}
       style={{ flex: 1, backgroundColor: tokens.background, paddingHorizontal: 20 }}
     >
+      <DispatchStatus />
       {error ? <Text style={{ color: tokens.mutedForeground, marginTop: 12 }}>{error}</Text> : null}
       {runError ? (
         <View style={{ marginTop: 12 }}>

@@ -37,6 +37,10 @@ export interface ArdurBotDesktopOAuthCallback {
 }
 
 export interface ArdurBotDesktop {
+  devices?: {
+    state: () => Promise<{ enabled: boolean; hints: string[] }>;
+    setEnabled: (enabled: boolean) => Promise<{ enabled: boolean; hints: string[] }>;
+  };
   /** Only the isolated local settings window is authorized to call this bridge. */
   localSettings?: {
     request: (pathname: string, body: string) => Promise<{ status: number; body: string }>;

@@ -18,6 +18,7 @@ import { getLogger } from "@ardurbot/logging";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
+import { inheritedRemoteOrigin, persistDispatchSummary } from "./dispatch.js";
 import {
   assertRunCanWriteHistory,
   createThreadMessageInTransaction,
@@ -187,6 +188,11 @@ export interface AnswerRunInput {
   messageId: string;
   answeredByUserId: string;
   answer: string;
+  /** Supplied only by the isolated, signed device API; validated inside the answer transaction. */
+  deviceApprovalValidator?: (
+    tx: Prisma.TransactionClient,
+    effect: { id: string; kind: string; request: unknown; runId: string },
+  ) => Promise<void>;
 }
 
 export interface SendUserMessageInput {
@@ -459,6 +465,37 @@ export async function sendUserMessage(
   };
 }
 
+/** A targeted Dispatch reply uses the same durable steering queue as a busy local send. */
+export async function steerRunInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    run: { id: string; botId: string; threadId: string; spaceId: string; userId: string };
+    text: string;
+    clientNonce: string;
+  },
+) {
+  const { run } = input;
+  const blocks = [{ kind: "text" as const, text: input.text }];
+  const message = await createThreadMessageInTransaction(tx, {
+    threadId: run.threadId,
+    role: "user",
+    blocks,
+    runId: run.id,
+    clientNonce: input.clientNonce,
+  });
+  await tx.steeringMessage.create({
+    data: { messageId: message.id, botId: run.botId, userId: run.userId, runId: run.id },
+  });
+  await appendEventInTransaction(tx, {
+    spaceId: run.spaceId,
+    threadId: run.threadId,
+    botId: run.botId,
+    runId: run.id,
+    type: "thread.message.created",
+    payload: { messageId: message.id, role: "user", blocks },
+  });
+}
+
 export async function claimSteering(
   prisma: PrismaClient,
   input: ClaimSteeringInput,
@@ -574,7 +611,7 @@ async function commitAnswerRunInput(
   const selectedChoice = choiceAsk ? resolveAskChoice(input.answer, pendingAsk.actions) : undefined;
   if (secretAsk && !runSecretWriter) return null;
   if (secretAsk && pendingAsk.credential && run.userId !== input.answeredByUserId) return null;
-  let approvalEffect: { id: string; kind: string } | null = null;
+  let approvalEffect: { id: string; kind: string; request: unknown; runId: string } | null = null;
   let approvalUserId: string | null = null;
 
   if (approvalAsk) {
@@ -588,6 +625,10 @@ async function commitAnswerRunInput(
       },
     });
     if (!approvalEffect) return null;
+    if (input.deviceApprovalValidator) {
+      if (input.answer !== "allow" && input.answer !== "deny") return null;
+      await input.deviceApprovalValidator(tx, approvalEffect);
+    }
     if (input.answer === "always") {
       if (run.userId !== input.answeredByUserId) return null;
       approvalUserId = input.answeredByUserId;
@@ -659,7 +700,7 @@ async function commitAnswerRunInput(
         ...(pendingAsk.credential ? { result: { credentialSaved: pendingAsk.credential } } : {}),
       },
     });
-  } else {
+  } else if (selectedChoice?.id !== "remote-retry") {
     const resumeLabel = selectedChoice
       ? resumeChoiceLabel(selectedChoice, run.checkpoint)
       : undefined;
@@ -1036,7 +1077,13 @@ async function finalizeRunOnce(
 ): Promise<{ threadId: string; seq: number; continuationRunId: string | null } | null> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
-    let writableRun: { startedAt: Date | null } | undefined;
+    let writableRun:
+      | {
+          startedAt: Date | null;
+          originDeviceGrantId: string | null;
+          remoteRootTaskId: string | null;
+        }
+      | undefined;
     try {
       writableRun = await assertRunCanWriteHistory(tx, input.runId);
     } catch (error) {
@@ -1091,6 +1138,7 @@ async function finalizeRunOnce(
     });
     if (task.count !== 1) throw new Error("Run task was not available to finalize");
 
+    let finalMessageId: string | null = null;
     if (input.outcome === "completed") {
       const completedBlocks = completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
       if (completedBlocks.length > 0) {
@@ -1102,6 +1150,7 @@ async function finalizeRunOnce(
           runId: input.runId,
           markUnread: input.markUnread,
         });
+        finalMessageId = message.id;
         await appendEventInTransaction(tx, {
           spaceId: input.spaceId,
           threadId: input.threadId,
@@ -1112,6 +1161,12 @@ async function finalizeRunOnce(
         });
       }
     }
+    await persistDispatchSummary(
+      tx,
+      { taskId: input.taskId, ...writableRun },
+      input.outcome === "completed" ? "done" : "failed",
+      finalMessageId,
+    );
     const lastEvent = await appendEventInTransaction(tx, {
       spaceId: input.spaceId,
       threadId: input.threadId,
@@ -1196,6 +1251,8 @@ async function createSteeringContinuation(
   });
   const run = await tx.run.create({
     data: {
+      ...(await inheritedRemoteOrigin(tx, input.runId)),
+
       spaceId: input.spaceId,
       botId: input.botId,
       threadId: input.threadId,

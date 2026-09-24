@@ -1,3 +1,8 @@
+const paired = vi.hoisted(() => ({ loadHome: vi.fn(async () => null as unknown), rpc: vi.fn() }));
+vi.mock("./dispatch", () => ({
+  dispatchClient: { loadHome: paired.loadHome },
+  deviceRpc: paired.rpc,
+}));
 vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
 
 import * as SecureStore from "expo-secure-store";
@@ -2241,4 +2246,15 @@ describe("mobile clipboard text", () => {
       }),
     ).toBe("Hello\nSMS · Sender: Reply");
   });
+});
+
+it("uses the device grant path without session headers for a paired phone", async () => {
+  const home = { grantId: "phone", spaceId: "space" };
+  paired.loadHome.mockResolvedValueOnce(home);
+  paired.rpc.mockResolvedValueOnce({ ok: true });
+  const network = vi.fn();
+  vi.stubGlobal("fetch", network);
+  await expect(rpc("threads/send", { botId: "bot", text: "Task" })).resolves.toEqual({ ok: true });
+  expect(paired.rpc).toHaveBeenCalledWith(home, "threads/send", { botId: "bot", text: "Task" });
+  expect(network).not.toHaveBeenCalled();
 });
