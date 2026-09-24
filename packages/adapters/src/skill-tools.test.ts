@@ -1,12 +1,13 @@
 import { buildSkillMd, formatSkillsCatalogInstruction, parseSkillMd } from "@ardurbot/core";
+import { memoryServiceFixture } from "@ardurbot/testkit/memory-fakes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILTIN_AGENT_SKILLS } from "./builtin-skills.js";
 import {
-  listAgentSkillRecords,
-  skillCreateFromTool,
-  skillDeleteFromTool,
-  skillReadFromTool,
-  skillUpdateFromTool,
+  listAgentSkillRecords as originallistAgentSkillRecords,
+  skillCreateFromTool as originalskillCreateFromTool,
+  skillDeleteFromTool as originalskillDeleteFromTool,
+  skillReadFromTool as originalskillReadFromTool,
+  skillUpdateFromTool as originalskillUpdateFromTool,
 } from "./skill-tools.js";
 
 function makePrisma(rows: Array<Record<string, unknown>> = []) {
@@ -55,7 +56,7 @@ function makePrisma(rows: Array<Record<string, unknown>> = []) {
               row.id === where.id &&
               row.spaceId === where.spaceId &&
               row.userId === where.userId &&
-              row.source === where.source,
+              (!where.source || row.source === where.source),
           );
           if (index < 0) return { count: 0 };
           store[index] = { ...store[index], ...data, updatedAt: new Date() };
@@ -74,7 +75,7 @@ function makePrisma(rows: Array<Record<string, unknown>> = []) {
             row.id === where.id &&
             row.spaceId === where.spaceId &&
             row.userId === where.userId &&
-            row.source === where.source,
+            (!where.source || row.source === where.source),
         );
         if (index < 0) return { count: 0 };
         store.splice(index, 1);
@@ -87,11 +88,31 @@ function makePrisma(rows: Array<Record<string, unknown>> = []) {
 
 const owner = { spaceId: "ws-1", userId: "user-1" };
 
+let documents = memoryServiceFixture(owner).service;
+const listAgentSkillRecords = (...args: Parameters<typeof originallistAgentSkillRecords>) =>
+  originallistAgentSkillRecords(args[0], args[1], documents);
+const skillCreateFromTool = (...args: Parameters<typeof originalskillCreateFromTool>) =>
+  originalskillCreateFromTool(args[0], args[1], args[2], documents);
+const skillDeleteFromTool = (...args: Parameters<typeof originalskillDeleteFromTool>) =>
+  originalskillDeleteFromTool(args[0], args[1], args[2], documents);
+const skillReadFromTool = (...args: Parameters<typeof originalskillReadFromTool>) =>
+  originalskillReadFromTool(args[0], args[1], args[2], documents);
+const skillUpdateFromTool = async (...args: Parameters<typeof originalskillUpdateFromTool>) => {
+  const read = await originalskillReadFromTool(args[0], args[1], args[2], documents);
+  return originalskillUpdateFromTool(
+    args[0],
+    args[1],
+    { ...args[2], expectedRevision: Number(read.activeRevision ?? 1) },
+    documents,
+  );
+};
+
 describe("skill tools", () => {
   let prisma: ReturnType<typeof makePrisma>;
 
   beforeEach(() => {
     prisma = makePrisma();
+    documents = memoryServiceFixture(owner).service;
   });
 
   it("creates, reads, updates, and deletes user skills", async () => {

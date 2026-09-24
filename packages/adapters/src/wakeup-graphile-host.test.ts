@@ -40,6 +40,7 @@ it("puts all revisions and generations of one document in the same Graphile queu
 
 function handlers(): BackgroundJobHandlers {
   return {
+    "learning.review": async () => undefined,
     "memory.deliver": async () => undefined,
     "run.continue": vi.fn(async () => undefined),
     "routine.wakeup": vi.fn(async () => undefined),

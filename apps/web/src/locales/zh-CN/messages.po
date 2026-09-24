@@ -3231,6 +3231,10 @@ msgstr "移除"
 msgid "Remove {0}"
 msgstr "移除 {0}"
 
+#: src/components/MessageFeedback.tsx
+msgid "Remove feedback"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
 msgstr ""
@@ -3468,6 +3472,7 @@ msgstr ""
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/MessageFeedback.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -4202,6 +4207,14 @@ msgstr "这个 Bot 是做什么的"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "What to return"
 msgstr "返回什么"
+
+#: src/components/MessageFeedback.tsx
+msgid "What was good?"
+msgstr ""
+
+#: src/components/MessageFeedback.tsx
+msgid "What was wrong?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"

@@ -25,6 +25,7 @@ export interface MemorySession {
   store: MemoryDocumentStore;
   generation: number;
   semantic: SemanticMemoryProvider | null;
+  beforeWrite?: (documentId: string) => Promise<void>;
 }
 export interface MemoryServiceDependencies {
   open<T>(
@@ -97,16 +98,28 @@ export class MemoryService {
     context: MemoryOperationContext,
   ) {
     assertMemorySafe(input, context.knownSecrets);
-    const document = await this.open(context, (s) =>
-      s.store.commit(
+    const document = await this.open(context, async (s) => {
+      if (input.id) await s.beforeWrite?.(input.id);
+      else if (s.beforeWrite) {
+        const scope = ownedScope(input.scope, s.access, input.botId);
+        const bundle = await s.store.exportBundle(s.access);
+        const existing = bundle.documents.find((doc) => {
+          const head = doc.revisions.at(-1)!;
+          return (
+            head.path === input.path && JSON.stringify(head.scopeKey) === JSON.stringify(scope)
+          );
+        });
+        if (existing) await s.beforeWrite(existing.id);
+      }
+      return s.store.commit(
         {
           ...input,
           scopeKey: ownedScope(input.scope, s.access, input.botId),
           ...this.attribution(s),
         },
         s.access,
-      ),
-    );
+      );
+    });
     return this.queued(document, context);
   }
   /** Compatibility saves choose the current revision while holding the same writer lock. */
@@ -128,6 +141,7 @@ export class MemoryService {
         const head = d.revisions.at(-1)!;
         return head.path === input.path && JSON.stringify(head.scopeKey) === JSON.stringify(scope);
       });
+      if (existing) await s.beforeWrite?.(existing.id);
       return s.store.commit(
         {
           ...input,
@@ -149,6 +163,7 @@ export class MemoryService {
   ) {
     assertMemorySafe(content, context.knownSecrets);
     const document = await this.open(context, async (s) => {
+      await s.beforeWrite?.(id);
       const doc = await s.store.read(id, s.access);
       if (!doc || doc.deletedAt) throw new MemoryAccessError();
       return s.store.commit(
@@ -159,9 +174,10 @@ export class MemoryService {
     return this.queued(document, context);
   }
   async delete(id: string, expectedRevision: number, context: MemoryOperationContext) {
-    const doc = await this.open(context, (s) =>
-      s.store.delete(id, expectedRevision, this.attribution(s), s.access),
-    );
+    const doc = await this.open(context, async (s) => {
+      await s.beforeWrite?.(id);
+      return s.store.delete(id, expectedRevision, this.attribution(s), s.access);
+    });
     return this.queued(doc, context);
   }
   async restore(
@@ -170,9 +186,10 @@ export class MemoryService {
     expectedRevision: number,
     context: MemoryOperationContext,
   ) {
-    const doc = await this.open(context, (s) =>
-      s.store.restore(id, revision, expectedRevision, this.attribution(s), s.access),
-    );
+    const doc = await this.open(context, async (s) => {
+      await s.beforeWrite?.(id);
+      return s.store.restore(id, revision, expectedRevision, this.attribution(s), s.access);
+    });
     return this.queued(doc, context);
   }
   async exportBundle(context: MemoryOperationContext) {
@@ -192,6 +209,7 @@ export class MemoryService {
       );
       if (input.expectedHash !== undefined) {
         requireImportReady(result.preview, input.expectedHash);
+        for (const doc of result.bundle.documents) await s.beforeWrite?.(doc.id);
         await s.store.importBundle(result.bundle, this.attribution(s).delivery, s.access);
       }
       return result;

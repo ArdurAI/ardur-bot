@@ -1,4 +1,5 @@
 import type { AdapterContext, MemorySnapshot, MemoryStore } from "@ardurbot/adapter-kit";
+import { redactSecrets } from "@ardurbot/core";
 
 const MAX_AGENT_MEMORY_BYTES = 32 * 1024;
 
@@ -11,6 +12,14 @@ export async function loadAgentMemoryContext(
   botId: string,
   context: AdapterContext,
   maxBytes = MAX_AGENT_MEMORY_BYTES,
+  onExposure?: (document: {
+    documentId: string;
+    activeRevision: number;
+    content: string;
+    kind: "injected";
+    truncated: boolean;
+  }) => Promise<void>,
+  knownSecrets: string[] = [],
 ): Promise<string | undefined> {
   const [botMemory, userMemory] = await Promise.all([
     memory.read({ scope: "bot", botId }, context),
@@ -19,7 +28,7 @@ export async function loadAgentMemoryContext(
   const documents: ScopedMemoryDocument[] = [
     ...botMemory.documents.map((document) => ({ ...document, scope: "bot" as const })),
     ...userMemory.documents.map((document) => ({ ...document, scope: "user" as const })),
-  ];
+  ].filter((document) => !document.path.startsWith("skills/"));
   if (documents.length === 0) return undefined;
 
   documents.sort(
@@ -45,10 +54,19 @@ export async function loadAgentMemoryContext(
     sections.push(heading);
     remainingBytes -= headingBytes;
 
-    const content = truncateUtf8(document.content, remainingBytes);
+    const safeContent = redactSecrets(document.content, knownSecrets);
+    const content = truncateUtf8(safeContent, remainingBytes);
+    if (content && document.id)
+      await onExposure?.({
+        documentId: document.id,
+        activeRevision: document.revision,
+        content,
+        kind: "injected",
+        truncated: content !== safeContent,
+      });
     sections.push(content);
     remainingBytes -= byteLength(content);
-    if (content !== document.content) break;
+    if (content !== safeContent) break;
   }
 
   return `${preamble}${sections.join("")}${closing}`;

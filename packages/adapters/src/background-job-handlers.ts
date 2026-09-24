@@ -18,6 +18,8 @@ import { scheduleComputerSleep, sleepComputerIfIdle } from "./computer-idle.js";
 import { performComputerUpdate } from "./computer-update.js";
 import type { createRunExecutor } from "./executor.js";
 import { compactHistory } from "./history-compaction.js";
+import { enqueueLearningReview } from "./learning-queue.js";
+import { reviewLearning } from "./learning-review.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -55,6 +57,16 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
+    "learning.review": (payload) =>
+      reviewLearning(
+        {
+          prisma: deps.prisma,
+          runtime: deps.runtime,
+          secretStore: deps.secretStore,
+          memoryDocuments: deps.memoryDocuments,
+        },
+        payload,
+      ),
     "memory.deliver": async (payload) => {
       if (!deps.memoryDocuments) throw new Error("Memory delivery is unavailable.");
       await deliverMemory(deps.memoryDocuments, payload.documentId, payload.revision, {
@@ -68,6 +80,7 @@ export function createBackgroundJobHandlers(deps: {
     },
     "run.continue": async (payload) => {
       await deps.executor.continueRun(payload.runId, deps.workerId);
+      await enqueueLearningReview(deps, payload.runId);
       // Automatic messaging mirror: once the run's bot messages are durable,
       // copy them into the outbox. Never let mirror failures fail the run.
       if (deps.messaging) {

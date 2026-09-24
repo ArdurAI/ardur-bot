@@ -3231,6 +3231,10 @@ msgstr "Удалить"
 msgid "Remove {0}"
 msgstr "Удалить {0}"
 
+#: src/components/MessageFeedback.tsx
+msgid "Remove feedback"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
 msgstr "Удалить событие Git"
@@ -3468,6 +3472,7 @@ msgstr "Запускается, когда этот бот получает пр
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/MessageFeedback.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -4202,6 +4207,14 @@ msgstr "Для чего нужен этот бот"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "What to return"
 msgstr "Что вернуть"
+
+#: src/components/MessageFeedback.tsx
+msgid "What was good?"
+msgstr ""
+
+#: src/components/MessageFeedback.tsx
+msgid "What was wrong?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"

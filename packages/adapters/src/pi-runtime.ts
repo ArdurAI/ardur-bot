@@ -222,7 +222,8 @@ export class PiAgentRuntime implements AgentRuntime {
             ),
           );
         }
-        const toolDefs = request.tools.length ? request.tools : builtinAgentTools;
+        const toolDefs =
+          request.tools === "none" ? [] : request.tools.length ? request.tools : builtinAgentTools;
         const nestedAgents = new Set<Agent>();
         const completionModel = modelForCompletion(model, request.model.maxTokens);
         trackedBudget = toolCallBudgetFor(request.runId);
@@ -265,7 +266,7 @@ export class PiAgentRuntime implements AgentRuntime {
         let piSession: PiSessionHandle | undefined;
         // Never write an unscoped transcript. Production requests carry userId;
         // callers without an authenticated context simply skip optional recording.
-        if (this.sessionRecorder && context?.userId) {
+        if (request.tools !== "none" && this.sessionRecorder && context?.userId) {
           try {
             piSession = await this.sessionRecorder.start({
               runId: request.runId,
@@ -1121,9 +1122,13 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   }
   const subagentModel = modelForCompletion(selectedModel.model, requestModel.maxTokens);
 
-  const childDefs = (host.request.tools.length ? host.request.tools : builtinAgentTools).filter(
-    (tool) => !DELEGATION_TOOL_NAMES.has(tool.name),
-  );
+  const childDefs = (
+    host.request.tools === "none"
+      ? []
+      : host.request.tools.length
+        ? host.request.tools
+        : builtinAgentTools
+  ).filter((tool) => !DELEGATION_TOOL_NAMES.has(tool.name));
   const nestedHost: ToolHost = {
     ...host,
     models: selectedModel.models,

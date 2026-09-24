@@ -1,4 +1,8 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "What was wrong?": "哪里做得不好？",
+  "What was good?": "哪里做得好？",
+  "Remove feedback": "移除反馈",
+
   "Update your server to use AI data sharing in this mobile version.":
     "请更新服务器，以便在此移动版本中使用 AI 数据共享功能。",
   "Release computer": "释放电脑",

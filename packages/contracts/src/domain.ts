@@ -477,6 +477,8 @@ export type TeachRecording = z.infer<typeof TeachRecordingSchema>;
 
 export const TaughtSkillSchema = z.object({
   id: Id,
+  documentId: Id.nullable().optional(),
+  activeRevision: z.number().int().positive().nullable().optional(),
   botId: Id,
   name: z.string(),
   goal: z.string(),
@@ -491,10 +493,22 @@ export const TaughtSkillSchema = z.object({
 });
 export type TaughtSkill = z.infer<typeof TaughtSkillSchema>;
 
-export const AgentSkillSourceSchema = z.enum(["user", "builtin", "plugin"]);
+export const AgentSkillSourceSchema = z.enum([
+  "user",
+  "builtin",
+  "plugin",
+  "learned",
+  "imported",
+  "unknown",
+]);
 export type AgentSkillSource = z.infer<typeof AgentSkillSourceSchema>;
 
 export const AgentSkillSchema = z.object({
+  documentId: Id.nullable().optional(),
+  activeRevision: z.number().int().nullable().optional(),
+  origin: z.enum(["user", "learned", "imported", "unknown"]).optional(),
+  botId: Id.nullable().optional(),
+  protected: z.boolean().optional(),
   id: Id,
   name: z.string(),
   description: z.string(),
@@ -507,6 +521,11 @@ export const AgentSkillSchema = z.object({
 export type AgentSkill = z.infer<typeof AgentSkillSchema>;
 
 export const AgentSkillCatalogEntrySchema = AgentSkillSchema.pick({
+  documentId: true,
+  activeRevision: true,
+  origin: true,
+  botId: true,
+  protected: true,
   id: true,
   name: true,
   description: true,
@@ -535,6 +554,8 @@ export const CreateAgentSkillInput = z
 
 export const UpdateAgentSkillInput = z
   .object({
+    expectedRevision: z.number().int().positive(),
+    protected: z.boolean().optional(),
     skillId: Id,
     content: z.string().min(1).max(100_000).optional(),
     name: z.string().min(1).max(80).optional(),
@@ -543,6 +564,7 @@ export const UpdateAgentSkillInput = z
   })
   .superRefine((input, ctx) => {
     if (
+      input.protected === undefined &&
       input.content === undefined &&
       input.name === undefined &&
       input.description === undefined &&

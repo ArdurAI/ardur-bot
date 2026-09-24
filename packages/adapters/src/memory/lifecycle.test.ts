@@ -20,6 +20,12 @@ function fixture() {
   let inTransaction = false;
   const tx = Object.assign(database.tx, {
     $queryRaw: vi.fn(async () => []),
+    agentSkill: {
+      findFirst: vi.fn(
+        async () =>
+          null as { protected: boolean; origin: string; source: string; botId: string } | null,
+      ),
+    },
     spaceMember: {
       findUnique: vi.fn(async () => ({ role: "owner" })),
       findMany: vi.fn(async () => [{ spaceId: "space", userId: "user" }]),
@@ -102,6 +108,34 @@ describe("document store factory and queue composition", () => {
     ).rejects.toMatchObject({ code: "MEMORY_GENERATION" });
     expect(f.database.documents.size).toBe(0);
     expect(f.enqueue).not.toHaveBeenCalled();
+  });
+  it("enforces skill protection inside the common writer lock, including path-based saves", async () => {
+    const f = fixture();
+    const doc = await f.service.save(
+      { scope: "bot", path: "skills/agent-fixture.md", content: "Protected procedure" },
+      context,
+    );
+    f.tx.agentSkill.findFirst.mockResolvedValue({
+      protected: true,
+      origin: "learned",
+      source: "learned",
+      botId: "bot",
+    });
+    const run = { ...context, runId: "run" };
+    await expect(f.service.update(doc.id, "overwrite", 1, run)).rejects.toMatchObject({
+      code: "MEMORY_ACCESS",
+    });
+    await expect(
+      f.service.commit(
+        { scope: "bot", path: doc.path, content: "overwrite", expectedRevision: 1 },
+        run,
+      ),
+    ).rejects.toMatchObject({ code: "MEMORY_ACCESS" });
+    await expect(
+      f.service.save({ scope: "bot", path: doc.path, content: "overwrite" }, run),
+    ).rejects.toMatchObject({ code: "MEMORY_ACCESS" });
+    await expect(f.service.delete(doc.id, 1, run)).rejects.toMatchObject({ code: "MEMORY_ACCESS" });
+    expect((await f.service.read(doc.id, context))?.revision).toBe(1);
   });
   it("recovers a committed but unqueued revision through reconciliation", async () => {
     const f = fixture();

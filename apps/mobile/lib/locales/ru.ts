@@ -1,4 +1,8 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "What was wrong?": "Что было не так?",
+  "What was good?": "Что было хорошо?",
+  "Remove feedback": "Удалить отзыв",
+
   "Update your server to use AI data sharing in this mobile version.":
     "Обновите сервер, чтобы использовать обмен данными с ИИ в этой версии мобильного приложения.",
   "Ask the server owner to configure this provider.":

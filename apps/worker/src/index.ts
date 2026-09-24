@@ -207,6 +207,7 @@ async function main() {
     cloudAgent,
   });
 
+  // Includes the proposal-only learning.review handler; all mutations stay in the regular executor.
   const jobHandlers = createBackgroundJobHandlers({
     executor,
     prisma,

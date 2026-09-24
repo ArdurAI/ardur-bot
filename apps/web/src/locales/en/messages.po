@@ -3231,6 +3231,10 @@ msgstr "Remove"
 msgid "Remove {0}"
 msgstr "Remove {0}"
 
+#: src/components/MessageFeedback.tsx
+msgid "Remove feedback"
+msgstr "Remove feedback"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
 msgstr "Remove Git event"
@@ -3468,6 +3472,7 @@ msgstr "Runs when this bot receives a verified message from this provider."
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/MessageFeedback.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -4202,6 +4207,14 @@ msgstr "What this bot is for"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "What to return"
 msgstr "What to return"
+
+#: src/components/MessageFeedback.tsx
+msgid "What was good?"
+msgstr "What was good?"
+
+#: src/components/MessageFeedback.tsx
+msgid "What was wrong?"
+msgstr "What was wrong?"
 
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"

@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@ardurbot/contracts";
+import type { MessageBlock, MessageOrigin } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "./client.js";
 
 /** Group turns use channel inputs and their own outputs, never private thread history. */
@@ -42,6 +42,8 @@ export function loadRunHistoryMessages(
 export interface CreateThreadMessageInput {
   threadId: string;
   role: "user" | "bot" | "system";
+  origin?: MessageOrigin;
+  actorId?: string;
   blocks: MessageBlock[];
   botId?: string;
   replyToMessageId?: string;
@@ -75,6 +77,8 @@ export async function createThreadMessageInTransaction(
       threadId: input.threadId,
       seq: thread.nextMessageSeq - 1,
       role: input.role,
+      origin: input.origin ?? "system",
+      actorId: input.actorId,
       blocks: input.blocks as Prisma.InputJsonValue,
       botId: input.botId,
       replyToMessageId: input.replyToMessageId,

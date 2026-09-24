@@ -66,6 +66,7 @@ import {
   MarkdownArtifactPreview,
   type MarkdownArtifactPreviewTarget,
 } from "../components/markdown-artifact-preview";
+import { MessageFeedback } from "../components/message-feedback";
 import { NativeSymbol } from "../components/native-symbol";
 import {
   applyMobileThreadEvent,
@@ -1308,7 +1309,11 @@ function Thread() {
     );
   }
 
-  async function reactToMessage(message: MobileMessage, reaction: MessageReaction) {
+  async function reactToMessage(
+    message: MobileMessage,
+    reaction: MessageReaction,
+    edit?: { reason?: string; retract?: boolean },
+  ) {
     const targetBotId = botId;
     const targetGroupId = groupId;
     if (!targetBotId && !targetGroupId) return;
@@ -1317,6 +1322,7 @@ function Thread() {
         ...(targetGroupId ? { groupId: targetGroupId } : { botId: targetBotId! }),
         messageId: message.id,
         reaction,
+        ...edit,
         clientNonce: newClientNonce(),
       });
     } catch (err) {
@@ -1460,6 +1466,11 @@ function Thread() {
               actionProps={actionProps}
             />
           </Pressable>
+          {message.role === "bot" && message.runId && canReactToThreadMessage(message) ? (
+            <MessageFeedback
+              onFeedback={(reaction, edit) => reactToMessage(message, reaction, edit)}
+            />
+          ) : null}
           {messageReactions ? (
             <View
               style={{

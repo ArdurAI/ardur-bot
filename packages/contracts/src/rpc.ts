@@ -92,6 +92,12 @@ import {
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
 import {
+  LearningProposalSchema,
+  ReviewExecutionSchema,
+  SpaceLearningConfigInput,
+  SpaceLearningConfigSchema,
+} from "./learning.js";
+import {
   MemoryBundleSchema,
   MemoryDocumentHeadSchema,
   MemoryDocumentPageSchema,
@@ -100,7 +106,7 @@ import {
   MemoryPageInput,
   MemoryScopeRemapSchema,
 } from "./memory-documents.js";
-import { MessageReactionSchema } from "./reactions.js";
+import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { SearchQueryOutputSchema } from "./search.js";
 
@@ -346,6 +352,8 @@ export const appContract = {
         threadTarget.safeExtend({
           messageId: Id,
           reaction: MessageReactionSchema,
+          reason: FeedbackReasonSchema.optional(),
+          retract: z.boolean().optional(),
           clientNonce: z.string().min(1).max(200),
         }),
       )
@@ -578,6 +586,7 @@ export const appContract = {
           skillId: Id,
           name: z.string().optional(),
           playbook: SkillPlaybookSchema,
+          expectedRevision: z.number().int().positive(),
         }),
       )
       .output(TaughtSkillSchema),
@@ -588,6 +597,17 @@ export const appContract = {
       .input(z.object({ skillId: Id, prompt: z.string().optional() }))
       .output(z.object({ runId: Id })),
     remove: oc.input(z.object({ skillId: Id })).output(z.object({ ok: z.literal(true) })),
+  },
+  learning: {
+    settings: oc.output(SpaceLearningConfigSchema),
+    configure: oc.input(SpaceLearningConfigInput).output(SpaceLearningConfigSchema),
+    list: oc.input(z.object({ botId: Id.optional() })).output(
+      z.object({
+        reviews: z.array(ReviewExecutionSchema),
+        proposals: z.array(LearningProposalSchema),
+      }),
+    ),
+    review: oc.input(z.object({ runId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   /** Claude Agent Skills (SKILL.md recipes) shared across assistants (not taught/demo skills). Pi already understands this format; we persist and inject them. */
   agentSkills: {

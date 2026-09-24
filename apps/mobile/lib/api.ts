@@ -2,6 +2,7 @@ import type {
   Bot,
   BotSection,
   ComputerMode,
+  Feedback,
   Group,
   Me,
   MessageBlock,
@@ -754,6 +755,7 @@ export type MobileModel = ModelCatalogEntry;
 export type MobileModelCredential = ModelCredential;
 
 export type MobileMessage = {
+  feedback?: Feedback[];
   id: string;
   threadId?: string;
   seq?: number;

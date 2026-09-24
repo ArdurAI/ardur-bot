@@ -28,6 +28,7 @@ export async function loadMessagePage(
       const minSeq = Math.max(0, targetSeq - half);
       const maxSeq = targetSeq + half;
       const rows = await prisma.message.findMany({
+        include: { feedback: true },
         where: { threadId, seq: { gte: minSeq, lte: maxSeq } },
         orderBy: { seq: "asc" },
         take: pageSize,
@@ -54,6 +55,7 @@ export async function loadMessagePage(
   let cursor = before;
   while (true) {
     const rows = await prisma.message.findMany({
+      include: { feedback: true },
       where: {
         threadId,
         ...(cursor === undefined ? {} : { seq: { lt: cursor } }),
@@ -178,6 +180,16 @@ export function shouldForwardPeerThreadEvent(event: {
 }
 
 function toThreadMessage(row: {
+  feedback?: Array<{
+    id: string;
+    actorId: string;
+    messageId: string;
+    runId: string;
+    rating: string;
+    reason: string | null;
+    retractedAt: Date | null;
+    updatedAt: Date;
+  }>;
   id: string;
   threadId: string;
   seq: number;
@@ -190,6 +202,12 @@ function toThreadMessage(row: {
   createdAt: Date;
 }): ThreadMessage {
   return {
+    feedback: row.feedback?.map((item) => ({
+      ...item,
+      rating: item.rating as "positive" | "negative",
+      retractedAt: item.retractedAt?.toISOString() ?? null,
+      updatedAt: item.updatedAt.toISOString(),
+    })),
     id: row.id,
     threadId: row.threadId,
     seq: row.seq,

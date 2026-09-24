@@ -1,4 +1,6 @@
 import type { Prisma } from "@ardurbot/db";
+import type { JournalDocument } from "@ardurbot/memory";
+import { JournalDocumentStore, MemoryService } from "@ardurbot/memory";
 
 /** Minimal relational fake exercises the production mapper; real concurrency stays in PostgreSQL tests. */
 export function memoryDatabaseFake() {
@@ -72,4 +74,34 @@ export function serialMemoryLock() {
     previous = next.catch(() => undefined);
     return next;
   };
+}
+
+/** Real document lifecycle over a deterministic journal, for API/adapter conformance tests. */
+export function memoryServiceFixture(owner: { spaceId: string; userId: string; botId?: string }) {
+  let documents: JournalDocument[] = [];
+  const lock = serialMemoryLock();
+  const store = new JournalDocumentStore(
+    {
+      transaction: async (_access, action) => {
+        const copy = structuredClone(documents);
+        const result = await action(copy);
+        documents = copy;
+        return result;
+      },
+    },
+    "fixture",
+  );
+  const service = new MemoryService({
+    enqueue: async () => undefined,
+    open: (context, action) =>
+      lock(() =>
+        action({
+          access: { ...context, botIds: [owner.botId ?? "bot-1"] },
+          store,
+          generation: 0,
+          semantic: null,
+        }),
+      ),
+  });
+  return { service, store };
 }

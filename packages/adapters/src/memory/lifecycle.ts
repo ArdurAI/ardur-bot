@@ -52,6 +52,23 @@ export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
             );
             return action({
               access,
+              beforeWrite: async (documentId) => {
+                const store = await selectDocumentStore(tx, config, deps.dataDir);
+                const document = await store.read(documentId, access);
+                if (document?.path.startsWith("skills/builtin-")) throw new MemoryAccessError();
+                if (!context.runId) return;
+                const skill = await tx.agentSkill.findFirst({
+                  where: { documentId, spaceId: context.spaceId },
+                });
+                if (
+                  skill &&
+                  (skill.protected ||
+                    !["user", "learned"].includes(skill.origin) ||
+                    !["user", "learned"].includes(skill.source) ||
+                    (skill.origin === "learned" && skill.botId !== context.botId))
+                )
+                  throw new MemoryAccessError();
+              },
               store: await selectDocumentStore(tx, config, deps.dataDir),
               generation: config?.generation ?? 0,
               semantic: semantic?.provider ?? null,

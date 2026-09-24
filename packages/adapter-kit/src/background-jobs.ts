@@ -26,6 +26,12 @@ const payloadSchemas = {
     leaseId: z.string().min(1),
   }),
   "skill.teaching-expire": z.object({ skillId: z.string().min(1) }),
+  "learning.review": z.object({
+    runId: z.string().min(1),
+    historyGeneration: z.number().int().nonnegative(),
+    evidenceWatermark: z.string().min(1),
+    policyVersion: z.string().min(1),
+  }),
   "history.compact": z.object({ threadId: z.string().min(1) }),
   "messaging.deliver": z.object({ runId: z.string().min(1).optional() }),
   "cloud_agent.poll": z.object({ agentId: z.string().min(1) }),
