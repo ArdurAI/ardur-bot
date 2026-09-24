@@ -131,6 +131,11 @@ async function runWithModel(
       tools: [],
       model: { provider, id: modelId, thinkingLevel, maxImagesPerPrompt },
       executeTool: vi.fn(async () => ({ ok: true })),
+      admitHelper: async () => ({
+        id: "delegation",
+        tokens: 10_000,
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
       resolveModel,
     },
     {
@@ -177,7 +182,7 @@ describe("Pi agent thinking level", () => {
     expect(levels).toEqual(["high", "high"]);
   });
 
-  it("resolves and runs an explicitly selected subagent model", async () => {
+  it("rejects an explicitly selected subagent model", async () => {
     fakeAgentState.subagentArgs = {
       name: "helper",
       task: "help",
@@ -199,34 +204,40 @@ describe("Pi agent thinking level", () => {
       resolveModel,
     );
 
-    expect(resolveModel).toHaveBeenCalledWith("xai", "grok-4.6");
+    // Helpers inherit the parent's resolved pin; per-call model overrides are refused.
+    expect(resolveModel).not.toHaveBeenCalled();
     expect(fakeAgentState.models.map((model) => `${model.provider}/${model.id}`)).toEqual([
       "test/plain-model",
-      "xai/grok-4.6",
     ]);
-    expect(levels).toEqual(["off", "high"]);
+    expect(levels).toEqual(["off"]);
+    expect(fakeAgentState.lastSubagentResult).toMatchObject({
+      details: {
+        result:
+          "Helpers use the parent's resolved pin; message an existing bot to use a different pin.",
+      },
+    });
   });
 
   it.each([
-    { parentLimit: 2, childLimit: 1, expected: 1 },
-    { parentLimit: 1, childLimit: 2, expected: 2 },
-    { parentLimit: 2, childLimit: 0, expected: 0 },
-    { parentLimit: 0, childLimit: undefined, expected: 2 },
+    { parentLimit: 2, expected: 2 },
+    { parentLimit: 1, expected: 1 },
+    { parentLimit: 0, expected: 0 },
+    { parentLimit: undefined, expected: 2 },
   ])(
-    "uses the selected subagent image budget: $parentLimit -> $childLimit",
-    async ({ parentLimit, childLimit, expected }) => {
+    "inherits the parent's image budget: $parentLimit -> $expected",
+    async ({ parentLimit, expected }) => {
+      // Helpers inherit the parent's connection settings, including its image budget.
       fakeAgentState.subagentArgs = {
         name: "helper",
         task: "inspect screenshots",
-        model_provider: "test",
-        model_id: "plain-model",
       };
+      const resolveModel = vi.fn();
       await runWithModel(
         "plain-model",
         "test",
         new AbortController().signal,
         null,
-        async () => ({ provider: "test", id: "plain-model", maxImagesPerPrompt: childLimit }),
+        resolveModel,
         parentLimit,
       );
       const screenshots: AgentMessage[] = [0, 1].map((index) => ({
@@ -249,7 +260,8 @@ describe("Pi agent thinking level", () => {
         );
       const [parentTransform, childTransform] = fakeAgentState.transforms;
       if (!parentTransform || !childTransform) throw new Error("missing agent transforms");
-      expect(countImages(await parentTransform(screenshots))).toBe(parentLimit);
+      expect(resolveModel).not.toHaveBeenCalled();
+      expect(countImages(await parentTransform(screenshots))).toBe(expected);
       expect(countImages(await childTransform(screenshots))).toBe(expected);
     },
   );
@@ -265,12 +277,17 @@ describe("Pi agent thinking level", () => {
     await runWithModel("plain-model", "test", new AbortController().signal, null, resolveModel);
 
     expect(resolveModel).not.toHaveBeenCalled();
+    expect(fakeAgentState.models).toHaveLength(1);
+    // Even an incomplete override is refused by the inherited-pin contract.
     expect(fakeAgentState.lastSubagentResult).toMatchObject({
-      details: { result: "Subagent failed: model_provider and model_id must both be set" },
+      details: {
+        result:
+          "Helpers use the parent's resolved pin; message an existing bot to use a different pin.",
+      },
     });
   });
 
-  it("surfaces a scoped model-resolution failure without starting the helper", async () => {
+  it("refuses an override before model resolution or starting the helper", async () => {
     fakeAgentState.subagentArgs = {
       name: "helper",
       task: "help",
@@ -283,10 +300,14 @@ describe("Pi agent thinking level", () => {
 
     await runWithModel("plain-model", "test", new AbortController().signal, null, resolveModel);
 
-    expect(resolveModel).toHaveBeenCalledWith("anthropic", "claude-opus-4-6");
+    // Helper overrides cannot reach model resolution, even if that resolver would fail.
+    expect(resolveModel).not.toHaveBeenCalled();
     expect(fakeAgentState.models).toHaveLength(1);
     expect(fakeAgentState.lastSubagentResult).toMatchObject({
-      details: { result: "Subagent failed: Connect that model provider first" },
+      details: {
+        result:
+          "Helpers use the parent's resolved pin; message an existing bot to use a different pin.",
+      },
     });
   });
 

@@ -21,23 +21,27 @@ beforeEach(() => {
       Labels: { "ardurbot.managed": "true", "ardurbot.botId": "home", "ardurbot.spaceId": "space" },
     },
   });
-  mock.exec.mockImplementation(async (options: { Cmd: string[] }) => ({
-    start: async () =>
-      Readable.from([
-        Buffer.from(
-          options.Cmd.includes("/usr/local/bin/ardurbot-page-browser")
-            ? JSON.stringify({
-                ok: true,
-                url: "https://example.test",
-                title: "Fixture",
-                tree: "",
-                elements: [],
-              })
-            : "",
-        ),
-      ]),
-    inspect: async () => ({ ExitCode: 0 }),
-  }));
+  mock.exec.mockImplementation(async (options: { Cmd: string[] }) => {
+    const payload = Buffer.from(
+      options.Cmd.includes("/usr/local/bin/ardurbot-page-browser")
+        ? JSON.stringify({
+            ok: true,
+            url: "https://example.test",
+            title: "Fixture",
+            tree: "",
+            elements: [],
+          })
+        : "",
+    );
+    // Non-TTY Docker exec output carries an eight-byte multiplex header.
+    const header = Buffer.alloc(8);
+    header[0] = 1;
+    header.writeUInt32BE(payload.length, 4);
+    return {
+      start: async () => Readable.from([header, payload]),
+      inspect: async () => ({ ExitCode: 0 }),
+    };
+  });
 });
 
 async function snapshot(id: string, screen: string, lease: string, home = "home") {

@@ -249,7 +249,18 @@ describe("Pi runtime cancellation", () => {
   it("aborts and settles nested agent work before returning", async () => {
     fake.state.delegate = true;
     const runtime = new PiAgentRuntime();
-    const stream = runtime.run(request)[Symbol.asyncIterator]();
+    const finishHelper = vi.fn();
+    const stream = runtime
+      .run({
+        ...request,
+        admitHelper: async () => ({
+          id: "delegation",
+          tokens: 10_000,
+          deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+        finishHelper,
+      })
+      [Symbol.asyncIterator]();
     await stream.next();
     await microtasks();
     expect(fake.state.agents).toHaveLength(2);
@@ -260,9 +271,11 @@ describe("Pi runtime cancellation", () => {
     await microtasks();
     for (const agent of fake.state.agents) expect(agent.abort).toHaveBeenCalled();
     expect(closed).toBe(false);
+    expect(finishHelper).not.toHaveBeenCalled();
     for (const agent of fake.state.agents) agent.release.resolve();
     await closing;
     expect(fake.state.agents.every((agent) => agent.settled)).toBe(true);
+    expect(finishHelper).toHaveBeenCalledWith("delegation", "cancelled", expect.any(String));
   });
 
   it("does not erase a replacement attempt when the previous stream closes", async () => {
