@@ -840,12 +840,10 @@ export const RU_MESSAGES: Record<string, string> = {
     "Здесь документы доступны только для чтения. Запросите изменения ниже и одобрите их в разделе «Обучение».",
   You: "О вас",
   Topics: "Темы",
-  Profile: "Профиль",
   Preferences: "Предпочтения",
   "Who the user is and the professional domain":
     "Кто пользователь и какова его профессиональная сфера",
   "How the user wants the assistant to respond": "Как пользователь хочет получать ответы помощника",
-  Updated: "Обновлено",
   "Generate memory from chats": "Создавать память из разговоров",
   "Could not save memory settings. Try again.":
     "Не удалось сохранить настройки памяти. Повторите попытку.",
