@@ -295,3 +295,4 @@ export const blockedAuthPaths = [
   "/organization/remove-member",
   "/organization/update-member-role",
 ];
+export { accountSessions } from "./account-sessions.js";

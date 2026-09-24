@@ -1,3 +1,4 @@
+export * from "./account.js";
 export * from "./ai-consent.js";
 export * from "./attachments.js";
 export * from "./bot-avatar.js";

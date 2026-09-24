@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { NativeAccountSettings } from "../components/account-settings";
 import { useAvatarStyle } from "../components/avatar-style";
 import { BotAvatar } from "../components/bot-avatar";
 import { HostComputerStatus } from "../components/host-computer-status";
@@ -240,6 +241,7 @@ export default function Account() {
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
+        <NativeAccountSettings />
         <HostComputerStatus />
         <Button
           color={mobileTokens().primary}

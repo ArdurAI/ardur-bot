@@ -143,6 +143,13 @@ export class HostBridge {
           heartbeat.unref();
           ws.on("pong", () => {
             alive = true;
+            if (!worker)
+              void this.prisma.hostRegistration
+                .updateMany({
+                  where: { id: "default", generation: registration!.generation },
+                  data: { lastSeenAt: new Date() },
+                })
+                .catch(() => ws.close());
           });
           receiveFrames(
             ws,
@@ -152,7 +159,12 @@ export class HostBridge {
               if (frame.type === "health")
                 await this.prisma.hostRegistration.updateMany({
                   where: { id: "default", generation: registration!.generation },
-                  data: { hostRoots: frame.health.roots },
+                  data: {
+                    hostRoots: frame.health.roots,
+                    platform: frame.health.platform,
+                    name: frame.health.name,
+                    lastSeenAt: new Date(),
+                  },
                 });
             },
             () => {

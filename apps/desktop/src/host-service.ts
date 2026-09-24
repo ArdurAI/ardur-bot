@@ -1,7 +1,9 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
+import { hostRegistrationIdentityText } from "@ardurbot/contracts/host-bridge";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface HostServiceConfig {
@@ -15,6 +17,11 @@ export interface HostSecretStorage {
   getSelectedStorageBackend?(): string;
   encryptString(value: string): Buffer;
   decryptString(value: Buffer): string;
+}
+/** Works with existing encrypted pairings without exposing their token or stored verifier. */
+export function hostServiceIdentity(config: HostServiceConfig) {
+  const tokenHash = createHash("sha256").update(config.token).digest("hex");
+  return createHash("sha256").update(hostRegistrationIdentityText(tokenHash)).digest("hex");
 }
 export function hostStorageAvailable(storage: HostSecretStorage, platform = process.platform) {
   return (

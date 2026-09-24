@@ -215,6 +215,7 @@ export const ProposalEvidenceSchema = z
     sourceClass: z.enum([
       "human-message",
       "human-steering",
+      "human-settings",
       "feedback-reason",
       "run",
       "tool",

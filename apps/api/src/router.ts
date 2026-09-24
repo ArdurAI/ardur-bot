@@ -147,6 +147,7 @@ import {
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { implement, ORPCError } from "@orpc/server";
+import { createAccountService } from "./account.js";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
@@ -522,10 +523,12 @@ export function createRouter(deps: RouterDeps) {
     actor: Actor | null;
     signal?: AbortSignal;
     authSessionId?: string;
+    authHeaders?: Headers;
     origin?: string;
   }>();
   const channelPairing = createChannelPairing(deps);
   const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
+  const account = createAccountService({ ...deps, remoteDevices });
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
@@ -557,6 +560,40 @@ export function createRouter(deps: RouterDeps) {
 
   const commands = createCommandRoutes(deps);
   return os.router({
+    account: {
+      get: authed.account.get.handler(({ context }) => account.get(context.actor)),
+      updateProfile: authed.account.updateProfile.handler(({ context, input }) =>
+        account.updateProfile(context.actor, input),
+      ),
+      updateInstructions: authed.account.updateInstructions.handler(({ context, input }) =>
+        account.updateInstructions(context.actor, input),
+      ),
+      setTrustedDevices: authed.account.setTrustedDevices.handler(({ context, input }) =>
+        account.setTrustedDevices(context.actor, input.required),
+      ),
+      approveDevice: authed.account.approveDevice.handler(({ context, input }) =>
+        account.approveDevice(context.actor, input.id),
+      ),
+      localDevices: authed.account.localDevices.handler(({ context }) =>
+        account.localDevices(context.actor),
+      ),
+      disconnectDevice: authed.account.disconnectDevice.handler(({ context, input }) =>
+        account.disconnectDevice(context.actor, input),
+      ),
+      sessions: authed.account.sessions.handler(({ context }) =>
+        account.sessions.list(context.actor.userId, context.authHeaders ?? new Headers()),
+      ),
+      revokeSession: authed.account.revokeSession.handler(({ context, input }) =>
+        account.sessions.revoke(
+          context.actor.userId,
+          context.authHeaders ?? new Headers(),
+          input.id,
+        ),
+      ),
+      revokeOtherSessions: authed.account.revokeOtherSessions.handler(({ context }) =>
+        account.sessions.revokeOthers(context.actor.userId, context.authHeaders ?? new Headers()),
+      ),
+    },
     channelPairing: {
       installations: authed.channelPairing.installations.handler(({ context }) =>
         channelPairing.installations(context.actor),

@@ -31,6 +31,8 @@ model User {
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
   avatarStyle                 String                       @default("robot")
+  displayName                 String                       @default("")
+  workType                    String                       @default("")
   sessions                    Session[]
   accounts                    Account[]
   members                     Member[]
@@ -164,6 +166,10 @@ model Member {
 }
 
 model Space {
+  botInstructions String @default("")
+  botInstructionsAuthorId String?
+  botInstructionsRevision Int @default(0)
+  requireTrustedDevices Boolean @default(false)
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
   aiDataConsents AiDataConsent[]
@@ -573,6 +579,7 @@ model Task {
 }
 
 model Run {
+  accountInstructionContext Json?
   delegationId String? @unique
   delegationRootTaskId String?
   originDeviceGrantId String?
@@ -1600,6 +1607,7 @@ model PairingThrottle {
   @@map("pairing_throttles")
 }
 model PendingDevicePairing {
+  platform String?
   id String @id @default(cuid())
   challengeHash String @unique
   userId String
@@ -1617,6 +1625,8 @@ model PendingDevicePairing {
   @@map("pending_device_pairings")
 }
 model DeviceGrant {
+  trustedAt DateTime? @default(now())
+  platform String?
   kind String @default("device")
   installationId String?
   provider String?
@@ -1919,6 +1929,9 @@ model Delegation {
 
 // A deployment has one paired host. Only a SHA-256 digest is persisted.
 model HostRegistration {
+  name String @default("Computer")
+  platform String?
+  lastSeenAt DateTime?
   id String @id @default("default")
   userId String
   tokenHash String @unique

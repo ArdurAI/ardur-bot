@@ -607,6 +607,7 @@ export async function createApp(
         actor,
         signal: c.req.raw.signal,
         authSessionId: session?.session.id,
+        authHeaders: sessionHeaders(c.req.raw),
         origin: c.req.header("origin"),
       },
     });

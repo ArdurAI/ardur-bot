@@ -48,6 +48,7 @@ import {
   appendToolCallSegment,
   applyJudgeDecision,
   assertTransition,
+  botInstructionText,
   botMessageAllowsSilence,
   connectorKindFromToolName,
   containsSecret,
@@ -110,6 +111,7 @@ import {
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
 import { parse as parseShellCommand } from "shell-quote";
+import { loadAccountInstructionContext } from "./account-instructions.js";
 import {
   connectAgent,
   messageConnectedAgent,
@@ -1345,6 +1347,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           bot.runtimeExperimental,
         );
         if ("kind" in runtimeSelection) throw new RuntimePinError(runtimeSelection);
+        const accountContext = await loadAccountInstructionContext(deps.prisma, run);
+        accountContext.instructions = redactSecrets(accountContext.instructions, runSecrets);
+        accountContext.displayName = redactSecrets(accountContext.displayName, runSecrets);
         const runtime = runtimeSelection.runtime;
         const native =
           selected.pin.runtimeKind !== "pi"
@@ -1355,7 +1360,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 spaceId: run.spaceId,
                 botId: bot.id,
                 computerId: bot.computerId,
-                instructions: bot.instructions,
+                instructions: botInstructionText(bot, accountContext),
                 pin: selected.pin,
               })
             : undefined;
@@ -1367,7 +1372,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
         await deps.prisma.run.updateMany({
           where: { id: runId, leaseOwner: workerId, leaseFence: fence },
-          data: { runtimeInfo },
+          data: { runtimeInfo, accountInstructionContext: accountContext },
         });
         const delegatedTokens = run.delegationId
           ? await enforceDelegationDestination(deps.prisma, run.delegationId, selected)
@@ -4023,7 +4028,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               sourceMessageId: run.sourceMessageId,
               prompt: redactSecrets(prompt, runSecrets),
               instructions: [
-                bot.instructions || `${bot.name}: ${bot.title}\n${bot.description}`,
+                botInstructionText(bot, accountContext),
                 formatCurrentTimeInstruction(),
                 groupContext,
                 messagingContext,

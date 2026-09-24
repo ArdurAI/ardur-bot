@@ -75,15 +75,25 @@ describe("isolated device routes", () => {
       { botId: "bot" },
     );
   });
-  it.each(["pairing/start", "integrationSetup/save", "actionApprovalRules/create", "bots/update"])(
-    "blocks permission expansion via %s",
-    async (procedure) => {
-      const f = fixture();
-      const response = await f.call(f.signed("rpc", { procedure, input: {} }));
-      expect(response.status).toBe(403);
-      expect(f.read).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    "pairing/start",
+    "integrationSetup/save",
+    "actionApprovalRules/create",
+    "bots/update",
+    "account/updateProfile",
+    "account/updateInstructions",
+    "account/setTrustedDevices",
+    "account/approveDevice",
+    "account/disconnectDevice",
+    "account/sessions",
+    "account/revokeSession",
+    "account/revokeOtherSessions",
+  ])("blocks permission expansion via %s", async (procedure) => {
+    const f = fixture();
+    const response = await f.call(f.signed("rpc", { procedure, input: {} }));
+    expect(response.status).toBe(403);
+    expect(f.read).not.toHaveBeenCalled();
+  });
   it("rejects a revoked device on its next request", async () => {
     const f = fixture();
     f.grant.revokedAt = new Date();

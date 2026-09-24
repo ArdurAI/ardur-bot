@@ -40,7 +40,7 @@ export interface ArdurBotDesktopOAuthCallback {
 
 export interface ArdurBotDesktop {
   host?: {
-    state(): Promise<{ configured: boolean; roots: string[] }>;
+    state(): Promise<{ configured: boolean; roots: string[]; registrationId?: string }>;
     setup(): Promise<void>;
     addRoot(): Promise<void>;
     removeRoot(root: string): Promise<void>;

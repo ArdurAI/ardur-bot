@@ -11,6 +11,7 @@ export {
   TERMINAL_WINDOW_BYTES,
   validateTerminalSize,
 } from "@ardurbot/contracts";
+export * from "./account.js";
 export * from "./action-approval.js";
 export * from "./agent-skill.js";
 export * from "./ai-consent.js";
