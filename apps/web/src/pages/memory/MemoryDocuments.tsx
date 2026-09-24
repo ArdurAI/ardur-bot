@@ -1,6 +1,7 @@
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useState } from "react";
+import { SettingsRow } from "../../components/SettingsRow";
 import { MemoryHistory } from "../MemoryHistory";
 import type { CategorizedMemoryDocument } from "./document-groups";
 import {
@@ -60,30 +61,38 @@ export function MemoryDocuments({
 
   return (
     <div className="space-y-6">
-      <section aria-label={t`You`}>
-        <h3 className="text-sm font-medium">
-          <Trans>You</Trans>
-        </h3>
-        {groups.you.length ? (
-          <ul className="divide-y divide-border">{rows(groups.you)}</ul>
-        ) : (
-          <p className="py-3 text-sm text-muted-foreground">
-            <Trans>No profile or preferences saved.</Trans>
-          </p>
-        )}
-      </section>
-      <section aria-label={t`Topics`}>
-        <h3 className="text-sm font-medium">
-          <Trans>Topics</Trans>
-        </h3>
-        {groups.topics.length ? (
-          <ul className="divide-y divide-border">{rows(groups.topics)}</ul>
-        ) : (
-          <p className="py-3 text-sm text-muted-foreground">
-            <Trans>No topics saved.</Trans>
-          </p>
-        )}
-      </section>
+      <SettingsRow
+        label={t`You`}
+        content={
+          <>
+            {groups.you.length ? (
+              <ul className="divide-y divide-border">{rows(groups.you)}</ul>
+            ) : (
+              <p className="py-3 text-sm text-muted-foreground">
+                <Trans>No profile or preferences saved.</Trans>
+              </p>
+            )}
+          </>
+        }
+      >
+        {null}
+      </SettingsRow>
+      <SettingsRow
+        label={t`Topics`}
+        content={
+          <>
+            {groups.topics.length ? (
+              <ul className="divide-y divide-border">{rows(groups.topics)}</ul>
+            ) : (
+              <p className="py-3 text-sm text-muted-foreground">
+                <Trans>No topics saved.</Trans>
+              </p>
+            )}
+          </>
+        }
+      >
+        {null}
+      </SettingsRow>
       {selected ? (
         <section
           className="space-y-3 rounded-lg border border-border p-4"

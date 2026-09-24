@@ -2,6 +2,7 @@ import type { LearningProposal } from "@ardurbot/contracts";
 import { Button, Textarea } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useId, useRef, useState } from "react";
+import { SettingsRow } from "../../components/SettingsRow";
 
 export { MEMORY_IMPORT_PROMPT } from "@ardurbot/contracts";
 
@@ -52,73 +53,75 @@ export function MemoryImport({
 
   return (
     <section aria-label={t`Import memory from other AI providers`} className="space-y-3 py-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-medium">
-            <Trans>Import memory from other AI providers</Trans>
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            <Trans>
-              We'll provide a prompt you can use to fetch the memory from your other account.
-            </Trans>
-          </p>
-        </div>
+      <SettingsRow
+        label={t`Import memory from other AI providers`}
+        description={t`We'll provide a prompt you can use to fetch the memory from your other account.`}
+        content={
+          <>
+            {open ? (
+              <form
+                className="space-y-3 rounded-lg border border-border p-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submit();
+                }}
+              >
+                <Textarea
+                  aria-label={t`Import prompt`}
+                  readOnly
+                  value={MEMORY_IMPORT_PROMPT}
+                  rows={5}
+                />
+                <Button type="button" variant="outline" onClick={() => void copy()}>
+                  {copied ? t`Copied` : t`Copy prompt`}
+                </Button>
+                <label htmlFor={pasteId} className="block text-sm">
+                  <Trans>Paste the response</Trans>
+                </label>
+                <Textarea
+                  id={pasteId}
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                  maxLength={12000}
+                  rows={6}
+                  disabled={busy}
+                />
+                <p className="text-sm text-muted-foreground">
+                  <Trans>Review and approve each suggestion before it is saved.</Trans>
+                </p>
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={busy || !text.trim()}>
+                    <Trans>Review import</Trans>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => {
+                      setOpen(false);
+                      setText("");
+                      setError(null);
+                    }}
+                  >
+                    <Trans>Cancel</Trans>
+                  </Button>
+                </div>
+              </form>
+            ) : null}
+            {error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+          </>
+        }
+      >
         {!open ? (
           <Button variant="outline" onClick={() => setOpen(true)}>
             <Trans>Start import</Trans>
           </Button>
         ) : null}
-      </div>
-      {open ? (
-        <form
-          className="space-y-3 rounded-lg border border-border p-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
-          <Textarea aria-label={t`Import prompt`} readOnly value={MEMORY_IMPORT_PROMPT} rows={5} />
-          <Button type="button" variant="outline" onClick={() => void copy()}>
-            {copied ? t`Copied` : t`Copy prompt`}
-          </Button>
-          <label htmlFor={pasteId} className="block text-sm">
-            <Trans>Paste the response</Trans>
-          </label>
-          <Textarea
-            id={pasteId}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            maxLength={12000}
-            rows={6}
-            disabled={busy}
-          />
-          <p className="text-sm text-muted-foreground">
-            <Trans>Review and approve each suggestion before it is saved.</Trans>
-          </p>
-          <div className="flex gap-2">
-            <Button type="submit" disabled={busy || !text.trim()}>
-              <Trans>Review import</Trans>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                setOpen(false);
-                setText("");
-                setError(null);
-              }}
-            >
-              <Trans>Cancel</Trans>
-            </Button>
-          </div>
-        </form>
-      ) : null}
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      </SettingsRow>
     </section>
   );
 }

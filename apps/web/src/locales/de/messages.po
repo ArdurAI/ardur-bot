@@ -474,10 +474,6 @@ msgstr ""
 msgid "Allow email actions without asking"
 msgstr "E-Mail-Aktionen ohne Nachfrage erlauben"
 
-#: src/pages/capabilities/CapabilitiesPage.tsx
-msgid "Allow network egress"
-msgstr ""
-
 #. placeholder {0}: computer.name
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Allow network egress for {0}"
@@ -797,6 +793,14 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
+msgstr ""
+
+#: src/pages/capabilities/CapabilitiesSettings.tsx
+msgid "Back to capabilities"
+msgstr ""
+
+#: src/pages/memory/MemorySettings.tsx
+msgid "Back to memory"
 msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
@@ -2884,11 +2888,6 @@ msgstr ""
 msgid "Flags"
 msgstr ""
 
-#. placeholder {0}: computer.name
-#: src/pages/capabilities/CapabilitiesPage.tsx
-msgid "for {0}"
-msgstr ""
-
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Passwort vergessen?"
@@ -3455,6 +3454,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "Stelle sicher, dass auf diesem Computer nichts mehr läuft."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Manage"
@@ -3592,6 +3592,10 @@ msgstr "Erinnerungsbereich"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory service"
+msgstr ""
+
+#: src/pages/memory/MemorySettings.tsx
+msgid "Memory storage"
 msgstr ""
 
 #: src/pages/memory/MemoryProposals.tsx

@@ -474,10 +474,6 @@ msgstr ""
 msgid "Allow email actions without asking"
 msgstr "확인 없이 이메일 동작 허용"
 
-#: src/pages/capabilities/CapabilitiesPage.tsx
-msgid "Allow network egress"
-msgstr ""
-
 #. placeholder {0}: computer.name
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Allow network egress for {0}"
@@ -798,6 +794,14 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
 msgstr "뒤로"
+
+#: src/pages/capabilities/CapabilitiesSettings.tsx
+msgid "Back to capabilities"
+msgstr ""
+
+#: src/pages/memory/MemorySettings.tsx
+msgid "Back to memory"
+msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Back to screen"
@@ -2884,11 +2888,6 @@ msgstr "예상하지 못한 작업 표시"
 msgid "Flags"
 msgstr ""
 
-#. placeholder {0}: computer.name
-#: src/pages/capabilities/CapabilitiesPage.tsx
-msgid "for {0}"
-msgstr ""
-
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "비밀번호를 잊으셨나요?"
@@ -3455,6 +3454,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "이 컴퓨터에서 실행 중인 작업이 없는지 확인하세요."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Manage"
@@ -3592,6 +3592,10 @@ msgstr "기억 사용 범위"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory service"
+msgstr ""
+
+#: src/pages/memory/MemorySettings.tsx
+msgid "Memory storage"
 msgstr ""
 
 #: src/pages/memory/MemoryProposals.tsx

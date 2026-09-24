@@ -1,7 +1,12 @@
-import { Button, Dialog, DialogContent, DialogTitle } from "@ardurbot/ui-web";
+import { Button, Dialog, DialogContent, DialogTitle, Skeleton } from "@ardurbot/ui-web";
 import { Trans } from "@lingui/react/macro";
-import { useState } from "react";
-import { IntegrationCatalog } from "../../components/integrations/catalog/IntegrationCatalog";
+import { lazy, Suspense, useState } from "react";
+
+const IntegrationCatalog = lazy(() =>
+  import("../../components/integrations/catalog/IntegrationCatalog").then((module) => ({
+    default: module.IntegrationCatalog,
+  })),
+);
 
 export function ConnectorSuggestion({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
@@ -16,7 +21,9 @@ export function ConnectorSuggestion({ name }: { name: string }) {
           <DialogTitle>
             <Trans>Connectors</Trans>
           </DialogTitle>
-          <IntegrationCatalog />
+          <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+            <IntegrationCatalog />
+          </Suspense>
         </DialogContent>
       </Dialog>
     </div>

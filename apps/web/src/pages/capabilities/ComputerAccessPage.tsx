@@ -2,10 +2,9 @@ import type { ComputerNetworkSetting } from "@ardurbot/contracts";
 import { Trans } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc, selectedSpaceId } from "../../lib/rpc";
-import { ComputerSettingsPanel } from "../AccountSettingsOverlay";
 
-export function ComputerAccessPage({ isDeploymentOwner }: { isDeploymentOwner: boolean }) {
-  return isDeploymentOwner ? <ComputerSettingsPanel /> : <ComputerList key={selectedSpaceId()} />;
+export function ComputerAccessPage() {
+  return <ComputerList key={selectedSpaceId()} />;
 }
 function ComputerList() {
   const [computers, setComputers] = useState<ComputerNetworkSetting[]>([]);

@@ -122,12 +122,12 @@ export function MemoryIntentControls() {
       {importing ? (
         <>
           <Text selectable style={styles.body}>
-            {MEMORY_IMPORT_PROMPT}
+            {t(MEMORY_IMPORT_PROMPT)}
           </Text>
           <Button
             title={t("Copy prompt")}
             onPress={() =>
-              void Clipboard.setStringAsync(MEMORY_IMPORT_PROMPT).catch(() => setError(true))
+              void Clipboard.setStringAsync(t(MEMORY_IMPORT_PROMPT)).catch(() => setError(true))
             }
           />
           <TextInput

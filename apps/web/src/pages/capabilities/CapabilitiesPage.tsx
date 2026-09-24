@@ -14,7 +14,8 @@ import {
   Switch,
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { SettingsRow } from "../../components/SettingsRow";
 
 export type { CapabilityPreferences, ComputerNetworkSetting } from "@ardurbot/contracts";
 
@@ -27,6 +28,7 @@ export function CapabilitiesPage({
   onNetworkChange,
   onOpenComputers,
   onOpenCustomize,
+  onBusyChange,
 }: {
   settings: CapabilityPreferences;
   canConfigure: boolean;
@@ -36,9 +38,9 @@ export function CapabilitiesPage({
   onNetworkChange: (computerId: string, networkEgress: boolean, confirmed: true) => Promise<void>;
   onOpenComputers: () => void;
   onOpenCustomize: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const { t } = useLingui();
-  const id = useId();
   const locked = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +49,10 @@ export function CapabilitiesPage({
     networkEgress: boolean;
   } | null>(null);
   const disabled = busy || !canConfigure;
+  useEffect(() => {
+    onBusyChange?.(busy);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
 
   async function change(work: () => Promise<void>, network = false) {
     if (locked.current || !canConfigure) return;
@@ -70,29 +76,23 @@ export function CapabilitiesPage({
 
   return (
     <div className="space-y-6" data-testid="capabilities-settings">
-      <section aria-label={t`General`} className="divide-y divide-border">
-        <h3 className="pb-2 text-sm font-medium">
+      <section aria-label={t`General`}>
+        <h3 className="text-sm font-medium">
           <Trans>General</Trans>
         </h3>
-        <div className="flex flex-wrap items-center justify-between gap-4 py-4">
-          <div className="min-w-0 flex-1">
-            <label htmlFor={`${id}-tools`} className="text-sm font-medium">
-              <Trans>Tool access mode</Trans>
-            </label>
-            <p id={`${id}-tools-help`} className="mt-1 text-sm text-muted-foreground">
-              <Trans>Controls how connector tools are loaded in new conversations.</Trans>
+        <SettingsRow
+          label={t`Tool access mode`}
+          description={t`Controls how connector tools are loaded in new conversations.`}
+          content={unsupportedRuntimes.map((runtime) => (
+            <p key={runtime} className="mt-1 text-sm text-muted-foreground">
+              <Trans>
+                {runtime} loads all connected tools because deferred loading is unavailable.
+              </Trans>
             </p>
-            {unsupportedRuntimes.map((runtime) => (
-              <p key={runtime} className="mt-1 text-sm text-muted-foreground">
-                <Trans>
-                  {runtime} loads all connected tools because deferred loading is unavailable.
-                </Trans>
-              </p>
-            ))}
-          </div>
+          ))}
+        >
           <NativeSelect
-            id={`${id}-tools`}
-            aria-describedby={`${id}-tools-help`}
+            aria-label={t`Tool access mode`}
             disabled={disabled}
             value={settings.toolAccessMode}
             onChange={(event) => {
@@ -108,46 +108,28 @@ export function CapabilitiesPage({
               <Trans>Load all connected tools</Trans>
             </NativeSelectOption>
           </NativeSelect>
-        </div>
-        <div className="flex items-center justify-between gap-4 py-4">
-          <div>
-            <label htmlFor={`${id}-search`} className="text-sm font-medium">
-              <Trans>Connector search</Trans>
-            </label>
-            <p id={`${id}-search-help`} className="mt-1 text-sm text-muted-foreground">
-              <Trans>
-                Let the assistant search the connector directory and surface ones relevant to your
-                conversation.
-              </Trans>
-            </p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          label={t`Connector search`}
+          description={t`Let the assistant search the connector directory and surface ones relevant to your conversation.`}
+        >
           <Switch
-            id={`${id}-search`}
             aria-label={t`Connector search`}
-            aria-describedby={`${id}-search-help`}
             checked={settings.connectorSearch}
             disabled={disabled}
             onCheckedChange={(connectorSearch) => void change(() => onChange({ connectorSearch }))}
           />
-        </div>
+        </SettingsRow>
       </section>
       <section aria-label={t`Visuals`}>
         <h3 className="text-sm font-medium">
           <Trans>Visuals</Trans>
         </h3>
-        <div className="flex items-center justify-between gap-4 py-4">
-          <div>
-            <label htmlFor={`${id}-visuals`} className="text-sm font-medium">
-              <Trans>Inline visualizations</Trans>
-            </label>
-            <p className="mt-1 text-sm text-muted-foreground">
-              <Trans>
-                Interactive visualizations, charts, and diagrams directly in the conversation.
-              </Trans>
-            </p>
-          </div>
+        <SettingsRow
+          label={t`Inline visualizations`}
+          description={t`Interactive visualizations, charts, and diagrams directly in the conversation.`}
+        >
           <Switch
-            id={`${id}-visuals`}
             aria-label={t`Inline visualizations`}
             checked={settings.inlineVisualizations}
             disabled={disabled}
@@ -155,68 +137,54 @@ export function CapabilitiesPage({
               void change(() => onChange({ inlineVisualizations }))
             }
           />
-        </div>
+        </SettingsRow>
       </section>
-      <section aria-label={t`Code execution on computers`} className="space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="text-sm font-medium">
-            <Trans>Code execution on computers</Trans>
-          </h3>
+      <section aria-label={t`Code execution on computers`}>
+        <SettingsRow
+          label={t`Code execution on computers`}
+          description={t`Network access lets a bot install packages and reach the internet. This comes with security risks.`}
+        >
           <Button variant="ghost" onClick={onOpenComputers}>
             <Trans>Computers</Trans>
           </Button>
-        </div>
-        <p id={`${id}-egress-help`} className="text-sm text-muted-foreground">
-          <Trans>
-            Network access lets a bot install packages and reach the internet. This comes with
-            security risks.
-          </Trans>
-        </p>
+        </SettingsRow>
         {computers.map((computer) => (
-          <div
+          <SettingsRow
             key={computer.id}
-            className="flex items-center justify-between gap-4 border-t border-border py-3"
+            label={t`Allow network egress for ${computer.name}`}
+            content={
+              <>
+                {!computer.supported ? (
+                  <p className="text-sm text-muted-foreground">
+                    {computer.kind === "kubernetes"
+                      ? t`Unsupported: no verified NetworkPolicy controller.`
+                      : t`Network control is unavailable on this computer.`}
+                  </p>
+                ) : null}
+                {computer.pending ? (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    <Trans>Computer change pending.</Trans>
+                  </p>
+                ) : null}
+              </>
+            }
           >
-            <div>
-              <p className="text-sm font-medium">{computer.name}</p>
-              <label htmlFor={`${id}-${computer.id}`} className="text-sm text-muted-foreground">
-                <Trans>Allow network egress</Trans>
-                <span className="sr-only">
-                  {" "}
-                  <Trans>for {computer.name}</Trans>
-                </span>
-              </label>
-              {!computer.supported ? (
-                <p className="text-sm text-muted-foreground">
-                  {computer.kind === "kubernetes"
-                    ? t`Unsupported: no verified NetworkPolicy controller.`
-                    : t`Network control is unavailable on this computer.`}
-                </p>
-              ) : null}
-              {computer.pending ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                  <Trans>Computer change pending.</Trans>
-                </p>
-              ) : null}
-            </div>
             <Switch
-              id={`${id}-${computer.id}`}
               aria-label={t`Allow network egress for ${computer.name}`}
-              aria-describedby={`${id}-egress-help`}
               checked={computer.networkEgress}
               disabled={disabled || !computer.supported || computer.pending}
               onCheckedChange={(networkEgress) =>
                 setNetworkChange({ computerId: computer.id, networkEgress })
               }
             />
-          </div>
+          </SettingsRow>
         ))}
       </section>
-      <section aria-label={t`Skills`} className="border-t border-border pt-3">
+      <SettingsRow label={t`Skills`}>
         <Button variant="ghost" onClick={onOpenCustomize}>
           <Trans>Skills have moved to Customize</Trans>
         </Button>
-      </section>
+      </SettingsRow>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}

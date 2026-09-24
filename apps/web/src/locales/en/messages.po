@@ -474,10 +474,6 @@ msgstr "Allow device"
 msgid "Allow email actions without asking"
 msgstr "Allow email actions without asking"
 
-#: src/pages/capabilities/CapabilitiesPage.tsx
-msgid "Allow network egress"
-msgstr "Allow network egress"
-
 #. placeholder {0}: computer.name
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Allow network egress for {0}"
@@ -798,6 +794,14 @@ msgstr "Awake for {0} routines"
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
 msgstr "Back"
+
+#: src/pages/capabilities/CapabilitiesSettings.tsx
+msgid "Back to capabilities"
+msgstr "Back to capabilities"
+
+#: src/pages/memory/MemorySettings.tsx
+msgid "Back to memory"
+msgstr "Back to memory"
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Back to screen"
@@ -2884,11 +2888,6 @@ msgstr "Flag unexpected actions"
 msgid "Flags"
 msgstr "Flags"
 
-#. placeholder {0}: computer.name
-#: src/pages/capabilities/CapabilitiesPage.tsx
-msgid "for {0}"
-msgstr "for {0}"
-
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Forgot password?"
@@ -3455,6 +3454,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "Make sure nothing is still running on this computer."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Manage"
@@ -3593,6 +3593,10 @@ msgstr "Memory scope"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory service"
 msgstr "Memory service"
+
+#: src/pages/memory/MemorySettings.tsx
+msgid "Memory storage"
+msgstr "Memory storage"
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Memory suggestions"

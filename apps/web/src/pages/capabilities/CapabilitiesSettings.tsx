@@ -3,14 +3,25 @@ import { Button, Skeleton } from "@ardurbot/ui-web";
 import { Trans } from "@lingui/react/macro";
 import { useCallback, useEffect, useState } from "react";
 import { rpc, selectedSpaceId } from "../../lib/rpc";
+import type { SettingsPageProps } from "../settings-types";
 import { CapabilitiesPage } from "./CapabilitiesPage";
+import { ComputerAccessPage } from "./ComputerAccessPage";
 
-type Props = { navigate: (section: "computer" | "customize") => void };
-export default function CapabilitiesSettings(props: Props) {
+export default function CapabilitiesSettings(props: SettingsPageProps) {
   const spaceId = selectedSpaceId();
-  return <Settings key={spaceId} {...props} spaceId={spaceId} />;
+  return (
+    <div className="rk-scroll min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-2">
+      <Settings key={spaceId} {...props} spaceId={spaceId} />
+    </div>
+  );
 }
-function Settings({ navigate, spaceId }: Props & { spaceId: string | null }) {
+function Settings({
+  navigate,
+  spaceId,
+  isDeploymentOwner,
+  onBusyChange,
+}: SettingsPageProps & { spaceId: string | null }) {
+  const [showComputers, setShowComputers] = useState(false);
   const [data, setData] = useState<CapabilitySettings | null>(null);
   const [error, setError] = useState(false);
   const refresh = useCallback(async () => {
@@ -49,9 +60,19 @@ function Settings({ navigate, spaceId }: Props & { spaceId: string | null }) {
       </div>
     );
   if (!data) return <Skeleton className="h-40 w-full" />;
+  if (showComputers)
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" onClick={() => setShowComputers(false)}>
+          <Trans>Back to capabilities</Trans>
+        </Button>
+        <ComputerAccessPage />
+      </div>
+    );
   return (
     <CapabilitiesPage
       {...data}
+      onBusyChange={onBusyChange}
       onChange={async (patch: Partial<CapabilityPreferences>) => {
         const settings = await rpc.capabilities.configure(patch, { context: { spaceId } });
         setData((current) => (current ? { ...current, settings } : current));
@@ -63,8 +84,8 @@ function Settings({ navigate, spaceId }: Props & { spaceId: string | null }) {
         );
         await refresh();
       }}
-      onOpenComputers={() => navigate("computer")}
-      onOpenCustomize={() => navigate("customize")}
+      onOpenComputers={() => (isDeploymentOwner ? navigate("computer") : setShowComputers(true))}
+      onOpenCustomize={() => navigate("skills")}
     />
   );
 }

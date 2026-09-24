@@ -35,7 +35,7 @@ import {
 import { native, useThemedStyles } from "../lib/native";
 
 export default function Memory() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const styles = useThemedStyles(createStyles);
   const [destination, setDestination] = useState<string | null>(null);
   const [sync, setSync] = useState<MemorySyncState | null>(null);
@@ -238,7 +238,7 @@ export default function Memory() {
                         : memoryDocumentSummary(doc.content)}
                   </Text>
                   <Text style={styles.secondary}>
-                    {t("Updated")} {memoryUpdatedDate(doc.updatedAt)}
+                    {t("Updated")} {memoryUpdatedDate(doc.updatedAt, locale)}
                   </Text>
                 </Pressable>
               ))}
