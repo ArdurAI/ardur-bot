@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
+  DocumentRevision,
   DocumentScope,
   MemoryAccess,
   MemoryBundle,
@@ -10,6 +11,14 @@ import { MemoryBundleSchema } from "@ardurbot/contracts";
 import { assertMemoryPath, assertMemorySafe } from "./redaction.js";
 import { assertScope, scopeKey } from "./scope.js";
 
+/** Git adds provenance on first publication; missing metadata is not a content conflict. */
+export function samePortableRevision(a: DocumentRevision, b: DocumentRevision): boolean {
+  const { commitId: aCommit, ...aBody } = a;
+  const { commitId: bCommit, ...bBody } = b;
+  return (
+    JSON.stringify(aBody) === JSON.stringify(bBody) && (!aCommit || !bCommit || aCommit === bCommit)
+  );
+}
 export function bundleHash(bundle: MemoryBundle): string {
   return createHash("sha256")
     .update(JSON.stringify(MemoryBundleSchema.parse(bundle)))
@@ -75,8 +84,9 @@ export function previewImport(
           !(
             other.id === doc.id &&
             other.revisions.length <= doc.revisions.length &&
-            JSON.stringify(other.revisions) ===
-              JSON.stringify(doc.revisions.slice(0, other.revisions.length))
+            other.revisions.every((revision, index) =>
+              samePortableRevision(revision, doc.revisions[index]!),
+            )
           )
         );
       });

@@ -1311,6 +1311,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           })),
           connectedProviders: connectedComposio.map((row) => row.provider),
         };
+        await deps.memoryDocuments?.startSession?.(context);
         const memoryScope = configuredMemory
           ? effectiveMemoryScope(bot.memoryScope, configuredMemory.defaultScope)
           : null;

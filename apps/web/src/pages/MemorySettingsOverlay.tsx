@@ -14,6 +14,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { GitMemorySettings, GitMemoryStatus } from "./GitMemorySettings";
 import { SpaceMemorySection } from "./KnowledgeSection";
 import type { MemoryProviderConnectionDraft } from "./memory-providers/registry";
 import {
@@ -22,13 +23,15 @@ import {
   memoryProviderSettings,
 } from "./memory-providers/registry";
 
-type Location = "postgres" | "obsidian" | "service";
+type Location = "postgres" | "obsidian" | "git" | "service";
 function configuredLocation(config: SpaceMemoryConfig | null | undefined): Location {
   return config?.provider && config.provider !== "builtin"
     ? "service"
-    : config?.documentStore === "obsidian"
-      ? "obsidian"
-      : "postgres";
+    : config?.documentStore === "git"
+      ? "git"
+      : config?.documentStore === "obsidian"
+        ? "obsidian"
+        : "postgres";
 }
 export function MemorySettingsOverlay({
   onClose,
@@ -186,11 +189,13 @@ export function MemorySettingsOverlay({
     location !== activeLocation ||
     (location === "obsidian" && folder !== config?.documentSettings.folder);
   const locationLine =
-    activeLocation === "service"
-      ? (memoryProviderSettings(config!.provider)?.name ?? config!.provider)
-      : localDesktop
-        ? t`On this device`
-        : t`On your server`;
+    activeLocation === "git"
+      ? t`Syncs to ${config?.documentSettings.host ?? ""}`
+      : activeLocation === "service"
+        ? (memoryProviderSettings(config!.provider)?.name ?? config!.provider)
+        : localDesktop
+          ? t`On this device`
+          : t`On your server`;
   const body = (
     <>
       {!embedded ? (
@@ -238,7 +243,7 @@ export function MemorySettingsOverlay({
           <NativeSelectOption value="obsidian">
             <Trans>Obsidian vault</Trans>
           </NativeSelectOption>
-          <NativeSelectOption value="git" disabled>
+          <NativeSelectOption value="git">
             <Trans>Git repository</Trans>
           </NativeSelectOption>
           <NativeSelectOption value="service">
@@ -246,13 +251,11 @@ export function MemorySettingsOverlay({
           </NativeSelectOption>
         </NativeSelect>
         <p className="mt-2 text-sm text-muted-foreground">{locationLine}</p>
+        {activeLocation === "git" ? <GitMemoryStatus key={config?.generation} /> : null}
         <details className="mt-2 text-xs text-muted-foreground">
           <summary>
             <Trans>Details</Trans>
           </summary>
-          <p>
-            <Trans>Git repository: Coming next.</Trans>
-          </p>
           <p>
             {activeLocation === "service"
               ? t`Indexing sends documents to ${locationLine}.`
@@ -296,6 +299,17 @@ export function MemorySettingsOverlay({
             </p>
           ) : null}
         </details>
+        {location === "git" ? (
+          <GitMemorySettings
+            key={config?.generation}
+            config={config}
+            onConfigChange={(next) => {
+              onConfigChange(next);
+              setRefresh((value) => value + 1);
+            }}
+            onBusyChange={setBusy}
+          />
+        ) : null}
         {location === "obsidian" ? (
           <div className="mt-4 space-y-2">
             {localDesktop ? (
@@ -321,7 +335,7 @@ export function MemorySettingsOverlay({
             {folder ? <p className="break-all text-xs text-muted-foreground">{folder}</p> : null}
           </div>
         ) : null}
-        {changed && location !== "service" ? (
+        {changed && location !== "service" && location !== "git" ? (
           <div className="mt-3 space-y-2">
             <Button
               variant="outline"

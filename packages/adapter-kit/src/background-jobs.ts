@@ -7,6 +7,11 @@ import type {
 } from "./types.js";
 
 const payloadSchemas = {
+  "memory.git-push": z.object({
+    spaceId: z.string().min(1),
+    userId: z.string().min(1),
+    generation: z.number().int().nonnegative().optional(),
+  }),
   "memory.deliver": z.object({
     spaceId: z.string().min(1),
     userId: z.string().min(1),

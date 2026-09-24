@@ -13,6 +13,9 @@ const api = vi.hoisted(() => ({
   location: vi.fn(),
   connectProvider: vi.fn(),
   setDefaultScope: vi.fn(),
+  gitLocation: vi.fn(),
+  syncState: vi.fn(async () => null),
+  retrySync: vi.fn(),
 }));
 vi.mock("../lib/rpc", () => ({
   rpc: {
@@ -50,6 +53,7 @@ vi.mock("@ardurbot/ui-web", () => {
       size: _size,
       ...props
     }: ComponentProps<"button"> & { variant?: string; size?: string }) => <button {...props} />,
+    Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
     Input: (props: ComponentProps<"input">) => <input {...props} />,
     NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
     NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
@@ -61,6 +65,7 @@ vi.mock("@ardurbot/ui-web", () => {
   };
 });
 
+import { GitMemorySettings } from "./GitMemorySettings";
 import { MemoryHistory } from "./MemoryHistory";
 import { MemoryImportExport } from "./MemoryImportExport";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
@@ -170,7 +175,7 @@ describe("memory settings lifecycle views", () => {
       expect(onImported).toHaveBeenCalledOnce();
     });
   });
-  it("defaults to built-in, disables Git, and previews a vault switch before applying", async () => {
+  it("defaults to built-in, enables Git, and previews a vault switch before applying", async () => {
     api.location
       .mockResolvedValueOnce({
         hash: "migration-hash",
@@ -195,7 +200,7 @@ describe("memory settings lifecycle views", () => {
       async (container) => {
         const location = container.querySelector("select")!;
         expect(location.value).toBe("postgres");
-        expect(container.querySelector('option[value="git"]')).toHaveProperty("disabled", true);
+        expect(container.querySelector('option[value="git"]')).toHaveProperty("disabled", false);
         await act(async () => {
           location.value = "obsidian";
           location.dispatchEvent(new Event("change", { bubbles: true }));
@@ -226,6 +231,68 @@ describe("memory settings lifecycle views", () => {
           expectedGeneration: 0,
           expectedHash: "migration-hash",
         });
+      },
+    );
+  });
+  it("tests a Git connection, clears the credential, and confirms the reviewed proposal mode", async () => {
+    const config = {
+      provider: "builtin",
+      documentStore: "git",
+      documentSettings: { host: "github.com" },
+      generation: 1,
+    };
+    api.gitLocation
+      .mockResolvedValueOnce({
+        hash: "git-preview",
+        connectionId: "encrypted-connection",
+        documents: 1,
+        revisions: 2,
+        conflicts: [],
+        scopes: [],
+        generation: 0,
+        config: null,
+      })
+      .mockResolvedValueOnce({ config });
+    const changed = vi.fn();
+    await mounted(
+      <GitMemorySettings config={null} onConfigChange={changed} onBusyChange={() => undefined} />,
+      async (container) => {
+        const fill = async (label: string, value: string) =>
+          act(async () => {
+            const input = container.querySelector(`input[aria-label="${label}"]`)!;
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+              input,
+              value,
+            );
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+          });
+        await fill("Repository URL", "https://github.com/fixture/memory.git");
+        await fill("Repository token", "fixture-credential");
+        await act(async () => {
+          const mode = container.querySelector<HTMLSelectElement>(
+            'select[aria-label="Publication mode"]',
+          )!;
+          mode.value = "propose";
+          mode.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        await act(async () => button(container, "Test connection and preview").click());
+        expect(changed).not.toHaveBeenCalled();
+        expect(
+          container.querySelector<HTMLInputElement>('input[aria-label="Repository token"]')!.value,
+        ).toBe("");
+        expect(container.textContent).toContain(
+          "Shared recall will use proposed facts after merge.",
+        );
+        await act(async () => button(container, "Use this location").click());
+        expect(api.gitLocation).toHaveBeenLastCalledWith({
+          url: "https://github.com/fixture/memory.git",
+          branch: "main",
+          mode: "propose",
+          expectedGeneration: 0,
+          connectionId: "encrypted-connection",
+          expectedHash: "git-preview",
+        });
+        expect(changed).toHaveBeenCalledWith(config);
       },
     );
   });

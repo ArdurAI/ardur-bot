@@ -65,6 +65,7 @@ msgstr ""
 
 #. placeholder {0}: preview.documents
 #. placeholder {1}: preview.revisions
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "{0} documents, {1} revisions"
@@ -690,6 +691,10 @@ msgstr "Botlar çalışıyor"
 msgid "Brain label"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Branch"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr ""
@@ -1015,6 +1020,7 @@ msgid "Confirm password"
 msgstr "Parolayı doğrulayın"
 
 #. placeholder {0}: conflict.path
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Conflict: {0}"
@@ -1218,6 +1224,10 @@ msgstr ""
 msgid "Could not connect the memory service. Preview again and retry."
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not connect the repository. Check its URL and access, then retry."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not connect this provider"
 msgstr "Bu sağlayıcı bağlanamadı"
@@ -1352,6 +1362,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Beceri yüklenemedi"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not load sync status. Retry."
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
@@ -1729,6 +1743,10 @@ msgstr "Reddedildi"
 msgid "Deny"
 msgstr "Reddet"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Deploy private key"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Dağıtım varsayılanı"
@@ -1954,7 +1972,6 @@ msgstr "Genişlet"
 msgid "Expand {0}"
 msgstr ""
 
-#: src/pages/MemoryImportExport.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Dışa aktar"
@@ -1970,6 +1987,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "Bu haftanın listesini CRM'den dışa aktar ve ortak klasöre bırak"
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Export with history"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2080,10 +2101,6 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Git repository"
-msgstr ""
-
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Git repository: Coming next."
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -2908,6 +2925,10 @@ msgstr ""
 msgid "Only empty spaces can be deleted. Delete its bots and groups first."
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Only space-shared documents go to this repository."
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -3078,6 +3099,14 @@ msgstr ""
 msgid "Project ID"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Proposal branch"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Propose on a branch"
+msgstr ""
+
 #: src/pages/Onboarding.tsx
 msgid "Provider"
 msgstr "Sağlayıcı"
@@ -3087,9 +3116,21 @@ msgstr "Sağlayıcı"
 msgid "Providers"
 msgstr "Sağlayıcılar"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Publication mode"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Publish directly"
+msgstr ""
+
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "Çekme isteği"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Pushed"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Queued"
@@ -3303,6 +3344,22 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository authentication"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository history changed. Review the saved copy before continuing."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository token"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository URL"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Rerun"
 msgstr ""
@@ -3361,6 +3418,7 @@ msgstr ""
 msgid "Restoring your workspace"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Retry"
 msgstr ""
@@ -3382,6 +3440,10 @@ msgstr "Ardur Bot'ya dön"
 #: src/pages/KnowledgeSection.tsx
 msgid "rev {0}"
 msgstr "rev {0}"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Review saved copy"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -3486,12 +3548,24 @@ msgstr "Kaydet"
 msgid "Saved"
 msgstr "Kaydedildi"
 
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. GitHub sync failed."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing failed."
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing pending."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. Sync pending."
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -3662,6 +3736,14 @@ msgstr "Ortak"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Shared chat with 2-6 bots. They all reply in the same thread."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared documents will be published directly."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared recall will use proposed facts after merge."
 msgstr ""
 
 #: src/components/ShowAllModels.tsx
@@ -3854,6 +3936,11 @@ msgstr ""
 msgid "Switching…"
 msgstr "Geçiliyor…"
 
+#. placeholder {0}: config?.documentSettings.host ?? ""
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Syncs to {0}"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "System"
 msgstr "Sistem"
@@ -3889,6 +3976,10 @@ msgstr ""
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "Dene"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Test connection and preview"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
@@ -4130,6 +4221,7 @@ msgstr ""
 msgid "Use default guidance"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Use this location"
 msgstr ""
@@ -4218,6 +4310,10 @@ msgstr "Ne zaman kullanılır"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Botlar nerede çalışsın?"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Working from the last copy"
+msgstr ""
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

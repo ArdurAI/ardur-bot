@@ -20,6 +20,7 @@ import {
 } from "@ardurbot/memory";
 import {
   contentHash,
+  historyNotePath,
   type MarkdownFiles,
   parseRevisionMarkdown,
   revisionMarkdown,
@@ -121,8 +122,7 @@ class ObsidianJournal implements MemoryJournal {
       const notePath = vaultNotePath(head);
       // The durable manifest precedes projections. Restart repairs missing/old projections.
       for (const revision of doc.revisions) {
-        const stamp = revision.createdAt.replace(/[:.]/gu, "-");
-        const history = `history/${doc.id}/${String(revision.revision).padStart(8, "0")}-${stamp}.md`;
+        const history = historyNotePath(revision);
         const expected = revisionMarkdown(revision);
         const existing = await files.read(history);
         if (existing && existing !== expected) {
@@ -275,10 +275,19 @@ export class VaultWithPrivateDocuments implements MemoryDocumentStore {
   constructor(
     private readonly vault: MemoryDocumentStore,
     private readonly privateStore: MemoryDocumentStore,
-    private readonly ownerUserId: string,
+    private readonly ownerUserId: string | null,
   ) {}
   describe() {
     return this.vault.describe();
+  }
+  startSession(access: MemoryAccess) {
+    return this.vault.startSession?.(access) ?? Promise.resolve();
+  }
+  push(access: MemoryAccess) {
+    return this.vault.push?.(access) ?? Promise.resolve();
+  }
+  syncState(access: MemoryAccess) {
+    return this.vault.syncState?.(access) ?? Promise.resolve(null);
   }
   private selected(scope: DocumentRevision["scopeKey"]) {
     return scope.kind === "space-shared" ||

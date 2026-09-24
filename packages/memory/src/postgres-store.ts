@@ -52,6 +52,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
             references: r.references,
             createdAt: r.createdAt.toISOString(),
             deletedAt: r.deletedAt?.toISOString() ?? null,
+            ...(r.commitId ? { commitId: r.commitId } : {}),
           }),
         ),
       };
@@ -91,12 +92,21 @@ export class PostgresMemoryJournal implements MemoryJournal {
         if ((error as { code?: string }).code === "P2002") throw new MemoryConflictError();
         throw error;
       }
+      for (const revision of doc.revisions) {
+        const previous = existing?.revisions.find((r) => r.revision === revision.revision);
+        if (previous && !previous.commitId && revision.commitId)
+          await this.tx.memoryRevision.updateMany({
+            where: { documentId: doc.id, revision: revision.revision, commitId: null },
+            data: { commitId: revision.commitId },
+          });
+      }
       for (const r of doc.revisions.filter(
         (revision) => revision.revision > (existing?.revision ?? 0),
       )) {
         await this.tx.memoryRevision.create({
           data: {
             documentId: doc.id,
+            commitId: r.commitId,
             revision: r.revision,
             content: r.content,
             sourceRunId: r.runId,

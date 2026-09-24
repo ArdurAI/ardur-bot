@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 const request = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ rpc: request }));
 
-import { loadMemoryDocuments, loadMemoryHistory, memoryAttribution } from "./memory.js";
+import {
+  loadMemoryDocuments,
+  loadMemoryHistory,
+  loadMemorySyncState,
+  memoryAttribution,
+} from "./memory.js";
 
 describe("native read-only memory contracts", () => {
   it("pages documents and history using shared schemas and no mutation endpoints", async () => {
@@ -30,5 +35,12 @@ describe("native read-only memory contracts", () => {
         model: { provider: "local", modelId: "fixture", effort: "high" },
       } as never),
     ).toBe("bot · user · bot · run · local · fixture · high");
+  });
+  it("loads read-only Git status without a repository credential or mutation", async () => {
+    request.mockClear();
+    const state = { host: "github.com", branch: "main", proposalBranch: null, status: "last-copy" };
+    request.mockResolvedValueOnce(state);
+    expect(await loadMemorySyncState()).toEqual(state);
+    expect(request).toHaveBeenCalledWith("memory/syncState", {});
   });
 });

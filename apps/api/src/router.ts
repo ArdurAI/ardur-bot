@@ -155,6 +155,7 @@ import {
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
+import { changeGitMemoryLocation } from "./memory-git-location.js";
 import { changeMemoryLocation } from "./memory-location.js";
 import {
   disconnectMemoryProvider,
@@ -2270,6 +2271,33 @@ export function createRouter(deps: RouterDeps) {
       import: authed.memory.import.handler(({ context, input }) =>
         memoryRpc(() => deps.memoryDocuments!.importBundle(input, memoryContext(context.actor))),
       ),
+      retrySync: authed.memory.retrySync.handler(async ({ context }) => {
+        const access = memoryContext(context.actor);
+        await deps.memoryDocuments!.dependencies.enqueueGit?.({
+          ...access,
+          memoryGeneration: await deps.memoryDocuments!.generation(access),
+        });
+        return { ok: true as const };
+      }),
+      syncState: authed.memory.syncState.handler(({ context }) =>
+        memoryRpc(() => deps.memoryDocuments!.syncState(memoryContext(context.actor))),
+      ),
+      gitLocation: authed.memory.gitLocation.handler(async ({ context, input }) => {
+        const result = await memoryRpc(() => changeGitMemoryLocation(deps, context.actor, input));
+        if (result.config)
+          await deps.jobs
+            .enqueue({
+              name: "memory.git-push",
+              payload: {
+                spaceId: context.actor.spaceId,
+                userId: context.actor.userId,
+                generation: result.generation,
+              },
+              replaceKey: `memory.git-push:${context.actor.spaceId}`,
+            })
+            .catch(() => undefined);
+        return result;
+      }),
       location: authed.memory.location.handler(({ context, input }) =>
         memoryRpc(() => changeMemoryLocation(deps, context.actor, input)),
       ),

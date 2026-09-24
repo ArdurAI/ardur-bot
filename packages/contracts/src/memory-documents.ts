@@ -45,6 +45,10 @@ export const DocumentRevisionSchema = z
     references: z.array(z.string().max(2000)).max(100),
     createdAt: z.string().datetime(),
     deletedAt: z.string().datetime().nullable(),
+    commitId: z
+      .string()
+      .regex(/^[a-f0-9]{40,64}$/)
+      .optional(),
   })
   .strict();
 export const DocumentDeliverySchema = z
@@ -54,7 +58,20 @@ export const DocumentDeliverySchema = z
     provider: z.string().nullable(),
   })
   .strict();
-export const MemoryDocumentHeadSchema = DocumentRevisionSchema.extend({
+export const GitRevisionSyncSchema = z.object({
+  status: z.enum(["pending", "pushed", "failed"]),
+  branch: z.string(),
+});
+export const MemorySyncStateSchema = z.object({
+  host: z.string(),
+  status: z.enum(["ready", "pending", "failed", "last-copy", "quarantined"]),
+  branch: z.string(),
+  proposalBranch: z.string().nullable(),
+});
+export const MemoryHistoryRevisionSchema = DocumentRevisionSchema.extend({
+  gitSync: GitRevisionSyncSchema.optional(),
+});
+export const MemoryDocumentHeadSchema = MemoryHistoryRevisionSchema.extend({
   id: MemoryIdentity,
   updatedAt: z.string().datetime(),
   delivery: DocumentDeliverySchema,
@@ -86,7 +103,7 @@ export const MemoryDocumentPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export const MemoryHistoryPageSchema = z.object({
-  items: z.array(DocumentRevisionSchema),
+  items: z.array(MemoryHistoryRevisionSchema),
   nextCursor: z.number().nullable(),
 });
 export const MemoryScopeRemapSchema = z.record(z.string(), DocumentScopeSchema);
@@ -101,6 +118,8 @@ export type DocumentScope = z.infer<typeof DocumentScopeSchema>;
 export type RevisionAuthor = z.infer<typeof RevisionAuthorSchema>;
 export type MemoryModel = z.infer<typeof MemoryModelSchema>;
 export type DocumentRevision = z.infer<typeof DocumentRevisionSchema>;
+export type MemoryHistoryRevision = z.infer<typeof MemoryHistoryRevisionSchema>;
+export type MemorySyncState = z.infer<typeof MemorySyncStateSchema>;
 export type DocumentDelivery = z.infer<typeof DocumentDeliverySchema>;
 export type MemoryDocumentHead = z.infer<typeof MemoryDocumentHeadSchema>;
 export type MemoryBundle = z.infer<typeof MemoryBundleSchema>;

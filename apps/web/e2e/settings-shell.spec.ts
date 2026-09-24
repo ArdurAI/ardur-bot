@@ -65,6 +65,12 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await memory.getByLabel("Memory location").selectOption("obsidian");
   await expect(memory.getByLabel("Memory folder on your server")).toBeVisible();
   await captureScreenshot(page, testInfo, "settings-memory-obsidian");
+  await memory.getByLabel("Memory location").selectOption("git");
+  await expect(memory.getByLabel("Repository URL")).toBeVisible();
+  await expect(memory.getByLabel("Repository token", { exact: true })).toBeVisible();
+  await memory.getByLabel("Publication mode").selectOption("propose");
+  await expect(memory.getByRole("button", { name: "Test connection and preview" })).toBeDisabled();
+  await captureScreenshot(page, testInfo, "settings-memory-git");
   await memory.getByLabel("Memory location").selectOption("service");
   await memory.getByLabel("Memory service").selectOption("serenity");
   await expect(memory.getByLabel("MCP endpoint")).toBeVisible();

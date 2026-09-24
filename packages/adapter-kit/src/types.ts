@@ -492,6 +492,7 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "memory.git-push": { spaceId: string; userId: string; generation?: number };
   "memory.deliver": {
     spaceId: string;
     userId: string;

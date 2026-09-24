@@ -4,9 +4,11 @@ import type {
   DocumentScope,
   MemoryBundle,
   MemoryDocumentHead,
+  MemoryHistoryRevision,
   MemoryImportPreview,
   MemoryModel,
   MemoryPage,
+  MemorySyncState,
   RevisionAuthor,
 } from "@ardurbot/contracts";
 import type { AdapterContext, AdapterDescriptor } from "./types.js";
@@ -17,9 +19,11 @@ export type {
   DocumentScope,
   MemoryBundle,
   MemoryDocumentHead,
+  MemoryHistoryRevision,
   MemoryImportPreview,
   MemoryModel,
   MemoryPage,
+  MemorySyncState,
   RevisionAuthor,
 };
 
@@ -30,6 +34,9 @@ export interface MemoryAccess extends AdapterContext {
   threadId?: string;
   model?: MemoryModel;
   knownSecrets?: readonly string[];
+  displayName?: string;
+  /** Recall uses published facts, never an unmerged proposal. */
+  recall?: boolean;
 }
 export interface DocumentListInput {
   cursor?: string;
@@ -53,6 +60,9 @@ export interface DocumentCommit {
   deleted?: boolean;
 }
 export interface MemoryDocumentStore {
+  startSession?(access: MemoryAccess): Promise<void>;
+  push?(access: MemoryAccess): Promise<void>;
+  syncState?(access: MemoryAccess): Promise<MemorySyncState | null>;
   describe(): AdapterDescriptor<{
     network: "none" | "loopback-only" | "remote";
     revisions: true;
@@ -71,7 +81,7 @@ export interface MemoryDocumentStore {
     id: string,
     input: { cursor?: number; limit?: number },
     access: MemoryAccess,
-  ): Promise<{ items: DocumentRevision[]; nextCursor: number | null }>;
+  ): Promise<{ items: MemoryHistoryRevision[]; nextCursor: number | null }>;
   restore(
     id: string,
     revision: number,

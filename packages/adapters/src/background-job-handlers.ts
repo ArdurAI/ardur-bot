@@ -55,6 +55,23 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
+    "memory.git-push": async (payload) => {
+      if (!deps.memoryDocuments) throw new Error("Memory sync is unavailable.");
+      const context = {
+        ...payload,
+        memoryGeneration: payload.generation,
+        operationId: "memory.git-push",
+        traceId: "memory.git-push",
+        signal: AbortSignal.timeout(30_000),
+      };
+      if (
+        payload.generation !== undefined &&
+        (await deps.memoryDocuments.generation({ ...context, memoryGeneration: undefined })) !==
+          payload.generation
+      )
+        return;
+      await deps.memoryDocuments.push(context);
+    },
     "memory.deliver": async (payload) => {
       if (!deps.memoryDocuments) throw new Error("Memory delivery is unavailable.");
       await deliverMemory(deps.memoryDocuments, payload.documentId, payload.revision, {

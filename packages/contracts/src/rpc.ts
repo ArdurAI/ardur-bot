@@ -99,6 +99,7 @@ import {
   MemoryImportPreviewSchema,
   MemoryPageInput,
   MemoryScopeRemapSchema,
+  MemorySyncStateSchema,
 } from "./memory-documents.js";
 import { MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
@@ -451,6 +452,29 @@ export const appContract = {
         }),
       )
       .output(MemoryImportPreviewSchema),
+    gitLocation: oc
+      .input(
+        z.object({
+          url: z.string().min(1).max(1000),
+          branch: z.string().min(1).max(180),
+          mode: z.enum(["publish", "propose"]),
+          credential: z
+            .object({ kind: z.enum(["token", "ssh"]), value: z.string().min(1).max(20000) })
+            .optional(),
+          connectionId: z.string().optional(),
+          expectedGeneration: z.number().int().nonnegative(),
+          expectedHash: z.string().optional(),
+        }),
+      )
+      .output(
+        MemoryImportPreviewSchema.extend({
+          connectionId: z.string(),
+          generation: z.number(),
+          config: SpaceMemoryConfigSchema.nullable(),
+        }),
+      ),
+    syncState: oc.output(MemorySyncStateSchema.nullable()),
+    retrySync: oc.output(z.object({ ok: z.literal(true) })),
     location: oc
       .input(
         z.object({

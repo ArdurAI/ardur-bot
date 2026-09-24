@@ -864,6 +864,7 @@ model MemoryRevision {
   content        String
   sourceRunId    String?
   sourceThreadId String?
+  commitId       String?
   authorKind     String @default("runtime")
   authorUserId   String?
   authorBotId    String?

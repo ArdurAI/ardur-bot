@@ -29,7 +29,16 @@ export async function saveRunMemory(
     ok: true,
     documentId: doc.id,
     revision: doc.revision,
-    ...(doc.delivery.status !== "delivered" ? { status: "Saved; indexing pending" } : {}),
+    ...(doc.gitSync && doc.gitSync.status !== "pushed"
+      ? {
+          status:
+            doc.gitSync.status === "failed"
+              ? "Saved locally. GitHub sync failed."
+              : "Saved locally. Sync pending.",
+        }
+      : doc.delivery.status !== "delivered"
+        ? { status: "Saved; indexing pending" }
+        : {}),
   };
 }
 export async function recallRunMemory(

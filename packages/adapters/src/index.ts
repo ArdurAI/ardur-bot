@@ -73,6 +73,8 @@ export * from "./mcp-emulator.js";
 export * from "./mcp-oauth.js";
 export * from "./mcp-server-tool.js";
 export * from "./mcp-transport.js";
+export * from "./memory/git-config.js";
+export { validateGitBranch, validateGitRemote } from "./memory/git-transport.js";
 export * from "./memory/lifecycle.js";
 export * from "./memory-provider-factory.js";
 export * from "./messaging-context.js";

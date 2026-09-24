@@ -65,6 +65,7 @@ msgstr "{0} default"
 
 #. placeholder {0}: preview.documents
 #. placeholder {1}: preview.revisions
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "{0} documents, {1} revisions"
@@ -690,6 +691,10 @@ msgstr "Bots are working"
 msgid "Brain label"
 msgstr "Brain label"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Branch"
+msgstr "Branch"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr "Browse MCP servers"
@@ -1015,6 +1020,7 @@ msgid "Confirm password"
 msgstr "Confirm password"
 
 #. placeholder {0}: conflict.path
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Conflict: {0}"
@@ -1218,6 +1224,10 @@ msgstr "Could not connect the memory service. Check the connection and retry."
 msgid "Could not connect the memory service. Preview again and retry."
 msgstr "Could not connect the memory service. Preview again and retry."
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not connect the repository. Check its URL and access, then retry."
+msgstr "Could not connect the repository. Check its URL and access, then retry."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not connect this provider"
 msgstr "Could not connect this provider"
@@ -1352,6 +1362,10 @@ msgstr "Could not load or save tools."
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Could not load skill"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not load sync status. Retry."
+msgstr "Could not load sync status. Retry."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
@@ -1729,6 +1743,10 @@ msgstr "Denied"
 msgid "Deny"
 msgstr "Deny"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Deploy private key"
+msgstr "Deploy private key"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Deployment default"
@@ -1954,7 +1972,6 @@ msgstr "Expand"
 msgid "Expand {0}"
 msgstr "Expand {0}"
 
-#: src/pages/MemoryImportExport.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Export"
@@ -1970,6 +1987,10 @@ msgstr "Export run"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "Export this week's list from the CRM and drop it in the shared folder"
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Export with history"
+msgstr "Export with history"
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2081,10 +2102,6 @@ msgstr "Git event"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Git repository"
 msgstr "Git repository"
-
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Git repository: Coming next."
-msgstr "Git repository: Coming next."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
@@ -2908,6 +2925,10 @@ msgstr "On your server"
 msgid "Only empty spaces can be deleted. Delete its bots and groups first."
 msgstr "Only empty spaces can be deleted. Delete its bots and groups first."
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Only space-shared documents go to this repository."
+msgstr "Only space-shared documents go to this repository."
+
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -3078,6 +3099,14 @@ msgstr "Private workspace with its own bots and groups."
 msgid "Project ID"
 msgstr "Project ID"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Proposal branch"
+msgstr "Proposal branch"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Propose on a branch"
+msgstr "Propose on a branch"
+
 #: src/pages/Onboarding.tsx
 msgid "Provider"
 msgstr "Provider"
@@ -3087,9 +3116,21 @@ msgstr "Provider"
 msgid "Providers"
 msgstr "Providers"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Publication mode"
+msgstr "Publication mode"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Publish directly"
+msgstr "Publish directly"
+
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "Pull request"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Pushed"
+msgstr "Pushed"
 
 #: src/pages/ActivityList.tsx
 msgid "Queued"
@@ -3303,6 +3344,22 @@ msgstr "Replying to {replyName}: “{replyQuote}”"
 msgid "Report an issue"
 msgstr "Report an issue"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository authentication"
+msgstr "Repository authentication"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository history changed. Review the saved copy before continuing."
+msgstr "Repository history changed. Review the saved copy before continuing."
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository token"
+msgstr "Repository token"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository URL"
+msgstr "Repository URL"
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Rerun"
 msgstr "Rerun"
@@ -3361,6 +3418,7 @@ msgstr "Restore the last saved workspace. Unsaved work on the computer is lost."
 msgid "Restoring your workspace"
 msgstr "Restoring your workspace"
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Retry"
 msgstr "Retry"
@@ -3382,6 +3440,10 @@ msgstr "Return to Ardur Bot"
 #: src/pages/KnowledgeSection.tsx
 msgid "rev {0}"
 msgstr "rev {0}"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Review saved copy"
+msgstr "Review saved copy"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -3486,6 +3548,12 @@ msgstr "Save"
 msgid "Saved"
 msgstr "Saved"
 
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. GitHub sync failed."
+msgstr "Saved locally. GitHub sync failed."
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing failed."
 msgstr "Saved locally. Indexing failed."
@@ -3493,6 +3561,12 @@ msgstr "Saved locally. Indexing failed."
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing pending."
 msgstr "Saved locally. Indexing pending."
+
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. Sync pending."
+msgstr "Saved locally. Sync pending."
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
@@ -3663,6 +3737,14 @@ msgstr "Shared"
 #: src/pages/shell/dialogs.tsx
 msgid "Shared chat with 2-6 bots. They all reply in the same thread."
 msgstr "Shared chat with 2-6 bots. They all reply in the same thread."
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared documents will be published directly."
+msgstr "Shared documents will be published directly."
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared recall will use proposed facts after merge."
+msgstr "Shared recall will use proposed facts after merge."
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -3854,6 +3936,11 @@ msgstr "Switch bot"
 msgid "Switching…"
 msgstr "Switching…"
 
+#. placeholder {0}: config?.documentSettings.host ?? ""
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Syncs to {0}"
+msgstr "Syncs to {0}"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "System"
 msgstr "System"
@@ -3889,6 +3976,10 @@ msgstr "Teams not enabled"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "Test"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Test connection and preview"
+msgstr "Test connection and preview"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
@@ -4130,6 +4221,7 @@ msgstr "Use a token"
 msgid "Use default guidance"
 msgstr "Use default guidance"
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Use this location"
 msgstr "Use this location"
@@ -4218,6 +4310,10 @@ msgstr "When to use"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Where should bots run?"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Working from the last copy"
+msgstr "Working from the last copy"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
