@@ -65,7 +65,10 @@ import {
   sessionPartitionForServerUrl,
 } from "./setup-config.js";
 import { clearSetup, readSetup, writeSetup } from "./setup-store.js";
-import { createDesktopTray, staysRunning } from "./tray.js";
+import { readEnabledRoutines } from "./system/routines.js";
+import { installSystemRuntime } from "./system/runtime.js";
+import { systemTray } from "./system/tray.js";
+import { staysRunning } from "./tray.js";
 import { shouldOpenInAppPopup } from "./window-open.js";
 import {
   browserWindowOptions,
@@ -86,7 +89,7 @@ const LOCAL_WEB_URL = process.env.ARDURBOT_LOCAL_WEB_URL?.trim() || DEFAULT_LOCA
 const PROBE_TIMEOUT_MS = 8_000;
 const DESKTOP_STACK_PROBE_PATH = "/.well-known/ardurbot-desktop-stack";
 const DESKTOP_STACK_TOKEN_HEADER = "x-ardurbot-desktop-stack-token";
-let desktopTray: ReturnType<typeof createDesktopTray> = null;
+let desktopTray: ReturnType<typeof systemTray> = null;
 let mainWindow: BrowserWindow | null = null;
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
 let setupWindow: BrowserWindow | null = null;
@@ -97,6 +100,7 @@ let settingsTarget: { origin: string; token: string } | null = null;
 const bundledRendererInstallations = new Set<string>();
 let currentSetup: DesktopSetup | null = null;
 let currentTargetUrl: string | null = null;
+let desktopSystem: Awaited<ReturnType<typeof installSystemRuntime>> | undefined;
 let setupError: string | null = null;
 let setupSaveInProgress = false;
 let openAppPromise: Promise<boolean> | null = null;
@@ -287,10 +291,11 @@ function createWindow(url: string, partition: string | null) {
   });
   mainWindow = win;
   appWindowTargets.set(win, url);
+  desktopSystem?.attachWindow(win, url);
   const targetOrigin = safeOrigin(url);
   // Intentional OAuth flows open the provider's authorize page via a named
   // window; give those and same-origin popups a normal frame. Everything else
-  // opens in the system browser so a connected server cannot navigate us away.
+  // uses the selected link viewer so a connected server cannot navigate us away.
   // Hoisted for loopback OAuth capture so MCP/in-app localhost callbacks are skipped.
   const appOrigin = targetOrigin ?? safeOrigin(url);
   win.webContents.setWindowOpenHandler(({ url: childUrl, frameName }) => {
@@ -301,14 +306,20 @@ function createWindow(url: string, partition: string | null) {
       };
     }
     const external = safeExternalUrl(childUrl);
-    if (external !== null) void shell.openExternal(external);
+    if (external !== null) {
+      if (desktopSystem) desktopSystem.openLink(external);
+      else void shell.openExternal(external);
+    }
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, navigationUrl) => {
     if (targetOrigin !== null && safeOrigin(navigationUrl) === targetOrigin) return;
     event.preventDefault();
     const external = safeExternalUrl(navigationUrl);
-    if (external !== null) void shell.openExternal(external);
+    if (external !== null) {
+      if (desktopSystem) desktopSystem.openLink(external);
+      else void shell.openExternal(external);
+    }
   });
   // The popup has no address bar, so a loopback redirect would otherwise strand
   // the user on a blank window holding the authorization code in a URL they
@@ -908,6 +919,7 @@ async function openAppOnce(targetUrl: string) {
     await created.loaded;
     if (currentTargetUrl !== targetUrl) await remoteListener.stop();
     currentTargetUrl = targetUrl;
+    void desktopSystem?.controller.refreshRoutines();
     await hostService?.activate(targetUrl);
     setupError = null;
     // Keep the previous window until the caller commits (after setup.json is written).
@@ -1392,20 +1404,49 @@ app.whenReady().then(async () => {
       });
   });
 
-  desktopTray = createDesktopTray(
-    process.platform,
-    app.isPackaged
-      ? path.join(process.resourcesPath, process.platform === "win32" ? "tray.ico" : "tray.png")
-      : path.join(
-          app.getAppPath(),
-          "assets",
-          process.platform === "win32" ? "icon.ico" : "icon.png",
-        ),
-    () => {
+  const setMenuBar = (enabled: boolean) => {
+    desktopTray = systemTray(desktopTray, enabled, () => {
       app.emit("activate");
+    });
+  };
+  desktopSystem = await installSystemRuntime({
+    window: () => mainWindow,
+    target: () => currentTargetUrl,
+    mode: () => currentSetup?.mode ?? "existing",
+    dataFolder: () => null,
+    preload: path.join(import.meta.dirname, "preload.cjs"),
+    menuBar: setMenuBar,
+    routines: async () => {
+      if (
+        currentSetup?.mode !== "new" ||
+        !currentTargetUrl ||
+        new URL(currentTargetUrl).origin !== new URL(localStack.webUrl()).origin
+      )
+        return 0;
+      const token = await readStackToken(stackDir(app.getPath("userData")));
+      if (!token) return 0;
+      return readEnabledRoutines(localStack.webUrl(), token, (url, init) =>
+        net.fetch(url instanceof URL ? url.href : url, {
+          ...init,
+          bypassCustomProtocolHandlers: true,
+        }),
+      );
     },
-    () => app.quit(),
-  );
+    openMain: async () => {
+      if (mainWindow === null || mainWindow.isDestroyed()) {
+        if (!currentTargetUrl) {
+          showSetupWindow();
+          return null;
+        }
+        if (await openApp(currentTargetUrl)) commitPendingAppSwitch();
+      }
+      clearTimeout(warmWindowTimer);
+      mainWindow?.show();
+      mainWindow?.focus();
+      return mainWindow;
+    },
+  });
+  if (process.platform !== "darwin") setMenuBar(true);
 
   if (target.kind === "setup") {
     showSetupWindow();

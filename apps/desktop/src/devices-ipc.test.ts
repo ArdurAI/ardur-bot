@@ -1,4 +1,5 @@
 import type { DesktopInstanceMode } from "@ardurbot/contracts";
+import { LOCAL_SETTINGS_TOKEN_HEADER } from "@ardurbot/contracts/local-settings";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalStackController } from "./local-stack.js";
@@ -95,7 +96,7 @@ describe("Devices main-process boundary", () => {
       expect(fake.fetch).toHaveBeenCalledWith(
         `${target}/local/device-listener`,
         expect.objectContaining({
-          headers: { "x-ardurbot-desktop-stack-token": "test-dev-token" },
+          headers: { [LOCAL_SETTINGS_TOKEN_HEADER]: "test-dev-token" },
           redirect: "error",
         }),
       );

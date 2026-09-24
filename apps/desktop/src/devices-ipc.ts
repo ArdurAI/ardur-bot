@@ -1,4 +1,5 @@
 import type { DesktopInstanceMode } from "@ardurbot/contracts";
+import { LOCAL_SETTINGS_TOKEN_HEADER } from "@ardurbot/contracts/local-settings";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { app, ipcMain, net } from "electron";
 import type { LocalStackController } from "./local-stack.js";
@@ -64,7 +65,7 @@ export function installDevices(options: {
       throw new Error("Start your home before pairing a phone.");
     const response = await net.fetch(`${home.origin}/local/device-listener`, {
       method: "POST",
-      headers: { "x-ardurbot-desktop-stack-token": token },
+      headers: { [LOCAL_SETTINGS_TOKEN_HEADER]: token },
       redirect: "error",
       bypassCustomProtocolHandlers: true,
     });

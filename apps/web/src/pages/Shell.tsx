@@ -252,6 +252,7 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { SidebarSettings } from "./shell/sidebar-settings";
+import { SystemDictation } from "./system/SystemDictation";
 import { TeamBoard } from "./TeamBoard";
 import { WindowChrome } from "./WindowChrome";
 
@@ -5318,6 +5319,7 @@ export const Composer = memo(function Composer({
       onDrop={handleDrop}
       className="composer-drop-target relative z-30 m-0 min-w-0 border-0 px-3 pb-4 pt-3 md:px-6 md:pb-6"
     >
+      <SystemDictation textarea={textareaRef} setDraft={setDraft} />
       {sendError || runError ? (
         <div
           ref={runErrorRef}
