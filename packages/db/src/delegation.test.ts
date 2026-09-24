@@ -12,6 +12,7 @@ import {
 
 const snapshot: DelegationSnapshot = {
   pin: {
+    runtimeKind: "pi",
     provider: "fixture",
     modelId: "fixture",
     effort: "high",

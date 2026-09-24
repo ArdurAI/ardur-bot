@@ -17,7 +17,6 @@ vi.mock("../../lib/rpc", () => ({
   rpc: {
     delegations: { policy: async () => ({ mode: "any" }), setPolicy: async () => ({ ok: true }) },
     models: api,
-    models: api,
     runtimes: { availability: api.availability },
     me: api.me,
     voice: { voices: async () => [] },
