@@ -10,7 +10,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
   let connections: IntegrationConnection[] = [];
   const connection: IntegrationConnection = {
     id: "synthetic-connection",
-    catalogId: "github",
+    catalogId: "notion",
     state: "connected",
     needsReview: false,
     spaceToolPolicies: {},
@@ -35,9 +35,12 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
   await page.route("**/rpc/integrations/list", (route) =>
     route.fulfill({ json: { json: { catalog: integrationCatalog, connections } } }),
   );
+  await page.route("**/rpc/integrations/resourceTools", (route) =>
+    route.fulfill({ json: { json: [] } }),
+  );
   await page.route("**/rpc/integrations/grants", (route) => route.fulfill({ json: { json: [] } }));
   await page.route("**/rpc/integrations/connect", async (route) => {
-    expect(route.request().postDataJSON().json.catalogId).toBe("github");
+    expect(route.request().postDataJSON().json.catalogId).toBe("notion");
     await route.fulfill({
       json: {
         json: {
@@ -74,6 +77,16 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
   await captureScreenshot(page, testInfo, "settings-integration-catalog");
   await settings
     .getByTestId("integration-github")
+    .getByRole("button", { name: "Use a token", exact: true })
+    .click();
+  await expect(settings.getByLabel("Fine-grained token")).toHaveAttribute("type", "password");
+  await captureScreenshot(page, testInfo, "settings-integration-token");
+  await settings
+    .getByTestId("integration-github")
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await settings
+    .getByTestId("integration-notion")
     .getByRole("button", { name: "Connect", exact: true })
     .click();
   await expect(settings.getByTestId("integration-manage")).toBeVisible();
@@ -101,6 +114,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     .first()
     .check();
   await settings.getByRole("checkbox", { name: "synthetic_update", exact: true }).check();
+  await settings.getByLabel("Notion page URL or ID").fill("a".repeat(32));
   await settings.getByRole("button", { name: "Save", exact: true }).click();
   await expect(settings.getByText("Your bots can use the selected tools.")).toBeVisible();
   expect(assigned?.botIds).toHaveLength(1);

@@ -140,9 +140,13 @@ describe("MCP OAuth", () => {
     expect(persisted.at(-1)?.oauth?.tokens).toBeUndefined();
   });
 
-  it.each(["https://mcp.example.test", "http://127.0.0.1:8080"])(
-    "drives discovery, registration, PKCE, redirect, and token exchange for %s",
-    async (mcpOrigin) => {
+  it.each([
+    ["https://mcp.example.test", false],
+    ["http://127.0.0.1:8080", false],
+    ["https://mcp.example.test", true],
+  ] as const)(
+    "drives discovery, registration, PKCE, redirect, and token exchange for %s (registered app: %s)",
+    async (mcpOrigin, staticClient) => {
       const requests: string[] = [];
       let registration: Record<string, unknown> | undefined;
       vi.stubGlobal(
@@ -171,7 +175,9 @@ describe("MCP OAuth", () => {
               issuer: "https://auth.example.test",
               authorization_endpoint: "https://auth.example.test/authorize",
               token_endpoint: "https://auth.example.test/token",
-              registration_endpoint: "https://auth.example.test/register",
+              ...(staticClient
+                ? { token_endpoint_auth_methods_supported: ["client_secret_post"] }
+                : { registration_endpoint: "https://auth.example.test/register" }),
               response_types_supported: ["code"],
               grant_types_supported: ["authorization_code", "refresh_token"],
               code_challenge_methods_supported: ["S256"],
@@ -189,6 +195,12 @@ describe("MCP OAuth", () => {
             );
           }
           if (url.href === "https://auth.example.test/token" && request.method === "POST") {
+            if (staticClient) {
+              const form = new URLSearchParams(await request.text());
+              expect(form.get("client_id")).toBe("synthetic-app");
+              expect(form.get("client_secret")).toBe("synthetic-app-secret");
+              expect(form.get("code_verifier")).toBeTruthy();
+            }
             return Response.json({
               access_token: "access-token",
               refresh_token: "refresh-token",
@@ -245,14 +257,31 @@ describe("MCP OAuth", () => {
         spaceId: "workspace-1",
         userId: "user-1",
         redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+        ...(staticClient
+          ? {
+              clientInformation: {
+                client_id: "synthetic-app",
+                client_secret: "synthetic-app-secret",
+                token_endpoint_auth_method: "client_secret_post" as const,
+              },
+            }
+          : {}),
       });
       expect(started.status).toBe("authorization_required");
       if (started.status !== "authorization_required") throw new Error("OAuth was not requested");
       const authorizationUrl = new URL(started.authorizationUrl);
 
-      expect(registration).toMatchObject({ client_name: "Ardur Bot", application_type: "native" });
+      if (staticClient) expect(registration).toBeUndefined();
+      else
+        expect(registration).toMatchObject({
+          client_name: "Ardur Bot",
+          application_type: "native",
+        });
+      expect(started.authorizationUrl).not.toContain("synthetic-app-secret");
       expect(authorizationUrl.origin).toBe("https://auth.example.test");
-      expect(authorizationUrl.searchParams.get("client_id")).toBe("registered-client-id");
+      expect(authorizationUrl.searchParams.get("client_id")).toBe(
+        staticClient ? "synthetic-app" : "registered-client-id",
+      );
       expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("S256");
       expect(authorizationUrl.searchParams.get("state")).toBe(started.sessionId);
 
@@ -261,6 +290,15 @@ describe("MCP OAuth", () => {
         spaceId: "workspace-1",
         userId: "user-1",
         redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+        ...(staticClient
+          ? {
+              clientInformation: {
+                client_id: "synthetic-app",
+                client_secret: "synthetic-app-secret",
+                token_endpoint_auth_method: "client_secret_post" as const,
+              },
+            }
+          : {}),
       });
       expect(second.status).toBe("authorization_required");
       if (second.status !== "authorization_required") throw new Error("OAuth was not requested");

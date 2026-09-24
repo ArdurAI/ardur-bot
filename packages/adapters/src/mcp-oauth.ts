@@ -405,6 +405,7 @@ export class McpOAuthBroker {
     spaceId: string;
     userId: string;
     redirectUri: string;
+    clientInformation?: OAuthClientInformationMixed;
   }): Promise<
     | { status: "authorization_required"; sessionId: string; authorizationUrl: string }
     | { status: "already_connected" | "authorization_not_requested" }
@@ -439,6 +440,11 @@ export class McpOAuthBroker {
     const loaded = await this.loadMaterial(server, context);
     if (server.catalogId)
       loaded.material.oauth = { ...loaded.material.oauth, authorizationRevision: server.revision };
+    if (input.clientInformation)
+      loaded.material.oauth = {
+        ...loaded.material.oauth,
+        clientInformation: input.clientInformation,
+      };
     let authorizationUrl: URL | undefined;
     const provider = this.createProvider(server, context, loaded, {
       redirectUri: input.redirectUri,

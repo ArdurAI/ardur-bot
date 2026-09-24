@@ -381,6 +381,14 @@ msgstr "खरीद कार्रवाइयों को बिना प�
 msgid "Allow writing"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Allowed destination"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Allowed destinations"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "एक बार अनुमति दी गई"
@@ -965,6 +973,10 @@ msgstr "डिलीट की पुष्टि करें"
 msgid "Confirm password"
 msgstr "पासवर्ड की पुष्टि करें"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Confluence space keys or IDs"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -1231,6 +1243,10 @@ msgstr "अनुमोदन नियम लोड नहीं हो सक�
 msgid "Could not load bots. Reload to try again."
 msgstr ""
 
+#: src/components/integrations/catalog/ResourcePicker.tsx
+msgid "Could not load destinations."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not load integrations"
@@ -1447,6 +1463,10 @@ msgstr "बनाएं"
 msgid "Create a section and move {0} into it."
 msgstr "एक सेक्शन बनाएं और {0} को उसमें ले जाएं।"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Create a token"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Create account"
 msgstr "खाता बनाएं"
@@ -1527,6 +1547,10 @@ msgstr "बॉट अवतार अनुकूलित करें"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Dark"
 msgstr "डार्क"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Database"
+msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
 msgid "day"
@@ -1748,6 +1772,10 @@ msgstr "ईमेल"
 msgid "Engage when... Ignore..."
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Enter a valid destination and save again."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -1853,6 +1881,10 @@ msgstr "विफल।"
 msgid "Failure handling"
 msgstr "विफलता प्रबंधन"
 
+#: src/components/integrations/catalog/ResourcePicker.tsx
+msgid "Find a destination"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Find models"
@@ -1862,6 +1894,10 @@ msgstr "मॉडल खोजें"
 #: src/pages/Onboarding.tsx
 msgid "Finding…"
 msgstr "खोजा जा रहा है…"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Fine-grained token"
+msgstr ""
 
 #. placeholder {0}: new URL(oauth.verificationUri).hostname
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1924,6 +1960,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Grant only the repositories and permissions this bot needs."
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2084,6 +2124,10 @@ msgstr "पृथक"
 #: src/pages/shell/dialogs.tsx
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
 msgstr "इसकी बातचीत, फ़ाइलें और रूटीन स्थायी रूप से डिलीट कर दिए जाएंगे। इसके बनाए बॉट आपकी सूची में बने रहेंगे।"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Jira project keys"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Jump to latest"
@@ -2520,6 +2564,10 @@ msgstr ""
 msgid "No chat apps linked yet."
 msgstr ""
 
+#: src/components/integrations/catalog/ResourcePicker.tsx
+msgid "No destinations found."
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "No exceptions. Actions run automatically."
 msgstr "कोई अपवाद नहीं। कार्रवाइयां स्वतः चलती हैं।"
@@ -2616,6 +2664,10 @@ msgstr "अभी तक कुछ याद नहीं किया गया
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "सूचनाएं"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Notion page URL or ID"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Now"
@@ -2734,6 +2786,10 @@ msgstr "अन्य मॉडल…"
 
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Parent page"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -3228,6 +3284,7 @@ msgstr "कुछ बोलें। चुप्पी होते ही भ�
 msgid "Say yes or no, or answer in a sentence."
 msgstr "हां या ना कहें, या एक वाक्य में उत्तर दें।"
 
+#: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -3391,10 +3448,18 @@ msgstr "साइन इन करें"
 msgid "Sign in to Ardur Bot"
 msgstr "Ardur Bot में साइन इन करें"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Sign in with GitHub"
+msgstr ""
+
 #: src/pages/Auth.tsx
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "साइन अप करें"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
+msgstr ""
 
 #. placeholder {0}: skill.name
 #: src/pages/Shell.tsx
@@ -3597,6 +3662,10 @@ msgstr ""
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
 msgstr "यह बॉट इसी कंप्यूटर पर चलता है, किसी Linux डेस्कटॉप पर नहीं। शेल और फ़ाइलें आपके होम फ़ोल्डर का उपयोग करती हैं।"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "This bot's connection needs to be chosen. Pick the connection to use."
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "This cannot be undone."
 msgstr "इसे पूर्ववत नहीं किया जा सकता।"
@@ -3680,6 +3749,7 @@ msgstr "Treg टोकन"
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "फिर से कोशिश करें"
@@ -3783,6 +3853,10 @@ msgstr "{hostLabel} का उपयोग करें"
 #: src/pages/Onboarding.tsx
 msgid "Use a found model"
 msgstr "मिला हुआ मॉडल उपयोग करें"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Use a token"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"

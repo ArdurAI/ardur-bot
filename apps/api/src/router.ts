@@ -2827,6 +2827,12 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     integrations: {
+      resourceTools: authed.integrations.resourceTools.handler(({ context, input }) =>
+        integrations.resourceTools(context.actor, input.connectionId, input.kind),
+      ),
+      searchResources: authed.integrations.searchResources.handler(({ context, input }) =>
+        integrations.searchResources(context.actor, input),
+      ),
       list: authed.integrations.list.handler(({ context }) => integrations.list(context.actor)),
       connect: authed.integrations.connect.handler(({ context, input }) =>
         integrations.connect(context.actor, input),

@@ -1,7 +1,10 @@
+import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { captureIntegrationManifest } from "./integration-manifest.js";
 import { allowlistDrift, McpConnector } from "./mcp-connector.js";
 import type { McpOAuthBroker } from "./mcp-oauth.js";
 import { StoredMcpOAuthProvider } from "./mcp-oauth.js";
+import { EncryptedSecretStore } from "./secrets.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -834,4 +837,177 @@ describe("allowlistDrift", () => {
       stringAllowedCount: 1,
     });
   });
+});
+
+it("sends the encrypted token as Bearer during authenticated discovery and redacts the manifest", async () => {
+  const token = randomBytes(24).toString("hex");
+  const store = new EncryptedSecretStore(randomBytes(32).toString("hex"));
+  const context = {
+    spaceId: "w1",
+    userId: "u1",
+    operationId: "test",
+    traceId: "test",
+    signal: new AbortController().signal,
+  };
+  const stored = await store.put(JSON.stringify({ secret: token }), context);
+  const state = {
+    failNext: false,
+    initializations: 0,
+    headers: [] as Record<string, string>[],
+    tools: [
+      { name: "synthetic_search", description: `Search ${token}`, inputSchema: { type: "object" } },
+    ],
+  };
+  vi.stubGlobal("fetch", mcpFetch(state));
+  const connector = new McpConnector(
+    { secret: { findFirst: async () => stored } } as never,
+    store,
+    { network: TEST_NETWORK },
+  );
+  try {
+    const manifest = await connector.inspectServer(
+      { ...SERVER, secretId: stored.id } as never,
+      context,
+    );
+    expect(state.headers.length).toBeGreaterThan(1);
+    expect(state.headers.every((headers) => headers.authorization === `Bearer ${token}`)).toBe(
+      true,
+    );
+    expect(JSON.stringify(manifest)).not.toContain(token);
+  } finally {
+    await connector.close();
+  }
+});
+
+it("marks a timeout after sending a catalog write uncertain without a transport retry", async () => {
+  const offered = [
+    { name: "synthetic_write", description: "Write content", inputSchema: { type: "object" } },
+  ];
+  const assignment = {
+    ...ASSIGNMENT,
+    allowedTools: ["synthetic_write"],
+    server: {
+      ...SERVER,
+      catalogId: "github",
+      connectionState: "connected",
+      manifest: captureIntegrationManifest(offered, null),
+      spaceAllowedTools: ["synthetic_write"],
+    },
+  };
+  const base = mcpFetch({ failNext: false, initializations: 0, tools: offered });
+  let calls = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (request.method === "POST" && (await request.clone().json()).method === "tools/call") {
+        calls++;
+        throw new DOMException("Synthetic timeout", "TimeoutError");
+      }
+      return base(input, init);
+    }),
+  );
+  const connector = new McpConnector(
+    { botMcpServer: { findFirst: async () => assignment } } as never,
+    {} as never,
+    { network: TEST_NETWORK },
+  );
+  const events = [];
+  try {
+    for await (const event of connector.execute(
+      {
+        tool: "mcp__demo__synthetic_write",
+        args: {},
+        executionId: "test",
+        route: {
+          connectorId: "mcp",
+          resourceId: SERVER.id,
+          resourceRevision: 1,
+          toolName: "synthetic_write",
+        },
+      },
+      {
+        spaceId: "w1",
+        userId: "u1",
+        botId: "bot-1",
+        operationId: "test",
+        traceId: "test",
+        signal: new AbortController().signal,
+      },
+    ))
+      events.push(event);
+    expect(events).toEqual([
+      { type: "error", message: "Delivery could not be confirmed", uncertain: true },
+    ]);
+    expect(calls).toBe(1);
+  } finally {
+    await connector.close();
+  }
+});
+
+it("uses the captured resource search tool and refuses unknown tools, missing fields and revoked connections", async () => {
+  const offered = [
+    {
+      name: "synthetic_search_projects",
+      description: "Search Jira projects",
+      inputSchema: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+  ];
+  const server = {
+    ...SERVER,
+    catalogId: "atlassian",
+    connectionState: "connected",
+    manifest: captureIntegrationManifest(offered, null),
+  };
+  const calls: string[] = [];
+  const base = mcpFetch({ failNext: false, initializations: 0, tools: offered, calls });
+  vi.stubGlobal("fetch", base);
+  const findFirst = vi.fn(async () => server);
+  const connector = new McpConnector({ mcpServer: { findFirst } } as never, {} as never, {
+    network: TEST_NETWORK,
+  });
+  const context = {
+    spaceId: "w1",
+    userId: "u1",
+    operationId: "test",
+    traceId: "test",
+    signal: new AbortController().signal,
+  };
+  try {
+    expect(await connector.resourceTools(server as never, "jira", context)).toMatchObject([
+      { id: offered[0]!.name },
+    ]);
+    await expect(
+      connector.searchResources(server as never, "jira", "invented", {}, context),
+    ).rejects.toThrow("Review the search fields");
+    await expect(
+      connector.searchResources(server as never, "jira", offered[0]!.name, {}, context),
+    ).rejects.toThrow("Review the search fields");
+    expect(calls).toEqual([]);
+    await connector.searchResources(
+      server as never,
+      "jira",
+      offered[0]!.name,
+      { query: "Demo" },
+      context,
+    );
+    expect(calls).toEqual([offered[0]!.name]);
+    findFirst.mockResolvedValueOnce(null as never);
+    await expect(
+      connector.searchResources(
+        server as never,
+        "jira",
+        offered[0]!.name,
+        { query: "Demo" },
+        context,
+      ),
+    ).rejects.toThrow("Connect this integration first");
+    expect(calls).toHaveLength(1);
+  } finally {
+    await connector.close();
+  }
 });
