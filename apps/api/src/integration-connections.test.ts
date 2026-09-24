@@ -1,5 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { captureIntegrationManifest, EncryptedSecretStore, McpConnector } from "@ardurbot/adapters";
+import {
+  captureIntegrationManifest,
+  EncryptedSecretStore,
+  McpConnector,
+  McpReauthorizationRequiredError,
+} from "@ardurbot/adapters";
 import type { McpServer } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpSession } from "../../../packages/adapters/src/mcp-transport.js";
@@ -58,7 +63,7 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
     }),
     findMany: vi.fn(async () => [{ ...row, assignments: grants }]),
     create: vi.fn(async ({ data }: { data: Partial<McpServer> }) => {
-      row = { ...row, ...data, manifest: null, connectionState: "awaiting-consent" };
+      row = { ...row, manifest: null, connectionState: "awaiting-consent", ...data };
       return { ...row };
     }),
     update: vi.fn(async ({ data }: { data: Partial<McpServer> }) => {
@@ -124,6 +129,7 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
       authorizationUrl: "https://example.test/authorize",
     })),
     disconnect: vi.fn(async () => undefined),
+    forgetPending: vi.fn(),
   };
   const service = new IntegrationConnections(
     db as never,
@@ -195,12 +201,12 @@ describe("catalog connection lifecycle", () => {
     expect(f.oauth.begin).toHaveBeenCalledWith({
       serverId: result.connection.id,
       ...actor,
-      redirectUri: "https://app.example.test/mcp/oauth/callback",
+      redirectUri: "https://app.example.test/api/oauth/done",
     });
     expect(result.connection.state).toBe("awaiting-consent");
     expect(result.authorizationUrl).toBe("https://example.test/authorize");
   });
-  it.each(["jenkins", "kubernetes", "aws", "google-cloud", "azure", "unknown"])(
+  it.each(["jenkins", "kubernetes", "google-cloud", "azure", "unknown"])(
     "refuses unavailable %s before creating a connection",
     async (catalogId) => {
       const f = fixture();
@@ -340,10 +346,12 @@ describe("catalog connection lifecycle", () => {
     expect(f.row().manifest).toEqual(manifest);
     expect(f.row().connectionState).toBe("connected");
     await f.service.capture(actor, "connection");
-    expect(f.row().connectionState).toBe("discovery-failed");
+    expect(f.row().connectionState).toBe("connected");
+    expect(f.row().lastError).toBe("Could not reach this integration. Try again.");
+    expect(JSON.stringify(f.row().recentErrors)).not.toContain("fake-secret");
     expect(inspect).toHaveBeenCalledTimes(2);
   });
-  it("requires a new explicit review after recapturing an assigned manifest", async () => {
+  it("requires a new explicit review when an assigned tool definition changes", async () => {
     const f = fixture();
     await f.service.assign(actor, {
       connectionId: "connection",
@@ -351,7 +359,10 @@ describe("catalog connection lifecycle", () => {
       toolIds: ["synthetic_read"],
       spaceToolPolicies: { synthetic_read: "allow" },
     });
-    vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue({
+      ...manifest,
+      tools: manifest.tools.map((tool) => ({ ...tool, inputSchemaDigest: "f".repeat(64) })),
+    });
     await f.service.capture(actor, "connection");
     expect(await f.service.grants(actor, "connection")).toEqual([
       { botId: "bot", toolIds: [], needsReview: true },
@@ -534,7 +545,142 @@ describe("catalog connection lifecycle", () => {
         }),
         data: { status: "denied" },
       });
-      expect(f.oauth.disconnect).toHaveBeenCalledWith({ serverId: "connection", ...actor });
+      expect(f.oauth.forgetPending).toHaveBeenCalledWith({ serverId: "connection", ...actor });
     },
   );
+});
+
+describe("connection recovery and health", () => {
+  it("does not replace a successful concurrent token refresh with an older sign-in failure", async () => {
+    const f = fixture();
+    f.setRow({ secretId: "old-secret", lastError: null });
+    vi.spyOn(f.service, "tools").mockImplementation(async () => {
+      f.setRow({ secretId: "refreshed-secret", connectionState: "connected" });
+      throw new McpReauthorizationRequiredError("connection", "invalid_token");
+    });
+    await f.service.capture(actor, "connection");
+    expect(f.row()).toMatchObject({
+      secretId: "refreshed-secret",
+      connectionState: "connected",
+      lastError: null,
+    });
+  });
+  it("preserves unchanged tools, grants and owner policies across successful health checks", async () => {
+    const f = fixture();
+    await f.service.assign(actor, {
+      connectionId: "connection",
+      botIds: ["bot"],
+      toolIds: ["synthetic_read"],
+      spaceToolPolicies: { synthetic_read: "allow" },
+    });
+    const revision = f.row().revision;
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+    await f.service.capture(actor, "connection");
+    expect(f.row().revision).toBe(revision);
+    expect(f.row().lastSuccessAt).toBeInstanceOf(Date);
+    expect(await f.service.grants(actor, "connection")).toEqual([
+      { botId: "bot", toolIds: ["synthetic_read"], needsReview: false },
+    ]);
+  });
+  it("expires consent after ten minutes and removes its credentials and sessions", async () => {
+    const f = fixture();
+    f.setRow({
+      connectionState: "awaiting-consent",
+      consentStartedAt: new Date(Date.now() - 600_001),
+    });
+    await f.service.expireConsent({ ...actor, isDeploymentOwner: true } as never);
+    expect(f.row()).toMatchObject({
+      connectionState: "not-connected",
+      enabled: false,
+      lastError: "Sign-in timed out.",
+      consentStartedAt: null,
+    });
+    expect(f.db.mcpOAuthSession.deleteMany).toHaveBeenCalled();
+    expect(f.oauth.forgetPending).toHaveBeenCalled();
+    expect(f.db.mcpServer.findMany.mock.calls[0]?.[0]).not.toHaveProperty(
+      "where.isDeploymentOwner",
+    );
+  });
+  it("does not expire a sign-in that completed after the expiry query", async () => {
+    const f = fixture();
+    f.setRow({
+      connectionState: "awaiting-consent",
+      consentStartedAt: new Date(Date.now() - 600_001),
+    });
+    const query = f.db.mcpServer.findMany.getMockImplementation()!;
+    f.db.mcpServer.findMany.mockImplementationOnce(async () => {
+      const rows = await query();
+      f.setRow({ connectionState: "connected", revision: 2 });
+      return rows;
+    });
+    await f.service.expireConsent(actor);
+    expect(f.row().connectionState).toBe("connected");
+    expect(f.db.mcpOAuthSession.deleteMany).not.toHaveBeenCalled();
+  });
+  it("cancels the current connection even after the session revision changed", async () => {
+    const f = fixture();
+    f.setRow({ revision: 9, connectionState: "awaiting-consent" });
+    await f.service.revoke(actor, "connection", "cancelled");
+    expect(f.row()).toMatchObject({ enabled: false, connectionState: "cancelled", revision: 10 });
+  });
+  it("only schedules health checks for granted connections due after thirty minutes", async () => {
+    const f = fixture();
+    f.db.mcpServer.findMany.mockResolvedValue([]);
+    await f.service.checkGranted();
+    expect(f.db.mcpServer.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          enabled: true,
+          connectionState: "connected",
+          assignments: { some: { needsReview: false } },
+          OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lte: expect.any(Date) } }],
+        }),
+      }),
+    );
+    const query = f.db.mcpServer.findMany.mock.calls.at(-1)![0] as {
+      where: { OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lte: Date } }] };
+    };
+    expect(Date.now() - query.where.OR[1].lastCheckedAt.lte.getTime()).toBeGreaterThanOrEqual(
+      1_800_000,
+    );
+  });
+  it("creates a host grant without copying a credential into the secret store", async () => {
+    const f = fixture();
+    vi.spyOn(f.service, "hostSignIns").mockResolvedValue([
+      {
+        id: "github",
+        command: "gh",
+        state: "signed-in",
+        identity: "test-account",
+        workspace: "github.example.test",
+        checkedAt: new Date().toISOString(),
+      },
+    ]);
+    const result = await f.service.connect(actor, { catalogId: "github", authKind: "host" });
+    expect(result.connection).toMatchObject({
+      state: "connected",
+      transport: "host-cli",
+      manifest: { account: "test-account" },
+    });
+    expect(f.db.secret.create).not.toHaveBeenCalled();
+    expect(f.row().secretId).toBeNull();
+    await f.service.assign(actor, {
+      connectionId: result.connection.id,
+      botIds: ["bot"],
+      toolIds: ["execute_command"],
+    });
+    expect(f.db.bot.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ computer: { kind: "desktop" } }),
+      }),
+    );
+    await expect(
+      f.service.assign(actor, {
+        connectionId: result.connection.id,
+        botIds: ["bot"],
+        toolIds: ["execute_command"],
+        spaceToolPolicies: { execute_command: "allow" },
+      }),
+    ).rejects.toThrow("Writes always ask");
+  });
 });

@@ -179,7 +179,7 @@ import { getModelDestinations, setModelDestinations } from "./delegation-policy.
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
-import { IntegrationConnections } from "./integration-connections.js";
+import { connectionDto, IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
 import { changeGitMemoryLocation } from "./memory-git-location.js";
@@ -483,6 +483,7 @@ export interface RouterDeps {
   integrationSettings?: IntegrationProviderSettings;
   composio?: ComposioProvider;
   mcpOAuth?: McpOAuthBroker;
+  integrationConnections?: IntegrationConnections;
   connectors: ConnectorRegistry;
   remoteConnectors?: RemoteConnectorDependencies;
   artifacts: ArtifactStore;
@@ -554,14 +555,21 @@ export function createRouter(deps: RouterDeps) {
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
-  const integrations = new IntegrationConnections(
-    deps.prisma,
-    mcpOAuth,
-    deps.secrets,
-    deps.env.webOrigin,
-    deps.remoteConnectors,
-    { stdioEnabled: deps.env.mcpStdioEnabled, allowedCommands: deps.env.mcpStdioAllowedCommands },
-  );
+  const integrations =
+    deps.integrationConnections ??
+    new IntegrationConnections(
+      deps.prisma,
+      mcpOAuth,
+      deps.secrets,
+      deps.env.webOrigin,
+      deps.remoteConnectors,
+      { stdioEnabled: deps.env.mcpStdioEnabled, allowedCommands: deps.env.mcpStdioAllowedCommands },
+      async (actor) =>
+        (
+          (await sourceHostStatus(deps.prisma, actor.userId, deps.env.sandboxProvider)) ??
+          (await deps.hostBridge?.status(actor.userId))
+        )?.health?.integrations ?? [],
+    );
   const groupRepos = createGroupRepos(deps.prisma);
   const taughtSkills = createTaughtSkillsService({
     memoryDocuments: deps.memoryDocuments,
@@ -3249,6 +3257,10 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     integrations: {
+      status: authed.integrations.status.handler(async ({ context, input }) => {
+        await integrations.expireConsent(context.actor);
+        return connectionDto(await integrations.owned(context.actor, input.connectionId));
+      }),
       resourceTools: authed.integrations.resourceTools.handler(({ context, input }) =>
         integrations.resourceTools(context.actor, input.connectionId, input.kind),
       ),
@@ -3624,7 +3636,7 @@ export function createRouter(deps: RouterDeps) {
       oauth: {
         begin: authed.mcp.oauth.begin.handler(async ({ context, input }) => {
           try {
-            const expectedRedirect = new URL("/mcp/oauth/callback", deps.env.webOrigin).toString();
+            const expectedRedirect = new URL("/api/oauth/done", deps.env.webOrigin).toString();
             if (new URL(input.redirectUri).toString() !== expectedRedirect) {
               throw new Error("MCP OAuth redirect URI is not allowed");
             }

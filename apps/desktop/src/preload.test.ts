@@ -38,6 +38,7 @@ describe("desktop preload bridge", () => {
     expect(Object.keys(bridge).sort()).toEqual([
       "devices",
       "host",
+      "integrations",
       "localSettings",
       "memoryFolders",
       "notifications",
@@ -99,6 +100,7 @@ describe("desktop preload bridge", () => {
     expect(Object.keys(bridge).sort()).toEqual([
       "devices",
       "host",
+      "integrations",
       "localSettings",
       "memoryFolders",
       "notifications",

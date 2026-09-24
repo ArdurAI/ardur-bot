@@ -867,6 +867,7 @@ export const appContract = {
   },
   integrations: {
     list: oc.output(IntegrationCatalogListSchema),
+    status: oc.input(z.object({ connectionId: Id })).output(IntegrationConnectionSchema),
     connect: oc
       .input(
         z.object({
@@ -880,7 +881,19 @@ export const appContract = {
             .max(16_384)
             .regex(/^[^\s]+$/)
             .optional(),
-          authKind: z.enum(["oauth", "token"]).optional(),
+          authKind: z.enum(["oauth", "token", "host"]).optional(),
+          oauthClient: z
+            .object({
+              clientId: z
+                .string()
+                .trim()
+                .min(1)
+                .max(1024)
+                .regex(/^[^\s]+$/),
+              clientSecret: z.string().min(1).max(16384).optional(),
+            })
+            .strict()
+            .optional(),
         }),
       )
       .output(

@@ -47,12 +47,14 @@ export function ModelSettingsOverlay({
   embedded = false,
   localOwner = false,
   initialProvider,
+  onOpenBotRuntime,
 }: {
   onClose: () => void;
   /** Render panel body only for the shared Settings shell. */
   embedded?: boolean;
   localOwner?: boolean;
   initialProvider?: string;
+  onOpenBotRuntime?: () => void;
 }) {
   const { t } = useLingui();
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
@@ -651,13 +653,21 @@ export function ModelSettingsOverlay({
               {!isOpenAiCompatible && selected.billing ? (
                 <p className="mt-2 text-[13px] leading-[1.5] text-muted-foreground">
                   {provider === "anthropic" ? (
-                    <Trans>Claude subscriptions are not supported here yet; use an API key.</Trans>
+                    <Trans>
+                      To use your Claude subscription, choose Runs on → Claude Code in a bot's
+                      settings.
+                    </Trans>
                   ) : (
                     selected.billing
                   )}
                 </p>
               ) : null}
 
+              {provider === "anthropic" && onOpenBotRuntime ? (
+                <Button variant="outline" onClick={onOpenBotRuntime}>
+                  <Trans>Open bot settings</Trans>
+                </Button>
+              ) : null}
               {!isOpenAiCompatible ? (
                 <div className="mt-5 rounded-xl border border-border px-4 py-3">
                   <div className="text-[12.5px] uppercase tracking-[0.08em] text-muted-foreground/80">

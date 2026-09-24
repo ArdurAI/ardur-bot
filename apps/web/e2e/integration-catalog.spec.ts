@@ -17,7 +17,9 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     manifest: {
       capturedAt: "2026-09-23T00:00:00.000Z",
       serverVersion: null,
-      account: null,
+      account: "test-account",
+      workspace: "Test workspace",
+      scopes: ["read", "write"],
       tools: [
         {
           id: "synthetic_read",
@@ -39,21 +41,31 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     route.fulfill({ json: { json: [] } }),
   );
   await page.route("**/rpc/integrations/grants", (route) => route.fulfill({ json: { json: [] } }));
+  await page.route("**/rpc/integrations/status", (route) =>
+    route.fulfill({ json: { json: connections[0] } }),
+  );
+  await page.route("**/rpc/integrations/discover", (route) =>
+    route.fulfill({ json: { json: connection.manifest } }),
+  );
   await page.route("**/rpc/integrations/connect", async (route) => {
+    connections = [{ ...connection, state: "awaiting-consent", manifest: null }];
     expect(route.request().postDataJSON().json.catalogId).toBe("notion");
     await route.fulfill({
       json: {
         json: {
           connection: { ...connection, state: "awaiting-consent", manifest: null },
-          authorizationUrl: `${origin}/mcp/oauth/callback?code=synthetic-code&state=synthetic-session`,
+          authorizationUrl: `${origin}/api/oauth/done?code=synthetic-code&state=synthetic-session`,
           sessionId: "synthetic-session",
         },
       },
     });
   });
-  await page.context().route("**/rpc/mcp/oauth/complete", async (route) => {
+  await page.context().route("**/api/oauth/done?*", async (route) => {
     connections = [connection];
-    await route.fulfill({ json: { json: { ok: true } } });
+    await route.fulfill({
+      contentType: "text/html",
+      body: "<p>Connected to Notion. You can close this tab and return to Ardur Bot.</p><script>window.close()</script>",
+    });
   });
   let assigned:
     | { botIds: string[]; toolIds: string[]; spaceToolPolicies: Record<string, string> }
@@ -81,6 +93,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     "GitHub",
     "GitLab",
     "Notion",
+    "Linear",
     "Atlassian",
     "Jenkins",
     "Kubernetes",
@@ -93,7 +106,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     await expect(page.getByText(copy, { exact: true })).toHaveCount(0);
   await expect(page.getByPlaceholder("Search apps")).toHaveCount(0);
   await expect(settings.getByRole("button", { name: "Connect", exact: true })).toHaveCount(3);
-  await expect(settings.getByText("Coming soon", { exact: true })).toHaveCount(5);
+  await expect(settings.getByText("Coming soon", { exact: true })).toHaveCount(0);
   await captureScreenshot(page, testInfo, "settings-integration-catalog");
   await settings
     .getByTestId("integration-github")
@@ -110,35 +123,30 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     .getByRole("button", { name: "Connect", exact: true })
     .click();
   await expect(settings.getByTestId("integration-manage")).toBeVisible();
-  await expect(
-    settings.getByRole("checkbox", { name: "synthetic_read", exact: true }),
-  ).not.toBeChecked();
-  await expect(
-    settings.getByRole("checkbox", { name: "synthetic_update", exact: true }),
-  ).not.toBeChecked();
-  await expect(settings.getByText("asks first", { exact: true })).toHaveCount(1);
-  await expect(
-    settings.getByRole("button", { name: "Approval for synthetic_update", exact: true }),
-  ).toHaveCount(0);
-  await settings.getByRole("checkbox", { name: "synthetic_read", exact: true }).check();
-  const approval = settings.getByRole("button", {
-    name: "Approval for synthetic_read",
-    exact: true,
-  });
-  await expect(approval).toHaveText("Ask first");
-  await approval.click();
-  await expect(approval).toHaveText("Allow");
+  const approval = settings.getByLabel("Permission for synthetic_read");
+  await expect(approval).toHaveValue("block");
+  await expect(settings.getByLabel("Permission for synthetic_update")).toHaveValue("block");
+  await approval.selectOption("allow");
+  await expect(approval).toHaveValue("allow");
+  await approval.selectOption("ask");
+  await expect(approval).toHaveValue("ask");
+  await expect(settings.getByText("test-account", { exact: true })).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Test", exact: true })).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Reconnect", exact: true })).toBeVisible();
   await settings
     .getByRole("group", { name: "Bots", exact: true })
     .getByRole("checkbox")
     .first()
     .check();
-  await settings.getByRole("checkbox", { name: "synthetic_update", exact: true }).check();
+  await settings.getByLabel("Permission for synthetic_update").selectOption("ask");
   await settings.getByLabel("Notion page URL or ID").fill("a".repeat(32));
   await settings.getByRole("button", { name: "Save", exact: true }).click();
   await expect(settings.getByText("Your bots can use the selected tools.")).toBeVisible();
   expect(assigned?.botIds).toHaveLength(1);
   expect(assigned?.toolIds).toEqual(["synthetic_read", "synthetic_update"]);
-  expect(assigned?.spaceToolPolicies).toEqual({ synthetic_read: "allow" });
+  expect(assigned?.spaceToolPolicies).toEqual({
+    synthetic_read: "ask-first",
+    synthetic_update: "ask-first",
+  });
   await captureScreenshot(page, testInfo, "settings-integration-tools");
 });

@@ -93,7 +93,10 @@ import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { HostBridge } from "./host-bridge.js";
+import { sourceHostStatus } from "./host-status.js";
 import { ensureInstanceIdentity } from "./instance-identity.js";
+import { IntegrationConnections } from "./integration-connections.js";
+import { integrationOAuthReturn } from "./integration-oauth-return.js";
 import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
 import { createLegacyChatDispatch, mountMessagingDispatch } from "./messaging-dispatch.js";
 import {
@@ -247,6 +250,20 @@ export async function createApp(
       secrets,
     });
   const mcpOAuth = new McpOAuthBroker(prisma, secrets, remoteConnectors);
+  const integrationConnections = new IntegrationConnections(
+    prisma,
+    mcpOAuth,
+    secrets,
+    env.webOrigin,
+    remoteConnectors,
+    { stdioEnabled: env.mcpStdioEnabled, allowedCommands: env.mcpStdioAllowedCommands },
+    async (actor) =>
+      (
+        (await sourceHostStatus(prisma, actor.userId, env.sandboxProvider)) ??
+        (await hostBridge.status(actor.userId))
+      )?.health?.integrations ?? [],
+  );
+  const stopIntegrationHealth = integrationConnections.startHealthChecks();
   const memoryProviders = new SpaceMemoryProviderResolver(prisma, secrets);
   const oauthLogins = new PiOAuthLogins();
   const home = new LocalAgentHomeStore(env.dataDir);
@@ -257,6 +274,7 @@ export async function createApp(
     prisma,
     secrets,
     {
+      sandbox,
       stdioEnabled: env.mcpStdioEnabled,
       allowedCommands: env.mcpStdioAllowedCommands,
       network: remoteConnectors,
@@ -465,6 +483,7 @@ export async function createApp(
     secrets,
     oauthLogins,
     integrationSettings,
+    integrationConnections,
     mcpOAuth,
     composio: stack.composio,
     connectors: stack.connector,
@@ -504,6 +523,7 @@ export async function createApp(
   });
   const app = new Hono();
   app.use("*", requestLogging(logger));
+  app.route("/api/oauth/done", integrationOAuthReturn(mcpOAuth, integrationConnections));
   app.use(
     "*",
     cors({
@@ -954,6 +974,7 @@ export async function createApp(
     stop: async () => {
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
+      stopIntegrationHealth();
       hostBridge.hub.detach();
       await terminals.gateway?.stop();
       shutdown.abort();

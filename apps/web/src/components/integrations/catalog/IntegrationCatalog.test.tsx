@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   cancel: vi.fn(),
   bots: vi.fn(),
   consent: vi.fn(),
+  discover: vi.fn(),
   resourceTools: vi.fn(),
   searchResources: vi.fn(),
 }));
@@ -47,6 +48,8 @@ vi.mock("@ardurbot/ui-web", () => {
       variant?: string;
       size?: string;
     }) => <button {...props} aria-pressed={pressed} onClick={() => onPressedChange(!pressed)} />,
+    NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
+    NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
     Card: Container,
     CardContent: Container,
     CardHeader: Container,
@@ -99,7 +102,10 @@ const catalog: IntegrationDescriptor[] = [
     index
   ]!,
   vendor: id,
-  available: index < 3,
+  available: true,
+  ...(index < 3
+    ? { endpoint: "https://example.test/mcp" }
+    : { hostCli: { command: "test-cli", installUrl: "https://example.test/install" } }),
   transport: "remote-http",
   authKind: "oauth",
   requiredInputs: [],
@@ -162,7 +168,7 @@ beforeEach(() => {
     connections = [connected];
     return {
       connection: connected,
-      authorizationUrl: "https://example.test/authorize",
+      authorizationUrl: null,
       sessionId: "session",
     };
   });
@@ -190,7 +196,7 @@ const click = async (element: HTMLElement) => {
 };
 
 describe("Settings integration catalog", () => {
-  it("shows eight cards, three connect actions and five unavailable integrations", async () => {
+  it("shows eight cards with remote and host options", async () => {
     await mount();
     expect(container.querySelectorAll('[data-testid^="integration-"]')).toHaveLength(9);
     expect(
@@ -198,8 +204,11 @@ describe("Settings integration catalog", () => {
         (button) => button.textContent === "Connect",
       ),
     ).toHaveLength(3);
-    expect(container.textContent?.match(/Coming soon/g)).toHaveLength(5);
-    expect(container.querySelector('[aria-label="GitLab host"]')).toBeNull();
+    expect(container.textContent).not.toContain("Coming soon");
+    expect(container.textContent?.match(/Open the desktop app/g)).toHaveLength(5);
+    expect(container.querySelector('[aria-label="GitLab host"]')?.closest("details")?.open).toBe(
+      false,
+    );
     expect(container.textContent).not.toContain("api.githubcopilot");
   });
   it("connects, starts with no grants, then saves only the selected bots and tools", async () => {
@@ -209,24 +218,22 @@ describe("Settings integration catalog", () => {
       catalogId: "github",
       connectionId: undefined,
       host: undefined,
+      authKind: "oauth",
+      token: undefined,
     });
-    expect(api.consent).toHaveBeenCalledWith(
-      "https://example.test/authorize",
-      expect.anything(),
-      "session",
-    );
     expect(api.assign).not.toHaveBeenCalled();
     const checks = [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
-    expect(checks).toHaveLength(3);
+    expect(checks).toHaveLength(1);
     expect(checks.every((input) => !input.checked)).toBe(true);
-    expect(container.textContent?.match(/asks first/g)).toHaveLength(1);
+    expect(container.querySelectorAll("select")).toHaveLength(2);
     await click(container.querySelector('[aria-label="Helper"]')!);
-    await click(container.querySelector('[aria-label="synthetic_update"]')!);
+    await permission("synthetic_update", "ask");
     await click(button("Save"));
     expect(api.assign).toHaveBeenCalledWith({
       connectionId: "connection",
       botIds: ["bot"],
       toolIds: ["synthetic_update"],
+      spaceToolPolicies: { synthetic_update: "ask-first" },
     });
     expect(container.textContent).toContain("Your bots can use the selected tools.");
     await click(button("Disconnect"));
@@ -247,10 +254,10 @@ describe("Settings integration catalog", () => {
     await mount();
     await click(button("Manage"));
     const approval = () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Approval for synthetic_read"]')!;
-    expect(approval().textContent).toBe("Allow");
-    await click(approval());
-    expect(approval().textContent).toBe("Ask first");
+      container.querySelector<HTMLSelectElement>('[aria-label="Permission for synthetic_read"]')!;
+    expect(approval().value).toBe("allow");
+    await permission("synthetic_read", "ask");
+    expect(approval().value).toBe("ask");
     await click(button("Save"));
     expect(api.assign).toHaveBeenCalledWith({
       connectionId: "connection",
@@ -260,7 +267,7 @@ describe("Settings integration catalog", () => {
     });
     await click(button("Back"));
     await click(button("Manage"));
-    expect(approval().textContent).toBe("Ask first");
+    expect(approval().value).toBe("ask");
   });
   it("shows registration help and review state with one primary action", async () => {
     connections = [
@@ -270,39 +277,24 @@ describe("Settings integration catalog", () => {
     await mount();
     const github = container.querySelector('[data-testid="integration-github"]')!;
     expect(github.textContent).toContain("needs client registration");
-    expect(github.querySelector("a")?.href).toBe("https://example.test/docs");
+    expect(button("Connect", github)).toBeDefined();
     expect(github.textContent).not.toContain("Connect your account");
-    expect(button("Review tools")).toBeDefined();
+    expect(button("Manage")).toBeDefined();
   });
   it("shows a pending consent sentence and allows cancellation while the browser is open", async () => {
-    let finishConsent: (result: string) => void = () => {};
-    api.connect.mockResolvedValue({
-      connection: { ...connected, state: "awaiting-consent", manifest: null },
-      authorizationUrl: "https://example.test/authorize",
-      sessionId: "session",
+    connections = [{ ...connected, state: "awaiting-consent", manifest: null }];
+    api.cancel.mockImplementation(async () => {
+      connections = [{ ...connected, state: "cancelled", manifest: null }];
     });
-    api.consent.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          finishConsent = resolve;
-        }),
-    );
     await mount();
-    await click(button("Connect"));
     expect(container.textContent).toContain("Finish signing in in your browser.");
     expect(button("Cancel").disabled).toBe(false);
     await click(button("Cancel"));
     expect(api.cancel).toHaveBeenCalledWith({ connectionId: "connection" });
-    await act(async () => finishConsent("cancelled"));
+    expect(container.textContent).toContain("The connection was cancelled.");
   });
 
-  it("cancels abandoned consent and surfaces load errors without provider text", async () => {
-    api.consent.mockResolvedValue("cancelled");
-    await mount();
-    await click(button("Connect"));
-    expect(api.cancel).toHaveBeenCalledWith({ connectionId: "connection" });
-    await act(async () => root.unmount());
-    root = createRoot(container);
+  it("surfaces load errors without provider text", async () => {
     api.list.mockRejectedValueOnce(new Error("fake-sensitive-provider-response"));
     await mount();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
@@ -334,9 +326,7 @@ describe("token and destination controls", () => {
       return { connection: connected, authorizationUrl: null, sessionId: null };
     });
     await mount();
-    expect(container.textContent).toContain(
-      "Sign-in needs a pre-registered app; use a fine-grained token instead.",
-    );
+    expect(container.textContent).not.toContain("Sign-in needs a pre-registered app");
     await click(button("Use a token"));
     expect(container.querySelector('[aria-label="Fine-grained token"]')?.getAttribute("type")).toBe(
       "password",
@@ -362,24 +352,24 @@ describe("token and destination controls", () => {
     });
     await mount();
     expect(button("Use a token")).toBeDefined();
-    await click(button("Sign in with GitHub"));
+    await click(button("Connect remote account"));
     expect(api.connect).toHaveBeenCalledWith({
       catalogId: "github",
       connectionId: undefined,
       host: undefined,
       authKind: "oauth",
+      token: undefined,
     });
-    expect(api.consent).toHaveBeenCalled();
   });
   it.each([
     [
       "needs-client-registration",
       "This service needs client registration before you can connect.",
-      "Open documentation",
+      "Connect",
     ],
     ["awaiting-consent", "Finish signing in in your browser.", "Cancel"],
-    ["connected", "Your account is connected.", "Manage"],
-    ["discovery-failed", "Could not load this account’s tools.", "Try again"],
+    ["connected", "Connected", "Manage"],
+    ["discovery-failed", "Could not load this account’s tools.", "Connect"],
     ["cancelled", "The connection was cancelled.", "Connect"],
   ] as const)(
     "renders Notion %s as one sentence and one action",
@@ -453,3 +443,13 @@ describe("token and destination controls", () => {
     );
   });
 });
+
+async function permission(tool: string, value: string) {
+  const select = container.querySelector<HTMLSelectElement>(
+    `[aria-label="Permission for ${tool}"]`,
+  )!;
+  await act(async () => {
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}

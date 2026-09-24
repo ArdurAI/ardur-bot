@@ -21,6 +21,7 @@ import type { HostWire } from "./bridge-wire.js";
 import { hostLostProblem } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import { inspectHostIntegrations } from "./host-integrations.js";
 import { confinedHostCwd } from "./host-policy.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
@@ -62,10 +63,11 @@ export class HostAgent {
   async health(): Promise<HostHealth> {
     const cwd = await confinedHostCwd(this.config.root, [this.config.root]);
     const start: NativeSpawn = (binary, args) => spawnNative(binary, args, cwd);
-    const [claude, codex, environment] = await Promise.all([
+    const [claude, codex, environment, integrations] = await Promise.all([
       probeClaude(start),
       probeCodex(start),
       inspectHostEnvironment(getHostEnvironment(), false),
+      inspectHostIntegrations(),
     ]);
     return {
       platform: process.platform as HostHealth["platform"],
@@ -74,6 +76,7 @@ export class HostAgent {
       claude,
       codex,
       environment,
+      integrations,
     };
   }
   async receive(frame: HostFrame) {

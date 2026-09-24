@@ -38,6 +38,7 @@ export function IntegrationCatalog() {
       ) : null}
       {data?.catalog.map((descriptor) => {
         const connection = data.connections.find((entry) => entry.catalogId === descriptor.id);
+        const host = data.hostSignIns?.find((entry) => entry.id === descriptor.id);
         const url =
           connection?.state === "needs-client-registration" && descriptor.authKind !== "token"
             ? descriptor.docsUrl
@@ -48,6 +49,25 @@ export function IntegrationCatalog() {
             <Text style={styles.secondary}>
               {t(integrationCardMessage(descriptor, connection))}
             </Text>
+            {host ? (
+              <Text style={styles.secondary}>
+                {host.state === "signed-in"
+                  ? t("Signed in on this computer as {identity}", { identity: host.identity ?? "" })
+                  : host.state === "not-found"
+                    ? t("Not found on this computer")
+                    : host.state === "unavailable"
+                      ? t("Could not check this computer.")
+                      : t("Needs sign-in on this computer")}
+              </Text>
+            ) : null}
+            {connection?.manifest?.account ? (
+              <Text style={styles.secondary}>{connection.manifest.account}</Text>
+            ) : null}
+            {connection?.lastSuccessAt ? (
+              <Text style={styles.secondary}>
+                {t("Last successful call")}: {new Date(connection.lastSuccessAt).toLocaleString()}
+              </Text>
+            ) : null}
             {descriptor.available && url ? (
               <Pressable
                 accessibilityRole="link"

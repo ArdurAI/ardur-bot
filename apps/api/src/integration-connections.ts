@@ -6,13 +6,20 @@ import type {
 } from "@ardurbot/adapters";
 import {
   assertSafeRemoteUrl,
+  CONSENT_TTL_MS,
+  captureIntegrationManifest,
   connectableIntegration,
+  hostIntegrationTools,
+  INTEGRATION_HEALTH_INTERVAL_MS,
   integrationById,
   integrationCatalog,
+  integrationFailure,
   McpConnector,
+  McpReauthorizationRequiredError,
 } from "@ardurbot/adapters";
 import type {
   Actor,
+  HostIntegration,
   IntegrationConnection,
   IntegrationManifest,
   IntegrationResourceConstraints,
@@ -40,6 +47,15 @@ export function connectionDto(server: McpServer, needsReview = false): Integrati
     state: IntegrationStateSchema.parse(server.connectionState),
     manifest: manifest.success ? manifest.data : null,
     needsReview,
+    transport: server.transport,
+    consentStartedAt: server.consentStartedAt?.toISOString() ?? null,
+    lastCheckedAt: server.lastCheckedAt?.toISOString() ?? null,
+    lastSuccessAt: server.lastSuccessAt?.toISOString() ?? null,
+    lastUsedAt: server.lastUsedAt?.toISOString() ?? null,
+    lastError: server.lastError ?? null,
+    recentErrors: Array.isArray(server.recentErrors)
+      ? (server.recentErrors as Array<{ at: string; message: string }>)
+      : [],
     resourceConstraints:
       IntegrationResourceConstraintsSchema.safeParse(server.resourceConstraints).data ?? {},
     spaceToolPolicies: SpaceToolPoliciesSchema.safeParse(server.spaceToolPolicies).data ?? {},
@@ -64,9 +80,11 @@ export class IntegrationConnections {
     private readonly webOrigin: string,
     private readonly network: RemoteConnectorDependencies = {},
     private readonly stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } = {},
+    readonly hostSignIns: (actor: Owner) => Promise<HostIntegration[]> = async () => [],
   ) {}
 
   async list(actor: Owner) {
+    await this.expireConsent(actor);
     const servers = await this.prisma.mcpServer.findMany({
       where: { spaceId: actor.spaceId, userId: actor.userId, catalogId: { not: null } },
       include: { assignments: true },
@@ -74,6 +92,7 @@ export class IntegrationConnections {
     });
     return {
       webUrl: new URL("/", this.webOrigin).toString(),
+      hostSignIns: await this.hostSignIns(actor),
       catalog: integrationCatalog.map((descriptor) => ({
         ...descriptor,
         oauthAvailable: Boolean(this.oauthApp(descriptor.id)),
@@ -98,6 +117,7 @@ export class IntegrationConnections {
   async tools(actor: Owner, id: string): Promise<IntegrationManifest> {
     const server = await this.owned(actor, id);
     if (!server.enabled) throw new Error("Connect this integration first.");
+    if (server.transport === "host-cli") return this.hostManifest(actor, server.catalogId!);
     const connector = new McpConnector(
       this.prisma,
       this.secrets,
@@ -115,6 +135,48 @@ export class IntegrationConnections {
     } finally {
       await connector.close();
     }
+  }
+
+  private async hostManifest(actor: Owner, catalogId: string): Promise<IntegrationManifest> {
+    const identity = (await this.hostSignIns(actor)).find((entry) => entry.id === catalogId);
+    if (identity?.state === "needs-sign-in")
+      throw new McpReauthorizationRequiredError(catalogId, "host_sign_in_required");
+    if (identity?.state !== "signed-in") throw new Error("Host sign-in is unavailable.");
+    return {
+      ...captureIntegrationManifest(hostIntegrationTools, "1"),
+      account: identity.identity,
+      workspace: identity.workspace,
+      scopes: [],
+    };
+  }
+
+  private async connectHost(actor: Owner, catalogId: string, connectionId?: string) {
+    const descriptor = integrationById(catalogId);
+    if (!descriptor?.hostCli) throw new IsolationError();
+    const manifest = await this.hostManifest(actor, catalogId);
+    const existing = connectionId ? await this.owned(actor, connectionId) : null;
+    if (existing && (existing.catalogId !== catalogId || existing.transport !== "host-cli"))
+      throw new IsolationError();
+    if (existing) await this.revoke(actor, existing.id);
+    const data = {
+      ...actor,
+      catalogId,
+      name: descriptor.name,
+      transport: "host-cli",
+      enabled: true,
+      connectionState: "connected",
+      manifest,
+      lastSuccessAt: new Date(),
+      lastCheckedAt: new Date(),
+      lastError: null,
+      secretId: null,
+    };
+    const server = existing
+      ? await this.prisma.mcpServer.update({ where: { id: existing.id }, data })
+      : await this.prisma.mcpServer.create({
+          data: { ...data, slug: `host-${catalogId}-${randomUUID().slice(0, 8)}` },
+        });
+    return { connection: connectionDto(server), authorizationUrl: null, sessionId: null };
   }
 
   private oauthApp(catalogId: string) {
@@ -137,13 +199,47 @@ export class IntegrationConnections {
       connectionId?: string;
       host?: string;
       token?: string;
-      authKind?: "oauth" | "token";
+      authKind?: "oauth" | "token" | "host";
+      oauthClient?: { clientId: string; clientSecret?: string };
     },
   ) {
     actor = { spaceId: actor.spaceId, userId: actor.userId };
-    const descriptor = connectableIntegration(input.catalogId, input.host);
+    if (input.authKind === "host")
+      return this.connectHost(actor, input.catalogId, input.connectionId);
+    const prior = input.connectionId ? await this.owned(actor, input.connectionId) : null;
+    const descriptor = connectableIntegration(
+      input.catalogId,
+      input.host ?? (prior?.catalogId === "azure" ? (prior.endpoint ?? undefined) : undefined),
+    );
+    if (descriptor.transport === "host-cli")
+      throw new ORPCError("BAD_REQUEST", { message: "Use the sign-in on this computer." });
     const authKind = input.authKind ?? descriptor.authKind;
-    const oauthApp = this.oauthApp(descriptor.id);
+    let oauthApp = input.oauthClient
+      ? {
+          client_id: input.oauthClient.clientId,
+          ...(input.oauthClient.clientSecret
+            ? { client_secret: input.oauthClient.clientSecret }
+            : {}),
+          token_endpoint_auth_method: input.oauthClient.clientSecret
+            ? ("client_secret_post" as const)
+            : ("none" as const),
+        }
+      : this.oauthApp(descriptor.id);
+    if (!oauthApp && prior?.secretId && prior.catalogId === descriptor.id) {
+      const secret = await this.prisma.secret.findFirst({
+        where: { id: prior.secretId, ...actor },
+      });
+      if (secret) {
+        try {
+          const stored = JSON.parse(this.secrets.load(secret.ciphertext, secret.id)) as {
+            oauth?: { clientInformation?: typeof oauthApp };
+          };
+          oauthApp = stored.oauth?.clientInformation;
+        } catch {
+          throw new ORPCError("BAD_REQUEST", { message: "Enter the client registration again." });
+        }
+      }
+    }
     if (
       authKind === "token" &&
       (descriptor.authKind !== "token" ||
@@ -169,7 +265,12 @@ export class IntegrationConnections {
       await this.revoke(actor, server.id);
       server = await this.prisma.mcpServer.update({
         where: { id: server.id },
-        data: { enabled: true, connectionState: "awaiting-consent" },
+        data: {
+          enabled: true,
+          connectionState: "awaiting-consent",
+          consentStartedAt: new Date(),
+          lastError: null,
+        },
       });
     } else {
       const id = randomUUID();
@@ -184,6 +285,7 @@ export class IntegrationConnections {
           endpoint: descriptor.endpoint,
           catalogId: descriptor.id,
           connectionState: "awaiting-consent",
+          consentStartedAt: new Date(),
         },
       });
     }
@@ -215,7 +317,7 @@ export class IntegrationConnections {
         serverId: server.id,
         spaceId: actor.spaceId,
         userId: actor.userId,
-        redirectUri: new URL("/mcp/oauth/callback", this.webOrigin).toString(),
+        redirectUri: new URL("/api/oauth/done", this.webOrigin).toString(),
         ...(oauthApp ? { clientInformation: oauthApp } : {}),
       });
       if (started.status === "already_connected") {
@@ -255,6 +357,19 @@ export class IntegrationConnections {
     if (!server.catalogId || !server.enabled) return;
     try {
       const manifest = await this.tools(actor, id);
+      const previous = IntegrationManifestSchema.safeParse(server.manifest);
+      // Optional profile scopes or a profile endpoint outage must not erase a known identity.
+      if (previous.success && server.connectionState === "connected") {
+        manifest.account ??= previous.data.account;
+        manifest.workspace ??= previous.data.workspace;
+      }
+      const tools = (value: IntegrationManifest) =>
+        JSON.stringify([...value.tools].sort((a, b) => a.id.localeCompare(b.id)));
+      const changed =
+        !previous.success ||
+        tools(previous.data) !== tools(manifest) ||
+        previous.data.account !== manifest.account ||
+        previous.data.workspace !== manifest.workspace;
       await this.prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${id}))`;
         const captured = await tx.mcpServer.updateMany({
@@ -268,12 +383,17 @@ export class IntegrationConnections {
           data: {
             manifest,
             connectionState: "connected",
-            spaceAllowedTools: [],
-            spaceToolPolicies: {},
-            revision: { increment: 1 },
+            consentStartedAt: null,
+            lastCheckedAt: new Date(),
+            lastSuccessAt: new Date(),
+            lastError: null,
+            ...(changed
+              ? { spaceAllowedTools: [], spaceToolPolicies: {}, revision: { increment: 1 } }
+              : {}),
           },
         });
         if (!captured.count) return;
+        if (!changed) return;
         // A refreshed manifest never silently inherits grants to an older tool definition.
         await tx.botMcpServer.updateMany({
           where: { serverId: id, spaceId: actor.spaceId, userId: actor.userId },
@@ -282,18 +402,103 @@ export class IntegrationConnections {
         await this.invalidateApprovals(tx, actor, server);
       });
       await McpConnector.invalidateConnection(id, actor);
-    } catch {
-      await this.prisma.mcpServer.updateMany({
-        where: {
+    } catch (error) {
+      const message = integrationFailure(error);
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${id}))`;
+        const where = {
           id,
           spaceId: actor.spaceId,
           userId: actor.userId,
           enabled: true,
           revision: server.revision,
-        },
-        data: { connectionState: "discovery-failed", manifest: Prisma.DbNull },
+        };
+        const current = await tx.mcpServer.findFirst({ where });
+        if (!current || current.revision !== server.revision) return;
+        // A rejected older token must not invalidate a successful concurrent refresh.
+        if (
+          error instanceof McpReauthorizationRequiredError &&
+          current.secretId !== server.secretId &&
+          current.connectionState === "connected"
+        )
+          return;
+        await tx.mcpServer.updateMany({
+          where,
+          data: {
+            ...(message.startsWith("Needs sign-in")
+              ? { connectionState: "needs-sign-in" }
+              : current.connectionState === "connected"
+                ? {}
+                : { connectionState: "discovery-failed" }),
+            lastCheckedAt: new Date(),
+            lastError: message,
+            recentErrors: [
+              ...(Array.isArray(current.recentErrors) ? current.recentErrors : []),
+              { at: new Date().toISOString(), message },
+            ].slice(-10),
+          },
+        });
       });
     }
+  }
+
+  async expireConsent(actor?: Owner) {
+    const cutoff = new Date(Date.now() - CONSENT_TTL_MS);
+    const rows = await this.prisma.mcpServer.findMany({
+      where: {
+        ...(actor ? { userId: actor.userId, spaceId: actor.spaceId } : {}),
+        connectionState: "awaiting-consent",
+        consentStartedAt: { lte: cutoff },
+      },
+    });
+    for (const row of rows) {
+      if (
+        row.connectionState !== "awaiting-consent" ||
+        (row.consentStartedAt?.getTime() ?? row.updatedAt?.getTime() ?? Date.now()) >
+          Date.now() - CONSENT_TTL_MS
+      )
+        continue;
+      await this.revoke({ userId: row.userId, spaceId: row.spaceId }, row.id, "not-connected", {
+        revision: row.revision,
+        cutoff,
+      });
+    }
+  }
+
+  /** A bounded, non-overlapping sweep. Only integrations granted to a bot make network calls. */
+  async checkGranted() {
+    await this.expireConsent();
+    const rows = await this.prisma.mcpServer.findMany({
+      where: {
+        enabled: true,
+        catalogId: { not: null },
+        connectionState: "connected",
+        assignments: { some: { needsReview: false } },
+        OR: [
+          { lastCheckedAt: null },
+          { lastCheckedAt: { lte: new Date(Date.now() - INTEGRATION_HEALTH_INTERVAL_MS) } },
+        ],
+      },
+      take: 50,
+      orderBy: { lastCheckedAt: { sort: "asc", nulls: "first" } },
+    });
+    for (const row of rows)
+      await this.capture({ userId: row.userId, spaceId: row.spaceId }, row.id);
+  }
+
+  startHealthChecks() {
+    let running = false;
+    const timer = setInterval(() => {
+      if (running) return;
+      running = true;
+      void this.checkGranted()
+        .catch(() => undefined)
+        .finally(() => {
+          running = false;
+        });
+    }, 60_000);
+    timer.unref?.();
+    return () => clearInterval(timer);
   }
 
   async grants(actor: Owner, id: string) {
@@ -389,6 +594,7 @@ export class IntegrationConnections {
           spaceId: actor.spaceId,
           userId: actor.userId,
           archivedAt: null,
+          ...(server.transport === "host-cli" ? { computer: { kind: "desktop" } } : {}),
         },
         select: { id: true },
       });
@@ -423,19 +629,33 @@ export class IntegrationConnections {
     return this.grants(actor, input.connectionId);
   }
 
-  async revoke(actor: Owner, id: string, state: "not-connected" | "cancelled" = "not-connected") {
+  async revoke(
+    actor: Owner,
+    id: string,
+    state: "not-connected" | "cancelled" = "not-connected",
+    expired?: { revision: number; cutoff: Date },
+  ) {
     actor = { spaceId: actor.spaceId, userId: actor.userId };
     const server = await this.owned(actor, id);
     if (!server.catalogId) throw new IsolationError();
-    await this.prisma.$transaction(async (tx) => {
+    const revoked = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${id}))`;
       const current = await tx.mcpServer.findFirst({ where: { id, ...actor } });
       if (!current) throw new IsolationError();
+      if (
+        expired &&
+        (current.revision !== expired.revision ||
+          current.connectionState !== "awaiting-consent" ||
+          (current.consentStartedAt ?? current.updatedAt) > expired.cutoff)
+      )
+        return false;
       await tx.mcpServer.update({
         where: { id },
         data: {
           enabled: false,
           connectionState: state,
+          consentStartedAt: null,
+          lastError: expired ? "Sign-in timed out." : null,
           secretId: null,
           resourceConstraints: {},
           manifest: Prisma.DbNull,
@@ -455,9 +675,11 @@ export class IntegrationConnections {
         where: { serverId: id, spaceId: actor.spaceId, userId: actor.userId },
       });
       await this.invalidateApprovals(tx, actor, server);
+      return true;
     });
+    if (!revoked) return { ok: true as const };
+    this.oauth.forgetPending({ serverId: id, ...actor });
     await McpConnector.invalidateConnection(id, actor);
-    await this.oauth.disconnect({ serverId: id, spaceId: actor.spaceId, userId: actor.userId });
     return { ok: true as const };
   }
 

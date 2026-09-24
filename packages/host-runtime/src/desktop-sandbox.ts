@@ -52,6 +52,7 @@ import {
   win32NtRelativeAvailable,
 } from "./desktop-sandbox-win32-path.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import { verifyHostIntegration } from "./host-integrations.js";
 import { confinedHostCwd, hostCommand } from "./host-policy.js";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
@@ -215,6 +216,10 @@ export class DesktopSandboxProvider implements SandboxProvider {
       return;
     }
     const { env } = await getHostEnvironment();
+    if (request.hostIntegration) {
+      await verifyHostIntegration(request.hostIntegration, request.argv);
+      context.signal.throwIfAborted();
+    }
     let argv: string[];
     try {
       argv = await hostCommand(request, env);

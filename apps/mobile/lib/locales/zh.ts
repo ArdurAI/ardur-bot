@@ -1,4 +1,15 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Sign-in timed out.": "登录已超时。",
+  "Needs sign-in": "需要登录",
+  "Not available": "不可用",
+  "Signed in on this computer as {identity}": "已在此电脑上以 {identity} 身份登录",
+  "Not found on this computer": "在此电脑上未找到",
+  "Needs sign-in on this computer": "需要在此电脑上登录",
+  "Could not check this computer.": "无法检查此电脑。",
+  "Last successful call": "上次成功调用",
+  "Open bot settings": "打开机器人设置",
+  "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.":
+    "要使用 Claude 订阅，请在机器人的设置中选择「运行于 → Claude Code」。",
   Accept: "接受",
   Acceptance: "接受情况",
   "Add files or photos": "添加文件或照片",

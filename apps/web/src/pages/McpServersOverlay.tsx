@@ -512,7 +512,7 @@ export function McpServersOverlay({
                           >
                             <Trans>Review tools</Trans>
                           </Button>
-                          {server.transport !== "stdio" ? (
+                          {server.transport !== "stdio" && server.transport !== "host-cli" ? (
                             <>
                               <Button
                                 type="button"

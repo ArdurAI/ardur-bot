@@ -108,6 +108,7 @@ async function main() {
     prisma,
     secrets,
     {
+      sandbox,
       stdioEnabled: process.env.MCP_STDIO_ENABLED === "true",
       allowedCommands: (process.env.MCP_STDIO_ALLOWED_COMMANDS ?? "")
         .split(",")

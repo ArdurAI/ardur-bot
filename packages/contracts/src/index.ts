@@ -12,6 +12,7 @@ export * from "./dispatch.js";
 export * from "./domain.js";
 export * from "./events.js";
 export * from "./host-bridge.js";
+export * from "./host-integrations.js";
 export * from "./ids.js";
 export * from "./integration-catalog.js";
 export * from "./integration-settings.js";

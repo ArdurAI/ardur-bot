@@ -722,7 +722,7 @@ export const McpServerSchema = z.object({
   slug: z.string(),
   name: z.string(),
   description: z.string(),
-  transport: McpTransportSchema,
+  transport: z.union([McpTransportSchema, z.literal("host-cli")]),
   endpoint: z.string().url().nullable(),
   command: z.string().nullable(),
   args: z.array(z.string()),

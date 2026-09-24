@@ -108,6 +108,31 @@ function mcpFetch(
 }
 
 describe("MCP connector session cache", () => {
+  it("requires sign-in after a personal token is rejected without a refresh mechanism", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("fake-private-provider-response", { status: 401 })),
+    );
+    const server = { ...SERVER, catalogId: "github", secretId: "secret-1" };
+    const prisma = {
+      secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
+    };
+    const connector = new McpConnector(
+      prisma as never,
+      { load: () => JSON.stringify({ headers: { Authorization: "Bearer fake-token" } }) } as never,
+      { network: TEST_NETWORK },
+    );
+    try {
+      await expect(
+        connector.inspectServer(
+          server as never,
+          { userId: "u1", spaceId: "w1", signal: new AbortController().signal } as never,
+        ),
+      ).rejects.toThrow("Needs sign-in (refresh_unavailable).");
+    } finally {
+      await connector.close();
+    }
+  });
   it("keeps large MCP schemas out of the initial runtime tool catalog", async () => {
     const state = {
       failNext: false,
@@ -272,7 +297,7 @@ describe("MCP connector session cache", () => {
     expect(append).toHaveBeenCalledTimes(1);
     const reason = String(append.mock.calls[0]?.[0].payload.error);
     expect(reason).not.toContain("local-key");
-    expect(reason).toContain("[redacted]");
+    expect(reason).toBe("Could not reach this integration. Try again.");
     await connector.close();
   });
 
@@ -322,7 +347,7 @@ describe("MCP connector session cache", () => {
     for (const call of append.mock.calls) {
       const message = String(call[0].payload.error);
       expect(message).not.toContain("local-key");
-      expect(message).toContain("[redacted]");
+      expect(message).toBe("Could not reach this integration. Try again.");
     }
     await connector.close();
   });

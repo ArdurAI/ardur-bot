@@ -250,3 +250,5 @@ it("reports the host inventory through health and the run-scoped environment ope
   await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
   expect(frames[0]).toMatchObject({ type: "stream", channel: "result", data: health.environment });
 });
+
+vi.mock("./host-integrations.js", () => ({ inspectHostIntegrations: async () => [] }));
