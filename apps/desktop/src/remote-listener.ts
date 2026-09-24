@@ -2,7 +2,7 @@ import { createHash, X509Certificate } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createServer } from "node:https";
 import { networkInterfaces } from "node:os";
-import { isDeviceApiPath } from "@ardurbot/contracts";
+import { isDeviceApiPath } from "@ardurbot/contracts/device-paths";
 
 export const DEVICE_LISTENER_PORT = 43119;
 export function privateDeviceAddress(address: string): boolean {
