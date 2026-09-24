@@ -168,7 +168,18 @@ describe("tool completion audit", () => {
       durationMs: 4,
       outcome: "error",
       error: "Rejected [redacted] using Bearer [redacted]",
+      errorClass: "integration",
     });
+  });
+  it("keeps connector authentication failures separate from model-provider failures", () => {
+    expect(
+      toolCompletionAuditPayload({
+        name: "GMAIL_LIST_MESSAGES",
+        executionId: "call-auth",
+        durationMs: 4,
+        error: new Error("401 Unauthorized: invalid API key"),
+      }),
+    ).toMatchObject({ outcome: "error", errorClass: "integration" });
   });
 
   it.each([{}, { error: null }, { error: undefined }, { data: { error: "a record field" } }])(

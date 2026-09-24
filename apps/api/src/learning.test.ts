@@ -116,4 +116,76 @@ it("lists scoped proposals with separate counts and opens only linked, surviving
   prisma.thread.findFirst.mockResolvedValueOnce(null);
   await expect(service.evidence(actor, "proposal", "evidence")).rejects.toThrow();
   expect(prisma.proposalEvidence.findFirst).toHaveBeenCalledTimes(1);
+  expect(await service.proposal(actor, "proposal")).toMatchObject({ id: "proposal" });
+  expect(prisma.learningProposal.findFirst).toHaveBeenLastCalledWith({
+    where: { id: "proposal", spaceId: "space", userId: "user" },
+  });
+});
+
+it("keeps content-free audit entries in exports when their document no longer exists", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const service = createLearningService({
+    prisma: {
+      spaceMember: { findUnique: async () => ({ role: "member" }) },
+      bot: { findFirst: async () => ({ id: "bot" }) },
+      learningAudit: {
+        findMany: async () => [
+          {
+            id: "audit",
+            action: "approve",
+            createdAt: new Date("2026-09-20Z"),
+            scopeKey: "bot:bot",
+            proposalId: "proposal",
+            afterRevisionId: "removed:2",
+            beforeRevisionId: null,
+            grantId: null,
+          },
+        ],
+      },
+    } as never,
+    memoryDocuments: { exportBundle: async () => ({ documents: [] }) } as never,
+    jobs: {} as never,
+  });
+  const exported = await service.exportLearning(actor, "bot");
+  expect(exported.journey).toMatchObject([{ revisionId: "removed:2", proposalId: "proposal" }]);
+  expect(exported.observations).toEqual([]);
+});
+
+it("only lets the owner enqueue the curator and preserves explicit consolidation opt-in", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const member = vi.fn(async () => ({ role: "owner" }));
+  const jobs = { enqueue: vi.fn() };
+  const prisma = {
+    spaceMember: { findUnique: member },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => ({ enabled: true, consolidationEnabled: false })),
+    },
+  };
+  const service = createLearningService({ prisma: prisma as never, jobs: jobs as never });
+  expect(await service.curate(actor)).toEqual({ ok: true });
+  expect(jobs.enqueue).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: "learning.curate",
+      payload: expect.objectContaining({
+        spaceId: "space",
+        requestedBy: "owner",
+        requestId: expect.any(String),
+      }),
+    }),
+  );
+  member.mockResolvedValue({ role: "member" });
+  await expect(service.curate(actor)).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(jobs.enqueue).toHaveBeenCalledOnce();
+});
+it("checks membership before exposing observations and passes the actor to the document lifecycle", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const member = vi.fn(async () => null);
+  const memoryDocuments = { history: vi.fn(async () => ({ items: [] })) };
+  const service = createLearningService({
+    prisma: { spaceMember: { findUnique: member } } as never,
+    jobs: {} as never,
+    memoryDocuments: memoryDocuments as never,
+  });
+  await expect(service.observation(actor, "doc", 2)).rejects.toThrow();
+  expect(memoryDocuments.history).not.toHaveBeenCalled();
 });

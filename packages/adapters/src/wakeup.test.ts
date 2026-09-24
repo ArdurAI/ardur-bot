@@ -4,6 +4,7 @@ import { InMemoryJobQueue } from "./wakeup.js";
 
 function handlers(): BackgroundJobHandlers {
   return {
+    "learning.curate": async () => undefined,
     "learning.review": async () => undefined,
     "memory.git-push": async () => undefined,
     "memory.deliver": async () => undefined,

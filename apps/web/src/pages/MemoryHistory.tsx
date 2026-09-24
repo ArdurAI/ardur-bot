@@ -3,6 +3,7 @@ import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { LearningObservations } from "./LearningObservation";
 
 export function MemoryHistory({
   document,
@@ -12,6 +13,7 @@ export function MemoryHistory({
   onChange: (doc: MemoryDocumentHead) => void;
 }) {
   const { t } = useLingui();
+  const [observing, setObserving] = useState(false);
   const [items, setItems] = useState<MemoryHistoryRevision[]>([]);
   const [cursor, setCursor] = useState<number | null>(null);
   const [selected, setSelected] = useState<MemoryHistoryRevision | null>(null);
@@ -178,6 +180,14 @@ export function MemoryHistory({
               </pre>
             </div>
           </div>
+          <details onToggle={(event) => setObserving(event.currentTarget.open)}>
+            <summary>
+              <Trans>Observations</Trans>
+            </summary>
+            {observing ? (
+              <LearningObservations documentId={document.id} revision={selected.revision} />
+            ) : null}
+          </details>
           {!selected.deletedAt ? (
             <Button
               className="mt-2"
