@@ -556,6 +556,7 @@ model Task {
 }
 
 model Run {
+  commandReplayId      String?
   id                   String           @id @default(cuid())
   spaceId              String
   space                Space            @relation(fields: [spaceId], references: [id], onDelete: Cascade)

@@ -2,6 +2,7 @@ import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
+import { CommandBlockSchema } from "./command-blocks.js";
 import {
   ActionApprovalRuleSchema,
   ActionAutoReviewSettingsSchema,
@@ -150,7 +151,19 @@ const threadSendInput = threadTarget
     }
   });
 
+const CommandReference = z.object({ runId: Id, commandId: Id });
 export const appContract = {
+  commands: {
+    list: oc
+      .input(z.object({ runId: Id, query: z.string().max(256).optional() }))
+      .output(z.object({ blocks: z.array(CommandBlockSchema) })),
+    open: oc.input(CommandReference).output(CommandBlockSchema),
+    export: oc
+      .input(z.object({ runId: Id, commandId: Id.optional() }))
+      .output(z.object({ text: z.string(), filename: z.string() })),
+    share: oc.input(CommandReference).output(z.object({ path: z.string() })),
+    rerun: oc.input(CommandReference).output(z.object({ runId: Id })),
+  },
   aiConsent: {
     status: oc.input(AiConsentQuerySchema).output(AiConsentStatusSchema),
     allow: oc

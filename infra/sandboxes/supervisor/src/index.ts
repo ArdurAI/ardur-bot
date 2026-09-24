@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   boundedSandboxCommandTimeoutMs,
+  COMMAND_OUTPUT_LIMIT,
   readBoundedJsonResponse,
   resolveSupervisorToken,
 } from "@ardurbot/core";
@@ -18,6 +19,7 @@ import Docker from "dockerode";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
+import { createDockerCommandOutput } from "./command-output.js";
 import {
   assertVolumeSubpathSupport,
   COMPUTER_GID,
@@ -333,6 +335,7 @@ app.post("/computers/:id/exec", async (c) => {
           ...Object.entries(body.env ?? {}).map(([k, v]) => `${k}=${v}`),
         ],
         timeoutMs: boundedSandboxCommandTimeoutMs(body.timeoutMs),
+        outputLimit: COMMAND_OUTPUT_LIMIT,
       },
     );
     return c.json(result);
@@ -1293,7 +1296,13 @@ async function inspectSupervisorContainer() {
 async function runContainerCommand(
   container: Docker.Container,
   argv: string[],
-  options: { workingDir?: string; env?: string[]; timeoutMs?: number; signal?: AbortSignal } = {},
+  options: {
+    workingDir?: string;
+    env?: string[];
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    outputLimit?: number;
+  } = {},
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   options.signal?.throwIfAborted();
   const timeoutMs = options.timeoutMs;
@@ -1314,11 +1323,19 @@ async function runContainerCommand(
   });
   options.signal?.throwIfAborted();
   const stream = await exec.start({ hijack: true, stdin: Boolean(options.signal) });
-  const chunks: Buffer[] = [];
+  // Internal file and image transports retain their own limits, not shell-log truncation.
+  const collector = createDockerCommandOutput(options.outputLimit ?? Number.POSITIVE_INFINITY);
   let onAbort: (() => void) | undefined;
   try {
     await new Promise<void>((resolve, reject) => {
-      stream.on("data", (data: Buffer) => chunks.push(data));
+      stream.on("data", (data: Buffer) => {
+        try {
+          collector.push(data);
+        } catch (error) {
+          stream.destroy();
+          reject(error);
+        }
+      });
       stream.on("end", resolve);
       stream.on("error", reject);
       onAbort = () => {
@@ -1339,7 +1356,7 @@ async function runContainerCommand(
       ? await consumeCompletionMarker(container, completionMarker)
       : false;
   const timedOut = sandboxCommandTimedOut(code, completedWithExit124);
-  const output = demuxDockerStream(Buffer.concat(chunks));
+  const output = collector.finish();
   return {
     stdout: output.stdout,
     stderr: timedOut

@@ -597,6 +597,10 @@ msgstr "बेस URL"
 msgid "Bearer token"
 msgstr "बियरर टोकन"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Block link copied."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "लाइव डेस्कटॉप शुरू हो रहा है…"
@@ -912,6 +916,10 @@ msgstr "कमांड"
 msgid "Complete"
 msgstr "पूर्ण"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Completion not recorded"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -1066,6 +1074,18 @@ msgstr "ईमेल से जारी रखें"
 #: src/pages/Shell.tsx
 msgid "Copy"
 msgstr "कॉपी करें"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy block link"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy command"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy output"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -1815,6 +1835,14 @@ msgstr ""
 msgid "Export"
 msgstr "एक्सपोर्ट करें"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Export block"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Export run"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "CRM से इस सप्ताह की सूची एक्सपोर्ट करें और उसे साझा फ़ोल्डर में डालें"
@@ -2185,6 +2213,7 @@ msgstr ""
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 msgid "Loading…"
 msgstr "लोड हो रहा है…"
@@ -2536,6 +2565,10 @@ msgstr "इस डिप्लॉयमेंट पर कोई प्रब�
 msgid "No matching models"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "No matching output."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No MCP or API tool sources installed yet."
 msgstr "अभी तक कोई MCP या API टूल स्रोत इंस्टॉल नहीं है।"
@@ -2600,6 +2633,10 @@ msgstr ""
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
 msgstr "अभी नहीं"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Not recorded"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
@@ -3027,6 +3064,18 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun is unavailable; reopen this block to check again."
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun requested."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr ""
@@ -3220,6 +3269,7 @@ msgstr "कुछ बोलें। चुप्पी होते ही भ�
 msgid "Say yes or no, or answer in a sentence."
 msgstr "हां या ना कहें, या एक वाक्य में उत्तर दें।"
 
+#: src/components/ThreadCommandBlock.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -3253,6 +3303,10 @@ msgstr ""
 msgid "Search providers"
 msgstr "प्रोवाइडर्स खोजें"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Search run output"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -3261,6 +3315,10 @@ msgstr "खोजा जा रहा है…"
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "एक बॉट चुनें"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Select the text to copy it."
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -3581,6 +3639,10 @@ msgstr "चयनित मेमोरी प्रोवाइडर इस �
 msgid "Thinking"
 msgstr "सोच रहा है"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "This action could not finish; try again."
+msgstr ""
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
@@ -3589,6 +3651,10 @@ msgstr ""
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
 msgstr "यह बॉट इसी कंप्यूटर पर चलता है, किसी Linux डेस्कटॉप पर नहीं। शेल और फ़ाइलें आपके होम फ़ोल्डर का उपयोग करती हैं।"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "This bot's connection needs to be chosen. Pick the connection to use."
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "This cannot be undone."
 msgstr "इसे पूर्ववत नहीं किया जा सकता।"
@@ -3596,6 +3662,10 @@ msgstr "इसे पूर्ववत नहीं किया जा सक�
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "यह चैट केवल देखने के लिए है"
+
+#: src/pages/SharedCommand.tsx
+msgid "This command is not available to this account."
+msgstr ""
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

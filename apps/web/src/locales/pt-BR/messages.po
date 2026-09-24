@@ -597,6 +597,10 @@ msgstr "URL Base"
 msgid "Bearer token"
 msgstr "Token portador"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Block link copied."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Iniciando a área de trabalho ao vivo..."
@@ -912,6 +916,10 @@ msgstr "Comando"
 msgid "Complete"
 msgstr "Concluir"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Completion not recorded"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -1066,6 +1074,18 @@ msgstr "Continuar com e-mail"
 #: src/pages/Shell.tsx
 msgid "Copy"
 msgstr "Copiar"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy block link"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy command"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy output"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -1815,6 +1835,14 @@ msgstr ""
 msgid "Export"
 msgstr "Exportar"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Export block"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Export run"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "Exporte a lista desta semana do CRM e solte-a na pasta compartilhada"
@@ -2185,6 +2213,7 @@ msgstr ""
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 msgid "Loading…"
 msgstr "Carregando..."
@@ -2536,6 +2565,10 @@ msgstr "Nenhum catálogo de aplicativos gerenciados está configurado nesta impl
 msgid "No matching models"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "No matching output."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No MCP or API tool sources installed yet."
 msgstr "Nenhuma fonte de ferramenta MCP ou API instalada ainda."
@@ -2600,6 +2633,10 @@ msgstr ""
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
 msgstr "Agora não"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Not recorded"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
@@ -3027,6 +3064,18 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun is unavailable; reopen this block to check again."
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun requested."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr ""
@@ -3220,6 +3269,7 @@ msgstr "Diga alguma coisa. O silêncio manda."
 msgid "Say yes or no, or answer in a sentence."
 msgstr "Diga sim ou não, ou responda em uma frase."
 
+#: src/components/ThreadCommandBlock.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -3253,6 +3303,10 @@ msgstr ""
 msgid "Search providers"
 msgstr "Pesquisar provedores"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Search run output"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -3261,6 +3315,10 @@ msgstr "Pesquisando…"
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "Selecione um bot"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Select the text to copy it."
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -3581,6 +3639,10 @@ msgstr "O provedor de memória selecionado não está disponível nesta compila�
 msgid "Thinking"
 msgstr "Pensando"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "This action could not finish; try again."
+msgstr ""
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
@@ -3589,6 +3651,10 @@ msgstr ""
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
 msgstr "Este bot é executado neste computador, não em um desktop Linux. Shell e arquivos usam sua pasta inicial."
 
+#: src/pages/shell/bot-panel.tsx
+msgid "This bot's connection needs to be chosen. Pick the connection to use."
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "This cannot be undone."
 msgstr "Essa ação não pode ser desfeita."
@@ -3596,6 +3662,10 @@ msgstr "Essa ação não pode ser desfeita."
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "Este chat é somente leitura"
+
+#: src/pages/SharedCommand.tsx
+msgid "This command is not available to this account."
+msgstr ""
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

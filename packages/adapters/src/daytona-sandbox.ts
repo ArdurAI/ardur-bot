@@ -145,6 +145,14 @@ export class DaytonaSandboxProvider implements SandboxProvider {
     await this.prepareWorkspace(await this.box(computer));
   }
 
+  async resolveCommandCwd(
+    computer: ComputerRef,
+    cwd: string | undefined,
+    _context: AdapterContext,
+  ): Promise<string | null> {
+    return daytonaCwd(await this.workspaceRoot(await this.box(computer)), cwd);
+  }
+
   async *execute(
     computer: ComputerRef,
     request: CommandRequest,

@@ -597,6 +597,10 @@ msgstr "Base URL"
 msgid "Bearer token"
 msgstr "Bearer token"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Block link copied."
+msgstr "Block link copied."
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Booting live desktop…"
@@ -912,6 +916,10 @@ msgstr "Command"
 msgid "Complete"
 msgstr "Complete"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Completion not recorded"
+msgstr "Completion not recorded"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -1066,6 +1074,18 @@ msgstr "Continue with email"
 #: src/pages/Shell.tsx
 msgid "Copy"
 msgstr "Copy"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy block link"
+msgstr "Copy block link"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy command"
+msgstr "Copy command"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy output"
+msgstr "Copy output"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -1815,6 +1835,14 @@ msgstr "Expand {0}"
 msgid "Export"
 msgstr "Export"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Export block"
+msgstr "Export block"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Export run"
+msgstr "Export run"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "Export this week's list from the CRM and drop it in the shared folder"
@@ -2185,6 +2213,7 @@ msgstr "Loading your tools."
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 msgid "Loading…"
 msgstr "Loading…"
@@ -2536,6 +2565,10 @@ msgstr "No managed app catalog is configured on this deployment."
 msgid "No matching models"
 msgstr "No matching models"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "No matching output."
+msgstr "No matching output."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No MCP or API tool sources installed yet."
 msgstr "No MCP or API tool sources installed yet."
@@ -2600,6 +2633,10 @@ msgstr "Not in the plugin catalog"
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
 msgstr "Not now"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Not recorded"
+msgstr "Not recorded"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
@@ -3027,6 +3064,18 @@ msgstr "Replying to {replyName}: “{replyQuote}”"
 msgid "Report an issue"
 msgstr "Report an issue"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun"
+msgstr "Rerun"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun is unavailable; reopen this block to check again."
+msgstr "Rerun is unavailable; reopen this block to check again."
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun requested."
+msgstr "Rerun requested."
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr "Research & writing"
@@ -3220,6 +3269,7 @@ msgstr "Say something. Silence sends it."
 msgid "Say yes or no, or answer in a sentence."
 msgstr "Say yes or no, or answer in a sentence."
 
+#: src/components/ThreadCommandBlock.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -3253,6 +3303,10 @@ msgstr "Search models"
 msgid "Search providers"
 msgstr "Search providers"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Search run output"
+msgstr "Search run output"
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -3261,6 +3315,10 @@ msgstr "Searching…"
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "Select a bot"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Select the text to copy it."
+msgstr "Select the text to copy it."
 
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -3581,6 +3639,10 @@ msgstr "The selected memory provider is not available in this build."
 msgid "Thinking"
 msgstr "Thinking"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "This action could not finish; try again."
+msgstr "This action could not finish; try again."
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
@@ -3589,6 +3651,10 @@ msgstr "This bot is pinned to {provider} · {model} · {effort}; connect it or c
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
 msgstr "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
 
+#: src/pages/shell/bot-panel.tsx
+msgid "This bot's connection needs to be chosen. Pick the connection to use."
+msgstr "This bot's connection needs to be chosen. Pick the connection to use."
+
 #: src/pages/shell/dialogs.tsx
 msgid "This cannot be undone."
 msgstr "This cannot be undone."
@@ -3596,6 +3662,10 @@ msgstr "This cannot be undone."
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "This chat is view-only"
+
+#: src/pages/SharedCommand.tsx
+msgid "This command is not available to this account."
+msgstr "This command is not available to this account."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

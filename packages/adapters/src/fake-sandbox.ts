@@ -77,6 +77,14 @@ export class FakeSandboxProvider implements SandboxProvider {
 
   async prepare(_computer: ComputerRef, _context: AdapterContext): Promise<void> {}
 
+  async resolveCommandCwd(
+    _computer: ComputerRef,
+    cwd: string | undefined,
+    _context: AdapterContext,
+  ): Promise<string | null> {
+    return cwd ?? "/home/ardurbot";
+  }
+
   async *execute(
     computer: ComputerRef,
     request: CommandRequest,

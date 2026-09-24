@@ -69,7 +69,6 @@ import {
   redactSecrets,
   renderBotDirectory,
   resolveActionApprovalDetail,
-  sandboxCommandTimeoutMs,
   type ToolCallStreak,
   toolRequiresApproval,
   toolRequiresExplicitApproval,
@@ -107,11 +106,7 @@ import {
   messageConnectedAgent,
   respondAgentConnection,
 } from "./agent-connections.js";
-import {
-  decryptAgentEnvironment,
-  formatAgentEnvironmentInstruction,
-  redactAgentCommandResult,
-} from "./agent-environment.js";
+import { decryptAgentEnvironment, formatAgentEnvironmentInstruction } from "./agent-environment.js";
 import { buildApprovalAskBlock } from "./approval-ask.js";
 import {
   approvalPausedToolResult,
@@ -171,6 +166,12 @@ import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-fac
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
 import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
+import { createCommandRecording } from "./command-recording.js";
+import {
+  CommandReplayUnavailableError,
+  commandReplayEvents,
+  loadRunCommandReplay,
+} from "./command-replay.js";
 import {
   collectLogIds,
   mergeConnectedPlugins,
@@ -1418,6 +1419,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const workspaceCheckpoint = createRunWorkspaceCheckpoint(() =>
           checkpointRunComputerWorkspace(deps, storedComputer, computer, context),
         );
+        const commandReplay = await loadRunCommandReplay({
+          prisma: deps.prisma,
+          run,
+          storedComputer,
+          computer,
+          sandbox: deps.sandbox,
+          context,
+        });
+        const commandRecording = createCommandRecording({
+          events: deps.events,
+          sandbox: deps.sandbox,
+          computer,
+          storedComputer,
+          context,
+          threadId: thread.id,
+          attemptId: attempt.id,
+          secrets: runSecrets,
+          replayOf: commandReplay?.commandId,
+        });
         let currentTurnFiles: Awaited<ReturnType<typeof materializeCurrentTurnFiles>>;
         try {
           currentTurnFiles = deps.artifacts
@@ -1603,7 +1623,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let handedOff = false;
         let progressRedactor = createStreamingRedactor(runSecrets);
         const scripted = deps.runtime.describe().capabilities.scripted;
-        const script = scripted ? inferScript(task.prompt, takeoverResume?.checkpoint) : undefined;
+        const script =
+          scripted && !commandReplay
+            ? inferScript(task.prompt, takeoverResume?.checkpoint)
+            : undefined;
         const flushProgress = async () => {
           if (scripted || !pendingProgress) return;
           await deps.events.append({
@@ -1863,6 +1886,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               }
             }
+          }
+          if (name === "shell" && !commandRecording.matchesRequest(executionId, args)) {
+            return { error: "This command changed during approval; request it again." };
           }
           const integrationDetails = await integrationApprovalDetailsForCall(
             deps.prisma,
@@ -2493,9 +2519,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               args.cwd ? String(args.cwd) : undefined,
             );
             workspaceCheckpoint.markDirty();
-            const result = await runSandboxCommand(
-              deps.sandbox,
-              computer,
+            const result = await commandRecording.execute(
+              executionId,
               [
                 "bash",
                 "-c",
@@ -2510,9 +2535,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               ],
               cwd,
               agentEnvironment,
-              context,
             );
-            return finish(redactAgentCommandResult(result, runSecrets));
+            return finish(result);
           }
           if (name === "open_path") {
             if (heldForTakeover) {
@@ -3586,7 +3610,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
 
         try {
-          const runtimeEvents = deps.runtime.run(
+          const recordedApplyTool = (
+            name: string,
+            args: Record<string, unknown>,
+            executionId: string,
+          ) => commandRecording.invoke(name, args, executionId, applyTool);
+          const runRuntime: AgentRuntime["run"] = commandReplay
+            ? () => commandReplayEvents(commandReplay, runId, recordedApplyTool)
+            : deps.runtime.run.bind(deps.runtime);
+          const runtimeEvents = runRuntime(
             {
               botId: bot.id,
               threadId: thread.id,
@@ -3632,7 +3664,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               script,
               allowSilentEmpty: allowSilentEmptyRun,
               emptyResponseText,
-              executeTool: scripted ? undefined : applyTool,
+              executeTool: scripted ? undefined : recordedApplyTool,
               resolveModel: scripted
                 ? undefined
                 : (provider, modelId) =>
@@ -3930,7 +3962,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (scripted) {
                 const startedAt = Date.now();
                 try {
-                  const result = await applyTool(event.name, event.args, event.executionId);
+                  const result = await recordedApplyTool(event.name, event.args, event.executionId);
                   await appendToolCompletionAudit(
                     deps,
                     {
@@ -4232,7 +4264,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       } catch (setupError) {
-        if (setupError instanceof RuntimePinError) {
+        if (
+          setupError instanceof RuntimePinError ||
+          setupError instanceof CommandReplayUnavailableError
+        ) {
           await deps.events.finalizeRun({
             spaceId: run.spaceId,
             threadId: run.threadId,
@@ -4244,7 +4279,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             leaseFence: fence,
             outcome: "failed",
             error: setupError.message,
-            runtimeProblem: setupError.problem,
+            runtimeProblem: setupError instanceof RuntimePinError ? setupError.problem : undefined,
           });
           return;
         }
@@ -4901,42 +4936,6 @@ function uncertainEffectError(toolName: string): Error {
   return new Error(
     `tool ${toolName} has an earlier execution with an uncertain outcome; it may already have completed, so verify the destination before retrying`,
   );
-}
-
-async function runSandboxCommand(
-  sandbox: SandboxProvider,
-  computer: ComputerRef,
-  argv: string[],
-  cwd: string | undefined,
-  env: Record<string, string>,
-  context: {
-    operationId: string;
-    traceId: string;
-    spaceId: string;
-    userId: string;
-    botId?: string;
-    runId?: string;
-    signal: AbortSignal;
-  },
-) {
-  let stdout = "";
-  let stderr = "";
-  let code = 0;
-  for await (const event of sandbox.execute(
-    computer,
-    {
-      argv,
-      cwd,
-      env: Object.keys(env).length > 0 ? env : undefined,
-      timeoutMs: sandboxCommandTimeoutMs(),
-    },
-    context,
-  )) {
-    if (event.type === "stdout") stdout += event.data;
-    if (event.type === "stderr") stderr += event.data;
-    if (event.type === "exit") code = event.code;
-  }
-  return { stdout, stderr, code };
 }
 
 /**

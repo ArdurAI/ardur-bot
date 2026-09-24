@@ -1,6 +1,7 @@
 import type { MessageBlock, ThreadMessage, ThreadMessagePage } from "@ardurbot/contracts";
 import { isPeerReceiptBlocks } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
+import { addHistoricalCommandBlocks, hydrateCommandMessages } from "@ardurbot/db";
 
 type MessageDb = PrismaClient | Prisma.TransactionClient;
 
@@ -41,7 +42,10 @@ export async function loadMessagePage(
       const messages = includePeerRuns ? rows : await withoutPeerRunMessages(prisma, rows);
       return {
         threadId,
-        messages: messages.map(toThreadMessage),
+        messages: await hydrateCommandMessages(
+          prisma,
+          await addHistoricalCommandBlocks(prisma, messages.map(toThreadMessage)),
+        ),
         olderCursor: hasOlder ? (first?.seq ?? null) : null,
       };
     }
@@ -68,7 +72,10 @@ export async function loadMessagePage(
     if (hasSubstantive || includePeerReceipts || !hasOlder || includePeerRuns) {
       return {
         threadId,
-        messages: visibleRows.map(toThreadMessage),
+        messages: await hydrateCommandMessages(
+          prisma,
+          await addHistoricalCommandBlocks(prisma, visibleRows.map(toThreadMessage)),
+        ),
         olderCursor: hasOlder ? (pageRows[0]?.seq ?? null) : null,
       };
     }
@@ -112,6 +119,7 @@ async function withoutPeerRunMessages<T extends { runId: string | null; blocks: 
       (block) =>
         block.kind === "bot_message_sent" ||
         block.kind === "bot_message_received" ||
+        block.kind === "command" ||
         block.kind === "ask" ||
         block.kind === "text",
     );
@@ -140,6 +148,7 @@ export function shouldForwardPeerThreadEvent(event: {
   payload: { blocks?: unknown };
 }): boolean {
   if (
+    event.type.startsWith("command.") ||
     event.type === "run.completed" ||
     event.type === "run.failed" ||
     event.type === "run.cancelled" ||
@@ -161,6 +170,7 @@ export function shouldForwardPeerThreadEvent(event: {
         "kind" in block &&
         (block.kind === "bot_message_received" ||
           block.kind === "bot_message_sent" ||
+          block.kind === "command" ||
           block.kind === "ask" ||
           block.kind === "text"),
     )
