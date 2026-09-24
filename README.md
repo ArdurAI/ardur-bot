@@ -13,8 +13,8 @@ Ardur Bot is a fork of [Rakazo](https://github.com/elie222/rakazo) (Apache-2.0).
 [NOTICE](NOTICE) and [ADR-001](docs/decisions/ADR-001-fork-and-rename.md).
 
 > **Status: pre-alpha.** Everything lands on the `dev` branch; `main` moves only after a
-> human has verified a build. No installers or container images are published yet. Run from
-> source (below).
+> human has verified a build. The release workflow produces unsigned desktop previews;
+> check the release assets before choosing an installer. Running from source remains available.
 
 ## What you get today
 
@@ -43,6 +43,58 @@ Inherited from Rakazo and working:
 - A fast, smooth UI on Windows, macOS and Linux
 
 Roadmap and questions live in [Discussions](https://github.com/ArdurAI/ardur-bot/discussions).
+
+## Install a desktop preview
+
+Download your OS and architecture from [GitHub pre-releases](https://github.com/ArdurAI/ardur-bot/releases).
+These builds are **unsigned**; macOS builds are also **not notarized**. Signed builds come later.
+Only approve a download you trust from the official release page.
+
+- **macOS:** open the arm64 DMG for Apple Silicon or x64 DMG for Intel, drag **Ardur Bot.app**
+  into **Applications**, and eject the DMG. Gatekeeper can say the developer cannot be verified
+  or the app cannot be checked for malicious software. In Finder, right-click → **Open** →
+  **Open**. On recent macOS versions where that override is unavailable, attempt to open once,
+  then use **System Settings → Privacy & Security → Open Anyway**, authenticate, and click
+  **Open**. A terminal alternative for that downloaded app is:
+
+  ```sh
+  xattr -d com.apple.quarantine "/Applications/Ardur Bot.app"
+  open "/Applications/Ardur Bot.app"
+  ```
+
+  The ZIP contains the same app for manual installation. Approving quarantine does not add a
+  developer signature or notarization. Updates show **“A new version is available — download”**;
+  download the next DMG and replace the app manually.
+- **Windows:** run the x64 NSIS `.exe`. SmartScreen may show **“Windows protected your PC”**
+  and an unknown publisher. Choose **More info → Run anyway**, then finish the installer.
+  Managed computers may disallow this override. No trusted publisher identity is asserted.
+- **Linux:** download the matching AppImage, then run:
+
+  ```sh
+  chmod +x ./ardur-bot-*.AppImage
+  ./ardur-bot-0.1.0-alpha.1-linux-x64.AppImage
+  ```
+
+  Substitute your downloaded version and architecture. Linux commonly requires the executable
+  permission rather than displaying a SmartScreen-style publisher prompt. Some distributions
+  require FUSE support for AppImages. On Debian/Ubuntu, the `.deb` alternative installs with
+  `sudo apt install ./ardur-bot-*.deb`; a standalone deb has no distribution-repository trust
+  guarantee. Run `ardur-bot --version` after installing it.
+
+**“This computer” still requires Docker Desktop**, running and ready. Alternatively, connect the
+client to an existing server. Backend images must also be published for local setup to succeed.
+Unsigned previews use manual downloads for updates on every OS.
+
+After the owner publishes the [Homebrew tap](docs/desktop-release.md#homebrew-tap-handoff):
+
+```sh
+brew install --cask ardurai/tap/ardur-bot
+ardur-bot --version
+```
+
+The cask does not bypass macOS quarantine. The tap is a separate publication step; no existing
+tap or published release is assumed by this checkout. See [desktop releases](docs/desktop-release.md)
+for build and acceptance instructions.
 
 ## Run from source
 

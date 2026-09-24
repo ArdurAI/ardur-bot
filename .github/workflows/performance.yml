@@ -1,0 +1,86 @@
+name: performance
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  budgets:
+    name: Advisory production shell budgets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    env:
+      ARDURBOT_ALLOW_DEV_SECRETS: "1"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
+      - name: Prepare the comparison revision on the same runner
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then BASE_SHA="$(git rev-parse HEAD^)"; fi
+          base="$RUNNER_TEMP/performance-base"
+          git worktree add --detach "$base" "$BASE_SHA"
+          # Use the same benchmark harness against each revision's production code.
+          cp apps/web/playwright.performance.config.ts "$base/apps/web/"
+          cp apps/web/e2e/{shell-performance.spec.ts,performance-fixture.ts} "$base/apps/web/e2e/"
+          cp apps/web/src/lib/performance-proxy.test.tsx "$base/apps/web/src/lib/"
+          # First rollout extracts the existing skeleton without changing its markup.
+          if [[ ! -f "$base/apps/web/src/components/ShellSkeleton.tsx" ]]; then
+            cp apps/web/src/components/ShellSkeleton.tsx "$base/apps/web/src/components/"
+          fi
+          cd "$base"
+          pnpm install --frozen-lockfile
+      - name: Measure comparison revision
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/performance-base"
+          PERF_REPORT_FILE="$RUNNER_TEMP/proxy-before.json" pnpm exec vitest run apps/web/src/lib/performance-proxy.test.tsx
+          pnpm --filter @ardurbot/web build
+          PERF_BROWSER_REPORT="$RUNNER_TEMP/browser-before.json" pnpm --filter @ardurbot/web exec playwright test --config playwright.performance.config.ts
+      - name: Measure current revision and retain traces
+        shell: bash
+        run: |
+          set -euo pipefail
+          PERF_REPORT_FILE=.context/performance/proxy-after.json pnpm perf:proxy
+          pnpm --filter @ardurbot/web build
+          node scripts/bundle-budget.mjs apps/web/dist docs/performance/bundle-baseline.json
+          pnpm --filter @ardurbot/web exec playwright test --config playwright.performance.config.ts
+      - name: Warn on timing regressions above twenty percent
+        if: always()
+        shell: bash
+        run: |
+          for kind in proxy browser; do
+            before="$RUNNER_TEMP/${kind}-before.json"
+            after=".context/performance/${kind}-after.json"
+            if [[ "$kind" == browser ]]; then after=.context/performance/browser.json; fi
+            if [[ -f "$before" && -f "$after" ]]; then
+              node scripts/performance-budget.mjs "$before" "$after"
+            else
+              echo "::warning title=Performance baseline::Missing $kind report; timings remain unverified."
+            fi
+          done
+      - name: Upload traces, screenshots, and measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: shell-performance
+          path: .context/performance
+          if-no-files-found: warn

@@ -15,11 +15,12 @@ describe("desktop window chrome", () => {
     expect(opts.trafficLightPosition).toEqual({ x: 16, y: 16 });
   });
 
-  it("is frameless on Windows and Linux so in-app buttons control the window", () => {
+  it("uses native Windows and Linux frames without traffic lights", () => {
     for (const platform of ["win32", "linux"] as const) {
       const opts = browserWindowOptions(platform);
-      expect(opts.frame).toBe(false);
-      expect(opts.titleBarStyle).toBeUndefined();
+      expect(opts.frame).toBe(true);
+      expect(opts.titleBarStyle).toBe("default");
+      expect(opts.trafficLightPosition).toBeUndefined();
     }
   });
 });

@@ -1,0 +1,36 @@
+{
+  "before": {
+    "kind": "offline-proxy",
+    "date": "2026-09-24",
+    "machine": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "cpu": "Apple M5 Pro",
+      "cores": 15,
+      "memoryGiB": 48,
+      "node": "v26.7.0"
+    },
+    "samples": 200,
+    "metrics": {
+      "shellPrepareMs": 0.27287499999874854,
+      "submitToFirstTokenMs": 0.0026250000009895302
+    }
+  },
+  "after": {
+    "kind": "offline-proxy",
+    "date": "2026-09-24",
+    "machine": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "cpu": "Apple M5 Pro",
+      "cores": 15,
+      "memoryGiB": 48,
+      "node": "v26.7.0"
+    },
+    "samples": 200,
+    "metrics": {
+      "shellPrepareMs": 0.2757080000001224,
+      "submitToFirstTokenMs": 0.002749999999650754
+    }
+  }
+}

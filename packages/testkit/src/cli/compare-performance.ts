@@ -11,8 +11,19 @@ if (!beforePath || !afterPath) {
   throw new Error("Usage: pnpm perf:compare <before.json> <after.json>");
 }
 
-const before = parsePerformanceReport(JSON.parse(await readFile(beforePath, "utf8")), beforePath);
-const after = parsePerformanceReport(JSON.parse(await readFile(afterPath, "utf8")), afterPath);
+const rawBefore = JSON.parse(await readFile(beforePath, "utf8"));
+const rawAfter = JSON.parse(await readFile(afterPath, "utf8"));
+if (rawBefore.kind === "offline-proxy" && rawAfter.kind === "offline-proxy") {
+  // Unit proxies intentionally have a smaller report schema than the Electron benchmark.
+  const { execFileSync } = await import("node:child_process");
+  execFileSync(process.execPath, ["scripts/performance-budget.mjs", beforePath, afterPath], {
+    stdio: "inherit",
+  });
+  process.exit(0);
+}
+
+const before = parsePerformanceReport(rawBefore, beforePath);
+const after = parsePerformanceReport(rawAfter, afterPath);
 assertComparable(before, after);
 warnAboutIntentionalRuntimeChanges(before, after);
 

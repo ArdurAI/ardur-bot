@@ -1,0 +1,211 @@
+{
+  "initial": {
+    "files": {
+      "assets/async-CU0Z_3ZN.js": 164,
+      "assets/check-CYzq7BcH.js": 168,
+      "assets/chunk-BV7QT456-CVQN-0K5.js": 14333,
+      "assets/createLucideIcon-BgzzVMGK.js": 1511,
+      "assets/desktop-D56m0QQL.js": 275,
+      "assets/dist-11zqWHgS.js": 4370,
+      "assets/dist-x2jm9RvA.js": 1960,
+      "assets/index-BwuuDkJ0.js": 202992,
+      "assets/input-B3uatZMi.js": 18611,
+      "assets/mcp-connect-YuyjWt-V.js": 516,
+      "assets/rolldown-runtime-hePW80VL.js": 430,
+      "assets/rpc-O4dQA2Xx.js": 4476,
+      "assets/src-CL3RVlPv.js": 90273,
+      "assets/src-DVsxFq4O.js": 44674,
+      "assets/src-zftwNtz1.js": 11035,
+      "assets/use-model-oauth-signin-Cf1BX7jy.js": 1983
+    },
+    "gzipBytes": 397771
+  },
+  "chunks": {
+    "../../packages/core/src/plot/plot-spec.ts": {
+      "file": "assets/plot-spec-DaUSB5_l.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "../../packages/ui-web/src/terminal/index.tsx": {
+      "file": "assets/terminal-tQtth-F8.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "chunk:KnowledgeSection": {
+      "file": "assets/KnowledgeSection-cVpn1PDz.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:ToolPicker": {
+      "file": "assets/ToolPicker-DKW7LVP1.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:async": {
+      "file": "assets/async-CU0Z_3ZN.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:check": {
+      "file": "assets/check-CYzq7BcH.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:chunk-BV7QT456": {
+      "file": "assets/chunk-BV7QT456-CVQN-0K5.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:createLucideIcon": {
+      "file": "assets/createLucideIcon-BgzzVMGK.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:desktop": {
+      "file": "assets/desktop-D56m0QQL.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "_dist.js": {
+      "file": "assets/dist-x2jm9RvA.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:input": {
+      "file": "assets/input-B3uatZMi.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:mcp-connect": {
+      "file": "assets/mcp-connect-YuyjWt-V.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:rolldown-runtime": {
+      "file": "assets/rolldown-runtime-hePW80VL.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:rpc": {
+      "file": "assets/rpc-O4dQA2Xx.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "_src.js": {
+      "file": "assets/src-zftwNtz1.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:use-model-oauth-signin": {
+      "file": "assets/use-model-oauth-signin-Cf1BX7jy.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "index.html": {
+      "file": "assets/index-BwuuDkJ0.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "src/locales/de/messages.po": {
+      "file": "assets/messages-BUoaiqsR.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/locales/en/messages.po": {
+      "file": "assets/messages-BxSu4Wqu.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/locales/es/messages.po": {
+      "file": "assets/messages-CIdU30SI.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/locales/hi/messages.po": {
+      "file": "assets/messages-Bt2QSeye.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/locales/ko/messages.po": {
+      "file": "assets/messages-D9p4B0Yz.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/locales/pt-BR/messages.po": {
+      "file": "assets/messages-CiTGCe8N.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/locales/ru/messages.po": {
+      "file": "assets/messages-DWOHrsFh.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/locales/tr/messages.po": {
+      "file": "assets/messages-Bv7-CTtX.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/locales/zh-CN/messages.po": {
+      "file": "assets/messages-C0PkScaL.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/Auth.tsx": {
+      "file": "assets/Auth-Cfqc6rQE.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/BotContextMenu.tsx": {
+      "file": "assets/BotContextMenu-CrMlzI0I.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/CallView.tsx": {
+      "file": "assets/CallView-Cg4WeRKe.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/McpServersOverlay.tsx": {
+      "file": "assets/McpServersOverlay-BEGNgIkD.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/MessagingSettingsOverlay.tsx": {
+      "file": "assets/MessagingSettingsOverlay-pVPFyNZB.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/Onboarding.tsx": {
+      "file": "assets/Onboarding-TzB_iewV.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/PeerMessagesOverlay.tsx": {
+      "file": "assets/PeerMessagesOverlay-BUTfZvIh.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/PluginsOverlay.tsx": {
+      "file": "assets/PluginsOverlay-BqK5BR63.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/ScratchpadSection.tsx": {
+      "file": "assets/ScratchpadSection-IGW0bo44.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/SettingsOverlay.tsx": {
+      "file": "assets/SettingsOverlay-CTEtV2XK.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/Welcome.tsx": {
+      "file": "assets/Welcome-C836Kr5I.js",
+      "lazy": true,
+      "dynamic": true
+    }
+  },
+  "warnings": []
+}

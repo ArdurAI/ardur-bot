@@ -13,6 +13,8 @@ export type DesktopUpdatePhase =
   | "error";
 
 export interface DesktopUpdateState {
+  /** Unsigned preview installs offer a browser download instead of in-place installation. */
+  downloadOnly?: boolean;
   phase: DesktopUpdatePhase;
   /** The installed desktop release, which can drift from the server this app points at. */
   currentVersion: string;

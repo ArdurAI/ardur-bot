@@ -213,6 +213,7 @@ import { admitRunHelper } from "./delegation-helpers.js";
 import { stoppedRunComputer } from "./delegation-stop.js";
 import { prepareDelegationWorkspace, taskWorkspacePath } from "./delegation-workspace.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
+import { startExecutionHeartbeat } from "./execution-heartbeat.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import {
   COMPACTION_BATCH_SIZE,
@@ -1193,37 +1194,39 @@ export function createRunExecutor(deps: ExecutorDeps) {
       let screenRelease: { computer: ComputerRef; context: AdapterContext } | undefined;
       let runAbortController: AbortController | null = null;
       let detachShutdown: (() => void) | undefined;
-      const stopPoll = setInterval(() => {
-        void checkDelegationExecution(deps.prisma, runId)
-          .then((reason) => {
-            if (reason) runAbortController?.abort(new DispatchStopRequested());
-          })
-          .catch(() => runAbortController?.abort());
-        void deps.prisma.run
-          .findUnique({ where: { id: runId }, select: { cancelRequestedAt: true } })
-          .then((current) => {
-            if (current?.cancelRequestedAt) runAbortController?.abort(new DispatchStopRequested());
-          })
-          .catch(() => runAbortController?.abort());
-      }, 1_000);
-      stopPoll.unref?.();
-      const heartbeat = setInterval(() => {
-        void Promise.all([
-          renewRunLease(deps, runId, workerId, fence),
-          renewComputerExecutionLease(deps.prisma, computerLease),
-        ])
-          .then(([runRenewed, computerRenewed]) => {
-            if (!runRenewed || !computerRenewed) {
-              leaseValid = false;
-              runAbortController?.abort();
+      const stopHeartbeat = startExecutionHeartbeat({
+        checkStop: async () => {
+          try {
+            const [reason, current] = await Promise.all([
+              checkDelegationExecution(deps.prisma, runId),
+              deps.prisma.run.findUnique({
+                where: { id: runId },
+                select: { cancelRequestedAt: true },
+              }),
+            ]);
+            if (reason || current?.cancelRequestedAt) {
+              runAbortController?.abort(new DispatchStopRequested());
             }
-          })
-          .catch(() => {
+          } catch {
+            // A failed stop check aborts the run but keeps the lease valid, as before.
+            runAbortController?.abort();
+          }
+        },
+        renew: async () => {
+          const [runRenewed, computerRenewed] = await Promise.all([
+            renewRunLease(deps, runId, workerId, fence),
+            renewComputerExecutionLease(deps.prisma, computerLease),
+          ]);
+          if (!runRenewed || !computerRenewed) {
             leaseValid = false;
             runAbortController?.abort();
-          });
-      }, 60_000);
-      heartbeat.unref?.();
+          }
+        },
+        onFailure: () => {
+          leaseValid = false;
+          runAbortController?.abort();
+        },
+      });
 
       const runSecrets = [...deps.secrets];
       try {
@@ -4719,8 +4722,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
       } finally {
         detachShutdown?.();
-        clearInterval(heartbeat);
-        clearInterval(stopPoll);
+        stopHeartbeat();
         const stopping = await deps.prisma.run.findUnique({
           where: { id: runId },
           select: { cancelRequestedAt: true },
