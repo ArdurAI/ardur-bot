@@ -73,7 +73,29 @@ export const HostTurnSchema = z.strictObject({
   emptyResponseText: text.optional(),
 });
 export type HostTurn = z.infer<typeof HostTurnSchema>;
+export const HostMcpRegistrationSchema = z.strictObject({
+  redactions: z.array(z.string().max(4096)).max(256).default([]),
+  serverId: id,
+  userId: id,
+  spaceId: id,
+  revision: z.number().int().positive(),
+  command: z.string().min(1).max(512),
+  args: z.array(z.string().max(2048)).max(64),
+  env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().max(4096)),
+  cwd: path,
+});
+export type HostMcpRegistration = z.infer<typeof HostMcpRegistrationSchema>;
+const mcpTarget = { serverId: id, revision: z.number().int().positive() };
 export const HostOperationSchema = z.discriminatedUnion("op", [
+  z.strictObject({ op: z.literal("mcp.tools"), ...mcpTarget }),
+  z.strictObject({
+    op: z.literal("mcp.call"),
+    ...mcpTarget,
+    name: z.string().min(1).max(160),
+    args: z.record(z.string(), z.unknown()),
+  }),
+  z.strictObject({ op: z.literal("mcp.status"), ...mcpTarget }),
+  z.strictObject({ op: z.literal("mcp.stop"), ...mcpTarget }),
   z.strictObject({
     op: z.literal("computer.exec"),
     homeKey: id,

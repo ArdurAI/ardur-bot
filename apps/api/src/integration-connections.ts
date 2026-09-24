@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   EncryptedSecretStore,
+  McpHostClient,
   McpOAuthBroker,
   RemoteConnectorDependencies,
 } from "@ardurbot/adapters";
@@ -63,7 +64,11 @@ export class IntegrationConnections {
     private readonly secrets: EncryptedSecretStore,
     private readonly webOrigin: string,
     private readonly network: RemoteConnectorDependencies = {},
-    private readonly stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } = {},
+    private readonly stdio: {
+      stdioEnabled?: boolean;
+      allowedCommands?: string[];
+      hostMcp?: McpHostClient;
+    } = {},
   ) {}
 
   async list(actor: Owner) {
@@ -115,6 +120,13 @@ export class IntegrationConnections {
     } finally {
       await connector.close();
     }
+  }
+
+  async beginAuthorization(actor: Owner, input: { serverId: string; redirectUri: string }) {
+    await this.owned(actor, input.serverId);
+    const started = await this.oauth.begin({ ...input, ...actor });
+    if (started.status !== "authorization_required") await this.capture(actor, input.serverId);
+    return started;
   }
 
   private oauthApp(catalogId: string) {
@@ -251,7 +263,29 @@ export class IntegrationConnections {
 
   async capture(actor: Owner, id: string): Promise<void> {
     const server = await this.owned(actor, id);
-    if (!server.catalogId || !server.enabled) return;
+    if (!server.enabled) return;
+    if (!server.catalogId) {
+      try {
+        const manifest = await this.tools(actor, id);
+        await this.prisma.mcpServer.updateMany({
+          where: {
+            id,
+            spaceId: actor.spaceId,
+            userId: actor.userId,
+            enabled: true,
+            revision: server.revision,
+          },
+          data: { manifest, connectionState: "connected" },
+        });
+      } catch {
+        await this.prisma.mcpServer.updateMany({
+          where: { id, spaceId: actor.spaceId, userId: actor.userId, revision: server.revision },
+          data: { connectionState: "discovery-failed" },
+        });
+        throw new Error("Could not connect this server. Check its configuration and try again.");
+      }
+      return;
+    }
     try {
       const manifest = await this.tools(actor, id);
       await this.prisma.$transaction(async (tx) => {
@@ -505,7 +539,7 @@ export class IntegrationConnections {
     const connector = new McpConnector(
       this.prisma,
       this.secrets,
-      { network: this.network },
+      { network: this.network, ...this.stdio },
       this.oauth,
     );
     try {

@@ -23,6 +23,7 @@ import {
 import { openBrowserAuth } from "./browser-auth.js";
 import { cliVersion } from "./cli.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
+import { installCustomizationIpc } from "./extensions/ipc.js";
 import { installHostService } from "./host-service-ipc.js";
 import { requestLocalSettings } from "./local-settings.js";
 import {
@@ -1027,6 +1028,7 @@ function safeOrigin(targetUrl: string) {
 }
 
 app.whenReady().then(async () => {
+  installCustomizationIpc({ window: () => mainWindow, target: () => currentTargetUrl });
   hostService = installHostService({
     window: () => mainWindow,
     target: () => currentTargetUrl,

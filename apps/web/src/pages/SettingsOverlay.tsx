@@ -1,26 +1,17 @@
 import type { AvatarStyle, SpaceMemoryConfig } from "@ardurbot/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
-import {
-  Brain,
-  CloudDownload,
-  Cpu,
-  Gauge,
-  Monitor,
-  Plug,
-  Settings,
-  Volume2,
-  XIcon,
-} from "lucide-react";
+import { Brain, CloudDownload, Cpu, Gauge, Monitor, Settings, Volume2, XIcon } from "lucide-react";
 import type { ComponentType } from "react";
-import { useEffect, useRef, useState } from "react";
-import { IntegrationCatalog } from "../components/integrations/catalog/IntegrationCatalog";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   ComputerSettingsPanel,
   GeneralSettingsPanels,
   UpdatesSettingsPanel,
   UsageSettingsPanel,
 } from "./AccountSettingsOverlay";
+import type { CustomizeSectionId } from "./customize/registrations";
+import { CustomizePage, customizeRegistration } from "./customize/registrations";
 import { DevicesSettings } from "./DevicesSettings";
 import { LearningBadge } from "./LearningInbox";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
@@ -29,6 +20,7 @@ import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
 
 export type SettingsSection =
+  | CustomizeSectionId
   | "devices"
   | "integrations"
   | "general"
@@ -40,6 +32,7 @@ export type SettingsSection =
   | "updates";
 
 type NavItem = {
+  group?: "desktop" | "customize";
   id: SettingsSection;
   label: string;
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -80,14 +73,16 @@ export function SettingsOverlay({
   const { t } = useLingui();
   const panelRef = useRef<HTMLDivElement>(null);
   const usageRef = useRef<HTMLDivElement>(null);
-  const [section, setSection] = useState<SettingsSection>(initialSection);
+  const [section, setSection] = useState<SettingsSection>(
+    initialSection === "integrations" ? "connectors" : initialSection,
+  );
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const showComputer = isDeploymentOwner;
   const panelBusy = memoryBusy || voiceBusy;
 
   useEffect(() => {
-    setSection(initialSection);
+    setSection(initialSection === "integrations" ? "connectors" : initialSection);
   }, [initialSection]);
 
   useEffect(() => {
@@ -99,13 +94,18 @@ export function SettingsOverlay({
   const navItems: NavItem[] = [
     { id: "general", label: t`General`, icon: Settings },
     { id: "devices", label: t`Devices`, icon: Monitor },
-    { id: "integrations", label: t`Integrations`, icon: Plug },
+
     { id: "models", label: t`Models`, icon: Cpu },
     { id: "memory", label: t`Memory & Skills`, icon: Brain },
     { id: "voice", label: t`Voice`, icon: Volume2 },
     { id: "usage", label: t`Usage`, icon: Gauge },
     ...(showComputer ? [{ id: "computer" as const, label: t`Computers`, icon: Monitor }] : []),
     { id: "updates", label: t`Updates`, icon: CloudDownload },
+    ...customizeRegistration("extensions", t`Extensions`),
+    ...customizeRegistration("developer", t`Developer`),
+    ...customizeRegistration("skills", t`Skills`),
+    ...customizeRegistration("connectors", t`Connectors`),
+    ...customizeRegistration("plugins", t`Plugins`),
   ];
 
   const sectionTitle =
@@ -168,29 +168,35 @@ export function SettingsOverlay({
             aria-label={t`Settings`}
             className="flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-border px-3 py-3 md:w-[200px] md:flex-col md:overflow-y-auto md:border-b-0 md:border-e md:px-3 md:py-4"
           >
-            {navItems.map((item) => {
+            {navItems.map((item, index) => {
               const Icon = item.icon;
               const active = item.id === section;
               return (
-                <button
-                  key={item.id}
-                  type="button"
-                  data-testid={`settings-nav-${item.id}`}
-                  aria-current={active ? "page" : undefined}
-                  disabled={panelBusy}
-                  onClick={() => setSection(item.id)}
-                  className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-[13.5px] transition-colors disabled:pointer-events-none disabled:opacity-50 ${
-                    active
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="size-4 shrink-0" strokeWidth={1.75} />
-                  <span className="whitespace-nowrap">
-                    {item.label}
-                    {item.id === "memory" ? <LearningBadge /> : null}
-                  </span>
-                </button>
+                <Fragment key={item.id}>
+                  {item.group && item.group !== navItems[index - 1]?.group ? (
+                    <p className="hidden px-2.5 pt-4 pb-1 text-xs text-muted-foreground sm:block">
+                      {item.group === "desktop" ? t`Desktop app` : t`Customize`}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    data-testid={`settings-nav-${item.id}`}
+                    aria-current={active ? "page" : undefined}
+                    disabled={panelBusy}
+                    onClick={() => setSection(item.id)}
+                    className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-[13.5px] transition-colors disabled:pointer-events-none disabled:opacity-50 ${
+                      active
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+                    <span className="whitespace-nowrap">
+                      {item.label}
+                      {item.id === "memory" ? <LearningBadge /> : null}
+                    </span>
+                  </button>
+                </Fragment>
               );
             })}
           </nav>
@@ -217,7 +223,7 @@ export function SettingsOverlay({
               }`}
             >
               {section === "devices" ? <DevicesSettings owner={isDeploymentOwner} /> : null}
-              {section === "integrations" ? <IntegrationCatalog /> : null}
+              <CustomizePage section={section} onNavigate={setSection} />
               {section === "general" ? (
                 <GeneralSettingsPanels
                   email={email}

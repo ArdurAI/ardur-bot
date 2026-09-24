@@ -1,11 +1,17 @@
 import path from "node:path";
-import { HOST_FRAME_BYTES, hostSocketUrl } from "@ardurbot/contracts/host-bridge";
+import {
+  HOST_FRAME_BYTES,
+  HostMcpRegistrationSchema,
+  hostSocketUrl,
+} from "@ardurbot/contracts/host-bridge";
 import { receiveFrames, wsWire } from "@ardurbot/host-runtime/bridge-wire";
 import { HostAgent } from "@ardurbot/host-runtime/host-agent";
 import WebSocket from "ws";
 import * as z from "zod";
+import { readHostMcpConfiguration } from "./mcp-configuration.js";
 
 const Config = z.strictObject({
+  mcpServers: z.array(HostMcpRegistrationSchema).max(200).default([]),
   apiUrl: z.string().url(),
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   root: z.string().max(4096).refine(path.isAbsolute),
@@ -17,6 +23,7 @@ let stopped = false;
 let configuration: z.infer<typeof Config> | undefined;
 let reconnect: ReturnType<typeof setTimeout> | undefined;
 let healthTimer: ReturnType<typeof setInterval> | undefined;
+let mcpTimer: ReturnType<typeof setInterval> | undefined;
 let failures = 0;
 const idle = setInterval(() => undefined, 60_000);
 function state(connected: boolean) {
@@ -33,6 +40,7 @@ async function connect() {
       close: () => socket?.close(),
     });
     await agent.initialize();
+    await agent.configureMcp(await readHostMcpConfiguration(config));
     socket = new WebSocket(hostSocketUrl(config.apiUrl), {
       headers: { authorization: `Bearer ${config.token}` },
       maxPayload: HOST_FRAME_BYTES,
@@ -45,6 +53,20 @@ async function connect() {
     sendWire = wire;
     const host = agent;
     let healthBusy = false;
+    let mcpRefresh: Promise<void> | undefined;
+    const refreshMcp = async () => {
+      mcpRefresh ??= (async () => {
+        try {
+          await host.configureMcp(await readHostMcpConfiguration(config));
+        } catch {
+          await host.configureMcp([]);
+        } finally {
+          mcpRefresh = undefined;
+        }
+      })();
+      await mcpRefresh;
+    };
+    host.refreshMcp = refreshMcp;
     const health = async () => {
       if (healthBusy) return;
       healthBusy = true;
@@ -63,6 +85,7 @@ async function connect() {
         host.close();
         state(false);
         clearInterval(healthTimer);
+        clearInterval(mcpTimer);
         if (!stopped)
           reconnect = setTimeout(
             () => void connect(),
@@ -75,6 +98,7 @@ async function connect() {
       state(true);
       void health();
       healthTimer = setInterval(() => void health(), 30_000);
+      mcpTimer = setInterval(() => void refreshMcp(), 5000);
     });
     // A revoked token needs explicit setup. Never spin on a permanent authentication failure.
     current.on("unexpected-response", (_request, response) => {
@@ -85,7 +109,12 @@ async function connect() {
     });
   } catch {
     state(false);
-    stop();
+    agent?.close();
+    if (!stopped)
+      reconnect = setTimeout(
+        () => void connect(),
+        Math.min(30_000, 500 * 2 ** Math.min(failures++, 6)),
+      );
   }
 }
 function stop() {
@@ -93,6 +122,7 @@ function stop() {
   clearInterval(idle);
   clearTimeout(reconnect);
   clearInterval(healthTimer);
+  clearInterval(mcpTimer);
   agent?.close();
   socket?.close();
   setTimeout(() => process.exit(0), 1500).unref();

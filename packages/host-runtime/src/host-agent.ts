@@ -7,7 +7,12 @@ import type {
   AgentRuntime,
   ComputerRef,
 } from "@ardurbot/adapter-kit";
-import type { HostFrame, HostHealth, HostRequest } from "@ardurbot/contracts/host-bridge";
+import type {
+  HostFrame,
+  HostHealth,
+  HostMcpRegistration,
+  HostRequest,
+} from "@ardurbot/contracts/host-bridge";
 import {
   HOST_FILE_BYTES,
   HOST_IN_FLIGHT,
@@ -20,6 +25,7 @@ import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
 import type { HostWire } from "./bridge-wire.js";
 import { hostLostProblem } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { HostMcpServers } from "./host-mcp.js";
 import { confinedHostCwd } from "./host-policy.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
@@ -39,14 +45,21 @@ export class HostAgent {
   private seen = new Set<string>();
   private sandbox: DesktopSandboxProvider;
   private roots: string[] = [];
+  private readonly mcp: HostMcpServers;
+  refreshMcp?: () => Promise<void>;
   constructor(
-    private readonly config: { root: string; hostRoots: string[] },
+    private readonly config: {
+      root: string;
+      hostRoots: string[];
+      mcpServers?: HostMcpRegistration[];
+    },
     private readonly wire: HostWire,
     private readonly runtimes: Record<"claude-code" | "codex-app-server", AgentRuntime> = {
       "claude-code": new ClaudeCodeRuntime(),
       "codex-app-server": new CodexAppServerRuntime(),
     },
   ) {
+    this.mcp = new HostMcpServers(config.mcpServers);
     this.sandbox = new DesktopSandboxProvider({
       root: config.root,
       hostRoots: config.hostRoots,
@@ -56,6 +69,14 @@ export class HostAgent {
   async initialize() {
     await mkdir(this.config.root, { recursive: true, mode: 0o700 });
     this.roots = await Promise.all(this.config.hostRoots.map((root) => realpath(root)));
+  }
+  async configureMcp(registrations: HostMcpRegistration[]) {
+    await this.mcp.replace(
+      registrations.map((entry) => ({
+        ...entry,
+        cwd: entry.cwd === "." ? this.config.root : entry.cwd,
+      })),
+    );
   }
   async health(): Promise<HostHealth> {
     const cwd = await confinedHostCwd(this.config.root, [this.config.root]);
@@ -124,6 +145,7 @@ export class HostAgent {
     throw new Error("Unexpected host request.");
   }
   close() {
+    void this.mcp.close();
     for (const state of this.active.values()) {
       state.abort.abort();
       state.wake?.();
@@ -168,6 +190,9 @@ export class HostAgent {
       const op = request.operation;
       if (op.op === "host.health") {
         await send("result", await this.health());
+      } else if ("serverId" in op) {
+        if (!this.mcp.has(op.serverId, op.revision)) await this.refreshMcp?.();
+        await send("result", await this.mcp.execute(op, request.scope, state.abort.signal));
       } else {
         // Never accept providerRef or a computer home from the wire. The service owns this mapping.
         const computerKey = createHash("sha256")

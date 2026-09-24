@@ -449,10 +449,29 @@ export default function Account() {
         <Pressable
           accessibilityRole="button"
           disabled={pending}
-          onPress={() => router.push("/integrations")}
+          onPress={() => router.push("/connectors")}
           style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
         >
-          <Text style={styles.settingsTitle}>{t("Integrations")}</Text>
+          <Text style={styles.settingsTitle}>{t("Connectors")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => router.push("/skills")}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsTitle}>{t("Skills")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => router.push("/plugins")}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsTitle}>{t("Plugins")}</Text>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
 

@@ -88,7 +88,7 @@ import {
   verifyMcpInstall,
 } from "@ardurbot/adapters";
 import type { Auth } from "@ardurbot/auth";
-import type { Actor, ComputerStatus, McpServer, Me, SpaceNavigation } from "@ardurbot/contracts";
+import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
   appContract,
   IntegrationProviderIdSchema,
@@ -144,8 +144,10 @@ import {
   selectSpaceVoicePreference,
   touchGroupUpdatedAt,
 } from "@ardurbot/db";
+import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
+import type { Router } from "@orpc/server";
 import { implement, ORPCError } from "@orpc/server";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
@@ -165,12 +167,15 @@ import {
   resolveBusyBotName,
   toComputerStatus,
 } from "./computer-status.js";
+import type { RouterContext } from "./customization-routes.js";
+import { createCustomizationRoutes } from "./customization-routes.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import type { HostBridge } from "./host-bridge.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
+import { mcpServerDto } from "./mcp-server-dto.js";
 import { changeGitMemoryLocation } from "./memory-git-location.js";
 import { changeMemoryLocation } from "./memory-location.js";
 import {
@@ -361,57 +366,6 @@ function computerContext(actor: Actor, botId: string, operationId: string): Adap
   };
 }
 
-function mcpServerDto(
-  row: {
-    id: string;
-    spaceId: string;
-    slug: string;
-    name: string;
-    description: string;
-    transport: string;
-    endpoint: string | null;
-    command: string | null;
-    args: unknown;
-    env: unknown;
-    headers: unknown;
-    secretId: string | null;
-    enabled: boolean;
-    revision: number;
-    createdAt: Date;
-    updatedAt: Date;
-  },
-  oauthStatus: McpServer["oauthStatus"] = "none",
-): McpServer {
-  const args = Array.isArray(row.args)
-    ? row.args.filter((item): item is string => typeof item === "string")
-    : [];
-  const envKeys =
-    row.env && typeof row.env === "object" && !Array.isArray(row.env) ? Object.keys(row.env) : [];
-  const headerKeys =
-    row.headers && typeof row.headers === "object" && !Array.isArray(row.headers)
-      ? Object.keys(row.headers)
-      : [];
-  return {
-    id: row.id,
-    spaceId: row.spaceId,
-    slug: row.slug,
-    name: row.name,
-    description: row.description,
-    transport: row.transport as McpServer["transport"],
-    endpoint: row.endpoint,
-    command: row.command,
-    args,
-    envKeys,
-    headerKeys,
-    hasSecret: row.secretId !== null,
-    oauthStatus,
-    enabled: row.enabled,
-    revision: row.revision,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
 function connectionContext(
   actor: Pick<Actor, "spaceId" | "userId">,
   operationId: string,
@@ -516,7 +470,7 @@ function mapSpaceLifecycleError(error: unknown): unknown {
   return error;
 }
 
-export function createRouter(deps: RouterDeps) {
+export function createRouter(deps: RouterDeps): Router<typeof appContract, RouterContext> {
   const nativeConnections = new CodexConnections();
   const os = implement(appContract).$context<{
     actor: Actor | null;
@@ -535,7 +489,11 @@ export function createRouter(deps: RouterDeps) {
     deps.secrets,
     deps.env.webOrigin,
     deps.remoteConnectors,
-    { stdioEnabled: deps.env.mcpStdioEnabled, allowedCommands: deps.env.mcpStdioAllowedCommands },
+    {
+      stdioEnabled: deps.env.mcpStdioEnabled,
+      allowedCommands: deps.env.mcpStdioAllowedCommands,
+      hostMcp: deps.hostBridge,
+    },
   );
   const groupRepos = createGroupRepos(deps.prisma);
   const taughtSkills = createTaughtSkillsService({
@@ -557,6 +515,7 @@ export function createRouter(deps: RouterDeps) {
 
   const commands = createCommandRoutes(deps);
   return os.router({
+    ...createCustomizationRoutes(deps),
     channelPairing: {
       installations: authed.channelPairing.installations.handler(({ context }) =>
         channelPairing.installations(context.actor),
@@ -3221,7 +3180,12 @@ export function createRouter(deps: RouterDeps) {
                 transport: input.transport,
                 endpoint: "endpoint" in input ? input.endpoint : null,
                 command: "command" in input ? input.command : null,
-                args: ("args" in input ? input.args : []) as Prisma.InputJsonValue,
+                args: ("args" in input
+                  ? redactMcpArguments(input.args, [
+                      ...Object.values(input.env),
+                      ...(input.secret ? [input.secret] : []),
+                    ])
+                  : []) as Prisma.InputJsonValue,
                 env: ("env" in input
                   ? Object.fromEntries(Object.keys(input.env).map((key) => [key, true]))
                   : {}) as Prisma.InputJsonValue,
@@ -3248,6 +3212,10 @@ export function createRouter(deps: RouterDeps) {
               },
             });
             if (!existing) throw new IsolationError();
+            if (existing.managedBy)
+              throw new ORPCError("BAD_REQUEST", {
+                message: "Manage this server in Extensions or Plugins.",
+              });
             if (existing.catalogId)
               throw new ORPCError("BAD_REQUEST", {
                 message: "Manage this connection in Integrations.",
@@ -3321,7 +3289,12 @@ export function createRouter(deps: RouterDeps) {
                 transport: config.transport,
                 endpoint: nextEndpoint,
                 command: "command" in config ? config.command : null,
-                args: ("args" in config ? config.args : []) as Prisma.InputJsonValue,
+                args: ("args" in config
+                  ? redactMcpArguments(config.args, [
+                      ...Object.values(config.env),
+                      ...(config.secret ? [config.secret] : []),
+                    ])
+                  : []) as Prisma.InputJsonValue,
                 env: ("env" in config
                   ? Object.fromEntries(Object.keys(config.env).map((key) => [key, true]))
                   : {}) as Prisma.InputJsonValue,
@@ -3362,9 +3335,13 @@ export function createRouter(deps: RouterDeps) {
               spaceId: context.actor.spaceId,
               userId: context.actor.userId,
             },
-            select: { id: true, secretId: true },
+            select: { id: true, secretId: true, managedBy: true },
           });
           if (!server) throw new IsolationError();
+          if (server.managedBy)
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Manage this server in Extensions or Plugins.",
+            });
           // Assignments cascade; the encrypted credential must go with the server.
           await deps.prisma.$transaction([
             deps.prisma.mcpServer.delete({ where: { id: server.id } }),
@@ -3511,11 +3488,7 @@ export function createRouter(deps: RouterDeps) {
             if (new URL(input.redirectUri).toString() !== expectedRedirect) {
               throw new Error("MCP OAuth redirect URI is not allowed");
             }
-            return await mcpOAuth.begin({
-              ...input,
-              spaceId: context.actor.spaceId,
-              userId: context.actor.userId,
-            });
+            return await integrations.beginAuthorization(context.actor, input);
           } catch (error) {
             throw new ORPCError("BAD_REQUEST", {
               message: error instanceof Error ? error.message : "Could not start MCP OAuth",

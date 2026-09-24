@@ -253,6 +253,10 @@ msgstr "Aktionsbestätigungen"
 msgid "Actions for {0}"
 msgstr "Aktionen für {0}"
 
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Actions for {name}"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Actions for space"
 msgstr ""
@@ -269,6 +273,11 @@ msgstr "Aktives Modell"
 msgid "Activity"
 msgstr "Aktivität"
 
+#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/CustomizeControls.tsx
+#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
@@ -302,12 +311,20 @@ msgstr "Gib einen stdio-Befehl ein."
 msgid "Add an HTTPS server URL."
 msgstr "Gib eine HTTPS-Server-URL ein."
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Add and manage MCP servers that you're working on"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add another"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Add computer connection"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Add connector"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -329,6 +346,10 @@ msgstr "GraphQL-Endpunkt hinzufügen"
 #: src/pages/ScratchpadSection.tsx
 msgid "Add item"
 msgstr "Element hinzufügen"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Add marketplace"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -363,6 +384,10 @@ msgstr "Treg hinzufügen"
 msgid "Add trigger"
 msgstr ""
 
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Add value"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Added"
 msgstr ""
@@ -383,10 +408,15 @@ msgstr "Wird hinzugefügt…"
 msgid "Advanced"
 msgstr "Erweitert"
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Advanced settings"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
@@ -405,6 +435,10 @@ msgstr "Agents:"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "All bots"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "All categories"
 msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
@@ -453,6 +487,10 @@ msgstr "Einmal erlauben"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow purchase actions without asking"
 msgstr "Kaufaktionen ohne Nachfrage erlauben"
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Allow the assistant to directly interact with apps, data, and tools on your computer"
+msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
@@ -554,6 +592,7 @@ msgid "Applied"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/DeveloperPage.tsx
 msgid "Apply"
 msgstr ""
 
@@ -616,6 +655,7 @@ msgstr "Archiviert. Chat, Erinnerungen und Dateien bleiben erhalten."
 msgid "Ardur (built-in)"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
 msgstr "Argumente"
@@ -730,6 +770,7 @@ msgid "Avatars"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
@@ -761,6 +802,7 @@ msgstr "Bearer-Token"
 msgid "Bearer token (optional)"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
@@ -850,6 +892,10 @@ msgstr ""
 msgid "Branch"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Browse extensions"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr ""
@@ -860,6 +906,16 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Built-in"
+msgstr ""
+
+#. placeholder {0}: entry.author
+#. placeholder {0}: row.author
+#: src/pages/customize/PluginsPage.tsx
+msgid "by {0}"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "by you"
 msgstr ""
 
 #: src/pages/CallView.tsx
@@ -876,6 +932,9 @@ msgstr "Server nicht erreichbar."
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryImportExport.tsx
@@ -909,6 +968,14 @@ msgstr "abgebrochen"
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Abgebrochen"
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Catalog"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Change"
+msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Change computer"
@@ -998,6 +1065,10 @@ msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Checkout has local changes. Clean it before updating."
+msgstr ""
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Choose"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -1179,9 +1250,14 @@ msgstr "Farbe {color}"
 msgid "Coming soon"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "Befehl"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Commands"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -1232,6 +1308,14 @@ msgstr "Computer sind aus. Setze SANDBOX_PROVIDER=docker mit SANDBOX_SUPERVISOR_
 msgid "Computers are unavailable; reconnect and try again."
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Configure"
+msgstr ""
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Configure {name}"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Configured by deployment"
 msgstr "Durch die Bereitstellung konfiguriert"
@@ -1267,6 +1351,7 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/provider-error-message.tsx
@@ -1274,6 +1359,11 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "Verbinden"
+
+#. placeholder {0}: tokenFor?.name ?? ""
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Connect {0}"
+msgstr ""
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Connect a chat bot"
@@ -1312,6 +1402,7 @@ msgid "Connect your account."
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1365,6 +1456,14 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Die Verbindung zu {0} steht noch aus. Du kannst dieses Fenster schließen und später erneut nachsehen."
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Connector"
+msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Connectors"
+msgstr ""
 
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
@@ -1485,6 +1584,11 @@ msgstr ""
 msgid "Could not complete the update. Try again."
 msgstr ""
 
+#: src/pages/customize/CustomizeControls.tsx
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Could not complete this action."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
@@ -1516,6 +1620,10 @@ msgstr "Stimmanbieter konnte nicht verbunden werden"
 
 #: src/pages/Shell.tsx
 msgid "Could not connect to the computer screen"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Could not connect. Check the details and try again."
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -1657,6 +1765,10 @@ msgstr ""
 msgid "Could not load the last check."
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Could not load the server configuration."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
@@ -1759,6 +1871,10 @@ msgstr "Speichern fehlgeschlagen"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not save Auto Review"
+msgstr ""
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Could not save configuration. Check the fields and try again."
 msgstr ""
 
 #: src/pages/ModelDestinations.tsx
@@ -1942,6 +2058,10 @@ msgstr "Dein Ardur Bot erstellen"
 msgid "Created"
 msgstr ""
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Created by you"
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
@@ -1965,6 +2085,10 @@ msgstr "Zugangsdaten werden verschlüsselt und dem Modell nie gesendet."
 msgid "Credentials are stored encrypted on your server."
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Credentials changed"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron"
 msgstr "Cron"
@@ -1985,8 +2109,24 @@ msgstr ""
 msgid "Current password"
 msgstr "Aktuelles Passwort"
 
+#: src/pages/customize/PluginsPage.tsx
+msgid "Current space"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Custom"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Custom MCP server"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Customer support"
+msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Customize"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -2111,7 +2251,12 @@ msgstr "Beschreibe, was dieser Bot macht"
 msgid "Description"
 msgstr "Beschreibung"
 
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Desktop"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
+#: src/pages/SettingsOverlay.tsx
 msgid "Desktop app"
 msgstr ""
 
@@ -2126,6 +2271,11 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Developer"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -2156,6 +2306,14 @@ msgstr ""
 msgid "Direct MCP"
 msgstr ""
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Disable"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Disabled"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2164,6 +2322,10 @@ msgstr "Trennen"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Disconnect this computer"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Disconnected"
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2258,6 +2420,10 @@ msgstr ""
 msgid "Draft skill"
 msgstr "Skill-Entwurf"
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Drag .MCPB or .DXT files here to install"
+msgstr ""
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Drag, drop, or paste an image"
 msgstr "Bild ziehen, ablegen oder einfügen"
@@ -2278,6 +2444,10 @@ msgstr "Frühere Nachricht"
 msgid "Edit"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Edit config"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Zuerst bearbeiten"
@@ -2289,6 +2459,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "E-Mail"
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Enable"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
@@ -2335,6 +2509,14 @@ msgstr "Gib eine ganze Zahl von 1 bis 1000 für das Bilderlimit ein."
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "Gib diesen Code unter <0>{0}</0> ein"
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Environment variables"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Error"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -2426,6 +2608,11 @@ msgstr "Exportiere die Liste dieser Woche aus dem CRM und lege sie im freigegebe
 msgid "Export with history"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Extensions"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "External conversation"
@@ -2463,6 +2650,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "Feedback corrections"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Filter"
 msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -2526,6 +2717,20 @@ msgstr "Passwort vergessen?"
 msgid "Free"
 msgstr "Kostenlos"
 
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "From folder"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "From marketplaces you added"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "From the catalog"
+msgstr ""
+
 #: src/pages/SettingsOverlay.tsx
 msgid "General"
 msgstr "Allgemein"
@@ -2552,6 +2757,10 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Git repository"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Git URL"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -2620,6 +2829,10 @@ msgstr "Hallo, so klinge ich, wenn ich Antworten vorlese."
 msgid "Hide bots"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Hide logs"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Hide password"
 msgstr ""
@@ -2642,6 +2855,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Home storage size"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Host"
 msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
@@ -2701,6 +2918,10 @@ msgstr ""
 msgid "Import OpenAPI JSON"
 msgstr "OpenAPI-JSON importieren"
 
+#: src/pages/customize/PluginsPage.tsx
+msgid "In this space"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "inappropriate"
 msgstr ""
@@ -2711,6 +2932,12 @@ msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "Included"
 msgstr ""
 
 #: src/pages/MemoryDeliveryProgress.tsx
@@ -2729,6 +2956,32 @@ msgstr "Eingaben"
 msgid "Inputs and boundaries"
 msgstr ""
 
+#: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/PluginsPage.tsx
+msgid "Install"
+msgstr ""
+
+#. placeholder {0}: summary.name
+#: src/pages/customize/PluginsPage.tsx
+msgid "Install {0}"
+msgstr ""
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Install {name}"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Installed"
+msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Installed on your computer"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Installing"
+msgstr ""
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
 msgstr "Instanz-API-Schlüssel"
@@ -2736,6 +2989,10 @@ msgstr "Instanz-API-Schlüssel"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "Anweisung"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Instructions"
+msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "integration"
@@ -2750,7 +3007,6 @@ msgid "Integration options"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "Integrationen"
@@ -2861,6 +3117,10 @@ msgstr ""
 msgid "learned {0} things this week"
 msgstr ""
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Learned skills"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Learning"
@@ -2868,6 +3128,10 @@ msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Learning inbox"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -2975,6 +3239,14 @@ msgstr "Lokal"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "Mit lokalem Zugriff können Bots ohne Rückfrage Befehle ausführen. Vermeide dies auf gemeinsam genutzten oder öffentlichen Servern."
 
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Local dev"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Local MCP servers"
+msgstr ""
+
 #: src/pages/ModelDestinations.tsx
 msgid "Local only"
 msgstr ""
@@ -3049,6 +3321,7 @@ msgstr ""
 msgid "MCP endpoint"
 msgstr ""
 
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "MCP servers"
 msgstr "MCP-Server"
@@ -3263,6 +3536,7 @@ msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/Auth.tsx
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3289,6 +3563,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "Eingabe erforderlich"
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Needs reconnection"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Needs takeover"
@@ -3360,6 +3638,10 @@ msgstr ""
 msgid "No bots match"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "No changes."
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No chat apps linked yet."
 msgstr ""
@@ -3382,6 +3664,14 @@ msgstr "Keine Ausnahmen. Aktionen werden automatisch ausgeführt."
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "No items found."
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "No logs yet."
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -3447,6 +3737,10 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "None"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -3576,6 +3870,8 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -3598,12 +3894,24 @@ msgstr ""
 msgid "Open in full window"
 msgstr "In vollständigem Fenster öffnen"
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Open learning inbox"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "Navigation öffnen"
 
 #: src/pages/shell/command-palette.tsx
 msgid "Open terminal"
+msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Open the desktop app to manage extensions."
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Open the desktop app to manage local servers."
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -3752,6 +4060,11 @@ msgstr "Anheften"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "Wiedergabe…"
+
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Plugins"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
@@ -3904,6 +4217,7 @@ msgstr ""
 msgid "Recent"
 msgstr "Kürzlich"
 
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Reconnect"
 msgstr ""
@@ -4005,6 +4319,9 @@ msgid "Release interrupted computer?"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/SkillsPage.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -4022,6 +4339,10 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Remove marketplace"
 msgstr ""
 
 #. placeholder {0}: mention.name
@@ -4053,6 +4374,10 @@ msgstr "Zusammen mit Chat, Computer und Erinnerungen entfernt."
 #: src/pages/ScratchpadSection.tsx
 msgid "Removed, but list refresh failed"
 msgstr "Entfernt, aber die Liste konnte nicht aktualisiert werden"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Removing"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Removing…"
@@ -4222,6 +4547,10 @@ msgstr "Rev. {0}"
 msgid "Review approval"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Review changes"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Review destination"
 msgstr ""
@@ -4319,6 +4648,7 @@ msgid "running"
 msgstr "läuft"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "Läuft"
@@ -4357,6 +4687,7 @@ msgstr ""
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -4376,6 +4707,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Saved"
@@ -4469,6 +4801,10 @@ msgstr ""
 msgid "Search by domain"
 msgstr ""
 
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Search connectors"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Search integrations.sh"
 msgstr ""
@@ -4483,6 +4819,11 @@ msgstr "Anbieter suchen"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Search run output"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "Search skills and plugins"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -4544,10 +4885,18 @@ msgstr ""
 msgid "Server"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Server configuration JSON"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/LocalSettings.tsx
 msgid "Server integrations"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Server logs"
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
@@ -4555,6 +4904,7 @@ msgid "Server name"
 msgstr "Servername"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -4667,7 +5017,10 @@ msgstr ""
 msgid "Skill {0}"
 msgstr "Skill {0}"
 
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/SettingsOverlay.tsx
 msgid "Skills"
 msgstr "Skills"
 
@@ -4695,6 +5048,18 @@ msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Sort by name"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Sort by newest"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Source"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -4760,6 +5125,10 @@ msgstr "Startet"
 msgid "Starting…"
 msgstr "Wird gestartet…"
 
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Status"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
 msgstr ""
@@ -4782,6 +5151,10 @@ msgstr "Vorlesen stoppen"
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Stop teaching"
 msgstr "Anlernen beenden"
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Stopped"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -4862,6 +5235,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Taught skills"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -5036,6 +5413,14 @@ msgstr "Dieser Server hat keine Browserautorisierung angefordert."
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "Dieser Server ist bereits verbunden. Trenne zuerst die Verbindung, um ihn erneut zu autorisieren."
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "This server is managed by a plugin"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "This server is managed by an extension"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "This service needs client registration before you can connect."
 msgstr ""
@@ -5060,6 +5445,10 @@ msgstr "Titel"
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "An:"
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Token"
+msgstr ""
 
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
@@ -5089,12 +5478,17 @@ msgstr "Treg-Token"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
+#: src/pages/customize/CustomizeControls.tsx
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "Erneut versuchen"
 
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Type"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -5121,6 +5515,8 @@ msgstr ""
 msgid "Undone"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr ""
@@ -5198,6 +5594,14 @@ msgstr ""
 msgid "Upload"
 msgstr "Hochladen"
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Upload skills ZIP"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Upload ZIP"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -5242,6 +5646,10 @@ msgstr "Prüfen und hinzufügen"
 msgid "Verifying…"
 msgstr "Wird geprüft…"
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "View logs"
+msgstr ""
+
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -5265,6 +5673,10 @@ msgstr ""
 #: src/pages/shell/message-cards.tsx
 msgid "Waiting…"
 msgstr "Warten…"
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Web"
+msgstr ""
 
 #: src/pages/ChannelPairingSettings.tsx
 #: src/pages/RoutineEditor.tsx
@@ -5414,3 +5826,7 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."
 msgstr "Dein Team aus jederzeit verfügbaren Agents<0/>für echte Aufgaben."
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Yours"
+msgstr ""

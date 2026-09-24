@@ -717,6 +717,10 @@ export const McpServerConfigInput = z.discriminatedUnion("transport", [
 export type McpServerConfigInput = z.infer<typeof McpServerConfigInput>;
 
 export const McpServerSchema = z.object({
+  managedBy: z.enum(["extension", "plugin"]).nullable().optional(),
+  managedId: z.string().nullable().optional(),
+  placement: z.enum(["worker", "host"]).optional(),
+  connectionState: z.string().optional(),
   id: Id,
   spaceId: Id,
   slug: z.string(),

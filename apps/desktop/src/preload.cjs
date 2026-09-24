@@ -1,7 +1,33 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("ardurbotDesktop", {
   platform: process.platform,
+  customization: {
+    info: (...args) => ipcRenderer.invoke("desktop.customization.info", ...args),
+    list: (...args) => ipcRenderer.invoke("desktop.customization.list", ...args),
+    prepare: (...args) => ipcRenderer.invoke("desktop.customization.prepare", ...args),
+    cancel: (...args) => ipcRenderer.invoke("desktop.customization.cancel", ...args),
+    install: (...args) => ipcRenderer.invoke("desktop.customization.install", ...args),
+    configure: (...args) => ipcRenderer.invoke("desktop.customization.configure", ...args),
+    uninstall: (...args) => ipcRenderer.invoke("desktop.customization.uninstall", ...args),
+    selectPaths: (...args) => ipcRenderer.invoke("desktop.customization.selectPaths", ...args),
+    importSkills: (...args) => ipcRenderer.invoke("desktop.customization.importSkills", ...args),
+    addMarketplace: (...args) =>
+      ipcRenderer.invoke("desktop.customization.addMarketplace", ...args),
+    installPlugin: (...args) => ipcRenderer.invoke("desktop.customization.installPlugin", ...args),
+    recoverPlugins: (...args) =>
+      ipcRenderer.invoke("desktop.customization.recoverPlugins", ...args),
+    uninstallPlugin: (...args) =>
+      ipcRenderer.invoke("desktop.customization.uninstallPlugin", ...args),
+    applyConfig: (...args) => ipcRenderer.invoke("desktop.customization.applyConfig", ...args),
+    prepareDrop: (spaceId, file) =>
+      ipcRenderer.invoke(
+        "desktop.customization.prepareDrop",
+        spaceId,
+        webUtils.getPathForFile(file),
+      ),
+  },
+
   host: {
     state: () => ipcRenderer.invoke("desktop.host.state"),
     setup: () => ipcRenderer.invoke("desktop.host.setup"),

@@ -16,7 +16,11 @@ function runPreload(file: string, ipc: { invoke?: unknown; on?: unknown; off?: u
     process: { platform: "linux" },
     require(moduleName: string) {
       if (moduleName !== "electron") throw new Error(`Unexpected preload import: ${moduleName}`);
-      return { contextBridge: { exposeInMainWorld }, ipcRenderer: { invoke, on, off } };
+      return {
+        contextBridge: { exposeInMainWorld },
+        ipcRenderer: { invoke, on, off },
+        webUtils: { getPathForFile: () => "/fixture/extension.mcpb" },
+      };
     },
   });
 
@@ -32,6 +36,7 @@ describe("desktop preload bridge", () => {
     expect(globalName).toBe("ardurbotDesktop");
     expect(bridge.platform).toBe("linux");
     expect(Object.keys(bridge).sort()).toEqual([
+      "customization",
       "devices",
       "host",
       "localSettings",
@@ -89,6 +94,7 @@ describe("desktop preload bridge", () => {
     const { exposeInMainWorld } = runPreload("preload.cjs");
     const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, Record<string, unknown>];
     expect(Object.keys(bridge).sort()).toEqual([
+      "customization",
       "devices",
       "host",
       "localSettings",
@@ -118,6 +124,33 @@ describe("desktop preload bridge", () => {
 
     unsubscribe();
     expect(off).toHaveBeenCalledWith("desktop.oauth.callback", expect.any(Function));
+  });
+  it("exposes fixed customization operations and resolves dropped files inside preload", async () => {
+    const { invoke, exposeInMainWorld } = runPreload("preload.cjs");
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, ArdurBotDesktop];
+    expect(Object.keys(bridge.customization!).sort()).toEqual([
+      "addMarketplace",
+      "applyConfig",
+      "cancel",
+      "configure",
+      "importSkills",
+      "info",
+      "install",
+      "installPlugin",
+      "list",
+      "prepare",
+      "prepareDrop",
+      "recoverPlugins",
+      "selectPaths",
+      "uninstall",
+      "uninstallPlugin",
+    ]);
+    await bridge.customization!.prepareDrop("space", { name: "extension.mcpb" });
+    expect(invoke).toHaveBeenCalledExactlyOnceWith(
+      "desktop.customization.prepareDrop",
+      "space",
+      "/fixture/extension.mcpb",
+    );
   });
 });
 

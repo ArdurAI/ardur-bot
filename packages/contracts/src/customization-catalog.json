@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "id": "builtin:interrogate",
+      "name": "Interrogate",
+      "description": "Review a change or plan.",
+      "categories": ["Development", "Review"]
+    }
+  ],
+  "plugins": [
+    {
+      "id": "review-kit",
+      "name": "Review kit",
+      "description": "Review changes and plans.",
+      "version": "1.0.0",
+      "categories": ["Development", "Review"]
+    }
+  ]
+}

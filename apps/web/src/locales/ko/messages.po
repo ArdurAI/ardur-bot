@@ -253,6 +253,10 @@ msgstr "작업 실행 전 확인"
 msgid "Actions for {0}"
 msgstr "{0} 작업 메뉴"
 
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Actions for {name}"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Actions for space"
 msgstr ""
@@ -269,6 +273,11 @@ msgstr "현재 모델"
 msgid "Activity"
 msgstr "활동"
 
+#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/CustomizeControls.tsx
+#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
@@ -302,12 +311,20 @@ msgstr "stdio 명령을 입력하세요."
 msgid "Add an HTTPS server URL."
 msgstr "HTTPS 서버 URL을 입력하세요."
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Add and manage MCP servers that you're working on"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add another"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Add computer connection"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Add connector"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -329,6 +346,10 @@ msgstr "GraphQL 엔드포인트 추가"
 #: src/pages/ScratchpadSection.tsx
 msgid "Add item"
 msgstr "항목 추가"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Add marketplace"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -363,6 +384,10 @@ msgstr "Treg 추가"
 msgid "Add trigger"
 msgstr "트리거 추가"
 
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Add value"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Added"
 msgstr ""
@@ -383,10 +408,15 @@ msgstr "추가 중…"
 msgid "Advanced"
 msgstr "고급 설정"
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Advanced settings"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr "고급..."
 
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
@@ -405,6 +435,10 @@ msgstr "사용 Bot:"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "All bots"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "All categories"
 msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
@@ -453,6 +487,10 @@ msgstr "한 번 허용"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow purchase actions without asking"
 msgstr "확인 없이 결제 동작 허용"
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Allow the assistant to directly interact with apps, data, and tools on your computer"
+msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
@@ -554,6 +592,7 @@ msgid "Applied"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/DeveloperPage.tsx
 msgid "Apply"
 msgstr ""
 
@@ -616,6 +655,7 @@ msgstr "보관되었습니다. 대화, 기억, 파일은 유지됩니다."
 msgid "Ardur (built-in)"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
 msgstr "인자"
@@ -730,6 +770,7 @@ msgid "Avatars"
 msgstr "아바타"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
@@ -761,6 +802,7 @@ msgstr "Bearer 토큰"
 msgid "Bearer token (optional)"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
@@ -850,6 +892,10 @@ msgstr ""
 msgid "Branch"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Browse extensions"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr ""
@@ -860,6 +906,16 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Built-in"
+msgstr ""
+
+#. placeholder {0}: entry.author
+#. placeholder {0}: row.author
+#: src/pages/customize/PluginsPage.tsx
+msgid "by {0}"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "by you"
 msgstr ""
 
 #: src/pages/CallView.tsx
@@ -876,6 +932,9 @@ msgstr "서버에 연결할 수 없습니다."
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryImportExport.tsx
@@ -909,6 +968,14 @@ msgstr "취소됨"
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "취소됨"
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Catalog"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Change"
+msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Change computer"
@@ -999,6 +1066,10 @@ msgstr "확인 중…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Checkout has local changes. Clean it before updating."
 msgstr "체크아웃에 로컬 변경 사항이 있습니다. 업데이트하기 전에 정리하세요."
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Choose"
+msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose a bot shape, color, or upload an image"
@@ -1179,9 +1250,14 @@ msgstr "색상 {color}"
 msgid "Coming soon"
 msgstr "준비 중"
 
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "실행 명령"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Commands"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -1232,6 +1308,14 @@ msgstr "컴퓨터가 꺼져 있습니다. SANDBOX_PROVIDER=docker와 SANDBOX_SUP
 msgid "Computers are unavailable; reconnect and try again."
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Configure"
+msgstr ""
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Configure {name}"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Configured by deployment"
 msgstr "서버에서 설정됨"
@@ -1267,6 +1351,7 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/provider-error-message.tsx
@@ -1274,6 +1359,11 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "연결"
+
+#. placeholder {0}: tokenFor?.name ?? ""
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Connect {0}"
+msgstr ""
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Connect a chat bot"
@@ -1312,6 +1402,7 @@ msgid "Connect your account."
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1365,6 +1456,14 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} 연결이 아직 진행 중입니다. 이 창을 닫고 나중에 다시 확인할 수 있습니다."
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Connector"
+msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Connectors"
+msgstr ""
 
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
@@ -1485,6 +1584,11 @@ msgstr ""
 msgid "Could not complete the update. Try again."
 msgstr ""
 
+#: src/pages/customize/CustomizeControls.tsx
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Could not complete this action."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
@@ -1516,6 +1620,10 @@ msgstr "음성 서비스에 연결하지 못했습니다."
 
 #: src/pages/Shell.tsx
 msgid "Could not connect to the computer screen"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Could not connect. Check the details and try again."
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -1657,6 +1765,10 @@ msgstr ""
 msgid "Could not load the last check."
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Could not load the server configuration."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
@@ -1760,6 +1872,10 @@ msgstr "저장하지 못했습니다."
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not save Auto Review"
 msgstr "자동 검토를 저장할 수 없습니다"
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Could not save configuration. Check the fields and try again."
+msgstr ""
 
 #: src/pages/ModelDestinations.tsx
 msgid "Could not save destinations; try again."
@@ -1942,6 +2058,10 @@ msgstr "Ardur Bot 계정 만들기"
 msgid "Created"
 msgstr "생성됨"
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Created by you"
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
@@ -1965,6 +2085,10 @@ msgstr "인증 정보는 암호화되며 모델에 전송되지 않습니다."
 msgid "Credentials are stored encrypted on your server."
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Credentials changed"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron"
 msgstr "Cron"
@@ -1985,9 +2109,25 @@ msgstr ""
 msgid "Current password"
 msgstr "현재 비밀번호"
 
+#: src/pages/customize/PluginsPage.tsx
+msgid "Current space"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Custom"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Custom MCP server"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Customer support"
 msgstr "고객 지원"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Customize"
+msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Customize bot avatar"
@@ -2111,7 +2251,12 @@ msgstr "이 Bot이 하는 일을 짧게 설명하세요"
 msgid "Description"
 msgstr "설명"
 
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Desktop"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
+#: src/pages/SettingsOverlay.tsx
 msgid "Desktop app"
 msgstr ""
 
@@ -2126,6 +2271,11 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Developer"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -2156,6 +2306,14 @@ msgstr ""
 msgid "Direct MCP"
 msgstr ""
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Disable"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Disabled"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2164,6 +2322,10 @@ msgstr "연결 해제"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Disconnect this computer"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Disconnected"
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2258,6 +2420,10 @@ msgstr ""
 msgid "Draft skill"
 msgstr "작업 기술 초안"
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Drag .MCPB or .DXT files here to install"
+msgstr ""
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Drag, drop, or paste an image"
 msgstr "이미지를 끌어다 놓거나 붙여넣으세요"
@@ -2278,6 +2444,10 @@ msgstr "이전 메시지"
 msgid "Edit"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Edit config"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "수정 후 보내기"
@@ -2289,6 +2459,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "이메일"
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Enable"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
@@ -2335,6 +2509,14 @@ msgstr "이미지 한도는 1에서 1000 사이의 정수로 입력하세요."
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "<0>{0}</0>에서 이 코드를 입력하세요"
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Environment variables"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Error"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -2426,6 +2608,11 @@ msgstr "CRM에서 이번 주 목록을 내려받아 공유 폴더에 넣기"
 msgid "Export with history"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Extensions"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "External conversation"
@@ -2463,6 +2650,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "Feedback corrections"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Filter"
 msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -2526,6 +2717,20 @@ msgstr "비밀번호를 잊으셨나요?"
 msgid "Free"
 msgstr "무료"
 
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "From folder"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "From marketplaces you added"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "From the catalog"
+msgstr ""
+
 #: src/pages/SettingsOverlay.tsx
 msgid "General"
 msgstr "일반"
@@ -2552,6 +2757,10 @@ msgstr "Git 이벤트"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Git repository"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Git URL"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -2620,6 +2829,10 @@ msgstr "안녕하세요. 답변을 소리 내어 읽을 때 이런 목소리로 
 msgid "Hide bots"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Hide logs"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Hide password"
 msgstr "비밀번호 숨기기"
@@ -2642,6 +2855,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Home storage size"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Host"
 msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
@@ -2701,6 +2918,10 @@ msgstr ""
 msgid "Import OpenAPI JSON"
 msgstr "OpenAPI JSON 가져오기"
 
+#: src/pages/customize/PluginsPage.tsx
+msgid "In this space"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "inappropriate"
 msgstr ""
@@ -2711,6 +2932,12 @@ msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "Included"
 msgstr ""
 
 #: src/pages/MemoryDeliveryProgress.tsx
@@ -2729,6 +2956,32 @@ msgstr "입력값"
 msgid "Inputs and boundaries"
 msgstr ""
 
+#: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/PluginsPage.tsx
+msgid "Install"
+msgstr ""
+
+#. placeholder {0}: summary.name
+#: src/pages/customize/PluginsPage.tsx
+msgid "Install {0}"
+msgstr ""
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Install {name}"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Installed"
+msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Installed on your computer"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Installing"
+msgstr ""
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
 msgstr "인스턴스 API 키"
@@ -2736,6 +2989,10 @@ msgstr "인스턴스 API 키"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "실행할 내용"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Instructions"
+msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "integration"
@@ -2750,7 +3007,6 @@ msgid "Integration options"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "앱·도구 연동"
@@ -2861,6 +3117,10 @@ msgstr ""
 msgid "learned {0} things this week"
 msgstr ""
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Learned skills"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Learning"
@@ -2868,6 +3128,10 @@ msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Learning inbox"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -2975,6 +3239,14 @@ msgstr "로컬"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "로컬 접근을 허용하면 Bot이 묻지 않고 명령을 실행할 수 있습니다. 공유 서버나 공개 서버에서는 허용하지 마세요."
 
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Local dev"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Local MCP servers"
+msgstr ""
+
 #: src/pages/ModelDestinations.tsx
 msgid "Local only"
 msgstr ""
@@ -3049,6 +3321,7 @@ msgstr ""
 msgid "MCP endpoint"
 msgstr ""
 
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "MCP servers"
 msgstr "MCP 서버"
@@ -3263,6 +3536,7 @@ msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/Auth.tsx
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3289,6 +3563,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "입력 필요"
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Needs reconnection"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Needs takeover"
@@ -3360,6 +3638,10 @@ msgstr ""
 msgid "No bots match"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "No changes."
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No chat apps linked yet."
 msgstr "아직 연결된 채팅 앱이 없습니다."
@@ -3383,6 +3665,14 @@ msgstr "별도 확인 규칙이 없습니다. 작업이 자동으로 실행됩�
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
 msgstr "아직 그룹 채팅이 없습니다."
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "No items found."
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "No logs yet."
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "No longer active"
@@ -3448,6 +3738,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "트리거 없음"
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "None"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
@@ -3576,6 +3870,8 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -3598,12 +3894,24 @@ msgstr ""
 msgid "Open in full window"
 msgstr "전체 창으로 열기"
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Open learning inbox"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "메뉴 열기"
 
 #: src/pages/shell/command-palette.tsx
 msgid "Open terminal"
+msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Open the desktop app to manage extensions."
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Open the desktop app to manage local servers."
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -3752,6 +4060,11 @@ msgstr "고정"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "재생 중…"
+
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Plugins"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
@@ -3904,6 +4217,7 @@ msgstr ""
 msgid "Recent"
 msgstr "최근"
 
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Reconnect"
 msgstr ""
@@ -4005,6 +4319,9 @@ msgid "Release interrupted computer?"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/SkillsPage.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -4022,6 +4339,10 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Remove marketplace"
 msgstr ""
 
 #. placeholder {0}: mention.name
@@ -4053,6 +4374,10 @@ msgstr "대화, 컴퓨터, 기억과 함께 삭제되었습니다."
 #: src/pages/ScratchpadSection.tsx
 msgid "Removed, but list refresh failed"
 msgstr "삭제했지만 목록을 새로고침하지 못했습니다."
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Removing"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Removing…"
@@ -4222,6 +4547,10 @@ msgstr "리비전 {0}"
 msgid "Review approval"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Review changes"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Review destination"
 msgstr ""
@@ -4319,6 +4648,7 @@ msgid "running"
 msgstr "실행 중"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "실행 중"
@@ -4357,6 +4687,7 @@ msgstr ""
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -4376,6 +4707,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Saved"
@@ -4469,6 +4801,10 @@ msgstr ""
 msgid "Search by domain"
 msgstr ""
 
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Search connectors"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Search integrations.sh"
 msgstr ""
@@ -4483,6 +4819,11 @@ msgstr "AI 서비스 검색"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Search run output"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "Search skills and plugins"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -4544,10 +4885,18 @@ msgstr "Sentry 알림"
 msgid "Server"
 msgstr ""
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Server configuration JSON"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/LocalSettings.tsx
 msgid "Server integrations"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Server logs"
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
@@ -4555,6 +4904,7 @@ msgid "Server name"
 msgstr "서버 이름"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -4667,7 +5017,10 @@ msgstr ""
 msgid "Skill {0}"
 msgstr "작업 기술 {0}"
 
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/SettingsOverlay.tsx
 msgid "Skills"
 msgstr "스킬"
 
@@ -4696,6 +5049,18 @@ msgstr ""
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "소프트웨어 업데이트"
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Sort by name"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Sort by newest"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Source"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
@@ -4760,6 +5125,10 @@ msgstr "시작 중"
 msgid "Starting…"
 msgstr "시작하는 중…"
 
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Status"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
 msgstr ""
@@ -4782,6 +5151,10 @@ msgstr "읽기 중지"
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Stop teaching"
 msgstr "가르치기 종료"
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "Stopped"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -4862,6 +5235,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Taught skills"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -5036,6 +5413,14 @@ msgstr "이 서버는 브라우저 인증을 요청하지 않았습니다."
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "이 서버는 이미 연결되어 있습니다. 다시 인증하려면 먼저 연결을 해제하세요."
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "This server is managed by a plugin"
+msgstr ""
+
+#: src/pages/customize/DeveloperPage.tsx
+msgid "This server is managed by an extension"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "This service needs client registration before you can connect."
 msgstr ""
@@ -5060,6 +5445,10 @@ msgstr "역할"
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "받는 사람:"
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Token"
+msgstr ""
 
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
@@ -5089,12 +5478,17 @@ msgstr "Treg 토큰"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
+#: src/pages/customize/CustomizeControls.tsx
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "다시 시도"
 
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
+msgstr ""
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Type"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -5121,6 +5515,8 @@ msgstr ""
 msgid "Undone"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr ""
@@ -5198,6 +5594,14 @@ msgstr "업데이트 중…"
 msgid "Upload"
 msgstr "업로드"
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Upload skills ZIP"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Upload ZIP"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -5242,6 +5646,10 @@ msgstr "확인 후 추가"
 msgid "Verifying…"
 msgstr "확인 중…"
 
+#: src/pages/customize/DeveloperPage.tsx
+msgid "View logs"
+msgstr ""
+
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -5265,6 +5673,10 @@ msgstr "API가 다시 작동하기를 기다리는 중…"
 #: src/pages/shell/message-cards.tsx
 msgid "Waiting…"
 msgstr "기다리는 중…"
+
+#: src/pages/customize/ConnectorsPage.tsx
+msgid "Web"
+msgstr ""
 
 #: src/pages/ChannelPairingSettings.tsx
 #: src/pages/RoutineEditor.tsx
@@ -5414,3 +5826,7 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."
 msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Yours"
+msgstr ""

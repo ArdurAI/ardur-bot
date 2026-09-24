@@ -164,6 +164,8 @@ model Member {
 }
 
 model Space {
+  customizationMarketplaces CustomizationMarketplace[]
+  pluginInstalls PluginInstall[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
   aiDataConsents AiDataConsent[]
@@ -780,6 +782,7 @@ model ScratchpadItem {
 }
 
 model TaughtSkill {
+  enabled   Boolean @default(true)
   id        String    @id @default(cuid())
   spaceId   String
   space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -810,6 +813,11 @@ model TaughtSkill {
 /// The Pi runtime already understands this format; we persist and inject them.
 /// Distinct from TaughtSkill (demo/record playbooks).
 model AgentSkill {
+  enabled     Boolean @default(true)
+  pluginId    String?
+  plugin      PluginInstall? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  componentKind String @default("skill")
+  bundleId String?
   id          String   @id @default(cuid())
   spaceId     String
   space       Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -1130,6 +1138,12 @@ model Secret {
 }
 
 model McpServer {
+  pluginId      String?
+  plugin        PluginInstall? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  managedBy     String?
+  managedId     String?
+  placement     String @default("worker")
+  diagnostics   Json @default("{}")
   id            String            @id @default(cuid())
   spaceId       String
   space         Space             @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -1926,4 +1940,36 @@ model HostRegistration {
   generation String
   createdAt DateTime @default(now())
   @@map("host_registrations")
+}
+
+model CustomizationMarketplace {
+  id        String @id @default(cuid())
+  spaceId   String
+  space     Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String
+  source    String
+  manifest  Json
+  secretId  String
+  createdAt DateTime @default(now())
+  @@unique([spaceId, userId, name])
+  @@map("customization_marketplaces")
+}
+
+model PluginInstall {
+  skills        AgentSkill[]
+  servers       McpServer[]
+  id            String @id @default(cuid())
+  spaceId       String
+  space         Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId        String
+  name          String
+  marketplaceId String?
+  source        String
+  digest        String
+  state         String @default("installing")
+  summary       Json
+  createdAt     DateTime @default(now())
+  @@unique([spaceId, userId, name])
+  @@map("plugin_installs")
 }

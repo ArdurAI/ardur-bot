@@ -9,6 +9,7 @@ import type { IntegrationResourceKind } from "@ardurbot/contracts";
 import { IntegrationManifestSchema, isLocalMcpHost } from "@ardurbot/contracts";
 import { integrationToolKind } from "@ardurbot/core";
 import type { McpServer, PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { argumentSecrets, McpLogBuffer } from "@ardurbot/host-runtime/mcp-diagnostics";
 import { getLogger } from "@ardurbot/logging";
 import { catalogToolPrefix } from "./approval-effect.js";
 import { redactConnectorPayload, sanitizeConnectorError } from "./connector-safety.js";
@@ -28,11 +29,13 @@ import {
 import type { McpOAuthBroker, OAuthMaterial } from "./mcp-oauth.js";
 import { oauthMaterialSecrets } from "./mcp-oauth.js";
 import { McpSession } from "./mcp-transport.js";
+import type { McpHostClient, McpSessionPort } from "./remote-host-mcp.js";
+import { RemoteHostMcpSession } from "./remote-host-mcp.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 
-type SessionEntry = { session: McpSession; revision: number; material: OAuthMaterial };
-type PendingSession = { revision: number; promise: Promise<McpSession> };
+type SessionEntry = { session: McpSessionPort; revision: number; material: OAuthMaterial };
+type PendingSession = { revision: number; promise: Promise<McpSessionPort> };
 
 /** Runtime MCP connector. Authorization is re-checked against the bot assignment on every call. */
 /**
@@ -98,6 +101,7 @@ export class McpConnector implements ConnectorProvider {
     private readonly prisma: PrismaClient,
     private readonly secrets: EncryptedSecretStore,
     private readonly options: {
+      hostMcp?: McpHostClient;
       stdioEnabled?: boolean;
       allowedCommands?: string[];
       network?: RemoteTransportDependencies;
@@ -455,7 +459,12 @@ export class McpConnector implements ConnectorProvider {
     await entry.session.close();
   }
 
-  private async sessionFor(server: McpServer, context: AdapterContext): Promise<McpSession> {
+  private async sessionFor(server: McpServer, context: AdapterContext): Promise<McpSessionPort> {
+    // The host owns the process; each proxy must carry this call's live run and bot authorization.
+    if (server.placement === "host" && server.transport === "stdio") {
+      if (!this.options.hostMcp) throw new Error("The host service is unavailable.");
+      return new RemoteHostMcpSession(this.options.hostMcp, server, context);
+    }
     const sessionKey = this.sessionKey(server, context);
     const existing = this.sessions.get(sessionKey);
     if (existing && existing.revision === server.revision) return existing.session;
@@ -483,8 +492,39 @@ export class McpConnector implements ConnectorProvider {
   private async connectSession(
     server: McpServer,
     context: AdapterContext,
-  ): Promise<{ session: McpSession; material: OAuthMaterial }> {
-    const session = new McpSession({ name: `ardurbot-${server.slug}` });
+  ): Promise<{ session: McpSessionPort; material: OAuthMaterial }> {
+    let flush: ReturnType<typeof setTimeout> | undefined;
+    const diagnostics = new McpLogBuffer([], (snapshot) => {
+      if (server.transport !== "stdio" || flush) return;
+      flush = setTimeout(
+        () => {
+          flush = undefined;
+          const current = diagnostics.snapshot();
+          void this.prisma.mcpServer
+            .updateMany({
+              where: {
+                id: server.id,
+                spaceId: context.spaceId,
+                userId: context.userId,
+                revision: server.revision,
+              },
+              data: {
+                diagnostics: current,
+                ...(current.status === "stopped"
+                  ? {}
+                  : {
+                      connectionState:
+                        current.status === "running" ? "connected" : "discovery-failed",
+                    }),
+              },
+            })
+            .catch(() => undefined);
+        },
+        snapshot.status === "error" ? 0 : 200,
+      );
+      flush.unref?.();
+    });
+    const session = new McpSession({ name: `ardurbot-${server.slug}`, diagnostics });
     // Hoisted so a throw after the secret is decoded can still hand the material out.
     let material: OAuthMaterial | undefined;
     try {
@@ -501,14 +541,20 @@ export class McpConnector implements ConnectorProvider {
         ? (JSON.parse(this.secrets.load(secret.ciphertext, secret.id)) as OAuthMaterial)
         : {};
       const loaded = { material, ...(secret ? { secretId: secret.id } : {}) };
-      const args = Array.isArray(server.args) ? server.args.map(String) : [];
+      const args = material.args ?? (Array.isArray(server.args) ? server.args.map(String) : []);
+      diagnostics.setSecrets([
+        ...oauthMaterialSecrets(material),
+        ...argumentSecrets(args),
+        ...Object.values(material.env ?? {}),
+      ]);
       const env = { ...(material.env ?? {}) };
       if (server.transport === "stdio") {
         if (!this.options.stdioEnabled) throw new Error("MCP stdio is disabled");
         await session.connectStdio({
-          command: String(server.command ?? ""),
+          command: material.command ?? String(server.command ?? ""),
           args,
           env,
+          cwd: material.cwd,
           allowedCommands: this.options.allowedCommands ?? [],
           signal: context.signal,
         });

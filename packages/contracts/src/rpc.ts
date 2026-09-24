@@ -8,6 +8,7 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
 } from "./computer-connections.js";
+import { customizationContract } from "./customization.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
 import {
@@ -193,6 +194,7 @@ const threadSendInput = threadTarget
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
 export const appContract = {
+  ...customizationContract,
   channelPairing: channelPairingContract,
   devices: devicesContract,
   pairing: pairingContract,

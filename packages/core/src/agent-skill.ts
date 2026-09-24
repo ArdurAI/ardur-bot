@@ -28,6 +28,7 @@ export type SkillCatalogEntry = {
 };
 
 export type SkillRecord = SkillCatalogEntry & {
+  componentKind?: string;
   id?: string;
   documentId?: string | null;
   activeRevision?: number | null;
