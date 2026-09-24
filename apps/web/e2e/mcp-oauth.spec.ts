@@ -84,18 +84,22 @@ test("connects an MCP server through the OAuth popup callback", async ({ page },
   });
 
   await page.getByText("Integrations", { exact: true }).click();
-  await page.getByTestId("integrations-advanced").evaluate((element) => {
-    (element as HTMLDetailsElement).open = true;
-  });
-  await page.getByRole("button", { name: "Manage MCP servers", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "MCP servers" })).toBeVisible();
+  await page.getByTestId("settings-nav-mcp").click();
+  await expect(page.getByTestId("user-settings")).toHaveAttribute("data-settings-section", "mcp");
+  await expect(page.getByRole("heading", { name: "MCP", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Manage MCP servers", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Linear MCP", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Access token (optional)")).toBeHidden();
   await captureScreenshot(page, testInfo, "mcp-oauth-ready");
 
+  await page.getByRole("button", { name: "Add MCP server", exact: true }).click();
   await page.getByText("Advanced", { exact: true }).click();
   await expect(page.getByLabel("Access token (optional)")).toBeVisible();
   await page.getByText("Advanced", { exact: true }).click();
+
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
 
   const popupPromise = page.waitForEvent("popup");
   await page.getByRole("button", { name: "Connect OAuth", exact: true }).click();

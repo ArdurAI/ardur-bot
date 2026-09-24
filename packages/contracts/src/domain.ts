@@ -1012,6 +1012,11 @@ export const ModelConnectInputSchema = z
     maxImagesPerPrompt: z.number().int().min(1).max(1000).nullable().optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.provider === "ollama") {
+      if (!value.baseUrl?.trim())
+        ctx.addIssue({ code: "custom", message: "Server URL is required", path: ["baseUrl"] });
+      return;
+    }
     if (
       value.maxTokens !== undefined &&
       value.contextWindow !== undefined &&
@@ -1098,6 +1103,10 @@ export const ModelCatalogEntrySchema = z.object({
   thinkingLevels: z.array(ThinkingLevelSchema).optional(),
   /** Catalog stand-in so a provider appears before the user enters a real model id. */
   placeholder: z.boolean().optional(),
+  credentialId: z.string().optional(),
+  acceptsImages: z.boolean().optional(),
+  contextWindow: z.number().int().positive().optional(),
+  parameterSize: z.string().optional(),
 });
 export type ModelCatalogEntry = z.infer<typeof ModelCatalogEntrySchema>;
 

@@ -42,6 +42,20 @@ export function HostComputerStatus() {
             : t("Not set up")}
         {status.connected && versions.length ? ` · ${versions.join(" · ")}` : ""}
       </Text>
+      {status.connected && status.health?.environment ? (
+        <>
+          <Text style={{ color: tokens.mutedForeground }}>
+            {t("Tools:")}{" "}
+            {status.health.environment.tools.map((tool) => tool.name).join(", ") ||
+              t("None detected")}
+          </Text>
+          {status.health.environment.diagnostic ? (
+            <Text accessibilityRole="alert" style={{ color: tokens.destructive }}>
+              {status.health.environment.diagnostic}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
       {status.roots.map((root) => (
         <Text key={root} style={{ color: tokens.mutedForeground }}>
           {root}

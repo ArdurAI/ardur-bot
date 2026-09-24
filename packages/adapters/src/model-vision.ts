@@ -87,6 +87,7 @@ export function modelAcceptsImageInput(
 ): boolean {
   const resolved = resolveModelRefForVisionCheck(provider, modelId);
   if (!resolved.provider || !resolved.id) return false;
+  if (resolved.provider === "ollama") return acceptsImages;
   if (acceptsImages && resolved.provider === OPENAI_COMPATIBLE_PROVIDER_ID) return true;
 
   const models = catalogModels();

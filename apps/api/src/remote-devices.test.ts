@@ -20,6 +20,9 @@ function fixture() {
   };
   let nonceUsed = false;
   const tx = {
+    remoteAuthorityPolicy: {
+      findMany: vi.fn(async () => [] as { layer: string; scopes: string[] }[]),
+    },
     instanceIdentity: { findUniqueOrThrow: vi.fn(async () => ({ instanceId: "home" })) },
     deviceGrant: {
       findFirst: vi.fn(async () => (grant.revokedAt ? null : grant)),
@@ -59,7 +62,7 @@ function fixture() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-  return { app, deps, grant, read, signed, call };
+  return { app, deps, grant, read, signed, call, tx };
 }
 describe("isolated device routes", () => {
   it("reads the same user and space thread through a signed grant", async () => {
@@ -131,5 +134,52 @@ it("allows signed Team reads but refuses task controls without their scopes", as
     expect(
       (await reader.call(reader.signed(operation, { id: "handoff", rootTaskId: "root" }))).status,
     ).toBe(403);
+  }
+});
+
+describe("space Dispatch switch", () => {
+  it.each(["dispatch", "answer", "team-accept", "default"])(
+    "blocks signed %s before any work",
+    async (operation) => {
+      const f = fixture();
+      f.grant.scopes = ["dispatch", "steer", "approve", "consequential"];
+      f.tx.remoteAuthorityPolicy.findMany.mockResolvedValue([
+        { layer: "desktop-dispatch", scopes: [] },
+      ]);
+      const response = await f.call(
+        f.signed(
+          operation,
+          operation === "dispatch"
+            ? { clientNonce: "request", text: "Continue", replyToTaskId: "task" }
+            : {},
+        ),
+      );
+      expect(response.status).toBe(403);
+      expect(await response.text()).toContain("Dispatch is off on this computer");
+      expect(f.read).not.toHaveBeenCalled();
+    },
+  );
+  it("leaves authenticated reading available while Dispatch is off", async () => {
+    const f = fixture();
+    f.tx.remoteAuthorityPolicy.findMany.mockResolvedValue([
+      { layer: "desktop-dispatch", scopes: [] },
+    ]);
+    expect(
+      (await f.call(f.signed("rpc", { procedure: "threads/get", input: { botId: "bot" } }))).status,
+    ).toBe(200);
+  });
+});
+
+it("exposes read-only comparison views to signed readers", async () => {
+  for (const procedure of ["comparisons/list", "comparisons/get"]) {
+    const f = fixture();
+    expect((await f.call(f.signed("rpc", { procedure, input: { id: "comparison" } }))).status).toBe(
+      200,
+    );
+  }
+  for (const procedure of ["comparisons/create", "comparisons/merge"]) {
+    const f = fixture();
+    expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).not.toBe(200);
+    expect(f.read).not.toHaveBeenCalled();
   }
 });

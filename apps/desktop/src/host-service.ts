@@ -2,6 +2,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { spawn } from "node:child_process";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
+import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface HostServiceConfig {
@@ -9,6 +10,26 @@ export interface HostServiceConfig {
   token: string;
   root: string;
   hostRoots: string[];
+}
+
+export class HostLifecyclePreferences {
+  keepRunning = true;
+  constructor(private readonly file: string) {}
+  async load() {
+    const text = await readPrivateFile(this.file, 1024);
+    if (text !== null) {
+      try {
+        this.keepRunning = JSON.parse(text).keepRunning !== false;
+      } catch {
+        this.keepRunning = true;
+      }
+    }
+  }
+  async setKeepRunning(enabled: boolean) {
+    await mkdir(path.dirname(this.file), { recursive: true, mode: 0o700 });
+    await writePrivateFile(this.file, JSON.stringify({ keepRunning: enabled }));
+    this.keepRunning = enabled;
+  }
 }
 export interface HostSecretStorage {
   isEncryptionAvailable(): boolean;
@@ -82,22 +103,10 @@ export function hostServiceLaunch(options: {
   };
 }
 export function hostServiceEnvironment(source: NodeJS.ProcessEnv, platform = process.platform) {
-  const env: NodeJS.ProcessEnv = { ELECTRON_RUN_AS_NODE: "1" };
-  for (const key of [
-    "PATH",
-    "HOME",
-    "USERPROFILE",
-    "SystemRoot",
-    "WINDIR",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "TMPDIR",
-    "TEMP",
-    "TMP",
-    "LANG",
-    "LC_ALL",
-  ])
-    if (source[key]) env[key] = source[key];
+  const env: NodeJS.ProcessEnv = {
+    ...filterHostEnvironment(source, platform),
+    ELECTRON_RUN_AS_NODE: "1",
+  };
   if (platform === "win32") env.ELECTRON_NO_ATTACH_CONSOLE = "1";
   return env;
 }
@@ -108,7 +117,12 @@ export function stopHostProcess(child: ChildProcess, platform = process.platform
       const killer = start(
         path.win32.join(system, "System32", "taskkill.exe"),
         ["/pid", String(child.pid), "/t", "/f"],
-        { shell: false, windowsHide: true, stdio: "ignore" },
+        {
+          shell: false,
+          windowsHide: true,
+          stdio: "ignore",
+          env: filterHostEnvironment(process.env, platform),
+        },
       );
       killer.on("error", () => child.kill("SIGKILL"));
       killer.unref();

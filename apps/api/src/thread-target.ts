@@ -42,6 +42,7 @@ import {
   resolveGroupSendAttachments,
   resolveSendAttachments,
 } from "./artifacts.js";
+import { resolveComposerReferences } from "./composer-references.js";
 import { resolveBusyBotName, toComputerStatus } from "./computer-status.js";
 import { storedRunFailure } from "./run-failure-kind.js";
 import { withSerializableRetry } from "./serializable-retry.js";
@@ -69,7 +70,9 @@ const RUNS_NEEDING_CONTINUE = new Set(["queued", "waiting_takeover"]);
 
 const STEERABLE_RUN_STATUSES = new Set(["queued", "leased", "running", "waiting_takeover"]);
 
-type MentionTargetInput = string | { kind: "bot" | "group" | "routine" | "connector"; id: string };
+type MentionTargetInput =
+  | string
+  | { kind: "bot" | "group" | "routine" | "connector" | "mcp" | "folder"; id: string };
 
 function splitMentionTargets(mentions: MentionTargetInput[] | undefined) {
   const botMentionIds = new Set<string>();
@@ -641,6 +644,20 @@ export async function sendThreadMessage(
 
   const commit = () =>
     deps.prisma.$transaction(async (tx) => {
+      const contextReferences = (input.mentions ?? []).flatMap((mention) =>
+        typeof mention !== "string" && (mention.kind === "mcp" || mention.kind === "folder")
+          ? [{ kind: mention.kind, id: mention.id }]
+          : [],
+      );
+      const composerContext = contextReferences.length
+        ? await resolveComposerReferences(
+            tx,
+            actor,
+            contextReferences,
+            target.kind === "bot" ? target.bot.computer?.kind : undefined,
+          )
+        : { note: "", blocks: [] };
+      const promptText = [input.text, composerContext.note].filter(Boolean).join("\n\n");
       let replyQuote: string | undefined;
       if (input.replyToMessageId) {
         const reply = await tx.message.findFirst({
@@ -675,7 +692,10 @@ export async function sendThreadMessage(
           actor,
           mentionTargets.connectorMentionIds,
         );
-        const blocks = buildUserMessageBlocks(input.text, attachmentBlocks);
+        const blocks: MessageBlock[] = [
+          ...buildUserMessageBlocks(input.text, attachmentBlocks),
+          ...composerContext.blocks,
+        ];
         const message = await createThreadMessageInTransaction(tx, {
           threadId: target.threadId,
           role: "user",
@@ -779,7 +799,7 @@ export async function sendThreadMessage(
             botId: target.botId,
             threadId: target.threadId,
             userId: actor.userId,
-            prompt: buildSendPrompt(input.text, artifacts, connectorNames),
+            prompt: buildSendPrompt(promptText, artifacts, connectorNames),
             status: "queued",
           },
         });
@@ -842,7 +862,10 @@ export async function sendThreadMessage(
         actor,
         mentionTargets.connectorMentionIds,
       );
-      const blocks = buildUserMessageBlocks(input.text, attachmentBlocks);
+      const blocks: MessageBlock[] = [
+        ...buildUserMessageBlocks(input.text, attachmentBlocks),
+        ...composerContext.blocks,
+      ];
       const message = await createThreadMessageInTransaction(tx, {
         threadId: target.threadId,
         role: "user",
@@ -917,7 +940,7 @@ export async function sendThreadMessage(
             botId,
             threadId: target.threadId,
             userId: actor.userId,
-            prompt: buildSendPrompt(input.text, artifacts, connectorNames),
+            prompt: buildSendPrompt(promptText, artifacts, connectorNames),
             status: "queued",
           },
         });

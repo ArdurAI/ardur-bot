@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  HostLifecyclePreferences,
   HostServiceStore,
   HostServiceSupervisor,
   hostServiceEnvironment,
@@ -21,6 +22,22 @@ const config = {
 afterEach(() => vi.useRealTimers());
 
 describe("desktop host service", () => {
+  it("persists the close-window choice separately from pairing secrets", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "host-lifecycle-"));
+    try {
+      const file = path.join(root, "lifecycle.json");
+      const preferences = new HostLifecyclePreferences(file);
+      await preferences.load();
+      expect(preferences.keepRunning).toBe(true);
+      await preferences.setKeepRunning(false);
+      const reopened = new HostLifecyclePreferences(file);
+      await reopened.load();
+      expect(reopened.keepRunning).toBe(false);
+      expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ keepRunning: false });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it.each(["win32", "linux", "darwin"] as const)(
     "launches compiled JavaScript using Electron Node mode on %s",
     (platform) => {
@@ -42,12 +59,30 @@ describe("desktop host service", () => {
       const env = hostServiceEnvironment(
         {
           PATH: "/usr/bin",
+          SHELL: "/bin/zsh",
+          SSH_AUTH_SOCK: "/fixture/agent.sock",
+          XDG_CONFIG_HOME: "/fixture/config",
+          XDG_DATA_HOME: "/fixture/data",
+          XDG_CACHE_HOME: "/fixture/cache",
+          HOMEBREW_PREFIX: "/fixture/brew",
+          GH_TOKEN: "placeholder",
+          AWS_PROFILE: "placeholder",
           NODE_OPTIONS: "injection",
           ANTHROPIC_API_KEY: "secret",
           HOST_TOKEN: "secret",
         },
         platform,
       );
+      expect(env).toMatchObject({
+        SHELL: "/bin/zsh",
+        SSH_AUTH_SOCK: "/fixture/agent.sock",
+        XDG_CONFIG_HOME: "/fixture/config",
+        XDG_DATA_HOME: "/fixture/data",
+        XDG_CACHE_HOME: "/fixture/cache",
+        HOMEBREW_PREFIX: "/fixture/brew",
+      });
+      expect(env.GH_TOKEN).toBeUndefined();
+      expect(env.AWS_PROFILE).toBeUndefined();
       expect(env.NODE_OPTIONS).toBeUndefined();
       expect(env.ANTHROPIC_API_KEY).toBeUndefined();
       expect(env.HOST_TOKEN).toBeUndefined();
@@ -154,7 +189,12 @@ it("uses absolute taskkill without a shell on Windows", async () => {
     expect(start).toHaveBeenCalledWith(
       "C:\\Windows\\System32\\taskkill.exe",
       ["/pid", "1234", "/t", "/f"],
-      { shell: false, windowsHide: true, stdio: "ignore" },
+      expect.objectContaining({
+        shell: false,
+        windowsHide: true,
+        stdio: "ignore",
+        env: expect.objectContaining({ SystemRoot: "C:\\Windows" }),
+      }),
     );
   } finally {
     vi.unstubAllEnvs();

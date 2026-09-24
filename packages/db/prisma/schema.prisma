@@ -22,6 +22,7 @@ model AiDataConsent {
 }
 
 model User {
+  preferences UserPreferences?
   aiDataConsents AiDataConsent[]
   id                          String                       @id
   name                        String
@@ -48,6 +49,22 @@ model User {
 
   @@unique([email])
   @@map("user")
+}
+
+model UserPreferences {
+  userId String @id @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme String @default("system")
+  chatFont String @default("sans") @map("chat_font")
+  motion String @default("system")
+  responseCompletions Boolean @default(true) @map("response_completions")
+  routines Boolean @default(true)
+  approvalsNeeded Boolean @default(true) @map("approvals_needed")
+  dispatchMessages Boolean @default(true) @map("dispatch_messages")
+  preferredBrowser String @default("builtin") @map("preferred_browser")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_preferences")
 }
 
 model Session {
@@ -166,6 +183,7 @@ model Member {
 model Space {
   customizationMarketplaces CustomizationMarketplace[]
   pluginInstalls PluginInstall[]
+  comparisons Comparison[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
   aiDataConsents AiDataConsent[]
@@ -575,6 +593,7 @@ model Task {
 }
 
 model Run {
+  comparisonId String?
   delegationId String? @unique
   delegationRootTaskId String?
   originDeviceGrantId String?
@@ -627,6 +646,7 @@ model Run {
   @@unique([spaceId, clientNonce])
   @@index([status, leaseExpiresAt])
   @@index([status, updatedAt, id])
+  @@index([userId, updatedAt, id])
   @@index([botOutcomeReturnedAt, status])
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
@@ -1050,6 +1070,7 @@ model Artifact {
 
   @@index([spaceId, botId])
   @@index([groupId])
+  @@index([userId, runId, id])
   @@map("artifacts")
 }
 
@@ -1892,6 +1913,7 @@ model DelegationRoot {
   @@map("delegation_roots")
 }
 model Delegation {
+  comparisonId String?
   card Json?
   id String @id @default(cuid())
   rootTaskId String
@@ -1972,4 +1994,40 @@ model PluginInstall {
   createdAt     DateTime @default(now())
   @@unique([spaceId, userId, name])
   @@map("plugin_installs")
+}
+
+model Comparison {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId String
+  coordinatorBotId String
+  rootTaskId String @unique
+  parentRunId String @unique
+  clientNonce String
+  requestHash String
+  snapshot Json
+  participants Json
+  budgetTokens Int
+  mergeReserved Boolean
+  createdAt DateTime @default(now())
+  executions ComparisonExecution[]
+  @@unique([spaceId, userId, clientNonce])
+  @@index([spaceId, userId, createdAt])
+  @@map("comparisons")
+}
+
+model ComparisonExecution {
+  id String @id @default(cuid())
+  comparisonId String
+  comparison Comparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  position Int
+  botId String
+  runId String @unique
+  delegationId String @unique
+  participant Json
+  input Json
+  selectedRunIds String[] @default([])
+  @@unique([comparisonId, position])
+  @@map("comparison_executions")
 }

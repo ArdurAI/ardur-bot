@@ -83,6 +83,9 @@ function fixture() {
     status: "pending",
   };
   const tx = {
+    remoteAuthorityPolicy: {
+      findMany: vi.fn(async () => [] as { layer: string; scopes: string[] }[]),
+    },
     deviceApprovalBinding: { findUnique: vi.fn(async () => binding) },
     messagingTaskOrigin: {
       findFirst: vi.fn(async () => ({ taskId: "task", grantId: "grant" })),
@@ -241,4 +244,25 @@ it("does not dispatch ambient group conversation", async () => {
   await f.dispatch.consume(installation, { ...event, private: false, addressed: false });
   expect(calls.admit).not.toHaveBeenCalled();
   expect(calls.enqueue).not.toHaveBeenCalled();
+});
+
+describe("space Dispatch switch", () => {
+  it.each([
+    { text: "Start a task" },
+    { text: "Change the task", replyTo: "message" },
+    { text: "", action: `allow:${"a".repeat(36)}` },
+  ])("blocks channel dispatch, steering and approvals while off: %j", async (request) => {
+    const f = fixture();
+    f.tx.remoteAuthorityPolicy.findMany.mockResolvedValue([
+      { layer: "desktop-dispatch", scopes: [] },
+    ]);
+    await f.dispatch.consume(installation, { ...event, ...request });
+    expect(calls.admit).not.toHaveBeenCalled();
+    expect(f.events.answerRunInput).not.toHaveBeenCalled();
+    expect(f.jobs.enqueue).not.toHaveBeenCalled();
+    expect(calls.enqueue).toHaveBeenCalledWith(
+      f.tx,
+      expect.objectContaining({ card: { text: "Dispatch is off on this computer" } }),
+    );
+  });
 });

@@ -106,6 +106,20 @@ export function RuntimeSettings({
             />
             <Trans>Experimental</Trans>
           </label>
+          {availability ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {[
+                availability.version,
+                availability.signedIn === true
+                  ? t`Signed in`
+                  : availability.available
+                    ? t`Available`
+                    : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          ) : null}
           {availability?.reason ? (
             <p role="status" className="text-sm text-muted-foreground">
               {availability.reason}
@@ -119,7 +133,7 @@ export function RuntimeSettings({
           <Button variant="ghost" size="sm" onClick={() => setRefresh((value) => value + 1)}>
             <Trans>Check again</Trans>
           </Button>
-          {kind === "codex-app-server" && !availability?.available ? (
+          {kind === "codex-app-server" && availability?.signedIn === false ? (
             <Button
               variant="outline"
               size="sm"

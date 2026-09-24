@@ -17,11 +17,6 @@ import { DesktopUpdateSection } from "../components/DesktopUpdates";
 import { SoftwareUpdateSection } from "../components/SoftwareUpdateSection";
 import { authClient } from "../lib/auth";
 import { getActiveUiLocale, setUiLocale } from "../lib/i18n";
-import {
-  type AppearancePreference,
-  getUiAppearancePreference,
-  setUiAppearance,
-} from "../lib/ui-appearance";
 import { UI_LOCALE_LABELS, UI_LOCALES, type UiLocale } from "../lib/ui-locale";
 import { ComputerProfilesSettings } from "./ComputerProfilesSettings";
 import { HostComputerSettings } from "./HostComputerSettings";
@@ -49,9 +44,6 @@ export function GeneralSettingsPanels({
   const { t } = useLingui();
   const [locale, setLocale] = useState<UiLocale>(() => getActiveUiLocale());
   const localeRequestRef = useRef(0);
-  const [appearance, setAppearance] = useState<AppearancePreference>(() =>
-    getUiAppearancePreference(),
-  );
   const [avatarPending, setAvatarPending] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
 
@@ -103,19 +95,6 @@ export function GeneralSettingsPanels({
           </Button>
         </section>
       ) : null}
-
-      <section className="rounded-xl border border-border px-4 py-4">
-        <h3 className="text-[15px] font-medium text-foreground">
-          <Trans>Appearance</Trans>
-        </h3>
-        <AppearancePicker
-          value={appearance}
-          onChange={(next) => {
-            setAppearance(next);
-            setUiAppearance(next);
-          }}
-        />
-      </section>
 
       <section className="rounded-xl border border-border px-4 py-4">
         <h3 className="text-[15px] font-medium text-foreground">
@@ -365,41 +344,6 @@ function SettingsPasswordInput({
         onChange={(event) => onChange(event.target.value)}
       />
     </Field>
-  );
-}
-
-function AppearancePicker({
-  value,
-  onChange,
-}: {
-  value: AppearancePreference;
-  onChange: (next: AppearancePreference) => void;
-}) {
-  const { t } = useLingui();
-  const options: { value: AppearancePreference; label: string }[] = [
-    { value: "system", label: t`System` },
-    { value: "light", label: t`Light` },
-    { value: "dark", label: t`Dark` },
-  ];
-
-  return (
-    <fieldset
-      aria-label={t`Appearance`}
-      data-testid="ui-appearance-select"
-      className="mt-3 grid min-w-0 grid-cols-3 gap-1 rounded-lg bg-muted p-1"
-    >
-      {options.map((option) => (
-        <Toggle
-          key={option.value}
-          data-testid={`ui-appearance-${option.value}`}
-          pressed={option.value === value}
-          onPressedChange={() => onChange(option.value)}
-          className="text-[13px] aria-pressed:bg-background aria-pressed:shadow-sm"
-        >
-          {option.label}
-        </Toggle>
-      ))}
-    </fieldset>
   );
 }
 

@@ -12,6 +12,56 @@ export const HOST_TOTAL_BYTES = 8 * 1024 * 1024;
 export const HOST_FILE_BYTES = 128 * 1024;
 export const HOST_IN_FLIGHT = 4;
 export const HOST_WINDOW = 8;
+export const HOST_TOOLS = [
+  "git",
+  "gh",
+  "glab",
+  "kubectl",
+  "helm",
+  "docker",
+  "podman",
+  "aws",
+  "gcloud",
+  "az",
+  "terraform",
+  "node",
+  "pnpm",
+  "npm",
+  "python3",
+  "uv",
+  "go",
+  "cargo",
+  "claude",
+  "codex",
+  "ollama",
+] as const;
+export const HostEnvironmentSchema = z.strictObject({
+  tools: z
+    .array(
+      z.strictObject({
+        name: z.enum(HOST_TOOLS),
+        version: z
+          .string()
+          .max(40)
+          .regex(/^\d+\.\d+(?:\.\d+)?$/)
+          .optional(),
+        status: z.enum(["signed in", "not checked"]),
+        context: z.string().max(160).optional(),
+      }),
+    )
+    .max(HOST_TOOLS.length),
+  diagnostic: z.string().max(512).optional(),
+});
+export type HostEnvironment = z.infer<typeof HostEnvironmentSchema>;
+export function hostEnvironmentNote(environment: HostEnvironment) {
+  const tools = environment.tools
+    .map(
+      (tool) =>
+        `${tool.name}${tool.version ? ` ${tool.version}` : ""} (${tool.context ? `context: ${JSON.stringify(tool.context)}; sign-in not checked` : tool.status})`,
+    )
+    .join(", ");
+  return `This computer uses the owner's tools and saved CLI sign-ins. Tools on this computer: ${tools || "none detected"}. Commands start in registered folders; Ask-first rules apply to consequential commands.${environment.diagnostic ? ` ${environment.diagnostic}.` : ""}`;
+}
 const id = z
   .string()
   .min(1)
@@ -32,6 +82,7 @@ const tool = z.strictObject({
   route: z.unknown().optional(),
 });
 export const HostTurnSchema = z.strictObject({
+  controlledComparison: z.boolean().optional(),
   botId: id,
   runId: id,
   threadId: id,
@@ -96,6 +147,7 @@ export const HostOperationSchema = z.discriminatedUnion("op", [
   }),
   z.strictObject({ op: z.literal("mcp.status"), ...mcpTarget }),
   z.strictObject({ op: z.literal("mcp.stop"), ...mcpTarget }),
+  z.strictObject({ op: z.literal("computer.environment"), homeKey: id }),
   z.strictObject({
     op: z.literal("computer.exec"),
     homeKey: id,
@@ -144,6 +196,7 @@ export const HostHealthSchema = z.strictObject({
   load: z.number().int().min(0).max(HOST_IN_FLIGHT),
   claude: RuntimeAvailabilitySchema,
   codex: RuntimeAvailabilitySchema,
+  environment: HostEnvironmentSchema.optional(),
 });
 export type HostHealth = z.infer<typeof HostHealthSchema>;
 export const HostStatusSchema = z.strictObject({

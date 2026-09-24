@@ -16,6 +16,7 @@ interface ComposeService {
   restart?: string;
   network_mode?: string;
   networks?: string[];
+  extra_hosts?: string[];
 }
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
@@ -24,6 +25,13 @@ const publishWorkflowFile = path.resolve(repoRoot, ".github/workflows/publish-se
 const compose = parse(readFileSync(composeFile, "utf8")) as {
   services: Record<string, ComposeService>;
 };
+
+it("lets packaged API and worker reach host model servers on every Docker platform", () => {
+  for (const service of ["api", "worker"]) {
+    expect(compose.services[service]?.extra_hosts).toContain("host.docker.internal:host-gateway");
+    expect(compose.services[service]?.environment?.ARDURBOT_DEPLOYMENT_KIND).toBe("packaged");
+  }
+});
 const publishWorkflow = parse(readFileSync(publishWorkflowFile, "utf8")) as {
   jobs?: {
     publish?: {

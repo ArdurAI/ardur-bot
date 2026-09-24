@@ -40,6 +40,7 @@ describe("native session ownership", () => {
     });
     for (const changed of [
       { ...input, computerId: "other" },
+      { ...input, historyGeneration: 1 },
       { ...input, instructions: "new" },
       { ...input, pin: { ...input.pin, effort: "high" } },
     ])

@@ -185,6 +185,40 @@ describe("catalog connection lifecycle", () => {
     ).rejects.toThrow();
     expect(f.oauth.begin).toHaveBeenCalledTimes(1);
   });
+  it.each(["notion", "atlassian"])(
+    "connects, cancels, reconnects and revokes %s with an enriched actor",
+    async (catalogId) => {
+      const f = fixture();
+      const owner = { ...actor, isDeploymentOwner: true, role: "owner" };
+      const first = await f.service.connect(owner, { catalogId });
+      expect(first.authorizationUrl).toBe("https://example.test/authorize");
+      await f.service.revoke(owner, first.connection.id, "cancelled");
+      expect(f.row().connectionState).toBe("cancelled");
+      const next = await f.service.connect(owner, { catalogId, connectionId: first.connection.id });
+      expect(next.authorizationUrl).toBe("https://example.test/authorize");
+      await f.service.revoke(owner, next.connection.id);
+      expect(f.row().connectionState).toBe("not-connected");
+      for (const [{ where }] of f.db.mcpServer.findFirst.mock.calls) {
+        expect(where).not.toHaveProperty("isDeploymentOwner");
+        expect(where).not.toHaveProperty("role");
+        expect(where).toMatchObject(actor);
+      }
+    },
+  );
+  it("keeps actor metadata out of token connection filters and secret rows", async () => {
+    const f = fixture();
+    const owner = { ...actor, isDeploymentOwner: true };
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+    const result = await f.service.connect(owner, { catalogId: "github", token: "test-token" });
+    expect(result.connection.state).toBe("connected");
+    await f.service.revoke(owner, result.connection.id);
+    for (const [{ where }] of f.db.mcpServer.findFirst.mock.calls)
+      expect(where).not.toHaveProperty("isDeploymentOwner");
+    expect(f.db.secret.create.mock.calls[0]![0].data).not.toHaveProperty("isDeploymentOwner");
+    expect(f.db.secret.deleteMany).toHaveBeenCalledWith({
+      where: { id: expect.any(String), ...actor },
+    });
+  });
   it("creates an unassigned connection and delegates OAuth without inventing client parameters", async () => {
     const f = fixture();
     const result = await f.service.connect(actor, { catalogId: "gitlab" });

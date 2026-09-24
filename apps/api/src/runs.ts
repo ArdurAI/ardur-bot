@@ -1,8 +1,8 @@
 import type { Actor, RunActivityRow } from "@ardurbot/contracts";
 import { MessageBlock } from "@ardurbot/contracts";
-import { ACTIVE_RUN_STATUSES, botMessageContext } from "@ardurbot/core";
+import { ACTIVE_RUN_STATUSES, botMessageContext, runNotificationCategory } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
-import { delegationView } from "@ardurbot/db";
+import { delegationView, getUserPreferences } from "@ardurbot/db";
 
 const RECENT_LIMIT = 20;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
@@ -41,6 +41,7 @@ export async function listSpaceRuns(
   actor: Actor,
   filter: "active" | "recent",
 ): Promise<RunActivityRow[]> {
+  const preferences = await getUserPreferences(prisma, actor.userId);
   const rows = await prisma.run.findMany({
     where: {
       spaceId: actor.spaceId,
@@ -98,7 +99,14 @@ export async function listSpaceRuns(
     externalThread: Boolean(row.thread.externalConversationId),
     status: row.status as RunActivityRow["status"],
     trigger: row.trigger as RunActivityRow["trigger"],
-    notificationsEnabled: activityNotificationsEnabled(row.thread.groupId, row.bot.notifyOnFinish),
+    notificationsEnabled:
+      activityNotificationsEnabled(row.thread.groupId, row.bot.notifyOnFinish) &&
+      preferences.notifications[
+        runNotificationCategory(
+          row,
+          row.status === "waiting_input" || row.status === "waiting_takeover",
+        )
+      ],
     promptSnippet: activityPromptSnippet({
       trigger: row.trigger,
       prompt: row.task.prompt,

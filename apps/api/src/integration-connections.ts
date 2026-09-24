@@ -124,7 +124,11 @@ export class IntegrationConnections {
 
   async beginAuthorization(actor: Owner, input: { serverId: string; redirectUri: string }) {
     await this.owned(actor, input.serverId);
-    const started = await this.oauth.begin({ ...input, ...actor });
+    const started = await this.oauth.begin({
+      ...input,
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+    });
     if (started.status !== "authorization_required") await this.capture(actor, input.serverId);
     return started;
   }
@@ -152,6 +156,7 @@ export class IntegrationConnections {
       authKind?: "oauth" | "token";
     },
   ) {
+    actor = { spaceId: actor.spaceId, userId: actor.userId };
     const descriptor = connectableIntegration(input.catalogId, input.host);
     const authKind = input.authKind ?? descriptor.authKind;
     const oauthApp = this.oauthApp(descriptor.id);
@@ -457,6 +462,7 @@ export class IntegrationConnections {
   }
 
   async revoke(actor: Owner, id: string, state: "not-connected" | "cancelled" = "not-connected") {
+    actor = { spaceId: actor.spaceId, userId: actor.userId };
     const server = await this.owned(actor, id);
     if (!server.catalogId) throw new IsolationError();
     await this.prisma.$transaction(async (tx) => {

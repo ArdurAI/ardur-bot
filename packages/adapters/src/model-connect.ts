@@ -2,6 +2,7 @@ import type { ModelConnectInput, ModelCredential, ThinkingLevel } from "@ardurbo
 import { OPENAI_COMPATIBLE_PROVIDER_ID as CONTRACT_OPENAI_COMPAT } from "@ardurbot/contracts";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { modelIdSupportsImages, updateModelImageCapabilities } from "./model-vision.js";
+import { normalizeOllamaUrl } from "./ollama.js";
 import type { StoredModelSecret } from "./pi-oauth.js";
 import {
   assertAnthropicApiKey,
@@ -25,6 +26,12 @@ export function buildModelConnectPlaintext(
   previousPlaintext?: string,
   options?: BuildModelConnectOptions,
 ): string {
+  if (input.provider === "ollama") {
+    return serializeModelSecret({
+      kind: "openai_compatible",
+      baseUrl: normalizeOllamaUrl(input.baseUrl ?? ""),
+    });
+  }
   if (input.apiKey !== undefined) {
     assertAnthropicApiKey(input.provider, input.apiKey);
     if (isSerializedModelCredential(input.apiKey)) {
@@ -113,6 +120,15 @@ export function modelCredentialDto(
     isDefault: row.isDefault,
     ...(row.defaultModel ? { modelId: row.defaultModel } : {}),
   };
+  if (row.provider === "ollama") {
+    const secret = plaintext ? parseModelSecret(plaintext) : undefined;
+    // hasKey is the historical connection-ready flag; no key is stored or required.
+    return {
+      ...credential,
+      hasKey: secret?.kind === "openai_compatible",
+      ...(secret?.kind === "openai_compatible" ? { baseUrl: secret.baseUrl } : {}),
+    };
+  }
   if (row.provider === "anthropic" && (!plaintext || isSerializedModelCredential(plaintext))) {
     return { ...credential, hasKey: false, connectionIssue: "api-key-required" };
   }

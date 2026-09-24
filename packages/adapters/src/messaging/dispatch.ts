@@ -19,6 +19,7 @@ import {
   findChatReplyTask,
   redeemChannelPairing,
   requestDispatchStop,
+  requireDispatchEnabled,
 } from "@ardurbot/db";
 import { approvalRequestRoute, validateDeviceApproval } from "../remote-execution.js";
 
@@ -83,6 +84,8 @@ export function createMessagingDispatch(deps: {
           await reply(installation, event, CHAT_COPY.pair);
           return;
         }
+        if (event.action || event.text.trim().toLowerCase() !== "stop")
+          await requireDispatchEnabled(prisma, grant.spaceId);
         if (event.action) {
           const match = /^(allow|deny):([a-f0-9-]{36})$/.exec(event.action);
           if (!match) {

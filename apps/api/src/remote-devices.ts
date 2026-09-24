@@ -26,6 +26,7 @@ import {
   requestCancel,
   requestDispatchStop,
   requestShortCodePairing,
+  requireDispatchEnabled,
   startDevicePairing,
   verifyDeviceSignature,
 } from "@ardurbot/db";
@@ -186,6 +187,8 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "threads/markRead",
   "botSections/list",
   "team/board",
+  "comparisons/list",
+  "comparisons/get",
 ]);
 function publicGrant(grant: DeviceGrant) {
   return {
@@ -311,6 +314,8 @@ export function mountRemoteDevices(
       if (!grant.scopes.includes(scope))
         throw new DeviceRequestError("This action is unavailable from this device.");
     };
+    if (["dispatch", "answer", "team-accept", "default"].includes(input.operation))
+      await requireDispatchEnabled(deps.prisma, grant.spaceId);
     switch (input.operation) {
       case "presence":
         return c.json({ ok: true });

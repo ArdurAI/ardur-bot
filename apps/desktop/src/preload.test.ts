@@ -19,7 +19,7 @@ function runPreload(file: string, ipc: { invoke?: unknown; on?: unknown; off?: u
       return {
         contextBridge: { exposeInMainWorld },
         ipcRenderer: { invoke, on, off },
-        webUtils: { getPathForFile: () => "/fixture/extension.mcpb" },
+        webUtils: { getPathForFile: (file: { path?: string }) => file.path ?? "" },
       };
     },
   });
@@ -41,8 +41,10 @@ describe("desktop preload bridge", () => {
       "host",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
@@ -55,9 +57,11 @@ describe("desktop preload bridge", () => {
     expect(Object.keys(bridge.update).sort()).toEqual(["check", "download", "install", "state"]);
 
     expect(Object.keys(bridge.host!).sort()).toEqual([
+      "addDroppedRoot",
       "addRoot",
       "clear",
       "removeRoot",
+      "setKeepRunning",
       "setup",
       "state",
     ]);
@@ -99,8 +103,10 @@ describe("desktop preload bridge", () => {
       "host",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
@@ -145,7 +151,10 @@ describe("desktop preload bridge", () => {
       "uninstall",
       "uninstallPlugin",
     ]);
-    await bridge.customization!.prepareDrop("space", { name: "extension.mcpb" });
+    await bridge.customization!.prepareDrop("space", {
+      name: "extension.mcpb",
+      path: "/fixture/extension.mcpb",
+    });
     expect(invoke).toHaveBeenCalledExactlyOnceWith(
       "desktop.customization.prepareDrop",
       "space",
@@ -198,4 +207,11 @@ describe("setup preload bridge", () => {
     handler({}, { phase: "pulling" });
     expect(listener).toHaveBeenCalledWith({ phase: "pulling" });
   });
+});
+
+it("turns a safe folder reply into a renderer error without logging it again", async () => {
+  const invoke = vi.fn(async () => ({ error: "Set up this computer first." }));
+  const { exposeInMainWorld } = runPreload("preload.cjs", { invoke });
+  const bridge = exposeInMainWorld.mock.calls[0]![1] as ArdurBotDesktop;
+  await expect(bridge.host!.addRoot()).rejects.toThrow("Set up this computer first.");
 });

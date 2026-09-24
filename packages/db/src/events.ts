@@ -67,6 +67,8 @@ export interface ClearThreadInput {
   /** Event author and the bot-scoped target for one-to-one chats. */
   botId: string;
   groupId?: string;
+  /** Start fresh context without deleting the owner's transcript. */
+  preserveHistory?: boolean;
 }
 
 export interface ClearThreadResult {
@@ -297,8 +299,13 @@ export async function clearThread(
         executionLeaseExpiresAt: null,
       },
     });
-    await tx.message.deleteMany({ where: { threadId: input.threadId } });
-    await tx.event.deleteMany({ where: { threadId: input.threadId } });
+    if (!input.preserveHistory) {
+      await tx.message.deleteMany({ where: { threadId: input.threadId } });
+      await tx.event.deleteMany({ where: { threadId: input.threadId } });
+    }
+    // The existing compaction boundary excludes earlier messages. A neutral summary
+    // keeps that boundary active while preserving the transcript for the owner.
+    const resetSummary = input.preserveHistory ? "New chat." : null;
     if (thread.nextMessageSeq > 0) {
       // nextMessageSeq is not reset, so mark every deleted message as already compacted.
       // Leaving the cursor behind would let compaction re-summarize deleted history (or, reset
@@ -307,7 +314,7 @@ export async function clearThread(
         where: { id: input.threadId },
         data: {
           historyCompactedUpToSeq: thread.nextMessageSeq - 1,
-          historyCompactionSummary: null,
+          historyCompactionSummary: resetSummary,
           historyCompactionGeneration: { increment: 1 },
         },
       });
@@ -315,7 +322,7 @@ export async function clearThread(
       await tx.thread.update({
         where: { id: input.threadId },
         data: {
-          historyCompactionSummary: null,
+          historyCompactionSummary: resetSummary,
           historyCompactionGeneration: { increment: 1 },
         },
       });

@@ -8,6 +8,8 @@ import type {
   MessageBlock,
   ModelCatalogEntry,
   ModelCredential,
+  RuntimeInfo,
+  RuntimePin,
   RuntimeProblem,
   Space,
   SpaceNavigation,
@@ -739,6 +741,7 @@ export type MobileBot = Pick<
   | "updatedAt"
   | "computerMode"
   | "modelCredentialId"
+  | "modelPinRevision"
   | "runtimeKind"
   | "runtimeExperimental"
   | "modelProvider"
@@ -810,6 +813,8 @@ export type MobileSnapshot = {
     status: string;
     error?: string | null;
     runtimeProblem?: RuntimeProblem;
+    runtimePin?: RuntimePin | null;
+    runtimeInfo?: RuntimeInfo | null;
   } | null;
   activeRuns?: Array<{ id: string; botId?: string; status: string }>;
   members?: MobileGroup["members"];

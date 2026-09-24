@@ -1,5 +1,12 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
+async function addHostRoot(path) {
+  const result = await ipcRenderer.invoke("desktop.host.addRoot", path);
+  if (result && typeof result === "object" && typeof result.error === "string")
+    throw new Error(result.error);
+  return result;
+}
+
 contextBridge.exposeInMainWorld("ardurbotDesktop", {
   platform: process.platform,
   customization: {
@@ -28,10 +35,40 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
       ),
   },
 
+  notifications: {
+    supported: () => ipcRenderer.invoke("desktop.notifications.supported"),
+    show: (message) => ipcRenderer.invoke("desktop.notifications.show", message),
+  },
+  system: {
+    state: () => ipcRenderer.invoke("desktop.system.state"),
+    set: (key, value) => ipcRenderer.invoke("desktop.system.set", key, value),
+    moveStorage: (recommended) => ipcRenderer.invoke("desktop.system.moveStorage", recommended),
+    openPermission: (permission) => ipcRenderer.invoke("desktop.system.openPermission", permission),
+    quickBot: (identity, botId) => ipcRenderer.invoke("desktop.system.quickBot", identity, botId),
+    closeQuick: () => ipcRenderer.invoke("desktop.system.closeQuick"),
+    openMain: () => ipcRenderer.invoke("desktop.system.openMain"),
+    onShortcut: (listener) => {
+      const handler = (_event, action) => {
+        if (action === "voice" || action === "dictation") listener(action);
+      };
+      ipcRenderer.on("desktop.system.shortcut", handler);
+      void ipcRenderer.invoke("desktop.system.shortcutReady", true).catch(() => undefined);
+      return () => {
+        ipcRenderer.off("desktop.system.shortcut", handler);
+        void ipcRenderer.invoke("desktop.system.shortcutReady", false).catch(() => undefined);
+      };
+    },
+  },
   host: {
     state: () => ipcRenderer.invoke("desktop.host.state"),
+    setKeepRunning: (enabled) => ipcRenderer.invoke("desktop.host.setKeepRunning", enabled),
     setup: () => ipcRenderer.invoke("desktop.host.setup"),
-    addRoot: () => ipcRenderer.invoke("desktop.host.addRoot"),
+    addRoot: () => addHostRoot(),
+    addDroppedRoot: (file) => {
+      const path = webUtils.getPathForFile(file);
+      if (!path) return Promise.resolve(null);
+      return addHostRoot(path);
+    },
     removeRoot: (root) => ipcRenderer.invoke("desktop.host.removeRoot", root),
     clear: () => ipcRenderer.invoke("desktop.host.clear"),
   },

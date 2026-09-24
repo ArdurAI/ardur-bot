@@ -1,7 +1,12 @@
 import { modelPinOptionKey, parseModelPinOptionKey } from "@ardurbot/core";
 // @vitest-environment jsdom
 
-import type { Bot, ModelCatalogEntry, ModelCredential } from "@ardurbot/contracts";
+import type {
+  Bot,
+  ModelCatalogEntry,
+  ModelCredential,
+  RuntimeAvailability,
+} from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -54,6 +59,7 @@ import { useModelSettings } from "../../lib/use-model-settings";
 import { BotModelChip, effectiveBotModel } from "./bot-model-chip";
 import { BotSettings } from "./bot-panel";
 import { ProviderErrorMessage } from "./provider-error-message";
+import { RuntimeSettings } from "./runtime-settings";
 
 const bot: Bot = {
   runtimeKind: "pi",
@@ -710,7 +716,7 @@ it("shows the saved native runtime in the header and its availability sentence i
   await act(async () =>
     root.render(<BotModelChip bot={native} settings={null} onClick={vi.fn()} />),
   );
-  expect(container.textContent).toBe("Claude Code · claude-opus-5 · low");
+  expect(container.textContent).toBe("Claude Code · claude-opus-5 · low · requested");
   await act(async () => root.render(settings(native)));
   expect(container.textContent).toContain("Not signed in — run `claude` in a terminal once");
   const runsOn = container.querySelector<HTMLSelectElement>('select[id$="-runtime"]');
@@ -719,6 +725,104 @@ it("shows the saved native runtime in the header and its availability sentence i
   expect(modelSelect().textContent).not.toContain("GPT-6 Astra");
   expect(container.textContent).toContain("Experimental");
 });
+
+it("offers and saves high from the probed native effort list, retaining the pin on recheck", async () => {
+  const native = {
+    ...bot,
+    runtimeKind: "claude-code" as const,
+    modelProvider: "anthropic",
+    modelId: "claude-opus-5",
+    modelCredentialId: "native:claude-code",
+    thinkingLevel: "low" as const,
+    modelPinRevision: 1,
+  };
+  api.availability.mockResolvedValue({
+    runtimeKind: "claude-code",
+    available: true,
+    version: "2.1.281",
+    models: [
+      { id: native.modelId, label: "Opus 5", efforts: ["low", "medium", "high", "xhigh", "max"] },
+    ],
+  });
+  await act(async () => root.render(settings(native)));
+  const select = container.querySelector<HTMLSelectElement>('select[id$="-effort"]')!;
+  expect([...select.options].map((option) => option.value)).toEqual([
+    "",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]);
+  await act(async () => {
+    select.value = "high";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({
+      runtimeKind: "claude-code",
+      thinkingLevel: "high",
+      modelId: "claude-opus-5",
+    }),
+  );
+  api.availability.mockResolvedValue({
+    runtimeKind: "claude-code",
+    available: false,
+    version: "2.2.0",
+    models: [{ id: native.modelId, label: "Opus 5", efforts: ["low"] }],
+  });
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Check again")!
+      .click(),
+  );
+  expect(select.value).toBe("high");
+  expect(select.selectedOptions[0]?.textContent).toBe("high — not available");
+});
+
+it.each([false, true, undefined])(
+  "labels the current Claude pin using effort evidence %s",
+  async (effortAttested) => {
+    const native = {
+      ...bot,
+      runtimeKind: "claude-code" as const,
+      modelProvider: "anthropic",
+      modelId: "claude-opus-5",
+      modelCredentialId: "native:claude-code",
+      thinkingLevel: "high" as const,
+      modelPinRevision: 1,
+    };
+    const run = {
+      runtimePin: {
+        runtimeKind: native.runtimeKind,
+        provider: native.modelProvider,
+        modelId: native.modelId,
+        effort: native.thinkingLevel,
+        credentialId: native.modelCredentialId,
+        revision: 1,
+      },
+      runtimeInfo: { runtimeKind: native.runtimeKind, effortAttested },
+    };
+    await act(async () =>
+      root.render(<BotModelChip bot={native} run={run} settings={null} onClick={vi.fn()} />),
+    );
+    expect(container.textContent).toBe(
+      `Claude Code · claude-opus-5 · high${effortAttested ? "" : " · requested"}`,
+    );
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={{ ...native, modelPinRevision: 2 }}
+          run={run}
+          settings={null}
+          onClick={vi.fn()}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain("high · requested");
+  },
+);
 
 it.each([
   ["claude-code", "claude is not installed on this computer"],
@@ -742,3 +846,243 @@ it.each([
     expect(modelSelect().value).toBe("saved-model");
   },
 );
+
+describe("Ollama pin visibility", () => {
+  it("does not resurrect a missing installed model from its saved default", () => {
+    const settings = {
+      me: { defaultProvider: "ollama", defaultModel: "qwen3:8b" },
+      catalog: [],
+      credentials: [
+        {
+          id: "connection",
+          provider: "ollama",
+          modelId: "qwen3:8b",
+          label: "Ollama",
+          hasKey: true,
+          isDefault: true,
+        },
+      ],
+    };
+    expect(
+      effectiveBotModel(
+        {
+          ...bot,
+          modelProvider: "ollama",
+          modelId: "qwen3:8b",
+          modelCredentialId: "connection",
+          thinkingLevel: "low",
+        },
+        settings,
+      ),
+    ).toMatchObject({ unavailable: true });
+  });
+  it("labels null effort as not applicable for non-thinking Ollama models", () => {
+    const settings = {
+      me: { defaultProvider: "ollama", defaultModel: "llama3.2:1b" },
+      catalog: [
+        {
+          provider: "ollama",
+          providerName: "Ollama",
+          id: "llama3.2:1b",
+          label: "llama3.2:1b",
+          billing: "",
+          reasoning: false,
+          thinkingLevels: [],
+        },
+      ],
+      credentials: [
+        {
+          id: "connection",
+          provider: "ollama",
+          modelId: "llama3.2:1b",
+          label: "Ollama",
+          hasKey: true,
+          isDefault: true,
+        },
+      ],
+    };
+    expect(
+      effectiveBotModel(
+        {
+          ...bot,
+          modelProvider: "ollama",
+          modelId: "llama3.2:1b",
+          modelCredentialId: "connection",
+          thinkingLevel: null,
+        },
+        settings,
+      ),
+    ).toMatchObject({ unavailable: false, effortLabel: "not applicable" });
+  });
+});
+
+it("offers only binary thinking controls under Local and saves null for a non-thinking model", async () => {
+  const ollamaModels: ModelCatalogEntry[] = [
+    {
+      provider: "ollama",
+      providerName: "Ollama",
+      id: "qwen3:8b",
+      label: "qwen3:8b · 8.2B",
+      billing: "",
+      reasoning: true,
+      thinkingLevels: ["off", "low", "medium", "high"],
+      credentialId: "connection",
+    },
+    {
+      provider: "ollama",
+      providerName: "Ollama",
+      id: "llama3.2:1b",
+      label: "llama3.2:1b · 1B",
+      billing: "",
+      reasoning: false,
+      thinkingLevels: [],
+      credentialId: "connection",
+    },
+  ];
+  api.list.mockResolvedValue(ollamaModels);
+  api.credentials.mockResolvedValue([
+    {
+      id: "connection",
+      provider: "ollama",
+      modelId: "qwen3:8b",
+      label: "Ollama",
+      hasKey: true,
+      isDefault: true,
+    },
+  ]);
+  await act(async () =>
+    root.render(
+      settings({
+        modelProvider: "ollama",
+        modelId: "qwen3:8b",
+        modelCredentialId: "connection",
+        thinkingLevel: "low",
+      }),
+    ),
+  );
+  const effort = container.querySelector<HTMLSelectElement>('select[id$="-thinking"]')!;
+  expect([...effort.options].map((option) => option.textContent)).toEqual(["Off", "On"]);
+  expect(effort.value).toBe("medium");
+  expect(modelSelect().querySelector('optgroup[label="Local"]')?.textContent).toContain(
+    "qwen3:8b · 8.2B",
+  );
+  await act(async () => {
+    modelSelect().value = modelPinOptionKey("ollama", "llama3.2:1b", "connection");
+    modelSelect().dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(container.textContent).toContain("Effort: not applicable");
+  expect(container.querySelector('select[id$="-thinking"]')).toBeNull();
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      modelProvider: "ollama",
+      modelId: "llama3.2:1b",
+      thinkingLevel: null,
+    }),
+  );
+});
+
+it("shows a fresh native probe's version, sign-in and models after Check again", async () => {
+  api.availability.mockResolvedValueOnce({
+    runtimeKind: "codex-app-server",
+    available: false,
+    version: "0.156.1",
+    signedIn: false,
+    models: [],
+    reason: "Not signed in — run codex login.",
+  });
+  await act(async () =>
+    root.render(
+      <RuntimeSettings
+        kind="codex-app-server"
+        onKind={vi.fn()}
+        modelKey=""
+        onModel={vi.fn()}
+        effort=""
+        onEffort={vi.fn()}
+        experimental
+        onExperimental={vi.fn()}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain("Not signed in — run codex login.");
+  api.availability.mockResolvedValueOnce({
+    runtimeKind: "codex-app-server",
+    available: true,
+    version: "0.156.1",
+    signedIn: true,
+    models: [{ id: "gpt-6-astra", label: "GPT-6 Astra", efforts: ["xhigh"] }],
+  });
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Check again")!
+      .click(),
+  );
+  expect(container.textContent).toContain("0.156.1 · Signed in");
+  expect(container.textContent).toContain("GPT-6 Astra");
+  expect(container.textContent).not.toContain("Not signed in");
+  expect(
+    [...container.querySelectorAll("button")].some((button) => button.textContent === "Connect"),
+  ).toBe(false);
+});
+it.each([
+  { available: false, reason: "Codex is not installed.", models: [] },
+  {
+    available: false,
+    reason: "Codex version 0.156.1 is not supported yet.",
+    version: "0.156.1",
+    models: [],
+  },
+])("shows the probe failure without offering an unrelated connection: $reason", async (result) => {
+  api.availability.mockResolvedValue({
+    runtimeKind: "codex-app-server",
+    ...result,
+  } as RuntimeAvailability);
+  await act(async () =>
+    root.render(
+      <RuntimeSettings
+        kind="codex-app-server"
+        onKind={vi.fn()}
+        modelKey=""
+        onModel={vi.fn()}
+        effort=""
+        onEffort={vi.fn()}
+        experimental
+        onExperimental={vi.fn()}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain(result.reason);
+  expect(
+    [...container.querySelectorAll("button")].some((button) => button.textContent === "Connect"),
+  ).toBe(false);
+});
+it("keeps a native pin failure's real reason and offers only Change pin", async () => {
+  await act(async () =>
+    root.render(
+      <ProviderErrorMessage
+        text="old generic copy"
+        runtimeProblem={{
+          kind: "problem",
+          code: "pin-model-unknown",
+          pin: {
+            runtimeKind: "codex-app-server",
+            provider: "openai-codex",
+            modelId: "gpt-6-astra",
+            effort: "xhigh",
+            credentialId: "native:codex-app-server",
+            revision: 1,
+          },
+          reason: "The pinned model is unavailable in Codex.",
+          actions: ["change-pin"],
+        }}
+        onChangeModel={vi.fn()}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain("The pinned model is unavailable in Codex.");
+  expect(container.textContent).not.toContain("connect it");
+  expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+    "Change pin",
+  ]);
+});

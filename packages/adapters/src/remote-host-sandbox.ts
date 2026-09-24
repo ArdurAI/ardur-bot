@@ -6,7 +6,11 @@ import type {
   PortableFile,
   ProcessEvent,
 } from "@ardurbot/adapter-kit";
-import { HOST_FILE_BYTES } from "@ardurbot/contracts/host-bridge";
+import {
+  HOST_FILE_BYTES,
+  HostEnvironmentSchema,
+  hostEnvironmentNote,
+} from "@ardurbot/contracts/host-bridge";
 import { resolveEncryptionKey } from "@ardurbot/core";
 import { DesktopSandboxProvider } from "@ardurbot/host-runtime/desktop-sandbox";
 import { HostClient } from "@ardurbot/host-runtime/host-client";
@@ -47,6 +51,13 @@ export class RemoteHostSandboxProvider extends DesktopSandboxProvider {
   }
   override async prepare(computer: ComputerRef, context: AdapterContext) {
     if (context.runId) await this.lifecycle(computer, "prepare", context);
+  }
+  override async environmentNote(computer: ComputerRef, context: AdapterContext) {
+    const environment = await this.client.result(
+      { op: "computer.environment", homeKey: computer.botId },
+      context,
+    );
+    return hostEnvironmentNote(HostEnvironmentSchema.parse(environment));
   }
   private lifecycle(
     computer: ComputerRef,

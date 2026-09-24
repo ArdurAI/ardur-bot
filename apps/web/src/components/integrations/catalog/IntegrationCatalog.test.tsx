@@ -18,7 +18,10 @@ const api = vi.hoisted(() => ({
   resourceTools: vi.fn(),
   searchResources: vi.fn(),
 }));
-vi.mock("../../../lib/rpc", () => ({ rpc: { integrations: api, bots: { list: api.bots } } }));
+vi.mock("../../../lib/rpc", () => ({
+  selectedSpaceId: () => "space",
+  rpc: { integrations: api, bots: { list: api.bots } },
+}));
 vi.mock("../../../lib/mcp-connect", () => ({
   MCP_OAUTH_CHANNEL: "test",
   waitForMcpOauth: api.consent,

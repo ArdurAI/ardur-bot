@@ -13,6 +13,11 @@ vi.mock("expo-secure-store", () => ({
 }));
 vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
 vi.mock("./live-notifications", () => ({ resumeLiveNotifications: vi.fn() }));
+// Command projection runs without the native device bridge in the Node test host.
+vi.mock("./dispatch", () => ({
+  dispatchClient: { loadHome: vi.fn(async () => null) },
+  deviceRpc: vi.fn(),
+}));
 
 describe("native command projection", () => {
   it("matches the shared command projection and is idempotent", () => {
