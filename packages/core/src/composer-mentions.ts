@@ -1,7 +1,15 @@
 import { formatCron } from "./cron.js";
 import { hasMentionToken } from "./group-mentions.js";
 
-export const COMPOSER_MENTION_KINDS = ["bot", "group", "routine", "connector", "everyone"] as const;
+export const COMPOSER_MENTION_KINDS = [
+  "bot",
+  "group",
+  "routine",
+  "connector",
+  "mcp",
+  "folder",
+  "everyone",
+] as const;
 
 export type ComposerMentionKind = (typeof COMPOSER_MENTION_KINDS)[number];
 
@@ -90,11 +98,18 @@ export function partitionComposerMentions(mentions: readonly ComposerMention[]) 
 /** Payload entries for `threads/send` mentions (legacy bare bot ids still accepted). */
 export function toThreadMentionPayload(
   mentions: readonly ComposerMention[],
-): Array<string | { kind: "bot" | "group" | "routine" | "connector"; id: string }> {
-  const payload: Array<string | { kind: "bot" | "group" | "routine" | "connector"; id: string }> =
-    [];
+): Array<
+  string | { kind: "bot" | "group" | "routine" | "connector" | "mcp" | "folder"; id: string }
+> {
+  const payload: Array<
+    string | { kind: "bot" | "group" | "routine" | "connector" | "mcp" | "folder"; id: string }
+  > = [];
   for (const mention of mentions) {
     if (mention.kind === "everyone") continue;
+    if (mention.kind === "mcp" || mention.kind === "folder") {
+      payload.push({ kind: mention.kind, id: mention.id });
+      continue;
+    }
     if (mention.kind === "bot") {
       payload.push({ kind: "bot", id: mention.id });
       continue;

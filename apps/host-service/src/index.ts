@@ -1,9 +1,16 @@
 import path from "node:path";
 import { HOST_FRAME_BYTES, hostSocketUrl } from "@ardurbot/contracts/host-bridge";
 import { receiveFrames, wsWire } from "@ardurbot/host-runtime/bridge-wire";
+import { installWin32NativeApi } from "@ardurbot/host-runtime/desktop-sandbox-win32-path";
 import { HostAgent } from "@ardurbot/host-runtime/host-agent";
 import WebSocket from "ws";
 import * as z from "zod";
+import { loadWin32NativeAddon } from "./native-addon.js";
+
+// esbuild preserves the CJS bundle's own filename. ESM source mode has no packaged addon.
+installWin32NativeApi(() =>
+  typeof __filename === "string" ? loadWin32NativeAddon(__filename) : undefined,
+);
 
 const Config = z.strictObject({
   apiUrl: z.string().url(),

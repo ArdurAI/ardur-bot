@@ -107,9 +107,19 @@ Tool routes remain server-side. Calls are serialized and invoke `authorizeTool`,
 `executeTool`/`applyTool`, and `onToolCompleted`, retaining remote ceilings, approvals,
 command recording, and exposure records. A pause closes subsequent queued calls.
 
-The subprocess environment copies only a small OS discovery allowlist. Provider
-keys, OAuth variables, custom agent secrets, and runtime injection variables are
-not inherited. Native requests containing API-key or OAuth material are rejected.
+The subprocess environment uses the host's once-per-process captured login PATH
+and a shared OS discovery allowlist, including `SHELL`, `SSH_AUTH_SOCK`, the XDG
+config/data/cache directories and `HOMEBREW_PREFIX` when present. `HOME` remains the
+actual OS home so the owner's CLIs read their own sign-ins. The Electron supervisor
+preserves this same allowlist before launching the packaged host. Provider keys,
+OAuth variables, custom agent secrets, secret-pattern names and runtime injection
+variables are not inherited. Windows reads the registry-backed PATH without a login
+shell. A broken login profile keeps a default PATH and reports a diagnostic in
+Settings and the run's single-paragraph environment note. The host command bridge
+resolves approved absolute binaries from that PATH and accepts the executor's
+`bash -c` arguments under the owner's Ask-first rules, with no caller environment
+or pty. Host commands do not reload Bash's login profile. See the full
+[environment and inventory policy](../host-service.md#owner-environment-and-tool-inventory). Native requests containing API-key or OAuth material are rejected.
 The Pi API-key runtime remains separate. The credential-boundary scan is unchanged.
 
 `run_subagent` is omitted from the native MCP surface: its real implementation is
@@ -157,6 +167,7 @@ protocol types are compatibility evidence, not evidence of a successful signed-i
 | --- | --- |
 | `--version`, `auth status`; `-p`, input/output `stream-json`, `--verbose`, `--include-partial-messages`; `--model`, `--effort`, `--system-prompt` | [Claude CLI reference](https://code.claude.com/docs/en/cli-reference) |
 | `--tools`, `--restricted`, `--strict-mcp-config`, `--mcp-config`, `--allowedTools`; `dontAsk`, `--permission-prompts none`; `--disable-slash-commands`, `--no-chrome`, `--settings`; `--resume`, `--session-id` | [Claude CLI reference](https://code.claude.com/docs/en/cli-reference) |
+| Shell selection from `SHELL`; `CLAUDE_CODE_SHELL` override (rechecked 2026-09-24) | [Environment variables](https://code.claude.com/docs/en/env-vars) |
 | SDK overview and streaming event format | [SDK entry point](https://code.claude.com/docs/en/sdk), [streaming output](https://code.claude.com/docs/en/agent-sdk/streaming-output), [streaming input](https://code.claude.com/docs/en/agent-sdk/streaming-vs-single-mode) |
 | Exact IDs, supported effort, silent effort caps, `switchModelsOnFlag`, `fallbackModel` | [Model configuration](https://code.claude.com/docs/en/model-config) |
 | `disableAllHooks` and managed-hook limitations | [Hooks reference](https://code.claude.com/docs/en/hooks#disable-or-remove-hooks), [settings precedence](https://code.claude.com/docs/en/settings) |

@@ -38,16 +38,6 @@ msgstr "（未读）"
 msgid "{0, plural, one {# model} other {# models}}"
 msgstr "{0, plural, one {# 个模型} other {# 个模型}}"
 
-#. placeholder {0}: file.name
-#: src/pages/Shell.tsx
-msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
-msgstr "{0}（最多 {ATTACHMENT_MAX_COUNT} 个附件）"
-
-#. placeholder {0}: file.name
-#: src/pages/Shell.tsx
-msgid "{0} (over 10 MiB)"
-msgstr "{0}（超过 10 MiB）"
-
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
 msgid "{0} {unitLabel}"
@@ -101,6 +91,11 @@ msgstr ""
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "{0} runs · {1} tokens"
 msgstr "{0} 次运行 · {1} tokens"
+
+#. placeholder {0}: preview.runs
+#: src/pages/CompareStart.tsx
+msgid "{0} runs at these pins; hosted providers may bill per run"
+msgstr ""
 
 #. placeholder {0}: counts.pendingCount
 #: src/pages/LearningInbox.tsx
@@ -158,6 +153,10 @@ msgstr "{name} 已完成"
 msgid "{name} stopped"
 msgstr "{name} 已停止"
 
+#: src/components/composer/ComposerMenu.tsx
+msgid "{reconnectCount} need reconnection"
+msgstr ""
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "剩余 {remaining} · Bot 只看不操作"
@@ -182,6 +181,10 @@ msgstr "{workingBotName} 正在工作"
 #: src/pages/Shell.tsx
 msgid "@{0}"
 msgstr "@{0}"
+
+#: src/pages/ComparePanel.tsx
+msgid "1 run at this pin; hosted providers may bill per run"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -322,6 +325,12 @@ msgstr ""
 msgid "Add Executor"
 msgstr "添加 Executor"
 
+#: src/components/composer/ComposerMenu.tsx
+#: src/components/composer/ComposerTools.tsx
+msgid "Add files or photos"
+msgstr ""
+
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "Add folder"
 msgstr ""
@@ -685,10 +694,6 @@ msgid "at {timeSelect}"
 msgstr "{timeSelect}"
 
 #: src/pages/Shell.tsx
-msgid "Attach file"
-msgstr "附加文件"
-
-#: src/pages/Shell.tsx
 msgid "Attachment"
 msgstr "附件"
 
@@ -900,6 +905,7 @@ msgstr "无法连接服务器。"
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -932,6 +938,7 @@ msgstr "已取消"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "已取消"
@@ -958,6 +965,10 @@ msgstr "修改密码"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "Change pin"
+msgstr ""
+
+#: src/components/composer/command-description.ts
+msgid "Change this bot’s pin"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
@@ -992,7 +1003,7 @@ msgstr ""
 msgid "Chat service"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/composer/command-description.ts
 msgid "Chat Settings"
 msgstr "聊天设置"
 
@@ -1022,6 +1033,7 @@ msgid "Checked"
 msgstr ""
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Checking…"
 msgstr "正在检查…"
@@ -1049,6 +1061,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "设置新密码"
+
+#: src/components/composer/command-description.ts
+msgid "Choose a taught skill"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Choose bots and the tools they can use."
@@ -1222,10 +1238,19 @@ msgstr "即将推出"
 msgid "Command"
 msgstr "命令"
 
+#: src/components/composer/command-description.ts
+msgid "Compare bots"
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Compare with…"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "完成"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Completed"
 msgstr ""
@@ -1358,6 +1383,7 @@ msgstr "连接 Treg"
 msgid "Connect your account."
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
@@ -1417,6 +1443,10 @@ msgstr ""
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "与 {0} 的连接仍在等待。可以关闭此窗口稍后再看。"
 
+#: src/components/composer/ComposerMenu.tsx
+msgid "Connectors"
+msgstr ""
+
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
@@ -1468,6 +1498,7 @@ msgstr ""
 msgid "Copy pairing details"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr ""
@@ -1475,6 +1506,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
 msgstr "无法添加"
+
+#: src/pages/Shell.tsx
+msgid "Could not add folder. Try again."
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not add MCP server"
@@ -1544,6 +1579,14 @@ msgstr ""
 msgid "Could not complete authorization. Try connecting again."
 msgstr ""
 
+#: src/components/composer/composer-actions.ts
+msgid "Could not complete command. Try again."
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Could not complete the request."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr ""
@@ -1553,6 +1596,7 @@ msgstr ""
 msgid "Could not connect"
 msgstr "无法连接"
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
@@ -1675,6 +1719,14 @@ msgstr "无法加载审批规则"
 msgid "Could not load bots. Reload to try again."
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Could not load comparison; retry."
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not load comparisons; retry."
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
 msgstr ""
@@ -1683,6 +1735,7 @@ msgstr ""
 msgid "Could not load history. Retry."
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not load integrations"
@@ -1700,8 +1753,16 @@ msgstr "无法加载模型设置"
 msgid "Could not load observations."
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
+msgid "Could not load Ollama."
+msgstr ""
+
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
+msgstr ""
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Could not load plugins"
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
@@ -1844,6 +1905,10 @@ msgstr ""
 msgid "Could not save group"
 msgstr "无法保存群组"
 
+#: src/components/composer/composer-actions.ts
+msgid "Could not save memory"
+msgstr ""
+
 #: src/pages/Onboarding.tsx
 msgid "Could not save model"
 msgstr "无法保存模型"
@@ -1900,6 +1965,18 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
+#: src/components/composer/composer-actions.ts
+msgid "Could not start a new chat"
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Could not start comparison; retry."
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Could not start comparison; review the pins and retry."
+msgstr ""
+
 #: src/pages/system/SystemDictation.tsx
 msgid "Could not start dictation; check Voice settings."
 msgstr ""
@@ -1931,6 +2008,10 @@ msgstr "无法更新"
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not update agent access"
 msgstr "无法更新 Agent 权限"
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not update comparison; retry."
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Could not update computer"
@@ -2366,6 +2447,10 @@ msgstr "拖放或粘贴图片"
 msgid "Duplicate"
 msgstr "复制"
 
+#: src/pages/ComparePanel.tsx
+msgid "Duration"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "e.g. Hivenet Agent, Presales, Timesheets bot"
 msgstr "例如 Hivenet Agent、Presales、工时表机器人"
@@ -2384,6 +2469,10 @@ msgstr "先编辑"
 
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
+msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -2514,6 +2603,10 @@ msgstr "导出"
 msgid "Export block"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Export JSON"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Export run"
 msgstr ""
@@ -2539,6 +2632,11 @@ msgstr "失败"
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "失败"
+
+#. placeholder {0}: result.failure ?? "Not reported"
+#: src/pages/ComparePanel.tsx
+msgid "Failed — {0}"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Failed to send message"
@@ -2752,6 +2850,10 @@ msgstr ""
 msgid "Host service:"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Hosted providers"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
 msgstr "小时"
@@ -2817,6 +2919,10 @@ msgstr ""
 msgid "Inbox & email"
 msgstr "收件箱和邮件"
 
+#: src/pages/ComparePanel.tsx
+msgid "Incomplete"
+msgstr ""
+
 #: src/pages/MemoryDeliveryProgress.tsx
 msgid "Indexed {delivered} of {total}"
 msgstr ""
@@ -2826,11 +2932,16 @@ msgid "Inherit default"
 msgstr "沿用默认"
 
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/ComparePanel.tsx
 msgid "Inputs"
 msgstr "输入"
 
 #: src/pages/TeamBoard.tsx
 msgid "Inputs and boundaries"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Installed models"
 msgstr ""
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -3085,6 +3196,7 @@ msgid "Loading…"
 msgstr "加载中…"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Local"
 msgstr "本地"
 
@@ -3127,6 +3239,10 @@ msgstr "管理 MCP 服务器"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Manage messaging settings"
 msgstr "管理消息设置"
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Manage…"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
@@ -3203,6 +3319,10 @@ msgstr "记忆"
 msgid "Memory & Skills"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Memory differed"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
 msgstr ""
@@ -3241,6 +3361,18 @@ msgstr ""
 
 #: src/pages/system/SystemPage.tsx
 msgid "Menu bar"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge selected"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge with"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -3329,6 +3461,10 @@ msgstr ""
 msgid "Model id"
 msgstr "模型 ID"
 
+#: src/components/OllamaSettings.tsx
+msgid "Model name"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model options"
 msgstr "模型选项"
@@ -3340,6 +3476,10 @@ msgstr "模型费用使用你的提供方密钥。"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
 msgstr "模型已更新。"
+
+#: src/pages/ComparePanel.tsx
+msgid "Model version"
+msgstr ""
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3416,6 +3556,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "需要输入"
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Needs reconnection"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Needs takeover"
@@ -3547,6 +3691,10 @@ msgstr "还没有与 {peerBotName} 的消息。"
 msgid "No model catalog is available."
 msgstr "没有可用的模型目录。"
 
+#: src/components/OllamaSettings.tsx
+msgid "No models installed. Pull one to start."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "未找到提供方。"
@@ -3579,6 +3727,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "无触发器"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "None detected"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
@@ -3617,6 +3769,7 @@ msgstr "暂不"
 msgid "Not recorded"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
 msgstr ""
@@ -3686,12 +3839,21 @@ msgstr ""
 msgid "Obsidian vault"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr ""
 
 #: src/lib/thinking-level-options.ts
 msgid "off — no extra thinking"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Ollama server URL"
+msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+msgid "On"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -3761,8 +3923,16 @@ msgstr ""
 msgid "Open navigation"
 msgstr "打开导航"
 
+#: src/components/composer/command-description.ts
+msgid "Open routines"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
+msgstr ""
+
+#: src/components/composer/command-description.ts
+msgid "Open Settings"
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -3920,6 +4090,10 @@ msgstr "置顶"
 msgid "Playing…"
 msgstr "播放中…"
 
+#: src/components/composer/ComposerMenu.tsx
+msgid "Plugins"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Policy version"
@@ -3937,6 +4111,10 @@ msgstr "POST 到"
 msgid "Prevent idle sleep while routines are enabled; your display can turn off, and closing the lid still puts the computer to sleep."
 msgstr ""
 
+#: src/pages/CompareStart.tsx
+msgid "Preview"
+msgstr ""
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Preview {0}"
@@ -3944,6 +4122,10 @@ msgstr "预览 {0}"
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Preview import"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Preview merge"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -4016,6 +4198,14 @@ msgstr ""
 msgid "Publish directly"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
+msgid "Pull"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Pull model"
+msgstr ""
+
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "拉取请求"
@@ -4025,6 +4215,7 @@ msgid "Pushed"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
@@ -4279,6 +4470,10 @@ msgstr ""
 msgid "Reported met"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Reported model"
+msgstr ""
+
 #: src/pages/TeamBoard.tsx
 msgid "Reported unmet"
 msgstr ""
@@ -4320,6 +4515,10 @@ msgstr ""
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr "调研和写作"
+
+#: src/pages/CompareStart.tsx
+msgid "Reserve a merge run"
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -4494,6 +4693,10 @@ msgstr "运行记录"
 msgid "Run now"
 msgstr ""
 
+#: src/pages/CompareStart.tsx
+msgid "Run on other bots"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "Run on startup"
 msgstr ""
@@ -4507,6 +4710,7 @@ msgid "running"
 msgstr "运行中"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "运行中"
@@ -4540,10 +4744,20 @@ msgstr ""
 msgid "safety"
 msgstr ""
 
+#. placeholder {0}: row.participants.length
+#: src/pages/ComparePanel.tsx
+msgid "Same task, {0} bots"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Same task, {count} bots"
+msgstr ""
+
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
@@ -4557,6 +4771,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Save"
 msgstr "保存"
+
+#: src/components/composer/command-description.ts
+msgid "Save a memory note"
+msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Save connection"
@@ -4686,6 +4904,10 @@ msgstr "正在搜索…"
 msgid "Select a bot"
 msgstr "选择 Bot"
 
+#: src/pages/ComparePanel.tsx
+msgid "Select output"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Select the text to copy it."
 msgstr ""
@@ -4748,6 +4970,7 @@ msgid "Server name"
 msgstr "服务器名称"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/components/OllamaSettings.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -4769,11 +4992,11 @@ msgstr ""
 msgid "Settings"
 msgstr "设置"
 
-#: src/pages/Shell.tsx
+#: src/components/composer/command-description.ts
 msgid "Settings: General"
 msgstr "设置：通用"
 
-#: src/pages/Shell.tsx
+#: src/components/composer/command-description.ts
 msgid "Settings: Usage"
 msgstr "设置：用量"
 
@@ -4831,6 +5054,10 @@ msgstr "显示密码"
 msgid "Show settings"
 msgstr "显示设置"
 
+#: src/components/composer/command-description.ts
+msgid "Show slash commands"
+msgstr ""
+
 #: src/lib/localized-provider-hint.ts
 #: src/pages/Auth.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -4863,11 +5090,6 @@ msgstr ""
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr ""
 
-#. placeholder {0}: skill.name
-#: src/pages/Shell.tsx
-msgid "Skill {0}"
-msgstr "技能 {0}"
-
 #: src/pages/KnowledgeSection.tsx
 msgid "Skills"
 msgstr "技能"
@@ -4892,6 +5114,11 @@ msgstr "Slack 消息"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Slack not enabled"
+msgstr ""
+
+#: src/components/composer/ComposerMenu.tsx
+#: src/components/composer/SlashPicker.tsx
+msgid "Slash commands"
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
@@ -4951,6 +5178,14 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/components/composer/command-description.ts
+msgid "Start a new chat"
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Start comparison"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "Start or stop dictation in the chat you are typing in."
 msgstr ""
@@ -4991,6 +5226,10 @@ msgstr "停止朗读"
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Stop teaching"
 msgstr "停止示范"
+
+#: src/components/composer/command-description.ts
+msgid "Stop the current run"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -5122,6 +5361,7 @@ msgstr ""
 msgid "Terminal is not available on this computer"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "测试"
@@ -5284,10 +5524,15 @@ msgstr "标题"
 msgid "To:"
 msgstr "至:"
 
+#: src/pages/CompareStart.tsx
+msgid "Token reservation"
+msgstr ""
+
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Tokens"
 msgstr ""
@@ -5298,6 +5543,10 @@ msgstr "工具源"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tools"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Tools:"
 msgstr ""
 
 #: src/pages/system/SystemDictation.tsx
@@ -5369,6 +5618,10 @@ msgstr "取消置顶"
 #: src/pages/Shell.tsx
 msgid "Unsupported file type: {0}"
 msgstr "不支持的文件类型：{0}"
+
+#: src/pages/Shell.tsx
+msgid "Up to 4 files, 10 MB each"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -5458,6 +5711,7 @@ msgstr ""
 msgid "Use this location"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "使用此模型"
@@ -5485,6 +5739,7 @@ msgstr "语音"
 msgid "Voice shortcut"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
 msgstr ""

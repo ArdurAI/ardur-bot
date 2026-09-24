@@ -1,6 +1,7 @@
-import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { CommandRequest } from "@ardurbot/adapter-kit";
 import { afterEach, describe, expect, it } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { confinedHostCwd, hostCommand } from "./host-policy.js";
@@ -46,19 +47,42 @@ describe("host process confinement", () => {
       ).rejects.toThrow();
     }
   });
-  it.each([
+  it.each<CommandRequest>([
     { argv: ["/bin/sh", "-c", "echo bad"] },
-    { argv: ["node", "-e", "process.exit()"] },
-    { argv: ["echo bad; whoami"] },
-    { argv: ["echo", "$(whoami)"] },
+    { argv: ["../bin/gh"] },
+    { argv: ["C:\\Tools\\gh.exe"] },
     { argv: ["echo", "ok"], env: { TOKEN: "never" } },
-  ])("refuses arbitrary binary, shell or environment %j", async (request) => {
-    await expect(hostCommand(request)).rejects.toThrow("runs only echo, pwd and whoami");
+    { argv: ["echo", "ok"], env: {} },
+    { argv: ["echo", "ok"], pty: true },
+    { argv: ["echo", "\0"] },
+    { argv: [] },
+  ])("refuses caller executable paths, environment and terminal overrides %j", async (request) => {
+    await expect(hostCommand(request, { PATH: "/fixture/bin" })).rejects.toThrow(
+      "Command did not run",
+    );
   });
   it("resolves allowed commands to an absolute executable without accepting a binary path", async () => {
-    const command = await hostCommand({ argv: ["echo", "ok"] });
-    expect(path.isAbsolute(command[0]!)).toBe(true);
-    expect(command.slice(1)).toEqual(["ok"]);
+    const root = await fixture();
+    for (const name of ["gh", "bash"]) {
+      await writeFile(path.join(root, name), "fixture");
+      await chmod(path.join(root, name), 0o700);
+    }
+    const env = { PATH: root };
+    expect(await hostCommand({ argv: ["gh", "auth", "status"] }, env)).toEqual([
+      await realpath(path.join(root, "gh")),
+      "auth",
+      "status",
+    ]);
+    const script = "which gh && gh auth status 2>&1 | head -5\nprintf '%s' \"$HOME\"";
+    expect(await hostCommand({ argv: ["bash", "-c", script] }, env)).toEqual([
+      await realpath(path.join(root, "bash")),
+      "-c",
+      script,
+    ]);
+    await expect(hostCommand({ argv: [path.join(root, "gh")] }, env)).rejects.toThrow(
+      "not an executable path",
+    );
+    await expect(hostCommand({ argv: ["missing"] }, env)).rejects.toThrow("not found");
   });
   it("refuses a replaced provisioning parent before creating outside directories", async () => {
     const root = await fixture();

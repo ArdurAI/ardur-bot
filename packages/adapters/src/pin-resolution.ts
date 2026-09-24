@@ -22,7 +22,12 @@ export function selectConfiguredModel(input: {
   credential: ModelCredential;
 }): (ResolvedPin & { credential: ModelCredential }) | RuntimeProblem {
   const { pin, credential } = input;
-  if (!pin.provider || !usableModelId(pin.modelId) || !pin.effort || !pin.credentialId) {
+  if (
+    !pin.provider ||
+    !usableModelId(pin.modelId) ||
+    (!pin.effort && pin.provider !== "ollama") ||
+    !pin.credentialId
+  ) {
     return runtimePinProblem(
       pin,
       "pin-incomplete",
@@ -46,17 +51,21 @@ export function selectConfiguredModel(input: {
   const entry = listPiCatalog().find(
     (item) => item.provider === pin.provider && item.id === pin.modelId,
   );
-  if (!scripted && pin.provider !== "openai-compatible" && !entry) {
+  if (!scripted && pin.provider !== "openai-compatible" && pin.provider !== "ollama" && !entry) {
     return runtimePinProblem(
       pin,
       "pin-model-unknown",
       "The pinned model is not available on this connection.",
     );
   }
-  const effort = ThinkingLevelSchema.safeParse(pin.effort);
+  const effort = ThinkingLevelSchema.safeParse(
+    pin.provider === "ollama" && (pin.effort === null || pin.effort === "none")
+      ? "off"
+      : pin.effort,
+  );
   const supported = scripted
     ? ["off"]
-    : pin.provider === "openai-compatible"
+    : pin.provider === "openai-compatible" || pin.provider === "ollama"
       ? undefined
       : entry?.thinkingLevels;
   if (!effort.success || (supported && !supported.includes(effort.data))) {
@@ -81,6 +90,8 @@ export function validateRuntimePin(
   model: AgentRunModel,
   pin: RuntimePin,
 ): RuntimeProblem | undefined {
+  // Ollama capabilities and effort are checked against a fresh /api/show by resolveModelKey.
+  if (model.provider === "ollama" && model.baseUrl && model.contextWindow) return undefined;
   if (model.provider === "scripted" && model.id === "scripted") return undefined;
   if (model.provider === "openai-compatible" && !model.baseUrl) {
     return runtimePinProblem(
@@ -121,7 +132,10 @@ export function requestedBotPin(bot: BotPinFields): RuntimePin {
     runtimeKind: (bot.runtimeKind ?? "pi") as RuntimeKind,
     provider: bot.modelProvider ?? null,
     modelId: bot.modelId ?? null,
-    effort: bot.thinkingLevel ?? null,
+    effort:
+      bot.modelProvider === "ollama" && bot.thinkingLevel === "off"
+        ? "none"
+        : (bot.thinkingLevel ?? null),
     credentialId: bot.modelCredentialId ?? null,
     revision: bot.modelPinRevision ?? 0,
   };

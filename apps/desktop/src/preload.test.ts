@@ -16,7 +16,11 @@ function runPreload(file: string, ipc: { invoke?: unknown; on?: unknown; off?: u
     process: { platform: "linux" },
     require(moduleName: string) {
       if (moduleName !== "electron") throw new Error(`Unexpected preload import: ${moduleName}`);
-      return { contextBridge: { exposeInMainWorld }, ipcRenderer: { invoke, on, off } };
+      return {
+        contextBridge: { exposeInMainWorld },
+        ipcRenderer: { invoke, on, off },
+        webUtils: { getPathForFile: (file: { path?: string }) => file.path ?? "" },
+      };
     },
   });
 
@@ -51,6 +55,7 @@ describe("desktop preload bridge", () => {
     expect(Object.keys(bridge.update).sort()).toEqual(["check", "download", "install", "state"]);
 
     expect(Object.keys(bridge.host!).sort()).toEqual([
+      "addDroppedRoot",
       "addRoot",
       "clear",
       "removeRoot",

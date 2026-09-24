@@ -76,7 +76,10 @@ export function openAiCompatibleModel(
   };
 }
 
-function openAiCompatibleProvider(models: Model<"openai-completions">[]): Provider {
+export function openAiCompatibleProvider(
+  models: Model<"openai-completions">[],
+  providerId = OPENAI_COMPATIBLE_PROVIDER_ID,
+): Provider {
   const api = openAICompletionsApi();
   // Guard the fetch the caller supplied (the runtime's seam for tests) or the
   // dispatcher-matched default; never the bare global.
@@ -93,8 +96,8 @@ function openAiCompatibleProvider(models: Model<"openai-completions">[]): Provid
       }),
   };
   return createProvider({
-    id: OPENAI_COMPATIBLE_PROVIDER_ID,
-    name: "OpenAI-compatible",
+    id: providerId,
+    name: providerId === "ollama" ? "Ollama" : "OpenAI-compatible",
     baseUrl: models[0]?.baseUrl ?? OPENAI_COMPAT_BASE,
     auth: {
       apiKey: {

@@ -7,6 +7,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Link } from "react-router-dom";
 import { decodeArtifactBase64, downloadArtifactBytes } from "../lib/artifact-open";
 import { rpc } from "../lib/rpc";
+import { ComparisonList } from "./ComparePanel";
+import { CompareStart } from "./CompareStart";
 
 export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
   const [rows, setRows] = useState<TeamRow[]>([]);
@@ -109,6 +111,7 @@ export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
       {!loaded && !error ? (
         <div className="h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
       ) : null}
+      <ComparisonList />
       <div ref={list} className="space-y-2">
         {rows.map((row) => (
           <TeamBoardRow key={row.botId} row={row} refresh={refresh} />
@@ -161,6 +164,7 @@ export function TeamBoardRow({ row, refresh }: { row: TeamRow; refresh: () => Pr
           {card ? (
             <>
               <p>{row.sentence}</p>
+              <CompareStart botId={row.botId} delegationId={row.delegationId ?? undefined} />
               {card.responsibleUserId ? (
                 <p>
                   <Trans>Responsible human</Trans>: {card.responsibleUserId}

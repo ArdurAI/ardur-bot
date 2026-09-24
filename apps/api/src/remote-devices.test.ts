@@ -147,3 +147,17 @@ describe("space Dispatch switch", () => {
     ).toBe(200);
   });
 });
+
+it("exposes read-only comparison views to signed readers", async () => {
+  for (const procedure of ["comparisons/list", "comparisons/get"]) {
+    const f = fixture();
+    expect((await f.call(f.signed("rpc", { procedure, input: { id: "comparison" } }))).status).toBe(
+      200,
+    );
+  }
+  for (const procedure of ["comparisons/create", "comparisons/merge"]) {
+    const f = fixture();
+    expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).not.toBe(200);
+    expect(f.read).not.toHaveBeenCalled();
+  }
+});
