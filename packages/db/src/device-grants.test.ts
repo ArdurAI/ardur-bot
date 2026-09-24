@@ -298,14 +298,19 @@ it("requires home confirmation before issuing a short-code grant", async () => {
     confirmShortCodePairing(prisma, { userId: "other", spaceId: "space" }, "pending", true, now),
   ).rejects.toThrow();
   expect(f.tx.deviceGrant.create).not.toHaveBeenCalled();
-  await confirmShortCodePairing(
-    prisma,
-    { userId: "owner", spaceId: "space" },
-    "pending",
-    true,
-    now,
-  );
+  const owner = { userId: "owner", spaceId: "space", isDeploymentOwner: true };
+  await confirmShortCodePairing(prisma, owner, "pending", true, now);
   expect(f.tx.deviceGrant.create).toHaveBeenCalledOnce();
+  expect(db.pendingDevicePairing.findFirst).toHaveBeenLastCalledWith({
+    where: {
+      id: "pending",
+      userId: "owner",
+      spaceId: "space",
+      grantId: null,
+      deniedAt: null,
+      expiresAt: { gt: now },
+    },
+  });
   await expect(
     confirmShortCodePairing(prisma, { userId: "owner", spaceId: "space" }, "pending", true, now),
   ).rejects.toThrow();

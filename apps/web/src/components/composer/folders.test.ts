@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { pickComposerFolder, splitComposerDrop } from "./folders";
+import { composerFolderError, pickComposerFolder, splitComposerDrop } from "./folders";
 
 describe("composer folder references", () => {
   it("attaches the path returned by the same host picker as Settings", async () => {
@@ -39,4 +39,29 @@ describe("composer folder references", () => {
     } as unknown as DataTransfer;
     expect(splitComposerDrop(transfer)).toEqual({ files: [image], folders: [folder] });
   });
+});
+
+it("explains missing and stale desktop bridges without swallowing dropped folders", async () => {
+  await expect(pickComposerFolder(undefined)).rejects.toThrow("Folders require this computer.");
+  const stale = { addRoot: vi.fn() } as unknown as Parameters<typeof pickComposerFolder>[0];
+  await expect(pickComposerFolder(stale, new File([], "folder"))).rejects.toThrow(
+    "Restart the desktop app to update it.",
+  );
+  expect(
+    composerFolderError(
+      new Error(
+        "Error invoking remote method 'desktop.host.addRoot': Error: No handler registered for 'desktop.host.addRoot'",
+      ),
+    ),
+  ).toBe("Restart the desktop app to update it.");
+  expect(
+    composerFolderError(
+      new Error(
+        "Error invoking remote method 'desktop.host.addRoot': Error: Set up this computer first.",
+      ),
+    ),
+  ).toBe("Set up this computer first.");
+  expect(composerFolderError(new Error("private diagnostic"))).toBe(
+    "Could not add folder. Try again.",
+  );
 });

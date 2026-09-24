@@ -40,8 +40,10 @@ describe("desktop preload bridge", () => {
       "host",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
@@ -58,6 +60,7 @@ describe("desktop preload bridge", () => {
       "addRoot",
       "clear",
       "removeRoot",
+      "setKeepRunning",
       "setup",
       "state",
     ]);
@@ -98,8 +101,10 @@ describe("desktop preload bridge", () => {
       "host",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
@@ -170,4 +175,11 @@ describe("setup preload bridge", () => {
     handler({}, { phase: "pulling" });
     expect(listener).toHaveBeenCalledWith({ phase: "pulling" });
   });
+});
+
+it("turns a safe folder reply into a renderer error without logging it again", async () => {
+  const invoke = vi.fn(async () => ({ error: "Set up this computer first." }));
+  const { exposeInMainWorld } = runPreload("preload.cjs", { invoke });
+  const bridge = exposeInMainWorld.mock.calls[0]![1] as ArdurBotDesktop;
+  await expect(bridge.host!.addRoot()).rejects.toThrow("Set up this computer first.");
 });

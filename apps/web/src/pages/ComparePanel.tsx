@@ -1,6 +1,6 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { Bot, Comparison, ComparisonParticipant, ComparisonResult } from "@ardurbot/contracts";
-import { TEAM_REFRESH_MS } from "@ardurbot/core";
+import { runtimeEffortLabel, TEAM_REFRESH_MS } from "@ardurbot/core";
 import {
   Button,
   Checkbox,
@@ -112,7 +112,7 @@ export function ComparePanel({ id, onClose }: { id: string; onClose: () => void 
                     className="space-y-3 rounded-lg border border-border bg-card p-4"
                   >
                     <h2 className="font-medium">{participant.name}</h2>
-                    <ComparisonPin participant={participant} />
+                    <ComparisonPin participant={participant} result={result} />
                     {result ? (
                       <>
                         <label
@@ -218,7 +218,10 @@ export function ComparePanel({ id, onClose }: { id: string; onClose: () => void 
                 <h2>
                   <Trans>Merge</Trans>
                 </h2>
-                <ComparisonPin participant={comparison.merge.participant} />
+                <ComparisonPin
+                  participant={comparison.merge.participant}
+                  result={comparison.merge.result}
+                />
                 <ComparisonOutput result={comparison.merge.result} />
                 {comparison.merge.result.approvals.map(({ messageId, block }) =>
                   block.kind === "ask" ? (
@@ -263,12 +266,20 @@ export function ComparePanel({ id, onClose }: { id: string; onClose: () => void 
   );
 }
 
-export function ComparisonPin({ participant }: { participant: ComparisonParticipant }) {
+export function ComparisonPin({
+  participant,
+  result,
+}: {
+  participant: ComparisonParticipant;
+  result?: ComparisonResult;
+}) {
+  const { t } = useLingui();
   const { pin, computer } = participant.executing;
   return (
     <div className="text-sm text-muted-foreground">
       <p>
-        {pin.provider} · {pin.modelId} · {pin.effort ?? <Trans>Not reported</Trans>}
+        {pin.provider} · {pin.modelId} ·{" "}
+        {runtimeEffortLabel(pin, result?.provenance, t`requested`) ?? <Trans>Not reported</Trans>}
       </p>
       <details>
         <summary>{pin.runtimeKind}</summary>

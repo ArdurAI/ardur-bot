@@ -229,7 +229,14 @@ export async function confirmShortCodePairing(
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM pending_device_pairings WHERE id = ${id} FOR UPDATE`;
     const pending = await tx.pendingDevicePairing.findFirst({
-      where: { id, ...actor, grantId: null, deniedAt: null, expiresAt: { gt: now } },
+      where: {
+        id,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        grantId: null,
+        deniedAt: null,
+        expiresAt: { gt: now },
+      },
     });
     if (!pending) throw pairingFailure();
     if (!allow) {

@@ -19,6 +19,7 @@ import { NativeAccountSettings } from "../components/account-settings";
 import { useAvatarStyle } from "../components/avatar-style";
 import { BotAvatar } from "../components/bot-avatar";
 import { HostComputerStatus } from "../components/host-computer-status";
+import { NotificationPreferences } from "../components/notification-preferences";
 import type { MobileBot, MobileMe } from "../lib/api";
 import {
   currentApiBase,
@@ -29,11 +30,7 @@ import {
   signOut,
 } from "../lib/api";
 import { formatUpdateLabel, getAppVersionInfo } from "../lib/app-version";
-import {
-  getCachedAppearancePreference,
-  mobileTokens,
-  setAppearancePreference,
-} from "../lib/appearance";
+import { mobileTokens } from "../lib/appearance";
 import { explicitSignInRoute } from "../lib/auth-routing";
 import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import { setUiLocale, useI18n } from "../lib/i18n";
@@ -79,7 +76,6 @@ export default function Account() {
     outputTokens: number;
   } | null>(null);
   const { avatarStyle, updateAvatarStyle } = useAvatarStyle();
-  const appearance = getCachedAppearancePreference();
   const styles = useThemedStyles(createAccountStyles);
   const versionInfo = getAppVersionInfo();
   const updateLabel = formatUpdateLabel(versionInfo.update, t);
@@ -264,38 +260,6 @@ export default function Account() {
           <Text style={styles.chevron}>›</Text>
         </Pressable>
 
-        <View accessibilityLabel={t("Appearance")} style={styles.avatarSection}>
-          <Text style={styles.settingsTitle}>{t("Appearance")}</Text>
-          <View style={styles.appearanceOptions}>
-            {(
-              [
-                ["system", "System"],
-                ["light", "Light"],
-                ["dark", "Dark"],
-              ] as const
-            ).map(([value, label]) => {
-              const selected = appearance === value;
-              const translated = t(label);
-              return (
-                <Pressable
-                  key={value}
-                  accessibilityLabel={translated}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  onPress={() => void setAppearancePreference(value)}
-                  style={({ pressed }) => [
-                    styles.appearanceOption,
-                    selected && styles.appearanceOptionSelected,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.appearanceLabel}>{translated}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
         <View accessibilityLabel={t("Avatar style")} style={styles.avatarSection}>
           <Text style={styles.settingsTitle}>{t("Avatars")}</Text>
           <View style={styles.avatarOptions}>
@@ -351,6 +315,7 @@ export default function Account() {
         </Pressable>
         {localeError ? <Text style={styles.error}>{localeError}</Text> : null}
 
+        <NotificationPreferences live={Platform.OS === "android" && notifications.liveConnection} />
         {Platform.OS === "android" ? (
           <View accessibilityLabel={t("Notifications")} style={styles.profile}>
             <Text style={styles.settingsTitle}>{t("Notifications")}</Text>
@@ -361,31 +326,6 @@ export default function Account() {
               disabled={notificationPending || !notificationsReady}
               onChange={(liveConnection) =>
                 void updateNotifications({ ...notifications, liveConnection })
-              }
-            />
-            <NotificationSwitch
-              label={t("Agent messages")}
-              detail={t("Replies and completed work")}
-              value={notifications.messages}
-              disabled={notificationPending || !notificationsReady}
-              onChange={(messages) => void updateNotifications({ ...notifications, messages })}
-            />
-            <NotificationSwitch
-              label={t("Scheduled tasks")}
-              detail={t("Alerts from routines")}
-              value={notifications.scheduledTasks}
-              disabled={notificationPending || !notificationsReady}
-              onChange={(scheduledTasks) =>
-                void updateNotifications({ ...notifications, scheduledTasks })
-              }
-            />
-            <NotificationSwitch
-              label={t("Needs attention")}
-              detail={t("Questions, approvals, takeover")}
-              value={notifications.needsAttention}
-              disabled={notificationPending || !notificationsReady}
-              onChange={(needsAttention) =>
-                void updateNotifications({ ...notifications, needsAttention })
               }
             />
             <Pressable

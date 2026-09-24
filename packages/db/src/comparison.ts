@@ -117,6 +117,8 @@ export async function readComparison(
       provenance: {
         reportedModel: info.success ? (info.data.reportedModel ?? null) : null,
         reportedModelVersion: info.success ? (info.data.reportedModelVersion ?? null) : null,
+        effortAttested: info.success ? info.data.effortAttested : undefined,
+        effortAttestationReason: info.success ? info.data.effortAttestationReason : undefined,
         memoryRead: false,
         memoryDiffered: false,
         ambientHistory: false,

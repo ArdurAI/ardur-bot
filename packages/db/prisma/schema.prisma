@@ -22,6 +22,7 @@ model AiDataConsent {
 }
 
 model User {
+  preferences UserPreferences?
   aiDataConsents AiDataConsent[]
   id                          String                       @id
   name                        String
@@ -50,6 +51,22 @@ model User {
 
   @@unique([email])
   @@map("user")
+}
+
+model UserPreferences {
+  userId String @id @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme String @default("system")
+  chatFont String @default("sans") @map("chat_font")
+  motion String @default("system")
+  responseCompletions Boolean @default(true) @map("response_completions")
+  routines Boolean @default(true)
+  approvalsNeeded Boolean @default(true) @map("approvals_needed")
+  dispatchMessages Boolean @default(true) @map("dispatch_messages")
+  preferredBrowser String @default("builtin") @map("preferred_browser")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_preferences")
 }
 
 model Session {
@@ -634,6 +651,7 @@ model Run {
   @@unique([spaceId, clientNonce])
   @@index([status, leaseExpiresAt])
   @@index([status, updatedAt, id])
+  @@index([userId, updatedAt, id])
   @@index([botOutcomeReturnedAt, status])
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
@@ -1051,6 +1069,7 @@ model Artifact {
 
   @@index([spaceId, botId])
   @@index([groupId])
+  @@index([userId, runId, id])
   @@map("artifacts")
 }
 

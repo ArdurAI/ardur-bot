@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  HostLifecyclePreferences,
   HostServiceStore,
   HostServiceSupervisor,
   hostServiceEnvironment,
@@ -31,6 +32,22 @@ describe("desktop host service", () => {
     expect(hostServiceIdentity({ ...config, token: "another-fixture-pairing" })).not.toBe(
       registrationId,
     );
+  });
+  it("persists the close-window choice separately from pairing secrets", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "host-lifecycle-"));
+    try {
+      const file = path.join(root, "lifecycle.json");
+      const preferences = new HostLifecyclePreferences(file);
+      await preferences.load();
+      expect(preferences.keepRunning).toBe(true);
+      await preferences.setKeepRunning(false);
+      const reopened = new HostLifecyclePreferences(file);
+      await reopened.load();
+      expect(reopened.keepRunning).toBe(false);
+      expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ keepRunning: false });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
   it.each(["win32", "linux", "darwin"] as const)(
     "launches compiled JavaScript using Electron Node mode on %s",

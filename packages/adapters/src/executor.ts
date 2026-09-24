@@ -69,12 +69,14 @@ import {
   messagingDmSurfaceNote,
   nextCronDateAcross,
   nextFence,
+  notify,
   planActionGate,
   promptInvokesSkill,
   redactSecrets,
   redactTaskValue,
   renderBotDirectory,
   resolveActionApprovalDetail,
+  runNotificationCategory,
   type ToolCallStreak,
   toolRequiresApproval,
   toolRequiresExplicitApproval,
@@ -97,6 +99,7 @@ import {
   createThreadMessageInTransaction,
   effectiveMemoryScope,
   findModelCredential,
+  getUserPreferences,
   InvalidSpaceNameError,
   isTooManyDatabaseConnections,
   listDelegations,
@@ -1389,11 +1392,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 pin: selected.pin,
               })
             : undefined;
-        const runtimeInfo = {
+        let runtimeInfo = {
           ...native?.previous,
           runtimeKind: selected.pin.runtimeKind,
           version: runtimeSelection.availability.version,
           binding: native?.binding,
+          ...(selected.pin.runtimeKind === "claude-code"
+            ? { effortAttested: false, effortAttestationReason: null }
+            : {}),
         };
         await deps.prisma.run.updateMany({
           where: { id: runId, leaseOwner: workerId, leaseFence: fence },
@@ -4116,9 +4122,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
               nativeSession: native?.previous,
               nativeCwd: computer.kind === "desktop" ? computer.providerRef : undefined,
               onRuntimeInfo: async (info) => {
+                runtimeInfo = { ...runtimeInfo, ...info };
                 const saved = await deps.prisma.run.updateMany({
                   where: { id: runId, leaseOwner: workerId, leaseFence: fence },
-                  data: { runtimeInfo: { ...runtimeInfo, ...info } },
+                  data: { runtimeInfo },
                 });
                 if (saved.count !== 1) throw new Error("Runtime session ownership was lost.");
               },
@@ -4674,11 +4681,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ).catch((error) => getLogger().error("bot message result return", error));
           }
           const notifyBody = completionNotificationPreview(text);
-          if (notifyBody && !completed.continuationRunId) {
+          if (!completed.continuationRunId) {
             await notifyRun(deps, run, {
               kind: "completion",
               title: `${bot.name} finished`,
-              body: notifyBody,
+              body: notifyBody || "Finished.",
               botId: bot.id,
               threadId: thread.id,
             });
@@ -4764,7 +4771,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           setupError instanceof RuntimePinError ||
           setupError instanceof CommandReplayUnavailableError
         ) {
-          await deps.events.finalizeRun({
+          const finalized = await deps.events.finalizeRun({
             spaceId: run.spaceId,
             threadId: run.threadId,
             botId: run.botId,
@@ -4777,6 +4784,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
             error: setupError.message,
             runtimeProblem: setupError instanceof RuntimePinError ? setupError.problem : undefined,
           });
+          if (finalized && !finalized.continuationRunId && deps.notifications) {
+            const bot = await deps.prisma.bot.findUnique({
+              where: { id: run.botId },
+              select: { name: true },
+            });
+            await notifyRun(deps, run, {
+              kind: "failure",
+              title: `${bot?.name ?? "Bot"} failed`,
+              body: "Failed.",
+              botId: run.botId,
+              threadId: run.threadId,
+            });
+          }
           return;
         }
         const computerBusy = setupError instanceof ComputerBusyError;
@@ -4954,34 +4974,49 @@ export async function runNotificationsEnabled(
   return Boolean(source && (source.thread.groupId || source.bot.notifyOnFinish));
 }
 
-async function notifyRun(
+export async function notifyRun(
   deps: ExecutorDeps,
   run: { id: string; spaceId: string; userId: string; botId: string; threadId: string },
   message: NotificationMessage,
 ) {
+  if (!deps.notifications) return;
   const delegated = await deps.prisma.run.findUnique({
     where: { id: run.id },
-    select: { delegationId: true, delegationRootTaskId: true },
+    select: {
+      delegationId: true,
+      delegationRootTaskId: true,
+      trigger: true,
+      originDeviceGrantId: true,
+    },
   });
-  if (delegated?.delegationId || delegated?.delegationRootTaskId) return;
-  if (!deps.notifications) return;
+  if (!delegated || delegated.delegationId || delegated.delegationRootTaskId) return;
   const enabled = await runNotificationsEnabled(deps.prisma, run).catch((error) => {
     getLogger().error("notification preference lookup", error);
     return false;
   });
   if (!enabled) return;
-  await deps.notifications
-    .send(message, {
-      operationId: "notify",
-      traceId: run.botId,
-      spaceId: run.spaceId,
-      userId: run.userId,
-      botId: run.botId,
-      signal: new AbortController().signal,
-    })
-    .catch((error) => {
-      getLogger().error("run notification", error);
-    });
+  try {
+    const preferences = await getUserPreferences(deps.prisma, run.userId);
+    const category = runNotificationCategory(
+      delegated ?? {},
+      message.kind === "help" || message.kind === "takeover",
+    );
+    await notify(
+      { id: run.id, category, title: message.title, body: message.body, threadId: run.threadId },
+      preferences.notifications,
+      () =>
+        deps.notifications!.send(message, {
+          operationId: "notify",
+          traceId: run.botId,
+          spaceId: run.spaceId,
+          userId: run.userId,
+          botId: run.botId,
+          signal: new AbortController().signal,
+        }),
+    );
+  } catch (error) {
+    getLogger().error("run notification", error);
+  }
 }
 
 async function renewRunLease(

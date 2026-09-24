@@ -128,6 +128,12 @@ import {
 } from "./memory-documents.js";
 import { channelPairingContract } from "./messaging-actions.js";
 import { OllamaPullProgressSchema, OllamaStatusSchema } from "./ollama.js";
+import {
+  NotificationActivitySchema,
+  PreferencesPatchSchema,
+  UserPreferencesSchema,
+} from "./preferences.js";
+import { AccountExportSchema } from "./privacy.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
@@ -229,7 +235,16 @@ export const appContract = {
   health: oc.output(z.object({ ok: z.literal(true), version: z.string() })),
   me: oc.output(MeSchema),
   preferences: {
-    update: oc.input(z.object({ avatarStyle: AvatarStyleSchema })).output(MeSchema),
+    get: oc.output(UserPreferencesSchema),
+    update: oc
+      .input(PreferencesPatchSchema.extend({ avatarStyle: AvatarStyleSchema.optional() }))
+      .output(MeSchema.extend({ preferences: UserPreferencesSchema })),
+  },
+  system: {
+    dispatch: oc.output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+    setDispatch: oc
+      .input(z.object({ enabled: z.boolean() }))
+      .output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
   },
   spaces: {
     list: oc.output(SpaceNavigationSchema),
@@ -1067,6 +1082,12 @@ export const appContract = {
     set: oc.input(z.object({ enabled: z.boolean() })).output(ActionAutoReviewSettingsSchema),
   },
   artifacts: {
+    uploaded: oc
+      .input(z.object({ cursor: Id.optional() }))
+      .output(z.object({ items: z.array(ArtifactSchema), cursor: Id.nullable() })),
+    deleteUploaded: oc
+      .input(z.object({ artifactId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
     list: oc.input(botId).output(z.array(ArtifactSchema)),
     create: oc
       .input(
@@ -1092,10 +1113,19 @@ export const appContract = {
     ),
   },
   export: {
+    account: oc.output(AccountExportSchema),
     comparison: oc.input(z.object({ id: Id })).output(ComparisonExportSchema),
     bot: oc.input(botId).output(ExportManifestSchema),
   },
   notifications: {
+    activity: oc.output(
+      z.object({
+        userId: Id,
+        preferences: UserPreferencesSchema,
+        activities: z.array(NotificationActivitySchema),
+      }),
+    ),
+    capabilities: oc.output(z.object({ dispatchPush: z.boolean() })),
     registerPush: oc
       .input(z.object({ token: z.string().min(8).max(512) }))
       .output(z.object({ ok: z.literal(true) })),

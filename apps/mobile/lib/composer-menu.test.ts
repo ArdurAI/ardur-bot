@@ -4,7 +4,7 @@ import { COMPOSER_MENU_OPTIONS } from "./composer-menu";
 
 describe("native composer menu", () => {
   it("offers files, photos, slash commands and read-only connectors in order", () => {
-    expect(COMPOSER_MENU_OPTIONS).toEqual(["Files", "Photos", "Slash commands", "Connectors"]);
+    expect(COMPOSER_MENU_OPTIONS).toEqual(["Files", "Photos", "Slash commands", "Integrations"]);
   });
   it("uses the native action sheet on iOS and a list sheet elsewhere, without a folder picker", () => {
     const thread = readFileSync(new URL("../app/thread.tsx", import.meta.url), "utf8");

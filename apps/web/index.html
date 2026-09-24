@@ -19,6 +19,11 @@
           const stored = localStorage.getItem(key);
           if (stored === "system" || stored === "light" || stored === "dark") preference = stored;
         } catch {}
+        try {
+          const preferences = JSON.parse(localStorage.getItem("ardurbot.preferences") || "null")?.preferences;
+          document.documentElement.dataset.chatFont = ["sans", "serif", "system"].includes(preferences?.chatFont) ? preferences.chatFont : "sans";
+          document.documentElement.dataset.motion = preferences?.motion === "reduced" ? "reduced" : "system";
+        } catch {}
         const systemLight =
           typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches;
         const theme = preference === "system" ? (systemLight ? "light" : "dark") : preference;

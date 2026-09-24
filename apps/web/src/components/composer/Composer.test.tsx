@@ -177,10 +177,10 @@ describe("composer controls", () => {
     ).toEqual([
       "Add files or photosCtrl+U",
       "Slash commands",
-      "Connectors(1 need reconnection)",
+      "Integrations(1 need reconnection)",
       "Plugins",
     ]);
-    await click(menuItem("Connectors"));
+    await click(menuItem("Integrations"));
     await click(menuItem("Reports"));
     expect(fake.manage).toHaveBeenCalledWith("connection");
   });
@@ -258,8 +258,8 @@ describe("composer controls", () => {
     await act(async () => {
       await refreshIntegrationCatalog();
     });
-    expect(menuItem("Connectors").textContent).toBe("Connectors");
-    await click(menuItem("Connectors"));
+    expect(menuItem("Integrations").textContent).toBe("Integrations");
+    await click(menuItem("Integrations"));
     await click(menuItem("Reports"));
     await click(button("Send"));
     expect(fake.send).toHaveBeenCalledWith("@Reports", [

@@ -4,7 +4,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { ComparePanel } from "./ComparePanel";
+import { ComparePanel, ComparisonPin } from "./ComparePanel";
 import { CompareStart } from "./CompareStart";
 
 const calls = vi.hoisted(() => ({
@@ -113,6 +113,23 @@ const comparison = {
   budget: { mergeReserved: true },
   merge: null,
 } as unknown as Comparison;
+
+it.each([false, true, undefined])(
+  "labels comparison effort with result evidence %s",
+  async (effortAttested) => {
+    const selected = participant("a");
+    selected.executing.pin.runtimeKind = "claude-code";
+    const output = result("a");
+    output.provenance.effortAttested = effortAttested;
+    const node = document.createElement("div");
+    const root = createRoot(node);
+    await act(async () => root.render(<ComparisonPin participant={selected} result={output} />));
+    expect(node.querySelector("p")?.textContent).toBe(
+      `fixture · model-a · high${effortAttested ? "" : " · requested"}`,
+    );
+    await act(async () => root.unmount());
+  },
+);
 
 it("keeps participant order, renders unknown provenance, answers one card, and merges only the selected run", async () => {
   calls.get.mockResolvedValue(comparison);
