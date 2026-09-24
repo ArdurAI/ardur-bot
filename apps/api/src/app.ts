@@ -447,6 +447,7 @@ export async function createApp(
     trustedOrigin: (origin) => isTrustedOrigin(origin, env),
   });
   const router = createRouter({
+    runtime,
     terminals,
     hostBridge,
     cloudAgent,

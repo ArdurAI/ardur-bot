@@ -1,4 +1,9 @@
-import type { AdapterContext, SandboxProvider, TerminalProvider } from "@ardurbot/adapter-kit";
+import type {
+  AdapterContext,
+  ComputerRef,
+  SandboxProvider,
+  TerminalProvider,
+} from "@ardurbot/adapter-kit";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
@@ -99,6 +104,11 @@ export class ConnectedSandboxProvider implements SandboxProvider {
     return computer.connectionId
       ? this.connections.resolve(computer.connectionId, context)
       : Promise.resolve(this.fallback);
+  }
+  async supportsNetworkEgress(computer: ComputerRef, context: AdapterContext) {
+    return (
+      (await this.route(computer, context)).supportsNetworkEgress?.(computer, context) ?? false
+    );
   }
   async provision(request: Parameters<SandboxProvider["provision"]>[0], context: AdapterContext) {
     const provider = await this.route(request, context);

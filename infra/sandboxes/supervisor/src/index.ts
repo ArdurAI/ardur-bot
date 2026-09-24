@@ -56,6 +56,7 @@ import {
   socketPath,
 } from "./container-engine.js";
 import { assertComputerHomeWritable } from "./home-ownership.js";
+import { screenRelay } from "./screen-relay.js";
 import {
   assertRequestIdentity,
   attemptComputerControl,
@@ -197,6 +198,7 @@ app.post("/computers", async (c) => {
       homePath: z.string().min(1),
       spaceId: z.string().min(1),
       imageProfile: ComputerProfileSchema.default("base"),
+      networkEgress: z.boolean().default(true),
     })
     .parse(await c.req.json());
   try {
@@ -215,7 +217,9 @@ app.post("/computers", async (c) => {
       if (expectedEngine && expectedEngine !== engine.name)
         throw new Error("The selected engine does not match this connection.");
       const runtimeInfo = await inspectSupervisorContainer();
-      const networkMode = computerNetworkName(body.botId, runtimeInfo);
+      const networkMode = body.networkEgress
+        ? computerNetworkName(body.botId, runtimeInfo)
+        : "none";
       const serviceHomePath = path.resolve(body.homePath);
       assertBotHomePath(serviceHomePath, body.botId);
       const hostUid = process.getuid?.();
@@ -242,7 +246,7 @@ app.post("/computers", async (c) => {
         const desired = await docker.getImage(image).inspect();
         const controlPublishOk = controlPortPublicationMatches(
           info.HostConfig.PortBindings,
-          controlViaLoopback,
+          body.networkEgress && controlViaLoopback,
         );
         if (
           info.Image === desired.Id &&
@@ -291,7 +295,9 @@ app.post("/computers", async (c) => {
         await assertComputerHomeWritable(serviceHomePath, effectiveUid, effectiveGid);
         const name = containerNameFor(body.botId);
         const createdNetwork =
-          screenNetworkMode === "internal" ? undefined : await ensureBotNetwork(body.botId);
+          networkMode === "none" || screenNetworkMode === "internal"
+            ? undefined
+            : await ensureBotNetwork(body.botId);
         let container: Docker.Container | undefined;
         try {
           if (existing) {
@@ -308,7 +314,7 @@ app.post("/computers", async (c) => {
               engine,
               networkMode,
               controlToken: randomUUID(),
-              publishControlPort: controlViaLoopback,
+              publishControlPort: body.networkEgress && controlViaLoopback,
             }),
           );
           await container.start();
@@ -1046,6 +1052,7 @@ function assertBotHomePath(homePath: string, botId: string) {
 }
 
 function computerControlEndpoint(info: Docker.ContainerInspectInfo) {
+  if (info.HostConfig.NetworkMode === "none") return undefined;
   const token = info.Config.Env?.find((value) =>
     value.startsWith("ARDURBOT_COMPUTER_CONTROL_TOKEN="),
   )?.slice("ARDURBOT_COMPUTER_CONTROL_TOKEN=".length);
@@ -1157,6 +1164,18 @@ async function publishedScreenUrl(
 ) {
   for (let i = 0; i < 30; i += 1) {
     const info = i === 0 && initialInfo ? initialInfo : await container.inspect();
+    if (info.HostConfig.NetworkMode === "none") {
+      const runtime = await inspectSupervisorContainer();
+      const host = runtime
+        ? Object.values(runtime.NetworkSettings.Networks).find((network) => network.IPAddress)
+            ?.IPAddress
+        : "127.0.0.1";
+      if (!host) throw new Error("Supervisor screen address is unavailable");
+      const port = await screenRelay(container, Number(containerPort), host);
+      if (!(await waitForScreenReady(host, port, SCREEN_READY_TIMEOUT_MS)))
+        throw new Error("Computer screen did not become ready in time");
+      return screenUrlFor(String(port), host);
+    }
     if (screenNetworkMode === "isolated") {
       const runtime = await inspectSupervisorContainer();
       const networkName = info.HostConfig.NetworkMode;

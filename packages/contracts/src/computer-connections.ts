@@ -37,3 +37,9 @@ export const ComputerConfigurationSchema = z.object({
 export function computerCapabilities(kind: string) {
   return { graphical: kind !== "kubernetes", interactiveTerminal: kind === "docker" };
 }
+
+export const ComputerReplacementConfigurationSchema = ComputerConfigurationSchema.omit({
+  botId: true,
+})
+  .partial({ imageProfile: true, connectionId: true })
+  .extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });

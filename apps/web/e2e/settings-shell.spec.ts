@@ -33,9 +33,11 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
     await expect(link).toHaveAttribute("target", "_blank");
   }
   await page.getByRole("button", { name: "Close user settings" }).click();
+  await expect(settings).not.toBeVisible();
   await page.keyboard.press("Control+,");
   await expect(settings).toBeVisible();
   await page.getByRole("button", { name: "Close user settings" }).click();
+  await expect(settings).not.toBeVisible();
   await page.keyboard.press("Meta+,");
   await expect(settings).toBeVisible();
   await expect(settings.getByTestId("settings-nav")).toBeVisible();
@@ -56,6 +58,10 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await settings.getByTestId("settings-nav-memory").click();
   await expect(settings).toHaveAttribute("data-settings-section", "memory");
   await expect(settings.getByRole("heading", { name: "Memory", exact: true })).toBeVisible();
+  await expect(settings.getByTestId("memory-settings-page")).toBeVisible();
+  await captureScreenshot(page, testInfo, "settings-shell-memory");
+  await settings.getByTestId("settings-nav-customize").click();
+  await expect(settings).toHaveAttribute("data-settings-section", "customize");
   await expect(settings.getByTestId("memory-settings")).toBeVisible();
   const memory = settings.getByTestId("memory-settings");
   await expect(memory.getByLabel("Memory location")).toHaveValue("postgres");

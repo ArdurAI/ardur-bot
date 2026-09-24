@@ -12,23 +12,27 @@ import {
   Volume2,
   XIcon,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { IntegrationCatalog } from "../components/integrations/catalog/IntegrationCatalog";
 import {
-  ComputerSettingsPanel,
   GeneralSettingsPanels,
   UpdatesSettingsPanel,
   UsageSettingsPanel,
 } from "./AccountSettingsOverlay";
+import { ComputerAccessPage } from "./capabilities/ComputerAccessPage";
+import { capabilitiesSection } from "./capabilities/registration";
 import { DevicesSettings } from "./DevicesSettings";
 import { LearningBadge } from "./LearningInbox";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
 import { ModelDestinations } from "./ModelDestinations";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
+import { memorySection } from "./memory/registration";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
 
 export type SettingsSection =
+  | "capabilities"
+  | "customize"
   | "devices"
   | "integrations"
   | "general"
@@ -40,6 +44,7 @@ export type SettingsSection =
   | "updates";
 
 type NavItem = {
+  page?: ReactNode;
   id: SettingsSection;
   label: string;
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -83,7 +88,7 @@ export function SettingsOverlay({
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
-  const showComputer = isDeploymentOwner;
+  const showComputer = true;
   const panelBusy = memoryBusy || voiceBusy;
 
   useEffect(() => {
@@ -101,7 +106,9 @@ export function SettingsOverlay({
     { id: "devices", label: t`Devices`, icon: Monitor },
     { id: "integrations", label: t`Integrations`, icon: Plug },
     { id: "models", label: t`Models`, icon: Cpu },
-    { id: "memory", label: t`Memory & Skills`, icon: Brain },
+    capabilitiesSection(t`Capabilities`, setSection),
+    memorySection(t`Memory`),
+    { id: "customize", label: t`Customize`, icon: Brain },
     { id: "voice", label: t`Voice`, icon: Volume2 },
     { id: "usage", label: t`Usage`, icon: Gauge },
     ...(showComputer ? [{ id: "computer" as const, label: t`Computers`, icon: Monitor }] : []),
@@ -211,7 +218,7 @@ export function SettingsOverlay({
 
             <div
               className={`min-h-0 flex-1 ${
-                section === "models" || section === "voice" || section === "memory"
+                section === "models" || section === "voice" || section === "customize"
                   ? "flex flex-col overflow-hidden"
                   : "rk-scroll overflow-y-auto overscroll-contain px-6 pb-6 pt-5 sm:px-8 sm:pb-8"
               }`}
@@ -234,7 +241,9 @@ export function SettingsOverlay({
               {section === "usage" ? (
                 <UsageSettingsPanel usage={usage} panelRef={usageRef} />
               ) : null}
-              {section === "computer" && showComputer ? <ComputerSettingsPanel /> : null}
+              {section === "computer" && showComputer ? (
+                <ComputerAccessPage isDeploymentOwner={isDeploymentOwner} />
+              ) : null}
               {section === "updates" ? (
                 <UpdatesSettingsPanel isDeploymentOwner={isDeploymentOwner} />
               ) : null}
@@ -250,7 +259,10 @@ export function SettingsOverlay({
                   />
                 </>
               ) : null}
-              {section === "memory" ? (
+              {navItems.find((item) => item.id === section)?.page ? (
+                <div>{navItems.find((item) => item.id === section)?.page}</div>
+              ) : null}
+              {section === "customize" ? (
                 <MemorySettingsOverlay
                   embedded
                   onClose={requestClose}

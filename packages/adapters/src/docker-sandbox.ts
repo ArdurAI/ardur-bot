@@ -165,6 +165,7 @@ export class DockerSandboxProvider implements SandboxProvider {
       homePath: string;
       imageProfile?: "base" | "developer";
       connectionId?: string | null;
+      networkEgress?: boolean;
     },
     context: AdapterContext,
   ): Promise<ComputerRef> {
@@ -172,6 +173,7 @@ export class DockerSandboxProvider implements SandboxProvider {
       method: "POST",
       headers: { ...this.headers(context, request.botId), "content-type": "application/json" },
       body: JSON.stringify({
+        networkEgress: request.networkEgress ?? true,
         imageProfile: request.imageProfile ?? "base",
         botId: request.botId,
         homePath: request.homePath,
@@ -190,6 +192,7 @@ export class DockerSandboxProvider implements SandboxProvider {
     }
     const body = await readSandboxJson<{ id: string; resumed?: boolean }>(res, context.signal);
     return {
+      networkEgress: request.networkEgress ?? true,
       imageProfile: request.imageProfile ?? "base",
       connectionId: request.connectionId,
       id: body.id,

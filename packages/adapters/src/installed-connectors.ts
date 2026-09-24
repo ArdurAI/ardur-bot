@@ -113,7 +113,12 @@ export class InstalledConnectorProvider implements ConnectorProvider {
 
   async discoverTools(context: AdapterContext): Promise<ConnectorTool[]> {
     const tools = await this.authorizedTools(context);
-    if (tools.length <= DIRECT_TOOL_LIMIT) return tools;
+    if (
+      context.toolAccessMode === "all" ||
+      tools.length === 0 ||
+      (context.toolAccessMode !== "when-needed" && tools.length <= DIRECT_TOOL_LIMIT)
+    )
+      return tools;
     return lazyCatalogTools("installed", "installed", "API", catalogEntries(tools));
   }
 

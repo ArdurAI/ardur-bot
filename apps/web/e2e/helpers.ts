@@ -130,7 +130,10 @@ export async function openUserSettings(
   section?: "general" | "models" | "memory" | "voice" | "usage" | "computer" | "updates",
 ) {
   await page.getByTestId("user-menu-trigger").click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page
+    .locator('[data-slot="popover-content"]')
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
   const settings = page.getByTestId("user-settings");
   await expect(settings).toBeVisible();
   if (section && section !== "general") {

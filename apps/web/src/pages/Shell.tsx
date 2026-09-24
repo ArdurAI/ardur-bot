@@ -207,6 +207,7 @@ import { useModelSettings } from "../lib/use-model-settings";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
+import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
 import type { RoutineDraftState } from "./RoutineEditor";
@@ -6170,6 +6171,8 @@ const MessageView = memo(function MessageView({
           if (!botId) return null;
           return <ChoiceCard key={i} botId={botId} block={block} onBotChanged={onBotChanged} />;
         }
+        if (block.kind === "app_connect" && block.connectorId === "trusted-catalog")
+          return <ConnectorSuggestion key={i} name={block.name} />;
         if (block.kind === "app_connect") {
           const botId = "botId" in artifactTarget ? artifactTarget.botId : message.botId;
           if (!botId) return null;

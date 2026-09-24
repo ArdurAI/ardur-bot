@@ -48,8 +48,15 @@ export function lazyCatalogTools(
   label: string,
   entries: CatalogEntry[] = [],
 ): ConnectorTool[] {
-  const indexText = formatNameIndexText(groupedNames(entries));
-  const embedIndex = indexText.length > 0 && fitsNameIndexBudget(groupedNames(entries));
+  const compactIndex = entries
+    .slice(0, NAME_INDEX_MAX_NAMES)
+    .map(({ tool }) => `${tool.name}: ${tool.description.replace(/\s+/g, " ").slice(0, 120)}`)
+    .join("\n");
+  const indexText = compactIndex;
+  const embedIndex =
+    indexText.length > 0 &&
+    entries.length <= NAME_INDEX_MAX_NAMES &&
+    Buffer.byteLength(indexText, "utf8") <= 32_000;
   const searchDescription = embedIndex
     ? `Search connected ${label} tools. Empty query lists names by source. Pass group to expand one source.\n${indexText}`
     : `Search connected ${label} tools. Empty query lists sources. Pass group to list names in one source, or query to search.`;

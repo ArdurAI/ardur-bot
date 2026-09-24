@@ -2,6 +2,12 @@ import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
+import {
+  CapabilityPreferencesPatchSchema,
+  CapabilityPreferencesSchema,
+  CapabilitySettingsSchema,
+  ComputerNetworkInputSchema,
+} from "./capability-settings.js";
 import { CommandBlockSchema } from "./command-blocks.js";
 import {
   ComputerConfigurationSchema,
@@ -124,6 +130,7 @@ import {
   MemoryScopeRemapSchema,
   MemorySyncStateSchema,
 } from "./memory-documents.js";
+import { MemoryIntentInputSchema } from "./memory-intent.js";
 import { channelPairingContract } from "./messaging-actions.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
@@ -501,6 +508,7 @@ export const appContract = {
     heartbeat: oc.input(botId).output(z.object({ ok: z.literal(true) })),
   },
   memory: {
+    propose: oc.input(MemoryIntentInputSchema).output(z.array(LearningProposalSchema)),
     list: oc.input(MemoryPageInput).output(MemoryDocumentPageSchema),
     update: oc
       .input(
@@ -800,6 +808,11 @@ export const appContract = {
     remove: oc.input(z.object({ skillId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   capabilities: {
+    settings: oc.output(CapabilitySettingsSchema),
+    configure: oc.input(CapabilityPreferencesPatchSchema).output(CapabilityPreferencesSchema),
+    network: oc
+      .input(ComputerNetworkInputSchema)
+      .output(z.object({ id: z.string(), status: z.string() })),
     list: oc.output(z.array(CapabilityInstallSchema)),
     catalogSearch: oc
       .input(
