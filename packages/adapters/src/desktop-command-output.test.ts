@@ -2,8 +2,13 @@ import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { COMMAND_OUTPUT_LIMIT, COMMAND_TRUNCATED } from "@ardurbot/core";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+
+vi.mock("@ardurbot/host-runtime/host-environment", async (original) => ({
+  ...(await original<object>()),
+  getHostEnvironment: async () => ({ env: { PATH: path.dirname(process.execPath) } }),
+}));
 
 it("bounds native command output at collection and records its actual working directory", async () => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "command-output-")));
@@ -23,7 +28,7 @@ it("bounds native command output at collection and records its actual working di
       computer,
       {
         argv: [
-          process.execPath,
+          "node",
           "-e",
           "process.stderr.write(process.cwd()); process.stdout.write('x'.repeat(1024 * 1024))",
         ],

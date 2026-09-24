@@ -42,6 +42,7 @@ export class RemoteHostRuntime implements AgentRuntime {
       ? request.nativeCwd.slice(5)
       : request.botId;
     const turn = HostTurnSchema.parse({
+      controlledComparison: request.controlledComparison,
       botId: request.botId,
       threadId: request.threadId,
       runId: request.runId,

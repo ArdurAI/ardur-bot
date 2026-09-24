@@ -25,6 +25,7 @@ export * from "./bot-messages.js";
 export * from "./bot-sections.js";
 export * from "./cloud-agent.js";
 export * from "./command-blocks.js";
+export * from "./comparison.js";
 export * from "./compose-update.js";
 export * from "./composer-commands.js";
 export * from "./composer-mention-picker.js";

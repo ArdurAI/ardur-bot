@@ -21,7 +21,15 @@ type Message = {
   result?: unknown;
 };
 function fixture(
-  mode: "success" | "login" | "reroute" | "approval" | "wrong-model" | "mcp-conflict" = "success",
+  mode:
+    | "success"
+    | "login"
+    | "reroute"
+    | "approval"
+    | "wrong-model"
+    | "mcp-conflict"
+    | "skills-error"
+    | "usage" = "success",
 ) {
   const messages: Message[] = [];
   const child = new EventEmitter() as ChildProcessWithoutNullStreams;
@@ -61,6 +69,16 @@ function fixture(
             },
           });
           break;
+        case "skills/list":
+          result({
+            data: [
+              {
+                skills: [{ path: "/skills/private-context/SKILL.md" }],
+                errors: mode === "skills-error" ? [{ message: "Unreadable skill" }] : [],
+              },
+            ],
+          });
+          break;
         case "thread/start":
         case "thread/resume":
           result({
@@ -95,6 +113,19 @@ function fixture(
                 },
               });
             else {
+              if (mode === "usage")
+                for (const total of [
+                  { inputTokens: 10, outputTokens: 5 },
+                  { inputTokens: 10, outputTokens: 5 },
+                  { inputTokens: 30, outputTokens: 8 },
+                ])
+                  send({
+                    method: "thread/tokenUsage/updated",
+                    params: {
+                      threadId: "thread-native",
+                      tokenUsage: { total, last: { inputTokens: 2, outputTokens: 1 } },
+                    },
+                  });
               send({
                 method: "item/agentMessage/delta",
                 params: { threadId: "thread-native", delta: "hello" },
@@ -208,4 +239,41 @@ describe("Codex app-server protocol", () => {
     expect(f.messages).toContainEqual({ id: "approval", result: { decision: "decline" } });
     expect(f.messages.some((event) => event.method === "turn/interrupt")).toBe(true);
   });
+});
+
+it("disables document discovery and memory injection for a controlled comparison", async () => {
+  const f = fixture();
+  f.request.controlledComparison = true;
+  await f.collect();
+  expect(f.messages.find((message) => message.method === "thread/start")).toMatchObject({
+    params: {
+      config: {
+        project_doc_max_bytes: 0,
+        developer_instructions: "",
+        personality: "none",
+        skills: { config: [{ path: "/skills/private-context/SKILL.md", enabled: false }] },
+        memories: { use_memories: false, generate_memories: false },
+      },
+    },
+  });
+});
+it("does not start a comparison when the native skill inventory cannot be isolated", async () => {
+  const f = fixture("skills-error");
+  f.request.controlledComparison = true;
+  await expect(f.collect()).rejects.toMatchObject({
+    problem: {
+      code: "runtime-unavailable",
+      reason: "Codex could not isolate saved skills — retry or change the pin.",
+    },
+  });
+  expect(f.messages.some((message) => message.method === "thread/start")).toBe(false);
+  expect(f.messages.some((message) => message.method === "turn/start")).toBe(false);
+});
+it("counts cumulative comparison usage once across repeated notifications and model calls", async () => {
+  const f = fixture("usage");
+  f.request.controlledComparison = true;
+  expect((await f.collect()).filter((event) => event.type === "usage")).toEqual([
+    { type: "usage", provider: "openai-codex", model: "model", inputTokens: 10, outputTokens: 5 },
+    { type: "usage", provider: "openai-codex", model: "model", inputTokens: 20, outputTokens: 3 },
+  ]);
 });

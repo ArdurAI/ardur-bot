@@ -10,16 +10,12 @@ describe("native platform launch policy", () => {
         { PATH: "relative;C:\\Apps;D:\\Tools", USERPROFILE: "C:\\Fixture" },
         "win32",
       ),
-    ).toEqual([
-      "C:\\Apps\\codex.exe",
-      "D:\\Tools\\codex.exe",
-      "C:\\Fixture\\.local\\bin\\codex.exe",
-    ]);
+    ).toEqual(["C:\\Apps\\codex.exe", "D:\\Tools\\codex.exe"]);
   });
   it("keeps Linux discovery absolute and does not inherit injection or credential variables", () => {
     expect(
       nativeBinaryCandidates("claude", { PATH: ":relative:/usr/bin", HOME: "/fixture" }, "linux"),
-    ).toEqual(["/usr/bin/claude", "/fixture/.local/bin/claude"]);
+    ).toEqual(["/usr/bin/claude"]);
     expect(
       nativeEnvironment({
         HOME: "/fixture",

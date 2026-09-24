@@ -18,6 +18,7 @@ const ORDINARY_TOOLS = new Set([
   "browser_snapshot",
   "list_files",
   "read_file",
+  "read_comparison_artifact",
   "web_search",
   "web_fetch",
   "recall_memory",

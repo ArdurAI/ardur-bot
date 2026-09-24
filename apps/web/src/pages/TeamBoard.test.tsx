@@ -8,6 +8,10 @@ import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 import { TeamBoardRow } from "./TeamBoard";
 
+vi.mock("./CompareStart", () => ({
+  CompareStart: () => <button type="button">Run on other bots</button>,
+}));
+vi.mock("./ComparePanel", () => ({ ComparisonList: () => null }));
 const calls = vi.hoisted(() => ({
   cancel: vi.fn(async () => ({ cancelRequested: true })),
   accept: vi.fn(async () => ({ accepted: true })),

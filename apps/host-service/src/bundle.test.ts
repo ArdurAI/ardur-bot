@@ -12,7 +12,28 @@ it("builds one relocatable JavaScript file without server modules or workspace i
   try {
     const file = path.join(directory, "host-service.cjs");
     const metadata = await bundleHostService(file);
-    expect(await readdir(directory)).toEqual(["host-service.cjs"]);
+    const entries = await readdir(directory);
+    expect(entries.filter((name) => /\.[cm]?js$/.test(name))).toEqual(["host-service.cjs"]);
+    expect(entries.sort()).toEqual(
+      metadata.native.files.length ? ["host-service.cjs", "native"] : ["host-service.cjs"],
+    );
+    if (metadata.native.files.length) {
+      expect(await readdir(path.join(directory, "native"), { recursive: true })).toEqual(
+        expect.arrayContaining(
+          metadata.native.files.map((file: string) => path.normalize(file.slice("native/".length))),
+        ),
+      );
+      for (const native of metadata.native.files) {
+        expect(native).toMatch(/^native\/win_(?:x64|arm64|ia32)\/koffi\.node$/);
+        expect((await readFile(path.join(directory, native))).length).toBeGreaterThan(0);
+      }
+    } else {
+      expect(metadata.native.skipped).toHaveLength(3);
+      for (const skipped of metadata.native.skipped)
+        expect(skipped.reason).toContain(
+          "is installed; Windows writes remain refused for this target.",
+        );
+    }
     expect(
       Object.keys(metadata.inputs).some((file) => /prisma|pi-runtime|pi-ai|koffi/i.test(file)),
     ).toBe(false);

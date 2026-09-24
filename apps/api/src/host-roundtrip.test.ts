@@ -9,8 +9,14 @@ import type { HostWire } from "@ardurbot/host-runtime/bridge-wire";
 import { HostAgent } from "@ardurbot/host-runtime/host-agent";
 import { HostClient } from "@ardurbot/host-runtime/host-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { RemoteHostSandboxProvider } from "../../../packages/adapters/src/remote-host-sandbox.js";
 import { HostHub } from "./host-hub.js";
 
+vi.mock("@ardurbot/host-runtime/host-environment", async (original) => ({
+  ...(await original<object>()),
+  getHostEnvironment: async () => ({ env: { PATH: process.env.PATH } }),
+  inspectHostEnvironment: async () => ({ tools: [{ name: "gh", status: "signed in" }] }),
+}));
 const transport = vi.hoisted(() => ({ open: vi.fn() }));
 vi.mock("ws", () => ({
   default: vi.fn(function socket() {
@@ -149,4 +155,15 @@ describe("worker to API hub to host protocol", () => {
     hub.detach();
     await failure;
   });
+});
+
+it("round-trips the run inventory without consulting the worker's PATH", async () => {
+  const { client } = await fixture();
+  const sandbox = new RemoteHostSandboxProvider(client);
+  const note = await sandbox.environmentNote(
+    { id: "host:computer", botId: "computer", kind: "desktop", providerRef: "host:computer" },
+    context,
+  );
+  expect(note).toContain("Tools on this computer: gh (signed in)");
+  expect(note).not.toContain("\n");
 });

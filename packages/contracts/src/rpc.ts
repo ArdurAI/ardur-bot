@@ -3,6 +3,7 @@ import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
 import { CommandBlockSchema } from "./command-blocks.js";
+import { ComparisonExportSchema, comparisonsContract } from "./comparison.js";
 import {
   ComputerConfigurationSchema,
   ComputerConnectionInputSchema,
@@ -125,6 +126,7 @@ import {
   MemorySyncStateSchema,
 } from "./memory-documents.js";
 import { channelPairingContract } from "./messaging-actions.js";
+import { OllamaPullProgressSchema, OllamaStatusSchema } from "./ollama.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
@@ -279,6 +281,11 @@ export const appContract = {
       .output(z.object({ ok: z.literal(true) })),
   },
   models: {
+    ollama: oc.output(OllamaStatusSchema),
+    testOllama: oc.input(z.object({ baseUrl: z.string() })).output(OllamaStatusSchema),
+    pullOllama: oc
+      .input(z.object({ model: z.string().trim().min(1).max(256) }))
+      .output(eventIterator(OllamaPullProgressSchema)),
     list: oc.output(z.array(ModelCatalogEntrySchema)),
     credentials: oc.output(z.array(ModelCredentialSchema)),
     connect: oc.input(ModelConnectInputSchema).output(ModelCredentialSchema),
@@ -1083,6 +1090,7 @@ export const appContract = {
     ),
   },
   export: {
+    comparison: oc.input(z.object({ id: Id })).output(ComparisonExportSchema),
     bot: oc.input(botId).output(ExportManifestSchema),
   },
   notifications: {
@@ -1096,6 +1104,7 @@ export const appContract = {
   },
   delegations: delegationsContract,
   team: teamContract,
+  comparisons: comparisonsContract,
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),
   },
