@@ -19,7 +19,7 @@ export async function validateConnectedModelChoice(
   const credential = await findModelCredential(prisma, actor, provider);
   if (!credential) return "Connect that model provider first";
   if (!usableModelId(modelId)) return "Unknown model for that provider";
-  if (isCatalogModelChoice(provider, modelId)) return undefined;
+  if (provider === "ollama" || isCatalogModelChoice(provider, modelId)) return undefined;
   // Free-form saved IDs only resolve at runtime for openai-compatible connections.
   if (provider !== OPENAI_COMPATIBLE_PROVIDER_ID) {
     return "Unknown model for that provider";

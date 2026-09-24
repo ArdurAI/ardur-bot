@@ -61,6 +61,13 @@
       {
         "from": "../host-service/dist/host-service.cjs",
         "to": "host-service/host-service.cjs"
+      },
+      {
+        "from": "../host-service/dist/native/${os}_${arch}",
+        "to": "host-service/native/${os}_${arch}",
+        "filter": [
+          "koffi.node"
+        ]
       }
     ],
     "extraMetadata": {

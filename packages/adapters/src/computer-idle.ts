@@ -16,13 +16,17 @@ export const DEFAULT_SANDBOX_IDLE_MS = 10 * 60 * 1000;
 const BACKGROUND_WORK_MARKER_PREFIX = "/tmp/ardurbot-background-";
 const BACKGROUND_WORK_IDLE_SENTINEL = "ardurbot-background-idle";
 
-export const BACKGROUND_WORK_LAUNCH = [
+const backgroundWorkMarker = [
   `marker="${BACKGROUND_WORK_MARKER_PREFIX}$1-$2-$3"`,
   "set -o noclobber",
   'exec 9>"$marker" || exit 1',
   "set +o noclobber",
-  'exec bash -lc "$4"',
-].join("\n");
+];
+export const BACKGROUND_WORK_LAUNCH = [...backgroundWorkMarker, 'exec bash -lc "$4"'].join("\n");
+// Host PATH is captured once. Loading Bash's profile here would override it and can fail.
+export const HOST_BACKGROUND_WORK_LAUNCH = [...backgroundWorkMarker, 'exec bash -c "$4"'].join(
+  "\n",
+);
 
 /** Terminate background shell wrappers for one cancelled run. Browser teardown stays screen-scoped. */
 export const CANCEL_COMPUTER_RUN_WORK = [

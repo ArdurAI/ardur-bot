@@ -132,13 +132,16 @@ export default function BotSettingsScreen() {
     const seen = new Set<string>();
     for (const credential of credentials) {
       const providerModels = catalog.filter(
-        (entry) => entry.provider === credential.provider && !entry.placeholder,
+        (entry) =>
+          entry.provider === credential.provider &&
+          !entry.placeholder &&
+          (!entry.credentialId || entry.credentialId === credential.id),
       );
       const credentialInCatalog = Boolean(
         credential.modelId && providerModels.some((entry) => entry.id === credential.modelId),
       );
       const nextOptions =
-        credential.modelId && !credentialInCatalog
+        credential.provider !== "ollama" && credential.modelId && !credentialInCatalog
           ? [
               {
                 key: modelOptionKey(credential.provider, credential.modelId, credential.id),
@@ -151,7 +154,7 @@ export default function BotSettingsScreen() {
               key: modelOptionKey(entry.provider, entry.id, credential.id),
               provider: entry.provider,
               modelId: entry.id,
-              label: `${entry.providerName ?? entry.provider} · ${entry.label}`,
+              label: `${entry.provider === "ollama" || entry.provider === "local" ? `${t("Local")} · ` : ""}${entry.providerName ?? entry.provider} · ${entry.label}`,
             }));
       for (const option of nextOptions) {
         if (seen.has(option.key)) continue;
@@ -159,7 +162,11 @@ export default function BotSettingsScreen() {
         options.push(option);
       }
     }
-    return options;
+    return options.sort(
+      (a, b) =>
+        Number(a.provider === "ollama" || a.provider === "local") -
+        Number(b.provider === "ollama" || b.provider === "local"),
+    );
   }, [catalog, credentials]);
 
   const effectiveProvider = modelKey
@@ -181,10 +188,15 @@ export default function BotSettingsScreen() {
   );
   const supportedThinking =
     effectiveCredential?.thinkingLevels ?? effectiveEntry?.thinkingLevels ?? [];
-  const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) => level !== "off");
+  const isOllama = effectiveProvider === "ollama";
+  const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) =>
+    isOllama ? level === "off" || level === "medium" : level !== "off",
+  );
   const defaultThinkingLevel =
     effectiveCredential?.thinkingLevel ?? spaceDefaultEffort(undefined, supportedThinking);
-  const defaultThinkingLabel = `${t("Default")} (${thinkingLevelLabel(defaultThinkingLevel, t)})`;
+  const defaultThinkingLabel = isOllama
+    ? t("On")
+    : `${t("Default")} (${thinkingLevelLabel(defaultThinkingLevel, t)})`;
 
   const spaceDefaultLabel = me?.defaultModel
     ? `${t("Space default")} (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel})`
@@ -206,13 +218,24 @@ export default function BotSettingsScreen() {
 
   const thinkingChoices: PickerChoice[] = useMemo(
     () => [
-      { key: "", label: defaultThinkingLabel },
-      ...(thinkingLevel && !thinkingOptions.includes(thinkingLevel as ThinkingLevel)
-        ? [{ key: thinkingLevel, label: thinkingLevelLabel(thinkingLevel as ThinkingLevel, t) }]
+      ...(isOllama ? [] : [{ key: "", label: defaultThinkingLabel }]),
+      ...(thinkingLevel &&
+      !(isOllama && ["low", "medium", "high"].includes(thinkingLevel)) &&
+      !thinkingOptions.includes(thinkingLevel as ThinkingLevel)
+        ? [
+            {
+              key: thinkingLevel,
+              label: isOllama
+                ? thinkingLevel === "off"
+                  ? t("Off")
+                  : t("On")
+                : thinkingLevelLabel(thinkingLevel as ThinkingLevel, t),
+            },
+          ]
         : []),
       ...thinkingOptions.map((level) => ({
         key: level,
-        label: thinkingLevelLabel(level, t),
+        label: isOllama ? (level === "off" ? t("Off") : t("On")) : thinkingLevelLabel(level, t),
       })),
     ],
     [t, thinkingOptions, thinkingLevel, defaultThinkingLabel],
@@ -485,7 +508,9 @@ export default function BotSettingsScreen() {
             >
               <Text style={{ color: tokens.foreground }}>{selectedModelLabel}</Text>
             </Pressable>
-            {thinkingOptions.length || thinkingLevel ? (
+            {isOllama && effectiveEntry?.reasoning === false ? (
+              <Text style={{ color: tokens.mutedForeground }}>{t("Effort: not applicable")}</Text>
+            ) : thinkingOptions.length || thinkingLevel ? (
               <>
                 <Text
                   style={{

@@ -469,6 +469,7 @@ describe("thread message pages", () => {
       where: { threadId: "thread-1", seq: { lt: 6 } },
       orderBy: { seq: "desc" },
       take: 3,
+      include: { feedback: true },
     });
     expect(page.messages.map((message) => message.seq)).toEqual([4, 5]);
     expect(page.olderCursor).toBe(4);
@@ -545,6 +546,7 @@ describe("thread message pages", () => {
       where: { threadId: "thread-1", seq: { gte: 3, lte: 7 } },
       orderBy: { seq: "asc" },
       take: 4,
+      include: { feedback: true },
     });
   });
 

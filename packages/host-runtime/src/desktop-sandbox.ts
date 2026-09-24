@@ -30,7 +30,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
-import { HOST_FILE_BYTES } from "@ardurbot/contracts/host-bridge";
+import { HOST_FILE_BYTES, hostEnvironmentNote } from "@ardurbot/contracts/host-bridge";
 import {
   boundedSandboxCommandTimeoutMs,
   createBoundedCommandOutput,
@@ -51,8 +51,8 @@ import {
   pathFromDirectoryFd,
   win32NtRelativeAvailable,
 } from "./desktop-sandbox-win32-path.js";
+import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
 import { confinedHostCwd, hostCommand } from "./host-policy.js";
-import { nativeEnvironment } from "./runtimes/native-process.js";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 
@@ -80,7 +80,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
       adapterVersion: "0.1.0",
       capabilities: {
         graphical: false,
-        pty: true,
+        pty: false,
         snapshots: true,
         takeover: false,
         persistentHome: true,
@@ -143,6 +143,10 @@ export class DesktopSandboxProvider implements SandboxProvider {
 
   async prepare(_computer: ComputerRef, _context: AdapterContext): Promise<void> {}
 
+  async environmentNote(_computer: ComputerRef, _context: AdapterContext): Promise<string> {
+    return hostEnvironmentNote(await inspectHostEnvironment());
+  }
+
   async resolveCommandCwd(
     computer: ComputerRef,
     cwd: string | undefined,
@@ -169,7 +173,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
     }
     if (this.opts.restricted && request.cwd?.split(/[/\\]/u).includes(".."))
       throw new Error("Path escapes registered folders.");
-    const cwd = this.opts.restricted
+    let cwd = this.opts.restricted
       ? await confinedHostCwd(resolveExecuteCwd(request.cwd, box.home), this.allowedRoots(box.home))
       : resolveExecuteCwd(request.cwd, box.home);
     if (!this.opts.restricted && !isAllowedDesktopPath(cwd, this.allowedRoots(box.home))) {
@@ -177,7 +181,17 @@ export class DesktopSandboxProvider implements SandboxProvider {
       yield { type: "exit", code: 1 };
       return;
     }
-    await mkdir(cwd, { recursive: true });
+    if (!this.opts.restricted) {
+      try {
+        cwd = await confinedHostCwd(cwd, this.allowedRoots(box.home));
+      } catch (error) {
+        if (!hasErrorCode(error, "ENOENT")) throw error;
+        const root = this.allowedRoots(box.home).find((root) => isAllowedDesktopPath(cwd, [root]))!;
+        // Preserve source-mode directory preparation without following an escaping symlink.
+        await localWorkspaceTarget(root, `${path.relative(root, cwd)}/.host-directory`, false);
+        cwd = await confinedHostCwd(cwd, this.allowedRoots(box.home));
+      }
+    }
     if (this.opts.restricted && request.argv[0] === "mkdir") {
       if (
         request.env !== undefined ||
@@ -187,9 +201,9 @@ export class DesktopSandboxProvider implements SandboxProvider {
         request.argv.length > 16
       )
         throw new Error(
-          "This computer runs only echo, pwd and whoami as bot commands; use the file tools, or a Claude Code or Codex runtime, for other work.",
+          "Command did not run: directory preparation requires mkdir -p without environment or terminal overrides.",
         );
-      if (process.platform === "win32")
+      if (process.platform === "win32" && !win32NtRelativeAvailable())
         throw new Error("Host file writes require native directory handles on Windows.");
       for (const directory of request.argv.slice(2)) {
         const relative = normalizeDesktopWorkspacePath(directory);
@@ -200,17 +214,25 @@ export class DesktopSandboxProvider implements SandboxProvider {
       yield { type: "exit", code: 0 };
       return;
     }
-    const argv = this.opts.restricted
-      ? await hostCommand(request)
-      : request.argv.length
-        ? request.argv
-        : ["echo", "ready"];
+    const { env } = await getHostEnvironment();
+    let argv: string[];
+    try {
+      argv = await hostCommand(request, env);
+    } catch (error) {
+      yield {
+        type: "stderr",
+        data:
+          error instanceof Error ? error.message : "Command did not run: host launch was refused.",
+      };
+      yield { type: "exit", code: 127 };
+      return;
+    }
     const result = await runCommand(
       argv,
       cwd,
       boundedSandboxCommandTimeoutMs(request.timeoutMs),
       context.signal,
-      this.opts.restricted,
+      env,
     );
     if (result.stdout) yield { type: "stdout", data: result.stdout };
     if (result.stderr) yield { type: "stderr", data: result.stderr };
@@ -305,7 +327,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
   }
 
   async writeFile(computer: ComputerRef, file: PortableFile) {
-    if (this.opts.restricted && process.platform === "win32")
+    if (this.opts.restricted && process.platform === "win32" && !win32NtRelativeAvailable())
       throw new Error("Host file writes require native directory handles on Windows.");
     const box = this.requiredBox(computer);
     const target = await localWorkspaceTarget(box.home, file.path, false);
@@ -814,16 +836,31 @@ function runCommand(
   cwd: string,
   timeoutMs: number,
   signal: AbortSignal,
-  restricted = false,
+  env: NodeJS.ProcessEnv,
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    const child = spawn(argv[0]!, argv.slice(1), {
-      cwd,
-      env: restricted ? nativeEnvironment() : process.env,
-      shell: false,
-      windowsHide: true,
-      detached: process.platform !== "win32",
+    const notRun = (error: unknown) => ({
+      stdout: "",
+      stderr: `Command did not run: the host could not start the executable (${error && typeof error === "object" && "code" in error && typeof error.code === "string" && /^[A-Z_]+$/.test(error.code) ? error.code : "launch failed"}).`,
+      code: 127,
     });
+    if (signal.aborted) {
+      resolve({ stdout: "", stderr: "Command did not run: command aborted.", code: 130 });
+      return;
+    }
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(argv[0]!, argv.slice(1), {
+        cwd,
+        env,
+        shell: false,
+        windowsHide: true,
+        detached: process.platform !== "win32",
+      });
+    } catch (error) {
+      resolve(notRun(error));
+      return;
+    }
     const stdout = createBoundedCommandOutput();
     const outDecoder = new StringDecoder("utf8");
     const stderr = createBoundedCommandOutput();
@@ -837,7 +874,7 @@ function runCommand(
       resolve(result);
     };
     const terminate = (message: string, code: number) => {
-      killProcessTree(child.pid);
+      killProcessTree(child.pid, env);
       child.stdout?.destroy();
       child.stderr?.destroy();
       const retained = stderr.value();
@@ -858,28 +895,26 @@ function runCommand(
       if (!stderr.truncated) stderr.push(errDecoder.write(chunk));
     });
     child.on("error", (error) => {
-      if (argv[0] === "echo") {
-        finish({ stdout: `${argv.slice(1).join(" ")}\n`, stderr: "", code: 0 });
-        return;
-      }
-      finish({ stdout: "", stderr: error.message, code: 1 });
+      finish(notRun(error));
     });
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       stdout.push(outDecoder.end());
       stderr.push(errDecoder.end());
-      finish({ stdout: stdout.value(), stderr: stderr.value(), code: code ?? 0 });
+      if (code === null)
+        stderr.push(`Command stopped before completion (${signal ?? "unknown exit"}).`);
+      finish({ stdout: stdout.value(), stderr: stderr.value(), code: code ?? 1 });
     });
     if (signal.aborted) abort();
   });
 }
 
-function killProcessTree(pid: number | undefined) {
+function killProcessTree(pid: number | undefined, env: NodeJS.ProcessEnv) {
   if (!pid) return;
   if (process.platform === "win32") {
     const killer = spawn(
-      path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"),
+      path.join(env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"),
       ["/pid", String(pid), "/t", "/f"],
-      { stdio: "ignore", shell: false, windowsHide: true },
+      { stdio: "ignore", shell: false, windowsHide: true, env },
     );
     killer.on("error", () => undefined);
     killer.unref();

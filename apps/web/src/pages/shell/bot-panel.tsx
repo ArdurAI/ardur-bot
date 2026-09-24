@@ -298,7 +298,10 @@ export function BotSettings({
       catalog,
       credential.provider,
       showAllModels,
-    ).filter((entry) => !entry.placeholder);
+    ).filter(
+      (entry) =>
+        !entry.placeholder && (!entry.credentialId || entry.credentialId === credential.id),
+    );
     const credentialInCatalog = Boolean(
       credential.modelId &&
         catalog.some(
@@ -311,6 +314,7 @@ export function BotSettings({
     // Catalog providers expand to every model for that connection. Free-form
     // credentials (model id not in the catalog) stay a single connected pair.
     const options =
+      credential.provider !== "ollama" &&
       credential.modelId &&
       !credentialInCatalog &&
       (showAllModels ||
@@ -360,7 +364,10 @@ export function BotSettings({
   );
   const supportedThinking =
     effectiveCredential?.thinkingLevels ?? effectiveEntry?.thinkingLevels ?? [];
-  const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) => level !== "off");
+  const isOllama = effectiveProvider === "ollama";
+  const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) =>
+    isOllama ? level === "off" || level === "medium" : level !== "off",
+  );
   const defaultThinkingLevel =
     effectiveCredential?.thinkingLevel ?? spaceDefaultEffort(undefined, supportedThinking);
   const unavailableDefault = metadata ? spaceDefaultUnavailable(metadata) : false;
@@ -415,7 +422,9 @@ export function BotSettings({
           : null,
         ...(runtimeKind !== "pi" || modelMetaReady
           ? {
-              thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
+              thinkingLevel: (isOllama && !effectiveEntry?.reasoning
+                ? null
+                : thinkingLevel || null) as ThinkingLevel | null,
             }
           : {}),
       });
@@ -558,21 +567,30 @@ export function BotSettings({
                   {unavailableSelection ? t` (not available on your account)` : ""}
                 </NativeSelectOption>
               ) : null}
-              {connectedOptions.map((option) => (
-                <NativeSelectOption
-                  key={option.key}
-                  value={option.key}
-                  className={
-                    unavailableSubscriptionModel(catalog, option.provider, option.modelId)
-                      ? "text-muted-foreground"
-                      : undefined
-                  }
-                >
-                  {option.label}
-                  {unavailableSubscriptionModel(catalog, option.provider, option.modelId)
-                    ? t` — May not be available on your plan`
-                    : ""}
-                </NativeSelectOption>
+              {([false, true] as const).map((local) => (
+                <optgroup key={String(local)} label={local ? t`Local` : t`Hosted providers`}>
+                  {connectedOptions
+                    .filter(
+                      (option) =>
+                        (option.provider === "ollama" || option.provider === "local") === local,
+                    )
+                    .map((option) => (
+                      <NativeSelectOption
+                        key={option.key}
+                        value={option.key}
+                        className={
+                          unavailableSubscriptionModel(catalog, option.provider, option.modelId)
+                            ? "text-muted-foreground"
+                            : undefined
+                        }
+                      >
+                        {option.label}
+                        {unavailableSubscriptionModel(catalog, option.provider, option.modelId)
+                          ? t` — May not be available on your plan`
+                          : ""}
+                      </NativeSelectOption>
+                    ))}
+                </optgroup>
               ))}
             </NativeSelect>
           </label>
@@ -588,26 +606,46 @@ export function BotSettings({
               <Trans>This model is not available on your account. Choose another model.</Trans>
             </p>
           ) : null}
-          {thinkingOptions.length || thinkingLevel ? (
+          {isOllama && effectiveEntry?.reasoning === false ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              <Trans>Effort: not applicable</Trans>
+            </p>
+          ) : thinkingOptions.length || thinkingLevel ? (
             <label htmlFor={`${ids}-thinking`} className={fieldLabelClass}>
               <Trans>Thinking</Trans>
               <NativeSelect
                 id={`${ids}-thinking`}
                 className="mt-2 w-full"
-                value={thinkingLevel}
+                value={
+                  isOllama && ["", "low", "medium", "high"].includes(thinkingLevel)
+                    ? "medium"
+                    : thinkingLevel
+                }
                 onChange={(event) => setThinkingLevel(event.target.value)}
               >
-                <NativeSelectOption value="">
-                  {t`Default (${thinkingLevelDescription(defaultThinkingLevel)})`}
-                </NativeSelectOption>
-                {thinkingLevel && !thinkingOptions.includes(thinkingLevel as ThinkingLevel) ? (
+                {!isOllama ? (
+                  <NativeSelectOption value="">
+                    {t`Default (${thinkingLevelDescription(defaultThinkingLevel)})`}
+                  </NativeSelectOption>
+                ) : null}
+                {thinkingLevel &&
+                !(isOllama && ["low", "medium", "high"].includes(thinkingLevel)) &&
+                !thinkingOptions.includes(thinkingLevel as ThinkingLevel) ? (
                   <NativeSelectOption value={thinkingLevel}>
-                    {thinkingLevelDescription(thinkingLevel as ThinkingLevel)}
+                    {isOllama
+                      ? thinkingLevel === "off"
+                        ? t`Off`
+                        : t`On`
+                      : thinkingLevelDescription(thinkingLevel as ThinkingLevel)}
                   </NativeSelectOption>
                 ) : null}
                 {thinkingOptions.map((level) => (
                   <NativeSelectOption key={level} value={level}>
-                    {thinkingLevelDescription(level)}
+                    {isOllama
+                      ? level === "off"
+                        ? t`Off`
+                        : t`On`
+                      : thinkingLevelDescription(level)}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>

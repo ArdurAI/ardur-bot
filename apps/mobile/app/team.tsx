@@ -59,6 +59,7 @@ export default function TeamScreen() {
   return (
     <View style={[styles.page, { backgroundColor: tokens.background }]}>
       <Stack.Screen options={{ title: t("Team") }} />
+      <Button title={t("Comparisons")} onPress={() => router.push("/comparisons")} />
       {!loaded && !error ? <ActivityIndicator /> : null}
       {error ? (
         <View>
