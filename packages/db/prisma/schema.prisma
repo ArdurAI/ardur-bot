@@ -869,6 +869,8 @@ model MemoryDocument {
   deliveryStatus String @default("delivered")
   deliveryGeneration Int @default(0)
   deliveryProvider String?
+  deliveryReceipt String?
+  deliveryRetryAt DateTime?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   revisions MemoryRevision[]
@@ -1583,6 +1585,11 @@ model PendingDevicePairing {
   @@map("pending_device_pairings")
 }
 model DeviceGrant {
+  kind String @default("device")
+  installationId String?
+  provider String?
+  workspaceId String?
+  senderId String?
   id String @id @default(cuid())
   userId String
   spaceId String
@@ -1597,6 +1604,7 @@ model DeviceGrant {
   lastPresenceAt DateTime?
   revokedAt DateTime?
   @@index([userId, spaceId, revokedAt])
+  @@index([installationId, provider, workspaceId, senderId, revokedAt])
   @@map("device_grants")
 }
 model DeviceNonce {
@@ -1711,4 +1719,91 @@ model LearningSuppression {
   createdAt DateTime @default(now())
   @@id([spaceId, userId, fingerprint])
   @@map("learning_suppressions")
+}
+
+model ChatInstallation {
+  id String @id @default(cuid())
+  instanceId String
+  userId String
+  spaceId String
+  provider String
+  accountId String
+  workspaceId String
+  botId String
+  ciphertext String
+  enabled Boolean @default(true)
+  revision Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([provider, accountId])
+  @@index([userId, spaceId])
+  @@map("chat_installations")
+}
+model ChannelPairingChallenge {
+  hash String @id
+  installationId String
+  scopes String[]
+  expiresAt DateTime
+  usedAt DateTime?
+  @@index([installationId, expiresAt])
+  @@map("channel_pairing_challenges")
+}
+model MessagingRoute {
+  installationId String
+  provider String
+  workspaceId String
+  channelId String
+  threadId String @default("")
+  botId String
+  @@id([installationId, provider, workspaceId, channelId, threadId])
+  @@map("messaging_routes")
+}
+model MessagingTaskOrigin {
+  taskId String @id
+  runId String @unique
+  grantId String
+  installationId String
+  provider String
+  workspaceId String
+  channelId String
+  threadId String @default("")
+  sourceMessageId String
+  botId String
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([installationId, createdAt])
+  @@map("messaging_task_origins")
+}
+model MessagingReceiverState {
+  installationId String @id
+  state Json @default("{}")
+  @@map("messaging_receiver_states")
+}
+model ChatInbox {
+  installationId String
+  eventId String
+  fingerprint String
+  event Json
+  receivedAt DateTime @default(now())
+  consumedAt DateTime?
+  @@id([installationId, eventId])
+  @@index([installationId, consumedAt, receivedAt])
+  @@map("chat_inbox")
+}
+model ChatOutbox {
+  id String @id @default(cuid())
+  key String @unique
+  installationId String
+  taskId String?
+  destination Json
+  card Json
+  state String @default("pending")
+  providerMessageId String?
+  providerMessageIds String[] @default([])
+  retryAt DateTime?
+  sentChunks Int @default(0)
+  createdAt DateTime @default(now())
+  @@index([installationId, state, createdAt])
+  @@index([installationId, taskId, providerMessageId])
+  @@map("chat_outbox")
 }

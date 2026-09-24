@@ -1,0 +1,12 @@
+{
+  "op": 0,
+  "s": 12,
+  "t": "MESSAGE_CREATE",
+  "d": {
+    "id": "message-1",
+    "guild_id": "guild-1",
+    "channel_id": "channel-1",
+    "author": { "id": "sender-1", "username": "Display name is not authority" },
+    "content": "Check the weather"
+  }
+}

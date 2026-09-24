@@ -162,9 +162,11 @@ import {
   disconnectMemoryProvider,
   persistMemoryProviderConfig,
   serializeSpaceMemoryConfig,
+  testMemoryProviderConnection,
   updateMemoryProviderDefaultScope,
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
+import { createChannelPairing } from "./messaging-dispatch.js";
 import {
   chooseFocus,
   dismissFocus,
@@ -502,6 +504,7 @@ export function createRouter(deps: RouterDeps) {
     authSessionId?: string;
     origin?: string;
   }>();
+  const channelPairing = createChannelPairing(deps);
   const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
@@ -534,6 +537,17 @@ export function createRouter(deps: RouterDeps) {
 
   const commands = createCommandRoutes(deps);
   return os.router({
+    channelPairing: {
+      installations: authed.channelPairing.installations.handler(({ context }) =>
+        channelPairing.installations(context.actor),
+      ),
+      configure: authed.channelPairing.configure.handler(({ context, input }) =>
+        channelPairing.configure(context.actor, input),
+      ),
+      start: authed.channelPairing.start.handler(({ context, input }) =>
+        channelPairing.start(context.actor, input),
+      ),
+    },
     terminal: {
       close: authed.terminal.close.handler(
         ({ context, input }) =>
@@ -2373,6 +2387,12 @@ export function createRouter(deps: RouterDeps) {
         const config = await findSpaceMemoryConfig(deps.prisma, context.actor.spaceId);
         return config ? serializeSpaceMemoryConfig(config) : null;
       }),
+      testProvider: authed.memory.testProvider.handler(({ context, input }) =>
+        testMemoryProviderConnection(deps, context.actor, input),
+      ),
+      deliveryProgress: authed.memory.deliveryProgress.handler(({ context }) =>
+        memoryRpc(() => deps.memoryDocuments!.deliveryProgress(memoryContext(context.actor))),
+      ),
       connectProvider: authed.memory.connectProvider.handler(async ({ context, input }) =>
         persistMemoryProviderConfig(deps, context.actor, input),
       ),

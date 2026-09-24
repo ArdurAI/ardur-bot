@@ -4,6 +4,7 @@ import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { ChatTaskReview } from "./ChatTaskReview";
 
 function statusTone(status: RunActivityRow["status"]): string {
   if (status === "failed") return "text-destructive";
@@ -18,6 +19,8 @@ type ActivityListProps = {
 };
 
 export function ActivityList({ onOpenRun }: ActivityListProps) {
+  const [review, setReview] = useState<RunActivityRow | null>(null);
+  const open = (run: RunActivityRow) => (run.externalThread ? setReview(run) : onOpenRun(run));
   const [activeRuns, setActiveRuns] = useState<RunActivityRow[]>([]);
   const [recentRuns, setRecentRuns] = useState<RunActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,13 +69,14 @@ export function ActivityList({ onOpenRun }: ActivityListProps) {
 
   return (
     <div className="mb-2 border-b border-border pb-2">
+      {review ? <ChatTaskReview run={review} onClose={() => setReview(null)} /> : null}
       {activeRuns.length > 0 ? (
         <section>
           <div className="px-2.5 pb-1 pt-1 text-[12.5px] font-medium text-muted-foreground/80">
             <Trans>Now</Trans>
           </div>
           {activeRuns.map((run) => (
-            <ActivityRow key={run.runId} run={run} onOpen={() => onOpenRun(run)} />
+            <ActivityRow key={run.runId} run={run} onOpen={() => open(run)} />
           ))}
         </section>
       ) : null}
@@ -82,7 +86,7 @@ export function ActivityList({ onOpenRun }: ActivityListProps) {
             <Trans>Recent</Trans>
           </div>
           {recentRuns.map((run) => (
-            <ActivityRow key={run.runId} run={run} onOpen={() => onOpenRun(run)} />
+            <ActivityRow key={run.runId} run={run} onOpen={() => open(run)} />
           ))}
         </section>
       ) : null}

@@ -40,7 +40,12 @@ export async function saveRunMemory(
               : "Saved locally. Sync pending.",
         }
       : doc.delivery.status !== "delivered"
-        ? { status: "Saved; indexing pending" }
+        ? {
+            status:
+              doc.delivery.status === "failed"
+                ? "Saved locally. Indexing failed."
+                : "Saved locally. Indexing pending.",
+          }
         : {}),
   };
 }

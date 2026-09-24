@@ -61,6 +61,26 @@ export class MemoryService {
   async syncState(context: MemoryOperationContext) {
     return this.open(context, (s) => s.store.syncState?.(s.access) ?? Promise.resolve(null));
   }
+  async deliveryProgress(context: MemoryOperationContext) {
+    return this.open(context, async (s) => {
+      const counts = { total: 0, delivered: 0, pending: 0, failed: 0 };
+      let cursor: string | undefined;
+      do {
+        const page = await s.store.list({ cursor, limit: 100 }, s.access);
+        for (const doc of page.items) {
+          if (
+            doc.delivery.generation !== s.generation ||
+            doc.delivery.provider !== s.semantic?.describe().id
+          )
+            continue;
+          counts.total++;
+          counts[doc.delivery.status]++;
+        }
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor);
+      return counts;
+    });
+  }
   async push(context: MemoryOperationContext) {
     return this.open(context, (s) => s.store.push?.(s.access) ?? Promise.resolve());
   }

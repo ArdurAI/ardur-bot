@@ -113,6 +113,7 @@ import {
   MemoryScopeRemapSchema,
   MemorySyncStateSchema,
 } from "./memory-documents.js";
+import { channelPairingContract } from "./messaging-actions.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { SearchQueryOutputSchema } from "./search.js";
@@ -124,6 +125,7 @@ const threadTarget = z
   .object({
     botId: Id.optional(),
     groupId: Id.optional(),
+    threadId: Id.optional(),
   })
   .superRefine((input, ctx) => {
     const hasBot = Boolean(input.botId);
@@ -178,6 +180,7 @@ const threadSendInput = threadTarget
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
 export const appContract = {
+  channelPairing: channelPairingContract,
   devices: devicesContract,
   pairing: pairingContract,
   commands: {
@@ -519,6 +522,23 @@ export const appContract = {
       ),
     exportMarkdown: oc.input(z.object({ botId: Id.optional() })).output(z.string()),
     providerConfig: oc.output(SpaceMemoryConfigSchema.nullable()),
+    deliveryProgress: oc.output(
+      z.object({
+        total: z.number(),
+        delivered: z.number(),
+        pending: z.number(),
+        failed: z.number(),
+      }),
+    ),
+    testProvider: oc
+      .input(
+        z.object({
+          provider: z.string().min(1),
+          settings: z.record(z.string(), z.string()),
+          credentials: z.record(z.string(), z.string()),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
     connectProvider: oc
       .input(
         z.object({

@@ -1,5 +1,6 @@
 export * from "./bootstrap-user.js";
 export * from "./cancel-runs.js";
+export * from "./channel-grants.js";
 export * from "./client.js";
 export * from "./command-blocks.js";
 export * from "./computers.js";
@@ -12,6 +13,7 @@ export * from "./groups.js";
 export * from "./memory-config.js";
 export * from "./messages.js";
 export * from "./messaging.js";
+export * from "./messaging-routes.js";
 export * from "./model-credentials.js";
 export * from "./repos.js";
 export * from "./scope.js";

@@ -125,6 +125,10 @@ msgstr "Computadora de {botName}"
 msgid "{days}d ago"
 msgstr "hace {days} d"
 
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "{failed} failed"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "hace {hours} h"
@@ -391,6 +395,10 @@ msgstr "Permitir {0} sin preguntar"
 msgid "Allow actions after presence confirmation"
 msgstr ""
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Allow approvals once"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Allow delegation"
 msgstr ""
@@ -471,15 +479,24 @@ msgstr "La API volvió, pero la actualización no terminó. Revisa los logs del 
 #: src/components/AskCard.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "API key"
 msgstr "Clave de API"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "API key (optional)"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
 msgstr "Encabezado de clave de API"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "App token"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Appearance"
@@ -671,6 +688,7 @@ msgstr "Volver a iniciar sesión"
 msgid "Base revision"
 msgstr ""
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "URL base"
@@ -679,6 +697,10 @@ msgstr "URL base"
 #: src/pages/PluginsOverlay.tsx
 msgid "Bearer token"
 msgstr "Token Bearer"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Bearer token (optional)"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
@@ -702,6 +724,7 @@ msgstr "Iniciando la computadora de {0}"
 msgid "bot"
 msgstr "bot"
 
+#: src/pages/ChannelPairingSettings.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
@@ -729,6 +752,10 @@ msgstr ""
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
 msgstr "Bot a vincular"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Bot token"
+msgstr ""
 
 #. placeholder {0}: botName ?? proposal.scope.botId
 #: src/pages/LearningInbox.tsx
@@ -841,6 +868,18 @@ msgstr "Apps de chat"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Chat apps, group channels, and agent connections."
 msgstr "Apps de chat, canales de grupo y conexiones de agentes."
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat bot"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat permissions"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat service"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Chat Settings"
@@ -1105,6 +1144,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "Conectar"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Connect a chat bot"
+msgstr ""
 
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -1464,6 +1507,10 @@ msgstr "No se pudo cargar la configuración de voz"
 
 #: src/pages/LocalSettings.tsx
 msgid "Could not open local settings. Start the local server and create its owner account, then try again."
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Could not pair this account. Check its settings and try again."
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1936,6 +1983,10 @@ msgstr ""
 msgid "Documents"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Documents stay in the local journal."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Don’t have an account?"
 msgstr "¿No tienes una cuenta?"
@@ -2216,6 +2267,10 @@ msgstr ""
 msgid "Get notified when this Bot finishes or needs input"
 msgstr "Recibe avisos cuando este Bot termine o necesite entrada"
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Get pairing code"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Getting ready"
 msgstr ""
@@ -2359,8 +2414,8 @@ msgstr "Importar JSON de OpenAPI"
 msgid "Inbox & email"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Indexing sends documents to {locationLine}."
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "Indexed {delivered} of {total}"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -3217,6 +3272,10 @@ msgstr "Otro modelo…"
 msgid "PagerDuty incident"
 msgstr "Incidente de PagerDuty"
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Pair a chat account"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Pair device"
 msgstr ""
@@ -3416,6 +3475,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
 msgstr "Reconectar OAuth"
+
+#: src/pages/ChatTaskReview.tsx
+msgid "Reconnect to your home."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Reconnect with an API key"
@@ -3955,9 +4018,23 @@ msgstr "Enviarlo"
 msgid "Send reset link"
 msgstr "Enviar enlace de restablecimiento"
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Send this code to the bot in a private message. Expires in five minutes."
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Sending…"
 msgstr "Enviando…"
+
+#. placeholder {0}: memoryProviderHost(config!.settings) ?? config!.provider
+#. placeholder {0}: memoryProviderHost(pendingConnection.settings) ?? registration?.name
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Sends memory text to {0}"
+msgstr ""
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Sends memory text to {host}"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -4289,6 +4366,10 @@ msgstr ""
 msgid "Test"
 msgstr "Probar"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Test connection"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Test connection and preview"
 msgstr ""
@@ -4296,6 +4377,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "Ejecución de prueba"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Testing…"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
@@ -4594,9 +4679,18 @@ msgstr "Esperando a que vuelva la API…"
 msgid "Waiting…"
 msgstr "Esperando…"
 
+#: src/pages/ChannelPairingSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Webhook"
 msgstr "Webhook"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Webhook secret"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Webhook URL"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -4663,6 +4757,10 @@ msgstr ""
 #: src/pages/CallView.tsx
 msgid "Working…"
 msgstr "Trabajando…"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Workspace or server ID"
+msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Write"

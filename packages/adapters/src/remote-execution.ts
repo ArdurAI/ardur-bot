@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
 import { canonicalDispatchJson } from "@ardurbot/contracts";
-import { effectiveRemoteAuthority } from "@ardurbot/core";
+import {
+  classifyRemoteTool,
+  effectiveRemoteAuthority,
+  remotePermissionExpansion,
+} from "@ardurbot/core";
 import type {
   DeviceApprovalBinding,
   ExternalEffect,
@@ -101,6 +105,16 @@ export async function currentRemoteDecision(prisma: PrismaClient, runId: string,
   }
   return { allowed: true as const };
 }
+/** Built-ins have a deployment-local resource boundary, just as connectors have a revisioned resource. */
+export function remoteBuiltinApprovalRoute(
+  run: { originDeviceGrantId?: string | null; botId: string },
+  toolName: string,
+  builtin: boolean,
+): BoundApprovalRoute | undefined {
+  return run.originDeviceGrantId && builtin
+    ? { connectorId: "builtin", resourceId: run.botId, resourceRevision: 1, toolName }
+    : undefined;
+}
 export function approvalRequestRoute(request: unknown): BoundApprovalRoute | undefined {
   return (
     boundDirectApprovalDetails(request, REMOTE_APPROVAL_MARKER)?.route ??
@@ -153,6 +167,7 @@ export async function validateDeviceApproval(
     throw new DeviceRequestError("This older approval must be answered at home.");
   if (
     !grant ||
+    (grant.kind === "channel" && binding.originDeviceGrantId !== grant.id) ||
     !run ||
     input.effectId !== effect.id ||
     binding.instanceId !== input.instanceId ||
@@ -173,6 +188,11 @@ export async function validateDeviceApproval(
     !effectiveRemoteAuthority(await loadRemoteAuthority(tx, grant, run.botId)).includes("approve")
   )
     throw new DeviceRequestError("Answer this approval at home.");
+  if (
+    grant.kind === "channel" &&
+    (classifyRemoteTool(route.toolName) !== "ordinary" || remotePermissionExpansion(route.toolName))
+  )
+    throw new DeviceRequestError("Approve this on your Mac or phone.");
   if (input.decision !== "deny") {
     const decision = await evaluateRemoteExecution(
       tx as PrismaClient,
@@ -202,7 +222,9 @@ export async function validateDeviceApproval(
         "disabled"
     )
       throw fail();
-  } else if (route.connectorId !== "builtin") {
+  } else if (route.connectorId === "builtin") {
+    if (route.resourceId !== run.botId || route.resourceRevision !== 1) throw fail();
+  } else {
     // Connector adapters without a revocable resource/revision contract need a home review.
     throw new DeviceRequestError("Review this connector approval at home.");
   }
@@ -224,14 +246,18 @@ export async function validateDeviceApproval(
       remoteDeviceGrantIds: [...new Set([...(run.remoteDeviceGrantIds ?? []), grant.id])],
     },
   });
-  await auditDevice(tx, "approval.device.answered", {
-    instanceId: grant.instanceId,
-    userId: grant.userId,
-    spaceId: grant.spaceId,
-    grantId: grant.id,
-    taskId: run.taskId,
-    effectId: effect.id,
-  });
+  await auditDevice(
+    tx,
+    grant.kind === "channel" ? "approval.channel.answered" : "approval.device.answered",
+    {
+      instanceId: grant.instanceId,
+      userId: grant.userId,
+      spaceId: grant.spaceId,
+      grantId: grant.id,
+      taskId: run.taskId,
+      effectId: effect.id,
+    },
+  );
 }
 export async function revalidateDeviceApprovalExecution(
   prisma: PrismaClient,

@@ -265,6 +265,7 @@ import {
   bindDeviceApproval,
   DispatchStopRequested,
   enforceRemoteExecution,
+  remoteBuiltinApprovalRoute,
   revalidateDeviceApprovalExecution,
   stopRemoteComputerWork,
 } from "./remote-execution.js";
@@ -1886,18 +1887,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 "Approved catalog request could not be resolved to a tool. Deny and retry the direct tool call.",
             };
           }
+          const directApprovalRoute =
+            connectorCall.route ??
+            remoteBuiltinApprovalRoute(run, name, BUILTIN_AGENT_TOOL_NAMES.has(name));
           if (
             !catalogRemapped &&
-            connectorCall.route?.resourceId &&
-            connectorCall.route.connectorId &&
-            connectorCall.route.toolName
+            directApprovalRoute?.resourceId &&
+            directApprovalRoute.connectorId &&
+            directApprovalRoute.toolName
           ) {
             effectRequest = boundDirectApprovalRequest(
               {
-                connectorId: connectorCall.route.connectorId,
-                resourceId: connectorCall.route.resourceId,
-                resourceRevision: connectorCall.route.resourceRevision,
-                toolName: connectorCall.route.toolName,
+                connectorId: directApprovalRoute.connectorId,
+                resourceId: directApprovalRoute.resourceId,
+                resourceRevision: directApprovalRoute.resourceRevision,
+                toolName: directApprovalRoute.toolName,
               },
               args,
               CATALOG_APPROVAL_TOOL,
@@ -1909,14 +1913,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const nextApprovedTool = approvedEffectReplays.nextToolName();
           const nextApprovedRequest = approvedEffectReplays.nextRequest();
           const liveRoute =
-            connectorCall.route?.resourceId &&
-            connectorCall.route.connectorId &&
-            connectorCall.route.toolName
+            directApprovalRoute?.resourceId &&
+            directApprovalRoute.connectorId &&
+            directApprovalRoute.toolName
               ? {
-                  connectorId: connectorCall.route.connectorId,
-                  resourceId: connectorCall.route.resourceId,
-                  resourceRevision: connectorCall.route.resourceRevision,
-                  toolName: connectorCall.route.toolName,
+                  connectorId: directApprovalRoute.connectorId,
+                  resourceId: directApprovalRoute.resourceId,
+                  resourceRevision: directApprovalRoute.resourceRevision,
+                  toolName: directApprovalRoute.toolName,
                 }
               : undefined;
           const nextBound = boundDirectApprovalDetails(nextApprovedRequest, CATALOG_APPROVAL_TOOL);

@@ -34,6 +34,9 @@ export function verifyDeviceSignature(publicKey: string, text: string, signature
   }
 }
 export type DeviceAuditType =
+  | "channel.paired"
+  | "channel.revoked"
+  | "approval.channel.answered"
   | "pairing.started"
   | "pairing.completed"
   | "pairing.failed"
@@ -252,7 +255,7 @@ export async function issueDeviceNonce(
   const grant = await prisma.deviceGrant.findFirst({
     where: { id: grantId, instanceId, revokedAt: null },
   });
-  if (!grant)
+  if (!grant || grant.kind === "channel")
     throw new DeviceRequestError("This device is unavailable; pair it again at home.", 401);
   // Bound outstanding challenges per grant and prune used/expired rows on admission.
   await prisma.deviceNonce.deleteMany({
@@ -288,6 +291,7 @@ export async function authenticateDevice(
     const presence = operation === "presence";
     if (
       !grant ||
+      grant.kind === "channel" ||
       Math.abs(now.getTime() - proof.timestamp) > REQUEST_TTL_MS ||
       !verifyDeviceSignature(
         presence ? grant.presencePublicKey : grant.devicePublicKey,

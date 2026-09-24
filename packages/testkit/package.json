@@ -6,7 +6,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./memory-conformance": "./src/memory-conformance.ts",
-    "./memory-fakes": "./src/memory-fakes.ts"
+    "./memory-fakes": "./src/memory-fakes.ts",
+    "./semantic-memory-http-fake": "./src/semantic-memory-http-fake.ts",
+    "./semantic-memory-conformance": "./src/semantic-memory-conformance.ts"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",

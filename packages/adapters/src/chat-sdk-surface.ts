@@ -31,6 +31,7 @@ export const MESSAGING_WEBHOOK_MAX_BODY_BYTES = 256 * 1024;
  */
 export interface MessagingPlatform {
   provider: string;
+  webhookEnabled?: boolean;
   capabilities: MessagingCapabilities;
   adapter: Adapter;
   /** Deterministic 1:1 thread id for platforms without openDM (sendblue). */
@@ -219,6 +220,8 @@ export class ChatSdkMessagingSurface implements MessagingSurface {
   }
 
   private async dispatchWebhook(platform: MessagingPlatform, request: Request): Promise<Response> {
+    if (platform.webhookEnabled === false)
+      return new Response("Webhook is not configured", { status: 401 });
     const declared = Number(request.headers.get("content-length") ?? 0);
     if (declared > MESSAGING_WEBHOOK_MAX_BODY_BYTES) {
       return new Response("Payload too large", { status: 413 });

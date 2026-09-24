@@ -94,6 +94,7 @@ import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { ensureInstanceIdentity } from "./instance-identity.js";
 import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
+import { createLegacyChatDispatch, mountMessagingDispatch } from "./messaging-dispatch.js";
 import {
   createMessagingInboundHandler,
   teamChatSenderCanWakeMessageRoutines,
@@ -264,11 +265,8 @@ export async function createApp(
   const pipedream =
     pipedreamOverride ??
     (isPipedreamEnabled(pipedreamConfig) ? new PipedreamConnector(pipedreamConfig) : undefined);
-  // This process registers the inbound sink (messaging.onInbound below),
-  // so it's the one that must hold Telegram's live getUpdates connection —
-  // see messagingPlatformsFromEnv's docstring for why a second poller
-  // elsewhere (e.g. the worker) would actively break this.
-  const messagingPlatforms = messagingPlatformsFromEnv(env, { pollInboundMessages: true });
+  // Webhook sinks stay here; outbound Dispatch receivers belong to the worker.
+  const messagingPlatforms = messagingPlatformsFromEnv(env);
   const messaging =
     messagingOverride ??
     (isMessagingSurfaceEnabled(messagingPlatforms, {
@@ -621,6 +619,7 @@ export async function createApp(
     return actor;
   });
   mountWebhookHttpRoutes(app, { prisma, secrets, events, jobs });
+  mountMessagingDispatch(app, { prisma, secrets, events, jobs });
   // Shared with stop so a shutdown during retry delays does not restart polling.
   let messagingStopped = false;
   let clearMessagingRetryDelay: (() => void) | undefined;
@@ -824,11 +823,16 @@ export async function createApp(
         })();
       }
     }
+    const legacyChatDispatch = createLegacyChatDispatch(
+      { prisma, secrets, events, jobs },
+      env.slackBotToken,
+    );
     messaging.onInbound(async (event) => {
       if (event.type !== "message") {
         await applyMessagingOutboundStatus(prisma, event);
         return;
       }
+      if (await legacyChatDispatch(event)) return;
       if (prefersTeamChatSurface(event, env.teamChatBotId)) {
         const bridge = teamChatBridge;
         if (bridge) {
@@ -851,15 +855,7 @@ export async function createApp(
       await inbound(event);
     });
     mountMessagingWebhookRoutes(app, { messaging });
-    // Start polling-mode adapters (e.g. Telegram with no public webhook URL
-    // registered) immediately rather than waiting for the first webhook
-    // POST or outbound send to lazily trigger it. This is the process that
-    // owns the inbound sink registered just above, so it must be the one
-    // holding the live connection — a second poller elsewhere (e.g. the
-    // worker) would only fight this one for Telegram's single getUpdates
-    // slot without ever seeing the messages itself.
-    // Bounded retries cover transient Telegram startup failures; polling-only
-    // bots otherwise stay dark until an unrelated outbound send re-inits.
+    // Initialize passive legacy adapters for webhook identity and outbound delivery.
     messagingInitTask = (async () => {
       const delayMs = [0, 2_000, 10_000];
       for (let attempt = 0; attempt < delayMs.length; attempt += 1) {

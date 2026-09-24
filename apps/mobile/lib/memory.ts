@@ -3,6 +3,8 @@ import {
   MemoryDocumentPageSchema,
   MemoryHistoryPageSchema,
   MemorySyncStateSchema,
+  memoryProviderHost,
+  SpaceMemoryConfigSchema,
 } from "@ardurbot/contracts";
 import { rpc } from "./api";
 
@@ -36,4 +38,9 @@ export function memoryAttribution(revision: DocumentRevision | MemoryDocumentHea
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+export async function loadMemoryDestination() {
+  const config = SpaceMemoryConfigSchema.nullable().parse(await rpc("memory/providerConfig", {}));
+  return config && config.provider !== "builtin" ? memoryProviderHost(config.settings) : null;
 }

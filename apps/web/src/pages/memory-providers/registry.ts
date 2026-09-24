@@ -1,5 +1,10 @@
 import type { SpaceMemoryConfig } from "@ardurbot/contracts";
 import type { ComponentType } from "react";
+import {
+  GraphitiSettingsForm,
+  Mem0OssSettingsForm,
+  Mem0SettingsForm,
+} from "./ExternalMemorySettingsForm";
 import { SerenitySettingsForm } from "./SerenitySettingsForm";
 import { SupermemorySettingsForm } from "./SupermemorySettingsForm";
 
@@ -22,6 +27,27 @@ export interface MemoryProviderSettingsRegistration {
 }
 
 export const MEMORY_PROVIDER_SETTINGS: readonly MemoryProviderSettingsRegistration[] = [
+  {
+    id: "mem0",
+    name: "Mem0 platform",
+    description: "",
+    SettingsForm: Mem0SettingsForm,
+    connectedLabel: () => "Mem0 platform",
+  },
+  {
+    id: "mem0-oss",
+    name: "Mem0 (self-hosted)",
+    description: "",
+    SettingsForm: Mem0OssSettingsForm,
+    connectedLabel: () => "Mem0 (self-hosted)",
+  },
+  {
+    id: "graphiti",
+    name: "Graphiti",
+    description: "",
+    SettingsForm: GraphitiSettingsForm,
+    connectedLabel: () => "Graphiti",
+  },
   {
     id: "supermemory",
     name: "Supermemory",

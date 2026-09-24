@@ -55,6 +55,8 @@ export class PostgresMemoryJournal implements MemoryJournal {
           status: row.deliveryStatus as JournalDocument["delivery"]["status"],
           generation: row.deliveryGeneration,
           provider: row.deliveryProvider,
+          ...(row.deliveryReceipt ? { receipt: row.deliveryReceipt } : {}),
+          ...(row.deliveryRetryAt ? { retryAt: row.deliveryRetryAt.toISOString() } : {}),
         },
         revisions: row.revisions.map((r) =>
           DocumentRevisionSchema.parse({
@@ -105,6 +107,8 @@ export class PostgresMemoryJournal implements MemoryJournal {
         deliveryStatus: doc.delivery.status,
         deliveryGeneration: doc.delivery.generation,
         deliveryProvider: doc.delivery.provider,
+        deliveryReceipt: doc.delivery.receipt ?? null,
+        deliveryRetryAt: doc.delivery.retryAt ? new Date(doc.delivery.retryAt) : null,
         updatedAt: new Date(head.createdAt),
       };
       try {

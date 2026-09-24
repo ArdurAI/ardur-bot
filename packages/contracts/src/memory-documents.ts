@@ -71,6 +71,11 @@ export const DocumentDeliverySchema = z
     status: z.enum(["pending", "delivered", "failed"]),
     generation: z.number().int().nonnegative(),
     provider: z.string().nullable(),
+    receipt: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]{1,200}$/)
+      .optional(),
+    retryAt: z.string().datetime().optional(),
   })
   .strict();
 export const GitRevisionSyncSchema = z.object({

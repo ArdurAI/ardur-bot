@@ -10,8 +10,18 @@ const api = vi.hoisted(() => ({
   revoke: vi.fn(),
   rename: vi.fn(),
   confirm: vi.fn(),
+  installations: vi.fn(),
+  channelStart: vi.fn(),
+  bots: vi.fn(),
 }));
-vi.mock("../lib/rpc", () => ({ rpc: { devices: api, pairing: api } }));
+vi.mock("../lib/rpc", () => ({
+  rpc: {
+    devices: api,
+    pairing: api,
+    channelPairing: { installations: api.installations, start: api.channelStart },
+    bots: { list: api.bots },
+  },
+}));
 vi.mock("@lingui/react/macro", () => {
   const t = (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, i) => text + part + (values[i] ?? ""), "");
@@ -21,6 +31,8 @@ vi.mock("@ardurbot/ui-web", () => ({
   Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
     <button {...props} />
   ),
+  NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
+  NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
   Input: (props: ComponentProps<"input">) => <input {...props} />,
   Switch: ({
     checked,
@@ -48,6 +60,14 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  api.installations.mockResolvedValue([
+    { id: "installation", provider: "telegram", workspaceId: "telegram", botId: "bot" },
+  ]);
+  api.bots.mockResolvedValue([{ id: "bot", name: "Research bot" }]);
+  api.channelStart.mockResolvedValue({
+    code: "PAIRTEST1234",
+    expiresAt: new Date(Date.now() + 300_000).toISOString(),
+  });
   api.list.mockResolvedValue({
     fingerprint: "a".repeat(64),
     pending: [{ id: "pending", deviceName: "Pending phone", publicKeyFingerprint: "b".repeat(64) }],
@@ -113,4 +133,18 @@ it("keeps device management with the owner", async () => {
   await act(async () => root.render(<DevicesSettings owner={false} />));
   expect(api.list).not.toHaveBeenCalled();
   expect(container.textContent).toContain("home owner account");
+});
+
+it("reveals chat pairing only when requested and shares the device list", async () => {
+  await act(async () => root.render(<DevicesSettings owner />));
+  expect(api.installations).not.toHaveBeenCalled();
+  await click("Pair a chat account");
+  expect(api.installations).toHaveBeenCalledOnce();
+  const form = container.querySelector("form")!;
+  await act(async () =>
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(api.channelStart).toHaveBeenCalledWith({ installationId: "installation", botId: "bot" });
+  expect(container.textContent).toContain("PAIRTEST1234");
+  expect(container.textContent).toContain("private message");
 });

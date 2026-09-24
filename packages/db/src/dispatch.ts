@@ -1,11 +1,18 @@
 import type { DispatchInput, DispatchState, DispatchReceipt as Receipt } from "@ardurbot/contracts";
-import { ALL_DEVICE_SCOPES, canonicalDispatchJson } from "@ardurbot/contracts";
+import {
+  ALL_DEVICE_SCOPES,
+  CHANNEL_SCOPES,
+  CHAT_COPY,
+  canonicalDispatchJson,
+} from "@ardurbot/contracts";
 import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
 import { auditDevice, DeviceRequestError, deviceDigest } from "./device-grants.js";
 import { appendEventInTransaction, steerRunInTransaction } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
+import type { ChannelDispatchOrigin } from "./messaging-routes.js";
+import { answerChannelQuestion, enqueueChat } from "./messaging-routes.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 const ACTIVE = ["running", "queued", "leased", "waiting_input", "waiting_takeover"];
@@ -51,7 +58,11 @@ export async function loadRemoteAuthority(
     space: member ? layer("space") : [],
     bot: bot ? layer("bot") : [],
     user: member ? layer("user") : [],
-    device: grant.revokedAt ? [] : grant.scopes,
+    device: grant.revokedAt
+      ? []
+      : grant.kind === "channel"
+        ? grant.scopes.filter((scope) => (CHANNEL_SCOPES as readonly string[]).includes(scope))
+        : grant.scopes,
   };
 }
 function receiptView(
@@ -71,6 +82,7 @@ export async function admitDispatch(
   prisma: PrismaClient,
   grant: DeviceGrant,
   input: DispatchInput,
+  origin?: ChannelDispatchOrigin,
 ): Promise<Receipt> {
   const key = {
     instanceId: grant.instanceId,
@@ -78,7 +90,9 @@ export async function admitDispatch(
     deviceGrantId: grant.id,
     clientNonce: input.clientNonce,
   };
-  const payloadFingerprint = deviceDigest(canonicalDispatchJson(input));
+  const payloadFingerprint = deviceDigest(
+    canonicalDispatchJson(origin ? { input, origin } : input),
+  );
   return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
       // Serializes admission and revocation, including a retry whose routing default has changed.
@@ -97,7 +111,35 @@ export async function admitDispatch(
         if (!run) throw new DeviceRequestError("This task is no longer available.", 409);
         return receiptView(replay, run);
       }
-      const botId = input.botId ?? liveGrant.defaultBotId;
+      if ((liveGrant.kind === "channel") !== Boolean(origin))
+        throw new DeviceRequestError("This surface cannot send this request.");
+      if (
+        origin &&
+        (origin.installationId !== liveGrant.installationId ||
+          origin.provider !== liveGrant.provider ||
+          origin.workspaceId !== liveGrant.workspaceId)
+      )
+        throw new DeviceRequestError("This channel is unavailable.");
+      const route = origin
+        ? await tx.messagingRoute.findUnique({
+            where: {
+              installationId_provider_workspaceId_channelId_threadId: {
+                installationId: origin.installationId,
+                provider: origin.provider,
+                workspaceId: origin.workspaceId,
+                channelId: origin.channelId,
+                threadId: origin.threadId ?? "",
+              },
+            },
+          })
+        : null;
+      const installation = origin
+        ? await tx.chatInstallation.findFirst({
+            where: { id: origin.installationId, enabled: true },
+          })
+        : null;
+      if (origin && !installation) throw new DeviceRequestError("This channel is unavailable.");
+      const botId = input.botId ?? route?.botId ?? installation?.botId ?? liveGrant.defaultBotId;
       if (!botId) throw new DeviceRequestError("Choose a bot before sending this task.", 400);
       const bot = await tx.bot.findFirst({
         where: { id: botId, spaceId: grant.spaceId, userId: grant.userId, archivedAt: null },
@@ -108,8 +150,54 @@ export async function admitDispatch(
       const authority = effectiveRemoteAuthority(await loadRemoteAuthority(tx, liveGrant, bot.id));
       if (!authority.includes(input.replyToTaskId ? "steer" : "dispatch"))
         throw new DeviceRequestError("This device is not allowed to send this request.");
-      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${bot.thread.id} FOR UPDATE`;
+      let threadId = bot.thread.id;
+      if (origin) {
+        if (
+          (await tx.dispatchReceipt.count({
+            where: { deviceGrantId: grant.id, createdAt: { gt: new Date(Date.now() - 60_000) } },
+          })) >= 12
+        )
+          throw new DeviceRequestError("Wait a moment before sending another task.", 429);
+        if (input.replyToTaskId) {
+          const target = await tx.messagingTaskOrigin.findFirst({
+            where: {
+              taskId: input.replyToTaskId,
+              grantId: grant.id,
+              installationId: origin.installationId,
+              workspaceId: origin.workspaceId,
+              channelId: origin.channelId,
+            },
+          });
+          const targetRun = target
+            ? await tx.run.findUnique({ where: { id: target.runId } })
+            : null;
+          if (!targetRun) throw new DeviceRequestError("Reply to this task's message.");
+          threadId = targetRun.threadId;
+        } else if (!origin.private) {
+          // Shared rooms never inherit the bot's personal transcript. Each task retains its own
+          // conversation boundary, including after a routing change or another sender's dispatch.
+          const conversation = await tx.externalConversation.create({
+            data: {
+              provider: origin.provider,
+              workspaceId: origin.workspaceId,
+              externalKey: `dispatch:${origin.installationId}:${grant.id}:${input.clientNonce}`,
+              conversationId: origin.channelId,
+              displayName: `${origin.provider} · ${origin.channelId}`,
+              botId,
+              userId: grant.userId,
+              spaceId: grant.spaceId,
+              thread: { create: { userId: grant.userId, spaceId: grant.spaceId } },
+            },
+            include: { thread: { select: { id: true } } },
+          });
+          if (!conversation.thread)
+            throw new DeviceRequestError("This conversation is unavailable.");
+          threadId = conversation.thread.id;
+        }
+      }
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
       if (
+        !input.replyToTaskId &&
         (await tx.run.count({
           where: { originDeviceGrantId: grant.id, status: { in: ACTIVE } },
         })) >= 20
@@ -125,7 +213,7 @@ export async function admitDispatch(
             botId,
             spaceId: grant.spaceId,
             userId: grant.userId,
-            threadId: bot.thread.id,
+            threadId,
             status: { in: ACTIVE },
             cancelRequestedAt: null,
           },
@@ -141,17 +229,27 @@ export async function admitDispatch(
             remoteDeviceGrantIds: [...new Set([...(active.remoteDeviceGrantIds ?? []), grant.id])],
           },
         });
-        await steerRunInTransaction(tx, {
-          run: active,
-          text: input.text,
-          clientNonce: `dispatch:${grant.id}:${input.clientNonce}`,
-        });
+        if (origin && active.status === "waiting_input") {
+          await answerChannelQuestion(tx, {
+            spaceId: grant.spaceId,
+            threadId,
+            runId: active.id,
+            answeredByUserId: grant.userId,
+            answer: input.text,
+          });
+        } else {
+          await steerRunInTransaction(tx, {
+            run: active,
+            text: input.text,
+            clientNonce: `dispatch:${grant.id}:${input.clientNonce}`,
+          });
+        }
         taskId = active.taskId;
         runId = active.id;
-        status = active.status;
+        status = origin && active.status === "waiting_input" ? "queued" : active.status;
       } else {
         const message = await createThreadMessageInTransaction(tx, {
-          threadId: bot.thread.id,
+          threadId,
           role: "user",
           blocks: [{ kind: "text", text: input.text }],
         });
@@ -160,7 +258,7 @@ export async function admitDispatch(
             spaceId: grant.spaceId,
             userId: grant.userId,
             botId,
-            threadId: bot.thread.id,
+            threadId,
             prompt: input.text,
             status: "queued",
           },
@@ -170,7 +268,7 @@ export async function admitDispatch(
             spaceId: grant.spaceId,
             userId: grant.userId,
             botId,
-            threadId: bot.thread.id,
+            threadId,
             taskId: task.id,
             trigger: "user",
             status: "queued",
@@ -183,7 +281,7 @@ export async function admitDispatch(
         await tx.message.update({ where: { id: message.id }, data: { runId: run.id } });
         await appendEventInTransaction(tx, {
           spaceId: grant.spaceId,
-          threadId: bot.thread.id,
+          threadId,
           botId,
           runId: run.id,
           type: "thread.message.created",
@@ -196,6 +294,42 @@ export async function admitDispatch(
         taskId = task.id;
         runId = run.id;
       }
+      if (origin && !input.replyToTaskId) {
+        const routeKey = {
+          installationId: origin.installationId,
+          provider: origin.provider,
+          workspaceId: origin.workspaceId,
+          channelId: origin.channelId,
+          threadId: origin.threadId ?? "",
+        };
+        await tx.messagingRoute.upsert({
+          where: { installationId_provider_workspaceId_channelId_threadId: routeKey },
+          create: { ...routeKey, botId },
+          update: {},
+        });
+        await tx.messagingTaskOrigin.create({
+          data: {
+            taskId,
+            runId,
+            grantId: grant.id,
+            installationId: origin.installationId,
+            provider: origin.provider,
+            workspaceId: origin.workspaceId,
+            channelId: origin.channelId,
+            threadId: origin.threadId ?? "",
+            sourceMessageId: origin.messageId,
+            botId,
+          },
+        });
+      }
+      if (origin)
+        await enqueueChat(tx, {
+          key: `accepted:${grant.id}:${input.clientNonce}`,
+          installationId: origin.installationId,
+          taskId,
+          destination: origin,
+          card: { text: CHAT_COPY.accepted },
+        });
       const record = await tx.dispatchReceipt.create({
         data: {
           ...key,
@@ -203,7 +337,7 @@ export async function admitDispatch(
           taskId,
           runId,
           botId,
-          threadId: bot.thread.id,
+          threadId,
           steering: Boolean(input.replyToTaskId),
         },
       });
@@ -224,25 +358,34 @@ export async function requestDispatchStop(
   taskId: string,
   now = new Date(),
 ) {
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, userId: grant.userId, spaceId: grant.spaceId },
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM device_grants WHERE id = ${grant.id} FOR UPDATE`;
+    const liveGrant = await tx.deviceGrant.findFirst({
+      where: { id: grant.id, instanceId: grant.instanceId, revokedAt: null },
+    });
+    const task = await tx.task.findFirst({
+      where: { id: taskId, userId: grant.userId, spaceId: grant.spaceId },
+    });
+    if (
+      !liveGrant ||
+      !task ||
+      !effectiveRemoteAuthority(await loadRemoteAuthority(tx, liveGrant, task.botId)).includes(
+        "stop",
+      )
+    )
+      throw new DeviceRequestError("This task is unavailable on this device.");
+    await tx.run.updateMany({
+      where: {
+        OR: [{ taskId }, { remoteRootTaskId: taskId }],
+        spaceId: grant.spaceId,
+        userId: grant.userId,
+        status: { in: ACTIVE },
+        cancelRequestedAt: null,
+      },
+      data: { cancelRequestedAt: now },
+    });
+    return { cancelRequested: true as const };
   });
-  if (
-    !task ||
-    !effectiveRemoteAuthority(await loadRemoteAuthority(prisma, grant, task.botId)).includes("stop")
-  )
-    throw new DeviceRequestError("This task is unavailable on this device.");
-  await prisma.run.updateMany({
-    where: {
-      OR: [{ taskId }, { remoteRootTaskId: taskId }],
-      spaceId: grant.spaceId,
-      userId: grant.userId,
-      status: { in: ACTIVE },
-      cancelRequestedAt: null,
-    },
-    data: { cancelRequestedAt: now },
-  });
-  return { cancelRequested: true as const };
 }
 /** Only the executor calls this after its active work has unwound. */
 export async function confirmDispatchStop(
