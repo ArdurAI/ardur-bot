@@ -27,6 +27,8 @@ import { toComputerRef } from "./computer-support.js";
 
 export type TaughtSkillRow = {
   id: string;
+  documentId?: string | null;
+  activeRevision?: number | null;
   spaceId: string;
   botId: string;
   userId: string;
@@ -92,6 +94,8 @@ export function parsePlaybook(value: unknown): SkillPlaybook {
 export function mapTaughtSkill(row: TaughtSkillRow): TaughtSkill {
   return {
     id: row.id,
+    documentId: row.documentId,
+    activeRevision: row.activeRevision,
     botId: row.botId,
     name: row.name,
     goal: row.goal,

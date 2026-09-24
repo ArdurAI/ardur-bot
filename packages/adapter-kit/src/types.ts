@@ -407,7 +407,8 @@ export interface AgentRunRequest {
   instructions: string;
   history: Array<{ id?: string; role: "user" | "assistant" | "system"; content: string }>;
   currentTurnImages?: AgentInputImage[];
-  tools: ConnectorTool[];
+  /** Explicit model-only mode; an empty array retains legacy built-in tools. */
+  tools: ConnectorTool[] | "none";
   model: AgentRunModel;
   /** Resolve an explicitly requested helper model within the active user and space scope. */
   resolveModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
@@ -517,6 +518,12 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "learning.review": {
+    runId: string;
+    historyGeneration: number;
+    evidenceWatermark: string;
+    policyVersion: string;
+  };
   "memory.git-push": { spaceId: string; userId: string; generation?: number };
   "memory.deliver": {
     spaceId: string;
@@ -609,6 +616,8 @@ export type TeamChatMessageKind = "direct" | "mention" | "ambient";
 export interface MessagingInboundMessage {
   type: "message";
   provider: string;
+  /** Original provider event ID, retained across webhook and socket delivery. */
+  providerEventId?: string;
   /** Per-message transport when one provider spans multiple networks (for example SMS vs RCS). */
   transport?: string;
   /** Provider message id; drives replay-safe client nonces downstream. */

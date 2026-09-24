@@ -517,7 +517,11 @@ function AgentSkills({
       if (creating) {
         await rpc.agentSkills.create({ content: draft });
       } else if (open) {
-        await rpc.agentSkills.update({ skillId: open.id, content: draft });
+        await rpc.agentSkills.update({
+          skillId: open.id,
+          expectedRevision: open.activeRevision ?? 1,
+          content: draft,
+        });
       }
       setOpen(null);
       setCreating(false);

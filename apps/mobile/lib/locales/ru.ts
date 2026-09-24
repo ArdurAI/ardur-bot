@@ -1,4 +1,8 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "What was wrong?": "Что было не так?",
+  "What was good?": "Что было хорошо?",
+  "Remove feedback": "Удалить отзыв",
+
   "Claude subscriptions are not supported here yet; use an API key.":
     "Подписки Claude здесь пока не поддерживаются; используйте API-ключ.",
   "Could not load integrations.": "Не удалось загрузить интеграции.",

@@ -9,6 +9,7 @@ import {
   deviceThreadProjection,
   enforceRemoteExecution,
   REMOTE_APPROVAL_MARKER,
+  remoteBuiltinApprovalRoute,
   revalidateDeviceApprovalExecution,
   stopRemoteComputerWork,
   validateDeviceApproval,
@@ -233,4 +234,88 @@ it("narrows an existing child when another device later steers its parent", asyn
   expect(deviceThreadProjection({ spaces: [{ id: "space" }, { id: "other" }] }, "space")).toEqual({
     spaces: [{ id: "space" }],
   });
+});
+
+describe("channel approval ceiling", () => {
+  function channelFixture() {
+    const f = fixture();
+    Object.assign(f.grant, { kind: "channel" });
+    Object.assign(f.binding, { originDeviceGrantId: f.grant.id });
+    f.effect.request = boundDirectApprovalRequest(
+      { connectorId: "builtin", resourceId: "bot", resourceRevision: 1, toolName: "read_file" },
+      { path: "example.txt" },
+      REMOTE_APPROVAL_MARKER,
+    );
+    f.binding.requestFingerprint = deviceDigest(canonicalDispatchJson(f.effect.request));
+    f.answer.requestFingerprint = f.binding.requestFingerprint;
+    return f;
+  }
+  it("allows one scoped ordinary approval, never expands the channel to consequential", async () => {
+    const f = channelFixture();
+    await validateDeviceApproval(f.db, f.effect, f.answer);
+    expect(f.tx.deviceAuditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ type: "approval.channel.answered" }),
+    });
+    expect((await currentRemoteDecision(f.db, "run", "shell")).allowed).toBe(false);
+  });
+  it("only one concurrent click wins the atomic approval claim", async () => {
+    const f = channelFixture();
+    f.tx.deviceApprovalBinding.updateMany.mockImplementation(async ({ data }) => {
+      if (f.binding.answeredAt) return { count: 0 };
+      Object.assign(f.binding, data);
+      return { count: 1 };
+    });
+    const results = await Promise.allSettled([
+      validateDeviceApproval(f.db, f.effect, f.answer),
+      validateDeviceApproval(f.db, f.effect, f.answer),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+  });
+  it.each(["expired", "changed", "other-origin"])(
+    "rejects a channel approval that is %s",
+    async (mode) => {
+      const f = channelFixture();
+      if (mode === "expired") f.binding.expiresAt = new Date(0);
+      if (mode === "changed")
+        f.effect.request = boundDirectApprovalRequest(
+          { connectorId: "builtin", resourceId: "bot", resourceRevision: 1, toolName: "read_file" },
+          { path: "changed.txt" },
+          REMOTE_APPROVAL_MARKER,
+        );
+      if (mode === "other-origin")
+        Object.assign(f.binding, { originDeviceGrantId: "another-grant" });
+      await expect(validateDeviceApproval(f.db, f.effect, f.answer)).rejects.toThrow(
+        "changed or expired",
+      );
+    },
+  );
+  it("refuses a consequential answer even with forged presence and broad scopes", async () => {
+    const f = channelFixture();
+    f.effect.request = boundDirectApprovalRequest(
+      { connectorId: "builtin", resourceId: "bot", resourceRevision: 1, toolName: "shell" },
+      {},
+      REMOTE_APPROVAL_MARKER,
+    );
+    f.binding.requestFingerprint = deviceDigest(canonicalDispatchJson(f.effect.request));
+    f.answer.requestFingerprint = f.binding.requestFingerprint;
+    await expect(validateDeviceApproval(f.db, f.effect, f.answer)).rejects.toThrow(
+      "Approve this on your Mac or phone.",
+    );
+  });
+});
+
+it("binds remote built-ins to their bot resource without changing local or connector requests", () => {
+  expect(
+    remoteBuiltinApprovalRoute({ botId: "bot", originDeviceGrantId: "grant" }, "read_file", true),
+  ).toEqual({
+    connectorId: "builtin",
+    resourceId: "bot",
+    resourceRevision: 1,
+    toolName: "read_file",
+  });
+  expect(remoteBuiltinApprovalRoute({ botId: "bot" }, "read_file", true)).toBeUndefined();
+  expect(
+    remoteBuiltinApprovalRoute({ botId: "bot", originDeviceGrantId: "grant" }, "custom", false),
+  ).toBeUndefined();
 });

@@ -227,7 +227,12 @@ import {
   needsOAuthProbe,
   parseMcpServerToolArgs,
 } from "./mcp-server-tool.js";
-import { forgetRunMemory, recallRunMemory, saveRunMemory } from "./memory/run-memory.js";
+import {
+  forgetRunMemory,
+  recalledKnowledgeExposures,
+  recallRunMemory,
+  saveRunMemory,
+} from "./memory/run-memory.js";
 import { loadAgentMemoryContext } from "./memory-context.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { selectMemoryTools } from "./memory-tools.js";
@@ -260,6 +265,7 @@ import {
   bindDeviceApproval,
   DispatchStopRequested,
   enforceRemoteExecution,
+  remoteBuiltinApprovalRoute,
   revalidateDeviceApprovalExecution,
   stopRemoteComputerWork,
 } from "./remote-execution.js";
@@ -276,6 +282,7 @@ import {
   secretPausedToolResult,
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
+import { recordRunUsage } from "./run-usage.js";
 import { withRuntimeCleanup } from "./runtime-stream.js";
 import {
   cancelScheduleFromTool,
@@ -295,6 +302,11 @@ import {
 import { inferScript } from "./scripted-runtime.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { isExactNoResponse, NO_RESPONSE, stripNoResponseReply } from "./silent-reply.js";
+import {
+  hydrateTaughtSkills,
+  invokedKnowledgeExposures,
+  recordKnowledgeExposure,
+} from "./skill-documents.js";
 import {
   listAgentSkillRecords,
   skillCreateFromTool,
@@ -993,11 +1005,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             routine.timezone,
           );
       const previousLastRunAt = routine.lastRunAt;
-      const skillRecords = await listAgentSkillRecords(deps.prisma, {
-        spaceId: routine.spaceId,
-        userId: routine.userId,
-      });
-      const routinePrompt = expandSkillReferencesInPrompt(routine.prompt, skillRecords);
+      const routinePrompt = routine.prompt;
       const claimed = await deps.prisma.$transaction(async (tx) => {
         const updated = await tx.routine.updateMany({
           where: { id: routine.id, active: true, nextRunAt: scheduledAt },
@@ -1240,12 +1248,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }),
           deps.memoryProviders.resolve(run.spaceId),
           deps.prisma.taughtSkill.findMany({
-            where: { botId: run.botId, spaceId: run.spaceId, status: "saved" },
+            where: {
+              botId: run.botId,
+              spaceId: run.spaceId,
+              status: run.trigger === "skill" ? { in: ["saved", "draft"] } : "saved",
+            },
           }),
-          listAgentSkillRecords(deps.prisma, {
-            spaceId: run.spaceId,
-            userId: run.userId,
-          }),
+          listAgentSkillRecords(
+            deps.prisma,
+            {
+              spaceId: run.spaceId,
+              userId: run.userId,
+              botId: run.botId,
+            },
+            deps.memoryDocuments,
+          ),
           deps.prisma.agentSecret.findMany({
             where: { spaceId: run.spaceId },
             select: {
@@ -1333,6 +1350,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           })),
           connectedProviders: connectedComposio.map((row) => row.provider),
         };
+        const skillOwner = { ...context, attempt: fence };
         await deps.memoryDocuments?.startSession?.(context);
         const memoryScope = configuredMemory
           ? effectiveMemoryScope(bot.memoryScope, configuredMemory.defaultScope)
@@ -1403,6 +1421,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? `Update from ${peerMessage.fromBotName}: ${peerMessage.text}`
             : "The delegated bot completed its turn without a written summary."
           : undefined;
+        const pendingExposures: Parameters<typeof recordKnowledgeExposure>[2][] = [];
         const recallPromise =
           threadContext.includeSemanticRecall &&
           semanticMemory &&
@@ -1427,7 +1446,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
             loadCurrentTurnImages(deps, turnBlocks, context),
             messagingChannelRun
               ? Promise.resolve("")
-              : loadAgentMemoryContext(deps.memory, bot.id, context),
+              : loadAgentMemoryContext(
+                  deps.memory,
+                  bot.id,
+                  context,
+                  undefined,
+                  async (exposure) => {
+                    pendingExposures.push(exposure);
+                  },
+                  runSecrets,
+                ),
             messagingChannelRun
               ? Promise.resolve("")
               : loadAgentScratchpadContext(deps, {
@@ -1443,6 +1471,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (recalled.ok && recalled.value.length > 0) {
             recallSucceeded = true;
             recalledMemory = formatRecalledMemory(recalled.value);
+            pendingExposures.push(
+              ...recalledKnowledgeExposures(
+                recalled.value.slice(0, MAX_RECALLED_MEMORIES),
+                "injected",
+                true,
+              ),
+            );
           } else if (!recalled.ok) {
             getLogger().error("semantic memory recall failed", recalled.error);
           }
@@ -1852,18 +1887,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 "Approved catalog request could not be resolved to a tool. Deny and retry the direct tool call.",
             };
           }
+          const directApprovalRoute =
+            connectorCall.route ??
+            remoteBuiltinApprovalRoute(run, name, BUILTIN_AGENT_TOOL_NAMES.has(name));
           if (
             !catalogRemapped &&
-            connectorCall.route?.resourceId &&
-            connectorCall.route.connectorId &&
-            connectorCall.route.toolName
+            directApprovalRoute?.resourceId &&
+            directApprovalRoute.connectorId &&
+            directApprovalRoute.toolName
           ) {
             effectRequest = boundDirectApprovalRequest(
               {
-                connectorId: connectorCall.route.connectorId,
-                resourceId: connectorCall.route.resourceId,
-                resourceRevision: connectorCall.route.resourceRevision,
-                toolName: connectorCall.route.toolName,
+                connectorId: directApprovalRoute.connectorId,
+                resourceId: directApprovalRoute.resourceId,
+                resourceRevision: directApprovalRoute.resourceRevision,
+                toolName: directApprovalRoute.toolName,
               },
               args,
               CATALOG_APPROVAL_TOOL,
@@ -1875,14 +1913,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const nextApprovedTool = approvedEffectReplays.nextToolName();
           const nextApprovedRequest = approvedEffectReplays.nextRequest();
           const liveRoute =
-            connectorCall.route?.resourceId &&
-            connectorCall.route.connectorId &&
-            connectorCall.route.toolName
+            directApprovalRoute?.resourceId &&
+            directApprovalRoute.connectorId &&
+            directApprovalRoute.toolName
               ? {
-                  connectorId: connectorCall.route.connectorId,
-                  resourceId: connectorCall.route.resourceId,
-                  resourceRevision: connectorCall.route.resourceRevision,
-                  toolName: connectorCall.route.toolName,
+                  connectorId: directApprovalRoute.connectorId,
+                  resourceId: directApprovalRoute.resourceId,
+                  resourceRevision: directApprovalRoute.resourceRevision,
+                  toolName: directApprovalRoute.toolName,
                 }
               : undefined;
           const nextBound = boundDirectApprovalDetails(nextApprovedRequest, CATALOG_APPROVAL_TOOL);
@@ -2826,30 +2864,26 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (name === "skill_read") {
             return skillReadFromTool(
               deps.prisma,
-              {
-                spaceId: run.spaceId,
-                userId: run.userId,
-              },
+              skillOwner,
               {
                 name: args.name ? String(args.name) : undefined,
                 skillId: args.skillId ? String(args.skillId) : undefined,
               },
+              deps.memoryDocuments,
             );
           }
           if (name === "skill_create") {
             return finish(
               await skillCreateFromTool(
                 deps.prisma,
-                {
-                  spaceId: run.spaceId,
-                  userId: run.userId,
-                },
+                skillOwner,
                 {
                   name: args.name ? String(args.name) : undefined,
                   description: args.description ? String(args.description) : undefined,
                   body: args.body ? String(args.body) : undefined,
                   content: args.content ? String(args.content) : undefined,
                 },
+                deps.memoryDocuments,
               ),
             );
           }
@@ -2857,19 +2891,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return finish(
               await skillUpdateFromTool(
                 deps.prisma,
-                {
-                  spaceId: run.spaceId,
-                  userId: run.userId,
-                },
+                skillOwner,
                 {
                   name: args.name ? String(args.name) : undefined,
                   skillId: args.skillId ? String(args.skillId) : undefined,
+                  expectedRevision:
+                    typeof args.expectedRevision === "number" ? args.expectedRevision : undefined,
                   newName: args.newName ? String(args.newName) : undefined,
                   description:
                     args.description !== undefined ? String(args.description) : undefined,
                   body: args.body !== undefined ? String(args.body) : undefined,
                   content: args.content ? String(args.content) : undefined,
                 },
+                deps.memoryDocuments,
               ),
             );
           }
@@ -2877,14 +2911,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return finish(
               await skillDeleteFromTool(
                 deps.prisma,
-                {
-                  spaceId: run.spaceId,
-                  userId: run.userId,
-                },
+                skillOwner,
                 {
                   name: args.name ? String(args.name) : undefined,
                   skillId: args.skillId ? String(args.skillId) : undefined,
                 },
+                deps.memoryDocuments,
               ),
             );
           }
@@ -2992,7 +3024,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             });
           }
           if (name === "recall_memory") {
-            return recallRunMemory(
+            const result = await recallRunMemory(
               deps.memoryDocuments,
               semanticMemory!,
               {
@@ -3006,6 +3038,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
               },
               context,
             );
+            if (result.ok)
+              for (const exposure of recalledKnowledgeExposures(result.value, "read"))
+                await recordKnowledgeExposure(
+                  deps.prisma,
+                  { ...context, attempt: fence },
+                  exposure,
+                );
+            return result;
           }
           if (name === "save_memory") {
             return finish(
@@ -3591,7 +3631,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
           connectedPlugins.length > 0
             ? `Connected plugins: ${connectedPlugins.map((row) => `${row.displayName} (${row.connectorId}:${row.provider})`).join(", ")}. Prefer those plugin tools over the computer browser or web search when reading app data (repos, releases, mail, calendar, and similar).`
             : "No plugins are connected yet.";
-        const taughtSkillIndex = savedSkills.slice(0, 20);
+        const hydratedTaughtSkills = await hydrateTaughtSkills(
+          deps.prisma,
+          deps.memoryDocuments,
+          context,
+          savedSkills,
+        );
+        const taughtSkillIndex = hydratedTaughtSkills.slice(0, 20);
         const taughtSkillsLine =
           taughtSkillIndex.length > 0
             ? `Saved taught skills:\n${taughtSkillIndex
@@ -3613,8 +3659,24 @@ export function createRunExecutor(deps: ExecutorDeps) {
           [task.prompt, attachedFilesPrompt, missingImagesInstruction].filter(Boolean).join("\n\n"),
           agentSkills,
         );
-        const invokedSkill = savedSkills.find((skill) =>
-          promptInvokesSkill(taskPrompt, skill.name || skill.goal),
+        const invokedSkill = hydratedTaughtSkills.find(
+          (skill) =>
+            (run.trigger === "skill" &&
+              task.prompt.startsWith(`Run ${skill.name || skill.goal.slice(0, 80)}.`)) ||
+            promptInvokesSkill(taskPrompt, skill.name || skill.goal),
+        );
+        pendingExposures.push(
+          ...invokedKnowledgeExposures(
+            task.prompt,
+            agentSkills,
+            invokedSkill
+              ? {
+                  ...invokedSkill,
+                  name: invokedSkill.name || invokedSkill.goal.slice(0, 80),
+                  playbook: parsePlaybook(invokedSkill.playbook),
+                }
+              : undefined,
+          ),
         );
         const basePrompt = invokedSkill
           ? `${formatSkillRunPrompt(
@@ -3697,13 +3759,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const runRuntime: AgentRuntime["run"] = commandReplay
             ? () => commandReplayEvents(commandReplay, runId, recordedApplyTool)
             : deps.runtime.run.bind(deps.runtime);
+          if (!commandReplay)
+            for (const exposure of pendingExposures)
+              await recordKnowledgeExposure(deps.prisma, { ...context, attempt: fence }, exposure);
           const runtimeEvents = runRuntime(
             {
               botId: bot.id,
               threadId: thread.id,
               runId,
               sourceMessageId: run.sourceMessageId,
-              prompt,
+              prompt: redactSecrets(prompt, runSecrets),
               instructions: [
                 bot.instructions || `${bot.name}: ${bot.title}\n${bot.description}`,
                 formatCurrentTimeInstruction(),
@@ -4126,17 +4191,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 );
               }
             } else if (event.type === "usage") {
-              await deps.prisma.usageRecord.create({
-                data: {
-                  spaceId: run.spaceId,
-                  botId: bot.id,
-                  userId: run.userId,
-                  runId,
-                  provider: event.provider,
-                  model: event.model,
-                  inputTokens: event.inputTokens,
-                  outputTokens: event.outputTokens,
-                },
+              await recordRunUsage(deps, run, {
+                provider: event.provider,
+                model: event.model,
+                inputTokens: event.inputTokens,
+                outputTokens: event.outputTokens,
               });
             } else if (event.type === "done") {
               if (!assembled && event.text) {
@@ -5046,13 +5105,16 @@ function uncertainEffectError(toolName: string): Error {
  * only when the provider that won the resolution above is that vendor. A provider named
  * by deployment settings or a bot override gets no key rather than another vendor's.
  */
-function deploymentKeyFor(deps: ExecutorDeps, provider: string): string | undefined {
+function deploymentKeyFor(
+  deps: Pick<ExecutorDeps, "deploymentModelKey">,
+  provider: string,
+): string | undefined {
   if (!deps.deploymentModelKey) return undefined;
   return provider === resolveDeploymentModel().provider ? deps.deploymentModelKey : undefined;
 }
 
-async function resolveModelKey(
-  deps: ExecutorDeps,
+export async function resolveModelKey(
+  deps: Pick<ExecutorDeps, "prisma" | "secretStore" | "deploymentModelKey">,
   userId: string,
   spaceId: string,
   credential: {

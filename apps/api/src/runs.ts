@@ -55,6 +55,7 @@ export async function listSpaceRuns(
       thread: {
         select: {
           groupId: true,
+          externalConversationId: true,
           group: { select: { name: true } },
         },
       },
@@ -73,6 +74,7 @@ export async function listSpaceRuns(
     groupId: row.thread.groupId,
     groupName: row.thread.group?.name ?? null,
     threadId: row.threadId,
+    externalThread: Boolean(row.thread.externalConversationId),
     status: row.status as RunActivityRow["status"],
     trigger: row.trigger as RunActivityRow["trigger"],
     notificationsEnabled: activityNotificationsEnabled(row.thread.groupId, row.bot.notifyOnFinish),

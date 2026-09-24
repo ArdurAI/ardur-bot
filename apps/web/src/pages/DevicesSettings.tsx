@@ -5,6 +5,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { toQR } from "toqr";
 import { rpc } from "../lib/rpc";
+import { ChannelPairingSettings } from "./ChannelPairingSettings";
 
 export function PairingQr({ payload }: { payload: PairingPayload }) {
   const { t } = useLingui();
@@ -122,6 +123,7 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
           )
         }
       >{t`Pair device`}</Button>
+      <ChannelPairingSettings />
       <details>
         <summary>{t`Device permissions`}</summary>
         <div className="mt-3 space-y-3">
@@ -185,10 +187,14 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
               {t`Last used`}:{" "}
               {device.lastUsedAt ? new Date(device.lastUsedAt).toLocaleString() : t`Never`}
             </p>
-            <p className="text-sm">
-              {t`Last present`}:{" "}
-              {device.lastPresenceAt ? new Date(device.lastPresenceAt).toLocaleString() : t`Never`}
-            </p>
+            {device.kind !== "channel" ? (
+              <p className="text-sm">
+                {t`Last present`}:{" "}
+                {device.lastPresenceAt
+                  ? new Date(device.lastPresenceAt).toLocaleString()
+                  : t`Never`}
+              </p>
+            ) : null}
             {!device.revokedAt ? (
               <div className="flex gap-2">
                 <Button

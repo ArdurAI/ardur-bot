@@ -77,6 +77,7 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
           lastPresenceAt: device.lastPresenceAt?.toISOString() ?? null,
           revokedAt: device.revokedAt?.toISOString() ?? null,
           defaultBotId: device.defaultBotId,
+          kind: device.kind === "channel" ? ("channel" as const) : ("device" as const),
         })),
         pending: pending.map((request) => ({
           id: request.id,
@@ -126,12 +127,15 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
       owner(actor);
       const home = await identity();
       await prisma.$transaction(async (tx) => {
+        const grant = await tx.deviceGrant.findFirst({
+          where: { id: input.id, userId: actor.userId, spaceId: actor.spaceId },
+        });
         const changed = await tx.deviceGrant.updateMany({
           where: { id: input.id, userId: actor.userId, spaceId: actor.spaceId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
         if (changed.count)
-          await auditDevice(tx, "device.revoked", {
+          await auditDevice(tx, grant?.kind === "channel" ? "channel.revoked" : "device.revoked", {
             instanceId: home.instanceId,
             userId: actor.userId,
             spaceId: actor.spaceId,

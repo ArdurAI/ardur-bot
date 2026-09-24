@@ -1,6 +1,7 @@
 import type { JobPublisher, JobWorkerHost } from "@ardurbot/adapter-kit";
 import { ComposioConnector, IntegrationProviderSettings } from "@ardurbot/adapters";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
+import { createMessagingReceivers } from "./messaging-receivers.js";
 
 loadRootEnv();
 
@@ -32,6 +33,7 @@ import {
   LocalArtifactStore,
   McpConnector,
   McpOAuthBroker,
+  MessagingInstallationSettings,
   messagingEnvFromProcess,
   messagingPlatformsFromEnv,
   PiAgentRuntime,
@@ -124,10 +126,7 @@ async function main() {
   const pipedream = isPipedreamEnabled(pipedreamConfig)
     ? new PipedreamConnector(pipedreamConfig)
     : undefined;
-  // pollInboundMessages stays false (the default) here: this process
-  // only ever sends outbound (messaging.deliver jobs). It must never poll
-  // Telegram — that would steal the single getUpdates slot away from the
-  // API process, which is the one with the inbound sink actually wired up.
+  // Legacy delivery stays passive; Dispatch receivers below own outbound connections.
   const messagingPlatforms = messagingPlatformsFromEnv(messagingEnvFromProcess(process.env));
   const messaging = isMessagingSurfaceEnabled(messagingPlatforms, {
     deploymentModelKey,
@@ -207,6 +206,7 @@ async function main() {
     cloudAgent,
   });
 
+  // Includes the proposal-only learning.review handler; all mutations stay in the regular executor.
   const jobHandlers = createBackgroundJobHandlers({
     executor,
     prisma,
@@ -252,12 +252,21 @@ async function main() {
     reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
   });
   reconciler.start();
+  const chatReceivers = createMessagingReceivers({
+    prisma,
+    pool,
+    jobs,
+    events,
+    settings: new MessagingInstallationSettings(prisma, secrets),
+  });
+  chatReceivers.start();
 
   let stopping = false;
   const stop = async () => {
     if (stopping) return;
     stopping = true;
     try {
+      await chatReceivers.stop();
       await reconciler.stop();
       await jobHost.stop();
       await jobs.close();

@@ -137,7 +137,7 @@ describe("reaction messages", () => {
     expect(tx.run.create).not.toHaveBeenCalled();
     expect(tx.message.findFirst).toHaveBeenCalledWith({
       where: { id: "parent", threadId: "thread-1" },
-      select: { id: true },
+      select: { id: true, role: true },
     });
     tx.message.findFirst.mockResolvedValueOnce(null);
     await expect(
@@ -2034,6 +2034,13 @@ describe("stopThreadRuns", () => {
       yield { type: "exit", code: 0 };
     });
     const transaction = {
+      event: {
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "cancel-event",
+          ...data,
+        })),
+      },
+      thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 1 }) },
       $queryRaw: vi.fn(),
       run: {
         updateManyAndReturn: vi.fn().mockResolvedValue([
@@ -2104,6 +2111,13 @@ describe("stopThreadRuns", () => {
       target,
     );
 
+    expect(transaction.event.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "run.cancelled",
+        runId: "run-a",
+        payload: expect.objectContaining({ source: "human", reason: "stop" }),
+      }),
+    });
     expect(transaction.computerExecutionLease.findMany).toHaveBeenCalledWith({
       where: { runId: { in: ["run-a", "run-b"] } },
       select: { computerId: true, botId: true, runId: true, fence: true },
@@ -2162,6 +2176,13 @@ describe("stopThreadRuns", () => {
       yield { type: "exit", code: 0 };
     });
     const transaction = {
+      event: {
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "cancel-event",
+          ...data,
+        })),
+      },
+      thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 1 }) },
       $queryRaw: vi.fn(),
       run: {
         updateManyAndReturn: vi.fn().mockResolvedValue([{ id: "run-a", botId: "bot-a" }]),
@@ -2249,5 +2270,55 @@ describe("stopThreadRuns", () => {
       expect.anything(),
       expect.objectContaining({ runId: "run-b" }),
     );
+  });
+});
+
+describe("typed feedback", () => {
+  it("edits and retracts a thumbs record without creating a message, task, or run", async () => {
+    let stored: Record<string, unknown> | null = null;
+    const tx = {
+      $queryRaw: vi.fn(),
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 2 })) },
+      message: {
+        findFirst: vi.fn(async () => ({ id: "reply", role: "bot", runId: "run", botId: "bot" })),
+        create: vi.fn(),
+      },
+      run: { findFirst: vi.fn(async () => ({ id: "run", botId: "bot" })), create: vi.fn() },
+      task: { create: vi.fn() },
+      event: { create: vi.fn(async ({ data }: { data: object }) => ({ ...data, seq: 1 })) },
+      learningProposal: { updateMany: vi.fn() },
+      feedback: {
+        findUnique: vi.fn(async () => stored),
+        upsert: vi.fn(async ({ create, update }: { create: object; update: object }) => {
+          stored = {
+            ...(stored ?? { id: "feedback", reason: null, ...create }),
+            ...update,
+            updatedAt: new Date(),
+          };
+          return stored;
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: (action: (db: typeof tx) => unknown) => action(tx),
+    } as unknown as PrismaClient;
+    const actor = { spaceId: "space", userId: "human" } as Actor;
+    const target = { kind: "bot", threadId: "thread", botId: "bot" } as ThreadTarget;
+    const input = { messageId: "reply", reaction: "👎" as const, clientNonce: "feedback-retry" };
+    await reactToThreadMessage({ prisma }, actor, target, input);
+    await reactToThreadMessage({ prisma }, actor, target, input);
+    expect(tx.feedback.upsert).toHaveBeenCalledOnce();
+    await reactToThreadMessage({ prisma }, actor, target, { ...input, reason: "Use a table." });
+    expect(stored).toMatchObject({
+      actorId: "human",
+      runId: "run",
+      reason: "Use a table.",
+      rating: "negative",
+    });
+    await reactToThreadMessage({ prisma }, actor, target, { ...input, retract: true });
+    expect(stored).toMatchObject({ retractedAt: expect.any(Date) });
+    expect(tx.message.create).not.toHaveBeenCalled();
+    expect(tx.task.create).not.toHaveBeenCalled();
+    expect(tx.run.create).not.toHaveBeenCalled();
   });
 });

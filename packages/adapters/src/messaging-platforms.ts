@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { MessagingInboundMessage, MessagingOutboundStatus } from "@ardurbot/adapter-kit";
 import { createSlackAdapter } from "@chat-adapter/slack";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
@@ -6,6 +7,10 @@ import type { Adapter } from "chat";
 import { createLarkAdapter, Domain } from "chat-adapter-lark";
 import { createSendblueAdapter } from "chat-adapter-sendblue";
 import type { MessagingPlatform } from "./chat-sdk-surface.js";
+import { discordTransport } from "./messaging/discord.js";
+import { slackSocketTransport } from "./messaging/slack-socket.js";
+import { telegramTransport } from "./messaging/telegram-polling.js";
+import type { ChatCredentials, ChatTransport, TransportIO } from "./messaging/transport.js";
 import { isVitestRuntime } from "./test-runtime.js";
 
 /**
@@ -59,29 +64,10 @@ export function messagingEnvFromProcess(
   };
 }
 
-/**
- * Build the platform list for every fully configured provider. Group
- * conversations stay sendblue-only until channel semantics are mapped for
- * the other platforms, so their capabilities say so instead of half-working.
- *
- * `pollInboundMessages` must be true only in the one process that also
- * registers the inbound sink (messaging.onInbound — apps/api/src/app.ts).
- * Telegram's "auto" mode starts a long-poll the moment anything calls
- * chat.initialize() when no webhook is registered — and that includes a
- * process that only ever meant to *send*: outbound delivery
- * (sendToThread) lazily initializes too. A second process polling with no
- * inbound sink attached doesn't just do nothing — it actively steals
- * Telegram's single getUpdates slot away from the process that IS
- * listening, so both sides spend every cycle losing a 409 Conflict to the
- * other and messages stop arriving at all. Any caller that only sends
- * (e.g. apps/worker/src/index.ts, for messaging.deliver jobs) must leave
- * this false so Telegram mode resolves to "webhook" (passive — resolves
- * bot identity for outbound calls, never polls, and no webhook route is
- * mounted there for it to receive on anyway).
- */
+/** Legacy webhook and outbound surfaces stay passive. The worker owns Dispatch receivers. */
 export function messagingPlatformsFromEnv(
   env: MessagingEnvironmentValues,
-  options: { pollInboundMessages?: boolean } = {},
+  _options: { pollInboundMessages?: boolean } = {},
 ): MessagingPlatform[] {
   const platforms: MessagingPlatform[] = [];
 
@@ -148,27 +134,15 @@ export function messagingPlatformsFromEnv(
     });
   }
 
-  // Both required: without the secret token the adapter accepts unsigned
-  // webhook posts, so a forged update could reach inbound processing.
-  if (env.telegramBotToken && env.telegramWebhookSecret) {
+  if (env.telegramBotToken) {
     platforms.push({
       provider: "telegram",
       capabilities: { direct: true, groups: false, typing: false },
-      // Auto mode: uses the webhook route when Telegram has one registered
-      // (checked via getWebhookInfo), and otherwise falls back to
-      // long-polling getUpdates. Self-hosted/local deployments typically
-      // have no public HTTPS endpoint for Telegram to push to, so the API
-      // process calls initialize() at startup (apps/api/src/app.ts) to
-      // start that polling loop immediately rather than waiting for the
-      // first inbound webhook or outbound send. It must be the API
-      // process specifically: that's where the inbound sink is registered,
-      // and Telegram allows only one live getUpdates connection per bot —
-      // a second poller elsewhere would just steal that slot and drop
-      // every message into the void.
+      webhookEnabled: Boolean(env.telegramWebhookSecret),
       adapter: createTelegramAdapter({
         botToken: env.telegramBotToken,
-        secretToken: env.telegramWebhookSecret,
-        mode: options.pollInboundMessages ? "auto" : "webhook",
+        secretToken: env.telegramWebhookSecret ?? randomBytes(32).toString("hex"),
+        mode: "webhook",
       }),
     });
   }
@@ -246,6 +220,8 @@ export function enrichSlackTeamRoom(
   const threadTs = stringField(event, "thread_ts");
   const channel = stringField(event, "channel");
   const enrichment: Partial<MessagingInboundMessage> = {};
+  const eventId = stringField(root, "event_id");
+  if (eventId) enrichment.providerEventId = eventId;
   if (teamId) enrichment.workspaceId = teamId;
   if (channel) enrichment.conversationKey = channel;
   if (botId) enrichment.senderIsBot = true;
@@ -312,3 +288,20 @@ function sendblueTransport(raw: unknown): string | null {
   const service = (raw as { service?: unknown }).service;
   return service === "iMessage" || service === "SMS" || service === "RCS" ? service : null;
 }
+
+/** Optional outbound connections share a provider-neutral lifecycle and backend admission. */
+export function createChatTransport(config: ChatCredentials, io?: TransportIO): ChatTransport {
+  switch (config.provider) {
+    case "telegram":
+      return telegramTransport(config, io);
+    case "discord":
+      return discordTransport(config, io);
+    case "slack":
+      return slackSocketTransport(config, io);
+  }
+}
+export const CHAT_PLATFORM_FIELDS = {
+  telegram: { required: ["botToken"], webhook: ["webhookUrl", "webhookSecret"] },
+  discord: { required: ["botToken", "workspaceId"] },
+  slack: { required: ["botToken", "appToken", "workspaceId"] },
+} as const;

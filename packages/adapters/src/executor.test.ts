@@ -883,7 +883,7 @@ describe("createRunExecutor", () => {
     );
   });
 
-  it("expands @skill mentions in the routine prompt at fire time", async () => {
+  it("keeps routine references until execution can record their actual revision", async () => {
     const scheduledAt = new Date(Date.now() - 1_000);
     const enqueue = vi.fn(async () => undefined);
     let createdPrompt = "";
@@ -945,9 +945,7 @@ description: Prepare standup notes
 
     await executor.wakeRoutine("routine-1", scheduledAt.toISOString());
 
-    expect(createdPrompt).toContain("Use skill: Daily standup");
-    expect(createdPrompt).toContain("Summarize wins");
-    expect(createdPrompt).not.toMatch(/@Daily standup/);
+    expect(createdPrompt).toBe("Run @Daily standup, then email me");
   });
 
   it("still continues the run when routine.fired append fails", async () => {

@@ -46,6 +46,7 @@ import {
   deploymentAutoReviewDefault,
   destroyBot,
   displayBotWorkspacePath,
+  enqueueLearningReview,
   enqueueTakeoverContinuation,
   expireComputerControl,
   hasActiveComputerControl,
@@ -93,7 +94,6 @@ import {
   ACTIVE_RUN_STATUSES,
   AttachmentValidationError,
   containsSecret,
-  expandSkillReferencesInPrompt,
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
@@ -154,6 +154,7 @@ import {
 } from "./computer-status.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
+import { createLearningService } from "./learning.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
 import { changeGitMemoryLocation } from "./memory-git-location.js";
 import { changeMemoryLocation } from "./memory-location.js";
@@ -165,6 +166,7 @@ import {
   updateMemoryProviderDefaultScope,
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
+import { createChannelPairing } from "./messaging-dispatch.js";
 import {
   chooseFocus,
   dismissFocus,
@@ -502,6 +504,7 @@ export function createRouter(deps: RouterDeps) {
     authSessionId?: string;
     origin?: string;
   }>();
+  const channelPairing = createChannelPairing(deps);
   const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
@@ -516,6 +519,7 @@ export function createRouter(deps: RouterDeps) {
   );
   const groupRepos = createGroupRepos(deps.prisma);
   const taughtSkills = createTaughtSkillsService({
+    memoryDocuments: deps.memoryDocuments,
     prisma: deps.prisma,
     events: deps.events,
     jobs: deps.jobs,
@@ -523,7 +527,8 @@ export function createRouter(deps: RouterDeps) {
     home: deps.home,
     dataDir: deps.dataDir,
   });
-  const agentSkills = createAgentSkillsService(deps.prisma);
+  const learning = createLearningService(deps);
+  const agentSkills = createAgentSkillsService(deps.prisma, deps.memoryDocuments);
 
   const authed = os.use(async ({ context, next }) => {
     if (!context.actor) throw new ORPCError("UNAUTHORIZED");
@@ -532,6 +537,17 @@ export function createRouter(deps: RouterDeps) {
 
   const commands = createCommandRoutes(deps);
   return os.router({
+    channelPairing: {
+      installations: authed.channelPairing.installations.handler(({ context }) =>
+        channelPairing.installations(context.actor),
+      ),
+      configure: authed.channelPairing.configure.handler(({ context, input }) =>
+        channelPairing.configure(context.actor, input),
+      ),
+      start: authed.channelPairing.start.handler(({ context, input }) =>
+        channelPairing.start(context.actor, input),
+      ),
+    },
     terminal: {
       close: authed.terminal.close.handler(
         ({ context, input }) =>
@@ -1480,11 +1496,14 @@ export function createRouter(deps: RouterDeps) {
             getLogger().error("thread reaction realtime notification", error);
           });
         }
+        if ("feedbackRunId" in result && result.feedbackRunId)
+          await enqueueLearningReview(deps, result.feedbackRunId);
         return { ok: true as const };
       }),
       stop: authed.threads.stop.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
-        await stopThreadRuns(deps, context.actor, target);
+        const runIds = await stopThreadRuns(deps, context.actor, target);
+        for (const runId of runIds) await enqueueLearningReview(deps, runId);
         return { ok: true as const };
       }),
       clear: authed.threads.clear.handler(async ({ context, input }) => {
@@ -2580,8 +2599,7 @@ export function createRouter(deps: RouterDeps) {
           });
           if (existing) return { runId: existing.id };
         }
-        const skillRecords = await agentSkills.listWithContent(context.actor);
-        const prompt = expandSkillReferencesInPrompt(routine.prompt, skillRecords);
+        const prompt = routine.prompt;
         let run: { id: string };
         try {
           // Task + run must commit together so a nonce collision cannot leave an orphan queued Task.
@@ -2720,10 +2738,13 @@ export function createRouter(deps: RouterDeps) {
         taughtSkills.stop(context.actor, input.skillId),
       ),
       updateDraft: authed.skills.updateDraft.handler(async ({ context, input }) =>
-        taughtSkills.updateDraft(context.actor, input.skillId, {
-          name: input.name,
-          playbook: input.playbook,
-        }),
+        memoryRpc(() =>
+          taughtSkills.updateDraft(context.actor, input.skillId, {
+            name: input.name,
+            playbook: input.playbook,
+            expectedRevision: input.expectedRevision,
+          }),
+        ),
       ),
       save: authed.skills.save.handler(async ({ context, input }) =>
         taughtSkills.save(context.actor, input.skillId, input.name),
@@ -2735,6 +2756,18 @@ export function createRouter(deps: RouterDeps) {
         taughtSkills.remove(context.actor, input.skillId),
       ),
     },
+    learning: {
+      settings: authed.learning.settings.handler(({ context }) => learning.settings(context.actor)),
+      configure: authed.learning.configure.handler(({ context, input }) =>
+        learning.configure(context.actor, input),
+      ),
+      list: authed.learning.list.handler(({ context, input }) =>
+        learning.list(context.actor, input.botId),
+      ),
+      review: authed.learning.review.handler(({ context, input }) =>
+        learning.review(context.actor, input.runId),
+      ),
+    },
     agentSkills: {
       list: authed.agentSkills.list.handler(async ({ context }) => agentSkills.list(context.actor)),
       get: authed.agentSkills.get.handler(async ({ context, input }) =>
@@ -2744,7 +2777,7 @@ export function createRouter(deps: RouterDeps) {
         agentSkills.create(context.actor, input),
       ),
       update: authed.agentSkills.update.handler(async ({ context, input }) =>
-        agentSkills.update(context.actor, input),
+        memoryRpc(() => agentSkills.update(context.actor, input)),
       ),
       remove: authed.agentSkills.remove.handler(async ({ context, input }) =>
         agentSkills.remove(context.actor, input.skillId),

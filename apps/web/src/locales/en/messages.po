@@ -385,6 +385,10 @@ msgstr "Allow {0} without asking"
 msgid "Allow actions after presence confirmation"
 msgstr "Allow actions after presence confirmation"
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Allow approvals once"
+msgstr "Allow approvals once"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Allow delegation"
 msgstr "Allow delegation"
@@ -479,6 +483,10 @@ msgstr "API key (optional)"
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
 msgstr "API key header"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "App token"
+msgstr "App token"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Appearance"
@@ -676,6 +684,7 @@ msgstr "Booting up {0}’s computer"
 msgid "bot"
 msgstr "bot"
 
+#: src/pages/ChannelPairingSettings.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
@@ -703,6 +712,10 @@ msgstr "Bot settings"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
 msgstr "Bot to link"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Bot token"
+msgstr "Bot token"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
@@ -809,6 +822,18 @@ msgstr "Chat apps"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Chat apps, group channels, and agent connections."
 msgstr "Chat apps, group channels, and agent connections."
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat bot"
+msgstr "Chat bot"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat permissions"
+msgstr "Chat permissions"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat service"
+msgstr "Chat service"
 
 #: src/pages/Shell.tsx
 msgid "Chat Settings"
@@ -1073,6 +1098,10 @@ msgstr "Confluence space keys or IDs"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "Connect"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Connect a chat bot"
+msgstr "Connect a chat bot"
 
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -1433,6 +1462,10 @@ msgstr "Could not load voice settings"
 #: src/pages/LocalSettings.tsx
 msgid "Could not open local settings. Start the local server and create its owner account, then try again."
 msgstr "Could not open local settings. Start the local server and create its owner account, then try again."
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Could not pair this account. Check its settings and try again."
+msgstr "Could not pair this account. Check its settings and try again."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not play a test clip"
@@ -2166,6 +2199,10 @@ msgstr "Get credentials"
 #: src/pages/shell/bot-panel.tsx
 msgid "Get notified when this Bot finishes or needs input"
 msgstr "Get notified when this Bot finishes or needs input"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Get pairing code"
+msgstr "Get pairing code"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Getting ready"
@@ -3126,6 +3163,10 @@ msgstr "Other model…"
 msgid "PagerDuty incident"
 msgstr "PagerDuty incident"
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Pair a chat account"
+msgstr "Pair a chat account"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Pair device"
 msgstr "Pair device"
@@ -3317,6 +3358,10 @@ msgstr "Reconnect"
 msgid "Reconnect OAuth"
 msgstr "Reconnect OAuth"
 
+#: src/pages/ChatTaskReview.tsx
+msgid "Reconnect to your home."
+msgstr "Reconnect to your home."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Reconnect with an API key"
 msgstr "Reconnect with an API key"
@@ -3403,6 +3448,10 @@ msgstr "Remove"
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "Remove {0}"
+
+#: src/components/MessageFeedback.tsx
+msgid "Remove feedback"
+msgstr "Remove feedback"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -3671,6 +3720,7 @@ msgstr "Runs when this bot receives a verified message from this provider."
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/MessageFeedback.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
@@ -3822,6 +3872,10 @@ msgstr "Send it"
 #: src/pages/Auth.tsx
 msgid "Send reset link"
 msgstr "Send reset link"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Send this code to the bot in a private message. Expires in five minutes."
+msgstr "Send this code to the bot in a private message. Expires in five minutes."
 
 #: src/components/AskCard.tsx
 msgid "Sending…"
@@ -4459,9 +4513,18 @@ msgstr "Waiting for the API to come back…"
 msgid "Waiting…"
 msgstr "Waiting…"
 
+#: src/pages/ChannelPairingSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Webhook"
 msgstr "Webhook"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Webhook secret"
+msgstr "Webhook secret"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Webhook URL"
+msgstr "Webhook URL"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -4492,6 +4555,14 @@ msgstr "What this bot is for"
 msgid "What to return"
 msgstr "What to return"
 
+#: src/components/MessageFeedback.tsx
+msgid "What was good?"
+msgstr "What was good?"
+
+#: src/components/MessageFeedback.tsx
+msgid "What was wrong?"
+msgstr "What was wrong?"
+
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"
 msgstr "When a webhook fires"
@@ -4516,6 +4587,10 @@ msgstr "Working from the last copy"
 #: src/pages/CallView.tsx
 msgid "Working…"
 msgstr "Working…"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Workspace or server ID"
+msgstr "Workspace or server ID"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Write"

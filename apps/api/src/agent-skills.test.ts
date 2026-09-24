@@ -1,6 +1,7 @@
 import type { Actor } from "@ardurbot/contracts";
 import { buildSkillMd } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
+import { memoryServiceFixture } from "@ardurbot/testkit/memory-fakes";
 import { describe, expect, it, vi } from "vitest";
 import { createAgentSkillsService } from "./agent-skills.js";
 
@@ -51,7 +52,10 @@ function setup(rows: ReturnType<typeof savedSkill>[] = []) {
   };
   return {
     agentSkill,
-    service: createAgentSkillsService({ agentSkill } as unknown as PrismaClient),
+    service: createAgentSkillsService(
+      { agentSkill } as unknown as PrismaClient,
+      memoryServiceFixture(actor).service,
+    ),
   };
 }
 
@@ -72,7 +76,11 @@ describe("built-in skill precedence in the API", () => {
       });
       await expect(service.get(actor, { skillId: "saved-1" })).resolves.toMatchObject({ name });
       await expect(
-        service.update(actor, { skillId: "saved-1", description: "Updated recipe" }),
+        service.update(actor, {
+          skillId: "saved-1",
+          expectedRevision: 1,
+          description: "Updated recipe",
+        }),
       ).resolves.toMatchObject({ name: name.trim(), description: "Updated recipe" });
       await expect(service.remove(actor, "saved-1")).resolves.toEqual({ ok: true });
       await expect(service.get(actor, { name: "Interrogate" })).resolves.toMatchObject({
@@ -89,11 +97,13 @@ describe("built-in skill precedence in the API", () => {
       source: "plugin",
       readOnly: true,
     });
-    await expect(service.update(actor, { skillId: "saved-1", body: "Changed" })).rejects.toThrow(
-      "read-only",
-    );
+    await expect(
+      service.update(actor, { skillId: "saved-1", expectedRevision: 1, body: "Changed" }),
+    ).rejects.toThrow("read-only");
     await expect(service.remove(actor, "saved-1")).rejects.toThrow("read-only");
-    expect(agentSkill.updateMany).not.toHaveBeenCalled();
+    expect(agentSkill.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ content: "Changed" }) }),
+    );
     expect(agentSkill.deleteMany).not.toHaveBeenCalled();
   });
 

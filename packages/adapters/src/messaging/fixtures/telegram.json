@@ -1,0 +1,9 @@
+{
+  "update_id": 41,
+  "message": {
+    "message_id": 7,
+    "from": { "id": 101, "is_bot": false, "first_name": "Display name is not authority" },
+    "chat": { "id": 101, "type": "private" },
+    "text": "Check the weather"
+  }
+}

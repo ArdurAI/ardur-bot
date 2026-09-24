@@ -72,7 +72,7 @@ async function mirrorRun(deps: MessagingDeliveryDeps, runId: string): Promise<vo
     where: { id: runId },
     include: { sourceMessage: true },
   });
-  if (!run) return;
+  if (!run || run.originDeviceGrantId) return;
 
   if (run.trigger === "messaging") {
     const sourceBlocks = (run.sourceMessage?.blocks ?? []) as MessageBlock[];
@@ -237,6 +237,8 @@ async function mirrorChannelRun(
         const created = await createThreadMessageInTransaction(tx, {
           threadId: peerThread.id,
           role: "user",
+          origin: "peer-bot",
+          actorId: run.botId,
           blocks: [block],
           clientNonce,
         });

@@ -8,6 +8,7 @@ export const RunActivityRowSchema = z.object({
   groupId: Id.nullable(),
   groupName: z.string().nullable(),
   threadId: Id,
+  externalThread: z.boolean().optional(),
   status: RunStatus,
   trigger: z.enum([
     "user",

@@ -1,14 +1,26 @@
+import { randomUUID } from "node:crypto";
 import {
   buildSkillMd,
   findSkillByName,
   isSkillReadOnly,
   mergeBuiltinSkills,
   parseSkillMd,
+  redactSecrets,
   type SkillRecord,
   type SkillSource,
 } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
+import type { MemoryService } from "@ardurbot/memory";
 import { BUILTIN_AGENT_SKILLS } from "./builtin-skills.js";
+import { boundedKnowledgeText } from "./knowledge-delivery.js";
+import type { SkillDocumentOwner } from "./skill-documents.js";
+import {
+  commitSkillDocument,
+  hydrateAgentSkills,
+  hydrateBuiltinSkills,
+  recordKnowledgeExposure,
+  skillDocumentContext,
+} from "./skill-documents.js";
 
 export const SKILL_TOOL_NAMES = new Set([
   "skill_read",
@@ -22,10 +34,7 @@ const MAX_SKILL_CONTENT_CHARS = 100_000;
 const MAX_SKILL_NAME_CHARS = 80;
 const MAX_SKILL_DESCRIPTION_CHARS = 2000;
 
-type SkillOwner = {
-  spaceId: string;
-  userId: string;
-};
+type SkillOwner = SkillDocumentOwner;
 
 type AgentSkillRow = {
   id: string;
@@ -33,22 +42,32 @@ type AgentSkillRow = {
   description: string;
   content: string;
   source: string;
+  documentId?: string | null;
+  activeRevision?: number | null;
+  origin?: string;
+  botId?: string | null;
+  protected?: boolean;
 };
 
 function asSource(value: string): SkillSource {
-  if (value === "builtin" || value === "plugin" || value === "user") return value;
-  return "user";
+  if (["builtin", "plugin", "user", "learned", "imported"].includes(value))
+    return value as SkillSource;
+  return "unknown";
 }
 
 function toRecord(row: AgentSkillRow): SkillRecord & { id: string } {
   const source = asSource(row.source);
   return {
+    ...row,
     id: row.id,
     name: row.name,
     description: row.description,
     content: row.content,
     source,
-    readOnly: isSkillReadOnly(source),
+    readOnly:
+      isSkillReadOnly(source) ||
+      row.protected === true ||
+      (row.origin !== undefined && row.origin !== "user" && row.origin !== "learned"),
   };
 }
 
@@ -85,20 +104,25 @@ function rejectInvalidSkillFields(name: string, description: string): string | u
 export async function listAgentSkillRecords(
   prisma: PrismaClient,
   owner: SkillOwner,
+  documents?: MemoryService,
 ): Promise<Array<SkillRecord & { id: string }>> {
   const rows = await prisma.agentSkill.findMany({
     where: { spaceId: owner.spaceId, userId: owner.userId },
     orderBy: [{ name: "asc" }, { id: "asc" }],
   });
-  return mergeBuiltinSkills(builtinRecords(), rows.map(toRecord));
+  return mergeBuiltinSkills(
+    await hydrateBuiltinSkills(documents, owner, builtinRecords()),
+    (await hydrateAgentSkills(prisma, documents, owner, rows)).map(toRecord),
+  );
 }
 
 async function findOwnedSkill(
   prisma: PrismaClient,
   owner: SkillOwner,
   input: { skillId?: string; name?: string },
+  documents?: MemoryService,
 ): Promise<(SkillRecord & { id: string }) | null> {
-  const skills = await listAgentSkillRecords(prisma, owner);
+  const skills = await listAgentSkillRecords(prisma, owner, documents);
   if (input.skillId) {
     return skills.find((skill) => skill.id === input.skillId) ?? null;
   }
@@ -110,22 +134,39 @@ export async function skillReadFromTool(
   prisma: PrismaClient,
   owner: SkillOwner,
   input: { name?: string; skillId?: string },
+  documents?: MemoryService,
 ): Promise<Record<string, unknown>> {
-  const skill = await findOwnedSkill(prisma, owner, input);
+  const skill = await findOwnedSkill(prisma, owner, input, documents);
   if (!skill) return { error: "Skill not found." };
-  return {
+  const content = redactSecrets(skill.content, [...(owner.knownSecrets ?? [])]);
+  const result = {
     name: skill.name,
-    description: skill.description,
+    description: skill.description.slice(0, 500),
     source: skill.source,
     readOnly: skill.readOnly,
-    content: skill.content,
+    documentId: skill.documentId,
+    activeRevision: skill.activeRevision,
+    content,
+    truncated: false,
   };
+  result.content = boundedKnowledgeText(content, (text) => ({ ...result, content: text }));
+  result.truncated = result.content !== content;
+  if (skill.documentId && skill.activeRevision)
+    await recordKnowledgeExposure(prisma, owner, {
+      documentId: skill.documentId,
+      activeRevision: skill.activeRevision,
+      content: result.content,
+      truncated: result.truncated,
+      kind: "read",
+    });
+  return result;
 }
 
 export async function skillCreateFromTool(
   prisma: PrismaClient,
   owner: SkillOwner,
   input: { name?: string; description?: string; body?: string; content?: string },
+  documents?: MemoryService,
 ): Promise<Record<string, unknown>> {
   let name = "";
   let description = "";
@@ -153,18 +194,35 @@ export async function skillCreateFromTool(
   const oversized = rejectOversizedContent(content);
   if (oversized) return { error: oversized };
 
-  const existing = await findOwnedSkill(prisma, owner, { name });
+  const existing = await findOwnedSkill(prisma, owner, { name }, documents);
   if (existing) return { error: `A skill named "${existing.name}" already exists.` };
 
   try {
+    if (!documents) return { error: "Skill documents are unavailable." };
+    const id = randomUUID();
+    const head = await documents.commit(
+      {
+        scope: owner.botId ? "bot" : "user",
+        botId: owner.botId,
+        path: `skills/agent-${id}.md`,
+        content,
+        expectedRevision: 0,
+      },
+      skillDocumentContext(owner),
+    );
     const row = await prisma.agentSkill.create({
       data: {
         spaceId: owner.spaceId,
         userId: owner.userId,
         name,
         description,
-        content,
-        source: "user",
+        id,
+        content: "",
+        documentId: head.id,
+        activeRevision: head.revision,
+        source: owner.botId ? "learned" : "user",
+        origin: owner.botId ? "learned" : "user",
+        botId: owner.botId,
       },
     });
     return {
@@ -189,17 +247,30 @@ export async function skillUpdateFromTool(
     description?: string;
     body?: string;
     content?: string;
+    expectedRevision?: number;
   },
+  documents?: MemoryService,
 ): Promise<Record<string, unknown>> {
-  const existing = await findOwnedSkill(prisma, owner, {
-    skillId: input.skillId,
-    name: input.name,
-  });
+  const existing = await findOwnedSkill(
+    prisma,
+    owner,
+    {
+      skillId: input.skillId,
+      name: input.name,
+    },
+    documents,
+  );
   if (!existing) return { error: "Skill not found." };
-  if (existing.readOnly || existing.source !== "user" || existing.id.startsWith("builtin:")) {
+  if (
+    existing.readOnly ||
+    !["user", "learned"].includes(existing.source) ||
+    existing.id.startsWith("builtin:")
+  ) {
     return { error: "Builtin and plugin skills are read-only." };
   }
 
+  if (input.expectedRevision === undefined)
+    return { error: "Read the skill and provide its expected revision before saving." };
   let nextContent = existing.content;
   let nextName = existing.name;
   let nextDescription = existing.description;
@@ -234,25 +305,33 @@ export async function skillUpdateFromTool(
   if (oversized) return { error: oversized };
 
   if (nextName.toLowerCase() !== existing.name.toLowerCase()) {
-    const clash = await findOwnedSkill(prisma, owner, { name: nextName });
+    const clash = await findOwnedSkill(prisma, owner, { name: nextName }, documents);
     if (clash && clash.id !== existing.id) {
       return { error: `A skill named "${clash.name}" already exists.` };
     }
   }
 
   try {
-    // Re-scope mutate to owner + user source so a stale id cannot cross tenants.
+    const head = await commitSkillDocument(
+      documents,
+      owner,
+      existing,
+      nextContent,
+      input.expectedRevision ?? existing.activeRevision ?? 1,
+    );
     const updated = await prisma.agentSkill.updateMany({
       where: {
         id: existing.id,
         spaceId: owner.spaceId,
         userId: owner.userId,
-        source: "user",
+        source: existing.source,
       },
       data: {
         name: nextName,
         description: nextDescription,
-        content: nextContent,
+        content: "",
+        documentId: head.id,
+        activeRevision: head.revision,
       },
     });
     if (updated.count !== 1) return { error: "Could not update skill." };
@@ -266,20 +345,19 @@ export async function skillDeleteFromTool(
   prisma: PrismaClient,
   owner: SkillOwner,
   input: { name?: string; skillId?: string },
+  documents?: MemoryService,
 ): Promise<Record<string, unknown>> {
-  const existing = await findOwnedSkill(prisma, owner, input);
+  const existing = await findOwnedSkill(prisma, owner, input, documents);
   if (!existing) return { error: "Skill not found." };
-  if (existing.readOnly || existing.source !== "user" || existing.id.startsWith("builtin:")) {
+  if (
+    existing.readOnly ||
+    !["user", "learned"].includes(existing.source) ||
+    existing.id.startsWith("builtin:")
+  ) {
     return { error: "Builtin and plugin skills are read-only." };
   }
-  const deleted = await prisma.agentSkill.deleteMany({
-    where: {
-      id: existing.id,
-      spaceId: owner.spaceId,
-      userId: owner.userId,
-      source: "user",
-    },
-  });
-  if (deleted.count !== 1) return { error: "Could not delete skill." };
+  if (!documents || !existing.documentId || !existing.activeRevision)
+    return { error: "Skill documents are unavailable." };
+  await documents.delete(existing.documentId, existing.activeRevision, skillDocumentContext(owner));
   return { ok: true, name: existing.name };
 }

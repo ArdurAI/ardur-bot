@@ -188,3 +188,109 @@ it("waits for delegated work before confirming the parent stopped", async () => 
   expect(f.run().cancelConfirmedAt).toBeNull();
   expect(dispatchState({ status: "cancelled" })).not.toBe("stopped");
 });
+
+describe("channel admission uses the P1 transaction", () => {
+  function channelFixture() {
+    const f = fixture();
+    const channelGrant = {
+      ...grant,
+      kind: "channel",
+      installationId: "installation",
+      provider: "telegram",
+      workspaceId: "telegram",
+      senderId: "sender",
+    };
+    f.tx.deviceGrant.findFirst.mockResolvedValue(channelGrant);
+    const chat = {
+      externalConversation: { create: vi.fn(async () => ({ thread: { id: "chat-thread" } })) },
+      chatInstallation: { findFirst: vi.fn(async () => ({ id: "installation", botId: "bot-a" })) },
+      messagingRoute: { findUnique: vi.fn(async () => null), upsert: vi.fn() },
+      messagingTaskOrigin: { create: vi.fn(), findFirst: vi.fn(async () => ({ runId: "run-a" })) },
+      chatOutbox: {
+        findUnique: vi.fn(async () => null),
+        count: vi.fn(async () => 0),
+        upsert: vi.fn(),
+      },
+    };
+    Object.assign(f.tx, chat);
+    Object.assign(f.tx.thread, { create: vi.fn(async () => ({ id: "chat-thread" })) });
+    Object.assign(f.tx.dispatchReceipt, { count: vi.fn(async () => 0) });
+    const origin = {
+      installationId: "installation",
+      provider: "telegram" as const,
+      workspaceId: "telegram",
+      channelId: "channel",
+      messageId: "provider-message",
+      private: false,
+    };
+    return { ...f, chat, channelGrant, origin };
+  }
+  it("creates one isolated task and immutable origin even after a receiver/default-bot restart", async () => {
+    const f = channelFixture();
+    const input = { text: "Question", clientNonce: "provider-event-nonce" };
+    const receipt = await admitDispatch(f.db, f.channelGrant, input, f.origin);
+    f.chat.chatInstallation.findFirst.mockResolvedValue({ id: "installation", botId: "bot-b" });
+    expect(await admitDispatch(f.db, f.channelGrant, input, f.origin)).toEqual(receipt);
+    expect(f.tx.task.create).toHaveBeenCalledOnce();
+    expect(f.chat.messagingTaskOrigin.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ taskId: "task-a", botId: "bot-a", channelId: "channel" }),
+    });
+    expect(f.tx.task.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ threadId: "chat-thread" }),
+    });
+    expect(f.chat.chatOutbox.upsert).toHaveBeenCalledOnce();
+    expect(f.chat.chatOutbox.upsert.mock.calls[0]?.[0].create.card.text).toBe(
+      "Accepted — working on it.",
+    );
+  });
+  it("keeps a private chat on the personal thread shared with home and phones", async () => {
+    const f = channelFixture();
+    await admitDispatch(
+      f.db,
+      f.channelGrant,
+      { text: "Question", clientNonce: "private-event-nonce" },
+      { ...f.origin, private: true },
+    );
+    expect(f.chat.externalConversation.create).not.toHaveBeenCalled();
+    expect(f.tx.task.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ threadId: "thread-a" }),
+    });
+  });
+  it("steers only an owned origin and rejects changed return destinations on replay", async () => {
+    const f = channelFixture();
+    const input = { text: "Question", clientNonce: "provider-event-nonce" };
+    await admitDispatch(f.db, f.channelGrant, input, f.origin);
+    await expect(
+      admitDispatch(f.db, f.channelGrant, input, { ...f.origin, channelId: "elsewhere" }),
+    ).rejects.toThrow("changed");
+    f.clearReceipt();
+    // Reaching the task cap must not prevent steering work that already exists.
+    f.tx.run.count.mockResolvedValue(20);
+    await admitDispatch(f.db, f.channelGrant, { ...input, replyToTaskId: "task-a" }, f.origin);
+    expect(f.tx.steeringMessage.create).toHaveBeenCalledOnce();
+    expect(f.chat.messagingTaskOrigin.findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        grantId: "phone-a",
+        channelId: "channel",
+        installationId: "installation",
+      }),
+    });
+  });
+  it("refuses a channel grant used without its origin and clamps consequential authority", async () => {
+    const f = channelFixture();
+    await expect(
+      admitDispatch(f.db, f.channelGrant, {
+        text: "No origin",
+        clientNonce: "provider-event-nonce",
+      }),
+    ).rejects.toThrow("surface");
+    expect(f.tx.task.create).not.toHaveBeenCalled();
+  });
+});
+
+it("rechecks revocation before recording a stop request", async () => {
+  const f = fixture();
+  f.tx.deviceGrant.findFirst.mockResolvedValueOnce(null as never);
+  await expect(requestDispatchStop(f.db, grant, "task-a")).rejects.toThrow("unavailable");
+  expect(f.tx.run.updateMany).not.toHaveBeenCalled();
+});

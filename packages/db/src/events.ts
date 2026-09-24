@@ -93,6 +93,7 @@ export interface ClaimSteeringInput {
   leaseOwner: string;
   leaseFence: number;
   seenIds: string[];
+  kind?: "correction" | "added-requirement" | "other";
 }
 
 export interface ClaimedSteeringMessage {
@@ -384,6 +385,13 @@ export async function sendUserMessage(
         threadId: input.threadId,
         role: "user",
         blocks: input.blocks,
+        origin:
+          input.trigger === "user"
+            ? "human-typed"
+            : input.trigger === "follow_up"
+              ? "follow-up"
+              : input.trigger,
+        actorId: input.trigger === "user" ? input.userId : undefined,
         clientNonce: input.clientNonce,
       });
       const createRun = input.createRun !== false;
@@ -514,7 +522,12 @@ export async function claimSteering(
         leaseOwner: input.leaseOwner,
         leaseFence: input.leaseFence,
       },
-      select: { id: true, trigger: true, sourceMessage: { select: { blocks: true } } },
+      select: {
+        id: true,
+        spaceId: true,
+        trigger: true,
+        sourceMessage: { select: { blocks: true } },
+      },
     });
     if (!run) return [];
     const channelId =
@@ -534,7 +547,7 @@ export async function claimSteering(
             : {}),
         },
       },
-      include: { message: { select: { blocks: true, seq: true } } },
+      include: { message: { select: { blocks: true, seq: true, origin: true, actorId: true } } },
       orderBy: [{ message: { seq: "asc" } }, { id: "asc" }],
     });
     if (steering.length === 0) return [];
@@ -542,6 +555,22 @@ export async function claimSteering(
       where: { id: { in: steering.map((item) => item.id) }, claimedAt: null },
       data: { runId: input.runId, claimedAt: new Date() },
     });
+    // The summary survives deletion of the consumed queue row. Text stays in its source message.
+    for (const item of steering) {
+      await tx.steeringSummary.upsert({
+        where: { runId_messageId: { runId: input.runId, messageId: item.messageId } },
+        create: {
+          spaceId: run.spaceId,
+          threadId: input.threadId,
+          runId: input.runId,
+          messageId: item.messageId,
+          origin: item.message.origin,
+          actorId: item.message.actorId,
+          kind: input.kind ?? "other",
+        },
+        update: {},
+      });
+    }
     return steering.map((item) => ({
       id: item.id,
       messageId: item.messageId,
@@ -1276,6 +1305,7 @@ async function createSteeringContinuation(
 export async function appendEventInTransaction(
   tx: Prisma.TransactionClient,
   input: AppendEventInput,
+  terminal?: { cancelledRunId: string },
 ) {
   const thread = await tx.thread.update({
     where: { id: input.threadId },
@@ -1296,7 +1326,7 @@ export async function appendEventInTransaction(
     });
     if (existing) return existing;
   }
-  await assertRunCanWriteHistory(tx, input.runId);
+  if (!terminal || input.type !== "run.cancelled") await assertRunCanWriteHistory(tx, input.runId);
   // Unpaired UTF-16 surrogates (e.g. a split emoji high half) are invalid JSON for Postgres.
   const payload = sanitizeJsonValue(input.payload);
   const event = await tx.event.create({
@@ -1307,7 +1337,7 @@ export async function appendEventInTransaction(
       seq: thread.nextEventSeq - 1,
       type: input.type,
       payload: payload as Prisma.InputJsonValue,
-      runId: input.runId,
+      runId: terminal?.cancelledRunId ?? input.runId,
     },
   });
   await materializeCommandEvent(tx, event);
