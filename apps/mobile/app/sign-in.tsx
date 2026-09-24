@@ -154,6 +154,10 @@ export default function SignIn() {
               keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
               keyboardShouldPersistTaps="handled"
             >
+              <Pressable accessibilityRole="button" onPress={() => router.push("/pair")}>
+                <Text style={{ color: tokens.foreground }}>{t("Pair device")}</Text>
+              </Pressable>
+
               <Text
                 accessibilityRole="header"
                 style={{

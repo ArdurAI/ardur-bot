@@ -34,7 +34,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Ardur Bot uses your photo library so you can attach images to a bot message.",
-          "cameraPermission": "Ardur Bot uses the camera so you can attach photos to a bot message.",
+          "cameraPermission": "Ardur Bot uses the camera to pair with home or attach a photo.",
           "microphonePermission": false
         }
       ],
@@ -51,7 +51,8 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSCameraUsageDescription": "Ardur Bot uses the camera so you can attach photos to a bot message.",
+        "NSFaceIDUsageDescription": "Ardur Bot confirms your presence before an action runs.",
+        "NSCameraUsageDescription": "Ardur Bot uses the camera to pair with home or attach a photo.",
         "NSPhotoLibraryUsageDescription": "Ardur Bot uses your photo library so you can attach images to a bot message.",
         "NSLocalNetworkUsageDescription": "Ardur Bot connects to a self-hosted Ardur Bot server on your local network.",
         "NSAppTransportSecurity": {

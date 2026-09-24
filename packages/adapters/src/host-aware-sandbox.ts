@@ -48,6 +48,10 @@ export function createRunSandbox(
 }
 
 export class HostAwareSandbox implements SandboxProvider {
+  get terminal() {
+    return this.isolated.terminal;
+  }
+
   readonly pageBrowser?: SandboxProvider["pageBrowser"];
 
   constructor(

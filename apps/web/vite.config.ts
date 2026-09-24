@@ -259,7 +259,11 @@ export default defineConfig(({ mode }) => {
           if (!Number.isFinite(performanceAssetDelayMs) || performanceAssetDelayMs <= 0) return;
           server.middlewares.use((req, _res, next) => {
             const pathname = req.url?.split("?", 1)[0] ?? "/";
-            if (["/api", "/rpc", "/novnc"].some((prefix) => pathname.startsWith(prefix))) {
+            if (
+              ["/api", "/rpc", "/device", "/local/device-listener", "/novnc"].some((prefix) =>
+                pathname.startsWith(prefix),
+              )
+            ) {
               next();
               return;
             }
@@ -273,13 +277,16 @@ export default defineConfig(({ mode }) => {
         configurePreviewServer: (server) => attachNovncProxy(server, screenProxySecret(), api),
       },
     ],
+    build: { manifest: true },
     server: {
       host: "127.0.0.1",
       port: webPort,
       strictPort: true,
       proxy: {
-        "/api": { target: api, changeOrigin: true },
+        "/api": { target: api, changeOrigin: true, ws: true },
         "/rpc": { target: api, changeOrigin: true },
+        "/device": { target: api, changeOrigin: true },
+        "/local/device-listener": { target: api, changeOrigin: true },
       },
     },
     preview: {
@@ -287,8 +294,10 @@ export default defineConfig(({ mode }) => {
       port: Number(process.env.WEB_PORT ?? 5173),
       allowedHosts: [previewHost],
       proxy: {
-        "/api": { target: api, changeOrigin: true },
+        "/api": { target: api, changeOrigin: true, ws: true },
         "/rpc": { target: api, changeOrigin: true },
+        "/device": { target: api, changeOrigin: true },
+        "/local/device-listener": { target: api, changeOrigin: true },
       },
     },
   };

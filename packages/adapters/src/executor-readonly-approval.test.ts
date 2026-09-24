@@ -172,6 +172,8 @@ function fixture({
     updatedAt: new Date(0),
   };
   const prisma = {
+    instanceIdentity: { findUnique: vi.fn(async () => null) },
+    deviceApprovalBinding: { findUnique: vi.fn(async () => null) },
     botMcpServer: { findFirst: vi.fn(async () => grant) },
     run: {
       findUnique: vi.fn(async () => run),

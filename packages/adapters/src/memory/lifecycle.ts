@@ -8,7 +8,7 @@ import { SpaceMemoryProviderResolver, selectDocumentStore } from "../memory-prov
 import type { EncryptedSecretStore } from "../secrets.js";
 
 export async function lockMemorySpace(tx: Prisma.TransactionClient, spaceId: string) {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`memory:${spaceId}`}, 0))`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`memory:${spaceId}`}, 0))`;
 }
 export async function authenticatedMemoryAccess(
   tx: Prisma.TransactionClient,

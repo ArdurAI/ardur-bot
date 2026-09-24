@@ -1,0 +1,9 @@
+.ardur-terminal .xterm {
+  height: 100%;
+}
+.ardur-terminal .xterm-viewport {
+  background-color: var(--background);
+}
+.ardur-terminal .xterm:focus-within {
+  outline: 1px solid var(--ring);
+}

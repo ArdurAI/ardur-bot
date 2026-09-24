@@ -17,6 +17,29 @@ export class PostgresMemoryJournal implements MemoryJournal {
       where: { spaceId: access.spaceId },
       include: { revisions: { orderBy: { revision: "asc" } } },
     });
+    // Documents written before the lifecycle migration have no revision rows. Expose the row
+    // itself as their head so lists, exports and reconciliation never fail on legacy data; the
+    // next commit records revision + 1 as usual.
+    for (const row of rows) {
+      if (row.revisions.length > 0) continue;
+      row.revisions.push({
+        id: `legacy:${row.id}`,
+        documentId: row.id,
+        revision: row.revision,
+        content: row.content,
+        sourceRunId: null,
+        sourceThreadId: null,
+        authorKind: "runtime",
+        authorUserId: row.userId,
+        authorBotId: row.botId,
+        modelProvider: null,
+        modelId: null,
+        modelEffort: null,
+        references: [],
+        deletedAt: row.deletedAt,
+        createdAt: row.updatedAt,
+      });
+    }
     const docs: JournalDocument[] = rows.map((row) => {
       const scope: DocumentScope =
         row.scope === "space-shared"

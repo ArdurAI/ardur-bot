@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("ardurbotDesktop", {
   platform: process.platform,
+  devices: {
+    state: () => ipcRenderer.invoke("desktop.devices.state"),
+    setEnabled: (enabled) => ipcRenderer.invoke("desktop.devices.setEnabled", enabled),
+  },
   memoryFolders: {
     available: () => ipcRenderer.invoke("desktop.memoryFolders.available"),
     select: (spaceId) => ipcRenderer.invoke("desktop.memoryFolders.select", spaceId),

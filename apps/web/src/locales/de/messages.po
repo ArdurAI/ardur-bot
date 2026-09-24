@@ -377,6 +377,18 @@ msgstr "{0}-Connector ohne Nachfrage erlauben"
 msgid "Allow {0} without asking"
 msgstr "{0} ohne Nachfrage erlauben"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Allow actions after presence confirmation"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow delegation"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow device"
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow email actions without asking"
 msgstr "E-Mail-Aktionen ohne Nachfrage erlauben"
@@ -610,6 +622,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Back to screen"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -974,6 +990,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Computer"
 msgstr "Computer"
 
@@ -1018,6 +1035,10 @@ msgstr "Löschen bestätigen"
 #: src/pages/Auth.tsx
 msgid "Confirm password"
 msgstr "Passwort bestätigen"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Confirm the phone fingerprint here before allowing it."
+msgstr ""
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -1108,6 +1129,10 @@ msgstr ""
 msgid "Connecting…"
 msgstr "Verbindung wird hergestellt…"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Connection lost — reconnecting"
+msgstr ""
+
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
@@ -1145,6 +1170,10 @@ msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Copy pairing details"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -1740,6 +1769,7 @@ msgid "Denied"
 msgstr "Abgelehnt"
 
 #: src/components/AskCard.tsx
+#: src/pages/DevicesSettings.tsx
 msgid "Deny"
 msgstr "Ablehnen"
 
@@ -1773,6 +1803,22 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device name"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device permissions"
+msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Devices"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1897,6 +1943,10 @@ msgstr "E-Mail"
 msgid "Engage when... Ignore..."
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enter a code instead"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
 msgstr ""
@@ -1972,6 +2022,10 @@ msgstr "Erweitern"
 msgid "Expand {0}"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Expires in five minutes."
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Exportieren"
@@ -2024,6 +2078,10 @@ msgstr "Fehlerbehandlung"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Find in terminal"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2177,6 +2235,14 @@ msgstr ""
 msgid "History"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Home fingerprint"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Home link"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
 msgstr "Stunde"
@@ -2321,6 +2387,14 @@ msgstr "Wissen"
 msgid "Language"
 msgstr "Sprache"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Last present"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Last used"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
 msgstr ""
@@ -2428,6 +2502,10 @@ msgstr "Stelle sicher, dass auf diesem Computer nichts mehr läuft."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Manage"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Manage devices from the home owner account."
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -2696,6 +2774,10 @@ msgstr "Übernahme erforderlich"
 msgid "Needs you"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Never"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Neuer Bot"
@@ -2724,6 +2806,10 @@ msgstr "Neuer Skill"
 
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Next"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2939,6 +3025,10 @@ msgstr "Öffnen"
 msgid "Open {0}"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Open a new terminal"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Open documentation"
 msgstr ""
@@ -2950,6 +3040,10 @@ msgstr "In vollständigem Fenster öffnen"
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "Navigation öffnen"
+
+#: src/pages/shell/command-palette.tsx
+msgid "Open terminal"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -2967,6 +3061,10 @@ msgstr "Thread geöffnet."
 #: src/pages/Onboarding.tsx
 msgid "Opening chat…"
 msgstr "Chat wird geöffnet…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Opening terminal"
+msgstr ""
 
 #: src/App.tsx
 msgid "Opening your Space…"
@@ -3008,6 +3106,14 @@ msgstr "Anderes Modell…"
 
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Pair device"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Pairing code"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -3081,6 +3187,10 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Preview migration"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Previous"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -3180,6 +3290,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Recent"
 msgstr "Kürzlich"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Reconnect"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
@@ -3309,6 +3423,10 @@ msgstr "Entfernt, aber die Liste konnte nicht aktualisiert werden"
 #: src/pages/PluginsOverlay.tsx
 msgid "Removing…"
 msgstr "Wird entfernt…"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Rename"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 #: src/pages/Shell.tsx
@@ -3462,9 +3580,14 @@ msgstr ""
 msgid "Revision {0}"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "Widerrufen"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Revoked"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Robot"
@@ -3531,6 +3654,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -3604,6 +3728,10 @@ msgstr "Sag etwas. Bei Stille wird es gesendet."
 #: src/pages/CallView.tsx
 msgid "Say yes or no, or answer in a sentence."
 msgstr "Antworte mit Ja oder Nein oder in einem Satz."
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Screen"
+msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
@@ -3705,6 +3833,10 @@ msgstr "Servername"
 #: src/pages/Onboarding.tsx
 msgid "Server URL"
 msgstr "Server-URL"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Session ended — open a new terminal"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -3885,6 +4017,7 @@ msgid "Steps"
 msgstr "Schritte"
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
 msgstr "Stoppen"
 
@@ -3945,6 +4078,14 @@ msgstr ""
 msgid "System"
 msgstr "System"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control to open a terminal"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Teach a task"
 msgstr "Aufgabe anlernen"
@@ -3973,6 +4114,18 @@ msgstr ""
 msgid "Teams not enabled"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal could not open; try again"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal is not available on this computer"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "Test"
@@ -3987,6 +4140,10 @@ msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "The bot is working — wait or stop it"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -4020,6 +4177,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "This cannot be undone."
 msgstr "Dies kann nicht rückgängig gemacht werden."
+
+#: src/pages/DevicesSettings.tsx
+msgid "This change could not finish; try again."
+msgstr ""
 
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
@@ -4363,6 +4524,10 @@ msgstr "Deine E-Mail-Adresse"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "Dein Name"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Your phone can reach this Mac on your network."
+msgstr ""
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

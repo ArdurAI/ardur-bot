@@ -760,6 +760,7 @@ export const ComputerUpdateSchema = z.object({
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
 export const ComputerStatusSchema = z.object({
+  computerId: Id.optional(),
   botId: Id,
   mode: ComputerModeSchema,
   kind: SandboxKind,

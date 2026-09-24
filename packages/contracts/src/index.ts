@@ -4,6 +4,7 @@ export * from "./bot-avatar.js";
 export * from "./bot-secrets.js";
 export * from "./command-blocks.js";
 export * from "./desktop.js";
+export * from "./dispatch.js";
 export * from "./domain.js";
 export * from "./events.js";
 export * from "./ids.js";
@@ -19,3 +20,5 @@ export * from "./rpc.js";
 export * from "./runs.js";
 export * from "./runtime-pins.js";
 export * from "./search.js";
+
+export * from "./terminal.js";
