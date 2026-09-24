@@ -1,4 +1,5 @@
-import { type ComputerUpdate, ComputerUpdateSchema } from "@ardurbot/contracts";
+import type { ComputerUpdate } from "@ardurbot/contracts";
+import { ComputerConfigurationSchema, ComputerUpdateSchema } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -42,7 +43,14 @@ export async function queueComputerUpdate(
   computerId: string,
   botId: string,
   action: "update" | "recover" = "update",
+  configuration?: {
+    imageProfile: "base" | "developer";
+    connectionId: string | null;
+    confirmed: boolean;
+  },
 ) {
+  if (configuration && !configuration.confirmed)
+    throw new Error("This replaces the computer's files. Continue?");
   const update = await deps.prisma.$transaction(async (tx) => {
     // Mode switches lock this same row before marking a bot as switching.
     // The following statement then observes their committed reservation.
@@ -50,7 +58,9 @@ export async function queueComputerUpdate(
     const computer = await tx.computer.findUniqueOrThrow({ where: { id: computerId } });
     if (action === "update" && !computerSupportsUpdate(computer.kind))
       throw new Error("Computer update is not available on this device");
-    const update = await tx.computerUpdate.create({ data: { computerId, botId, action } });
+    const update = await tx.computerUpdate.create({
+      data: { computerId, botId, action, ...(configuration ? { configuration } : {}) },
+    });
     const claimed = await tx.computer.updateMany({
       where: {
         id: computerId,
@@ -139,6 +149,9 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
         });
         if (result.count !== 1) throw new Error("Computer update interrupted");
       },
+      update.configuration
+        ? ComputerConfigurationSchema.omit({ botId: true }).parse(update.configuration)
+        : undefined,
     );
     await finishUpdate(deps.prisma, updateId, update.computerId, "completed");
     scheduleComputerSleep(deps.jobs, update.computerId);

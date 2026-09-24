@@ -37,6 +37,12 @@ export function createTerminalRoutes(deps: {
     return computer;
   }
   const provider = deps.sandbox.terminal;
+  const availableOn = (computer: { kind: string; connectionId?: string | null }) =>
+    Boolean(
+      computer.kind === "docker" &&
+        provider &&
+        (computer.connectionId || deps.sandbox.describe().capabilities.interactiveTerminal),
+    );
   const gateway = provider
     ? new TerminalGateway({
         provider,
@@ -92,11 +98,7 @@ export function createTerminalRoutes(deps: {
     async available(actor: Actor, input: { botId: string; computerId: string }) {
       const computer = await owned(actor, input.botId, input.computerId);
       return {
-        available: Boolean(
-          computer.kind === "docker" &&
-            provider &&
-            deps.sandbox.describe().capabilities.interactiveTerminal,
-        ),
+        available: availableOn(computer),
       };
     },
     async ticket(
@@ -107,10 +109,10 @@ export function createTerminalRoutes(deps: {
     ) {
       let requestAudited = false;
       try {
-        if (!gateway || !deps.sandbox.describe().capabilities.interactiveTerminal)
-          throw new Error(TERMINAL_UNAVAILABLE);
+        if (!gateway) throw new Error(TERMINAL_UNAVAILABLE);
         if (!authSessionId || !origin || !deps.trustedOrigin(origin)) throw new IsolationError();
-        await owned(actor, input.botId, input.computerId);
+        if (!availableOn(await owned(actor, input.botId, input.computerId)))
+          throw new Error(TERMINAL_UNAVAILABLE);
         return await withComputerAdmission(
           deps.prisma,
           input.computerId,

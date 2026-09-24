@@ -1,9 +1,10 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ComputerProfileSchema, computerImage } from "@ardurbot/contracts";
 import {
   boundedSandboxCommandTimeoutMs,
   COMMAND_OUTPUT_LIMIT,
@@ -48,6 +49,12 @@ import {
   screenUrlWithToken,
   xdotoolCommand,
 } from "./computer-spec.js";
+import {
+  discoverEngineSocket,
+  engineFromResponses,
+  engineUser,
+  socketPath,
+} from "./container-engine.js";
 import { assertComputerHomeWritable } from "./home-ownership.js";
 import {
   assertRequestIdentity,
@@ -87,15 +94,23 @@ import { assertNoDockerTerminals } from "./terminal-process.js";
 
 loadRootEnv();
 
-const dockerSocketPath = resolveDockerSocketPath();
-const docker = dockerSocketPath ? new Docker({ socketPath: dockerSocketPath }) : new Docker();
-const computerContext =
-  process.env.ARDURBOT_COMPUTER_CONTEXT ??
-  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../computer");
+// Preserve Dockerode's existing DOCKER_HOST/TLS configuration for the default engine.
+const defaultDocker = new Docker(
+  process.env.DOCKER_HOST ? {} : { socketPath: discoverEngineSocket() },
+);
+const engineScope = new AsyncLocalStorage<Docker>();
+const engines = new Map<string, Docker>();
+const docker = new Proxy(defaultDocker, {
+  get(_target, key) {
+    const target = engineScope.getStore() ?? defaultDocker;
+    const value = Reflect.get(target, key);
+    return typeof value === "function" ? value.bind(target) : value;
+  },
+});
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const dataDir = path.resolve(repositoryRoot, process.env.DATA_DIR ?? "./data");
-let imageReady: Promise<void> | undefined;
-let supervisorInfo: Docker.ContainerInspectInfo | undefined;
+
+const supervisorContainers = new WeakMap<Docker, Docker.ContainerInspectInfo>();
 const supervisorToken = resolveSupervisorToken(process.env);
 const screenNetworkMode = resolveScreenNetworkMode(process.env.SANDBOX_SCREEN_NETWORK);
 const teamScreenLimit = resolveTeamScreenLimit();
@@ -154,6 +169,22 @@ app.use("/computers/*", async (c, next) => {
   }
   await next();
 });
+app.use("/computers*", async (c, next) => {
+  const socket = c.req.header("x-ardurbot-engine-socket");
+  if (!socket) return next();
+  // Engine endpoints come only from owner-managed shared connections.
+  const normalized = socketPath(socket);
+  let engine = engines.get(normalized);
+  if (!engine) {
+    engine = new Docker({ socketPath: normalized });
+    engines.set(normalized, engine);
+  }
+  return engineScope.run(engine, next);
+});
+app.get("/computers/engine", async (c) => {
+  const [version, info] = await Promise.all([docker.version(), docker.info()]);
+  return c.json(engineFromResponses(version, info));
+});
 app.use("/computers", limitSupervisorRequestBody);
 app.use("/computers/*", limitSupervisorRequestBody);
 
@@ -165,6 +196,7 @@ app.post("/computers", async (c) => {
       botId: z.string().min(1),
       homePath: z.string().min(1),
       spaceId: z.string().min(1),
+      imageProfile: ComputerProfileSchema.default("base"),
     })
     .parse(await c.req.json());
   try {
@@ -173,7 +205,15 @@ app.post("/computers", async (c) => {
       spaceId: body.spaceId,
     });
     return await withBotLifecycleLock(body.botId, async () => {
-      await ensureComputerImage();
+      const image =
+        body.imageProfile === "base" && process.env.ARDURBOT_COMPUTER_IMAGE
+          ? COMPUTER_IMAGE
+          : computerImage(body.imageProfile);
+      await ensureComputerImage(image);
+      const engine = engineFromResponses(await docker.version(), await docker.info());
+      const expectedEngine = c.req.header("x-ardurbot-engine");
+      if (expectedEngine && expectedEngine !== engine.name)
+        throw new Error("The selected engine does not match this connection.");
       const runtimeInfo = await inspectSupervisorContainer();
       const networkMode = computerNetworkName(body.botId, runtimeInfo);
       const serviceHomePath = path.resolve(body.homePath);
@@ -185,14 +225,21 @@ app.post("/computers", async (c) => {
       // user-controlled paths at runtime; Compose data-init handles legacy data.
       if (hostUid !== 0) await mkdir(serviceHomePath, { recursive: true });
       const storage = computerHomeStorage(serviceHomePath, dataDir, runtimeInfo);
+      if (storage.homeVolume && engine.name === "podman")
+        throw new Error(
+          "Podman computers require a host-run supervisor and a bind-mounted data directory.",
+        );
       if (storage.homeVolume) {
         assertVolumeSubpathSupport((await docker.version()).ApiVersion);
       }
-      const computerUser = runtimeInfo ? COMPUTER_USER : hostComputerUser(hostUid, hostGid);
+      const computerUser = engineUser(
+        engine,
+        runtimeInfo ? COMPUTER_USER : hostComputerUser(hostUid, hostGid),
+      );
       const existing = await findBotContainer(body.botId, body.spaceId);
       if (existing) {
         const info = await existing.inspect();
-        const desired = await docker.getImage(COMPUTER_IMAGE).inspect();
+        const desired = await docker.getImage(image).inspect();
         const controlPublishOk = controlPortPublicationMatches(
           info.HostConfig.PortBindings,
           controlViaLoopback,
@@ -207,7 +254,7 @@ app.post("/computers", async (c) => {
           if (!info.State.Running) await existing.start();
           return c.json({
             id: existing.id,
-            image: COMPUTER_IMAGE,
+            image,
             resumed: true,
           });
         }
@@ -253,11 +300,12 @@ app.post("/computers", async (c) => {
           container = await docker.createContainer(
             containerCreateOptions({
               name,
-              image: COMPUTER_IMAGE,
+              image,
               botId: body.botId,
               spaceId: body.spaceId,
               ...storage,
               user: computerUser,
+              engine,
               networkMode,
               controlToken: randomUUID(),
               publishControlPort: controlViaLoopback,
@@ -273,7 +321,7 @@ app.post("/computers", async (c) => {
         }
         return c.json({
           id: container.id,
-          image: COMPUTER_IMAGE,
+          image,
           resumed: false,
         });
       };
@@ -845,49 +893,15 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   startSupervisor();
 }
 
-async function ensureComputerImage() {
-  if (!imageReady) {
-    imageReady = (async () => {
-      try {
-        await docker.getImage(COMPUTER_IMAGE).inspect();
-        return;
-      } catch {
-        // build below
-      }
-      const dockerfile = path.join(computerContext, "Dockerfile");
-      if (!existsSync(dockerfile)) {
-        throw new Error(
-          `Missing ${COMPUTER_IMAGE}. Build it with: docker build -t ${COMPUTER_IMAGE} infra/sandboxes/computer`,
-        );
-      }
-      const stream = await docker.buildImage(
-        {
-          context: computerContext,
-          src: [
-            "Dockerfile",
-            "start.sh",
-            "control.py",
-            "xcapture.c",
-            "ardurbot-browser",
-            "ardurbot-page-browser",
-            "ardurbot-browser.desktop",
-            "embed.html",
-            "clipboard-bridge.js",
-            "mobile-keyboard.js",
-            "fluxbox.init",
-            "fluxbox.apps",
-            "fluxbox.menu",
-          ],
-        },
-        { t: COMPUTER_IMAGE },
-      );
-      await new Promise<void>((resolve, reject) => {
-        docker.modem.followProgress(stream, (err) => (err ? reject(err) : resolve()));
-      });
-      await docker.getImage(COMPUTER_IMAGE).inspect();
-    })();
+async function ensureComputerImage(image: string) {
+  // Explicit local builds or pulls only: never silently rebuild a pinned computer.
+  try {
+    await docker.getImage(image).inspect();
+  } catch {
+    throw new Error(
+      "Computer image is missing; run pnpm sandbox:build or load the pinned image into this engine.",
+    );
   }
-  await imageReady;
 }
 
 async function findBotContainer(botId: string, spaceId: string) {
@@ -1144,7 +1158,7 @@ async function publishedScreenUrl(
   for (let i = 0; i < 30; i += 1) {
     const info = i === 0 && initialInfo ? initialInfo : await container.inspect();
     if (screenNetworkMode === "isolated") {
-      const runtime = supervisorInfo ?? (await inspectSupervisorContainer());
+      const runtime = await inspectSupervisorContainer();
       const networkName = info.HostConfig.NetworkMode;
       if (runtime && networkName) await connectComposeScreenPeers(networkName, runtime);
     }
@@ -1295,10 +1309,13 @@ async function withSpaceComputerLock<T>(spaceId: string, task: () => Promise<T>)
 }
 
 async function inspectSupervisorContainer() {
-  if (supervisorInfo || !process.env.HOSTNAME) return supervisorInfo;
+  const engine = engineScope.getStore() ?? defaultDocker;
+  const cached = supervisorContainers.get(engine);
+  if (cached || !process.env.HOSTNAME) return cached;
   try {
-    supervisorInfo = await docker.getContainer(process.env.HOSTNAME).inspect();
-    return supervisorInfo;
+    const info = await engine.getContainer(process.env.HOSTNAME).inspect();
+    supervisorContainers.set(engine, info);
+    return info;
   } catch {
     return undefined;
   }

@@ -61,6 +61,8 @@ export interface PortableFile {
 }
 
 export interface ComputerRef {
+  imageProfile?: "base" | "developer";
+  connectionId?: string | null;
   id: string;
   botId: string;
   kind: SandboxKind;

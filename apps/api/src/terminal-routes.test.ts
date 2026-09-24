@@ -12,7 +12,7 @@ vi.mock("@ardurbot/db", async (original) => ({
     return {};
   }),
 }));
-function fixture() {
+function fixture(defaultTerminal = true) {
   const actor = { userId: "user", spaceId: "space", role: "owner" } as Actor;
   const computer = {
     id: "computer",
@@ -23,6 +23,7 @@ function fixture() {
     providerRef: "container",
     screenGeneration: 2,
     kind: "docker",
+    connectionId: null as string | null,
     state: "running",
     maintenanceId: null,
     controlHolder: "user",
@@ -78,13 +79,24 @@ function fixture() {
     prisma: db as unknown as PrismaClient,
     sandbox: {
       terminal: provider,
-      describe: () => ({ capabilities: { interactiveTerminal: true } }),
+      describe: () => ({ capabilities: { interactiveTerminal: defaultTerminal } }),
     } as SandboxProvider,
     trustedOrigin: (origin) => origin === "https://app.example",
   });
   return { actor, computer, provider, db, routes };
 }
 describe("terminal authorization", () => {
+  it("uses a saved Docker connection's capability when the default has no terminal", async () => {
+    const f = fixture(false);
+    const input = { botId: "bot", computerId: "computer" };
+    expect(await f.routes.available(f.actor, input)).toEqual({ available: false });
+    f.computer.connectionId = "saved-docker";
+    expect(await f.routes.available(f.actor, input)).toEqual({ available: true });
+    f.computer.kind = "kubernetes";
+    expect(await f.routes.available(f.actor, input)).toEqual({ available: false });
+    await expect(f.routes.ticket(f.actor, input, "auth", "https://app.example")).rejects.toThrow();
+    expect(f.provider.open).not.toHaveBeenCalled();
+  });
   it.each(["user", "space", "bot", "computer", "team-key", "dedicated-user", "origin", "session"])(
     "denies across %s boundaries before opening a PTY",
     async (boundary) => {

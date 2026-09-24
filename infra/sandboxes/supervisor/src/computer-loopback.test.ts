@@ -9,6 +9,7 @@ import { COMPUTER_IMAGE, computerNetworkNameFor, hostComputerUser } from "./comp
 const mocks = vi.hoisted(() => ({
   docker: {
     version: vi.fn(),
+    info: vi.fn(),
     getImage: vi.fn(),
     getContainer: vi.fn(),
     listContainers: vi.fn(),
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("dockerode", () => ({
   default: class {
     version = mocks.docker.version;
+    info = mocks.docker.info;
     getImage = mocks.docker.getImage;
     getContainer = mocks.docker.getContainer;
     listContainers = mocks.docker.listContainers;
@@ -39,6 +41,8 @@ let screenPort: string;
 beforeEach(async () => {
   vi.resetModules();
   vi.resetAllMocks();
+  mocks.docker.version.mockResolvedValue({ Version: "28.0.0", ApiVersion: "1.48" });
+  mocks.docker.info.mockResolvedValue({ SecurityOptions: [] });
   vi.stubEnv("HOSTNAME", "");
   vi.stubEnv("DATA_DIR", "/tmp/ardurbot-loopback-test");
   vi.stubEnv("SANDBOX_SCREEN_NETWORK", "published");

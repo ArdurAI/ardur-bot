@@ -282,6 +282,8 @@ export async function provisionComputer(
     await onProgress?.("recreating");
     const ref = await deps.sandbox.provision(
       {
+        imageProfile: (existing.imageProfile ?? "base") as ComputerRef["imageProfile"],
+        connectionId: existing.connectionId,
         botId: existing.homeKey,
         homePath,
         providerRef: existing.providerRef ?? undefined,
@@ -591,6 +593,7 @@ export async function replaceComputer(
   context: AdapterContext,
   controlHolder: "bot" | "none" = "none",
   onProgress?: ComputerUpdateProgress,
+  configuration?: { imageProfile: "base" | "developer"; connectionId: string | null },
 ): Promise<ComputerRef> {
   let existing = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
   if (existing.maintenanceId && existing.maintenanceId !== context.operationId)
@@ -690,7 +693,11 @@ export async function replaceComputer(
   const oldRef = existing.providerRef ? toComputerRef(existing) : null;
   try {
     // Retry the checkpoint even after an earlier update left the row in error.
-    if (oldRef && (mode === "update" || (existing.state === "running" && mode === "recover"))) {
+    if (
+      oldRef &&
+      !(existing.kind === "kubernetes" && ["stopped", "suspended"].includes(existing.state)) &&
+      (mode === "update" || (existing.state === "running" && mode === "recover"))
+    ) {
       try {
         await onProgress?.("saving");
         const revision = await checkpointComputerWorkspace(
@@ -726,6 +733,9 @@ export async function replaceComputer(
         maintenanceId: existing.maintenanceId ?? null,
       },
       data: {
+        ...(configuration
+          ? { imageProfile: configuration.imageProfile, connectionId: configuration.connectionId }
+          : {}),
         state: "stopped",
         providerRef: null,
         controlHolder: "none",

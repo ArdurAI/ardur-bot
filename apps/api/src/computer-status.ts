@@ -1,5 +1,6 @@
 import { computerSupportsUpdate } from "@ardurbot/adapters";
 import type { ComputerStatus } from "@ardurbot/contracts";
+import { ComputerProfileSchema, computerCapabilities } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, computerScreenSize } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 
@@ -52,6 +53,8 @@ export async function resolveBusyBotName(
 export function toComputerStatus(
   botId: string,
   computer: {
+    imageProfile?: string;
+    connectionId?: string | null;
     id?: string;
     kind: string;
     state: string;
@@ -80,13 +83,19 @@ export function toComputerStatus(
   return {
     ...(computer?.id ? { computerId: computer.id } : {}),
     botId,
+    imageProfile: ComputerProfileSchema.parse(computer?.imageProfile ?? "base"),
+    connectionId: computer?.connectionId ?? null,
+    capabilities: computerCapabilities(kind),
     mode: computer?.scope === "dedicated" ? "dedicated" : "team",
     kind,
     state,
     controlHolder: (computer?.controlHolder ?? "none") as ComputerStatus["controlHolder"],
     controlBotId: computer?.controlBotId ?? null,
     takeoverRequested: Boolean(computer?.controlRunId),
-    screenAvailable: !computer?.maintenanceId && (state === "running" || state === "booting"),
+    screenAvailable:
+      computerCapabilities(kind).graphical &&
+      !computer?.maintenanceId &&
+      (state === "running" || state === "booting"),
     screenWidth: screen.width,
     screenHeight: screen.height,
     homeRevision: computer?.homeRevision ?? null,

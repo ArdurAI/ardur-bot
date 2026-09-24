@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { MAX_DESKTOP_DISPLAY, screenPorts } from "@ardurbot/core/node/desktop-runtime";
 import type Docker from "dockerode";
+import type { ContainerEngine } from "./container-engine.js";
+import { engineHostConfig } from "./container-engine.js";
 
 export const COMPUTER_IMAGE = process.env.ARDURBOT_COMPUTER_IMAGE ?? "ardurbot/computer:local";
 export const COMPUTER_UID = 1000;
@@ -216,6 +218,7 @@ export function homeVolumeMatches(
 
 export interface ComputerCreateInput {
   name: string;
+  engine?: ContainerEngine;
   image: string;
   botId: string;
   spaceId: string;
@@ -262,6 +265,7 @@ export function containerCreateOptions(input: ComputerCreateInput) {
     },
     ExposedPorts: ports.ExposedPorts,
     HostConfig: {
+      ...engineHostConfig(input.engine ?? { name: "docker", rootless: false }),
       ...(input.homeVolume
         ? {
             Binds: undefined,

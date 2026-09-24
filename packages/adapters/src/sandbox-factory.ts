@@ -1,4 +1,5 @@
 import type { SandboxProvider } from "@ardurbot/adapter-kit";
+import type { ComputerConnectionSettings } from "@ardurbot/contracts";
 import { BoxSandboxEmulator } from "./box-emulator.js";
 import { BoxSandboxProvider } from "./box-sandbox.js";
 import { DaytonaSandboxEmulator } from "./daytona-emulator.js";
@@ -8,9 +9,12 @@ import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { ManagedSandboxEmulator } from "./e2b-emulator.js";
 import { E2BSandboxProvider } from "./e2b-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
+import type { KubernetesApi } from "./kubernetes-client.js";
+import { KubernetesSandboxProvider } from "./kubernetes-sandbox.js";
 import { NoneSandboxProvider } from "./none-sandbox.js";
 
 export interface SandboxProviderOptions {
+  kubernetes?: { api: KubernetesApi; settings: ComputerConnectionSettings };
   supervisorUrl?: string;
   supervisorToken?: string;
   e2bApiKey?: string;
@@ -46,6 +50,10 @@ export function createSandboxProvider(kind: string, opts: SandboxProviderOptions
     case "box":
       if (!opts.boxApiKey?.trim()) return missingRemoteKey("box", "BOX_API_KEY");
       return new BoxSandboxProvider({ apiKey: opts.boxApiKey, apiUrl: opts.boxApiUrl });
+    case "kubernetes":
+      if (!opts.kubernetes)
+        throw new Error("Choose a Kubernetes connection in Settings → Computers.");
+      return new KubernetesSandboxProvider(opts.kubernetes.api, opts.kubernetes.settings);
     case "docker":
       return new DockerSandboxProvider(
         opts.supervisorUrl ?? "http://127.0.0.1:7091",
@@ -65,7 +73,7 @@ export function createSandboxProvider(kind: string, opts: SandboxProviderOptions
       return new FakeSandboxProvider();
     default:
       throw new Error(
-        `Unknown SANDBOX_PROVIDER "${kind}". Use none | docker | e2b | daytona | box | e2b-emulator | daytona-emulator | box-emulator | desktop | fake.`,
+        `Unknown SANDBOX_PROVIDER "${kind}". Use none | docker | kubernetes | e2b | daytona | box | e2b-emulator | daytona-emulator | box-emulator | desktop | fake.`,
       );
   }
 }

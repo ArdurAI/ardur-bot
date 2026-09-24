@@ -297,6 +297,10 @@ msgstr "Gib eine HTTPS-Server-URL ein."
 msgid "Add another"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Add computer connection"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add Executor"
 msgstr "Executor hinzufügen"
@@ -534,6 +538,10 @@ msgstr "Erscheinungsbild"
 
 #: src/pages/LearningInbox.tsx
 msgid "Applied"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Apply"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -841,6 +849,7 @@ msgstr "Server nicht erreichbar."
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryImportExport.tsx
@@ -874,6 +883,10 @@ msgstr "abgebrochen"
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Abgebrochen"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Change computer"
+msgstr ""
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "Change model"
@@ -979,6 +992,10 @@ msgstr "Wähle ein neues Passwort"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Choose bots and the tools they can use."
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Choose context"
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -1154,7 +1171,6 @@ msgid "Completion not recorded"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -1178,12 +1194,17 @@ msgid "Computer is stopped"
 msgstr "Computer ist gestoppt"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/SettingsOverlay.tsx
 msgid "Computers"
 msgstr "Computer"
 
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set SANDBOX_PROVIDER to e2b, daytona, or box with its API key. Recreate the stack after changing .env."
 msgstr "Computer sind aus. Setze SANDBOX_PROVIDER=docker mit SANDBOX_SUPERVISOR_TOKEN, oder setze SANDBOX_PROVIDER auf e2b, daytona oder box mit dem passenden API-Key. Stack nach der Änderung von .env neu erstellen."
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Computers are unavailable; reconnect and try again."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Configured by deployment"
@@ -1301,8 +1322,16 @@ msgstr ""
 msgid "Connecting…"
 msgstr "Verbindung wird hergestellt…"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Connection"
+msgstr ""
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Connection lost — reconnecting"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Connection name"
 msgstr ""
 
 #. placeholder {0}: item.name
@@ -1320,6 +1349,7 @@ msgid "Context limit"
 msgstr "Kontextlimit"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/Onboarding.tsx
 msgid "Continue"
 msgstr "Weiter"
@@ -1383,6 +1413,10 @@ msgstr ""
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Could not change password"
 msgstr "Passwort konnte nicht geändert werden"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Could not change the computer; stop its bots and try again."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not change the default model"
@@ -1724,6 +1758,10 @@ msgstr "Auswahl konnte nicht gespeichert werden"
 msgid "Could not save that voice"
 msgstr "Stimme konnte nicht gespeichert werden"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Could not save the connection; check its settings and try again."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not save this choice"
 msgstr "Diese Auswahl konnte nicht gespeichert werden"
@@ -1792,11 +1830,23 @@ msgstr ""
 msgid "Couldn't update messaging settings"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "CPU limit"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "CPU request"
+msgstr ""
+
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Create"
 msgstr "Erstellen"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Create a kind cluster: kind create cluster --name ardurbot"
+msgstr ""
 
 #. placeholder {0}: bot.name
 #: src/pages/shell/dialogs.tsx
@@ -2001,6 +2051,7 @@ msgstr "Ablehnen"
 msgid "Deploy private key"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Bereitstellungsstandard"
@@ -2028,6 +2079,14 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Developer is a larger download and uses more disk space."
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
@@ -2174,6 +2233,19 @@ msgstr "E-Mail"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Engine"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Engine socket"
+msgstr ""
+
+#. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Engine: {0}"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
@@ -2509,6 +2581,10 @@ msgstr ""
 msgid "Home link"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Home storage size"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
 msgstr "Stunde"
@@ -2536,6 +2612,10 @@ msgstr "Wenn du das gehört hast, ist die Stimme einsatzbereit."
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Ignore"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Image profile"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -2665,6 +2745,22 @@ msgstr ""
 msgid "Knowledge"
 msgstr "Wissen"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Kubeconfig contents"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Kubeconfig path"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Kubeconfig path on the server"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Kubernetes context"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Language"
 msgstr "Sprache"
@@ -2725,6 +2821,10 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Link a chat app"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "List contexts"
 msgstr ""
 
 #: src/pages/ModelDestinations.tsx
@@ -2919,12 +3019,20 @@ msgstr ""
 msgid "Memory folder on your server"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Memory limit"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory location"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory location and documents"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Memory request"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -3106,6 +3214,10 @@ msgstr "Gruppe benennen"
 msgid "Name this routine"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Namespace"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "Eingabe erforderlich"
@@ -3275,6 +3387,10 @@ msgstr "Noch keine"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "not available"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Not available on this computer"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3455,6 +3571,10 @@ msgstr "Oder einen API-Schlüssel verbinden"
 #: src/pages/Onboarding.tsx
 msgid "Or paste an API key"
 msgstr "Oder einen API-Schlüssel einfügen"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Or paste kubeconfig contents"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Organic"
@@ -3950,6 +4070,10 @@ msgstr "Setze dein Passwort zurück"
 msgid "Resetting…"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Resources"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Restart to update"
 msgstr ""
@@ -4137,6 +4261,10 @@ msgstr ""
 msgid "Save"
 msgstr "Speichern"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Save connection"
+msgstr ""
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/ExternalConversationSettings.tsx
@@ -4203,6 +4331,10 @@ msgstr "Antworte mit Ja oder Nein oder in einem Satz."
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Screen"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Screen and terminal: Not available on this computer"
 msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -4497,6 +4629,10 @@ msgstr "Spricht…"
 msgid "Stale"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Standard"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "Aufnahme starten"
@@ -4540,6 +4676,10 @@ msgstr "Gestoppt."
 
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Storage class"
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
@@ -4622,6 +4762,7 @@ msgstr "Aufgabe wird angelernt. Beende das Anlernen, bevor du eine neue Nachrich
 msgid "Team"
 msgstr "Team"
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/Shell.tsx
 msgid "Team Computer"
 msgstr "Team-Computer"
@@ -4749,6 +4890,10 @@ msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "This permanently removes every message and stops current work. The chat remains available."
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "This replaces the computer's files. Continue?"
 msgstr ""
 
 #: src/pages/Auth.tsx

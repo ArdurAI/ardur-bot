@@ -112,3 +112,17 @@ interrupted operations in the owner’s current workspace. A stale heartbeat alo
 never authorizes takeover. Progress reports
 actual lifecycle stages rather than estimated percentages; workspace files and
 browser profiles are portable, while system packages outside the workspace are not.
+
+## Compute profiles and local engines
+
+Docker computers now carry an explicit Standard or Developer image profile and may bind to a
+shared Docker/Podman socket connection. Kubernetes/kind computers implement the same lifecycle
+and portable file contract through the Kubernetes API, retaining a home PVC during sleep. Their
+screen and interactive-terminal capability flags are false. Profile and connection changes use
+confirmed background maintenance and preserve the external workspace checkpoint.
+
+See [profiles, connection boundaries, official sources and manual acceptance](compute-profiles.md)
+for build tags, engine discovery, Kubernetes resource/RBAC settings, and the macOS/Linux checks.
+The profile registry is `packages/contracts/src/computer-profiles.ts`; unpublished digest fields
+remain null. No image is built implicitly during provisioning, and no vendor credentials are
+installed in these profiles.

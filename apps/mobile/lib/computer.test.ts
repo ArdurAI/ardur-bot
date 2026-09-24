@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import { computerScreenUnavailable } from "./computer";
 import {
   type ComputerStatus,
   controlLabel,
@@ -227,4 +228,13 @@ describe("mobile computer screen", () => {
     expect(src).toContain("key={sourceUrl.current}");
     expect(src).not.toContain("key={url}");
   });
+});
+
+it("uses capability flags to disable unavailable computer screens", () => {
+  expect(computerScreenUnavailable(null)).toBe(false);
+  expect(
+    computerScreenUnavailable({
+      capabilities: { graphical: false, interactiveTerminal: false },
+    } as Parameters<typeof computerScreenUnavailable>[0]),
+  ).toBe(true);
 });

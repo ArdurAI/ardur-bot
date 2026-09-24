@@ -3,6 +3,11 @@ import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
 import { CommandBlockSchema } from "./command-blocks.js";
+import {
+  ComputerConfigurationSchema,
+  ComputerConnectionInputSchema,
+  ComputerConnectionSettingsSchema,
+} from "./computer-connections.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
 import {
@@ -422,6 +427,33 @@ export const appContract = {
       .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
   },
   computer: {
+    engine: oc
+      .input(z.object({ connectionId: Id.nullable() }))
+      .output(
+        z.object({ name: z.enum(["docker", "podman", "kubernetes"]), rootless: z.boolean() }),
+      ),
+    list: oc.output(
+      z.array(z.object({ botId: Id, name: z.string(), status: ComputerStatusSchema })),
+    ),
+    connections: oc.output(
+      z.array(z.object({ id: Id, name: z.string(), settings: ComputerConnectionSettingsSchema })),
+    ),
+    connect: oc
+      .input(ComputerConnectionInputSchema)
+      .output(z.object({ id: Id, name: z.string(), settings: ComputerConnectionSettingsSchema })),
+    contexts: oc
+      .input(
+        z.object({
+          kubeconfig: z
+            .string()
+            .max(1024 * 1024)
+            .optional(),
+          kubeconfigPath: z.string().max(1024).optional(),
+        }),
+      )
+      .output(z.array(z.object({ name: z.string(), local: z.boolean() }))),
+    configure: oc.input(ComputerConfigurationSchema).output(ComputerUpdateSchema),
+
     status: oc.input(botId).output(ComputerStatusSchema),
     boot: oc.input(botId).output(ComputerStatusSchema),
     stop: oc.input(botId).output(ComputerStatusSchema),

@@ -1,4 +1,5 @@
 import type { ComputerMode, ComputerReleaseReason } from "@ardurbot/contracts";
+import { COMPUTER_PROFILES } from "@ardurbot/contracts";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
@@ -17,6 +18,7 @@ import {
   COMPUTER_LIFECYCLE_TIMEOUT_MS,
   type ComputerStatus,
   computerLabel,
+  computerScreenUnavailable,
   controlLabel,
   embeddableScreenUrl,
   previewPlaceholder,
@@ -201,8 +203,9 @@ export default function Computer() {
     }
   }
 
-  const placeholder =
-    screenError ?? previewPlaceholder(computer?.state, booting, name, computer?.mode);
+  const placeholder = computerScreenUnavailable(computer)
+    ? t("Not available on this computer")
+    : (screenError ?? previewPlaceholder(computer?.state, booting, name, computer?.mode));
 
   return (
     <View style={{ flex: 1, backgroundColor: tokens.background, padding: 24 }}>
@@ -241,6 +244,7 @@ export default function Computer() {
           </View>
         )}
         <Pressable
+          disabled={computerScreenUnavailable(computer)}
           accessibilityLabel={t("Open computer")}
           onPress={() => void openComputer()}
           style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
@@ -258,7 +262,11 @@ export default function Computer() {
         <Text style={{ color: tokens.mutedForeground, flex: 1 }}>
           {controlLabel(computer, name, botId)}
         </Text>
-        {hasControl ? (
+        {computerScreenUnavailable(computer) ? (
+          <Text style={{ color: tokens.mutedForeground }}>
+            {t("Not available on this computer")}
+          </Text>
+        ) : hasControl ? (
           <ComputerReleaseActions
             takeoverRequested={computer?.takeoverRequested ?? false}
             onRelease={releaseComputer}
@@ -277,6 +285,11 @@ export default function Computer() {
           </Pressable>
         )}
       </View>
+      {computer?.imageProfile ? (
+        <Text style={{ color: tokens.mutedForeground }}>
+          {t("Image profile")}: {COMPUTER_PROFILES[computer.imageProfile].label}
+        </Text>
+      ) : null}
       {computer ? (
         <ComputerMaintenanceActions
           botId={botId ?? ""}

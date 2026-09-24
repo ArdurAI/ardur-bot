@@ -55,6 +55,7 @@ import {
   isComputerScreenUnavailable,
   isSandboxGoneError,
   isScratchpadStatus,
+  kubernetesContexts,
   listPiCatalog,
   listScratchpadItems,
   McpOAuthBroker,
@@ -153,6 +154,12 @@ import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artif
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
 import { createCommandRoutes } from "./command-routes.js";
+import {
+  computerEngineInfo,
+  listComputerConnections,
+  saveComputerConnection,
+  validateComputerConfiguration,
+} from "./computer-settings.js";
 import {
   executionBlocksUserTakeover,
   resolveBusyBotName,
@@ -476,6 +483,8 @@ export interface RouterDeps {
     privacyPolicyUrl?: string;
     screenProxySecret: string;
     sandboxProvider: string;
+    sandboxSupervisorUrl?: string;
+    sandboxSupervisorToken?: string;
     gitSha?: string;
     updaterUrl?: string;
     updaterToken?: string;
@@ -1727,6 +1736,56 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     computer: {
+      engine: authed.computer.engine.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return computerEngineInfo(
+          deps,
+          input.connectionId,
+          computerContext(context.actor, "settings", "engine"),
+        );
+      }),
+      list: authed.computer.list.handler(async ({ context }) => {
+        const bots = await deps.prisma.bot.findMany({
+          where: { spaceId: context.actor.spaceId, userId: context.actor.userId, archivedAt: null },
+          include: { computer: true },
+        });
+        const seen = new Set<string>();
+        return bots.flatMap((bot) => {
+          if (!bot.computer || seen.has(bot.computer.id)) return [];
+          seen.add(bot.computer.id);
+          return [
+            { botId: bot.id, name: bot.name, status: toComputerStatus(bot.id, bot.computer) },
+          ];
+        });
+      }),
+      connections: authed.computer.connections.handler(({ context }) =>
+        listComputerConnections(deps.prisma, context.actor.spaceId),
+      ),
+      connect: authed.computer.connect.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return saveComputerConnection(
+          deps,
+          input,
+          computerContext(context.actor, "settings", "connect"),
+        );
+      }),
+      contexts: authed.computer.contexts.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return kubernetesContexts({ inline: input.kubeconfig, path: input.kubeconfigPath });
+      }),
+      configure: authed.computer.configure.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        const bot = await repos.getBot(context.actor, input.botId);
+        if (!bot.computer) throw new IsolationError();
+        const configuration = await validateComputerConfiguration(
+          deps.prisma,
+          context.actor.spaceId,
+          input,
+        );
+        if (!configuration.connectionId && !["docker", "kubernetes"].includes(bot.computer.kind))
+          throw new ORPCError("BAD_REQUEST", { message: "Choose a computer connection first." });
+        return queueComputerUpdate(deps, bot.computer.id, bot.id, "update", configuration);
+      }),
       status: authed.computer.status.handler(async ({ context, input }) =>
         computerStatus(deps, context.actor, input.botId),
       ),
@@ -2250,6 +2309,7 @@ export function createRouter(deps: RouterDeps) {
           bot = await repos.getBot(context.actor, input.botId);
         }
         if (
+          bot.computer?.kind === "kubernetes" ||
           !bot.computer?.providerRef ||
           (bot.computer.state !== "running" && bot.computer.state !== "booting")
         ) {

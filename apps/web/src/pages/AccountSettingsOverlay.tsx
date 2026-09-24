@@ -13,7 +13,6 @@ import {
 import { Link } from "react-router-dom";
 import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";
 import { SuccessPop } from "../components/ai/primitives";
-import { ComputersUnavailableHint } from "../components/ComputersUnavailableHint";
 import { DesktopUpdateSection } from "../components/DesktopUpdates";
 import { SoftwareUpdateSection } from "../components/SoftwareUpdateSection";
 import { authClient } from "../lib/auth";
@@ -24,6 +23,7 @@ import {
   setUiAppearance,
 } from "../lib/ui-appearance";
 import { UI_LOCALE_LABELS, UI_LOCALES, type UiLocale } from "../lib/ui-locale";
+import { ComputerProfilesSettings } from "./ComputerProfilesSettings";
 import { SettingsSupportLinks } from "./settings-support-links";
 
 export type SettingsGeneralProps = {
@@ -228,7 +228,7 @@ export function ComputerSettingsPanel() {
       <h3 className="text-[15px] font-medium text-foreground">
         <Trans>Computers</Trans>
       </h3>
-      <ComputersUnavailableHint className="mt-3 text-[13px] leading-relaxed text-muted-foreground" />
+      <ComputerProfilesSettings />
     </div>
   );
 }

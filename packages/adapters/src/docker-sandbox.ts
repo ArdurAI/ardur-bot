@@ -16,6 +16,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
+import { profileCommandError } from "@ardurbot/contracts";
 import { boundedSandboxCommandTimeoutMs, resolveSupervisorToken } from "@ardurbot/core";
 import { outgoingCorrelationHeaders } from "@ardurbot/logging";
 import {
@@ -106,6 +107,7 @@ export class DockerSandboxProvider implements SandboxProvider {
   constructor(
     private readonly supervisorUrl: string,
     supervisorToken?: string,
+    private readonly engine?: { socket?: string; name: "docker" | "podman" },
   ) {
     this.supervisorToken = supervisorToken ?? resolveSupervisorToken(process.env);
     this.terminal = new DockerTerminal(supervisorUrl, (context, botId) =>
@@ -137,6 +139,8 @@ export class DockerSandboxProvider implements SandboxProvider {
   private headers(context: AdapterContext, botId?: string) {
     return {
       authorization: `Bearer ${this.supervisorToken}`,
+      ...(this.engine?.socket ? { "x-ardurbot-engine-socket": this.engine.socket } : {}),
+      ...(this.engine ? { "x-ardurbot-engine": this.engine.name } : {}),
       "x-ardurbot-space-id": context.spaceId,
       ...outgoingCorrelationHeaders(),
       ...(botId ? { "x-ardurbot-bot-id": botId } : {}),
@@ -146,14 +150,29 @@ export class DockerSandboxProvider implements SandboxProvider {
     };
   }
 
+  async engineInfo(context: AdapterContext) {
+    const res = await fetch(this.url("/computers/engine"), {
+      headers: this.headers(context),
+      signal: context.signal,
+    });
+    if (!res.ok) throw new Error("Computer engine is unavailable.");
+    return readSandboxJson<{ name: "docker" | "podman"; rootless: boolean }>(res, context.signal);
+  }
+
   async provision(
-    request: { botId: string; homePath: string },
+    request: {
+      botId: string;
+      homePath: string;
+      imageProfile?: "base" | "developer";
+      connectionId?: string | null;
+    },
     context: AdapterContext,
   ): Promise<ComputerRef> {
     const res = await fetch(this.url("/computers"), {
       method: "POST",
       headers: { ...this.headers(context, request.botId), "content-type": "application/json" },
       body: JSON.stringify({
+        imageProfile: request.imageProfile ?? "base",
         botId: request.botId,
         homePath: request.homePath,
         spaceId: context.spaceId,
@@ -171,6 +190,8 @@ export class DockerSandboxProvider implements SandboxProvider {
     }
     const body = await readSandboxJson<{ id: string; resumed?: boolean }>(res, context.signal);
     return {
+      imageProfile: request.imageProfile ?? "base",
+      connectionId: request.connectionId,
       id: body.id,
       botId: request.botId,
       kind: "docker",
@@ -214,7 +235,16 @@ export class DockerSandboxProvider implements SandboxProvider {
       context.signal,
     );
     if (body.stdout) yield { type: "stdout", data: body.stdout };
-    if (body.stderr) yield { type: "stderr", data: body.stderr };
+    if (body.stderr)
+      yield {
+        type: "stderr",
+        data: profileCommandError(
+          computer.imageProfile ?? "base",
+          request.argv,
+          body.stderr,
+          body.code,
+        ),
+      };
     yield { type: "exit", code: body.code };
   }
 
