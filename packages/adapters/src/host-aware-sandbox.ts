@@ -176,7 +176,7 @@ export class HostAwareSandbox implements SandboxProvider {
     computer: ComputerRef,
     path: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     return this.route(computer).readFile(computer, path, context, options);
   }

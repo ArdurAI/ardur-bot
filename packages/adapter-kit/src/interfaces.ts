@@ -154,7 +154,7 @@ export interface SandboxProvider {
     computer: ComputerRef,
     path: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ): Promise<Uint8Array>;
   writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext): Promise<void>;
   exportWorkspace(computer: ComputerRef, context: AdapterContext): AsyncIterable<PortableFile>;
@@ -286,7 +286,7 @@ export interface AgentHomeStore {
     botId: string,
     path: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ): Promise<string>;
   writeFile(botId: string, path: string, content: string, context: AdapterContext): Promise<void>;
   list(

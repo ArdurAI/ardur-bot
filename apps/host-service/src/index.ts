@@ -1,5 +1,5 @@
 import path from "node:path";
-import { HOST_FRAME_BYTES, hostSocketUrl } from "@ardurbot/contracts/host-bridge";
+import { HOST_WRITE_FRAME_BYTES, hostSocketUrl } from "@ardurbot/contracts/host-bridge";
 import { receiveFrames, wsWire } from "@ardurbot/host-runtime/bridge-wire";
 import { installWin32NativeApi } from "@ardurbot/host-runtime/desktop-sandbox-win32-path";
 import { HostAgent } from "@ardurbot/host-runtime/host-agent";
@@ -42,7 +42,7 @@ async function connect() {
     await agent.initialize();
     socket = new WebSocket(hostSocketUrl(config.apiUrl), {
       headers: { authorization: `Bearer ${config.token}` },
-      maxPayload: HOST_FRAME_BYTES,
+      maxPayload: HOST_WRITE_FRAME_BYTES,
       perMessageDeflate: false,
       handshakeTimeout: 5000,
       followRedirects: false,

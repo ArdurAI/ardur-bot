@@ -308,11 +308,18 @@ export class KubernetesSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     path: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     return new Uint8Array(
       Buffer.from(
-        await this.fileCommand(computer, "read", path, context, "", options?.maxBytes ?? MAX_FILE),
+        await this.fileCommand(
+          computer,
+          options?.preview ? "preview" : "read",
+          path,
+          context,
+          "",
+          options?.maxBytes ?? MAX_FILE,
+        ),
         "base64",
       ),
     );

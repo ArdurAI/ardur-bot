@@ -224,6 +224,7 @@ import { stoppedRunComputer } from "./delegation-stop.js";
 import { prepareDelegationWorkspace, taskWorkspacePath } from "./delegation-workspace.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
 import { startExecutionHeartbeat } from "./execution-heartbeat.js";
+import { beforeFileChange, fileChangeText, recordFileChange } from "./file-changes.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import {
   COMPACTION_BATCH_SIZE,
@@ -2703,6 +2704,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (name === "write_file") {
             const filePath = String(args.path ?? "notes/result.txt");
             const content = textContentArg(args.content, "");
+            const before = await beforeFileChange(
+              deps.sandbox,
+              computer,
+              toolWorkspacePath(filePath),
+              context,
+              runSecrets,
+            );
             workspaceCheckpoint.markDirty();
             await deps.sandbox.writeFile(
               computer,
@@ -2711,6 +2719,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 content: new TextEncoder().encode(content),
               },
               context,
+            );
+            await recordFileChange(
+              deps.events,
+              run,
+              {
+                computerId: storedComputer.id,
+                path: toolWorkspacePath(filePath),
+                source: "tool",
+                before,
+                after: fileChangeText(new TextEncoder().encode(content), runSecrets),
+              },
+              runSecrets,
             );
             return finish({ ok: true, path: filePath });
           }
@@ -2836,6 +2856,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 },
               );
               await publishMessage(deps, run, "bot", [attached.block]);
+              await recordFileChange(
+                deps.events,
+                run,
+                {
+                  computerId: storedComputer.id,
+                  path: storedPath,
+                  source: "artifact",
+                  before: null,
+                  after: fileChangeText(bytes, runSecrets),
+                },
+                runSecrets,
+              );
               return finish({ ok: true, artifactId: attached.artifactId, path: filePath });
             } catch (error) {
               return finish({

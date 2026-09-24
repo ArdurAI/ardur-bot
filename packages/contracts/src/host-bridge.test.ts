@@ -3,6 +3,7 @@ import {
   decodeHostFrame,
   encodeHostFrame,
   HOST_FRAME_BYTES,
+  HOST_WRITE_FRAME_BYTES,
   HostOperationSchema,
   hostSocketUrl,
 } from "./host-bridge.js";
@@ -18,7 +19,7 @@ describe("host protocol", () => {
       data: "hello",
     };
     expect(decodeHostFrame(encodeHostFrame(frame))).toEqual(frame);
-    expect(() => decodeHostFrame("x".repeat(HOST_FRAME_BYTES + 1))).toThrow("too large");
+    expect(() => decodeHostFrame("x".repeat(HOST_WRITE_FRAME_BYTES + 1))).toThrow("too large");
     expect(() => encodeHostFrame({ ...frame, data: "é".repeat(HOST_FRAME_BYTES) })).toThrow(
       "too large",
     );

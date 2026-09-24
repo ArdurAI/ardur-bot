@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
@@ -76,7 +76,7 @@ const turn: HostOperation = {
     },
   },
 };
-async function fixture(runtime?: AgentRuntime) {
+async function fixture(runtime?: AgentRuntime, acknowledge = false) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "host-agent-")));
   roots.push(root);
   const frames: HostFrame[] = [];
@@ -85,6 +85,10 @@ async function fixture(runtime?: AgentRuntime) {
     {
       send: async (frame) => {
         frames.push(decodeHostFrame(encodeHostFrame(frame)));
+        if (acknowledge && frame.type === "stream")
+          queueMicrotask(() => {
+            void agent.receive({ v: 1, type: "ack", id: frame.id, seq: frame.seq });
+          });
       },
       close: vi.fn(),
     },
@@ -249,4 +253,51 @@ it("reports the host inventory through health and the run-scoped environment ope
   await agent.receive(request({ op: "computer.environment", homeKey: "bot" }));
   await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
   expect(frames[0]).toMatchObject({ type: "stream", channel: "result", data: health.environment });
+});
+
+it("round-trips a 2 MB owner save and bounds larger previews without raising bot file limits", async () => {
+  const { agent, frames, root } = await fixture(undefined, true);
+  const content = Buffer.alloc(2 * 1024 * 1024, 97);
+  const file = path.join(root, "editor.txt");
+  await agent.receive(
+    request({
+      op: "computer.files.write",
+      homeKey: "ide",
+      path: file,
+      editor: true,
+      content: content.toString("base64"),
+    }),
+  );
+  await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ type: "end", id: "req" }));
+  expect(frames.at(-1)).not.toHaveProperty("problem");
+  expect(await readFile(file)).toEqual(content);
+  await writeFile(file, Buffer.concat([content, Buffer.from("large")]));
+  await agent.receive({
+    ...request({
+      op: "computer.files.read",
+      homeKey: "ide",
+      path: file,
+      editor: true,
+      maxBytes: content.length + 1,
+    }),
+    id: "preview",
+  });
+  await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ type: "end", id: "preview" }));
+  const chunks = frames.flatMap((frame) =>
+    frame.type === "stream" && frame.id === "preview" && frame.channel === "file"
+      ? [Buffer.from(frame.data as string, "base64")]
+      : [],
+  );
+  expect(Buffer.concat(chunks).length).toBe(content.length + 1);
+  await agent.receive({
+    ...request({ op: "computer.files.read", homeKey: "bot", path: file }),
+    id: "bot-read",
+  });
+  await vi.waitFor(() =>
+    expect(frames.at(-1)).toMatchObject({
+      type: "end",
+      id: "bot-read",
+      problem: expect.any(Object),
+    }),
+  );
 });

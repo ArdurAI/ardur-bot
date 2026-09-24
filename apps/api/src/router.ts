@@ -174,6 +174,8 @@ import {
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
+import { createIdeChanges } from "./ide-changes.js";
+import { createIdeFiles } from "./ide-files.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
@@ -578,6 +580,8 @@ export function createRouter(deps: RouterDeps) {
 
   const systemSettings = createSystemSettings(deps.prisma);
   const commands = createCommandRoutes(deps);
+  const ide = createIdeFiles(deps);
+  const ideChanges = createIdeChanges(deps, ide);
   return os.router({
     system: {
       dispatch: authed.system.dispatch.handler(({ context }) => systemSettings.get(context.actor)),
@@ -595,6 +599,19 @@ export function createRouter(deps: RouterDeps) {
       start: authed.channelPairing.start.handler(({ context, input }) =>
         channelPairing.start(context.actor, input),
       ),
+    },
+    ide: {
+      roots: authed.ide.roots.handler(({ context }) => ide.roots(context.actor)),
+      list: authed.ide.list.handler(({ context, input }) =>
+        ide.list(context.actor, input, context.signal),
+      ),
+      read: authed.ide.read.handler(({ context, input }) =>
+        ide.read(context.actor, input, context.signal),
+      ),
+      save: authed.ide.save.handler(({ context, input }) =>
+        ide.save(context.actor, input, context.signal),
+      ),
+      changes: authed.ide.changes.handler(({ context, input }) => ideChanges(context.actor, input)),
     },
     terminal: {
       close: authed.terminal.close.handler(

@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
       ipcRenderer.invoke("desktop.localSettings.request", pathname, body),
   },
   window: {
+    setUnsavedChanges: (dirty) => ipcRenderer.invoke("desktop.window.unsaved", dirty),
     close: () => ipcRenderer.invoke("desktop.window.close"),
     minimize: () => ipcRenderer.invoke("desktop.window.minimize"),
     toggleMaximize: () => ipcRenderer.invoke("desktop.window.toggleMaximize"),

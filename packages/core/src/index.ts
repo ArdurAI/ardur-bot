@@ -38,6 +38,7 @@ export * from "./events.js";
 export * from "./featured-connectors.js";
 export * from "./group-mentions.js";
 export * from "./http-response.js";
+export * from "./ide-changes.js";
 export * from "./integration-policy.js";
 export * from "./learning-journey.js";
 export * from "./learning-signals.js";
