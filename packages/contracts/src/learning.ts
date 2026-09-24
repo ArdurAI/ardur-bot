@@ -55,8 +55,30 @@ export const LearningCandidateSchema = z
 export const LearningProposalSchema = LearningCandidateSchema.safeExtend({
   id: z.string(),
   diff: z.string().max(40000),
-  status: z.enum(["pending", "approved", "rejected", "applied", "expired", "superseded"]),
+  status: z.enum([
+    "pending",
+    "approved",
+    "rejected",
+    "applied",
+    "expired",
+    "superseded",
+    "reverted",
+  ]),
   expiresAt: z.string().datetime(),
+  appliedRevisionId: z.string().optional(),
+  revertedRevisionId: z.string().optional(),
+  appliedAt: z.string().datetime().optional(),
+  documentId: z.string().optional(),
+  blockedReason: z.string().optional(),
+  settingBefore: z.boolean().optional(),
+  provenance: z
+    .object({
+      runId: z.string(),
+      originatingPin: RuntimePinSchema.nullable(),
+      reviewerPin: RuntimePinSchema,
+      policyVersion: z.string(),
+    })
+    .optional(),
 });
 export type LearningProposal = z.infer<typeof LearningProposalSchema>;
 export type LearningCandidate = z.infer<typeof LearningCandidateSchema>;
@@ -149,6 +171,7 @@ export const SpaceLearningConfigInput = z
   .strict();
 export const SpaceLearningConfigSchema = SpaceLearningConfigInput.extend({
   destination: RuntimePinSchema.nullable(),
+  canConfigure: z.boolean().default(false),
 });
 export type SpaceLearningConfig = z.infer<typeof SpaceLearningConfigSchema>;
 export const RunKnowledgeExposureSchema = z.object({
@@ -161,3 +184,73 @@ export const RunKnowledgeExposureSchema = z.object({
   truncated: z.boolean(),
 });
 export type RunKnowledgeExposure = z.infer<typeof RunKnowledgeExposureSchema>;
+
+export const LearningGrantScopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("bot"), botId: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal("user") }).strict(),
+]);
+export const LearningGrantInputSchema = z
+  .object({
+    category: z.enum(["memory", "skill"]),
+    scope: LearningGrantScopeSchema,
+    expiresAt: z.string().datetime().optional(),
+    limits: z
+      .object({ maxPerDay: z.number().int().min(1).max(20).default(5) })
+      .default({ maxPerDay: 5 }),
+  })
+  .strict();
+export const LearningGrantSchema = LearningGrantInputSchema.extend({
+  id: z.string(),
+  spaceId: z.string(),
+  userId: z.string(),
+  createdAt: z.string().datetime(),
+  revokedAt: z.string().datetime().optional(),
+});
+export type LearningGrant = z.infer<typeof LearningGrantSchema>;
+export type LearningGrantInput = z.infer<typeof LearningGrantInputSchema>;
+export const LearningEditSchema = z
+  .object({
+    proposedContent: z.string().min(1).max(12000).optional(),
+    typedDelta: z
+      .object({ key: z.string().max(160), value: z.boolean() })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .refine((value) => (value.proposedContent !== undefined) !== (value.typedDelta !== undefined));
+export type LearningEdit = z.infer<typeof LearningEditSchema>;
+export const LearningActionSchema = z.object({
+  proposal: LearningProposalSchema,
+  conflict: z
+    .object({
+      before: z.string(),
+      applied: z.string(),
+      current: z.string(),
+      expectedRevision: z.number(),
+    })
+    .optional(),
+});
+export const LearningCountsSchema = z.object({
+  pendingCount: z.number(),
+  appliedThisWeek: z.number(),
+});
+export const LearningInboxSchema = z.object({
+  reviews: z.array(ReviewExecutionSchema),
+  proposals: z.array(LearningProposalSchema),
+  botNames: z.record(z.string(), z.string()).default({}),
+  pendingCount: z.number(),
+  appliedThisWeek: z.number(),
+});
+export function learningApprovalBlock(proposal: LearningProposal): string | undefined {
+  if (!proposal.scope.userId) return "Shared skills need a reviewer — coming later";
+  if (["policy-suggestion", "pin-insight", "harness-issue"].includes(proposal.type))
+    return "This suggestion cannot be approved here yet.";
+  if (
+    proposal.type === "preference" &&
+    (!proposal.scope.botId ||
+      !["bot.notifyOnFinish", "bot.autoSpeak"].includes(proposal.typedDelta?.key ?? "") ||
+      typeof proposal.typedDelta?.value !== "boolean")
+  )
+    return "This preference needs a visible setting before it can be applied.";
+  return proposal.blockedReason;
+}

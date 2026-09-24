@@ -86,6 +86,11 @@ msgstr "{0} KB"
 msgid "{0} MB"
 msgstr "{0} MB"
 
+#. placeholder {0}: grant.limits.maxPerDay
+#: src/pages/LearningInbox.tsx
+msgid "{0} per day"
+msgstr ""
+
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} rollup hours"
@@ -96,6 +101,11 @@ msgstr ""
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "{0} runs · {1} tokens"
 msgstr "{0} Läufe · {1} Tokens"
+
+#. placeholder {0}: counts.pendingCount
+#: src/pages/LearningInbox.tsx
+msgid "{0} suggestions to review"
+msgstr ""
 
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -475,6 +485,26 @@ msgstr "API-Schlüssel-Header"
 msgid "Appearance"
 msgstr "Erscheinungsbild"
 
+#: src/pages/LearningInbox.tsx
+msgid "Applied"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply memory suggestions for me automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply memory suggestions for this bot automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply skill suggestions for me automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply skill suggestions for this bot automatically"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Approval boundaries"
 msgstr "Bestätigungsgrenzen"
@@ -484,6 +514,7 @@ msgstr "Bestätigungsgrenzen"
 msgid "Approval for {0}"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Approve"
@@ -492,6 +523,10 @@ msgstr "Genehmigen"
 #: src/pages/shell/message-cards.tsx
 msgid "Approve this server to let your agent use its tools."
 msgstr "Genehmige diesen Server, damit dein Agent seine Tools verwenden kann."
+
+#: src/pages/MemoryHistory.tsx
+msgid "Approved by"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 msgid "Archive"
@@ -632,6 +667,10 @@ msgstr ""
 msgid "Back to sign in"
 msgstr "Zurück zur Anmeldung"
 
+#: src/pages/LearningInbox.tsx
+msgid "Base revision"
+msgstr ""
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "Basis-URL"
@@ -641,6 +680,7 @@ msgstr "Basis-URL"
 msgid "Bearer token"
 msgstr "Bearer-Token"
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Before"
 msgstr ""
@@ -690,6 +730,11 @@ msgstr ""
 msgid "Bot to link"
 msgstr ""
 
+#. placeholder {0}: botName ?? proposal.scope.botId
+#: src/pages/LearningInbox.tsx
+msgid "Bot: {0}"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Bots"
@@ -733,6 +778,7 @@ msgstr "Server nicht erreichbar."
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/dialogs.tsx
@@ -1568,6 +1614,10 @@ msgstr "Agent-Zugriff konnte nicht aktualisiert werden"
 msgid "Could not update computer"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Could not update learning. Try again."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr ""
@@ -1667,6 +1717,10 @@ msgstr "Cron"
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron expression"
 msgstr "Cron-Ausdruck"
+
+#: src/pages/LearningInbox.tsx
+msgid "Current"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Current password"
@@ -1801,6 +1855,7 @@ msgstr ""
 msgid "Destination scope"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
 msgstr ""
@@ -1931,6 +1986,10 @@ msgstr "z. B. Hivenet Agent, Presales, Zeiterfassungs-Bot"
 msgid "Earlier message"
 msgstr "Frühere Nachricht"
 
+#: src/pages/LearningInbox.tsx
+msgid "Edit"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Zuerst bearbeiten"
@@ -2005,6 +2064,10 @@ msgstr "Jeden Monat"
 msgid "Every week"
 msgstr "Jede Woche"
 
+#: src/pages/LearningInbox.tsx
+msgid "Evidence"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor-Token"
@@ -2020,6 +2083,10 @@ msgstr "Erweitern"
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
 msgid "Expand {0}"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Expired"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
@@ -2399,6 +2466,28 @@ msgstr ""
 msgid "Later"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Later edits overlap this change. Review both versions in History."
+msgstr ""
+
+#. placeholder {0}: counts.appliedThisWeek
+#: src/pages/LearningInbox.tsx
+msgid "learned {0} things this week"
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
+msgid "Learning"
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "Learning grant"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning is off for this space."
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Leave"
 msgstr ""
@@ -2572,9 +2661,12 @@ msgstr "Mitglieder ({GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX} auswählen)"
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
 msgid "Memory"
 msgstr "Erinnerungen"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Memory & Skills"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
@@ -2675,6 +2767,10 @@ msgstr "Modell"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Model & effort"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "model estimate"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2888,6 +2984,10 @@ msgstr "Noch keine Nachrichten mit {peerBotName}."
 msgid "No model catalog is available."
 msgstr "Kein Modellkatalog verfügbar."
 
+#: src/pages/LearningInbox.tsx
+msgid "no observations yet"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "Keine Anbieter gefunden."
@@ -2933,6 +3033,7 @@ msgstr "Nicht verbunden"
 msgid "Not in the plugin catalog"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
 msgstr "Jetzt nicht"
@@ -2948,6 +3049,10 @@ msgstr "Nichts läuft mehr"
 #: src/pages/KnowledgeSection.tsx
 msgid "Nothing remembered yet"
 msgstr "Noch nichts gemerkt"
+
+#: src/pages/LearningInbox.tsx
+msgid "Nothing to review."
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -3099,6 +3204,10 @@ msgstr ""
 msgid "Organization API key"
 msgstr "Organisations-API-Schlüssel"
 
+#: src/pages/LearningInbox.tsx
+msgid "Originating run"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
@@ -3160,6 +3269,10 @@ msgstr "Füge deinen API-Schlüssel ein"
 msgid "Paused"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Personal"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Personal credential"
 msgstr "Persönliche Zugangsdaten"
@@ -3171,6 +3284,11 @@ msgstr "Anheften"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "Wiedergabe…"
+
+#: src/pages/LearningInbox.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Policy version"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "POST to"
@@ -3363,6 +3481,14 @@ msgstr ""
 msgid "Refreshing…"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Reject"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Rejected"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Release"
 msgstr "Freigeben"
@@ -3542,6 +3668,7 @@ msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Retry"
 msgstr ""
 
@@ -3563,6 +3690,10 @@ msgstr "Zurück zu Ardur Bot"
 msgid "rev {0}"
 msgstr "Rev. {0}"
 
+#: src/pages/LearningInbox.tsx
+msgid "Review destination"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr ""
@@ -3579,12 +3710,25 @@ msgstr ""
 msgid "Review tools before your bots can use this account."
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Reviewer"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Reviews use this connection and may incur model charges."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Revision"
+msgstr ""
+
 #. placeholder {0}: revision.revision
 #: src/pages/MemoryHistory.tsx
 msgid "Revision {0}"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "Widerrufen"
@@ -3663,6 +3807,7 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3867,6 +4012,7 @@ msgstr "Einrichtungshilfe"
 msgid "Shape"
 msgstr "Form"
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "Geteilt"
@@ -4055,6 +4201,14 @@ msgstr "Subagent"
 #: src/pages/Onboarding.tsx
 msgid "Submit"
 msgstr "Absenden"
+
+#: src/pages/LearningInbox.tsx
+msgid "Suggested content"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Superseded"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -4279,6 +4433,10 @@ msgstr "Treg-Token"
 msgid "Try again"
 msgstr "Erneut versuchen"
 
+#: src/pages/LearningInbox.tsx
+msgid "Turn on"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Type your answer"
 msgstr "Gib deine Antwort ein"
@@ -4289,6 +4447,14 @@ msgstr "Nicht zugewiesen"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Unavailable"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Undo"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Undone"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -4443,6 +4609,10 @@ msgstr "Was soll mit seinen Erinnerungen geschehen?"
 
 #: src/pages/shell/message-cards.tsx
 msgid "What do you want me on first?"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "What I learned"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx

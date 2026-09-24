@@ -28,7 +28,9 @@ export async function loadAgentMemoryContext(
   const documents: ScopedMemoryDocument[] = [
     ...botMemory.documents.map((document) => ({ ...document, scope: "bot" as const })),
     ...userMemory.documents.map((document) => ({ ...document, scope: "user" as const })),
-  ].filter((document) => !document.path.startsWith("skills/"));
+  ].filter(
+    (document) => !document.path.startsWith("skills/") && !document.path.startsWith("preferences/"),
+  );
   if (documents.length === 0) return undefined;
 
   documents.sort(

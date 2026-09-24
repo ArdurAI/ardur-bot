@@ -10,11 +10,14 @@ import type {
   SemanticMemoryProvider,
 } from "@ardurbot/adapter-kit";
 import { MemoryAccessError, MemoryGenerationError } from "@ardurbot/adapter-kit";
+import type { Prisma } from "@ardurbot/db";
 import { previewImport, requireImportReady } from "./portable.js";
 import { assertMemorySafe } from "./redaction.js";
 import { ownedScope } from "./scope.js";
 
 export interface MemoryOperationContext extends AdapterContext {
+  databaseTransaction?: Prisma.TransactionClient;
+  learning?: DocumentCommit["learning"];
   memoryGeneration?: number;
   memoryModel?: MemoryModel;
   threadId?: string;
@@ -76,10 +79,12 @@ export class MemoryService {
   }
   private attribution(
     s: MemorySession,
-  ): Pick<DocumentCommit, "author" | "model" | "runId" | "threadId" | "delivery"> {
+    context: MemoryOperationContext,
+  ): Pick<DocumentCommit, "author" | "model" | "runId" | "threadId" | "delivery" | "learning"> {
     return {
+      learning: context.learning,
       author: {
-        kind: s.access.runId ? "bot" : "user",
+        kind: context.learning ? "learning-loop" : s.access.runId ? "bot" : "user",
         userId: s.access.userId,
         ...(s.access.botId ? { botId: s.access.botId } : {}),
       },
@@ -94,6 +99,7 @@ export class MemoryService {
     };
   }
   private async queued(document: MemoryDocumentHead, context: MemoryOperationContext) {
+    if (context.databaseTransaction) return document;
     if (document.delivery.status === "pending") {
       // The committed revision is the outbox. Reconciliation retries a failed enqueue.
       await this.dependencies.enqueue(context, document).catch(() => undefined);
@@ -103,6 +109,9 @@ export class MemoryService {
         .enqueueGit?.({ ...context, memoryGeneration: document.delivery.generation })
         .catch(() => undefined);
     return document;
+  }
+  async schedule(document: MemoryDocumentHead, context: MemoryOperationContext) {
+    return this.queued(document, { ...context, databaseTransaction: undefined });
   }
   async commit(
     input: {
@@ -134,7 +143,7 @@ export class MemoryService {
         {
           ...input,
           scopeKey: ownedScope(input.scope, s.access, input.botId),
-          ...this.attribution(s),
+          ...this.attribution(s, context),
         },
         s.access,
       );
@@ -167,7 +176,7 @@ export class MemoryService {
           id: existing?.id,
           scopeKey: scope,
           expectedRevision: existing?.revisions.at(-1)?.revision ?? 0,
-          ...this.attribution(s),
+          ...this.attribution(s, context),
         },
         s.access,
       );
@@ -186,7 +195,7 @@ export class MemoryService {
       const doc = await s.store.read(id, s.access);
       if (!doc || doc.deletedAt) throw new MemoryAccessError();
       return s.store.commit(
-        { ...doc, id, content, expectedRevision, ...this.attribution(s) },
+        { ...doc, id, content, expectedRevision, ...this.attribution(s, context) },
         s.access,
       );
     });
@@ -195,7 +204,7 @@ export class MemoryService {
   async delete(id: string, expectedRevision: number, context: MemoryOperationContext) {
     const doc = await this.open(context, async (s) => {
       await s.beforeWrite?.(id);
-      return s.store.delete(id, expectedRevision, this.attribution(s), s.access);
+      return s.store.delete(id, expectedRevision, this.attribution(s, context), s.access);
     });
     return this.queued(doc, context);
   }
@@ -207,7 +216,13 @@ export class MemoryService {
   ) {
     const doc = await this.open(context, async (s) => {
       await s.beforeWrite?.(id);
-      return s.store.restore(id, revision, expectedRevision, this.attribution(s), s.access);
+      return s.store.restore(
+        id,
+        revision,
+        expectedRevision,
+        this.attribution(s, context),
+        s.access,
+      );
     });
     return this.queued(doc, context);
   }
@@ -229,7 +244,7 @@ export class MemoryService {
       if (input.expectedHash !== undefined) {
         requireImportReady(result.preview, input.expectedHash);
         for (const doc of result.bundle.documents) await s.beforeWrite?.(doc.id);
-        await s.store.importBundle(result.bundle, this.attribution(s).delivery, s.access);
+        await s.store.importBundle(result.bundle, this.attribution(s, context).delivery, s.access);
       }
       return result;
     });
@@ -248,7 +263,7 @@ export class MemoryService {
       if (doc.gitSync) return { ...doc, delivery: { ...doc.delivery, generation: s.generation } };
       // Explicit user retries target the currently selected location. Automatic queued retries
       // keep their original provider and generation and can never silently switch destinations.
-      const delivery = this.attribution(s).delivery;
+      const delivery = this.attribution(s, context).delivery;
       if (doc.delivery.generation === s.generation && doc.delivery.provider === delivery.provider)
         await s.store.setDelivery(id, doc.revision, delivery, s.access);
       else {

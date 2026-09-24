@@ -35,6 +35,11 @@ export async function deliverMemory(
   const selected = await service.open(context, async (s) => {
     const doc = await s.store.read(id, s.access);
     if (!doc || doc.revision !== revision || doc.delivery.status === "delivered") return null;
+    // Typed setting revisions are visible history, never semantic knowledge or prompt instructions.
+    if (doc.path.startsWith("preferences/")) {
+      await s.store.setDelivery(id, revision, { ...doc.delivery, status: "delivered" }, s.access);
+      return null;
+    }
     if (
       !s.semantic ||
       s.semantic.describe().id !== doc.delivery.provider ||
@@ -103,7 +108,11 @@ export async function recallDocuments(
       access: s.access,
       generation: s.generation,
       documentIds: bundle.documents
-        .filter((doc) => !doc.revisions.at(-1)!.deletedAt)
+        .filter(
+          (doc) =>
+            !doc.revisions.at(-1)!.deletedAt &&
+            !doc.revisions.at(-1)!.path.startsWith("preferences/"),
+        )
         .map((doc) => doc.id),
     };
   });
@@ -130,7 +139,13 @@ export async function recallDocuments(
         /\[ardur-memory:([a-zA-Z0-9_-]+):(\d+)\]/u.exec(result.provenance ?? "");
       if (!citation) continue;
       const doc = await s.store.read(citation[1]!, s.access);
-      if (!doc || doc.deletedAt || doc.revision !== Number(citation[2]) || seen.has(doc.id))
+      if (
+        !doc ||
+        doc.deletedAt ||
+        doc.path.startsWith("preferences/") ||
+        doc.revision !== Number(citation[2]) ||
+        seen.has(doc.id)
+      )
         continue;
       assertMemorySafe(doc, context.knownSecrets);
       seen.add(doc.id);

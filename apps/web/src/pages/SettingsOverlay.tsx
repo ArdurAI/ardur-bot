@@ -23,6 +23,7 @@ import {
   UsageSettingsPanel,
 } from "./AccountSettingsOverlay";
 import { DevicesSettings } from "./DevicesSettings";
+import { LearningBadge } from "./LearningInbox";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
@@ -101,7 +102,7 @@ export function SettingsOverlay({
     { id: "devices", label: t`Devices`, icon: Monitor },
     { id: "integrations", label: t`Integrations`, icon: Plug },
     { id: "models", label: t`Models`, icon: Cpu },
-    { id: "memory", label: t`Memory`, icon: Brain },
+    { id: "memory", label: t`Memory & Skills`, icon: Brain },
     { id: "voice", label: t`Voice`, icon: Volume2 },
     { id: "usage", label: t`Usage`, icon: Gauge },
     ...(showComputer ? [{ id: "computer" as const, label: t`Computer`, icon: Monitor }] : []),
@@ -186,7 +187,10 @@ export function SettingsOverlay({
                   }`}
                 >
                   <Icon className="size-4 shrink-0" strokeWidth={1.75} />
-                  <span className="whitespace-nowrap">{item.label}</span>
+                  <span className="whitespace-nowrap">
+                    {item.label}
+                    {item.id === "memory" ? <LearningBadge /> : null}
+                  </span>
                 </button>
               );
             })}

@@ -12,13 +12,18 @@ import { learningEligibility, parseSkillMd, redactLearningText } from "@ardurbot
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import type { MemoryService } from "@ardurbot/memory";
 import { z } from "zod";
+import { applyGrantedLearning } from "./learning-auto-apply.js";
 import { resolveReviewerPin, reviewerDestination } from "./learning-pin.js";
+import { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 import {
   LEARNING_POLICY_VERSION,
   learningHash,
   loadLearningRecords,
   reviewEvidence,
 } from "./learning-records.js";
+
+export { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
+
 import { learningSecrets } from "./learning-redaction.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { skillDocumentContext } from "./skill-documents.js";
@@ -50,15 +55,6 @@ export type ReviewTarget = {
   protected: boolean;
   kind: "memory" | "skill";
 };
-export function proposalFingerprint(candidate: LearningCandidate) {
-  return learningHash([
-    candidate.type,
-    candidate.scope,
-    candidate.target,
-    candidate.proposedContent?.trim(),
-    candidate.typedDelta,
-  ]);
-}
 function redactValue<T>(value: T, secrets: readonly string[]): T {
   if (typeof value === "string") return redactLearningText(value, secrets) as T;
   if (Array.isArray(value)) return value.map((item) => redactValue(item, secrets)) as T;
@@ -126,21 +122,6 @@ export function validateLearningCandidate(
   } else if (candidate.expectedBaseRevision !== undefined && candidate.expectedBaseRevision !== 0)
     return "rejected";
   return "pending";
-}
-export function proposalDiff(before: string, after: string): string {
-  if (before === after) return "";
-  // A bounded, server-computed replacement diff; the model cannot supply its own audit.
-  return [
-    `--- current`,
-    `+++ proposed`,
-    ...before
-      .slice(0, 12000)
-      .split("\n")
-      .map((line) => `-${line}`),
-    ...after.split("\n").map((line) => `+${line}`),
-  ]
-    .join("\n")
-    .slice(0, 40000);
 }
 async function reviewTargets(
   deps: LearningReviewDependencies,
@@ -221,7 +202,10 @@ export async function reviewLearning(
     await tx.reviewExecution.create({ data: audit });
     return true;
   });
-  if (!claim) return;
+  if (!claim) {
+    await applyGrantedLearning(deps, run.id);
+    return;
+  }
   const finish = async (status: string, reason: string, tokens?: number) =>
     deps.prisma.reviewExecution.update({
       where: { idempotencyKey },
@@ -444,7 +428,16 @@ export async function reviewLearning(
       return;
     }
     const freshTargets = await reviewTargets(deps, freshSource);
-    const fingerprints = new Set(existing.map((item) => item.fingerprint));
+    const suppressed = await deps.prisma.learningSuppression.findMany({
+      where: { spaceId: run.spaceId, userId: run.userId },
+    });
+    const fingerprints = new Set([
+      ...existing.flatMap((item) => [
+        item.fingerprint,
+        proposalFingerprint(item.body as LearningCandidate),
+      ]),
+      ...suppressed.map((item) => item.fingerprint),
+    ]);
     const proposals: LearningProposal[] = [];
     for (const raw of parsed.proposals) {
       const candidate = LearningCandidateSchema.parse(redactValue(raw, knownSecrets));
@@ -463,8 +456,26 @@ export async function reviewLearning(
       const after = candidate.proposedContent ?? JSON.stringify(candidate.typedDelta);
       const diff = proposalDiff(redactLearningText(before, knownSecrets), after);
       if (!diff) continue;
+      const settingBot =
+        candidate.type === "preference"
+          ? await deps.prisma.bot.findFirst({
+              where: { id: run.botId, spaceId: run.spaceId, userId: run.userId },
+            })
+          : null;
       proposals.push({
         ...candidate,
+        ...(settingBot && candidate.typedDelta?.key === "bot.notifyOnFinish"
+          ? { settingBefore: settingBot.notifyOnFinish }
+          : {}),
+        ...(settingBot && candidate.typedDelta?.key === "bot.autoSpeak"
+          ? { settingBefore: settingBot.autoSpeak }
+          : {}),
+        provenance: {
+          runId: run.id,
+          originatingPin: (run.runtimePin ?? null) as RuntimePin | null,
+          reviewerPin: pin,
+          policyVersion: payload.policyVersion,
+        },
         id: randomUUID(),
         diff,
         status,
@@ -540,6 +551,7 @@ export async function reviewLearning(
         },
       });
     });
+    await applyGrantedLearning(deps, run.id);
   } catch {
     // Provider exceptions and invalid output may contain secrets. Persist no exception text.
     await finish(

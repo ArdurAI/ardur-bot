@@ -26,6 +26,7 @@ function fixture() {
     threadId: thread.id,
     sourceMessageId: "message-1",
     status: "completed",
+    runtimePin: pin,
     startedAt: null,
     completedAt: null,
     thread,
@@ -92,6 +93,8 @@ function fixture() {
         }),
       ),
     },
+    learningSuppression: { findMany: vi.fn(async () => []), findUnique: vi.fn(async () => null) },
+    learningGrant: { findFirst: vi.fn(async () => null) },
     learningProposal: {
       findMany: vi.fn(async () => records.proposals),
       create: vi.fn(async ({ data }: { data: Row }) => {

@@ -28,6 +28,7 @@ export class LifecycleMemoryStore implements MemoryStore {
       .filter(
         (r) =>
           !r.deletedAt &&
+          !r.path.startsWith("preferences/") &&
           (r.scopeKey.kind === input.scope ||
             (input.scope === "user" && r.scopeKey.kind === "space-shared")) &&
           (!input.botId || (r.scopeKey.kind === "bot" && r.scopeKey.botId === input.botId)) &&
@@ -51,6 +52,7 @@ export class LifecycleMemoryStore implements MemoryStore {
       .filter(
         (d) =>
           !d.deletedAt &&
+          !d.path.startsWith("preferences/") &&
           (input.scope === "all" || d.scopeKey.kind === input.scope) &&
           (!input.botId || (d.scopeKey.kind === "bot" && d.scopeKey.botId === input.botId)) &&
           `${d.path}\n${d.content}`.toLowerCase().includes(input.query.toLowerCase()),

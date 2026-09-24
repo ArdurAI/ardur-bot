@@ -1,0 +1,514 @@
+import type {
+  Actor,
+  LearningEdit,
+  LearningProposal,
+  MemoryDocumentHead,
+} from "@ardurbot/contracts";
+import {
+  LearningEditSchema,
+  LearningProposalSchema,
+  learningApprovalBlock,
+  RuntimePinSchema,
+} from "@ardurbot/contracts";
+import { parseSkillMd, redactLearningText } from "@ardurbot/core";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
+import { IsolationError } from "@ardurbot/db";
+import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
+import {
+  learningMember,
+  learningScopeKey,
+  matchingLearningGrant,
+  proposalScope,
+} from "./learning-grants.js";
+import { inverseLearningChange } from "./learning-inverse.js";
+import { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
+import { learningSecrets } from "./learning-redaction.js";
+import { lockMemorySpace } from "./memory/lifecycle.js";
+import type { EncryptedSecretStore } from "./secrets.js";
+import { skillDocumentContext } from "./skill-documents.js";
+
+type Identity = Pick<Actor, "spaceId" | "userId">;
+export interface LearningApplyDependencies {
+  prisma: PrismaClient;
+  memoryDocuments?: MemoryService;
+  secretStore: EncryptedSecretStore;
+}
+export function proposalView(row: {
+  body: unknown;
+  status: string;
+  appliedRevisionId?: string | null;
+  revertedRevisionId?: string | null;
+  appliedAt?: Date | null;
+}) {
+  const { evidenceWatermark: _watermark, ...body } = row.body as Record<string, unknown>;
+  return LearningProposalSchema.parse({
+    ...body,
+    status: row.status,
+    appliedRevisionId: row.appliedRevisionId ?? undefined,
+    revertedRevisionId: row.revertedRevisionId ?? undefined,
+    appliedAt: row.appliedAt?.toISOString(),
+  });
+}
+export function createLearningApplyService(deps: LearningApplyDependencies) {
+  const memory = () => {
+    if (!deps.memoryDocuments) throw new Error("Document storage is unavailable.");
+    return deps.memoryDocuments;
+  };
+  async function operation<T>(
+    id: string,
+    actor: Identity,
+    action: (
+      tx: Prisma.TransactionClient,
+      proposal: LearningProposal,
+      context: MemoryOperationContext,
+      audit: (
+        action: string,
+        before?: string,
+        after?: string,
+        grantId?: string,
+      ) => Promise<unknown>,
+    ) => Promise<T>,
+  ) {
+    return deps.prisma.$transaction(
+      async (tx) => {
+        await lockMemorySpace(tx, actor.spaceId);
+        const row = await tx.learningProposal.findFirst({ where: { id, ...actor } });
+        if (!row) throw new IsolationError();
+        await learningMember(tx, actor, row.botId);
+        // Uses the same thread row lock as clear/delete; queued grants cannot outlive source history.
+        const source = await tx.thread.updateMany({
+          where: {
+            id: row.threadId,
+            spaceId: actor.spaceId,
+            historyCompactionGeneration: row.historyGeneration,
+          },
+          data: { historyCompactionGeneration: row.historyGeneration },
+        });
+        if (source.count !== 1) throw new IsolationError();
+        const proposal = proposalView(row);
+        if (
+          proposal.scope.spaceId !== actor.spaceId ||
+          (proposal.scope.userId && proposal.scope.userId !== actor.userId) ||
+          (proposal.scope.botId && proposal.scope.botId !== row.botId)
+        )
+          throw new IsolationError();
+        const knownSecrets = await learningSecrets(deps.prisma, deps.secretStore, row);
+        const context: MemoryOperationContext = {
+          ...skillDocumentContext({
+            ...actor,
+            botId: row.botId,
+            runId: row.runId,
+            threadId: row.threadId,
+          }),
+          knownSecrets,
+          databaseTransaction: tx,
+        };
+        const audit = (
+          action: string,
+          beforeRevisionId?: string,
+          afterRevisionId?: string,
+          grantId?: string,
+        ) =>
+          tx.learningAudit.create({
+            data: {
+              ...actor,
+              proposalId: id,
+              action,
+              category: proposal.type,
+              scopeKey: learningScopeKey(proposalScope(proposal)),
+              beforeRevisionId,
+              afterRevisionId,
+              grantId,
+            },
+          });
+        return action(tx, proposal, context, audit);
+      },
+      { timeout: 60_000 },
+    );
+  }
+  async function save(
+    tx: Prisma.TransactionClient,
+    proposal: LearningProposal,
+    extra: Record<string, unknown> = {},
+  ) {
+    const row = await tx.learningProposal.update({
+      where: { id: proposal.id },
+      data: {
+        body: proposal as Prisma.InputJsonValue,
+        status: proposal.status,
+        ...extra,
+      },
+    });
+    return proposalView(row);
+  }
+  async function target(
+    tx: Prisma.TransactionClient,
+    proposal: LearningProposal,
+    context: MemoryOperationContext,
+    id = proposal.target.documentId,
+    allowDeleted = false,
+  ) {
+    if (!id) return null;
+    const head = await memory().read(id, context);
+    if (
+      !head ||
+      (!allowDeleted && head.deletedAt) ||
+      head.scopeKey.kind === "space-shared" ||
+      head.scopeKey.userId !== context.userId ||
+      (head.scopeKey.kind === "bot"
+        ? head.scopeKey.botId !== proposal.scope.botId
+        : !!proposal.scope.botId)
+    )
+      throw new IsolationError();
+    if (head.path.startsWith("skills/")) {
+      const skill = await tx.agentSkill.findFirst({
+        where: { documentId: id, spaceId: context.spaceId, userId: context.userId },
+      });
+      if (
+        !skill ||
+        skill.protected ||
+        !["user", "learned"].includes(skill.source) ||
+        !["user", "learned"].includes(skill.origin) ||
+        skill.botId !== (proposal.scope.botId ?? null)
+      )
+        throw new Error("Protected and repository skills cannot be changed here.");
+      if (proposal.type !== "skill") throw new IsolationError();
+    } else if (proposal.type === "skill") throw new IsolationError();
+    return head;
+  }
+  async function editContent(
+    tx: Prisma.TransactionClient,
+    proposal: LearningProposal,
+    context: MemoryOperationContext,
+    edits: LearningEdit,
+    head: MemoryDocumentHead | null,
+  ) {
+    const input = LearningEditSchema.parse(edits);
+    if (proposal.type === "preference") {
+      if (!input.typedDelta || input.typedDelta.key !== proposal.typedDelta?.key)
+        throw new Error("Edit the suggested setting value only.");
+      proposal.typedDelta = input.typedDelta;
+    } else {
+      if (input.proposedContent === undefined) throw new Error("Provide document content.");
+      proposal.proposedContent = redactLearningText(input.proposedContent, context.knownSecrets);
+    }
+    validateContent(proposal);
+    proposal.diff = proposalDiff(
+      redactLearningText(
+        head?.content ?? JSON.stringify(proposal.settingBefore) ?? "",
+        context.knownSecrets,
+      ),
+      proposal.proposedContent ?? JSON.stringify(proposal.typedDelta),
+    );
+    await tx.learningProposal.update({
+      where: { id: proposal.id },
+      data: { body: proposal as Prisma.InputJsonValue },
+    });
+  }
+  function validateContent(proposal: LearningProposal) {
+    if (
+      proposal.type === "skill" &&
+      (!proposal.proposedContent ||
+        "error" in parseSkillMd(proposal.proposedContent) ||
+        /```|~~~/.test(proposal.proposedContent))
+    )
+      throw new Error("Use a prose skill with name and description frontmatter.");
+    if (["memory", "skill"].includes(proposal.type) && !proposal.proposedContent?.trim())
+      throw new Error("Provide document content.");
+  }
+  async function attribution(
+    tx: Prisma.TransactionClient,
+    proposal: LearningProposal,
+    context: MemoryOperationContext,
+    parentRevision: number,
+    action: "apply" | "revert",
+    grantId?: string,
+  ) {
+    const run = await tx.run.findFirst({
+      where: { id: context.runId, spaceId: context.spaceId, userId: context.userId },
+    });
+    const review = await tx.reviewExecution.findFirst({
+      where: {
+        runId: context.runId,
+        spaceId: context.spaceId,
+        proposalIds: { array_contains: [proposal.id] },
+      },
+    });
+    if (!run || !review) throw new IsolationError();
+    const reviewerPin = RuntimePinSchema.parse(review.reviewerPin);
+    context.learning = {
+      proposalId: proposal.id,
+      approvingUserId: context.userId,
+      grantId,
+      originatingPin: run.runtimePin ? RuntimePinSchema.parse(run.runtimePin) : null,
+      reviewerPin,
+      policyVersion: review.policyVersion,
+      action,
+      parentRevision,
+    };
+    context.memoryModel =
+      reviewerPin.provider && reviewerPin.modelId
+        ? {
+            provider: reviewerPin.provider,
+            modelId: reviewerPin.modelId,
+            effort: reviewerPin.effort ?? null,
+          }
+        : undefined;
+    proposal.provenance = {
+      runId: run.id,
+      originatingPin: context.learning.originatingPin,
+      reviewerPin,
+      policyVersion: review.policyVersion,
+    };
+  }
+  async function apply(id: string, actor: Identity, edits?: LearningEdit, grantId?: string) {
+    actor = { spaceId: actor.spaceId, userId: actor.userId };
+    let committed: { doc: MemoryDocumentHead; context: MemoryOperationContext } | undefined;
+    const result = await operation(id, actor, async (tx, proposal, context, audit) => {
+      if (proposal.status !== "pending") throw new Error("This suggestion is no longer pending.");
+      if (new Date(proposal.expiresAt) <= new Date()) {
+        proposal.status = "expired";
+        await audit("expired");
+        return { proposal: await save(tx, proposal) };
+      }
+      const blocked = learningApprovalBlock(proposal);
+      if (blocked) {
+        proposal.blockedReason = blocked;
+        await audit("apply-refused");
+        return { proposal: await save(tx, proposal) };
+      }
+      if (grantId) {
+        const enabled = await tx.spaceLearningConfig.findUnique({
+          where: { spaceId: actor.spaceId },
+        });
+        const grant = await matchingLearningGrant(tx, actor, proposal);
+        if (!enabled?.enabled || !grant || grant.id !== grantId)
+          throw new Error("Automatic learning is no longer allowed.");
+        const day = new Date();
+        day.setUTCHours(0, 0, 0, 0);
+        const used = await tx.learningAudit.count({
+          where: { grantId, action: "auto-apply", createdAt: { gte: day } },
+        });
+        if (used >= grant.maxPerDay) throw new Error("The daily learning limit has been reached.");
+      }
+      const head = await target(tx, proposal, context);
+      if ((head?.revision ?? 0) !== (proposal.expectedBaseRevision ?? 0)) {
+        proposal.status = "superseded";
+        proposal.blockedReason = "This changed since the suggestion was made";
+        await audit("superseded");
+        return { proposal: await save(tx, proposal) };
+      }
+      if (edits) {
+        await editContent(tx, proposal, context, edits, head);
+        await audit("edit");
+      }
+      if (proposal.proposedContent !== undefined)
+        proposal.proposedContent = redactLearningText(
+          proposal.proposedContent,
+          context.knownSecrets,
+        );
+      validateContent(proposal);
+      if (proposal.type === "preference") {
+        const key =
+          proposal.typedDelta!.key === "bot.notifyOnFinish" ? "notifyOnFinish" : "autoSpeak";
+        const bot = await tx.bot.findFirst({ where: { id: proposal.scope.botId, ...actor } });
+        if (
+          !bot ||
+          typeof proposal.settingBefore !== "boolean" ||
+          bot[key] !== proposal.settingBefore
+        ) {
+          proposal.status = "superseded";
+          proposal.blockedReason = "This changed since the suggestion was made";
+          await audit("superseded");
+          return { proposal: await save(tx, proposal) };
+        }
+        await tx.bot.update({ where: { id: bot.id }, data: { [key]: proposal.typedDelta!.value } });
+      }
+      await attribution(tx, proposal, context, head?.revision ?? 0, "apply", grantId);
+      const content = proposal.proposedContent ?? JSON.stringify(proposal.typedDelta);
+      proposal.diff = proposalDiff(
+        redactLearningText(head?.content ?? "", context.knownSecrets),
+        content,
+      );
+      const doc = head
+        ? await memory().update(head.id, content, head.revision, context)
+        : await memory().commit(
+            {
+              scope: proposal.scope.botId ? "bot" : "user",
+              botId: proposal.scope.botId,
+              path: `${proposal.type === "skill" ? "skills" : proposal.type === "preference" ? "preferences" : "learned"}/${proposal.id}.md`,
+              content,
+              expectedRevision: 0,
+            },
+            context,
+          );
+      if (proposal.type === "skill") {
+        const parsed = parseSkillMd(content);
+        if ("error" in parsed) throw new Error("This skill is invalid.");
+        if (head)
+          await tx.agentSkill.updateMany({
+            where: { documentId: head.id, ...actor },
+            data: {
+              name: parsed.name,
+              description: parsed.description,
+              activeRevision: doc.revision,
+              content: "",
+            },
+          });
+        else
+          await tx.agentSkill.create({
+            data: {
+              ...actor,
+              botId: proposal.scope.botId,
+              name: parsed.name,
+              description: parsed.description,
+              origin: "learned",
+              source: "learned",
+              documentId: doc.id,
+              activeRevision: doc.revision,
+              content: "",
+            },
+          });
+      }
+      proposal.status = "applied";
+      proposal.documentId = doc.id;
+      await audit(
+        grantId ? "auto-apply" : "approve",
+        head ? `${head.id}:${head.revision}` : undefined,
+        `${doc.id}:${doc.revision}`,
+        grantId,
+      );
+      const saved = await save(tx, proposal, {
+        appliedRevisionId: `${doc.id}:${doc.revision}`,
+        appliedAt: new Date(),
+        grantId,
+      });
+      committed = { doc, context };
+      return { proposal: saved };
+    });
+    if (committed) await memory().schedule(committed.doc, committed.context);
+    return result;
+  }
+  return {
+    approve: (id: string, actor: Identity, edits?: LearningEdit) => apply(id, actor, edits),
+    // Reviewers cannot supply an actor as a substitute for a grant. The grant is read again inside apply.
+    async autoApply(id: string, grantId: string) {
+      const grant = await deps.prisma.learningGrant.findUnique({ where: { id: grantId } });
+      if (!grant) throw new IsolationError();
+      return apply(id, { spaceId: grant.spaceId, userId: grant.userId }, undefined, grantId);
+    },
+    async edit(id: string, actor: Identity, edits: LearningEdit) {
+      actor = { spaceId: actor.spaceId, userId: actor.userId };
+      return operation(id, actor, async (tx, proposal, context, audit) => {
+        if (proposal.status !== "pending" || new Date(proposal.expiresAt) <= new Date())
+          throw new Error("This suggestion is no longer pending.");
+        if (learningApprovalBlock(proposal))
+          throw new Error("This suggestion cannot be edited here.");
+        const head = await target(tx, proposal, context);
+        await editContent(tx, proposal, context, edits, head);
+        await audit("edit");
+        return { proposal: await save(tx, proposal) };
+      });
+    },
+    async reject(id: string, actor: Identity, _reason?: string) {
+      actor = { spaceId: actor.spaceId, userId: actor.userId };
+      return operation(id, actor, async (tx, proposal, _context, audit) => {
+        if (proposal.status !== "pending") throw new Error("This suggestion is no longer pending.");
+        const row = await tx.learningProposal.findUniqueOrThrow({ where: { id } });
+        for (const fingerprint of new Set([row.fingerprint, proposalFingerprint(proposal)]))
+          await tx.learningSuppression.upsert({
+            where: { spaceId_userId_fingerprint: { ...actor, fingerprint } },
+            create: { ...actor, fingerprint },
+            update: {},
+          });
+        proposal.status = "rejected";
+        await audit("reject");
+        return { proposal: await save(tx, proposal) };
+      });
+    },
+    async revert(id: string, actor: Identity) {
+      actor = { spaceId: actor.spaceId, userId: actor.userId };
+      let committed: { doc: MemoryDocumentHead; context: MemoryOperationContext } | undefined;
+      const result = await operation(id, actor, async (tx, proposal, context, audit) => {
+        if (proposal.status !== "applied" || !proposal.documentId || !proposal.appliedRevisionId)
+          throw new Error("This suggestion has no applied change to undo.");
+        const head = await target(tx, proposal, context, proposal.documentId, true);
+        if (!head) throw new IsolationError();
+        const revision = Number(proposal.appliedRevisionId.split(":").at(-1));
+        const history = await memory().history(
+          head.id,
+          { cursor: revision + 1, limit: 2 },
+          context,
+        );
+        const applied = history.items.find((item) => item.revision === revision);
+        const parent = history.items.find((item) => item.revision === revision - 1);
+        if (!applied || (revision > 1 && !parent)) throw new IsolationError();
+        const inverse = head.deletedAt
+          ? null
+          : revision === 1
+            ? head.revision === revision
+              ? ""
+              : null
+            : inverseLearningChange(parent!.content, applied.content, head.content);
+        let settingConflict = false;
+        let conflictBefore = parent?.content ?? "";
+        let conflictCurrent = head.content;
+        if (proposal.type === "preference") {
+          const key =
+            proposal.typedDelta!.key === "bot.notifyOnFinish" ? "notifyOnFinish" : "autoSpeak";
+          const bot = await tx.bot.findFirst({ where: { id: proposal.scope.botId, ...actor } });
+          if (!bot) throw new IsolationError();
+          conflictBefore = JSON.stringify({
+            key: proposal.typedDelta!.key,
+            value: proposal.settingBefore,
+          });
+          conflictCurrent = JSON.stringify({ key: proposal.typedDelta!.key, value: bot[key] });
+          settingConflict = bot[key] !== proposal.typedDelta!.value;
+          if (!settingConflict && inverse !== null) {
+            const changed = await tx.bot.updateMany({
+              where: { id: bot!.id, ...actor, [key]: proposal.typedDelta!.value },
+              data: { [key]: proposal.settingBefore },
+            });
+            settingConflict = changed.count !== 1;
+          }
+        }
+        if (inverse === null || settingConflict) {
+          await audit("revert-conflict", proposal.appliedRevisionId, `${head.id}:${head.revision}`);
+          return {
+            proposal,
+            conflict: {
+              before: redactLearningText(conflictBefore, context.knownSecrets),
+              applied: redactLearningText(applied.content, context.knownSecrets),
+              current: redactLearningText(conflictCurrent, context.knownSecrets),
+              expectedRevision: head.revision,
+            },
+          };
+        }
+        await attribution(tx, proposal, context, head.revision, "revert");
+        const doc =
+          revision === 1
+            ? await memory().delete(head.id, head.revision, context)
+            : await memory().update(head.id, inverse, head.revision, context);
+        if (proposal.type === "skill") {
+          const metadata = doc.deletedAt ? null : parseSkillMd(doc.content);
+          if (metadata && "error" in metadata)
+            throw new Error("Review this skill before undoing it.");
+          await tx.agentSkill.updateMany({
+            where: { documentId: doc.id, ...actor },
+            data: {
+              activeRevision: doc.revision,
+              ...(metadata ? { name: metadata.name, description: metadata.description } : {}),
+            },
+          });
+        }
+        proposal.status = "reverted";
+        await audit("revert", `${head.id}:${head.revision}`, `${doc.id}:${doc.revision}`);
+        const saved = await save(tx, proposal, { revertedRevisionId: `${doc.id}:${doc.revision}` });
+        committed = { doc, context };
+        return { proposal: saved };
+      });
+      if (committed) await memory().schedule(committed.doc, committed.context);
+      return result;
+    },
+  };
+}
