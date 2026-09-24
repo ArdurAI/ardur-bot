@@ -517,6 +517,10 @@ msgstr "보관됨"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "보관되었습니다. 대화, 기억, 파일은 유지됩니다."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ardur (built-in)"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
 msgstr "인자"
@@ -825,6 +829,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "채팅 설정"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Check again"
+msgstr ""
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "확인 실패"
@@ -859,12 +867,20 @@ msgstr "봇 모양과 색을 고르거나 이미지를 업로드하세요"
 msgid "Choose a bot…"
 msgstr "Bot 선택…"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Choose a model"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "새 비밀번호 선택"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Choose bots and the tools they can use."
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Choose effort"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -878,6 +894,14 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Ardur Bot에서 기본으로 사용할 연결된 모델을 선택하세요."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Claude Code (your claude sign-in)"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Claude subscriptions are not supported here yet; use an API key."
@@ -981,6 +1005,18 @@ msgstr "클라우드"
 msgid "Code"
 msgstr "코드"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex (your ChatGPT sign-in)"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex app-server unavailable"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex runs on host computers for now — change the bot's computer or its runtime."
+msgstr ""
+
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
 msgid "Collapse {0}"
@@ -1081,6 +1117,7 @@ msgstr ""
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "연결"
@@ -1179,6 +1216,10 @@ msgstr "계속"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Continue in Background"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Continue with ChatGPT"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -2055,6 +2096,10 @@ msgstr "펼치기"
 msgid "Expand {0}"
 msgstr "{0} 펼치기"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
 msgstr ""
@@ -2707,6 +2752,7 @@ msgstr "분"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Model"
 msgstr "모델"
 
@@ -2961,6 +3007,10 @@ msgstr "트리거 없음"
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "아직 없음"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "not available"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
@@ -3692,11 +3742,16 @@ msgid "Running…"
 msgstr "실행 중…"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Runtime availability could not be checked."
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -3976,6 +4031,10 @@ msgstr ""
 msgid "Sign up"
 msgstr "가입하기"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in expired. Connect Codex again."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr ""
@@ -4209,6 +4268,7 @@ msgid "The service may use its own embedding providers. Check its settings befor
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "생각 깊이"
 

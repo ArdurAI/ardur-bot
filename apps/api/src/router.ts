@@ -34,6 +34,7 @@ import {
   archiveBot,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
+  CodexConnections,
   ComputerBusyError,
   cancelComputerRunWork,
   checkpointAndRecordComputerWorkspace,
@@ -59,6 +60,9 @@ import {
   McpOAuthBroker,
   mapScratchpadItem,
   modelCredentialDto,
+  NATIVE_HOST_OWNER_MESSAGE,
+  nativeHostOwner,
+  nativeRuntimeAvailability,
   pickReusableConnection,
   planLiveConnectionSync,
   prepareApiInstall,
@@ -497,6 +501,7 @@ function mapSpaceLifecycleError(error: unknown): unknown {
 }
 
 export function createRouter(deps: RouterDeps) {
+  const nativeConnections = new CodexConnections();
   const os = implement(appContract).$context<{
     actor: Actor | null;
     signal?: AbortSignal;
@@ -866,6 +871,30 @@ export function createRouter(deps: RouterDeps) {
         }
       }),
     },
+    runtimes: {
+      availability: authed.runtimes.availability.handler(async ({ context, input }) =>
+        input.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, context.actor.userId))
+          ? {
+              runtimeKind: input.runtimeKind,
+              available: false,
+              models: [],
+              reason: NATIVE_HOST_OWNER_MESSAGE,
+            }
+          : nativeRuntimeAvailability(input.runtimeKind),
+      ),
+      connectCodex: authed.runtimes.connectCodex.handler(async ({ context }) => {
+        if (!(await nativeHostOwner(deps.prisma, context.actor.userId)))
+          throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });
+        return nativeConnections.begin(context.actor.userId);
+      }),
+      connectStatus: authed.runtimes.connectStatus.handler(({ context, input }) =>
+        nativeConnections.status(context.actor.userId, input.loginId),
+      ),
+      cancelConnect: authed.runtimes.cancelConnect.handler(async ({ context, input }) => {
+        await nativeConnections.cancel(context.actor.userId, input.loginId);
+        return { ok: true as const };
+      }),
+    },
     models: {
       list: authed.models.list.handler(async () => [...listPiCatalog(), scriptedCatalogEntry]),
       credentials: authed.models.credentials.handler(async ({ context }) => {
@@ -1084,6 +1113,8 @@ export function createRouter(deps: RouterDeps) {
             thinkingLevel: source.thinkingLevel,
             modelCredentialId: source.modelCredentialId,
             modelPinRevision: source.modelPinRevision,
+            runtimeKind: source.runtimeKind,
+            runtimeExperimental: source.runtimeExperimental,
           })
           .catch((error: unknown) => {
             throw mapSpaceLifecycleError(error);
@@ -1149,6 +1180,7 @@ export function createRouter(deps: RouterDeps) {
             voiceId: input.voiceId,
             autoSpeak: input.autoSpeak,
             ...modelPinUpdate,
+            runtimeExperimental: input.runtimeExperimental,
             ...(input.teamChatAmbientEnabled !== undefined
               ? { teamChatAmbientEnabled: input.teamChatAmbientEnabled }
               : {}),

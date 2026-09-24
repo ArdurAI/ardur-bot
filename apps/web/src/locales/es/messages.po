@@ -517,6 +517,10 @@ msgstr "Archivado"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "Archivado. Se conservan el chat, la memoria y los archivos."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ardur (built-in)"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
 msgstr "Argumentos"
@@ -825,6 +829,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "Configuración del chat"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Check again"
+msgstr ""
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "La comprobación falló"
@@ -859,12 +867,20 @@ msgstr "Elige una forma y color del bot, o sube una imagen"
 msgid "Choose a bot…"
 msgstr "Elige un bot…"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Choose a model"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "Elige una contraseña nueva"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Choose bots and the tools they can use."
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Choose effort"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -878,6 +894,14 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Elige qué modelo conectado usa Ardur Bot."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Claude Code (your claude sign-in)"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Claude subscriptions are not supported here yet; use an API key."
@@ -981,6 +1005,18 @@ msgstr "Nube"
 msgid "Code"
 msgstr "Código"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex (your ChatGPT sign-in)"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex app-server unavailable"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex runs on host computers for now — change the bot's computer or its runtime."
+msgstr ""
+
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
 msgid "Collapse {0}"
@@ -1081,6 +1117,7 @@ msgstr ""
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "Conectar"
@@ -1179,6 +1216,10 @@ msgstr "Continuar"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Continue in Background"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Continue with ChatGPT"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -2055,6 +2096,10 @@ msgstr "Expandir"
 msgid "Expand {0}"
 msgstr "Expandir {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
 msgstr ""
@@ -2707,6 +2752,7 @@ msgstr "minutos"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Model"
 msgstr "Modelo"
 
@@ -2961,6 +3007,10 @@ msgstr "Sin disparador"
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "Ninguno aún"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "not available"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
@@ -3692,11 +3742,16 @@ msgid "Running…"
 msgstr "Ejecutando…"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Runtime availability could not be checked."
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -3976,6 +4031,10 @@ msgstr ""
 msgid "Sign up"
 msgstr "Registrarse"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in expired. Connect Codex again."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr ""
@@ -4209,6 +4268,7 @@ msgid "The service may use its own embedding providers. Check its settings befor
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "Pensando"
 

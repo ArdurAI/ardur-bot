@@ -91,6 +91,7 @@ export async function backfillRuntimePins({
             modelId: bot.modelId,
             effort,
             credentialId: credential.id,
+            runtimeKind: "pi" as const,
             revision: 1,
           };
           const eventScope = { spaceId: bot.spaceId, threadId: thread.id, botId: bot.id };

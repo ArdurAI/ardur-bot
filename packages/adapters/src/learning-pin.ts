@@ -15,7 +15,14 @@ export async function reviewerDestination(
     const parsed = RuntimePinSchema.safeParse(configured);
     return parsed.success
       ? parsed.data
-      : { provider: null, modelId: null, credentialId: null, effort: "medium", revision: 0 };
+      : {
+          runtimeKind: "pi",
+          provider: null,
+          modelId: null,
+          credentialId: null,
+          effort: "medium",
+          revision: 0,
+        };
   }
   const credential = await findDefaultModelCredential(prisma, scope);
   return {
@@ -23,6 +30,7 @@ export async function reviewerDestination(
     modelId: credential?.defaultModel ?? null,
     effort: "medium",
     credentialId: credential?.id ?? null,
+    runtimeKind: "pi" as const,
     revision: 0,
   };
 }

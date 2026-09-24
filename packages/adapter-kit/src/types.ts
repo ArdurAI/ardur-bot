@@ -1,4 +1,9 @@
-import type { ConnectionCatalogItem, RuntimePin, SandboxKind } from "@ardurbot/contracts";
+import type {
+  ConnectionCatalogItem,
+  RuntimeInfo,
+  RuntimePin,
+  SandboxKind,
+} from "@ardurbot/contracts";
 
 export interface AdapterContext {
   operationId: string;
@@ -380,6 +385,9 @@ export interface AgentRunRequest {
   botId: string;
   threadId: string;
   runId: string;
+  nativeSession?: RuntimeInfo;
+  nativeCwd?: string;
+  onRuntimeInfo?: (info: RuntimeInfo) => Promise<void>;
   sourceMessageId?: string | null;
   prompt: string;
   instructions: string;

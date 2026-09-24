@@ -1,4 +1,5 @@
 import type { Bot } from "@ardurbot/contracts";
+import { runtimeNames } from "@ardurbot/contracts";
 import { spaceDefaultEffort } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -6,9 +7,22 @@ import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-avail
 import type { ModelSettings } from "../../lib/use-model-settings";
 
 export function effectiveBotModel(
-  bot: Pick<Bot, "modelProvider" | "modelId" | "thinkingLevel" | "modelCredentialId">,
-  { me, catalog, credentials }: ModelSettings,
+  bot: Pick<
+    Bot,
+    "modelProvider" | "modelId" | "thinkingLevel" | "modelCredentialId" | "runtimeKind"
+  >,
+  settings: ModelSettings | null,
 ) {
+  if (bot.runtimeKind && bot.runtimeKind !== "pi")
+    return {
+      label: bot.modelId ?? "unset model",
+      providerLabel: runtimeNames[bot.runtimeKind],
+      thinkingLevel: bot.thinkingLevel,
+      isDefault: false,
+      unavailable: !bot.modelId || !bot.thinkingLevel,
+    };
+  if (!settings) return null;
+  const { me, catalog, credentials } = settings;
   const hasOverride = Boolean(
     bot.modelProvider != null || bot.modelId != null || bot.modelCredentialId != null,
   );
@@ -54,9 +68,9 @@ export function BotModelChip({
   onClick: () => void;
 }) {
   const { t } = useLingui();
-  const model = settings ? effectiveBotModel(bot, settings) : null;
+  const model = effectiveBotModel(bot, settings);
   if (!model) return null;
-  const label = `${model.providerLabel} · ${model.label}${model.thinkingLevel ? ` · ${model.thinkingLevel}` : ""}${model.unavailable ? t` · not available` : ""}`;
+  const label = `${bot.runtimeKind && bot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${model.thinkingLevel ? ` · ${model.thinkingLevel}` : ""}${model.unavailable ? t` · not available` : ""}`;
   return (
     <Button
       variant="ghost"

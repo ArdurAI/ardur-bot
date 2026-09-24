@@ -10,6 +10,7 @@ it("captures the space default at medium effort and never substitutes for a revo
     modelId: "grok-4.6",
     credentialId: "connection",
     effort: "medium",
+    runtimeKind: "pi" as const,
     revision: 0,
   };
   const preference = vi.fn(async () => ({

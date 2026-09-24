@@ -1,0 +1,3 @@
+ALTER TABLE "bots" ADD COLUMN "runtimeKind" TEXT NOT NULL DEFAULT 'pi';
+ALTER TABLE "runs" ADD COLUMN "runtimeInfo" JSONB;
+ALTER TABLE "bots" ADD COLUMN "runtimeExperimental" BOOLEAN NOT NULL DEFAULT false;

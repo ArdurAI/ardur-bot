@@ -318,6 +318,7 @@ describe("runAutoReviewJudge instructions", () => {
           modelId: "grok-4.6",
           effort: "high",
           credentialId: "bound",
+          runtimeKind: "pi" as const,
           revision: 1,
         },
       },

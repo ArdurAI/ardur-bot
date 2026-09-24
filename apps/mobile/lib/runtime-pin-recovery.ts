@@ -2,7 +2,10 @@ import type { RuntimeProblem } from "@ardurbot/contracts";
 
 export function runtimePinRecovery(problem: RuntimeProblem, botId: string) {
   return {
-    connect: { pathname: "/models" as const, params: { provider: problem.pin.provider ?? "" } },
+    connect:
+      problem.pin.runtimeKind === "pi"
+        ? { pathname: "/models" as const, params: { provider: problem.pin.provider ?? "" } }
+        : { pathname: "/bot-settings" as const, params: { botId } },
     changePin: { pathname: "/bot-settings" as const, params: { botId } },
   };
 }

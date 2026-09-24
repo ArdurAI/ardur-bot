@@ -2,6 +2,7 @@ import type { AgentRunModel } from "@ardurbot/adapter-kit";
 import type {
   Actor,
   ResolvedPin,
+  RuntimeKind,
   RuntimePin,
   RuntimeProblem,
   ThinkingLevel,
@@ -111,10 +112,12 @@ export type BotPinFields = {
   thinkingLevel?: string | null;
   modelCredentialId?: string | null;
   modelPinRevision?: number;
+  runtimeKind?: RuntimeKind | string;
 };
 
 export function requestedBotPin(bot: BotPinFields): RuntimePin {
   return {
+    runtimeKind: (bot.runtimeKind ?? "pi") as RuntimeKind,
     provider: bot.modelProvider ?? null,
     modelId: bot.modelId ?? null,
     effort: bot.thinkingLevel ?? null,
@@ -125,7 +128,11 @@ export function requestedBotPin(bot: BotPinFields): RuntimePin {
 
 export function hasBotPin(bot: BotPinFields | null): boolean {
   return Boolean(
-    bot && (bot.modelProvider != null || bot.modelId != null || bot.modelCredentialId != null),
+    bot &&
+      ((bot.runtimeKind && bot.runtimeKind !== "pi") ||
+        bot.modelProvider != null ||
+        bot.modelId != null ||
+        bot.modelCredentialId != null),
   );
 }
 
@@ -134,7 +141,7 @@ export async function credentialForPin(
   scope: Pick<Actor, "userId" | "spaceId">,
   pin: RuntimePin,
 ) {
-  return pin.provider && pin.credentialId && pin.provider !== "scripted"
+  return pin.runtimeKind === "pi" && pin.provider && pin.credentialId && pin.provider !== "scripted"
     ? findBoundModelCredential(prisma, scope, pin.provider, pin.credentialId)
     : null;
 }

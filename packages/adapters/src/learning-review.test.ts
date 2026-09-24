@@ -13,6 +13,7 @@ const pin: RuntimePin = {
   modelId: "test-model",
   effort: "medium",
   credentialId: "connection",
+  runtimeKind: "pi" as const,
   revision: 1,
 };
 const scope = { spaceId: "space-1", userId: "user-1", botId: "bot-1" };

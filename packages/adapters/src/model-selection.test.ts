@@ -22,6 +22,7 @@ const pin = {
   modelId: "grok-4.6",
   effort: "high",
   credentialId: "credential-xai",
+  runtimeKind: "pi" as const,
   revision: 1,
 };
 const connected = credential("xai", "grok-4.6");

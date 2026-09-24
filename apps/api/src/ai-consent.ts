@@ -56,6 +56,7 @@ export async function aiConsentStatus(
               thinkingLevel: true,
               modelCredentialId: true,
               modelPinRevision: true,
+              runtimeKind: true,
             },
           })
         : [],

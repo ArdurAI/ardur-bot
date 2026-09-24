@@ -371,6 +371,8 @@ model Bot {
   thinkingLevel     String?
   modelCredentialId String?
   modelPinRevision  Int @default(0)
+  runtimeKind       String @default("pi")
+  runtimeExperimental Boolean @default(false)
   webhookSecretId   String?
   teamChatAmbientEnabled Boolean @default(false)
   teamChatRules          String  @default("")
@@ -585,6 +587,7 @@ model Run {
   status               String
   trigger              String
   runtimePin           Json?
+  runtimeInfo          Json?
   modelProvider        String?
   modelId              String?
   error                String?

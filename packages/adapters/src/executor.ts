@@ -283,7 +283,11 @@ import {
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
 import { recordRunUsage } from "./run-usage.js";
+import type { RuntimeRegistry } from "./runtime-registry.js";
+import { createRuntimeRegistry } from "./runtime-registry.js";
 import { withRuntimeCleanup } from "./runtime-stream.js";
+import { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "./runtimes/native-host.js";
+import { runtimeSession } from "./runtimes/runtime-session.js";
 import {
   cancelScheduleFromTool,
   createScheduleFromTool,
@@ -566,6 +570,7 @@ export interface ExecutorDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
   runtime: AgentRuntime;
+  runtimeRegistry?: RuntimeRegistry;
   sandbox: SandboxProvider;
   memory: MemoryStore;
   memoryDocuments?: MemoryService;
@@ -856,6 +861,7 @@ export function buildApprovalContinuation(
 }
 
 export function createRunExecutor(deps: ExecutorDeps) {
+  const runtimeRegistry = deps.runtimeRegistry ?? createRuntimeRegistry(deps.runtime);
   const web = deps.web ?? createWebProvider();
   const browser = deps.browser ?? createBrowserProvider(undefined, { sandbox: deps.sandbox });
   const cloudAgent = deps.cloudAgent;
@@ -1287,6 +1293,40 @@ export function createRunExecutor(deps: ExecutorDeps) {
         });
         if (captured.count !== 1) return;
         if (selected.kind === "problem") throw new RuntimePinError(selected);
+        if (selected.pin.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, run.userId)))
+          throw new RuntimePinError(
+            runtimePinProblem(selected.pin, "runtime-unavailable", NATIVE_HOST_OWNER_MESSAGE),
+          );
+        const runtimeSelection = await runtimeRegistry.resolve(
+          selected.pin,
+          bot.computer?.kind,
+          bot.runtimeExperimental,
+        );
+        if ("kind" in runtimeSelection) throw new RuntimePinError(runtimeSelection);
+        const runtime = runtimeSelection.runtime;
+        const native =
+          selected.pin.runtimeKind !== "pi"
+            ? await runtimeSession(deps.prisma, {
+                runId,
+                threadId: run.threadId,
+                userId: run.userId,
+                spaceId: run.spaceId,
+                botId: bot.id,
+                computerId: bot.computerId,
+                instructions: bot.instructions,
+                pin: selected.pin,
+              })
+            : undefined;
+        const runtimeInfo = {
+          ...native?.previous,
+          runtimeKind: selected.pin.runtimeKind,
+          version: runtimeSelection.availability.version,
+          binding: native?.binding,
+        };
+        await deps.prisma.run.updateMany({
+          where: { id: runId, leaseOwner: workerId, leaseFence: fence },
+          data: { runtimeInfo },
+        });
         const resolved = selected;
         const runModelProvider = selected.provider;
         const runModelId = selected.id;
@@ -1545,7 +1585,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         // above. Deriving it a second time here dropped the deployment fallback, so a
         // vision-capable default was gated as "scripted" and lost its screenshot tools.
         const acceptsImages =
-          deps.runtime.describe().capabilities.scripted ||
+          runtime.describe().capabilities.scripted ||
           modelAcceptsImageInput(runModelProvider, runModelId, resolved.acceptsImages);
         const groupContext = thread.groupId
           ? await loadGroupContext(deps.prisma, thread.groupId, { id: bot.id, name: bot.name })
@@ -1704,7 +1744,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let approvalPausePending = false;
         let handedOff = false;
         let progressRedactor = createStreamingRedactor(runSecrets);
-        const scripted = deps.runtime.describe().capabilities.scripted;
+        const scripted = runtime.describe().capabilities.scripted;
         const script =
           scripted && !commandReplay
             ? inferScript(task.prompt, takeoverResume?.checkpoint)
@@ -2165,7 +2205,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       );
                   provider = createAutoReviewProvider("llm", {
                     llm: {
-                      runtime: deps.runtime,
+                      runtime,
                       checker: checker!,
                       model: reviewUsesRunPin ? resolved : undefined,
                       apiKey: judgeKey?.oauth ? undefined : judgeKey?.apiKey,
@@ -3758,7 +3798,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           ) => commandRecording.invoke(name, args, executionId, applyTool);
           const runRuntime: AgentRuntime["run"] = commandReplay
             ? () => commandReplayEvents(commandReplay, runId, recordedApplyTool)
-            : deps.runtime.run.bind(deps.runtime);
+            : runtime.run.bind(runtime);
           if (!commandReplay)
             for (const exposure of pendingExposures)
               await recordKnowledgeExposure(deps.prisma, { ...context, attempt: fence }, exposure);
@@ -3805,6 +3845,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
               tools,
               model: resolved,
               resumeFromCheckpoint: takeoverResume?.checkpoint,
+              nativeSession: native?.previous,
+              nativeCwd: computer.kind === "desktop" ? computer.providerRef : undefined,
+              onRuntimeInfo: async (info) => {
+                const saved = await deps.prisma.run.updateMany({
+                  where: { id: runId, leaseOwner: workerId, leaseFence: fence },
+                  data: { runtimeInfo: { ...runtimeInfo, ...info } },
+                });
+                if (saved.count !== 1) throw new Error("Runtime session ownership was lost.");
+              },
               script,
               allowSilentEmpty: allowSilentEmptyRun,
               emptyResponseText,
@@ -5148,7 +5197,14 @@ export async function resolveModelKey(
       if (!row)
         throw new RuntimePinError(
           runtimePinProblem(
-            pin ?? { provider, modelId, effort: null, credentialId: null, revision: 0 },
+            pin ?? {
+              runtimeKind: "pi",
+              provider,
+              modelId,
+              effort: null,
+              credentialId: null,
+              revision: 0,
+            },
             "pin-credential-missing",
             "The pinned connection secret is missing.",
           ),

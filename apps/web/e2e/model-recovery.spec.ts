@@ -276,3 +276,56 @@ test("a pin failure opens its provider settings and the bot model control", asyn
   await expect(dialog.getByText("xAI", { exact: true }).first()).toBeVisible();
   await captureScreenshot(page, testInfo, "pin-connect-provider");
 });
+
+test("native runtime settings show unavailable sign-in without replacing the pin", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `native-runtime-${Date.now()}@ardurbot.test`, "password12", "Runtime Test");
+  await completeOnboarding(page);
+  await page.route("**/rpc/bots/list", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: Bot[] };
+    body.json = body.json.map((bot) => ({
+      ...bot,
+      runtimeKind: "claude-code",
+      runtimeExperimental: false,
+      modelProvider: "anthropic",
+      modelId: "claude-opus-5",
+      modelCredentialId: "native:claude-code",
+      thinkingLevel: "low",
+    }));
+    await route.fulfill({ response, json: body });
+  });
+  await page.route("**/rpc/runtimes/availability", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          runtimeKind: "claude-code",
+          available: false,
+          reason: "Not signed in — run `claude` in a terminal once",
+          models: [{ id: "claude-opus-5", label: "Opus 5", efforts: ["low"] }],
+        },
+      },
+    }),
+  );
+  await page.reload();
+  await page
+    .locator("aside")
+    .first()
+    .getByRole("button", { name: /Chief/ })
+    .first()
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Model & effort", exact: true }).click();
+  const settings = page.getByTestId("bot-settings");
+  await expect(settings.getByRole("combobox", { name: "Runs on", exact: true })).toHaveValue(
+    "claude-code",
+  );
+  await expect(settings.getByRole("combobox", { name: "Model", exact: true })).toHaveValue(
+    "claude-opus-5",
+  );
+  await expect(settings.getByText("Not signed in — run `claude` in a terminal once")).toBeVisible();
+  await expect(
+    settings.getByRole("switch", { name: "Experimental", exact: true }),
+  ).not.toBeChecked();
+  await captureScreenshot(page, testInfo, "native-runtime-sign-in");
+});

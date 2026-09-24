@@ -111,6 +111,7 @@ import {
 import { channelPairingContract } from "./messaging-actions.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
+import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
 
 const botId = z.object({ botId: Id });
@@ -236,6 +237,23 @@ export const appContract = {
     status: oc.output(ServerUpdateStatusSchema),
     check: oc.input(ServerUpdateRequestSchema).output(ServerUpdateCheckSchema),
     apply: oc.input(ServerUpdateRequestSchema).output(ServerUpdateRunSchema),
+  },
+  runtimes: {
+    availability: oc
+      .input(z.object({ runtimeKind: RuntimeKindSchema }))
+      .output(RuntimeAvailabilitySchema),
+    connectCodex: oc.output(ModelOAuthBeginSchema),
+    connectStatus: oc
+      .input(z.object({ loginId: z.string() }))
+      .output(
+        z.union([
+          z.object({ status: z.enum(["pending", "ready"]) }),
+          z.object({ status: z.literal("error"), error: z.string() }),
+        ]),
+      ),
+    cancelConnect: oc
+      .input(z.object({ loginId: z.string() }))
+      .output(z.object({ ok: z.literal(true) })),
   },
   models: {
     list: oc.output(z.array(ModelCatalogEntrySchema)),
