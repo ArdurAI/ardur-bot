@@ -380,6 +380,10 @@ msgstr "Permitir {0} sem perguntar"
 msgid "Allow actions after presence confirmation"
 msgstr ""
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Allow approvals once"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Allow delegation"
 msgstr ""
@@ -469,6 +473,10 @@ msgstr "Chave de API"
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
 msgstr "Cabeçalho da chave API"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "App token"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Appearance"
@@ -657,6 +665,7 @@ msgstr "Inicializando o computador do {0}"
 msgid "bot"
 msgstr "bot"
 
+#: src/pages/ChannelPairingSettings.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
@@ -683,6 +692,10 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Bot token"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -785,6 +798,18 @@ msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Chat apps, group channels, and agent connections."
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat bot"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat permissions"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat service"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -1048,6 +1073,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "Conectar"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Connect a chat bot"
+msgstr ""
 
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -1395,6 +1424,10 @@ msgstr "Não foi possível carregar as configurações de voz"
 
 #: src/pages/LocalSettings.tsx
 msgid "Could not open local settings. Start the local server and create its owner account, then try again."
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Could not pair this account. Check its settings and try again."
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2114,6 +2147,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Get notified when this Bot finishes or needs input"
 msgstr "Seja avisado quando este Bot terminar ou precisar de entrada"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Get pairing code"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Getting ready"
@@ -3058,6 +3095,10 @@ msgstr "Outro modelo..."
 msgid "PagerDuty incident"
 msgstr ""
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Pair a chat account"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Pair device"
 msgstr ""
@@ -3220,6 +3261,10 @@ msgstr "Recente"
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
 msgstr "Reconectar OAuth"
+
+#: src/pages/ChatTaskReview.tsx
+msgid "Reconnect to your home."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Reconnect with an API key"
@@ -3689,6 +3734,10 @@ msgstr "Enviar"
 #: src/pages/Auth.tsx
 msgid "Send reset link"
 msgstr "Enviar link de redefinição"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Send this code to the bot in a private message. Expires in five minutes."
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Sending…"
@@ -4261,8 +4310,17 @@ msgstr ""
 msgid "Waiting…"
 msgstr "Aguardando…"
 
+#: src/pages/ChannelPairingSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Webhook"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Webhook secret"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Webhook URL"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -4314,6 +4372,10 @@ msgstr "Onde os bots devem ser executados?"
 #: src/pages/CallView.tsx
 msgid "Working…"
 msgstr "Funcionando"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Workspace or server ID"
+msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Write"

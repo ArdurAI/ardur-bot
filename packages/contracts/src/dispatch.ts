@@ -70,6 +70,7 @@ export const DispatchReceiptSchema = z.object({
 });
 export type DispatchReceipt = z.infer<typeof DispatchReceiptSchema>;
 export const DeviceGrantViewSchema = z.object({
+  kind: z.enum(["device", "channel"]).optional(),
   id: z.string(),
   deviceName: z.string(),
   scopes: z.array(DeviceScopeSchema),

@@ -62,10 +62,12 @@ describe("messagingPlatformsFromEnv", () => {
       expect(providers({ ...fullEnv, [key]: undefined })).not.toContain("whatsapp");
     }
     expect(providers({ ...fullEnv, telegramBotToken: undefined })).not.toContain("telegram");
-    // Without the secret token the adapter would accept unsigned webhook
-    // posts, so the secret is a mount gate, not optional hardening.
-    expect(providers({ ...fullEnv, telegramWebhookSecret: undefined })).not.toContain("telegram");
-    expect(providers({ telegramBotToken: "tg-token" })).toEqual([]);
+    // Polling needs only a bot token; the passive legacy surface rejects unsigned webhooks.
+    expect(providers({ ...fullEnv, telegramWebhookSecret: undefined })).toContain("telegram");
+    expect(providers({ telegramBotToken: "tg-token" })).toEqual(["telegram"]);
+    expect(messagingPlatformsFromEnv({ telegramBotToken: "tg-token" })[0]?.webhookEnabled).toBe(
+      false,
+    );
     expect(
       providers({ telegramBotToken: "tg-token", telegramWebhookSecret: "tg-webhook-secret" }),
     ).toEqual(["telegram"]);

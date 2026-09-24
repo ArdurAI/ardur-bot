@@ -585,6 +585,8 @@ export type TeamChatMessageKind = "direct" | "mention" | "ambient";
 export interface MessagingInboundMessage {
   type: "message";
   provider: string;
+  /** Original provider event ID, retained across webhook and socket delivery. */
+  providerEventId?: string;
   /** Per-message transport when one provider spans multiple networks (for example SMS vs RCS). */
   transport?: string;
   /** Provider message id; drives replay-safe client nonces downstream. */

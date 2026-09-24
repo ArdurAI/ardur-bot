@@ -50,6 +50,27 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
       },
     }),
   );
+  await page.route("**/rpc/channelPairing/installations", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            id: "chat-installation",
+            provider: "telegram",
+            workspaceId: "telegram",
+            botId: "test-bot",
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/rpc/channelPairing/start", (route) =>
+    route.fulfill({
+      json: {
+        json: { code: "PAIRTEST1234", expiresAt: new Date(Date.now() + 300_000).toISOString() },
+      },
+    }),
+  );
   await page.route("**/rpc/devices/revoke", (route) => {
     devices[0]!.revokedAt = new Date().toISOString();
     return route.fulfill({ json: { json: { ok: true } } });
@@ -78,7 +99,74 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   await settings.getByRole("button", { name: "Pair device", exact: true }).click();
   await expect(settings.getByRole("img", { name: "Pair device" })).toBeVisible();
   await expect(settings.getByText("TESTCODE", { exact: true })).toBeVisible();
+  await settings.getByRole("button", { name: "Pair a chat account", exact: true }).click();
+  await settings.getByRole("button", { name: "Get pairing code", exact: true }).click();
+  await expect(settings.getByText("PAIRTEST1234", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "settings-devices-pairing");
   await settings.getByRole("button", { name: "Revoke", exact: true }).click();
   await expect(settings.getByText("Test phone · Revoked", { exact: true })).toBeVisible();
+});
+
+test("activity opens a shared-room task without the personal bot transcript", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `room-review-${Date.now()}@example.test`, "password12", "Room test");
+  await completeOnboarding(page);
+  const run = {
+    runId: "room-run",
+    botId: "room-bot",
+    botName: "Room bot",
+    groupId: null,
+    groupName: null,
+    threadId: "room-thread",
+    externalThread: true,
+    status: "waiting_input",
+    trigger: "user",
+    notificationsEnabled: false,
+    promptSnippet: "Review the public example",
+    updatedAt: new Date().toISOString(),
+  };
+  await page.route("**/rpc/runs/list", (route) =>
+    route.fulfill({ json: { json: { runs: [run] } } }),
+  );
+  await page.route("**/rpc/threads/get", async (route) => {
+    if (!route.request().postData()?.includes("room-thread")) return route.continue();
+    return route.fulfill({
+      json: {
+        json: {
+          botId: "room-bot",
+          threadId: "room-thread",
+          cursor: 1,
+          olderCursor: null,
+          run: { id: "room-run", taskId: "room-task", status: "waiting_input" },
+          messages: [
+            {
+              id: "room-message",
+              role: "bot",
+              runId: "room-run",
+              seq: 1,
+              blocks: [
+                {
+                  kind: "ask",
+                  text: "Read the public example?",
+                  detail: "read_file: example.txt",
+                  approvalEffectId: "room-effect",
+                  status: "pending",
+                  actions: [
+                    { id: "allow", label: "Read" },
+                    { id: "deny", label: "Cancel" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+  });
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  await page.getByRole("button", { name: "Room bot, Needs input", exact: true }).first().click();
+  await expect(page.getByTestId("chat-task-review")).toBeVisible();
+  await expect(page.getByText("Read the public example?", { exact: true })).toBeVisible();
+  await captureScreenshot(page, testInfo, "dispatch-room-review");
 });

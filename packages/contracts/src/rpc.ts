@@ -101,6 +101,7 @@ import {
   MemoryPageInput,
   MemoryScopeRemapSchema,
 } from "./memory-documents.js";
+import { channelPairingContract } from "./messaging-actions.js";
 import { MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { SearchQueryOutputSchema } from "./search.js";
@@ -112,6 +113,7 @@ const threadTarget = z
   .object({
     botId: Id.optional(),
     groupId: Id.optional(),
+    threadId: Id.optional(),
   })
   .superRefine((input, ctx) => {
     const hasBot = Boolean(input.botId);
@@ -166,6 +168,7 @@ const threadSendInput = threadTarget
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
 export const appContract = {
+  channelPairing: channelPairingContract,
   devices: devicesContract,
   pairing: pairingContract,
   commands: {

@@ -163,6 +163,7 @@ import {
   updateMemoryProviderDefaultScope,
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
+import { createChannelPairing } from "./messaging-dispatch.js";
 import {
   chooseFocus,
   dismissFocus,
@@ -492,6 +493,7 @@ function mapSpaceLifecycleError(error: unknown): unknown {
 
 export function createRouter(deps: RouterDeps) {
   const os = implement(appContract).$context<{ actor: Actor | null; signal?: AbortSignal }>();
+  const channelPairing = createChannelPairing(deps);
   const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
@@ -522,6 +524,17 @@ export function createRouter(deps: RouterDeps) {
 
   const commands = createCommandRoutes(deps);
   return os.router({
+    channelPairing: {
+      installations: authed.channelPairing.installations.handler(({ context }) =>
+        channelPairing.installations(context.actor),
+      ),
+      configure: authed.channelPairing.configure.handler(({ context, input }) =>
+        channelPairing.configure(context.actor, input),
+      ),
+      start: authed.channelPairing.start.handler(({ context, input }) =>
+        channelPairing.start(context.actor, input),
+      ),
+    },
     devices: {
       list: authed.devices.list.handler(({ context }) => remoteDevices.list(context.actor)),
       rename: authed.devices.rename.handler(({ context, input }) =>

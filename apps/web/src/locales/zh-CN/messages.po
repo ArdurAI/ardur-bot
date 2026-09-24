@@ -380,6 +380,10 @@ msgstr "允许 {0}，无需询问"
 msgid "Allow actions after presence confirmation"
 msgstr ""
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Allow approvals once"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Allow delegation"
 msgstr ""
@@ -469,6 +473,10 @@ msgstr "API 密钥"
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
 msgstr "API 密钥请求头"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "App token"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Appearance"
@@ -657,6 +665,7 @@ msgstr "正在启动 {0} 的电脑"
 msgid "bot"
 msgstr "Bot"
 
+#: src/pages/ChannelPairingSettings.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
@@ -684,6 +693,10 @@ msgstr ""
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
 msgstr "要关联的 Bot"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Bot token"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
@@ -786,6 +799,18 @@ msgstr "聊天应用"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Chat apps, group channels, and agent connections."
 msgstr "聊天应用、群组频道和 Agent 连接。"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat bot"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat permissions"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Chat service"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Chat Settings"
@@ -1048,6 +1073,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "连接"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Connect a chat bot"
+msgstr ""
 
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -1395,6 +1424,10 @@ msgstr "无法加载语音设置"
 
 #: src/pages/LocalSettings.tsx
 msgid "Could not open local settings. Start the local server and create its owner account, then try again."
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Could not pair this account. Check its settings and try again."
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2114,6 +2147,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Get notified when this Bot finishes or needs input"
 msgstr "在此机器人完成或需要输入时收到通知"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Get pairing code"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Getting ready"
@@ -3058,6 +3095,10 @@ msgstr "其他模型…"
 msgid "PagerDuty incident"
 msgstr "PagerDuty 事件"
 
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Pair a chat account"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Pair device"
 msgstr ""
@@ -3220,6 +3261,10 @@ msgstr "最近"
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
 msgstr "重新连接 OAuth"
+
+#: src/pages/ChatTaskReview.tsx
+msgid "Reconnect to your home."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Reconnect with an API key"
@@ -3689,6 +3734,10 @@ msgstr "发送"
 #: src/pages/Auth.tsx
 msgid "Send reset link"
 msgstr "发送重置链接"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Send this code to the bot in a private message. Expires in five minutes."
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Sending…"
@@ -4261,9 +4310,18 @@ msgstr "正在等待 API 恢复…"
 msgid "Waiting…"
 msgstr "等待中…"
 
+#: src/pages/ChannelPairingSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Webhook"
 msgstr "Webhook"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Webhook secret"
+msgstr ""
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Webhook URL"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -4314,6 +4372,10 @@ msgstr "Bot 应在哪里运行？"
 #: src/pages/CallView.tsx
 msgid "Working…"
 msgstr "处理中…"
+
+#: src/pages/ChannelPairingSettings.tsx
+msgid "Workspace or server ID"
+msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Write"

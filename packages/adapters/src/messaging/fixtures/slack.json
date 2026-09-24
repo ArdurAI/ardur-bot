@@ -1,0 +1,16 @@
+{
+  "envelope_id": "envelope-1",
+  "type": "events_api",
+  "payload": {
+    "event_id": "event-1",
+    "team_id": "team-1",
+    "event": {
+      "type": "message",
+      "user": "sender-1",
+      "channel": "Dchannel",
+      "channel_type": "im",
+      "ts": "1.001",
+      "text": "Check the weather"
+    }
+  }
+}
