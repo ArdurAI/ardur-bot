@@ -116,6 +116,7 @@ import {
   startDelegation,
   type ThreadEvents,
 } from "@ardurbot/db";
+import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
 import { parse as parseShellCommand } from "shell-quote";
@@ -1328,6 +1329,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   botId: run.botId,
                   spaceId: run.spaceId,
                   status: run.trigger === "skill" ? { in: ["saved", "draft"] } : "saved",
+                  enabled: true,
                 },
               }),
           comparisonRun
@@ -3237,7 +3239,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     transport: parsed.transport,
                     endpoint: parsed.endpoint ?? null,
                     command: parsed.command ?? null,
-                    args: parsed.args as unknown as Prisma.InputJsonValue,
+                    args: redactMcpArguments(parsed.args, [
+                      ...Object.values(parsed.env),
+                      ...(parsed.secret ? [parsed.secret] : []),
+                    ]) as Prisma.InputJsonValue,
                     env: Object.fromEntries(Object.keys(parsed.env).map((key) => [key, true])),
                     headers: Object.fromEntries(
                       Object.keys(parsed.headers).map((key) => [key, true]),
@@ -3996,6 +4001,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 )}\nWhen the user asks to run a taught skill by name, follow that skill's playbook exactly. The full playbook is included in the user task when they invoke it.`
             : undefined;
         const agentSkillsLine = formatSkillsCatalogInstruction(agentSkills);
+        const pluginInstructions = agentSkills
+          .filter((skill) => skill.componentKind === "instructions")
+          .map((skill) => skill.content)
+          .join("\n\n");
         const missingImagesInstruction = missingTurnImagesInstruction(
           turnBlocks,
           currentTurnImages,
@@ -4150,6 +4159,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 "archive_bot safely archives a bot this bot created, and only that bot. Use it when the user asks to remove that bot or when it is finished and unused. The user can restore it or permanently delete it later. confirm_name must exactly match its name.",
                 pluginLine,
                 agentSkillsLine,
+                pluginInstructions,
                 taughtSkillsLine,
                 'For charts and data visualization, use the render_plot tool: it renders bar, line, scatter, histogram, heatmap, faceted and many more chart types from a JSON spec and attaches the PNG to the chat. Call render_plot with {"help": true} before your first chart to read the full guide.',
                 "When the user asks you to add or connect an MCP server (and gives you its details), use add_mcp_server. If it uses browser sign-in, an approval card appears in the chat — tell the user to click Authorize on it.",

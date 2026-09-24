@@ -18,7 +18,7 @@ const forbidden = [
 ];
 const allowedHistory = (path: string) => path === "NOTICE" || path.startsWith("docs/decisions/");
 
-function hasForbiddenReference(path: string, contents: string): boolean {
+function hasForbiddenReference(path: string, contents: string | Buffer): boolean {
   return (
     !allowedHistory(path) &&
     forbidden.some((term) => path.includes(term) || contents.includes(term))
@@ -32,7 +32,7 @@ function violations(paths: string[]): string[] {
     if (!existsSync(absolute)) return false; // Uncommitted deletions are absent from the build.
     const contents = lstatSync(absolute).isSymbolicLink()
       ? readlinkSync(absolute)
-      : readFileSync(absolute, "utf8");
+      : readFileSync(absolute);
     return hasForbiddenReference(path, contents);
   });
 }
@@ -128,6 +128,12 @@ describe("subscription credential boundary", () => {
       expect(hasForbiddenReference("packages/adapters/src/restored.ts", `fetch('${term}')`)).toBe(
         true,
       );
+      expect(
+        hasForbiddenReference(
+          "assets/fixture.bin",
+          Buffer.concat([Buffer.from([0xff]), Buffer.from(term)]),
+        ),
+      ).toBe(true);
       expect(hasForbiddenReference(`${term}.ts`, "")).toBe(true);
       expect(hasForbiddenReference("docs/decisions/history.md", term)).toBe(false);
       expect(hasForbiddenReference("NOTICE", term)).toBe(false);

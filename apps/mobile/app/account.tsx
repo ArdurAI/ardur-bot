@@ -407,6 +407,35 @@ export default function Account() {
           <Text style={styles.chevron}>›</Text>
         </Pressable>
 
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => router.push("/mcp")}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsTitle}>{t("MCP")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => router.push("/skills")}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsTitle}>{t("Skills")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => router.push("/plugins")}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsTitle}>{t("Plugins")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+
         {me?.isDeploymentOwner ? (
           <Pressable
             accessibilityRole="button"

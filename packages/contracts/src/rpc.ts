@@ -16,6 +16,7 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
 } from "./computer-connections.js";
+import { customizationContract } from "./customization.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
 import {
@@ -211,6 +212,7 @@ const threadSendInput = threadTarget
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
 export const appContract = {
+  ...customizationContract,
   account: accountContract,
   channelPairing: channelPairingContract,
   devices: devicesContract,
@@ -944,6 +946,7 @@ export const appContract = {
           z.union([
             z.object({ id: Id, config: McpServerConfigInput }),
             z.object({ id: Id, secret: z.string().min(1).max(16384) }),
+            z.object({ id: Id, enabled: z.boolean() }),
           ]),
         )
         .output(McpServerSchema),

@@ -7,6 +7,9 @@ const IntegrationCatalog = lazy(() =>
   })),
 );
 
-export default function IntegrationsSection({ initialIntegration }: SettingsPageProps) {
-  return <IntegrationCatalog reconnectId={initialIntegration} />;
+export default function IntegrationsSection({
+  initialIntegration,
+  onBusyChange,
+}: SettingsPageProps) {
+  return <IntegrationCatalog reconnectId={initialIntegration} onBusyChange={onBusyChange} />;
 }

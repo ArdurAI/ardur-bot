@@ -275,6 +275,10 @@ msgstr "कार्रवाई की पुष्टि"
 msgid "Actions for {0}"
 msgstr "{0} के लिए कार्रवाइयां"
 
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Actions for {name}"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Actions for space"
 msgstr ""
@@ -296,6 +300,10 @@ msgstr ""
 msgid "Activity"
 msgstr "गतिविधि"
 
+#: src/pages/customize/CustomizeControls.tsx
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
@@ -363,6 +371,10 @@ msgstr "GraphQL एंडपॉइंट जोड़ें"
 msgid "Add item"
 msgstr "आइटम जोड़ें"
 
+#: src/pages/customize/PluginsPage.tsx
+msgid "Add marketplace"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -397,6 +409,10 @@ msgstr "Treg जोड़ें"
 msgid "Add trigger"
 msgstr ""
 
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Add value"
+msgstr ""
+
 #: src/pages/account/AccountTables.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Added"
@@ -418,10 +434,15 @@ msgstr "जोड़ा जा रहा है…"
 msgid "Advanced"
 msgstr "उन्नत"
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Advanced settings"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr ""
 
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
@@ -440,6 +461,10 @@ msgstr "एजेंट:"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "All bots"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "All categories"
 msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
@@ -501,6 +526,10 @@ msgstr "एक बार अनुमति दें"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow purchase actions without asking"
 msgstr "खरीद कार्रवाइयों को बिना पूछे अनुमति दें"
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Allow the assistant to directly interact with apps, data, and tools on your computer"
+msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
@@ -593,7 +622,7 @@ msgstr "API कुंजी हेडर"
 msgid "App token"
 msgstr ""
 
-#: src/pages/settings/DeveloperSection.tsx
+#: src/pages/customize/DeveloperPage.tsx
 msgid "App version"
 msgstr ""
 
@@ -607,6 +636,7 @@ msgid "Applied"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 msgid "Apply"
 msgstr ""
 
@@ -675,6 +705,7 @@ msgstr "आर्काइव किया गया। चैट, मेमो�
 msgid "Ardur (built-in)"
 msgstr ""
 
+#: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
 msgstr "आर्ग्युमेंट"
@@ -798,6 +829,7 @@ msgid "Awake for {0} routines"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
@@ -837,6 +869,7 @@ msgstr "बियरर टोकन"
 msgid "Bearer token (optional)"
 msgstr ""
 
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
@@ -930,6 +963,10 @@ msgstr ""
 msgid "Branch"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Browse extensions"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr ""
@@ -944,6 +981,16 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Built-in"
+msgstr ""
+
+#. placeholder {0}: entry.author
+#. placeholder {0}: row.author
+#: src/pages/customize/PluginsPage.tsx
+msgid "by {0}"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "by you"
 msgstr ""
 
 #: src/pages/CallView.tsx
@@ -963,6 +1010,9 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1005,6 +1055,11 @@ msgstr "रद्द किया गया"
 msgid "Capabilities"
 msgstr ""
 
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Catalog"
+msgstr ""
+
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Change"
 msgstr ""
@@ -1103,6 +1158,10 @@ msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Checkout has local changes. Clean it before updating."
+msgstr ""
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Choose"
 msgstr ""
 
 #: src/pages/system/QuickComposer.tsx
@@ -1306,9 +1365,14 @@ msgstr "रंग {color}"
 msgid "Coming soon"
 msgstr ""
 
+#: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "कमांड"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Commands"
+msgstr ""
 
 #: src/components/composer/command-description.ts
 msgid "Compare bots"
@@ -1389,6 +1453,14 @@ msgstr ""
 msgid "Computers that can run tasks with access to local files, computer use, browser use, and local MCPs"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Configure"
+msgstr ""
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Configure {name}"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Configured by deployment"
 msgstr "डिप्लॉयमेंट द्वारा कॉन्फ़िगर"
@@ -1427,6 +1499,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
+#: src/pages/customize/IntegrationTable.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/provider-error-message.tsx
@@ -1477,6 +1550,7 @@ msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/customize/IntegrationTable.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1714,6 +1788,11 @@ msgstr ""
 msgid "Could not complete the update. Try again."
 msgstr ""
 
+#: src/pages/customize/CustomizeControls.tsx
+#: src/pages/customize/McpConfigEditor.tsx
+msgid "Could not complete this action."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
@@ -1917,6 +1996,10 @@ msgstr ""
 msgid "Could not load plugins"
 msgstr ""
 
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "Could not load server diagnostics."
+msgstr ""
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
@@ -1935,6 +2018,10 @@ msgstr ""
 
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
+msgstr ""
+
+#: src/pages/customize/McpConfigEditor.tsx
+msgid "Could not load the server configuration."
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -2069,6 +2156,10 @@ msgstr ""
 msgid "Could not save changes. Try again."
 msgstr ""
 
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Could not save configuration. Check the fields and try again."
+msgstr ""
+
 #: src/pages/ModelDestinations.tsx
 msgid "Could not save destinations; try again."
 msgstr ""
@@ -2201,6 +2292,10 @@ msgstr "कंप्यूटर अपडेट नहीं हो सका"
 msgid "Could not update learning. Try again."
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Could not update MCP server."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr ""
@@ -2295,6 +2390,10 @@ msgstr "अपना Ardur Bot बनाएं"
 msgid "Created"
 msgstr ""
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Created by you"
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
@@ -2318,6 +2417,10 @@ msgstr "क्रेडेंशियल एन्क्रिप्टेड �
 msgid "Credentials are stored encrypted on your server."
 msgstr ""
 
+#: src/pages/customize/McpConfigEditor.tsx
+msgid "Credentials changed"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron"
 msgstr "Cron"
@@ -2338,6 +2441,14 @@ msgstr ""
 #: src/pages/account/AccountSignIn.tsx
 msgid "Current password"
 msgstr "वर्तमान पासवर्ड"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Current space"
+msgstr ""
+
+#: src/pages/customize/IntegrationTable.tsx
+msgid "Custom"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Customer support"
@@ -2392,6 +2503,10 @@ msgstr "डिफ़ॉल्ट ({0})"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "डिफ़ॉल्ट स्कोप"
+
+#: src/pages/customize/McpDefaults.tsx
+msgid "Default servers"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -2476,6 +2591,10 @@ msgstr "विवरण"
 msgid "Design"
 msgstr ""
 
+#: src/pages/customize/IntegrationTable.tsx
+msgid "Desktop"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/settings-sections.ts
@@ -2544,6 +2663,15 @@ msgstr ""
 msgid "Direct MCP"
 msgstr ""
 
+#: src/pages/customize/SkillsPage.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "Disable"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Disabled"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -2553,6 +2681,10 @@ msgstr "डिस्कनेक्ट करें"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Disconnect this computer"
+msgstr ""
+
+#: src/pages/customize/IntegrationTable.tsx
+msgid "Disconnected"
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2606,6 +2738,7 @@ msgid "Document"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/customize/McpDefaults.tsx
 msgid "Documentation"
 msgstr ""
 
@@ -2655,6 +2788,10 @@ msgstr ""
 msgid "Draft skill"
 msgstr "ड्राफ़्ट स्किल"
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Drag .MCPB or .DXT files here to install"
+msgstr ""
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Drag, drop, or paste an image"
 msgstr "छवि खींचें, छोड़ें या पेस्ट करें"
@@ -2679,6 +2816,11 @@ msgstr "पुराना संदेश"
 msgid "Edit"
 msgstr ""
 
+#: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "Edit config"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "पहले संपादित करें"
@@ -2698,6 +2840,12 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "ईमेल"
+
+#: src/pages/customize/McpDefaults.tsx
+#: src/pages/customize/SkillsPage.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "Enable"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
@@ -2748,6 +2896,14 @@ msgstr "इमेज सीमा के लिए 1 से 1000 के बी�
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "यह कोड <0>{0}</0> पर दर्ज करें"
+
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "Environment variables"
+msgstr ""
+
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "Error"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -2853,6 +3009,7 @@ msgstr "CRM से इस सप्ताह की सूची एक्सप
 msgid "Export with history"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/settings-sections.ts
 msgid "Extensions"
 msgstr ""
@@ -2894,6 +3051,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "Feedback corrections"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Filter"
 msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -2952,6 +3113,20 @@ msgstr "पासवर्ड भूल गए?"
 msgid "Free"
 msgstr ""
 
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "From folder"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "From marketplaces you added"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "From the catalog"
+msgstr ""
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Full name"
 msgstr ""
@@ -2991,6 +3166,10 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Git repository"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Git URL"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -3061,6 +3240,10 @@ msgstr "नमस्ते, उत्तर पढ़कर सुनाते �
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
+msgstr ""
+
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "Hide logs"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -3161,6 +3344,10 @@ msgstr "OpenAPI JSON इम्पोर्ट करें"
 msgid "Import prompt"
 msgstr ""
 
+#: src/pages/customize/PluginsPage.tsx
+msgid "In this space"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "inappropriate"
 msgstr ""
@@ -3171,6 +3358,12 @@ msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
+msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "Included"
 msgstr ""
 
 #: src/pages/ComparePanel.tsx
@@ -3198,8 +3391,34 @@ msgstr "इनपुट"
 msgid "Inputs and boundaries"
 msgstr ""
 
+#: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/PluginsPage.tsx
+msgid "Install"
+msgstr ""
+
+#. placeholder {0}: summary.name
+#: src/pages/customize/PluginsPage.tsx
+msgid "Install {0}"
+msgstr ""
+
+#: src/pages/customize/ConfigureExtension.tsx
+msgid "Install {name}"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Installed"
+msgstr ""
+
 #: src/components/OllamaSettings.tsx
 msgid "Installed models"
+msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Installed on your computer"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Installing"
 msgstr ""
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -3209,6 +3428,10 @@ msgstr "इंस्टेंस API कुंजी"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "निर्देश"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Instructions"
+msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Instructions changed. Reload before saving."
@@ -3220,6 +3443,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "integration"
+msgstr ""
+
+#: src/pages/customize/IntegrationTable.tsx
+msgid "Integration"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -3359,6 +3586,10 @@ msgstr ""
 msgid "learned {0} things this week"
 msgstr ""
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Learned skills"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
@@ -3371,6 +3602,10 @@ msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Learning inbox"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -3509,6 +3744,10 @@ msgstr "लोकल"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "स्थानीय पहुँच मिलने पर बॉट्स बिना पूछे कमांड चला सकते हैं। साझा या सार्वजनिक सर्वर पर इससे बचें।"
 
+#: src/pages/customize/IntegrationTable.tsx
+msgid "Local dev"
+msgstr ""
+
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/account/AccountTables.tsx
 msgid "Local devices"
@@ -3606,6 +3845,7 @@ msgstr ""
 msgid "MCP endpoint"
 msgstr ""
 
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "MCP servers"
 msgstr "MCP सर्वर"
@@ -3904,6 +4144,7 @@ msgid "Needs input"
 msgstr "इनपुट चाहिए"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/customize/IntegrationTable.tsx
 msgid "Needs reconnection"
 msgstr ""
 
@@ -3986,6 +4227,10 @@ msgstr ""
 msgid "No bots match"
 msgstr ""
 
+#: src/pages/customize/McpConfigEditor.tsx
+msgid "No changes."
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No chat apps linked yet."
 msgstr ""
@@ -4014,8 +4259,16 @@ msgstr "कोई अपवाद नहीं। कार्रवाइया
 msgid "No group chats yet."
 msgstr ""
 
+#: src/pages/customize/CustomizeControls.tsx
+msgid "No items found."
+msgstr ""
+
 #: src/pages/account/AccountTables.tsx
 msgid "No local devices"
+msgstr ""
+
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "No logs yet."
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -4101,6 +4354,10 @@ msgstr ""
 
 #: src/pages/settings/UploadedFiles.tsx
 msgid "No uploaded files"
+msgstr ""
+
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "None"
 msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
@@ -4265,6 +4522,8 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -4299,6 +4558,10 @@ msgstr ""
 msgid "Open in full window"
 msgstr "पूरी विंडो में खोलें"
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Open learning inbox"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "Open links in built-in browser"
 msgstr ""
@@ -4325,6 +4588,10 @@ msgstr ""
 
 #: src/pages/shell/command-palette.tsx
 msgid "Open terminal"
+msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Open the desktop app to manage extensions."
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -4492,6 +4759,7 @@ msgid "Playing…"
 msgstr "प्ले हो रहा है…"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/settings-sections.ts
 msgid "Plugins"
 msgstr ""
@@ -4696,6 +4964,8 @@ msgstr "हाल के"
 msgid "Recheck"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Reconnect"
 msgstr ""
@@ -4811,6 +5081,9 @@ msgid "Reload"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/SkillsPage.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -4828,6 +5101,10 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Remove marketplace"
 msgstr ""
 
 #: src/pages/memory/MemoryProposals.tsx
@@ -4863,6 +5140,10 @@ msgstr "चैट, कंप्यूटर और मेमोरी सहि�
 #: src/pages/ScratchpadSection.tsx
 msgid "Removed, but list refresh failed"
 msgstr "हटाया गया, लेकिन सूची रिफ़्रेश विफल रही"
+
+#: src/pages/customize/PluginsPage.tsx
+msgid "Removing"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Removing…"
@@ -5078,6 +5359,10 @@ msgstr ""
 msgid "Review approval"
 msgstr ""
 
+#: src/pages/customize/McpConfigEditor.tsx
+msgid "Review changes"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Review destination"
 msgstr ""
@@ -5098,6 +5383,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/customize/McpDefaults.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Review tools"
 msgstr ""
@@ -5194,6 +5480,7 @@ msgstr "चल रहा है"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "चल रहा है"
@@ -5247,6 +5534,7 @@ msgstr ""
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -5271,6 +5559,7 @@ msgstr ""
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Saved"
@@ -5368,6 +5657,10 @@ msgstr ""
 msgid "Search by domain"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Search integrations"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Search integrations.sh"
 msgstr ""
@@ -5386,6 +5679,11 @@ msgstr ""
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Search settings"
+msgstr ""
+
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
+msgid "Search skills and plugins"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5461,10 +5759,22 @@ msgstr ""
 msgid "Server"
 msgstr ""
 
+#: src/pages/customize/McpConfigEditor.tsx
+msgid "Server configuration JSON"
+msgstr ""
+
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "Server details"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/LocalSettings.tsx
 msgid "Server integrations"
+msgstr ""
+
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "Server logs"
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
@@ -5473,10 +5783,10 @@ msgstr "सर्वर का नाम"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/components/OllamaSettings.tsx
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/settings/DeveloperSection.tsx
 msgid "Server URL"
 msgstr "सर्वर URL"
 
@@ -5616,6 +5926,8 @@ msgid "Signed in"
 msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
+#: src/pages/customize/PluginsPage.tsx
+#: src/pages/customize/SkillsPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/settings-sections.ts
 msgid "Skills"
@@ -5654,6 +5966,18 @@ msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Sort by name"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Sort by newest"
+msgstr ""
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Source"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -5743,6 +6067,10 @@ msgstr "शुरू हो रहा है"
 msgid "Starting…"
 msgstr "शुरू हो रहा है…"
 
+#: src/pages/customize/IntegrationTable.tsx
+msgid "Status"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
 msgstr ""
@@ -5768,6 +6096,10 @@ msgstr "सिखाना रोकें"
 
 #: src/components/composer/command-description.ts
 msgid "Stop the current run"
+msgstr ""
+
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "Stopped"
 msgstr ""
 
 #: src/pages/DelegationLines.tsx
@@ -5855,6 +6187,10 @@ msgstr ""
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Tasks"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Taught skills"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -6052,6 +6388,14 @@ msgstr "इस सर्वर ने ब्राउज़र ऑथराइ�
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "यह सर्वर पहले से कनेक्टेड है। पुनः ऑथराइज़ करने के लिए पहले इसे डिस्कनेक्ट करें।"
 
+#: src/pages/McpServersOverlay.tsx
+msgid "This server is managed by a plugin"
+msgstr ""
+
+#: src/pages/McpServersOverlay.tsx
+msgid "This server is managed by an extension"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "This service needs client registration before you can connect."
 msgstr ""
@@ -6138,12 +6482,18 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
+#: src/pages/customize/CustomizeControls.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "फिर से कोशिश करें"
 
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
+msgstr ""
+
+#: src/pages/customize/IntegrationTable.tsx
+msgid "Type"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -6172,6 +6522,8 @@ msgstr ""
 msgid "Undone"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/PluginsPage.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr ""
@@ -6264,6 +6616,14 @@ msgstr "अपडेट हो रहा है…"
 msgid "Upload"
 msgstr "अपलोड"
 
+#: src/pages/customize/SkillsPage.tsx
+msgid "Upload skills ZIP"
+msgstr ""
+
+#: src/pages/customize/SkillsPage.tsx
+msgid "Upload ZIP"
+msgstr ""
+
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Uploaded files"
 msgstr ""
@@ -6321,6 +6681,10 @@ msgstr ""
 msgid "Verifying…"
 msgstr "पुष्टि की जा रही है…"
 
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "View logs"
+msgstr ""
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Visuals"
 msgstr ""
@@ -6357,6 +6721,10 @@ msgstr "प्रतीक्षा…"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "We'll provide a prompt you can use to fetch the memory from your other account."
+msgstr ""
+
+#: src/pages/customize/IntegrationTable.tsx
+msgid "Web"
 msgstr ""
 
 #: src/pages/ChannelPairingSettings.tsx
@@ -6541,3 +6909,7 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."
 msgstr "हमेशा चालू रहने वाले एजेंटों की आपकी टीम<0/>जिन्हें आप असली काम सौंप सकते हैं।"
+
+#: src/pages/customize/CustomizeControls.tsx
+msgid "Yours"
+msgstr ""

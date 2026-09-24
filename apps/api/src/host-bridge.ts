@@ -1,20 +1,24 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
-import type { HostRequest } from "@ardurbot/contracts/host-bridge";
+import type { AdapterContext } from "@ardurbot/adapter-kit";
+import type { HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
 import { HOST_FRAME_BYTES } from "@ardurbot/contracts/host-bridge";
 import { RuntimePinSchema } from "@ardurbot/contracts/runtime-pins";
 import type { PrismaClient } from "@ardurbot/db";
+import type { HostWire } from "@ardurbot/host-runtime/bridge-wire";
 import { receiveFrames, wsWire } from "@ardurbot/host-runtime/bridge-wire";
 import { hostTokenMatches, hostWorkerToken } from "@ardurbot/host-runtime/worker-auth";
 import { WebSocketServer } from "ws";
 import { HostHub } from "./host-hub.js";
+import { authorizeHostMcp } from "./host-mcp-authorization.js";
 
 export function hostTokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 export class HostBridge {
   readonly hub: HostHub;
+  private readonly settingsRequests = new Set<string>();
   constructor(
     private readonly prisma: PrismaClient,
     private readonly encryptionKey: string,
@@ -41,6 +45,19 @@ export class HostBridge {
     this.hub.detach();
     return { ok: true as const };
   }
+  async registrationFor(authorization: string | undefined) {
+    const token = authorization?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
+    if (!token) return null;
+    const registration = await this.prisma.hostRegistration.findUnique({
+      where: { id: "default" },
+    });
+    if (!registration || !hostTokenMatches(hostTokenHash(token), registration.tokenHash))
+      return null;
+    const deployment = await this.prisma.deploymentSettings.findUnique({
+      where: { id: "default" },
+    });
+    return deployment?.ownerUserId === registration.userId ? registration : null;
+  }
   async status(userId: string) {
     const row = await this.prisma.hostRegistration.findUnique({ where: { id: "default" } });
     const configured = row?.userId === userId;
@@ -53,6 +70,18 @@ export class HostBridge {
   }
   private async authorize(request: HostRequest, ownerId: string, generation: string) {
     if (request.scope.userId !== ownerId) return false;
+    if ("serverId" in request.operation) {
+      const [registration, deployment] = await Promise.all([
+        this.prisma.hostRegistration.findUnique({ where: { id: "default" } }),
+        this.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+      ]);
+      return (
+        registration?.generation === generation &&
+        registration.userId === ownerId &&
+        deployment?.ownerUserId === ownerId &&
+        authorizeHostMcp(this.prisma, request, this.settingsRequests.has(request.id))
+      );
+    }
     const [registration, deployment, run] = await Promise.all([
       this.prisma.hostRegistration.findUnique({ where: { id: "default" } }),
       this.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
@@ -92,6 +121,54 @@ export class HostBridge {
         return false;
     }
     return true;
+  }
+  /** Settings grants are local to this API instance and cannot be claimed by a worker frame. */
+  async result(operation: HostOperation, context: Partial<AdapterContext>): Promise<unknown> {
+    if (
+      !["mcp.tools", "mcp.status", "mcp.stop"].includes(operation.op) ||
+      !context.spaceId ||
+      !context.userId
+    )
+      throw new Error("This host operation requires an active bot run.");
+    const id = randomUUID();
+    const request: HostRequest = {
+      v: 1,
+      type: "request",
+      id,
+      scope: { userId: context.userId, spaceId: context.spaceId, botId: "settings", runId: id },
+      operation,
+    };
+    this.settingsRequests.add(id);
+    let value: unknown;
+    let wire: HostWire | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await new Promise<unknown>((resolve, reject) => {
+        wire = {
+          send: async (frame) => {
+            if (frame.type === "stream") {
+              if (frame.channel !== "result") throw new Error("Unexpected MCP response.");
+              value = frame.data;
+              await this.hub.fromWorker(wire!, { v: 1, type: "ack", id, seq: frame.seq });
+            } else if (frame.type === "end") {
+              if (frame.problem)
+                reject(new Error("The host server is unavailable. Reconnect this computer."));
+              else resolve(value);
+            } else reject(new Error("Unexpected MCP response."));
+          },
+          close: () => reject(new Error("The host connection closed.")),
+        };
+        timer = setTimeout(() => {
+          this.hub.cancel(id, wire!);
+          reject(new Error("The host server did not respond."));
+        }, 30_000);
+        void this.hub.request(request, wire).catch(reject);
+      });
+    } finally {
+      clearTimeout(timer);
+      this.settingsRequests.delete(id);
+      if (wire) this.hub.closeWorker(wire);
+    }
   }
   isWorker(authorization: string | undefined) {
     return hostTokenMatches(authorization, `Bearer ${hostWorkerToken(this.encryptionKey)}`);

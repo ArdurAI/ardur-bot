@@ -87,16 +87,27 @@ export function parseMcpServerToolArgs(
 /** Serialized credential blob for the encrypted secret store; null when the
  * server has no static credential material. */
 export function buildMcpCredentialBlob(parsed: {
+  args?: string[];
   secret?: string;
   env?: Record<string, string>;
   headers?: Record<string, string>;
 }): string | null {
   const env = parsed.env ?? {};
   const headers = parsed.headers ?? {};
-  if (!parsed.secret && Object.keys(env).length === 0 && Object.keys(headers).length === 0) {
+  if (
+    !parsed.args &&
+    !parsed.secret &&
+    Object.keys(env).length === 0 &&
+    Object.keys(headers).length === 0
+  ) {
     return null;
   }
-  return JSON.stringify({ secret: parsed.secret, env, headers });
+  return JSON.stringify({
+    ...(parsed.args ? { args: parsed.args } : {}),
+    secret: parsed.secret,
+    env,
+    headers,
+  });
 }
 
 /** Heuristic for whether the approval card should lead with OAuth: remote
