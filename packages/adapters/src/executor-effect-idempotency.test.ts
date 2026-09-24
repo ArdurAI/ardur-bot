@@ -1,4 +1,4 @@
-import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
 import type { CommandBlock as FixtureCommandBlock } from "@ardurbot/contracts";
 import type { ActionApprovalRule } from "@ardurbot/core";
 import {
@@ -260,10 +260,11 @@ function fixture(runId = "run-1") {
     }
     yield { type: "done" as const, text: "Done" };
   });
-  const sandboxExecute = vi.fn(async function* () {
+  const sandboxExecute = vi.fn(async function* (): AsyncGenerator<ProcessEvent> {
     yield { type: "stdout" as const, data: "Tests passed." };
     yield { type: "exit" as const, code: 0 };
   });
+  const environmentNote = vi.fn(async () => "Tools on this computer: gh 2.80.0 (signed in).");
   const resolveCommandCwd = vi.fn(async () => "/workspace");
   const sandboxDescription = { capabilities: { graphical: false } };
   const events = { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun };
@@ -279,6 +280,7 @@ function fixture(runId = "run-1") {
     sandbox: {
       describe: () => sandboxDescription,
       resolveCommandCwd,
+      environmentNote,
       execute: sandboxExecute,
     },
     memory: {
@@ -298,6 +300,7 @@ function fixture(runId = "run-1") {
     executor,
     prisma,
     sandboxExecute,
+    environmentNote,
     resolveCommandCwd,
     sandboxDescription,
     replayRequest,
@@ -861,3 +864,48 @@ function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureComm
     ...overrides,
   };
 }
+
+it("gives a host run one inventory and launches its command without reloading a login profile", async () => {
+  const f = fixture("host-inventory");
+  f.setCalls([{ name: "shell", args: { command: "gh auth status" }, executionId: "host-command" }]);
+  await f.run();
+  expect(f.environmentNote).toHaveBeenCalledOnce();
+  expect(f.runtimeRun.mock.calls[0]![0].instructions).toContain(
+    "Tools on this computer: gh 2.80.0 (signed in).",
+  );
+  expect(f.sandboxExecute).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({
+      argv: [
+        "bash",
+        "-c",
+        expect.stringContaining('exec bash -c "$4"'),
+        "ardurbot-background-launch",
+        expect.any(String),
+        "host-inventory",
+        expect.any(String),
+        "gh auth status",
+      ],
+      env: undefined,
+    }),
+    expect.anything(),
+  );
+});
+it("returns a host command start failure to the runtime as a failed tool result", async () => {
+  const f = fixture("host-start-failed");
+  f.sandboxExecute.mockImplementation(async function* () {
+    yield {
+      type: "stderr",
+      data: "Command did not run: the host could not start the executable (ENOENT).",
+    };
+    yield { type: "exit", code: 127 };
+  });
+  f.setCalls([{ name: "shell", args: { command: "gh auth status" }, executionId: "host-command" }]);
+  await f.run();
+  expect(f.results[0]).toMatchObject({
+    stdout: "",
+    stderr: expect.stringContaining("Command did not run"),
+    code: 127,
+    error: expect.stringContaining("Command did not run"),
+  });
+});

@@ -3449,6 +3449,10 @@ msgstr ""
 msgid "No trigger"
 msgstr "트리거 없음"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "None detected"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "아직 없음"
@@ -5075,6 +5079,10 @@ msgstr "도구 소스"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tools"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Tools:"
 msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx

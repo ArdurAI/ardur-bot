@@ -167,6 +167,7 @@ import {
 } from "./computer-status.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import type { HostBridge } from "./host-bridge.js";
+import { sourceHostStatus } from "./host-status.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
@@ -890,6 +891,7 @@ export function createRouter(deps: RouterDeps) {
     host: {
       status: authed.host.status.handler(
         async ({ context }) =>
+          (await sourceHostStatus(deps.prisma, context.actor.userId, deps.env.sandboxProvider)) ??
           deps.hostBridge?.status(context.actor.userId) ?? {
             configured: false,
             connected: false,

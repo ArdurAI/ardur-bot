@@ -3449,6 +3449,10 @@ msgstr ""
 msgid "No trigger"
 msgstr "无触发器"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "None detected"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "暂无"
@@ -5075,6 +5079,10 @@ msgstr "工具源"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tools"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Tools:"
 msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx

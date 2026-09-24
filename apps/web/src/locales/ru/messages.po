@@ -3449,6 +3449,10 @@ msgstr "Нет доступных инструментов."
 msgid "No trigger"
 msgstr "Нет триггера"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "None detected"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "Пока нет"
@@ -5076,6 +5080,10 @@ msgstr "Источники инструментов"
 #: src/pages/PluginsOverlay.tsx
 msgid "Tools"
 msgstr "Инструменты"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Tools:"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
