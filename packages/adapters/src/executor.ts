@@ -35,6 +35,7 @@ import {
   BOT_TITLE_MAX_LENGTH,
   BotSecretName,
   BotSecretSubmission,
+  CapabilityPreferencesSchema,
   computerProfileNote,
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
@@ -50,10 +51,13 @@ import {
   appendToolCallSegment,
   applyJudgeDecision,
   assertTransition,
+  botInstructionText,
   botMessageAllowsSilence,
+  capabilityAllowsTool,
   connectorKindFromToolName,
   containsSecret,
   createStreamingRedactor,
+  effectiveToolAccessMode,
   endsSentence,
   expandSkillReferencesInPrompt,
   formatSkillRunPrompt,
@@ -116,6 +120,7 @@ import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
 import { parse as parseShellCommand } from "shell-quote";
+import { loadAccountInstructionContext } from "./account-instructions.js";
 import {
   connectAgent,
   messageConnectedAgent,
@@ -241,6 +246,7 @@ import {
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
 import { integrationApprovalDetailsForCall } from "./integration-access.js";
+import { integrationCatalog } from "./integration-catalog.js";
 import {
   assertConnectorToolArgs,
   CATALOG_EXECUTE,
@@ -1374,6 +1380,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           bot.runtimeExperimental,
         );
         if ("kind" in runtimeSelection) throw new RuntimePinError(runtimeSelection);
+        const accountContext = await loadAccountInstructionContext(deps.prisma, run);
+        accountContext.instructions = redactSecrets(accountContext.instructions, runSecrets);
+        accountContext.displayName = redactSecrets(accountContext.displayName, runSecrets);
         const runtime = runtimeSelection.runtime;
         const native =
           selected.pin.runtimeKind !== "pi" && !comparisonRun
@@ -1384,7 +1393,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 spaceId: run.spaceId,
                 botId: bot.id,
                 computerId: bot.computerId,
-                instructions: bot.instructions,
+                instructions: botInstructionText(bot, accountContext),
                 historyGeneration: thread.historyCompactionGeneration,
                 pin: selected.pin,
               })
@@ -1400,7 +1409,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
         await deps.prisma.run.updateMany({
           where: { id: runId, leaseOwner: workerId, leaseFence: fence },
-          data: { runtimeInfo },
+          data: { runtimeInfo, accountInstructionContext: accountContext },
         });
         const delegatedTokens = run.delegationId
           ? await enforceDelegationDestination(deps.prisma, run.delegationId, selected)
@@ -1442,6 +1451,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           storedConnections,
           connectedComposio.map((connection) => connection.provider),
         );
+        const capabilities = CapabilityPreferencesSchema.parse(
+          (await deps.prisma.space.findUnique({ where: { id: run.spaceId } })) ?? {},
+        );
         const context: MemoryOperationContext & { botId: string; runId: string } = {
           memoryGeneration:
             configuredMemory?.generation ??
@@ -1461,6 +1473,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           },
           threadId: thread.id,
           knownSecrets: runSecrets,
+          toolAccessMode: effectiveToolAccessMode(
+            capabilities.toolAccessMode,
+            selected.pin.runtimeKind,
+          ),
           operationId: runId,
           traceId: runId,
           spaceId: run.spaceId,
@@ -1747,7 +1763,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }),
           // Cross-owner agent connections only exist for chat-linked bots.
           ...(hasMessagingIdentity ? agentConnectionTools : []),
-        ];
+        ].filter((tool) => capabilityAllowsTool(capabilities, tool.name));
         const exposedConnectorTools = discovered.filter(
           (tool) => !builtinAgentTools.some((builtin) => builtin.name === tool.name),
         );
@@ -2013,6 +2029,40 @@ export function createRunExecutor(deps: ExecutorDeps) {
           context.signal.throwIfAborted();
           if (comparisonRun && !comparisonToolAllowed(name))
             return { error: "This tool is unavailable in a controlled comparison." };
+          if (!capabilityAllowsTool(capabilities, name))
+            return { error: "This capability is disabled in this space." };
+          if (name === "search_connectors") {
+            const query = String(args.query ?? "")
+              .trim()
+              .toLowerCase()
+              .slice(0, 200);
+            const results = integrationCatalog
+              .filter(
+                (item) =>
+                  item.available &&
+                  `${item.name} ${item.vendor} ${item.riskClass}`.toLowerCase().includes(query),
+              )
+              .slice(0, 5);
+            if (results.length)
+              await publishMessage(
+                deps,
+                run,
+                "bot",
+                results.map((item) => ({
+                  kind: "app_connect" as const,
+                  connectorId: "trusted-catalog",
+                  provider: item.id,
+                  name: item.name,
+                  description: "",
+                  logo: null,
+                  status: "pending" as const,
+                })),
+              );
+            return {
+              connectors: results.map(({ id, name }) => ({ id, name })),
+              requiresUserConnection: true,
+            };
+          }
           if (handedOff) {
             return { error: "This stage was handed off. End the turn without more tool calls." };
           }
@@ -4084,7 +4134,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               sourceMessageId: run.sourceMessageId,
               prompt: redactSecrets(prompt, runSecrets),
               instructions: [
-                bot.instructions || `${bot.name}: ${bot.title}\n${bot.description}`,
+                botInstructionText(bot, accountContext),
                 formatCurrentTimeInstruction(),
                 groupContext,
                 messagingContext,

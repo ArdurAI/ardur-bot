@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-// Whole-tree scans include binary assets and share filesystem throughput with parallel checks.
-const repositoryScanTimeout = 60_000;
+// Repository-wide reads include binary assets and share I/O with other test workers.
+const sourceScanTimeout = 120_000;
 // Assemble the search terms so this test does not exempt itself from the scan.
 const forbidden = [
   ["pi-anthropic", "oauth"].join("-"),
@@ -70,7 +70,7 @@ describe("subscription credential boundary", () => {
         .filter(Boolean);
       expect(violations([...new Set(paths)])).toEqual([]);
     },
-    repositoryScanTimeout,
+    sourceScanTimeout,
   );
 
   it(
@@ -79,7 +79,7 @@ describe("subscription credential boundary", () => {
       // Includes untracked and gitignored files Docker would copy, excluding only Docker ignores.
       expect(violations(contextFiles())).toEqual([]);
     },
-    repositoryScanTimeout,
+    sourceScanTimeout,
   );
 
   it("requires review if the server Dockerfile or ignore rules change the scanned context", () => {

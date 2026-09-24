@@ -15,7 +15,8 @@
     "./runtime-pins": "./src/runtime-pins.ts",
     "./host-bridge": "./src/host-bridge.ts",
     "./customization-catalog": "./src/customization-catalog.json",
-    "./host-environment": "./src/host-environment.js"
+    "./host-environment": "./src/host-environment.js",
+    "./host-registration-identity": "./src/host-registration-identity.js"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",

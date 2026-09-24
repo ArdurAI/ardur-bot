@@ -30,6 +30,16 @@ vi.mock("@ardurbot/ui-web", () => {
   );
   return {
     Button,
+    Skeleton: (props: ComponentProps<"div">) => <div {...props} />,
+    AlertDialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
+      open ? <div role="alertdialog">{children}</div> : null,
+    AlertDialogAction: Button,
+    AlertDialogCancel: Button,
+    AlertDialogContent: Container,
+    AlertDialogDescription: Container,
+    AlertDialogFooter: Container,
+    AlertDialogHeader: Container,
+    AlertDialogTitle: Container,
     Input: (props: ComponentProps<"input">) => <input {...props} />,
     NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
     NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,

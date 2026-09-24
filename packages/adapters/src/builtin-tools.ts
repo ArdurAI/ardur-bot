@@ -26,6 +26,17 @@ export const DELEGATION_TOOL_NAMES = new Set([
 
 export const builtinAgentTools: ConnectorTool[] = [
   {
+    name: "search_connectors",
+    description:
+      "Search the trusted connector directory and propose connection cards. A person must connect an account and choose access.",
+    readOnly: true,
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string", maxLength: 200 } },
+      required: ["query"],
+    },
+  },
+  {
     name: "report_progress",
     description: "Update this task card quietly; blocked needs a reason and an action.",
     inputSchema: z.toJSONSchema(TaskProgressSchema),

@@ -1,6 +1,7 @@
 import type { DispatchReceipt } from "@ardurbot/contracts";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 import type { NativeDevices, PairedHome } from "./dispatch-client";
 import { createDispatchClient, dispatchReceiptLabel } from "./dispatch-client";
 
@@ -29,6 +30,7 @@ export const dispatchClient = createDispatchClient(
     remove: (key) => SecureStore.deleteItemAsync(key),
   },
   setDispatchStatus,
+  Platform.OS,
 );
 function setDispatchStatus(next: string | null) {
   status = next;

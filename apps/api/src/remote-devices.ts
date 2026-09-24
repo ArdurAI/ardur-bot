@@ -160,6 +160,7 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
   };
 }
 const pairInput = z.strictObject({
+  platform: z.enum(["ios", "android", "darwin", "linux", "win32", "web"]).optional(),
   challenge: z.string().min(8).max(128),
   instanceId: z.string().max(128),
   deviceName: z.string().trim().min(1).max(80),
@@ -168,6 +169,8 @@ const pairInput = z.strictObject({
   signature: z.string().min(1).max(256),
 });
 export const DEVICE_READ_PROCEDURES = new Set([
+  "account/get",
+  "account/localDevices",
   "me",
   "bootstrap",
   "spaces/list",

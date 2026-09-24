@@ -91,6 +91,7 @@ export interface SandboxProvider {
     context: AdapterContext,
   ): Promise<PageBrowserResult>;
   /** Allocate or reconnect the computer, returning its reference before fallible setup. */
+  supportsNetworkEgress?(computer: ComputerRef, context: AdapterContext): Promise<boolean>;
   provision(
     request: {
       botId: string;
@@ -99,6 +100,7 @@ export interface SandboxProvider {
       providerKind?: ComputerRef["kind"];
       imageProfile?: ComputerRef["imageProfile"];
       connectionId?: string | null;
+      networkEgress?: boolean;
     },
     context: AdapterContext,
   ): Promise<ComputerRef>;

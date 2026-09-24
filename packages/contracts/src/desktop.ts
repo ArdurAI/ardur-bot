@@ -55,7 +55,12 @@ export interface ArdurBotDesktop {
     show(message: { title: string; body: string; threadId: string }): Promise<boolean>;
   };
   host?: {
-    state(): Promise<{ configured: boolean; roots: string[]; keepRunning?: boolean }>;
+    state(): Promise<{
+      configured: boolean;
+      roots: string[];
+      registrationId?: string;
+      keepRunning?: boolean;
+    }>;
     setKeepRunning?(enabled: boolean): Promise<void>;
     setup(): Promise<void>;
     addRoot(): Promise<string | null>;

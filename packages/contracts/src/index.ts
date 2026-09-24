@@ -1,7 +1,9 @@
+export * from "./account.js";
 export * from "./ai-consent.js";
 export * from "./attachments.js";
 export * from "./bot-avatar.js";
 export * from "./bot-secrets.js";
+export * from "./capability-settings.js";
 export * from "./command-blocks.js";
 export * from "./comparison.js";
 export * from "./computer-connections.js";
@@ -22,6 +24,7 @@ export * from "./local-settings.js";
 export * from "./mcp.js";
 export * from "./mcp-defaults.js";
 export * from "./memory-documents.js";
+export * from "./memory-intent.js";
 export { memoryProviderHost } from "./memory-provider-location.js";
 export * from "./messaging-actions.js";
 export * from "./ollama.js";

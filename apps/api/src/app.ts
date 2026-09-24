@@ -449,6 +449,7 @@ export async function createApp(
     trustedOrigin: (origin) => isTrustedOrigin(origin, env),
   });
   const router = createRouter({
+    runtime,
     resolveComparisonPin: (bot) =>
       executor.resolveModel({ spaceId: bot.spaceId, userId: bot.userId, botId: bot.id }),
     terminals,
@@ -613,6 +614,7 @@ export async function createApp(
         actor,
         signal: c.req.raw.signal,
         authSessionId: session?.session.id,
+        authHeaders: sessionHeaders(c.req.raw),
         origin: c.req.header("origin"),
       },
     });

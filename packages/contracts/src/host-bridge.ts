@@ -191,6 +191,7 @@ export const HostRequestSchema = z.strictObject({
 });
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 export const HostHealthSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80).optional(),
   platform: z.enum(["darwin", "linux", "win32"]),
   roots: z.array(path).max(32),
   load: z.number().int().min(0).max(HOST_IN_FLIGHT),
@@ -313,3 +314,6 @@ export const HostRuntimeEventSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("checkpoint"), blob: text }),
   z.strictObject({ type: z.literal("done"), text: text.optional() }),
 ]);
+/** Canonical text for a public identifier; hashing it never yields a host credential. */
+// Defined in plain JavaScript so the packaged desktop app can load it.
+export { hostRegistrationIdentityText } from "./host-registration-identity.js";

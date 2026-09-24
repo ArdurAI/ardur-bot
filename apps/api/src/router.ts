@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type {
   AdapterContext,
   AgentHomeStore,
+  AgentRuntime,
   ArtifactStore,
   ConnectorCatalogItem,
   JobPublisher,
@@ -74,6 +75,7 @@ import {
   prepareApiInstall,
   prepareGraphqlInstall,
   probeOpenAiCompatibleModels,
+  proposeMemoryIntent,
   provisionComputer,
   pullOllamaModel,
   queueComputerUpdate,
@@ -157,6 +159,7 @@ import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import type { Router } from "@orpc/server";
 import { implement, ORPCError } from "@orpc/server";
+import { createAccountService } from "./account.js";
 import { exportAccountData, exportBotData } from "./account-export.js";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
@@ -164,6 +167,7 @@ import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
+import { createCapabilitySettings } from "./capability-settings.js";
 import { createCommandRoutes } from "./command-routes.js";
 import { createComparisons } from "./comparisons.js";
 import {
@@ -419,6 +423,7 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  runtime?: AgentRuntime;
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
   terminals?: ReturnType<typeof createTerminalRoutes>;
@@ -501,10 +506,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     actor: Actor | null;
     signal?: AbortSignal;
     authSessionId?: string;
+    authHeaders?: Headers;
     origin?: string;
   }>();
   const channelPairing = createChannelPairing(deps);
   const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
+  const account = createAccountService({ ...deps, remoteDevices });
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
@@ -542,6 +549,40 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const commands = createCommandRoutes(deps);
   return os.router({
     ...createCustomizationRoutes(deps),
+    account: {
+      get: authed.account.get.handler(({ context }) => account.get(context.actor)),
+      updateProfile: authed.account.updateProfile.handler(({ context, input }) =>
+        account.updateProfile(context.actor, input),
+      ),
+      updateInstructions: authed.account.updateInstructions.handler(({ context, input }) =>
+        account.updateInstructions(context.actor, input),
+      ),
+      setTrustedDevices: authed.account.setTrustedDevices.handler(({ context, input }) =>
+        account.setTrustedDevices(context.actor, input.required),
+      ),
+      approveDevice: authed.account.approveDevice.handler(({ context, input }) =>
+        account.approveDevice(context.actor, input.id),
+      ),
+      localDevices: authed.account.localDevices.handler(({ context }) =>
+        account.localDevices(context.actor),
+      ),
+      disconnectDevice: authed.account.disconnectDevice.handler(({ context, input }) =>
+        account.disconnectDevice(context.actor, input),
+      ),
+      sessions: authed.account.sessions.handler(({ context }) =>
+        account.sessions.list(context.actor.userId, context.authHeaders ?? new Headers()),
+      ),
+      revokeSession: authed.account.revokeSession.handler(({ context, input }) =>
+        account.sessions.revoke(
+          context.actor.userId,
+          context.authHeaders ?? new Headers(),
+          input.id,
+        ),
+      ),
+      revokeOtherSessions: authed.account.revokeOtherSessions.handler(({ context }) =>
+        account.sessions.revokeOthers(context.actor.userId, context.authHeaders ?? new Headers()),
+      ),
+    },
     system: {
       dispatch: authed.system.dispatch.handler(({ context }) => systemSettings.get(context.actor)),
       setDispatch: authed.system.setDispatch.handler(({ context, input }) =>
@@ -2472,6 +2513,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     memory: {
+      propose: authed.memory.propose.handler(({ context, input }) =>
+        proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+      ),
       remember: authed.memory.remember.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         await memoryRpc(() =>
@@ -3024,6 +3068,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
     },
     capabilities: {
+      settings: authed.capabilities.settings.handler(({ context }) =>
+        createCapabilitySettings(deps).settings(context.actor),
+      ),
+      configure: authed.capabilities.configure.handler(({ context, input }) =>
+        createCapabilitySettings(deps).configure(context.actor, input),
+      ),
+      network: authed.capabilities.network.handler(({ context, input }) =>
+        createCapabilitySettings(deps).network(context.actor, input),
+      ),
       list: authed.capabilities.list.handler(async ({ context }) => {
         const rows = await deps.prisma.capabilityInstall.findMany({
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId },

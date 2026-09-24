@@ -16,11 +16,13 @@ type SettingsRegistration = {
 type SettingsContext = { desktop: boolean; isDeploymentOwner: boolean };
 ```
 
-The Account, Capabilities, Memory, System, Extensions, Developer, Skills, Integrations, MCP and Plugins slots are already reserved. Replace the corresponding line when its page lands; do not append a duplicate id. For the existing Account export, the exact one-line registration is:
+The Account, Capabilities, Memory, System, Extensions, Developer, Skills, Integrations, MCP and Plugins slots are already reserved. Replace the corresponding line when its page lands; do not append a duplicate id. Account uses its page through this one-line registration:
 
 ```ts
-{ id: "account", group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./AccountSettingsOverlay").then((m) => ({ default: m.GeneralSettingsPanels }))), available: always },
+{ id: "account", group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./account/AccountSettings")), available: always },
 ```
+
+Capabilities and Memory now use their pages under `pages/capabilities/` and `pages/memory/` in those existing slots. Memory → Memory storage → Manage opens the existing embedded storage settings, including Git repository memory and semantic providers; Back to memory returns to the proposal and document view. Skills opens the existing Skills section under Customize. The Capabilities Computers link opens the owner section for deployment owners and a read-only computer list for other members. Both pages register their setting rows with search and release busy state when unmounted.
 
 Use `desktopOnly` for System, Extensions and Developer. Keep the `computer` id for Computers and `integrations` for Integrations. There is no `connectors` alias. Integrations and MCP are always available under Customize. Native routes and RPC namespaces retain their existing names.
 
@@ -68,4 +70,4 @@ Registered folders grant filesystem access; consequential actions still require 
 
 Offline unit tests cover the contracts, persistence, filtering, appearance attributes and CSS, notification gates and transports, export, upload ownership, desktop IPC and mobile preferences. The web `settings-shell.spec.ts` captures General, row search and Privacy. Native OS notification delivery and host lifecycle still need a signed desktop build and a phone; the desktop Playwright suite is deliberately excluded from routine local verification.
 
-The composer prerequisite is the existing `355c8852` commit from `dev`. No comparison or account-stream implementation is included. The preference migration uses `20260924052000_user_preferences`; its SQL is identical to the initial Settings migration. This keeps the comparisons timestamp `20260924050000` and account-settings timestamp `20260924055000` free for their streams.
+The composer prerequisite is the existing `355c8852` commit from `dev`. Account owns profile, avatar, password, shared bot instructions, trusted devices and sessions. General owns language and appearance. Privacy owns account and memory export. Account deletion remains in the native mobile Account screen; it is omitted from web and desktop Account. The preference migration uses `20260924052000_user_preferences`; its SQL is identical to the initial Settings migration. This keeps the comparisons timestamp `20260924050000` and account-settings timestamp `20260924055000` free for their streams.

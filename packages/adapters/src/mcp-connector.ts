@@ -124,7 +124,12 @@ export class McpConnector implements ConnectorProvider {
 
   async discoverTools(context: AdapterContext): Promise<ConnectorTool[]> {
     const tools = await this.authorizedTools(context);
-    if (tools.length <= DIRECT_TOOL_LIMIT) return tools;
+    if (
+      context.toolAccessMode === "all" ||
+      tools.length === 0 ||
+      (context.toolAccessMode !== "when-needed" && tools.length <= DIRECT_TOOL_LIMIT)
+    )
+      return tools;
     // The catalog wrappers must not be named `mcp_*`: Anthropic rejects Claude Code OAuth
     // requests that carry a tool whose name starts with "mcp_" (single underscore) with a
     // misleading "You're out of extra usage" 400, on every model. Direct MCP tools are

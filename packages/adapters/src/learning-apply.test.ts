@@ -743,3 +743,113 @@ it("requires human approval for curator reverts and shares Undo's revision path"
   );
   expect(f.proposals.find((r) => r.id === original.id)!.status).toBe("reverted");
 });
+
+it.each(["memory-import", "memory-edit"] as const)(
+  "never automatically applies %s, even with a matching grant",
+  async (operation) => {
+    const f = fixture();
+    const p = await f.proposal(undefined, { operation });
+    const grant = f.grant();
+    await expect(f.apply.autoApply(p.id, String(grant.id))).rejects.toThrow("no longer allowed");
+    expect(f.memoryDb.documents.size).toBe(0);
+  },
+);
+it("approves a user import with its kind and requires approval before deleting and undoing it", async () => {
+  const f = fixture();
+  f.db.reviewExecution.findFirst.mockResolvedValue({
+    reviewerPin: pin,
+    policyVersion: "memory-settings-v1",
+    userId: actor.userId,
+    botId: "bot",
+    completedAt: new Date(),
+  } as never);
+  f.db.run.findFirst.mockResolvedValue(null as never);
+  const p = await f.proposal(undefined, {
+    scope: actor,
+    operation: "memory-import",
+    documentKind: "profile",
+    proposedContent: "Studies plants.",
+  });
+  expect(f.memoryDb.documents.size).toBe(0);
+  const saved = await f.apply.approve(p.id, actor);
+  const head = await f.service.read(saved.proposal.documentId!, f.context);
+  expect(head).toMatchObject({ kind: "profile", content: "Studies plants." });
+  expect(parseRevisionMarkdown(revisionMarkdown(head!)).kind).toBe("profile");
+  const removal = await f.proposal(undefined, {
+    scope: actor,
+    operation: "memory-edit",
+    memoryAction: "delete",
+    documentKind: "profile",
+    target: { documentId: head!.id },
+    expectedBaseRevision: head!.revision,
+    proposedContent: "",
+  });
+  expect((await f.service.read(head!.id, f.context))?.deletedAt).toBeNull();
+  await f.apply.approve(removal.id, actor);
+  expect((await f.service.read(head!.id, f.context))?.deletedAt).not.toBeNull();
+  await f.apply.revert(removal.id, actor);
+  expect(await f.service.read(head!.id, f.context)).toMatchObject({
+    kind: "profile",
+    content: "Studies plants.",
+    deletedAt: null,
+    revision: 3,
+  });
+});
+
+it("undoes an approved category edit without overwriting later category changes", async () => {
+  const f = fixture();
+  f.db.reviewExecution.findFirst.mockResolvedValue({
+    reviewerPin: pin,
+    policyVersion: "memory-settings-v1",
+    userId: actor.userId,
+    botId: "bot",
+    completedAt: new Date(),
+  } as never);
+  const imported = await f.proposal(undefined, {
+    scope: actor,
+    operation: "memory-import",
+    documentKind: "profile",
+    proposedContent: "Studies plants.",
+  });
+  const saved = (await f.apply.approve(imported.id, actor)).proposal;
+  const edit = await f.proposal(undefined, {
+    scope: actor,
+    operation: "memory-edit",
+    documentKind: "topic",
+    target: { documentId: saved.documentId },
+    expectedBaseRevision: 1,
+    proposedContent: "Garden planning.",
+  });
+  await f.apply.approve(edit.id, actor);
+  expect((await f.service.read(saved.documentId!, f.context))?.kind).toBe("topic");
+  const head = (await f.service.read(saved.documentId!, f.context))!;
+  await f.service.commit(
+    {
+      id: head.id,
+      scope: "user",
+      path: head.path,
+      content: head.content,
+      kind: "preferences",
+      expectedRevision: head.revision,
+    },
+    f.context,
+  );
+  expect((await f.apply.revert(edit.id, actor)).conflict).toBeDefined();
+  const later = (await f.service.read(head.id, f.context))!;
+  await f.service.commit(
+    {
+      id: head.id,
+      scope: "user",
+      path: head.path,
+      content: later.content,
+      kind: "topic",
+      expectedRevision: later.revision,
+    },
+    f.context,
+  );
+  await f.apply.revert(edit.id, actor);
+  expect(await f.service.read(head.id, f.context)).toMatchObject({
+    kind: "profile",
+    content: "Studies plants.",
+  });
+});

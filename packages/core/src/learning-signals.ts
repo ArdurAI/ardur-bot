@@ -1,4 +1,8 @@
-import type { MessageBlock, ProposalEvidence } from "@ardurbot/contracts";
+import type {
+  AccountInstructionContext,
+  MessageBlock,
+  ProposalEvidence,
+} from "@ardurbot/contracts";
 import { createStreamingRedactor } from "./events.js";
 
 /** Shared, deterministic redaction for review input, output, and feedback. Never logs input. */
@@ -30,6 +34,7 @@ export type LearningMessage = {
   steeringKind?: "correction" | "added-requirement" | "other";
 };
 export interface LearningSignalRecords {
+  settingsInstructions?: AccountInstructionContext;
   runId: string;
   threadId: string;
   userId: string;
@@ -71,6 +76,25 @@ export function buildLearningSignals(
     redactionVersion: 1 as const,
     eventIds: [] as string[],
   };
+  const settings = records.settingsInstructions;
+  if (settings?.origin === "human-settings" && settings.actorId && settings.revision > 0) {
+    // Keep the existing conservative span filter: quoted/tool-like text is never promoted.
+    const text = redactLearningText(settings.instructions, knownSecrets);
+    if (humanInstructionSpan(text)) {
+      for (let start = 0; start < text.length; start += 1000) {
+        const excerpt = text.slice(start, start + 1000).trim();
+        if (!excerpt) continue;
+        authorisedIntent.push({
+          ...base,
+          id: `account:${settings.revision}:${start}`,
+          kind: "instruction-span",
+          sourceClass: "human-settings",
+          actorId: settings.actorId,
+          excerpt,
+        });
+      }
+    }
+  }
   for (const message of records.messages) {
     // Origin comes from server intake. A user role, claimed author, or summary cannot upgrade it.
     if (message.origin !== "human-typed" || message.actorId !== records.userId) continue;

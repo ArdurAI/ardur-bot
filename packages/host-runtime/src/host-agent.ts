@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, realpath } from "node:fs/promises";
+import { hostname } from "node:os";
 import path from "node:path";
 import type {
   AdapterContext,
@@ -90,6 +91,7 @@ export class HostAgent {
     ]);
     return {
       platform: process.platform as HostHealth["platform"],
+      name: hostname().slice(0, 80),
       roots: this.roots,
       load: this.active.size,
       claude,
