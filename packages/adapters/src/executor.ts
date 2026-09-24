@@ -1380,6 +1380,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 botId: bot.id,
                 computerId: bot.computerId,
                 instructions: bot.instructions,
+                historyGeneration: thread.historyCompactionGeneration,
                 pin: selected.pin,
               })
             : undefined;

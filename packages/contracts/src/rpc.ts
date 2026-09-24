@@ -159,6 +159,8 @@ const structuredMentionTarget = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), id: Id }),
   z.object({ kind: z.literal("routine"), id: Id }),
   z.object({ kind: z.literal("connector"), id: Id }),
+  z.object({ kind: z.literal("mcp"), id: Id }),
+  z.object({ kind: z.literal("folder"), id: z.string().min(1).max(4096) }),
 ]);
 
 const threadSendInput = threadTarget
@@ -416,6 +418,7 @@ export const appContract = {
       .input(threadTarget.safeExtend({ text: z.string().min(1) }))
       .output(z.object({ ok: z.literal(true) })),
     clear: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+    restart: oc.input(botId).output(z.object({ ok: z.literal(true) })),
     answer: oc
       .input(
         threadTarget.safeExtend({
@@ -508,6 +511,19 @@ export const appContract = {
     heartbeat: oc.input(botId).output(z.object({ ok: z.literal(true) })),
   },
   memory: {
+    remember: oc
+      .input(
+        z.object({
+          botId: Id,
+          text: z.string().trim().min(1).max(20000),
+          nonce: z
+            .string()
+            .min(1)
+            .max(200)
+            .regex(/^[a-zA-Z0-9_-]+$/),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
     list: oc.input(MemoryPageInput).output(MemoryDocumentPageSchema),
     update: oc
       .input(

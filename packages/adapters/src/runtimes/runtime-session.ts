@@ -14,6 +14,7 @@ export async function runtimeSession(
     botId: string;
     computerId: string | null;
     instructions: string;
+    historyGeneration?: number;
     pin: RuntimePin;
   },
 ) {
@@ -27,6 +28,7 @@ export async function runtimeSession(
         input.computerId,
         input.instructions,
         input.pin,
+        ...(input.historyGeneration ? [input.historyGeneration] : []),
       ]),
     )
     .digest("hex");

@@ -1644,6 +1644,22 @@ export function createRouter(deps: RouterDeps) {
         for (const runId of runIds) await enqueueLearningReview(deps, runId);
         return { ok: true as const };
       }),
+      restart: authed.threads.restart.handler(async ({ context, input }) => {
+        const target = await resolveThreadTarget(deps.prisma, context.actor, input);
+        if (target.kind !== "bot") throw new IsolationError();
+        const result = await deps.events.clearThread({
+          spaceId: context.actor.spaceId,
+          threadId: target.threadId,
+          botId: target.botId,
+          preserveHistory: true,
+        });
+        await Promise.all(
+          result.cancelledRunIds.map((runId) =>
+            deps.jobs.cancel(runJobKey(runId)).catch(() => undefined),
+          ),
+        );
+        return { ok: true as const };
+      }),
       clear: authed.threads.clear.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
         const contextBotId = target.kind === "bot" ? target.botId : target.memberBotIds[0];
@@ -2479,6 +2495,22 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     memory: {
+      remember: authed.memory.remember.handler(async ({ context, input }) => {
+        const bot = await repos.getBot(context.actor, input.botId);
+        await memoryRpc(() =>
+          deps.memory.commit(
+            {
+              scope: "bot",
+              botId: bot.id,
+              path: `notes/${input.nonce}.md`,
+              content: input.text,
+              sourceThreadId: bot.thread?.id,
+            },
+            memoryContext(context.actor),
+          ),
+        );
+        return { ok: true as const };
+      }),
       list: authed.memory.list.handler(({ context, input }) =>
         memoryRpc(() => deps.memoryDocuments!.list(input, memoryContext(context.actor))),
       ),

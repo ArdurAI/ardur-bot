@@ -53,14 +53,14 @@ export default function BotSettingsScreen() {
   const colorScheme = useResolvedAppearance();
   const { t } = useI18n();
   const router = useRouter();
-  const { botId } = useLocalSearchParams<{ botId: string }>();
+  const { botId, focus } = useLocalSearchParams<{ botId: string; focus?: string }>();
   const [bot, setBot] = useState<BotSettingsRecord | null>(null);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<string>(BOT_COLORS[0]);
   const [computerMode, setComputerMode] = useState<ComputerMode>("team");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(focus === "model");
   const [runtimeExperimental, setRuntimeExperimental] = useState(false);
   const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>("pi");
   const [modelKey, setModelKey] = useState("");

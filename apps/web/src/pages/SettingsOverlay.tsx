@@ -51,6 +51,7 @@ export function SettingsOverlay({
   usage,
   initialSection = "general",
   initialProvider,
+  initialIntegration,
   avatarStyle,
   onAvatarStyleChange,
   isDeploymentOwner = false,
@@ -66,6 +67,7 @@ export function SettingsOverlay({
   usage?: { runs: number; inputTokens: number; outputTokens: number } | null;
   initialSection?: SettingsSection;
   initialProvider?: string;
+  initialIntegration?: string;
   avatarStyle: AvatarStyle;
   onAvatarStyleChange: (style: AvatarStyle) => Promise<void>;
   isDeploymentOwner?: boolean;
@@ -217,7 +219,9 @@ export function SettingsOverlay({
               }`}
             >
               {section === "devices" ? <DevicesSettings owner={isDeploymentOwner} /> : null}
-              {section === "integrations" ? <IntegrationCatalog /> : null}
+              {section === "integrations" ? (
+                <IntegrationCatalog reconnectId={initialIntegration} />
+              ) : null}
               {section === "general" ? (
                 <GeneralSettingsPanels
                   email={email}
