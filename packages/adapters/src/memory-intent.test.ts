@@ -1,6 +1,8 @@
 import type { Actor } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { resolveReviewerPin } from "./learning-pin.js";
 import { proposeMemoryIntent } from "./memory-intent.js";
+import { PiAgentRuntime } from "./pi-runtime.js";
 
 const actor = { spaceId: "space", userId: "user" } as Actor;
 const pin = {
@@ -25,13 +27,28 @@ function fixture(
     modelPinRevision: 0,
     thinkingLevel: "medium",
     runtimeKind: "pi",
+    allowedModelDestinations: { mode: "any" } as unknown,
     thread: { id: "thread", historyCompactionGeneration: 0 },
   };
   const db = {
     $queryRaw: vi.fn(),
     spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
     bot: { findFirst: vi.fn(async () => bot) },
-    secret: { findMany: vi.fn(async () => []) },
+    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+    user: { findMany: vi.fn(async () => [{ id: actor.userId }]) },
+    hostRegistration: { findUnique: vi.fn(async () => ({ userId: actor.userId })) },
+    userModelCredential: {
+      findFirst: vi.fn(async () => ({
+        id: pin.credentialId,
+        provider: pin.provider,
+        secretId: "secret",
+      })),
+    },
+    spaceModelPreference: { findFirst: vi.fn(async () => null) },
+    secret: {
+      findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => ({ id: "secret", ciphertext: "fixture" })),
+    },
     botSecret: { findMany: vi.fn(async () => []) },
     spaceLearningConfig: { findUnique: vi.fn(async () => null) },
     reviewExecution: {
@@ -66,7 +83,15 @@ function fixture(
   const deps = {
     prisma: { ...db, $transaction: async (work: (tx: typeof db) => unknown) => work(db) },
     memoryDocuments: memory,
-    secretStore: { load: vi.fn() },
+    secretStore: {
+      load: vi.fn(() =>
+        JSON.stringify({
+          kind: "openai_compatible",
+          baseUrl: "https://models.example.test/v1",
+          reasoning: true,
+        }),
+      ),
+    },
     runtime,
     resolvePin: vi.fn(async () => ({
       kind: "resolved",
@@ -76,6 +101,7 @@ function fixture(
     })),
   };
   return {
+    bot,
     db,
     memory,
     runtime,
@@ -84,6 +110,75 @@ function fixture(
   };
 }
 describe("explicit memory intents", () => {
+  it.each([{ mode: "local" }, { mode: "hosts", hosts: ["allowed.example.test"] }])(
+    "refuses a remote edit under coordinator policy %j without dispatch",
+    async (policy) => {
+      const f = fixture();
+      f.bot.allowedModelDestinations = policy;
+      const resolvePin = vi.fn(resolveReviewerPin);
+      f.deps.resolvePin = resolvePin;
+      await expect(
+        proposeMemoryIntent(f.deps, actor, {
+          intent: "edit",
+          text: "Use short answers.",
+          requestId: "policy-fixture",
+        }),
+      ).rejects.toThrow("This bot may only run locally — change the pin or the space policy");
+      expect(await resolvePin.mock.results[0]!.value).toMatchObject({
+        kind: "problem",
+        code: "locality-denied",
+      });
+      expect(f.runtime.run).not.toHaveBeenCalled();
+      expect(f.db.reviewExecution.create).not.toHaveBeenCalled();
+      expect(f.proposals).toHaveLength(0);
+    },
+  );
+  it("allows an edit at a coordinator's explicitly permitted host", async () => {
+    const f = fixture();
+    f.bot.allowedModelDestinations = { mode: "hosts", hosts: ["models.example.test"] };
+    f.deps.resolvePin = resolveReviewerPin;
+    expect(
+      await proposeMemoryIntent(f.deps, actor, {
+        intent: "edit",
+        text: "Use short answers.",
+        requestId: "allowed-fixture",
+      }),
+    ).toHaveLength(1);
+    expect(f.runtime.run).toHaveBeenCalledOnce();
+  });
+  it.each(["claude-code", "codex-app-server"])(
+    "refuses unsupported %s memory reviews before dispatch or reservation",
+    async (kind) => {
+      const f = fixture();
+      f.bot.runtimeKind = kind;
+      f.bot.modelProvider = kind === "claude-code" ? "anthropic" : "openai-codex";
+      f.bot.modelCredentialId = `native:${kind}`;
+      f.deps.resolvePin = resolveReviewerPin;
+      const runtime = new PiAgentRuntime();
+      const run = vi.spyOn(runtime, "run");
+      f.deps.runtime = runtime;
+      await expect(
+        proposeMemoryIntent(f.deps, actor, {
+          intent: "edit",
+          text: "Use short answers.",
+          requestId: "native-fixture",
+        }),
+      ).rejects.toThrow(
+        "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
+      );
+      expect(run).not.toHaveBeenCalled();
+      expect(f.db.reviewExecution.create).not.toHaveBeenCalled();
+      expect(f.proposals).toHaveLength(0);
+      expect(
+        await proposeMemoryIntent(f.deps, actor, {
+          intent: "import",
+          text: "Use short answers.",
+          requestId: "native-import-fixture",
+        }),
+      ).toHaveLength(1);
+      expect(run).not.toHaveBeenCalled();
+    },
+  );
   it("imports grouped text as pending proposals without a model, memory write, or grant", async () => {
     const f = fixture();
     const proposals = await proposeMemoryIntent(f.deps, actor, {

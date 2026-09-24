@@ -2,6 +2,8 @@ import { z } from "zod";
 import { MemoryDocumentKindSchema } from "./memory-documents.js";
 
 export const MEMORY_INTENT_POLICY = "memory-settings-v1";
+export const MEMORY_REVIEW_UNAVAILABLE_MESSAGE =
+  "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.";
 
 export const MemoryIntentInputSchema = z
   .object({

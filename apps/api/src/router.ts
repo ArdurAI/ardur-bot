@@ -2555,7 +2555,9 @@ export function createRouter(deps: RouterDeps) {
     },
     memory: {
       propose: authed.memory.propose.handler(({ context, input }) =>
-        proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+        memoryRpc(() =>
+          proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+        ),
       ),
       remember: authed.memory.remember.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
