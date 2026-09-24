@@ -10,6 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import {
+  loadMemoryDestination,
   loadMemoryDocuments,
   loadMemoryHistory,
   loadMemorySyncState,
@@ -20,6 +21,7 @@ import { native, useThemedStyles } from "../lib/native";
 export default function Memory() {
   const { t } = useI18n();
   const styles = useThemedStyles(createStyles);
+  const [destination, setDestination] = useState<string | null>(null);
   const [sync, setSync] = useState<MemorySyncState | null>(null);
   const [documents, setDocuments] = useState<MemoryDocumentHead[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -36,6 +38,12 @@ export default function Memory() {
       setOpen(null);
       setHistory([]);
       setBusy(true);
+      setDestination(null);
+      void loadMemoryDestination()
+        .then((value) => {
+          if (current === ticket.current) setDestination(value);
+        })
+        .catch(() => undefined);
       void loadMemorySyncState()
         .then((value) => {
           if (current === ticket.current) setSync(value);
@@ -108,6 +116,11 @@ export default function Memory() {
         <Text style={styles.secondary}>
           {t("Memory is read-only here. Edit it in Settings on desktop or web.")}
         </Text>
+        {destination ? (
+          <Text style={styles.secondary}>
+            {t("Sends memory text to")} {destination}
+          </Text>
+        ) : null}
         {sync ? (
           <Text style={styles.secondary}>
             {t("Syncs to")} {sync.host}

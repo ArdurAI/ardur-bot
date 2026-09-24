@@ -161,6 +161,7 @@ import {
   disconnectMemoryProvider,
   persistMemoryProviderConfig,
   serializeSpaceMemoryConfig,
+  testMemoryProviderConnection,
   updateMemoryProviderDefaultScope,
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
@@ -2367,6 +2368,12 @@ export function createRouter(deps: RouterDeps) {
         const config = await findSpaceMemoryConfig(deps.prisma, context.actor.spaceId);
         return config ? serializeSpaceMemoryConfig(config) : null;
       }),
+      testProvider: authed.memory.testProvider.handler(({ context, input }) =>
+        testMemoryProviderConnection(deps, context.actor, input),
+      ),
+      deliveryProgress: authed.memory.deliveryProgress.handler(({ context }) =>
+        memoryRpc(() => deps.memoryDocuments!.deliveryProgress(memoryContext(context.actor))),
+      ),
       connectProvider: authed.memory.connectProvider.handler(async ({ context, input }) =>
         persistMemoryProviderConfig(deps, context.actor, input),
       ),

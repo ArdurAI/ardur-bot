@@ -30,17 +30,49 @@ const legacyRow = {
   revisions: [] as unknown[],
 };
 
-function fakeTransaction() {
+function fakeTransaction(extra: Record<string, unknown> = {}) {
   const upsert = vi.fn(async () => legacyRow);
   const create = vi.fn(async () => ({}));
   const tx = {
-    memoryDocument: { findMany: vi.fn(async () => [structuredClone(legacyRow)]), upsert },
+    memoryDocument: {
+      findMany: vi.fn(async () => [structuredClone({ ...legacyRow, ...extra })]),
+      upsert,
+    },
     memoryRevision: { create },
   };
   return { tx: tx as never, upsert, create };
 }
 
 describe("PostgresMemoryJournal with documents that predate revision rows", () => {
+  it("reloads pending receipts and clears retry state on successful delivery without adding a revision", async () => {
+    const retryAt = new Date("2026-09-23T12:00:05.000Z");
+    const { tx, upsert, create } = fakeTransaction({
+      deliveryStatus: "pending",
+      deliveryProvider: "mem0",
+      deliveryReceipt: "event-fixture",
+      deliveryRetryAt: retryAt,
+    });
+    await new PostgresMemoryJournal(tx).transaction(access, async (documents) => {
+      expect(documents[0]!.delivery).toMatchObject({
+        status: "pending",
+        receipt: "event-fixture",
+        retryAt: retryAt.toISOString(),
+      });
+      documents[0]!.delivery = { status: "delivered", provider: "mem0", generation: 0 };
+    });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          revision: 3,
+          content: legacyRow.content,
+          deliveryStatus: "delivered",
+          deliveryReceipt: null,
+          deliveryRetryAt: null,
+        }),
+      }),
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
   it("exposes the stored row as the head revision instead of failing", async () => {
     const { tx } = fakeTransaction();
     const journal = new PostgresMemoryJournal(tx);

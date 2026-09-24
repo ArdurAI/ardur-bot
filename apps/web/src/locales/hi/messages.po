@@ -115,6 +115,10 @@ msgstr "{botName} का कंप्यूटर"
 msgid "{days}d ago"
 msgstr "{days} दिन पहले"
 
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "{failed} failed"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} घंटे पहले"
@@ -461,11 +465,16 @@ msgstr ""
 #: src/components/AskCard.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "API key"
 msgstr "API कुंजी"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "API key (optional)"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
@@ -632,6 +641,7 @@ msgstr ""
 msgid "Back to sign in"
 msgstr "साइन इन पर वापस जाएँ"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "बेस URL"
@@ -640,6 +650,10 @@ msgstr "बेस URL"
 #: src/pages/PluginsOverlay.tsx
 msgid "Bearer token"
 msgstr "बियरर टोकन"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Bearer token (optional)"
+msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "Before"
@@ -1881,6 +1895,10 @@ msgstr ""
 msgid "Documents"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Documents stay in the local journal."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Don’t have an account?"
 msgstr "खाता नहीं है?"
@@ -2292,8 +2310,8 @@ msgstr "OpenAPI JSON इम्पोर्ट करें"
 msgid "Inbox & email"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Indexing sends documents to {locationLine}."
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "Indexed {delivered} of {total}"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -3809,6 +3827,16 @@ msgstr "रीसेट लिंक भेजें"
 msgid "Sending…"
 msgstr "भेजा जा रहा है…"
 
+#. placeholder {0}: memoryProviderHost(config!.settings) ?? config!.provider
+#. placeholder {0}: memoryProviderHost(pendingConnection.settings) ?? registration?.name
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Sends memory text to {0}"
+msgstr ""
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Sends memory text to {host}"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr ""
@@ -4130,12 +4158,20 @@ msgstr ""
 msgid "Test"
 msgstr "टेस्ट करें"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Test connection"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Test connection and preview"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
+msgstr ""
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Testing…"
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx

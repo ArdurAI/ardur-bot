@@ -506,6 +506,23 @@ export const appContract = {
       ),
     exportMarkdown: oc.input(z.object({ botId: Id.optional() })).output(z.string()),
     providerConfig: oc.output(SpaceMemoryConfigSchema.nullable()),
+    deliveryProgress: oc.output(
+      z.object({
+        total: z.number(),
+        delivered: z.number(),
+        pending: z.number(),
+        failed: z.number(),
+      }),
+    ),
+    testProvider: oc
+      .input(
+        z.object({
+          provider: z.string().min(1),
+          settings: z.record(z.string(), z.string()),
+          credentials: z.record(z.string(), z.string()),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
     connectProvider: oc
       .input(
         z.object({

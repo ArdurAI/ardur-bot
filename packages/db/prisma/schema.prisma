@@ -852,6 +852,8 @@ model MemoryDocument {
   deliveryStatus String @default("delivered")
   deliveryGeneration Int @default(0)
   deliveryProvider String?
+  deliveryReceipt String?
+  deliveryRetryAt DateTime?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   revisions MemoryRevision[]

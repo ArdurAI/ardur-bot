@@ -72,6 +72,21 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await expect(memory.getByRole("button", { name: "Test connection and preview" })).toBeDisabled();
   await captureScreenshot(page, testInfo, "settings-memory-git");
   await memory.getByLabel("Memory location").selectOption("service");
+  await memory.getByLabel("Memory service").selectOption("mem0");
+  await expect(memory.getByText("Sends memory text to api.mem0.ai", { exact: true })).toBeVisible();
+  await expect(memory.getByLabel("API key", { exact: true })).toBeVisible();
+  await captureScreenshot(page, testInfo, "settings-memory-mem0-platform");
+  await memory.getByLabel("Memory service").selectOption("mem0-oss");
+  await memory.getByLabel("Base URL", { exact: true }).fill("http://127.0.0.1:8000");
+  await expect(
+    memory.getByText("Sends memory text to 127.0.0.1:8000", { exact: true }),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "settings-memory-mem0-oss");
+  await memory.getByLabel("Memory service").selectOption("graphiti");
+  await memory.getByLabel("Base URL", { exact: true }).fill("http://127.0.0.1:8001");
+  await expect(memory.getByLabel("Bearer token (optional)")).toBeVisible();
+  await expect(memory.getByRole("button", { name: "Test connection", exact: true })).toBeEnabled();
+  await captureScreenshot(page, testInfo, "settings-memory-graphiti");
   await memory.getByLabel("Memory service").selectOption("serenity");
   await expect(memory.getByLabel("MCP endpoint")).toBeVisible();
   await expect(memory.getByLabel("Bearer token")).toBeVisible();

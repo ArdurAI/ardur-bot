@@ -13,6 +13,7 @@ export * from "./integration-settings.js";
 export * from "./local-settings.js";
 export * from "./mcp.js";
 export * from "./memory-documents.js";
+export { memoryProviderHost } from "./memory-provider-location.js";
 export * from "./openai-compatible-ui.js";
 export * from "./provider-errors.js";
 export * from "./reactions.js";
@@ -20,5 +21,4 @@ export * from "./rpc.js";
 export * from "./runs.js";
 export * from "./runtime-pins.js";
 export * from "./search.js";
-
 export * from "./terminal.js";

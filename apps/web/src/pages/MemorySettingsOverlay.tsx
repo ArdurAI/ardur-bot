@@ -1,4 +1,5 @@
 import type { MemoryImportPreview, SpaceMemoryConfig } from "@ardurbot/contracts";
+import { memoryProviderHost } from "@ardurbot/contracts";
 import {
   Button,
   Dialog,
@@ -16,6 +17,7 @@ import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { GitMemorySettings, GitMemoryStatus } from "./GitMemorySettings";
 import { SpaceMemorySection } from "./KnowledgeSection";
+import { MemoryDeliveryProgress } from "./MemoryDeliveryProgress";
 import type { MemoryProviderConnectionDraft } from "./memory-providers/registry";
 import {
   defaultMemoryProviderSettings,
@@ -133,13 +135,14 @@ export function MemorySettingsOverlay({
     setBusy(true);
     setError(null);
     try {
+      await rpc.memory.testProvider({ provider: registration.id, ...draft });
       const result = await rpc.memory.location({
         location: "postgres",
         expectedGeneration: config?.generation ?? 0,
       });
       setPreview(result);
       setPendingConnection(draft);
-      return false;
+      return true;
     } catch {
       setError(t`Could not connect the memory service. Check the connection and retry.`);
       return false;
@@ -192,7 +195,7 @@ export function MemorySettingsOverlay({
     activeLocation === "git"
       ? t`Syncs to ${config?.documentSettings.host ?? ""}`
       : activeLocation === "service"
-        ? (memoryProviderSettings(config!.provider)?.name ?? config!.provider)
+        ? t`Sends memory text to ${memoryProviderHost(config!.settings) ?? config!.provider}`
         : localDesktop
           ? t`On this device`
           : t`On your server`;
@@ -251,6 +254,7 @@ export function MemorySettingsOverlay({
           </NativeSelectOption>
         </NativeSelect>
         <p className="mt-2 text-sm text-muted-foreground">{locationLine}</p>
+        {activeLocation === "service" ? <MemoryDeliveryProgress key={config?.generation} /> : null}
         {activeLocation === "git" ? <GitMemoryStatus key={config?.generation} /> : null}
         <details className="mt-2 text-xs text-muted-foreground">
           <summary>
@@ -258,7 +262,7 @@ export function MemorySettingsOverlay({
           </summary>
           <p>
             {activeLocation === "service"
-              ? t`Indexing sends documents to ${locationLine}.`
+              ? t`Documents stay in the local journal.`
               : t`No embedding service is configured.`}
           </p>
           {activeLocation === "service" ? (
@@ -385,9 +389,12 @@ export function MemorySettingsOverlay({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
-            {registration ? <registration.SettingsForm busy={busy} onConnect={connect} /> : null}
+            {registration && !pendingConnection ? (
+              <registration.SettingsForm key={registration.id} busy={busy} onConnect={connect} />
+            ) : null}
             {pendingConnection && preview ? (
               <div className="space-y-2">
+                <p className="text-sm">{t`Sends memory text to ${memoryProviderHost(pendingConnection.settings) ?? registration?.name}`}</p>
                 <p>
                   <Trans>
                     {preview.documents} documents, {preview.revisions} revisions

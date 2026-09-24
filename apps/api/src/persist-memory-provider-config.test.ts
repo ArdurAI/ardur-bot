@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   disconnectMemoryProvider,
   persistMemoryProviderConfig,
+  testMemoryProviderConnection,
   updateMemoryProviderDefaultScope,
 } from "./memory-provider-config.js";
 
@@ -56,8 +57,12 @@ function makeDeps(
   const deleteConfig = vi.fn().mockResolvedValue({ id: "cfg-1" });
   const prisma = {
     $queryRaw: vi.fn().mockResolvedValue([]),
+    $executeRaw: vi.fn().mockResolvedValue(0),
     bot: { findMany: vi.fn().mockResolvedValue([]) },
-    memoryDocument: { findMany: vi.fn().mockResolvedValue([]) },
+    memoryDocument: {
+      findMany: vi.fn().mockResolvedValue([]),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
     spaceMember: {
       findUnique: vi
         .fn()
@@ -98,6 +103,96 @@ function connectionInput(mode: "cloud" | "local", baseUrl?: string) {
 }
 
 describe("persistMemoryProviderConfig", () => {
+  it.each(["mem0", "mem0-oss", "graphiti"])(
+    "tests %s before saving and keeps credentials out of the response and settings",
+    async (provider) => {
+      const { deps, upsert } = makeDeps();
+      const input = {
+        provider,
+        settings: { baseUrl: "https://memory.example.test" },
+        credentials: { apiKey: "fixture-placeholder" },
+        defaultMemoryScope: "isolated" as const,
+      };
+      const prepareConnection = vi.fn(async () => ({
+        provider,
+        settings: input.settings,
+        credentials: input.credentials,
+      }));
+      const preparedDeps = {
+        ...deps,
+        classifySettings: async () => input.settings,
+        prepareConnection,
+      };
+      expect(await testMemoryProviderConnection(preparedDeps, actor, input)).toEqual({ ok: true });
+      expect(deps.secrets.put).not.toHaveBeenCalled();
+      expect(upsert).not.toHaveBeenCalled();
+      await persistMemoryProviderConfig(preparedDeps, actor, input);
+      expect(prepareConnection).toHaveBeenCalledTimes(2);
+      expect(deps.secrets.put).toHaveBeenCalledWith(
+        JSON.stringify(input.credentials),
+        expect.anything(),
+      );
+      expect(upsert.mock.calls[0]![0].create.settings).toEqual(input.settings);
+    },
+  );
+  it.each(["mem0-oss", "graphiti"])(
+    "gates private %s connection tests before a credentialed probe",
+    async (provider) => {
+      const { deps } = makeDeps();
+      const prepareConnection = vi.fn();
+      await expect(
+        testMemoryProviderConnection({ ...deps, prepareConnection }, actor, {
+          provider,
+          settings: { baseUrl: "http://127.0.0.1:8000" },
+          credentials: {},
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(prepareConnection).not.toHaveBeenCalled();
+    },
+  );
+  it("retargets every space revision without revising documents and queues each authorized owner", async () => {
+    const { deps } = makeDeps();
+    vi.mocked(deps.prisma.memoryDocument.findMany).mockImplementation(async (input) =>
+      input?.select
+        ? ([
+            { id: "private-doc", revision: 4, userId: "member", scope: "user" },
+            { id: "shared-doc", revision: 2, userId: "past-member", scope: "space-shared" },
+          ] as never)
+        : [],
+    );
+    const enqueue = vi.fn(async () => undefined);
+    await persistMemoryProviderConfig(
+      {
+        ...deps,
+        jobs: { enqueue },
+        classifySettings: async () => ({}),
+        prepareConnection: async () => ({
+          provider: "mem0",
+          settings: { filterVersion: "platform-v3" },
+          credentials: {},
+        }),
+      },
+      actor,
+      { provider: "mem0", settings: {}, credentials: {}, defaultMemoryScope: "isolated" },
+    );
+    expect(deps.prisma.memoryDocument.updateMany).toHaveBeenCalledWith({
+      where: { spaceId: actor.spaceId },
+      data: {
+        deliveryStatus: "pending",
+        deliveryProvider: "mem0",
+        deliveryGeneration: 1,
+        deliveryReceipt: null,
+        deliveryRetryAt: null,
+      },
+    });
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    expect(enqueue.mock.calls[0]![0]).toMatchObject({
+      payload: { documentId: "private-doc", revision: 4, userId: "member" },
+    });
+    expect(enqueue.mock.calls[1]![0]).toMatchObject({
+      payload: { documentId: "shared-doc", revision: 2, userId: actor.userId },
+    });
+  });
   it("rejects unknown providers as bad requests without probing or writing", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

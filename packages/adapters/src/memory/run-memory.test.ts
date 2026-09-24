@@ -20,7 +20,7 @@ describe("executor document hooks", () => {
       ok: true,
       documentId: "doc",
       revision: 1,
-      status: "Saved; indexing pending",
+      status: "Saved locally. Indexing pending.",
     });
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({ scope: "bot", botId: "bot", content: "Safe fact" }),

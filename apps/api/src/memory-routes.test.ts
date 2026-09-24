@@ -66,6 +66,13 @@ async function fixture() {
   return { request, actor, saved };
 }
 describe("authorized memory RPC lifecycle", () => {
+  it("exposes authorized indexing progress as counts only", async () => {
+    const f = await fixture();
+    expect(await f.request("deliveryProgress")).toEqual({
+      status: 200,
+      body: { json: { total: 0, delivered: 0, pending: 0, failed: 0 } },
+    });
+  });
   it("pages the selected store and edits, deletes and restores with optimistic revisions", async () => {
     const f = await fixture();
     const listed = await f.request("list", { limit: 1 });

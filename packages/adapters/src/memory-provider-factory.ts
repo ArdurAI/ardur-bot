@@ -1,5 +1,19 @@
 import type { DurableMemoryScope, SemanticMemoryProvider } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
+import {
+  GraphitiMemoryProvider,
+  graphitiConnection,
+  prepareGraphitiConnection,
+} from "./memory/graphiti-memory-provider.js";
+import {
+  Mem0MemoryProvider,
+  mem0Connection,
+  prepareMem0Connection,
+} from "./memory/mem0-memory-provider.js";
+import {
+  classifySemanticSettings,
+  semanticRequiresDeploymentOwner,
+} from "./memory/semantic-http.js";
 import { UnavailableMemoryProvider } from "./memory/unavailable-provider.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import {
@@ -62,7 +76,41 @@ interface MemoryProviderAdapter {
   decodeLegacyCredentials?(plaintext: string): Record<string, string> | null;
 }
 
-const MEMORY_PROVIDER_ADAPTERS: ReadonlyMap<string, MemoryProviderAdapter> = new Map([
+const MEMORY_PROVIDER_ADAPTERS: ReadonlyMap<string, MemoryProviderAdapter> = new Map<
+  string,
+  MemoryProviderAdapter
+>([
+  [
+    "mem0",
+    {
+      requiresDeploymentOwner: () => false,
+      prepare: (settings, credentials, options) =>
+        prepareMem0Connection("mem0", settings, credentials, options),
+      create: (settings, credentials) =>
+        new Mem0MemoryProvider(mem0Connection("mem0", settings, credentials)),
+    },
+  ],
+  [
+    "mem0-oss",
+    {
+      requiresDeploymentOwner: semanticRequiresDeploymentOwner,
+      classifySettings: classifySemanticSettings,
+      prepare: (settings, credentials, options) =>
+        prepareMem0Connection("mem0-oss", settings, credentials, options),
+      create: (settings, credentials) =>
+        new Mem0MemoryProvider(mem0Connection("mem0-oss", settings, credentials)),
+    },
+  ],
+  [
+    "graphiti",
+    {
+      requiresDeploymentOwner: semanticRequiresDeploymentOwner,
+      classifySettings: classifySemanticSettings,
+      prepare: prepareGraphitiConnection,
+      create: (settings, credentials) =>
+        new GraphitiMemoryProvider(graphitiConnection(settings, credentials)),
+    },
+  ],
   [
     SUPERMEMORY_PROVIDER_ID,
     {
@@ -144,7 +192,11 @@ export function toStringRecord(value: unknown): Record<string, string> {
 function decodeCredentials(provider: string, plaintext: string): Record<string, string> {
   try {
     const credentials = toStringRecord(JSON.parse(plaintext));
-    if (Object.keys(credentials).length > 0) return credentials;
+    if (
+      Object.keys(credentials).length > 0 ||
+      (plaintext.trim() === "{}" && (provider === "mem0-oss" || provider === "graphiti"))
+    )
+      return credentials;
   } catch {
     // Configurations created before the generic provider boundary stored the API key directly.
   }
