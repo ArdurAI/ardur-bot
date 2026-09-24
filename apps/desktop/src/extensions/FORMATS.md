@@ -1,6 +1,6 @@
 # Customization formats and runtime boundaries
 
-Extensions help the local-first user connect local tools through a generated configuration sheet. Developer helps the builder inspect local processes, redacted logs, and configuration changes. Skills help the researcher keep reusable procedures together. Connectors help the operator find connections that need attention. Plugin previews help the team lead review the components added to a space.
+Extensions help the local-first user connect local tools through a generated configuration sheet. MCP helps the builder inspect local processes, redacted logs, and configuration changes. Developer identifies the connected server and desktop version. Skills help the researcher keep reusable procedures together. Integrations helps the operator find product connections that need attention. Plugin previews help the team lead review the components added to a space.
 
 ## MCPB and DXT
 
@@ -32,6 +32,8 @@ Desktop skill import uses a folder picker; web import uses a ZIP upload. Both sn
 
 File skills have no existing per-bot assignment model. They retain the current user-and-space scope. Taught and learned skills retain their existing bot ownership, and enabled state is checked before runtime loading. Learned skills link to the existing learning inbox. Plugin commands become namespaced skill-backed slash entries through the existing composer skill picker. Plugin instructions are loaded with enabled plugin components.
 
-The five page registrations are in `SettingsOverlay.tsx` because `settings-sections.ts` was absent in this checkout. `customize/registrations.tsx` holds deferred page imports and the Desktop app / Customize grouping. Move the five registrations to the settings-shell registry when that stream lands. `connectors.summary` returns `{ needingReconnection }` for the composer's pending-connection badge. The API contracts and mobile views share connector classification. Mobile presents Skills, Connectors, and Plugins as read-only lists.
+The four page registrations replace the reserved Extensions, Developer, Skills, and Plugins lines in `settings-sections.ts`. The shell owns navigation and availability. The former Connectors table is part of the trusted Integrations section; the former Developer MCP diagnostics and config editor are part of MCP. Developer retains only server URL and app version. `connectors.summary` still returns `{ needingReconnection }` and is read by the composer. The API contracts and mobile views share connection classification. Mobile presents Skills, MCP, and Plugins as read-only lists, with product account type and state in the existing Integrations catalog. The legacy mobile connectors route redirects to Integrations.
 
 The additive migration is `20260924070000_customization`. Its SQL is generated from the prior and current Prisma schemas and uses `taught_skills`, `agent_skills`, `mcp_servers`, `customization_marketplaces`, and `plugin_installs`. There are no data-destructive statements or table renames.
+
+MCP defaults are opt-in remote servers: [Context7](https://context7.com/docs/resources/all-clients) and [DeepWiki](https://docs.devin.ai/work-with-devin/deepwiki-mcp), using their documented Streamable HTTP endpoints. Listing defaults performs no connection or grant. Enabling a saved remote server preserves encrypted credentials and clears bot tool grants for review. Native local server additions use the reviewed config editor so packaged processes keep host-service authorization.

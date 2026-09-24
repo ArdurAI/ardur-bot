@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+// Whole-tree scans include binary assets and share filesystem throughput with parallel checks.
+const repositoryScanTimeout = 60_000;
 // Assemble the search terms so this test does not exempt itself from the scan.
 const forbidden = [
   ["pi-anthropic", "oauth"].join("-"),
@@ -16,7 +18,7 @@ const forbidden = [
 ];
 const allowedHistory = (path: string) => path === "NOTICE" || path.startsWith("docs/decisions/");
 
-function hasForbiddenReference(path: string, contents: string): boolean {
+function hasForbiddenReference(path: string, contents: string | Buffer): boolean {
   return (
     !allowedHistory(path) &&
     forbidden.some((term) => path.includes(term) || contents.includes(term))
@@ -30,7 +32,7 @@ function violations(paths: string[]): string[] {
     if (!existsSync(absolute)) return false; // Uncommitted deletions are absent from the build.
     const contents = lstatSync(absolute).isSymbolicLink()
       ? readlinkSync(absolute)
-      : readFileSync(absolute, "utf8");
+      : readFileSync(absolute);
     return hasForbiddenReference(path, contents);
   });
 }
@@ -53,24 +55,32 @@ function contextFiles(directory = ""): string[] {
 }
 
 describe("subscription credential boundary", () => {
-  it("keeps removed OAuth and native credential access out of tracked source", () => {
-    const paths = execFileSync(
-      "git",
-      ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-      {
-        cwd: root,
-        encoding: "utf8",
-      },
-    )
-      .split("\0")
-      .filter(Boolean);
-    expect(violations([...new Set(paths)])).toEqual([]);
-  });
+  it(
+    "keeps removed OAuth and native credential access out of tracked source",
+    () => {
+      const paths = execFileSync(
+        "git",
+        ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        {
+          cwd: root,
+          encoding: "utf8",
+        },
+      )
+        .split("\0")
+        .filter(Boolean);
+      expect(violations([...new Set(paths)])).toEqual([]);
+    },
+    repositoryScanTimeout,
+  );
 
-  it("keeps the server image source context free of removed OAuth and native credential access", () => {
-    // Includes untracked and gitignored files Docker would copy, excluding only Docker ignores.
-    expect(violations(contextFiles())).toEqual([]);
-  });
+  it(
+    "keeps the server image source context free of removed OAuth and native credential access",
+    () => {
+      // Includes untracked and gitignored files Docker would copy, excluding only Docker ignores.
+      expect(violations(contextFiles())).toEqual([]);
+    },
+    repositoryScanTimeout,
+  );
 
   it("requires review if the server Dockerfile or ignore rules change the scanned context", () => {
     const dockerfile = readFileSync(resolve(root, "infra/compose/Dockerfile"), "utf8");
@@ -118,6 +128,12 @@ describe("subscription credential boundary", () => {
       expect(hasForbiddenReference("packages/adapters/src/restored.ts", `fetch('${term}')`)).toBe(
         true,
       );
+      expect(
+        hasForbiddenReference(
+          "assets/fixture.bin",
+          Buffer.concat([Buffer.from([0xff]), Buffer.from(term)]),
+        ),
+      ).toBe(true);
       expect(hasForbiddenReference(`${term}.ts`, "")).toBe(true);
       expect(hasForbiddenReference("docs/decisions/history.md", term)).toBe(false);
       expect(hasForbiddenReference("NOTICE", term)).toBe(false);

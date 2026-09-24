@@ -931,6 +931,7 @@ export const appContract = {
           z.union([
             z.object({ id: Id, config: McpServerConfigInput }),
             z.object({ id: Id, secret: z.string().min(1).max(16384) }),
+            z.object({ id: Id, enabled: z.boolean() }),
           ]),
         )
         .output(McpServerSchema),

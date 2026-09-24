@@ -87,7 +87,13 @@ export function CustomizationList({ kind }: { kind: MobileCustomizationKind }) {
     };
   }, [kind, version]);
   const title =
-    kind === "skills" ? t("Skills") : kind === "plugins" ? t("Plugins") : t("Connectors");
+    kind === "skills"
+      ? t("Skills")
+      : kind === "plugins"
+        ? t("Plugins")
+        : kind === "mcp"
+          ? t("MCP")
+          : t("Integrations");
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title }} />

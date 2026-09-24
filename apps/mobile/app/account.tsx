@@ -389,10 +389,20 @@ export default function Account() {
         <Pressable
           accessibilityRole="button"
           disabled={pending}
-          onPress={() => router.push("/connectors")}
+          onPress={() => router.push("/integrations")}
           style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
         >
-          <Text style={styles.settingsTitle}>{t("Connectors")}</Text>
+          <Text style={styles.settingsTitle}>{t("Integrations")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => router.push("/mcp")}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsTitle}>{t("MCP")}</Text>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
 

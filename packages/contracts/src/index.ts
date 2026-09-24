@@ -20,6 +20,7 @@ export * from "./integration-settings.js";
 export * from "./learning.js";
 export * from "./local-settings.js";
 export * from "./mcp.js";
+export * from "./mcp-defaults.js";
 export * from "./memory-documents.js";
 export { memoryProviderHost } from "./memory-provider-location.js";
 export * from "./messaging-actions.js";

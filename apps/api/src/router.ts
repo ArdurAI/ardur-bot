@@ -3337,6 +3337,26 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               throw new ORPCError("BAD_REQUEST", {
                 message: "Manage this connection in Integrations.",
               });
+            if ("enabled" in input) {
+              if (existing.transport === "stdio")
+                throw new ORPCError("BAD_REQUEST", { message: "A remote MCP server is required" });
+              await tx.botMcpServer.updateMany({
+                where: {
+                  serverId: existing.id,
+                  spaceId: context.actor.spaceId,
+                  userId: context.actor.userId,
+                },
+                data: { needsReview: true, allowAllTools: false, allowedTools: [] },
+              });
+              return tx.mcpServer.update({
+                where: { id: existing.id },
+                data: {
+                  enabled: input.enabled,
+                  connectionState: "not-connected",
+                  revision: { increment: 1 },
+                },
+              });
+            }
             const existingSecret = existing.secretId
               ? await tx.secret.findFirst({
                   where: {

@@ -24,7 +24,8 @@ export function connectorRows(input: {
   const descriptorById = new Map(input.catalog.map((entry) => [entry.id, entry]));
   const rows: ConnectorRow[] = input.servers.map((server) => {
     const connection = connectionById.get(server.id);
-    const descriptor = connection ? descriptorById.get(connection.catalogId) : undefined;
+    const catalogId = connection?.catalogId ?? server.catalogId;
+    const descriptor = catalogId ? descriptorById.get(catalogId) : undefined;
     const state = connection?.state ?? server.connectionState;
     return {
       id: server.id,
@@ -44,10 +45,29 @@ export function connectorRows(input: {
           : server.oauthStatus === "connected" || state === "connected"
             ? "connected"
             : "disconnected",
-      catalogId: descriptor?.id,
+      catalogId: catalogId ?? undefined,
       available: descriptor?.available ?? true,
     };
   });
+  for (const connection of input.connections) {
+    if (rows.some((row) => row.id === connection.id)) continue;
+    const descriptor = descriptorById.get(connection.catalogId);
+    if (!descriptor) continue;
+    rows.push({
+      id: connection.id,
+      name: descriptor.name,
+      type: descriptor.transport === "stdio" ? "desktop" : "web",
+      badges: ["included"],
+      status:
+        connection.state === "connected"
+          ? "connected"
+          : connection.state === "discovery-failed"
+            ? "reconnect"
+            : "disconnected",
+      catalogId: descriptor.id,
+      available: descriptor.available,
+    });
+  }
   if (!input.catalogTab) return rows;
   return input.catalog.map(
     (descriptor) =>

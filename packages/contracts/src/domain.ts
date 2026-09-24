@@ -717,6 +717,7 @@ export const McpServerConfigInput = z.discriminatedUnion("transport", [
 export type McpServerConfigInput = z.infer<typeof McpServerConfigInput>;
 
 export const McpServerSchema = z.object({
+  catalogId: z.string().nullable().optional(),
   managedBy: z.enum(["extension", "plugin"]).nullable().optional(),
   managedId: z.string().nullable().optional(),
   placement: z.enum(["worker", "host"]).optional(),

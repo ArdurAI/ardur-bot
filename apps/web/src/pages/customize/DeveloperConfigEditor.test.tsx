@@ -37,7 +37,7 @@ vi.mock("@ardurbot/ui-web", () => {
   };
 });
 
-import { DeveloperConfigEditor } from "./DeveloperPage";
+import { McpConfigEditor } from "./McpConfigEditor";
 
 it("requires a validated diff before the native apply boundary", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -46,9 +46,7 @@ it("requires a validated diff before the native apply boundary", async () => {
   const closed = vi.fn(),
     applied = vi.fn();
   try {
-    await act(async () =>
-      root.render(<DeveloperConfigEditor onClose={closed} onApplied={applied} />),
-    );
+    await act(async () => root.render(<McpConfigEditor onClose={closed} onApplied={applied} />));
     await act(async () =>
       [...element.querySelectorAll("button")]
         .find((button) => button.textContent === "Review changes")!

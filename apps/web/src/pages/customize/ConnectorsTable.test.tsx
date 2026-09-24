@@ -23,7 +23,7 @@ vi.mock("../../components/integrations/catalog/IntegrationManage", () => ({
   IntegrationManage: () => null,
 }));
 
-import { ConnectorsTable } from "./ConnectorsPage";
+import { IntegrationTable } from "./IntegrationTable";
 
 it("renders types, badges and status and invokes Reconnect for only the selected row", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -41,7 +41,7 @@ it("renders types, badges and status and invokes Reconnect for only the selected
   try {
     await act(async () =>
       root.render(
-        <ConnectorsTable
+        <IntegrationTable
           onConnect={reconnect}
           rows={[
             expired,
@@ -66,7 +66,7 @@ it("renders types, badges and status and invokes Reconnect for only the selected
       ),
     );
     for (const text of [
-      "Connector",
+      "Integration",
       "Type",
       "Status",
       "Web",

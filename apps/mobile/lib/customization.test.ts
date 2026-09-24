@@ -1,3 +1,4 @@
+import { DEFAULT_MCP_SERVERS } from "@ardurbot/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -22,6 +23,55 @@ import { CustomizationRows } from "../components/customization-list";
 import { loadCustomization } from "./customization";
 
 describe("mobile customization lists", () => {
+  it("separates product accounts from local MCP and includes opt-in defaults without mutations", async () => {
+    const server = {
+      name: "Fixture",
+      slug: "fixture",
+      spaceId: "space",
+      description: "",
+      transport: "stdio",
+      command: "node",
+      endpoint: null,
+      args: [],
+      envKeys: [],
+      headerKeys: [],
+      hasSecret: false,
+      enabled: true,
+      revision: 1,
+      oauthStatus: "none",
+      createdAt: "",
+      updatedAt: "",
+    };
+    const request = vi.fn(async (procedure: string) =>
+      procedure === "integrations/list"
+        ? { catalog: [], connections: [] }
+        : [
+            { ...server, id: "product", catalogId: "github" },
+            { ...server, id: "local" },
+            {
+              ...server,
+              id: "default",
+              transport: "streamable_http",
+              endpoint: DEFAULT_MCP_SERVERS[0].endpoint,
+            },
+          ],
+    );
+    expect((await loadCustomization("integrations", request)).map((row) => row.id)).toEqual([
+      "product",
+    ]);
+    const rows = await loadCustomization("mcp", request);
+    expect(rows.map((row) => row.id)).toEqual(["local", "default", "default:deepwiki"]);
+    expect(rows[0]).toMatchObject({ detail: "Desktop", badges: ["Custom", "Local dev"] });
+    expect(rows[1]?.badges).toEqual(["Included"]);
+    expect(rows[2]).toMatchObject({
+      name: "DeepWiki",
+      status: "disconnected",
+      badges: ["Included"],
+    });
+    expect(new Set(request.mock.calls.map(([procedure]) => procedure))).toEqual(
+      new Set(["integrations/list", "mcp/servers/list"]),
+    );
+  });
   it("renders read-only skill, plugin and reconnection rows without mutation controls", () => {
     const html = renderToStaticMarkup(
       createElement(CustomizationRows, {

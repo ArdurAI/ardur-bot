@@ -1,12 +1,13 @@
 import {
   CustomizationSkillSchema,
+  DEFAULT_MCP_SERVERS,
   IntegrationCatalogListSchema,
   McpServerSchema,
   PluginInstallSchema,
 } from "@ardurbot/contracts";
 import { connectorRows } from "@ardurbot/core";
 
-export type MobileCustomizationKind = "skills" | "connectors" | "plugins";
+export type MobileCustomizationKind = "skills" | "integrations" | "mcp" | "plugins";
 export type MobileCustomizationRow = {
   id: string;
   name: string;
@@ -58,10 +59,31 @@ export async function loadCustomization(
     request("integrations/list"),
     request("mcp/servers/list"),
   ]);
-  return connectorRows({
+  const parsedServers = McpServerSchema.array().parse(servers);
+  const rows = connectorRows({
     ...IntegrationCatalogListSchema.parse(catalog),
-    servers: McpServerSchema.array().parse(servers),
-  }).map((row) => ({
+    servers: parsedServers,
+  });
+  const visible = rows.filter((row) => (kind === "mcp" ? !row.catalogId : Boolean(row.catalogId)));
+  if (kind === "mcp")
+    for (const preset of DEFAULT_MCP_SERVERS) {
+      const installed = parsedServers.find(
+        (server) => !server.catalogId && !server.managedBy && server.endpoint === preset.endpoint,
+      );
+      if (installed) {
+        const row = visible.find((row) => row.id === installed.id);
+        if (row) row.badges = ["included"];
+      } else
+        visible.push({
+          id: `default:${preset.id}`,
+          name: preset.name,
+          type: "web",
+          badges: ["included"],
+          status: "disconnected",
+          available: true,
+        });
+    }
+  return visible.map((row) => ({
     id: row.id,
     name: row.name,
     description: "",

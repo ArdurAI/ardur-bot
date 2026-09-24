@@ -16,6 +16,7 @@ import { Folder, Puzzle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { desktopBridge } from "../../lib/desktop";
 import { rpc, selectedSpaceId } from "../../lib/rpc";
+import type { SettingsPageProps } from "../settings-types";
 import type { CatalogTab, ListSort } from "./CustomizeControls";
 import {
   CustomizeToolbar,
@@ -82,7 +83,9 @@ export function PluginInstallReview({
     </Dialog>
   );
 }
-export default function PluginsPage() {
+export default function PluginsPage({
+  onBusyChange,
+}: Partial<Pick<SettingsPageProps, "onBusyChange">> = {}) {
   const { t, i18n } = useLingui();
   const [tab, setTab] = useState<CatalogTab>("yours");
   const [query, setQuery] = useState("");
@@ -101,6 +104,10 @@ export default function PluginsPage() {
     null,
   );
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    onBusyChange?.(busy);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
   const [failed, setFailed] = useState(false);
   const native = desktopBridge()?.customization;
   const refresh = useCallback(async () => {

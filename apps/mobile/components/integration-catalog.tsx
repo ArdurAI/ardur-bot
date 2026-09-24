@@ -1,4 +1,7 @@
 import type { IntegrationCatalogList } from "@ardurbot/contracts";
+import { McpServerSchema } from "@ardurbot/contracts";
+import type { ConnectorRow } from "@ardurbot/core";
+import { connectorRows } from "@ardurbot/core";
 import { useEffect, useState } from "react";
 import { AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { rpc } from "../lib/api";
@@ -10,10 +13,22 @@ export function IntegrationCatalog() {
   const { t } = useI18n();
   const styles = useThemedStyles(createStyles);
   const [data, setData] = useState<IntegrationCatalogList>();
+  const [rows, setRows] = useState<ConnectorRow[]>([]);
   const [error, setError] = useState(false);
   async function load() {
     try {
-      setData(await loadIntegrationCatalog(rpc));
+      const [catalog, servers] = await Promise.all([
+        loadIntegrationCatalog(rpc),
+        rpc("mcp/servers/list"),
+      ]);
+      setRows(
+        connectorRows({
+          ...catalog,
+          servers: McpServerSchema.array().parse(servers),
+          catalogTab: true,
+        }),
+      );
+      setData(catalog);
       setError(false);
     } catch {
       setError(true);
@@ -38,6 +53,7 @@ export function IntegrationCatalog() {
       ) : null}
       {data?.catalog.map((descriptor) => {
         const connection = data.connections.find((entry) => entry.catalogId === descriptor.id);
+        const row = rows.find((entry) => entry.catalogId === descriptor.id);
         const url =
           connection?.state === "needs-client-registration" && descriptor.authKind !== "token"
             ? descriptor.docsUrl
@@ -45,6 +61,17 @@ export function IntegrationCatalog() {
         return (
           <View key={descriptor.id} testID={`integration-${descriptor.id}`} style={styles.card}>
             <Text style={styles.title}>{descriptor.name}</Text>
+            <View style={styles.metadata}>
+              <Text style={styles.secondary}>{t(row?.type === "desktop" ? "Desktop" : "Web")}</Text>
+              <Text style={styles.secondary}>{t("Included")}</Text>
+              <Text style={styles.secondary}>
+                {row?.status === "connected"
+                  ? `✓ ${t("Connected")}`
+                  : row?.status === "reconnect"
+                    ? `⚠ ${t("Needs reconnection")}`
+                    : t("Disconnected")}
+              </Text>
+            </View>
             <Text style={styles.secondary}>
               {t(integrationCardMessage(descriptor, connection))}
             </Text>
@@ -58,7 +85,7 @@ export function IntegrationCatalog() {
                   {t(
                     url === descriptor.docsUrl
                       ? "Open documentation"
-                      : connection?.state === "connected"
+                      : row?.status === "connected"
                         ? "Manage on web"
                         : "Connect on web",
                   )}
@@ -78,6 +105,7 @@ function createStyles() {
     card: { padding: 16, gap: 12, borderRadius: 16, backgroundColor: native.fill },
     title: { color: native.label, fontSize: 16, fontWeight: "600" },
     secondary: { color: native.secondaryLabel, fontSize: 14 },
+    metadata: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
     button: {
       minHeight: 44,
       justifyContent: "center",

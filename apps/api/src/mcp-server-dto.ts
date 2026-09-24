@@ -3,6 +3,7 @@ import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 
 export function mcpServerDto(
   row: {
+    catalogId?: string | null;
     managedBy?: string | null;
     managedId?: string | null;
     placement?: string;
@@ -36,6 +37,7 @@ export function mcpServerDto(
       ? Object.keys(row.headers)
       : [];
   return {
+    catalogId: row.catalogId ?? null,
     id: row.id,
     spaceId: row.spaceId,
     slug: row.slug,

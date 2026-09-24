@@ -27,6 +27,32 @@ const catalog = [
   { id: "local-fixture", name: "Local service", transport: "stdio", available: false },
 ] as IntegrationDescriptor[];
 describe("connector table data", () => {
+  it("keeps product ownership during independent catalog and server refreshes", () => {
+    expect(
+      connectorRows({
+        catalog,
+        connections: [],
+        servers: [server("known", { catalogId: "fixture-catalog" })],
+      })[0],
+    ).toMatchObject({ catalogId: "fixture-catalog", badges: ["included"] });
+    const rows = connectorRows({
+      catalog,
+      servers: [],
+      connections: [
+        {
+          id: "pending",
+          catalogId: "fixture-catalog",
+          state: "awaiting-consent",
+        } as IntegrationConnection,
+      ],
+      catalogTab: true,
+    });
+    expect(rows[0]).toMatchObject({
+      id: "pending",
+      catalogId: "fixture-catalog",
+      status: "disconnected",
+    });
+  });
   it("derives Web/Desktop and Included/Custom/Local dev without labeling managed servers as development servers", () => {
     const rows = connectorRows({
       catalog,

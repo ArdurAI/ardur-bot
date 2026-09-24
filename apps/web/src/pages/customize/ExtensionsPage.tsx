@@ -9,15 +9,15 @@ import { Blocks, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { desktopBridge } from "../../lib/desktop";
 import { rpc, selectedSpaceId } from "../../lib/rpc";
+import type { SettingsPageProps } from "../settings-types";
 import { ConfigureExtension } from "./ConfigureExtension";
 import { EmptyList, ListSection, PageError, RowMenu } from "./CustomizeControls";
 import { ensureCustomizationHost } from "./native";
 
 export default function ExtensionsPage({
-  onNavigate,
-}: {
-  onNavigate?(id: "developer" | "connectors"): void;
-}) {
+  navigate,
+  onBusyChange,
+}: Partial<Pick<SettingsPageProps, "navigate" | "onBusyChange">>) {
   const { t } = useLingui();
   const bridge = desktopBridge()?.customization;
   const [items, setItems] = useState<DesktopExtension[]>([]);
@@ -27,6 +27,10 @@ export default function ExtensionsPage({
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    onBusyChange?.(busy);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
   const refresh = useCallback(async () => {
     if (!bridge) return;
     try {
@@ -120,7 +124,7 @@ export default function ExtensionsPage({
       <Button
         className="self-start"
         variant="ghost"
-        onClick={() => onNavigate?.("developer")}
+        onClick={() => navigate?.("mcp")}
       >{t`Advanced settings`}</Button>
       <button
         type="button"
@@ -212,7 +216,7 @@ export default function ExtensionsPage({
                       disabled={!item.available}
                       onClick={() => {
                         setCatalog(null);
-                        onNavigate?.("connectors");
+                        navigate?.("integrations");
                       }}
                     >{t`Open`}</Button>
                   </div>

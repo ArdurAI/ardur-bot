@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { desktopBridge } from "../../lib/desktop";
 import { rpc, selectedSpaceId } from "../../lib/rpc";
 import { LearningInbox } from "../LearningInbox";
+import type { SettingsPageProps } from "../settings-types";
 import type { CatalogTab, ListSort } from "./CustomizeControls";
 import {
   CustomizeToolbar,
@@ -17,7 +18,9 @@ import {
   readableDate,
 } from "./CustomizeControls";
 
-export default function SkillsPage() {
+export default function SkillsPage({
+  onBusyChange,
+}: Partial<Pick<SettingsPageProps, "onBusyChange">> = {}) {
   const { t, i18n } = useLingui();
   const [tab, setTab] = useState<CatalogTab>("yours");
   const [query, setQuery] = useState("");
@@ -30,6 +33,10 @@ export default function SkillsPage() {
   const [opened, setOpened] = useState<CustomizationSkill | null>(null);
   const [inbox, setInbox] = useState(false);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    onBusyChange?.(busy);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
   const [failed, setFailed] = useState(false);
   const upload = useRef<HTMLInputElement>(null);
   const refresh = useCallback(async () => {

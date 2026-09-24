@@ -290,10 +290,9 @@ msgstr "Active model"
 msgid "Activity"
 msgstr "Activity"
 
-#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/customize/CustomizeControls.tsx
-#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -328,10 +327,6 @@ msgstr "Add a stdio command."
 msgid "Add an HTTPS server URL."
 msgstr "Add an HTTPS server URL."
 
-#: src/pages/customize/DeveloperPage.tsx
-msgid "Add and manage MCP servers that you're working on"
-msgstr "Add and manage MCP servers that you're working on"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Add another"
 msgstr "Add another"
@@ -339,10 +334,6 @@ msgstr "Add another"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Add computer connection"
 msgstr "Add computer connection"
-
-#: src/pages/customize/ConnectorsPage.tsx
-msgid "Add connector"
-msgstr "Add connector"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Add Executor"
@@ -440,7 +431,7 @@ msgstr "Advanced settings"
 msgid "Advanced..."
 msgstr "Advanced..."
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr "After"
@@ -615,7 +606,7 @@ msgstr "API key header"
 msgid "App token"
 msgstr "App token"
 
-#: src/pages/settings/DeveloperSection.tsx
+#: src/pages/customize/DeveloperPage.tsx
 msgid "App version"
 msgstr "App version"
 
@@ -628,7 +619,7 @@ msgid "Applied"
 msgstr "Applied"
 
 #: src/pages/ComputerProfilesSettings.tsx
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 msgid "Apply"
 msgstr "Apply"
 
@@ -695,7 +686,7 @@ msgstr "Archived. Chat, memory, and files kept."
 msgid "Ardur (built-in)"
 msgstr "Ardur (built-in)"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
 msgstr "Arguments"
@@ -819,7 +810,7 @@ msgid "Awake for {0} routines"
 msgstr "Awake for {0} routines"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Back"
@@ -851,7 +842,7 @@ msgstr "Bearer token"
 msgid "Bearer token (optional)"
 msgstr "Bearer token (optional)"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
@@ -991,7 +982,7 @@ msgstr "Can't reach the server."
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -1038,7 +1029,7 @@ msgstr "Capabilities"
 msgid "Catalog"
 msgstr "Catalog"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Change"
 msgstr "Change"
@@ -1338,7 +1329,7 @@ msgstr "Color {color}"
 msgid "Coming soon"
 msgstr "Coming soon"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "Command"
@@ -1462,7 +1453,7 @@ msgstr "Confluence space keys or IDs"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/provider-error-message.tsx
@@ -1470,11 +1461,6 @@ msgstr "Confluence space keys or IDs"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "Connect"
-
-#. placeholder {0}: tokenFor?.name ?? ""
-#: src/pages/customize/ConnectorsPage.tsx
-msgid "Connect {0}"
-msgstr "Connect {0}"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Connect a chat bot"
@@ -1514,7 +1500,7 @@ msgstr "Connect your account."
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1572,10 +1558,6 @@ msgstr "Connection name"
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Connection to {0} is still pending. You can close this and check again."
-
-#: src/pages/customize/ConnectorsPage.tsx
-msgid "Connector"
-msgstr "Connector"
 
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
@@ -1722,7 +1704,7 @@ msgid "Could not complete the update. Try again."
 msgstr "Could not complete the update. Try again."
 
 #: src/pages/customize/CustomizeControls.tsx
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 msgid "Could not complete this action."
 msgstr "Could not complete this action."
 
@@ -1759,10 +1741,6 @@ msgstr "Could not connect this voice provider"
 #: src/pages/Shell.tsx
 msgid "Could not connect to the computer screen"
 msgstr "Could not connect to the computer screen"
-
-#: src/pages/customize/ConnectorsPage.tsx
-msgid "Could not connect. Check the details and try again."
-msgstr "Could not connect. Check the details and try again."
 
 #: src/pages/Auth.tsx
 #: src/pages/Shell.tsx
@@ -1908,6 +1886,10 @@ msgstr "Could not load or save tools."
 msgid "Could not load plugins"
 msgstr "Could not load plugins"
 
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "Could not load server diagnostics."
+msgstr "Could not load server diagnostics."
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr "Could not load settings. Try again."
@@ -1928,7 +1910,7 @@ msgstr "Could not load Team; retry."
 msgid "Could not load the last check."
 msgstr "Could not load the last check."
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 msgid "Could not load the server configuration."
 msgstr "Could not load the server configuration."
 
@@ -2180,6 +2162,10 @@ msgstr "Could not update computer"
 msgid "Could not update learning. Try again."
 msgstr "Could not update learning. Try again."
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Could not update MCP server."
+msgstr "Could not update MCP server."
+
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "Could not update reaction"
@@ -2300,7 +2286,7 @@ msgstr "Credentials are encrypted and never sent to the model."
 msgid "Credentials are stored encrypted on your server."
 msgstr "Credentials are stored encrypted on your server."
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 msgid "Credentials changed"
 msgstr "Credentials changed"
 
@@ -2328,13 +2314,9 @@ msgstr "Current password"
 msgid "Current space"
 msgstr "Current space"
 
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 msgid "Custom"
 msgstr "Custom"
-
-#: src/pages/customize/ConnectorsPage.tsx
-msgid "Custom MCP server"
-msgstr "Custom MCP server"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Customer support"
@@ -2389,6 +2371,10 @@ msgstr "Default ({0})"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "Default scope"
+
+#: src/pages/customize/McpDefaults.tsx
+msgid "Default servers"
+msgstr "Default servers"
 
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -2469,7 +2455,7 @@ msgstr "Describe what this bot does"
 msgid "Description"
 msgstr "Description"
 
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 msgid "Desktop"
 msgstr "Desktop"
 
@@ -2495,7 +2481,6 @@ msgstr "Destination scope"
 msgid "Details"
 msgstr "Details"
 
-#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/settings-sections.ts
 msgid "Developer"
 msgstr "Developer"
@@ -2533,6 +2518,7 @@ msgid "Direct MCP"
 msgstr "Direct MCP"
 
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/McpServersOverlay.tsx
 msgid "Disable"
 msgstr "Disable"
 
@@ -2550,7 +2536,7 @@ msgstr "Disconnect"
 msgid "Disconnect this computer"
 msgstr "Disconnect this computer"
 
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 msgid "Disconnected"
 msgstr "Disconnected"
 
@@ -2605,6 +2591,7 @@ msgid "Document"
 msgstr "Document"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/customize/McpDefaults.tsx
 msgid "Documentation"
 msgstr "Documentation"
 
@@ -2682,7 +2669,8 @@ msgstr "Earlier message"
 msgid "Edit"
 msgstr "Edit"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/McpServersOverlay.tsx
 msgid "Edit config"
 msgstr "Edit config"
 
@@ -2702,7 +2690,9 @@ msgstr "Effort: not applicable"
 msgid "Email"
 msgstr "Email"
 
+#: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/McpServersOverlay.tsx
 msgid "Enable"
 msgstr "Enable"
 
@@ -2752,11 +2742,11 @@ msgstr "Enter a whole number from 1 to 1000 for the image limit."
 msgid "Enter this code at <0>{0}</0>"
 msgstr "Enter this code at <0>{0}</0>"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 msgid "Environment variables"
 msgstr "Environment variables"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 msgid "Error"
 msgstr "Error"
 
@@ -3087,7 +3077,7 @@ msgstr "Hi, this is how I'll sound when I read replies out loud."
 msgid "Hide bots"
 msgstr "Hide bots"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
 msgstr "Hide logs"
 
@@ -3114,10 +3104,6 @@ msgstr "Home link"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Home storage size"
 msgstr "Home storage size"
-
-#: src/pages/customize/ConnectorsPage.tsx
-msgid "Host"
-msgstr "Host"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Host service:"
@@ -3196,8 +3182,8 @@ msgstr "Inbox"
 msgid "Inbox & email"
 msgstr "Inbox & email"
 
-#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/customize/ExtensionsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 #: src/pages/customize/SkillsPage.tsx
 msgid "Included"
 msgstr "Included"
@@ -3268,6 +3254,10 @@ msgstr "Instructions"
 #: src/pages/LearningObservation.tsx
 msgid "integration"
 msgstr "integration"
+
+#: src/pages/customize/IntegrationTable.tsx
+msgid "Integration"
+msgstr "Integration"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
@@ -3540,13 +3530,9 @@ msgstr "Local"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 msgid "Local dev"
 msgstr "Local dev"
-
-#: src/pages/customize/DeveloperPage.tsx
-msgid "Local MCP servers"
-msgstr "Local MCP servers"
 
 #: src/pages/ModelDestinations.tsx
 msgid "Local only"
@@ -3882,7 +3868,6 @@ msgstr "My documents"
 
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/Auth.tsx
-#: src/pages/customize/ConnectorsPage.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3911,7 +3896,7 @@ msgid "Needs input"
 msgstr "Needs input"
 
 #: src/components/composer/ComposerMenu.tsx
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 msgid "Needs reconnection"
 msgstr "Needs reconnection"
 
@@ -3985,7 +3970,7 @@ msgstr "No bots"
 msgid "No bots match"
 msgstr "No bots match"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 msgid "No changes."
 msgstr "No changes."
 
@@ -4021,7 +4006,7 @@ msgstr "No group chats yet."
 msgid "No items found."
 msgstr "No items found."
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 msgid "No logs yet."
 msgstr "No logs yet."
 
@@ -4102,7 +4087,7 @@ msgstr "No trigger"
 msgid "No uploaded files"
 msgstr "No uploaded files"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 msgid "None"
 msgstr "None"
 
@@ -4335,10 +4320,6 @@ msgstr "Open terminal"
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Open the desktop app to manage extensions."
 msgstr "Open the desktop app to manage extensions."
-
-#: src/pages/customize/DeveloperPage.tsx
-msgid "Open the desktop app to manage local servers."
-msgstr "Open the desktop app to manage local servers."
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -4689,7 +4670,8 @@ msgstr "Recent"
 msgid "Recheck"
 msgstr "Recheck"
 
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Reconnect"
 msgstr "Reconnect"
@@ -4800,7 +4782,7 @@ msgstr "Release interrupted computer?"
 
 #: src/components/ApprovalRulesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5058,7 +5040,7 @@ msgstr "rev {0}"
 msgid "Review approval"
 msgstr "Review approval"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 msgid "Review changes"
 msgstr "Review changes"
 
@@ -5073,6 +5055,7 @@ msgstr "Review saved copy"
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/customize/McpDefaults.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Review tools"
 msgstr "Review tools"
@@ -5169,7 +5152,7 @@ msgstr "running"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "Running"
@@ -5344,9 +5327,9 @@ msgstr "Search bots and switch conversations"
 msgid "Search by domain"
 msgstr "Search by domain"
 
-#: src/pages/customize/ConnectorsPage.tsx
-msgid "Search connectors"
-msgstr "Search connectors"
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Search integrations"
+msgstr "Search integrations"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Search integrations.sh"
@@ -5441,9 +5424,13 @@ msgstr "Serif"
 msgid "Server"
 msgstr "Server"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpConfigEditor.tsx
 msgid "Server configuration JSON"
 msgstr "Server configuration JSON"
+
+#: src/pages/customize/McpDiagnostics.tsx
+msgid "Server details"
+msgstr "Server details"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/AccountSettingsOverlay.tsx
@@ -5451,7 +5438,7 @@ msgstr "Server configuration JSON"
 msgid "Server integrations"
 msgstr "Server integrations"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 msgid "Server logs"
 msgstr "Server logs"
 
@@ -5461,11 +5448,10 @@ msgstr "Server name"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/components/OllamaSettings.tsx
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/DeveloperPage.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/settings/DeveloperSection.tsx
 msgid "Server URL"
 msgstr "Server URL"
 
@@ -5716,7 +5702,7 @@ msgstr "Starting"
 msgid "Starting…"
 msgstr "Starting…"
 
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 msgid "Status"
 msgstr "Status"
 
@@ -5747,7 +5733,7 @@ msgstr "Stop teaching"
 msgid "Stop the current run"
 msgstr "Stop the current run"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 msgid "Stopped"
 msgstr "Stopped"
 
@@ -6026,11 +6012,11 @@ msgstr "This server did not request browser authorization."
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "This server is already connected. Disconnect it first to authorize again."
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/McpServersOverlay.tsx
 msgid "This server is managed by a plugin"
 msgstr "This server is managed by a plugin"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/McpServersOverlay.tsx
 msgid "This server is managed by an extension"
 msgstr "This server is managed by an extension"
 
@@ -6058,10 +6044,6 @@ msgstr "Title"
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "To:"
-
-#: src/pages/customize/ConnectorsPage.tsx
-msgid "Token"
-msgstr "Token"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -6109,6 +6091,7 @@ msgstr "Trusted folders"
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/pages/customize/CustomizeControls.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "Try again"
@@ -6117,7 +6100,7 @@ msgstr "Try again"
 msgid "Turn on"
 msgstr "Turn on"
 
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 msgid "Type"
 msgstr "Type"
 
@@ -6290,7 +6273,7 @@ msgstr "Verify and add"
 msgid "Verifying…"
 msgstr "Verifying…"
 
-#: src/pages/customize/DeveloperPage.tsx
+#: src/pages/customize/McpDiagnostics.tsx
 msgid "View logs"
 msgstr "View logs"
 
@@ -6324,7 +6307,7 @@ msgstr "Waiting for the API to come back…"
 msgid "Waiting…"
 msgstr "Waiting…"
 
-#: src/pages/customize/ConnectorsPage.tsx
+#: src/pages/customize/IntegrationTable.tsx
 msgid "Web"
 msgstr "Web"
 
