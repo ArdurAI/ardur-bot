@@ -1,4 +1,4 @@
-import type { DocumentRevision, MemoryDocumentHead } from "@ardurbot/contracts";
+import type { MemoryDocumentHead, MemoryHistoryRevision } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
@@ -12,9 +12,9 @@ export function MemoryHistory({
   onChange: (doc: MemoryDocumentHead) => void;
 }) {
   const { t } = useLingui();
-  const [items, setItems] = useState<DocumentRevision[]>([]);
+  const [items, setItems] = useState<MemoryHistoryRevision[]>([]);
   const [cursor, setCursor] = useState<number | null>(null);
-  const [selected, setSelected] = useState<DocumentRevision | null>(null);
+  const [selected, setSelected] = useState<MemoryHistoryRevision | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -34,7 +34,7 @@ export function MemoryHistory({
     return () => {
       active = false;
     };
-  }, [document.id, document.revision, t]);
+  }, [document.id, document.revision, document.gitSync?.status, t]);
   async function more() {
     if (!cursor || busy) return;
     setBusy(true);
@@ -89,6 +89,9 @@ export function MemoryHistory({
             aria-pressed={selected?.revision === revision.revision}
           >
             <Trans>Revision {revision.revision}</Trans>
+            {revision.commitId ? (
+              <span className="font-mono text-xs">{revision.commitId.slice(0, 8)}</span>
+            ) : null}
           </Button>
         ))}
       </div>
@@ -99,6 +102,15 @@ export function MemoryHistory({
       ) : null}
       {selected ? (
         <>
+          {selected.gitSync ? (
+            <p className="text-xs text-muted-foreground">
+              {selected.gitSync.status === "pushed"
+                ? t`Pushed`
+                : selected.gitSync.status === "failed"
+                  ? t`Saved locally. GitHub sync failed.`
+                  : t`Saved locally. Sync pending.`}
+            </p>
+          ) : null}
           <dl className="my-2 grid grid-cols-2 gap-1 text-xs text-muted-foreground">
             <dt>
               <Trans>Author</Trans>

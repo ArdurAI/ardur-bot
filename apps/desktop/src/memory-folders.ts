@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, readdir } from "node:fs/promises";
+import { lstat, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
@@ -34,13 +34,20 @@ export function memoryFolder(spaceId: string, hostPath: string): MemoryFolder {
   const hash = createHash("sha256").update(hostPath).digest("hex").slice(0, 24);
   return { spaceId, hostPath, internalPath: `/memory-folders/${spaceId}/${hash}` };
 }
-export function memoryComposeOverride(folders: MemoryFolder[]): string {
+export function memoryComposeOverride(folders: MemoryFolder[], managedStorage?: string): string {
   const volumes = folders.map((folder) => ({
     type: "bind",
     source: folder.hostPath.replaceAll("$", () => "$$"),
     target: folder.internalPath,
     bind: { create_host_path: false },
   }));
+  if (managedStorage)
+    volumes.push({
+      type: "bind",
+      source: managedStorage.replaceAll("$", () => "$$"),
+      target: "/data/memory-git",
+      bind: { create_host_path: false },
+    });
   // Neither the bot computer nor its supervisor receives a vault, .git directory, or credentials.
   return JSON.stringify({ services: { api: { volumes }, worker: { volumes } } }, null, 2);
 }
@@ -97,14 +104,36 @@ export async function registerMemoryFolder(
   const valid = folders.map((folder) => memoryFolder(folder.spaceId, folder.hostPath));
   const next = memoryFolder(spaceId, selected);
   const merged = [...valid.filter((folder) => folder.internalPath !== next.internalPath), next];
-  await deps.write(overridePath, memoryComposeOverride(merged));
+  await deps.write(
+    overridePath,
+    memoryComposeOverride(merged, path.join(deps.stackDir, "memory-git")),
+  );
   try {
     await deps.apply();
     await deps.write(registryPath, JSON.stringify(merged));
   } catch {
-    await deps.write(overridePath, memoryComposeOverride(valid));
+    await deps.write(
+      overridePath,
+      memoryComposeOverride(valid, path.join(deps.stackDir, "memory-git")),
+    );
     await deps.apply().catch(() => undefined);
     throw new Error("Could not attach the memory folder. Retry.");
   }
   return { path: next.internalPath };
+}
+
+/** Reuse P1a's override so only API/worker can see application-managed repositories. */
+export async function prepareMemoryStorage(stackDir: string): Promise<void> {
+  const managed = path.join(stackDir, "memory-git");
+  await mkdir(managed, { recursive: true, mode: 0o700 });
+  const raw = await readPrivateFile(path.join(stackDir, REGISTRY), 100_000);
+  const folders = raw
+    ? (JSON.parse(raw) as MemoryFolder[]).map((entry) =>
+        memoryFolder(entry.spaceId, entry.hostPath),
+      )
+    : [];
+  await writePrivateFile(
+    path.join(stackDir, MEMORY_COMPOSE_OVERRIDE),
+    memoryComposeOverride(folders, managed),
+  );
 }

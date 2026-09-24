@@ -21,7 +21,9 @@ export class LifecycleMemoryStore implements MemoryStore {
     };
   }
   async read(input: MemoryReadRequest, context: AdapterContext) {
-    const documents = (await this.service.exportBundle(context)).documents
+    const documents = (
+      await this.service.exportBundle({ ...context, memoryRecall: true })
+    ).documents
       .map((doc) => doc.revisions.at(-1)!)
       .filter(
         (r) =>
@@ -42,9 +44,9 @@ export class LifecycleMemoryStore implements MemoryStore {
     };
   }
   async search(input: MemorySearchRequest, context: AdapterContext) {
-    const docs = (await this.service.exportBundle(context)).documents.map(
-      (d) => d.revisions.at(-1)!,
-    );
+    const docs = (
+      await this.service.exportBundle({ ...context, memoryRecall: true })
+    ).documents.map((d) => d.revisions.at(-1)!);
     return docs
       .filter(
         (d) =>

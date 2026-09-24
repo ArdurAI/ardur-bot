@@ -24,6 +24,7 @@ import {
   computerObservation,
   normalizeWorkspacePath,
 } from "./computer-support.js";
+import { DockerTerminal } from "./docker-terminal.js";
 import { readBodyCapped, withAbort } from "./web-ssrf.js";
 
 export const MAX_SANDBOX_ERROR_RESPONSE_BYTES = 8 * 1024;
@@ -100,12 +101,16 @@ function sandboxGoneError(computer: ComputerRef): Error {
 
 export class DockerSandboxProvider implements SandboxProvider {
   private readonly supervisorToken: string;
+  readonly terminal: DockerTerminal;
 
   constructor(
     private readonly supervisorUrl: string,
     supervisorToken?: string,
   ) {
     this.supervisorToken = supervisorToken ?? resolveSupervisorToken(process.env);
+    this.terminal = new DockerTerminal(supervisorUrl, (context, botId) =>
+      this.headers(context, botId),
+    );
   }
 
   describe() {
@@ -116,6 +121,7 @@ export class DockerSandboxProvider implements SandboxProvider {
       capabilities: {
         graphical: true,
         pty: true,
+        interactiveTerminal: true,
         snapshots: true,
         takeover: true,
         persistentHome: true,

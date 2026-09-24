@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createPrivateKey, randomUUID, sign, X509Certificate } from "node:crypto";
 import { rm } from "node:fs/promises";
 import type {
   AgentRuntime,
@@ -31,6 +31,7 @@ import {
   createRunSecretWriter,
   createWebProvider,
   destroyBot,
+  deviceThreadProjection,
   EmailEmulator,
   EncryptedSecretStore,
   ExpoPushProvider,
@@ -64,6 +65,7 @@ import {
   toTeamChatInbound,
 } from "@ardurbot/adapters";
 import { blockedAuthPaths, createAuth } from "@ardurbot/auth";
+import { homeSignedText, LOCAL_SETTINGS_TOKEN_HEADER } from "@ardurbot/contracts";
 import { signupPolicyFromEnv } from "@ardurbot/core";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import {
@@ -90,13 +92,15 @@ import { cors } from "hono/cors";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
-import { mountLocalSettings } from "./local-settings.js";
+import { ensureInstanceIdentity } from "./instance-identity.js";
+import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
 import {
   createMessagingInboundHandler,
   teamChatSenderCanWakeMessageRoutines,
   wakeMessageRoutines,
 } from "./messaging-inbound.js";
 import { mountMessagingWebhookRoutes } from "./messaging-webhook.js";
+import { mountRemoteDevices } from "./remote-devices.js";
 import { mountApiRequestBodyLimits } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
 import { mountScreenTarget } from "./screen-proxy.js";
@@ -108,10 +112,13 @@ import {
   settleWithTimeout,
   TEAM_CHAT_STARTUP_SHUTDOWN_MS,
 } from "./team-chat-startup.js";
+import { createTerminalRoutes } from "./terminal-routes.js";
+import { installTerminalWebSocket } from "./terminal-websocket.js";
 import { mountVoiceHttpRoutes } from "./voice.js";
 import { mountWebhookHttpRoutes } from "./webhook.js";
 
 export interface AppHandles {
+  installTerminal: (server: Parameters<typeof installTerminalWebSocket>[0]) => void;
   app: Hono;
   prisma: PrismaClient;
   jobs: JobPublisher;
@@ -170,6 +177,7 @@ export async function createApp(
         })
       : new InMemoryRealtimeFanout());
   const secrets = new EncryptedSecretStore(env.encryptionKey);
+  const instance = await ensureInstanceIdentity(prisma, secrets);
   await backfillRuntimePins({ prisma, secrets, logger });
   const events = createThreadEvents(prisma, realtime, {
     runSecretWriter: createRunSecretWriter(secrets),
@@ -432,7 +440,13 @@ export async function createApp(
     : undefined;
   reconciler?.start();
 
+  const terminals = createTerminalRoutes({
+    prisma,
+    sandbox,
+    trustedOrigin: (origin) => isTrustedOrigin(origin, env),
+  });
   const router = createRouter({
+    terminals,
     cloudAgent,
     prisma,
     events,
@@ -514,9 +528,66 @@ export async function createApp(
     if (blockedAuthPaths.some((blocked) => path.startsWith(blocked))) {
       return c.json({ error: "Not available in version 1" }, 404);
     }
+    if (
+      [
+        "/sign-out",
+        "/revoke-session",
+        "/revoke-sessions",
+        "/revoke-other-sessions",
+        "/delete-user",
+      ].includes(path)
+    ) {
+      const origin = c.req.header("origin");
+      if (c.req.method !== "POST" || (origin && !isTrustedOrigin(origin, env)))
+        return c.json({ error: "Forbidden" }, 403);
+      const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
+      if (session?.user) await terminals.gateway?.revokeUser(session.user.id);
+    }
     return auth.handler(c.req.raw);
   });
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
+  app.post("/local/device-listener", async (c) => {
+    c.header("cache-control", "no-store");
+    if (!validLocalSettingsToken(env.desktopStackToken, c.req.header(LOCAL_SETTINGS_TOKEN_HEADER)))
+      return c.json({ message: "Open device settings on your Mac." }, 403);
+    return c.json({
+      certificate: instance.certificate,
+      privateKey: secrets.load(instance.privateKeyCiphertext, instance.instanceId),
+      certificateFingerprint: instance.certificateFingerprint,
+      instanceId: instance.instanceId,
+    });
+  });
+  const homePrivateKey = createPrivateKey(
+    secrets.load(instance.privateKeyCiphertext, instance.instanceId),
+  );
+  mountRemoteDevices(app, {
+    prisma,
+    events,
+    jobs,
+    publicUrl: env.webOrigin,
+    homeProof: (challenge) => ({
+      certificate: new X509Certificate(instance.certificate).raw.toString("base64"),
+      signature: sign(
+        "sha256",
+        Buffer.from(homeSignedText(instance.instanceId, instance.fingerprint, challenge)),
+        homePrivateKey,
+      ).toString("base64"),
+    }),
+    read: async (grant, procedure, input) => {
+      const actor = await requireMembership(prisma, grant.userId, grant.spaceId);
+      const { response } = await rpc.handle(
+        new Request(`http://home/rpc/${procedure}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ json: input }),
+        }),
+        { prefix: "/rpc", context: { actor } },
+      );
+      if (!response?.ok) throw new Error("This view is unavailable from this device.");
+      const result = (await response.json()) as { json: unknown };
+      return deviceThreadProjection(result.json, grant.spaceId);
+    },
+  });
   app.use("/rpc/*", async (c, next) => {
     const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
     const requestedSpaceId = c.req.header("x-ardurbot-space-id");
@@ -528,7 +599,12 @@ export async function createApp(
     }
     const { matched, response } = await rpc.handle(c.req.raw, {
       prefix: "/rpc",
-      context: { actor, signal: c.req.raw.signal },
+      context: {
+        actor,
+        signal: c.req.raw.signal,
+        authSessionId: session?.session.id,
+        origin: c.req.header("origin"),
+      },
     });
     if (matched) return c.newResponse(response.body, response);
     await next();
@@ -831,6 +907,8 @@ export async function createApp(
   );
 
   return {
+    installTerminal: (server) =>
+      installTerminalWebSocket(server, terminals.gateway, (origin) => isTrustedOrigin(origin, env)),
     app,
     prisma,
     jobs,
@@ -845,6 +923,7 @@ export async function createApp(
     stop: async () => {
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
+      await terminals.gateway?.stop();
       shutdown.abort();
       oauthLogins.abortAll();
       messagingStopped = true;

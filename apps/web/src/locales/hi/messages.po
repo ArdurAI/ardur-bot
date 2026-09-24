@@ -65,6 +65,7 @@ msgstr ""
 
 #. placeholder {0}: preview.documents
 #. placeholder {1}: preview.revisions
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "{0} documents, {1} revisions"
@@ -376,6 +377,18 @@ msgstr "{0} कनेक्टर को बिना पूछे अनुम�
 msgid "Allow {0} without asking"
 msgstr "{0} को बिना पूछे अनुमति दें"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Allow actions after presence confirmation"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow delegation"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow device"
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow email actions without asking"
 msgstr "ईमेल कार्रवाइयों को बिना पूछे अनुमति दें"
@@ -611,6 +624,10 @@ msgstr ""
 msgid "Back"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Back to screen"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "साइन इन पर वापस जाएँ"
@@ -688,6 +705,10 @@ msgstr "बॉट काम कर रहे हैं"
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Branch"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -969,6 +990,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Computer"
 msgstr "कंप्यूटर"
 
@@ -1014,7 +1036,12 @@ msgstr "डिलीट की पुष्टि करें"
 msgid "Confirm password"
 msgstr "पासवर्ड की पुष्टि करें"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Confirm the phone fingerprint here before allowing it."
+msgstr ""
+
 #. placeholder {0}: conflict.path
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Conflict: {0}"
@@ -1102,6 +1129,10 @@ msgstr ""
 msgid "Connecting…"
 msgstr "कनेक्ट हो रहा है…"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Connection lost — reconnecting"
+msgstr ""
+
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
@@ -1139,6 +1170,10 @@ msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Copy pairing details"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -1216,6 +1251,10 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Could not connect the memory service. Preview again and retry."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not connect the repository. Check its URL and access, then retry."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1352,6 +1391,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "स्किल लोड नहीं हो सकी"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not load sync status. Retry."
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
@@ -1726,8 +1769,13 @@ msgid "Denied"
 msgstr "अस्वीकृत"
 
 #: src/components/AskCard.tsx
+#: src/pages/DevicesSettings.tsx
 msgid "Deny"
 msgstr "अस्वीकार करें"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Deploy private key"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
@@ -1755,6 +1803,22 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device name"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device permissions"
+msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Devices"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1879,6 +1943,10 @@ msgstr "ईमेल"
 msgid "Engage when... Ignore..."
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enter a code instead"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
 msgstr ""
@@ -1954,7 +2022,10 @@ msgstr "विस्तृत करें"
 msgid "Expand {0}"
 msgstr ""
 
-#: src/pages/MemoryImportExport.tsx
+#: src/pages/DevicesSettings.tsx
+msgid "Expires in five minutes."
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "एक्सपोर्ट करें"
@@ -1970,6 +2041,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "CRM से इस सप्ताह की सूची एक्सपोर्ट करें और उसे साझा फ़ोल्डर में डालें"
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Export with history"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2003,6 +2078,10 @@ msgstr "विफलता प्रबंधन"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Find in terminal"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2082,10 +2161,6 @@ msgstr ""
 msgid "Git repository"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Git repository: Coming next."
-msgstr ""
-
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
 msgstr ""
@@ -2158,6 +2233,14 @@ msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "History"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Home fingerprint"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Home link"
 msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
@@ -2304,6 +2387,14 @@ msgstr "ज्ञान"
 msgid "Language"
 msgstr "भाषा"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Last present"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Last used"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
 msgstr ""
@@ -2411,6 +2502,10 @@ msgstr "सुनिश्चित करें कि इस कंप्य�
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Manage"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Manage devices from the home owner account."
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -2679,6 +2774,10 @@ msgstr "नियंत्रण लेना ज़रूरी"
 msgid "Needs you"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Never"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "नया बॉट"
@@ -2707,6 +2806,10 @@ msgstr "नई स्किल"
 
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Next"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2908,6 +3011,10 @@ msgstr ""
 msgid "Only empty spaces can be deleted. Delete its bots and groups first."
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Only space-shared documents go to this repository."
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -2916,6 +3023,10 @@ msgstr "खोलें"
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
 msgid "Open {0}"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Open a new terminal"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -2929,6 +3040,10 @@ msgstr "पूरी विंडो में खोलें"
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "नेविगेशन खोलें"
+
+#: src/pages/shell/command-palette.tsx
+msgid "Open terminal"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -2946,6 +3061,10 @@ msgstr "इसका थ्रेड खोला।"
 #: src/pages/Onboarding.tsx
 msgid "Opening chat…"
 msgstr "चैट खुल रही है…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Opening terminal"
+msgstr ""
 
 #: src/App.tsx
 msgid "Opening your Space…"
@@ -2987,6 +3106,14 @@ msgstr "अन्य मॉडल…"
 
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Pair device"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Pairing code"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -3062,6 +3189,10 @@ msgstr ""
 msgid "Preview migration"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Previous"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "निजी"
@@ -3078,6 +3209,14 @@ msgstr ""
 msgid "Project ID"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Proposal branch"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Propose on a branch"
+msgstr ""
+
 #: src/pages/Onboarding.tsx
 msgid "Provider"
 msgstr "प्रोवाइडर"
@@ -3087,9 +3226,21 @@ msgstr "प्रोवाइडर"
 msgid "Providers"
 msgstr "प्रोवाइडर्स"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Publication mode"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Publish directly"
+msgstr ""
+
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "पुल अनुरोध"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Pushed"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Queued"
@@ -3139,6 +3290,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Recent"
 msgstr "हाल के"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Reconnect"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
@@ -3273,6 +3428,10 @@ msgstr "हटाया गया, लेकिन सूची रिफ़्�
 msgid "Removing…"
 msgstr "हटाया जा रहा है…"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Rename"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/dialogs.tsx
@@ -3305,6 +3464,22 @@ msgstr ""
 
 #: src/pages/settings-support-links.tsx
 msgid "Report an issue"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository authentication"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository history changed. Review the saved copy before continuing."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository token"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository URL"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
@@ -3365,6 +3540,7 @@ msgstr "अंतिम सहेजे गए वर्कस्पेस क�
 msgid "Restoring your workspace"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Retry"
 msgstr ""
@@ -3387,6 +3563,10 @@ msgstr "Ardur Bot पर लौटें"
 msgid "rev {0}"
 msgstr "रिवीज़न {0}"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Review saved copy"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
@@ -3404,8 +3584,13 @@ msgstr ""
 msgid "Revision {0}"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Revoked"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
@@ -3474,6 +3659,7 @@ msgstr ""
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -3491,12 +3677,24 @@ msgstr "सहेजें"
 msgid "Saved"
 msgstr "सहेजा गया"
 
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. GitHub sync failed."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing failed."
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing pending."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. Sync pending."
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -3535,6 +3733,10 @@ msgstr "कुछ बोलें। चुप्पी होते ही भ�
 #: src/pages/CallView.tsx
 msgid "Say yes or no, or answer in a sentence."
 msgstr "हां या ना कहें, या एक वाक्य में उत्तर दें।"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Screen"
+msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
@@ -3637,6 +3839,10 @@ msgstr "सर्वर का नाम"
 msgid "Server URL"
 msgstr "सर्वर URL"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Session ended — open a new terminal"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -3667,6 +3873,14 @@ msgstr "साझा"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Shared chat with 2-6 bots. They all reply in the same thread."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared documents will be published directly."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared recall will use proposed facts after merge."
 msgstr ""
 
 #: src/components/ShowAllModels.tsx
@@ -3808,6 +4022,7 @@ msgid "Steps"
 msgstr "चरण"
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
 msgstr "रोकें"
 
@@ -3859,9 +4074,22 @@ msgstr ""
 msgid "Switching…"
 msgstr "बदला जा रहा है…"
 
+#. placeholder {0}: config?.documentSettings.host ?? ""
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Syncs to {0}"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "System"
 msgstr "सिस्टम"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control to open a terminal"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Teach a task"
@@ -3891,9 +4119,25 @@ msgstr ""
 msgid "Teams not enabled"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal could not open; try again"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal is not available on this computer"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "टेस्ट करें"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Test connection and preview"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
@@ -3901,6 +4145,10 @@ msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "The bot is working — wait or stop it"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -3934,6 +4182,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "This cannot be undone."
 msgstr "इसे पूर्ववत नहीं किया जा सकता।"
+
+#: src/pages/DevicesSettings.tsx
+msgid "This change could not finish; try again."
+msgstr ""
 
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
@@ -4135,6 +4387,7 @@ msgstr ""
 msgid "Use default guidance"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Use this location"
 msgstr ""
@@ -4232,6 +4485,10 @@ msgstr "कब उपयोग करें"
 msgid "Where should bots run?"
 msgstr "बॉट कहां चलने चाहिए?"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Working from the last copy"
+msgstr ""
+
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
 msgid "Working…"
@@ -4280,6 +4537,10 @@ msgstr "आपका ईमेल पता"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "आपका नाम"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Your phone can reach this Mac on your network."
+msgstr ""
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

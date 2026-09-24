@@ -3,17 +3,26 @@ import path from "node:path";
 import type { MemoryDocumentStore } from "@ardurbot/adapter-kit";
 import type { Prisma } from "@ardurbot/db";
 import { PostgresDocumentStore } from "@ardurbot/memory";
+import type { EncryptedSecretStore } from "../secrets.js";
+import { configuredGitStore } from "./git-config.js";
 import { MarkdownFiles } from "./markdown-files.js";
 import { ObsidianDocumentStore, VaultWithPrivateDocuments } from "./obsidian-store.js";
 
 /** Document destination selection is independent of the semantic provider adapter. */
 export async function selectDocumentStore(
   tx: Prisma.TransactionClient,
-  config: { documentStore: string; documentSettings: unknown } | null,
+  config: { documentStore: string; documentSettings: unknown; secretId?: string | null } | null,
   dataDir: string,
+  secrets?: Pick<EncryptedSecretStore, "load">,
 ): Promise<MemoryDocumentStore> {
   const postgres = new PostgresDocumentStore(tx);
   if (!config || !config.documentStore || config.documentStore === "postgres") return postgres;
+  if (config.documentStore === "git")
+    return new VaultWithPrivateDocuments(
+      await configuredGitStore(tx, config, dataDir, secrets),
+      postgres,
+      null,
+    );
   if (config.documentStore !== "obsidian") throw new Error("This memory location is unavailable.");
   const settings = config.documentSettings as Record<string, unknown> | null;
   if (

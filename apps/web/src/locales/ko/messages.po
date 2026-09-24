@@ -65,6 +65,7 @@ msgstr ""
 
 #. placeholder {0}: preview.documents
 #. placeholder {1}: preview.revisions
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "{0} documents, {1} revisions"
@@ -376,6 +377,18 @@ msgstr "확인 없이 {0} 커넥터 허용"
 msgid "Allow {0} without asking"
 msgstr "확인 없이 {0} 허용"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Allow actions after presence confirmation"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow delegation"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Allow device"
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow email actions without asking"
 msgstr "확인 없이 이메일 동작 허용"
@@ -611,6 +624,10 @@ msgstr "아바타"
 msgid "Back"
 msgstr "뒤로"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Back to screen"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "로그인으로 돌아가기"
@@ -688,6 +705,10 @@ msgstr "봇 작업 중"
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Branch"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -969,6 +990,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Computer"
 msgstr "컴퓨터"
 
@@ -1014,7 +1036,12 @@ msgstr "삭제 확인"
 msgid "Confirm password"
 msgstr "비밀번호 확인"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Confirm the phone fingerprint here before allowing it."
+msgstr ""
+
 #. placeholder {0}: conflict.path
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Conflict: {0}"
@@ -1102,6 +1129,10 @@ msgstr ""
 msgid "Connecting…"
 msgstr "연결 중…"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Connection lost — reconnecting"
+msgstr ""
+
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
@@ -1139,6 +1170,10 @@ msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Copy pairing details"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -1216,6 +1251,10 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Could not connect the memory service. Preview again and retry."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not connect the repository. Check its URL and access, then retry."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1352,6 +1391,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "스킬을 불러오지 못했습니다"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not load sync status. Retry."
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
@@ -1726,8 +1769,13 @@ msgid "Denied"
 msgstr "거부됨"
 
 #: src/components/AskCard.tsx
+#: src/pages/DevicesSettings.tsx
 msgid "Deny"
 msgstr "거부"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Deploy private key"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
@@ -1755,6 +1803,22 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device name"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Device permissions"
+msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Devices"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1879,6 +1943,10 @@ msgstr "이메일"
 msgid "Engage when... Ignore..."
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enter a code instead"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
 msgstr ""
@@ -1954,7 +2022,10 @@ msgstr "펼치기"
 msgid "Expand {0}"
 msgstr "{0} 펼치기"
 
-#: src/pages/MemoryImportExport.tsx
+#: src/pages/DevicesSettings.tsx
+msgid "Expires in five minutes."
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "내보내기"
@@ -1970,6 +2041,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "CRM에서 이번 주 목록을 내려받아 공유 폴더에 넣기"
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Export with history"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2003,6 +2078,10 @@ msgstr "실패했을 때 처리"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Find in terminal"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2082,10 +2161,6 @@ msgstr "Git 이벤트"
 msgid "Git repository"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Git repository: Coming next."
-msgstr ""
-
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
 msgstr ""
@@ -2158,6 +2233,14 @@ msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "History"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Home fingerprint"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Home link"
 msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
@@ -2304,6 +2387,14 @@ msgstr "지식"
 msgid "Language"
 msgstr "언어"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Last present"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Last used"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
 msgstr ""
@@ -2411,6 +2502,10 @@ msgstr "이 컴퓨터에서 실행 중인 작업이 없는지 확인하세요."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Manage"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Manage devices from the home owner account."
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -2679,6 +2774,10 @@ msgstr "인수 필요"
 msgid "Needs you"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Never"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "새 Bot 만들기"
@@ -2708,6 +2807,10 @@ msgstr "새 스킬"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "새 스페이스"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Next"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
@@ -2908,6 +3011,10 @@ msgstr ""
 msgid "Only empty spaces can be deleted. Delete its bots and groups first."
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Only space-shared documents go to this repository."
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -2917,6 +3024,10 @@ msgstr "열기"
 #: src/pages/Shell.tsx
 msgid "Open {0}"
 msgstr "{0} 열기"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Open a new terminal"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Open documentation"
@@ -2929,6 +3040,10 @@ msgstr "전체 창으로 열기"
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "메뉴 열기"
+
+#: src/pages/shell/command-palette.tsx
+msgid "Open terminal"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -2946,6 +3061,10 @@ msgstr "대화가 만들어졌습니다."
 #: src/pages/Onboarding.tsx
 msgid "Opening chat…"
 msgstr "채팅 여는 중…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Opening terminal"
+msgstr ""
 
 #: src/App.tsx
 msgid "Opening your Space…"
@@ -2988,6 +3107,14 @@ msgstr "다른 모델 직접 입력…"
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
 msgstr "PagerDuty 인시던트"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Pair device"
+msgstr ""
+
+#: src/pages/DevicesSettings.tsx
+msgid "Pairing code"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Parent page"
@@ -3062,6 +3189,10 @@ msgstr ""
 msgid "Preview migration"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Previous"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "Bot 전용"
@@ -3078,6 +3209,14 @@ msgstr ""
 msgid "Project ID"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Proposal branch"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Propose on a branch"
+msgstr ""
+
 #: src/pages/Onboarding.tsx
 msgid "Provider"
 msgstr "서비스"
@@ -3087,9 +3226,21 @@ msgstr "서비스"
 msgid "Providers"
 msgstr "서비스"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Publication mode"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Publish directly"
+msgstr ""
+
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "풀 리퀘스트"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Pushed"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Queued"
@@ -3139,6 +3290,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Recent"
 msgstr "최근"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Reconnect"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
@@ -3273,6 +3428,10 @@ msgstr "삭제했지만 목록을 새로고침하지 못했습니다."
 msgid "Removing…"
 msgstr "삭제 중…"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Rename"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/dialogs.tsx
@@ -3305,6 +3464,22 @@ msgstr ""
 
 #: src/pages/settings-support-links.tsx
 msgid "Report an issue"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository authentication"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository history changed. Review the saved copy before continuing."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository token"
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository URL"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
@@ -3365,6 +3540,7 @@ msgstr "마지막으로 저장된 작업 공간을 복원합니다. 컴퓨터에
 msgid "Restoring your workspace"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Retry"
 msgstr ""
@@ -3387,6 +3563,10 @@ msgstr "Ardur Bot로 돌아가기"
 msgid "rev {0}"
 msgstr "리비전 {0}"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Review saved copy"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
@@ -3404,9 +3584,14 @@ msgstr ""
 msgid "Revision {0}"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "연결 해제"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Revoked"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Robot"
@@ -3474,6 +3659,7 @@ msgstr ""
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -3491,12 +3677,24 @@ msgstr "저장"
 msgid "Saved"
 msgstr "저장됨"
 
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. GitHub sync failed."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing failed."
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing pending."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. Sync pending."
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -3535,6 +3733,10 @@ msgstr "말씀하세요. 잠시 멈추면 자동으로 전송됩니다."
 #: src/pages/CallView.tsx
 msgid "Say yes or no, or answer in a sentence."
 msgstr "예 또는 아니요로 답하거나 문장으로 답해 주세요."
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Screen"
+msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
@@ -3637,6 +3839,10 @@ msgstr "서버 이름"
 msgid "Server URL"
 msgstr "서버 URL"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Session ended — open a new terminal"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -3667,6 +3873,14 @@ msgstr "함께 사용"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Shared chat with 2-6 bots. They all reply in the same thread."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared documents will be published directly."
+msgstr ""
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared recall will use proposed facts after merge."
 msgstr ""
 
 #: src/components/ShowAllModels.tsx
@@ -3808,6 +4022,7 @@ msgid "Steps"
 msgstr "실행 단계"
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
 msgstr "중지"
 
@@ -3859,9 +4074,22 @@ msgstr ""
 msgid "Switching…"
 msgstr "전환 중…"
 
+#. placeholder {0}: config?.documentSettings.host ?? ""
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Syncs to {0}"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "System"
 msgstr "시스템"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control to open a terminal"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Teach a task"
@@ -3891,9 +4119,25 @@ msgstr "Teams 메시지"
 msgid "Teams not enabled"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal could not open; try again"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal is not available on this computer"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "시험 실행"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Test connection and preview"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
@@ -3902,6 +4146,10 @@ msgstr "테스트 실행"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API가 다시 작동하지 않습니다. 이 페이지를 새로 고침하세요."
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "The bot is working — wait or stop it"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "The connection was cancelled."
@@ -3934,6 +4182,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "This cannot be undone."
 msgstr "이 작업은 되돌릴 수 없습니다."
+
+#: src/pages/DevicesSettings.tsx
+msgid "This change could not finish; try again."
+msgstr ""
 
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
@@ -4135,6 +4387,7 @@ msgstr ""
 msgid "Use default guidance"
 msgstr ""
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Use this location"
 msgstr ""
@@ -4232,6 +4485,10 @@ msgstr "언제 사용할지"
 msgid "Where should bots run?"
 msgstr "Bot을 어디에서 실행할까요?"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Working from the last copy"
+msgstr ""
+
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
 msgid "Working…"
@@ -4280,6 +4537,10 @@ msgstr "이메일 주소"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "이름"
+
+#: src/pages/DevicesSettings.tsx
+msgid "Your phone can reach this Mac on your network."
+msgstr ""
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

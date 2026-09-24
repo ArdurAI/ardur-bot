@@ -46,7 +46,7 @@ export class JournalDocumentStore implements MemoryDocumentStore {
     private readonly id: string,
     private readonly clock: () => Date = () => new Date(),
   ) {}
-  describe() {
+  describe(): ReturnType<MemoryDocumentStore["describe"]> {
     return {
       id: this.id,
       contractVersion: "1",

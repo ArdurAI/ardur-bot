@@ -11,6 +11,7 @@ import { makeWorkerUtils, type Runner, run, type WorkerUtils } from "graphile-wo
 import type { Pool } from "pg";
 
 function memoryDeliveryQueue(job: BackgroundJob): string | undefined {
+  if (job.name === "memory.git-push") return `memory.git:${job.payload.spaceId}`;
   return job.name === "memory.deliver"
     ? `memory.document:${job.payload.spaceId}:${job.payload.documentId}`
     : undefined;
@@ -31,7 +32,10 @@ export class GraphileJobPublisher implements JobPublisher {
     await utils.addJob(job.name, wrapJobPayload(job.payload), {
       runAt: job.availableAt,
       jobKey: job.replaceKey,
-      ...(job.name === "memory.deliver" ? { queueName: memoryDeliveryQueue(job) } : {}),
+      ...(job.name === "memory.git-push" ? { jobKeyMode: "replace" as const } : {}),
+      ...(["memory.deliver", "memory.git-push"].includes(job.name)
+        ? { queueName: memoryDeliveryQueue(job) }
+        : {}),
     });
   }
 

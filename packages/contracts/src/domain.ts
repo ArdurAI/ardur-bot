@@ -782,6 +782,7 @@ export const ComputerUpdateSchema = z.object({
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
 export const ComputerStatusSchema = z.object({
+  computerId: Id.optional(),
   botId: Id,
   mode: ComputerModeSchema,
   kind: SandboxKind,
@@ -1044,7 +1045,7 @@ export type ModelOAuthBegin = z.infer<typeof ModelOAuthBeginSchema>;
 
 export const SpaceMemoryConfigSchema = z.object({
   generation: z.number().int().nonnegative().default(0),
-  documentStore: z.enum(["postgres", "obsidian"]).default("postgres"),
+  documentStore: z.enum(["postgres", "obsidian", "git"]).default("postgres"),
   documentSettings: z.record(z.string(), z.string()).default({}),
   provider: z.string(),
   settings: z.record(z.string(), z.string()),

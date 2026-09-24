@@ -541,6 +541,35 @@ describe("Pi connector tool dispatch", () => {
     },
   );
 
+  it("checks the remote ceiling before a runtime tool dispatch", async () => {
+    fakeAgentState.invoke = { name: "shell", args: { command: "true" } };
+    const executeTool = vi.fn(async () => ({ ok: true }));
+    const authorizeTool = vi.fn(async () => ({
+      kind: "agent_tool_result" as const,
+      content: [],
+      details: { approval: "paused" },
+    }));
+    const runtime = new PiAgentRuntime();
+    for await (const _event of runtime.run(
+      {
+        botId: "b",
+        threadId: "t",
+        runId: "r",
+        prompt: "run the task",
+        instructions: "",
+        history: [],
+        tools: [shellTool],
+        model: { provider: "test", id: "dispatch-test-model" },
+        executeTool,
+        authorizeTool,
+      },
+      { signal: new AbortController().signal },
+    )) {
+    }
+    expect(authorizeTool).toHaveBeenCalledWith("shell");
+    expect(executeTool).not.toHaveBeenCalled();
+  });
+
   it("exposes a provider-safe name while executing the original connector name", async () => {
     const executeTool = vi.fn(async () => ({ ok: true }));
     const runtime = new PiAgentRuntime();

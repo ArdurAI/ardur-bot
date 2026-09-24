@@ -26,6 +26,7 @@ function fixture() {
           null as { protected: boolean; origin: string; source: string; botId: string } | null,
       ),
     },
+    $executeRaw: vi.fn(async () => []),
     spaceMember: {
       findUnique: vi.fn(async () => ({ role: "owner" })),
       findMany: vi.fn(async () => [{ spaceId: "space", userId: "user" }]),

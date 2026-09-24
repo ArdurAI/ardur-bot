@@ -3,6 +3,7 @@ import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
 import { CommandBlockSchema } from "./command-blocks.js";
+import { devicesContract, pairingContract } from "./dispatch.js";
 import {
   ActionApprovalRuleSchema,
   ActionAutoReviewSettingsSchema,
@@ -105,6 +106,7 @@ import {
   MemoryImportPreviewSchema,
   MemoryPageInput,
   MemoryScopeRemapSchema,
+  MemorySyncStateSchema,
 } from "./memory-documents.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
@@ -171,6 +173,8 @@ const threadSendInput = threadTarget
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
 export const appContract = {
+  devices: devicesContract,
+  pairing: pairingContract,
   commands: {
     list: oc
       .input(z.object({ runId: Id, query: z.string().max(256).optional() }))
@@ -375,6 +379,17 @@ export const appContract = {
     markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
     markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
   },
+  terminal: {
+    close: oc
+      .input(z.object({ botId: Id, computerId: Id, sessionId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
+    available: oc
+      .input(z.object({ botId: Id, computerId: Id }))
+      .output(z.object({ available: z.boolean() })),
+    ticket: oc
+      .input(z.object({ botId: Id, computerId: Id, sessionId: Id.optional() }))
+      .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
+  },
   computer: {
     status: oc.input(botId).output(ComputerStatusSchema),
     boot: oc.input(botId).output(ComputerStatusSchema),
@@ -459,6 +474,29 @@ export const appContract = {
         }),
       )
       .output(MemoryImportPreviewSchema),
+    gitLocation: oc
+      .input(
+        z.object({
+          url: z.string().min(1).max(1000),
+          branch: z.string().min(1).max(180),
+          mode: z.enum(["publish", "propose"]),
+          credential: z
+            .object({ kind: z.enum(["token", "ssh"]), value: z.string().min(1).max(20000) })
+            .optional(),
+          connectionId: z.string().optional(),
+          expectedGeneration: z.number().int().nonnegative(),
+          expectedHash: z.string().optional(),
+        }),
+      )
+      .output(
+        MemoryImportPreviewSchema.extend({
+          connectionId: z.string(),
+          generation: z.number(),
+          config: SpaceMemoryConfigSchema.nullable(),
+        }),
+      ),
+    syncState: oc.output(MemorySyncStateSchema.nullable()),
+    retrySync: oc.output(z.object({ ok: z.literal(true) })),
     location: oc
       .input(
         z.object({

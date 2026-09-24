@@ -71,6 +71,8 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-ardurbot}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-ardurbot}
       API_HOST: "0.0.0.0"
       DATA_DIR: /data
+      MEMORY_GIT_ALLOWED_HOSTS: ${MEMORY_GIT_ALLOWED_HOSTS:-github.com}
+      MEMORY_GIT_KNOWN_HOSTS: ${MEMORY_GIT_KNOWN_HOSTS:-}
       SANDBOX_SUPERVISOR_URL: http://supervisor:7091
       WAKEUP_DRIVER: graphile
       SANDBOX_PROVIDER: docker
@@ -106,6 +108,8 @@ services:
       BETTER_AUTH_SECRET: ""
       DATABASE_URL: postgres://${POSTGRES_USER:-ardurbot}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-ardurbot}
       DATA_DIR: /data
+      MEMORY_GIT_ALLOWED_HOSTS: ${MEMORY_GIT_ALLOWED_HOSTS:-github.com}
+      MEMORY_GIT_KNOWN_HOSTS: ${MEMORY_GIT_KNOWN_HOSTS:-}
       SANDBOX_SUPERVISOR_URL: http://supervisor:7091
       WAKEUP_DRIVER: graphile
       SANDBOX_PROVIDER: docker

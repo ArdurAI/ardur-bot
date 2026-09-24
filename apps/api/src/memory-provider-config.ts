@@ -1,4 +1,5 @@
 import type { SecretStore } from "@ardurbot/adapter-kit";
+import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import {
   authenticatedMemoryAccess,
   classifyMemoryProviderSettings,
@@ -18,7 +19,7 @@ import { withSerializableRetry } from "./serializable-retry.js";
 export interface MemoryProviderConfigDeps {
   prisma: PrismaClient;
   dataDir?: string;
-  secrets: Pick<SecretStore, "put">;
+  secrets: Pick<SecretStore, "put"> & Partial<Pick<EncryptedSecretStore, "load">>;
   /** Test seam: override DNS/trust classification without probing. */
   classifySettings?: (
     provider: string,
@@ -123,7 +124,12 @@ export async function persistMemoryProviderConfig(
           traceId: "memory-provider",
           signal: new AbortController().signal,
         });
-        const source = await selectDocumentStore(tx, existing, deps.dataDir ?? "./data");
+        const source = await selectDocumentStore(
+          tx,
+          existing,
+          deps.dataDir ?? "./data",
+          deps.secrets.load ? { load: deps.secrets.load.bind(deps.secrets) } : undefined,
+        );
         const bundle = await source.exportBundle(access);
         if (
           (bundle.documents.length > 0 || input.expectedHash !== undefined) &&
@@ -213,7 +219,11 @@ export function serializeSpaceMemoryConfig(config: {
   return {
     generation: config.generation ?? 0,
     documentStore:
-      config.documentStore === "obsidian" ? ("obsidian" as const) : ("postgres" as const),
+      config.documentStore === "git"
+        ? ("git" as const)
+        : config.documentStore === "obsidian"
+          ? ("obsidian" as const)
+          : ("postgres" as const),
     documentSettings: toStringRecord(config.documentSettings),
     provider: config.provider,
     settings: toStringRecord(config.settings),
@@ -230,6 +240,10 @@ export async function disconnectMemoryProvider(deps: MemoryProviderConfigDeps, a
         await lockMemorySpace(tx, actor.spaceId);
         const existing = await findSpaceMemoryConfig(tx, actor.spaceId);
         if (!existing) return;
+        if (existing.documentStore === "git")
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Change the memory location before disconnecting the repository.",
+          });
         await tx.spaceMemoryConfig.update({
           where: { id: existing.id },
           data: { provider: "builtin", settings: {}, secretId: null, generation: { increment: 1 } },

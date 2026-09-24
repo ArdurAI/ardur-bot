@@ -171,6 +171,7 @@ export interface SnapshotRef {
 export interface SandboxCapabilities {
   graphical: boolean;
   pty: boolean;
+  interactiveTerminal?: boolean;
   snapshots: boolean;
   takeover: boolean;
   persistentHome: boolean;
@@ -398,6 +399,8 @@ export interface AgentRunRequest {
   allowSilentEmpty?: boolean;
   /** Contextual fallback when a non-silent run produces no written response. */
   emptyResponseText?: string;
+  /** Authorize runtime-owned control tools before they start, including nested helpers. */
+  authorizeTool?: (name: string) => Promise<AgentToolExecutionResult | undefined>;
   executeTool?: (
     name: string,
     args: Record<string, unknown>,
@@ -499,6 +502,7 @@ export interface BackgroundJobPayloads {
     evidenceWatermark: string;
     policyVersion: string;
   };
+  "memory.git-push": { spaceId: string; userId: string; generation?: number };
   "memory.deliver": {
     spaceId: string;
     userId: string;

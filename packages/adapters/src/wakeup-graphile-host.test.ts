@@ -38,9 +38,31 @@ it("puts all revisions and generations of one document in the same Graphile queu
   await publisher.close();
 });
 
+it("replaces waiting Git pushes per space and serializes their execution", async () => {
+  const addJob = vi.fn(async () => undefined);
+  makeWorkerUtils.mockResolvedValueOnce({ addJob, release: vi.fn() });
+  const publisher = new GraphileJobPublisher({} as Pool);
+  await publisher.enqueue({
+    name: "memory.git-push",
+    payload: { spaceId: "space", userId: "member", generation: 3 },
+    replaceKey: "memory.git-push:space",
+  });
+  expect(addJob).toHaveBeenCalledWith(
+    "memory.git-push",
+    expect.anything(),
+    expect.objectContaining({
+      jobKey: "memory.git-push:space",
+      jobKeyMode: "replace",
+      queueName: "memory.git:space",
+    }),
+  );
+  await publisher.close();
+});
+
 function handlers(): BackgroundJobHandlers {
   return {
     "learning.review": async () => undefined,
+    "memory.git-push": async () => undefined,
     "memory.deliver": async () => undefined,
     "run.continue": vi.fn(async () => undefined),
     "routine.wakeup": vi.fn(async () => undefined),

@@ -32,6 +32,7 @@ describe("desktop preload bridge", () => {
     expect(globalName).toBe("ardurbotDesktop");
     expect(bridge.platform).toBe("linux");
     expect(Object.keys(bridge).sort()).toEqual([
+      "devices",
       "localSettings",
       "memoryFolders",
       "oauth",
@@ -80,6 +81,7 @@ describe("desktop preload bridge", () => {
     const { exposeInMainWorld } = runPreload("preload.cjs");
     const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, Record<string, unknown>];
     expect(Object.keys(bridge).sort()).toEqual([
+      "devices",
       "localSettings",
       "memoryFolders",
       "oauth",

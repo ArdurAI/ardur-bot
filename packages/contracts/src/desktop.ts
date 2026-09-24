@@ -37,6 +37,10 @@ export interface ArdurBotDesktopOAuthCallback {
 }
 
 export interface ArdurBotDesktop {
+  devices?: {
+    state: () => Promise<{ enabled: boolean; hints: string[] }>;
+    setEnabled: (enabled: boolean) => Promise<{ enabled: boolean; hints: string[] }>;
+  };
   memoryFolders?: {
     available: () => Promise<boolean>;
     select: (spaceId: string) => Promise<{ path: string } | null>;

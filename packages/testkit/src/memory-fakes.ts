@@ -41,6 +41,19 @@ export function memoryDatabaseFake() {
       },
     },
     memoryRevision: {
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { documentId: string; revision: number };
+        data: Record<string, unknown>;
+      }) => {
+        const row = revisions.find(
+          (r) => r.documentId === where.documentId && r.revision === where.revision,
+        );
+        if (row) Object.assign(row, data);
+        return { count: row ? 1 : 0 };
+      },
       create: async ({ data }: { data: Record<string, unknown> }) => {
         const row = {
           sourceRunId: null,

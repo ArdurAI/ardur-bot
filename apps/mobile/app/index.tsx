@@ -46,6 +46,7 @@ import {
   selectSpace,
 } from "../lib/api";
 import { mobileTokens, resolveMobileAppearance } from "../lib/appearance";
+import { hasPairedDevice } from "../lib/dispatch";
 import { allowFocusPrompt, scheduleFocusPrompt } from "../lib/focus-prompt";
 import { t, useI18n } from "../lib/i18n";
 import { botTag, filterBots, formatThreadTime, userInitials } from "../lib/inbox";
@@ -161,8 +162,8 @@ export default function Home() {
   }, [loadBots]);
 
   useEffect(() => {
-    void loadSessionToken().then((token) => {
-      setHasSession(Boolean(token));
+    void Promise.all([loadSessionToken(), hasPairedDevice()]).then(([token, paired]) => {
+      setHasSession(Boolean(token) || paired);
       setReady(true);
     });
   }, []);

@@ -11,7 +11,7 @@ import {
   type RunDockerResult,
   resolveDockerBinary,
 } from "./docker-cli.js";
-import { MEMORY_COMPOSE_OVERRIDE } from "./memory-folders.js";
+import { MEMORY_COMPOSE_OVERRIDE, prepareMemoryStorage } from "./memory-folders.js";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export const STACK_DIR_NAME = "stack";
@@ -485,6 +485,7 @@ export class LocalStackController {
       path.join(this.deps.resourceDir, STACK_COMPOSE_FILE),
       path.join(this.deps.stackDir, STACK_COMPOSE_FILE),
     );
+    await prepareMemoryStorage(this.deps.stackDir);
     const template = await readFile(path.join(this.deps.resourceDir, STACK_ENV_TEMPLATE), "utf8");
     await ensureStackEnv(this.deps.stackDir, template, this.deps.randomHex);
     const stackToken = await ensureStackToken(this.deps.stackDir, this.deps.randomHex);

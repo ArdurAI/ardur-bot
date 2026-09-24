@@ -566,6 +566,11 @@ model Task {
 }
 
 model Run {
+  originDeviceGrantId String?
+  remoteDeviceGrantIds String[] @default([])
+  remoteRootTaskId String?
+  cancelRequestedAt DateTime?
+  cancelConfirmedAt DateTime?
   commandReplayId      String?
   id                   String           @id @default(cuid())
   spaceId              String
@@ -612,6 +617,8 @@ model Run {
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
   @@index([spaceId, botId])
+  @@index([originDeviceGrantId, status])
+  @@index([remoteRootTaskId, status])
   @@index([sourceMessageId])
   @@index([threadId, status, createdAt])
   @@index([routineId])
@@ -881,6 +888,7 @@ model MemoryRevision {
   content        String
   sourceRunId    String?
   sourceThreadId String?
+  commitId       String?
   authorKind     String @default("runtime")
   authorUserId   String?
   authorBotId    String?
@@ -1487,4 +1495,175 @@ model ReviewExecution {
   @@index([spaceId, createdAt])
   @@index([runId, historyGeneration])
   @@map("review_executions")
+}
+
+// Human terminal lifecycle metadata only. No input or output is stored here.
+model TerminalAudit {
+  sequence BigInt @unique @default(autoincrement())
+  id String @id @default(cuid())
+  actorUserId String
+  spaceId String
+  computerId String
+  botId String
+  sessionRef String
+  leaseFence Int
+  type String
+  reason String
+  createdAt DateTime @default(now())
+
+  @@index([spaceId, createdAt])
+  @@index([sessionRef, createdAt])
+  @@map("terminal_audit")
+}
+
+// Short-lived command/control reservations survive API/worker process boundaries.
+model ComputerAdmission {
+  id String @id
+  computerId String
+  kind String
+  expiresAt DateTime
+
+  @@index([computerId, expiresAt])
+  @@map("computer_admission")
+}
+
+// Device identity is deployment-local; private material uses the encrypted secret store format.
+model InstanceIdentity {
+  id String @id @default("home")
+  instanceId String @unique
+  homeName String @default("Ardur Bot")
+  publicKey String
+  fingerprint String
+  certificate String
+  certificateFingerprint String
+  privateKeyCiphertext String
+  scopes String[]
+  createdAt DateTime @default(now())
+  @@map("instance_identity")
+}
+model PairingChallenge {
+  hash String @id
+  shortCodeHash String @unique
+  userId String
+  spaceId String
+  instanceId String
+  scopes String[]
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([userId, spaceId, expiresAt])
+  @@map("pairing_challenges")
+}
+model PairingThrottle {
+  instanceId String @id
+  attempts Int @default(0)
+  lockedUntil DateTime?
+  @@map("pairing_throttles")
+}
+model PendingDevicePairing {
+  id String @id @default(cuid())
+  challengeHash String @unique
+  userId String
+  spaceId String
+  instanceId String
+  deviceName String
+  devicePublicKey String
+  presencePublicKey String
+  scopes String[]
+  expiresAt DateTime
+  grantId String?
+  deniedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([userId, spaceId, expiresAt])
+  @@map("pending_device_pairings")
+}
+model DeviceGrant {
+  id String @id @default(cuid())
+  userId String
+  spaceId String
+  instanceId String
+  deviceName String
+  devicePublicKey String
+  presencePublicKey String
+  scopes String[]
+  defaultBotId String?
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
+  lastPresenceAt DateTime?
+  revokedAt DateTime?
+  @@index([userId, spaceId, revokedAt])
+  @@map("device_grants")
+}
+model DeviceNonce {
+  hash String @id
+  grantId String
+  purpose String
+  expiresAt DateTime
+  usedAt DateTime?
+  @@index([expiresAt])
+  @@map("device_nonces")
+}
+model RemoteAuthorityPolicy {
+  layer String
+  subjectId String
+  scopes String[]
+  @@id([layer, subjectId])
+  @@map("remote_authority_policies")
+}
+model DispatchReceipt {
+  id String @id @default(cuid())
+  instanceId String
+  spaceId String
+  deviceGrantId String
+  clientNonce String
+  payloadFingerprint String
+  taskId String
+  runId String
+  botId String
+  threadId String
+  steering Boolean @default(false)
+  createdAt DateTime @default(now())
+  @@unique([instanceId, spaceId, deviceGrantId, clientNonce])
+  @@index([taskId])
+  @@map("dispatch_receipts")
+}
+model DispatchSummary {
+  taskId String @id
+  deviceGrantId String
+  messageId String?
+  state String
+  acknowledgedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([deviceGrantId, acknowledgedAt, createdAt])
+  @@map("dispatch_summaries")
+}
+model DeviceApprovalBinding {
+  effectId String @id
+  instanceId String
+  spaceId String
+  userId String
+  taskId String
+  runId String
+  botId String
+  originDeviceGrantId String
+  requestFingerprint String
+  nonce String @unique
+  expiresAt DateTime
+  answeredAt DateTime?
+  answeredByGrantId String?
+  executedAt DateTime?
+  @@map("device_approval_bindings")
+}
+model DeviceAuditEvent {
+  id String @id @default(cuid())
+  type String
+  instanceId String
+  userId String?
+  spaceId String?
+  grantId String?
+  taskId String?
+  effectId String?
+  createdAt DateTime @default(now())
+  @@index([spaceId, createdAt])
+  @@map("device_audit_events")
 }

@@ -19,6 +19,8 @@ export interface MemoryOperationContext extends AdapterContext {
   memoryModel?: MemoryModel;
   threadId?: string;
   knownSecrets?: readonly string[];
+  memoryRecall?: boolean;
+  memorySessionStart?: boolean;
 }
 export interface MemorySession {
   access: MemoryAccess;
@@ -33,6 +35,7 @@ export interface MemoryServiceDependencies {
     action: (session: MemorySession) => Promise<T>,
   ): Promise<T>;
   enqueue(context: AdapterContext, document: MemoryDocumentHead): Promise<void>;
+  enqueueGit?(context: MemoryOperationContext): Promise<void>;
 }
 export class MemoryService {
   constructor(readonly dependencies: MemoryServiceDependencies) {}
@@ -45,6 +48,18 @@ export class MemoryService {
   }
   async generation(context: MemoryOperationContext) {
     return this.open(context, async (s) => s.generation);
+  }
+  async startSession(context: MemoryOperationContext) {
+    await this.open(
+      { ...context, memorySessionStart: true },
+      (s) => s.store.startSession?.(s.access) ?? Promise.resolve(),
+    ).catch(() => undefined);
+  }
+  async syncState(context: MemoryOperationContext) {
+    return this.open(context, (s) => s.store.syncState?.(s.access) ?? Promise.resolve(null));
+  }
+  async push(context: MemoryOperationContext) {
+    return this.open(context, (s) => s.store.push?.(s.access) ?? Promise.resolve());
   }
   async list(input: DocumentListInput, context: MemoryOperationContext) {
     return this.open(context, (s) => s.store.list(input, s.access));
@@ -83,6 +98,10 @@ export class MemoryService {
       // The committed revision is the outbox. Reconciliation retries a failed enqueue.
       await this.dependencies.enqueue(context, document).catch(() => undefined);
     }
+    if (document.gitSync?.status !== undefined && document.gitSync.status !== "pushed")
+      await this.dependencies
+        .enqueueGit?.({ ...context, memoryGeneration: document.delivery.generation })
+        .catch(() => undefined);
     return document;
   }
   async commit(
@@ -226,6 +245,7 @@ export class MemoryService {
     const doc = await this.open(context, async (s) => {
       const doc = await s.store.read(id, s.access);
       if (!doc) throw new MemoryAccessError();
+      if (doc.gitSync) return { ...doc, delivery: { ...doc.delivery, generation: s.generation } };
       // Explicit user retries target the currently selected location. Automatic queued retries
       // keep their original provider and generation and can never silently switch destinations.
       const delivery = this.attribution(s).delivery;

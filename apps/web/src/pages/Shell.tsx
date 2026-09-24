@@ -223,6 +223,7 @@ import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { BotCreatePicker } from "./shell/bot-picker";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
+import { useComputerTerminal } from "./shell/computer-terminal";
 import {
   ClearConversationDialog,
   DeleteBotDialog,
@@ -2462,6 +2463,7 @@ export function ShellPage() {
   useEffect(() => {
     if (!computerOpen) return;
     function onKey(event: KeyboardEvent) {
+      if (event.target instanceof Element && event.target.closest("[data-terminal-root]")) return;
       if (event.key === "Escape") setComputerOpen(false);
     }
     window.addEventListener("keydown", onKey);
@@ -2559,6 +2561,20 @@ export function ShellPage() {
 
   const embeddedScreenUrl = embeddableScreenUrl(screenUrl);
   const hasControl = userHoldsComputerControl(computer, computerBot?.id);
+  const terminalSurface = useComputerTerminal({
+    computer,
+    botId: computerBot?.id,
+    hasControl,
+    working: composerRunning,
+    onTakeControl: async () => {
+      if (computerBot) {
+        await rpc.computer.takeover({ botId: computerBot.id });
+        await refreshComputerFor(computerBot.id);
+      }
+    },
+    onStop: stopRun,
+    onOpen: () => setComputerOpen(true),
+  });
   const hideScreenLoadError = computerErrorFromScreen && Boolean(embeddedScreenUrl);
   const computerScreenError =
     computerError && !hideScreenLoadError ? (
@@ -4101,6 +4117,7 @@ export function ShellPage() {
           open={commandPaletteOpen}
           onOpenChange={setCommandPaletteOpen}
           bots={bots}
+          onOpenTerminal={terminalSurface.open}
           onSelectBot={(id) => {
             setMobileSidebarOpen(false);
             navigate(`/app/${id}`);
@@ -4367,39 +4384,41 @@ export function ShellPage() {
                 {sendError}
               </div>
             ) : null}
+            {terminalSurface.tabs}
             <div className="relative min-h-0 flex-1 bg-background">
-              {computer?.kind === "desktop" ? (
-                <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
-              ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
-                <>
-                  <iframe
-                    title={t`Bot screen`}
-                    src={embeddedScreenUrl}
-                    sandbox={screenIframeSandbox(embeddedScreenUrl)}
-                    className="h-full w-full border-0 bg-black"
-                    allow="clipboard-read; clipboard-write; fullscreen"
-                    style={{
-                      pointerEvents: recordingSkill || !hasControl ? "none" : "auto",
-                    }}
-                  />
-                  {computerBot ? (
-                    <TeachCaptureOverlay
-                      botId={computerBot.id}
-                      skill={recordingSkill}
-                      enabled={Boolean(recordingSkill)}
-                      screenWidth={computer?.screenWidth}
-                      screenHeight={computer?.screenHeight}
+              {terminalSurface.content ??
+                (computer?.kind === "desktop" ? (
+                  <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
+                ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
+                  <>
+                    <iframe
+                      title={t`Bot screen`}
+                      src={embeddedScreenUrl}
+                      sandbox={screenIframeSandbox(embeddedScreenUrl)}
+                      className="h-full w-full border-0 bg-black"
+                      allow="clipboard-read; clipboard-write; fullscreen"
+                      style={{
+                        pointerEvents: recordingSkill || !hasControl ? "none" : "auto",
+                      }}
                     />
-                  ) : null}
-                </>
-              ) : (
-                <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
-                  {computerScreenError ??
-                    (computer?.state === "suspended"
-                      ? t`Computer is asleep`
-                      : computerLabel(computer?.mode, computerBot.name))}
-                </div>
-              )}
+                    {computerBot ? (
+                      <TeachCaptureOverlay
+                        botId={computerBot.id}
+                        skill={recordingSkill}
+                        enabled={Boolean(recordingSkill)}
+                        screenWidth={computer?.screenWidth}
+                        screenHeight={computer?.screenHeight}
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
+                    {computerScreenError ??
+                      (computer?.state === "suspended"
+                        ? t`Computer is asleep`
+                        : computerLabel(computer?.mode, computerBot.name))}
+                  </div>
+                ))}
             </div>
           </div>
         </div>
