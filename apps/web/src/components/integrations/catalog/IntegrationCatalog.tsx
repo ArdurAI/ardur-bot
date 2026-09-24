@@ -2,11 +2,13 @@ import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/con
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
-import { MCP_OAUTH_CHANNEL, waitForMcpOauth } from "../../../lib/mcp-connect";
+import { connectIntegration } from "../../../lib/connect-integration";
+import { refreshIntegrationCatalog } from "../../../lib/integration-catalog-query";
+import { MCP_OAUTH_CHANNEL } from "../../../lib/mcp-connect";
 import { rpc } from "../../../lib/rpc";
 import { IntegrationManage } from "./IntegrationManage";
 
-export function IntegrationCatalog() {
+export function IntegrationCatalog({ reconnectId }: { reconnectId?: string }) {
   const { t } = useLingui();
   const consentPopup = useRef<Window | null>(null);
   const [catalog, setCatalog] = useState<IntegrationDescriptor[]>([]);
@@ -19,7 +21,11 @@ export function IntegrationCatalog() {
   const [tokenFor, setTokenFor] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const refresh = async () => {
-    const result = await rpc.integrations.list();
+    const result = await refreshIntegrationCatalog();
+    if (reconnectId) {
+      const connection = result.connections.find((row) => row.id === reconnectId);
+      if (connection) setTokenFor(connection.catalogId);
+    }
     setCatalog(result.catalog);
     setConnections(result.connections);
     setError(false);
@@ -40,38 +46,24 @@ export function IntegrationCatalog() {
   ) {
     setBusy(descriptor.id);
     setError(false);
-    // Open during the click gesture, before awaiting network discovery.
-    const popup =
-      authKind === "oauth"
-        ? window.open("about:blank", MCP_OAUTH_CHANNEL, "popup,width=560,height=720")
-        : null;
-    consentPopup.current = popup;
     try {
-      const started = await rpc.integrations.connect({
-        catalogId: descriptor.id,
-        ...(authKind === "token"
-          ? { token, authKind }
-          : descriptor.authKind === "token"
-            ? { authKind }
-            : {}),
-        connectionId: connection?.id,
+      const connectionResult = await connectIntegration(descriptor, connection, {
+        token,
+        authKind,
         host: descriptor.id === "gitlab" && customHost ? host : undefined,
+        onPopup: (popup) => {
+          consentPopup.current = popup;
+        },
+        onStarted: (started) => {
+          setConnections((current) => [
+            started,
+            ...current.filter((entry) => entry.id !== started.id),
+          ]);
+        },
       });
-      setConnections((current) => [
-        started.connection,
-        ...current.filter((entry) => entry.id !== started.connection.id),
-      ]);
-      if (started.authorizationUrl) {
-        const result = await waitForMcpOauth(started.authorizationUrl, popup, started.sessionId);
-        if (result === "cancelled")
-          await rpc.integrations.cancel({ connectionId: started.connection.id });
-      } else {
-        popup?.close();
-      }
       await refresh();
-      setSelected(started.connection.id);
+      setSelected(connectionResult.id);
     } catch {
-      popup?.close();
       setError(true);
     } finally {
       setToken("");

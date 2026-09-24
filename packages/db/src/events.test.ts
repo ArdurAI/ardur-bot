@@ -1974,67 +1974,76 @@ describe("claimSteering", () => {
 });
 
 describe("clearThread", () => {
-  it("releases the computer execution lease without dropping the computer", async () => {
-    const fanout = new TestFanout();
-    const publish = vi.spyOn(fanout, "publish");
-    const tx = {
-      thread: {
-        update: vi
-          .fn()
-          .mockResolvedValueOnce({ nextMessageSeq: 42, historyCompactionGeneration: 0 })
-          .mockResolvedValue({ nextEventSeq: 1 }),
-      },
-      run: {
-        findMany: vi.fn().mockResolvedValue([{ id: "run-1", taskId: "task-1" }]),
-        updateMany: vi.fn(),
-      },
-      attempt: { updateMany: vi.fn() },
-      task: { updateMany: vi.fn() },
-      computerExecutionLease: { updateMany: vi.fn() },
-      computer: { updateMany: vi.fn() },
-      message: { deleteMany: vi.fn() },
-      event: {
-        deleteMany: vi.fn(),
-        create: vi.fn().mockResolvedValue({
-          ...event(0),
-          type: "thread.cleared",
-        }),
-      },
-      bot: { update: vi.fn() },
-    };
-    const prisma = {
-      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
-    } as unknown as PrismaClient;
+  it.each([false, true])(
+    "releases the computer execution lease without dropping the computer (preserve history: %s)",
+    async (preserveHistory) => {
+      const fanout = new TestFanout();
+      const publish = vi.spyOn(fanout, "publish");
+      const tx = {
+        thread: {
+          update: vi
+            .fn()
+            .mockResolvedValueOnce({ nextMessageSeq: 42, historyCompactionGeneration: 0 })
+            .mockResolvedValue({ nextEventSeq: 1 }),
+        },
+        run: {
+          findMany: vi.fn().mockResolvedValue([{ id: "run-1", taskId: "task-1" }]),
+          updateMany: vi.fn(),
+        },
+        attempt: { updateMany: vi.fn() },
+        task: { updateMany: vi.fn() },
+        computerExecutionLease: { updateMany: vi.fn() },
+        computer: { updateMany: vi.fn() },
+        message: { deleteMany: vi.fn() },
+        event: {
+          deleteMany: vi.fn(),
+          create: vi.fn().mockResolvedValue({
+            ...event(0),
+            type: "thread.cleared",
+          }),
+        },
+        bot: { update: vi.fn() },
+      };
+      const prisma = {
+        $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+      } as unknown as PrismaClient;
 
-    await expect(
-      clearThread(prisma, { spaceId: "workspace-1", threadId: "thread-1", botId: "bot-1" }, fanout),
-    ).resolves.toMatchObject({
-      event: { type: "thread.cleared" },
-      cancelledRunIds: ["run-1"],
-    });
-    expect(tx.computerExecutionLease.updateMany).toHaveBeenCalledWith({
-      where: { runId: { in: ["run-1"] } },
-      data: { expiresAt: new Date(0) },
-    });
-    expect(tx.computer.updateMany).toHaveBeenCalledWith({
-      where: { executionRunId: { in: ["run-1"] } },
-      data: {
-        executionRunId: null,
-        executionBotId: null,
-        executionLeaseExpiresAt: null,
-      },
-    });
-    // Every deleted message counts as compacted, so compaction cannot summarize cleared history.
-    expect(tx.thread.update).toHaveBeenCalledWith({
-      where: { id: "thread-1" },
-      data: {
-        historyCompactedUpToSeq: 41,
-        historyCompactionSummary: null,
-        historyCompactionGeneration: { increment: 1 },
-      },
-    });
-    expect(publish).toHaveBeenCalledWith("thread:thread-1", JSON.stringify({ cursor: 0 }));
-  });
+      await expect(
+        clearThread(
+          prisma,
+          { spaceId: "workspace-1", threadId: "thread-1", botId: "bot-1", preserveHistory },
+          fanout,
+        ),
+      ).resolves.toMatchObject({
+        event: { type: "thread.cleared" },
+        cancelledRunIds: ["run-1"],
+      });
+      expect(tx.computerExecutionLease.updateMany).toHaveBeenCalledWith({
+        where: { runId: { in: ["run-1"] } },
+        data: { expiresAt: new Date(0) },
+      });
+      expect(tx.computer.updateMany).toHaveBeenCalledWith({
+        where: { executionRunId: { in: ["run-1"] } },
+        data: {
+          executionRunId: null,
+          executionBotId: null,
+          executionLeaseExpiresAt: null,
+        },
+      });
+      // Every deleted message counts as compacted, so compaction cannot summarize cleared history.
+      expect(tx.thread.update).toHaveBeenCalledWith({
+        where: { id: "thread-1" },
+        data: {
+          historyCompactedUpToSeq: 41,
+          historyCompactionSummary: preserveHistory ? "New chat." : null,
+          historyCompactionGeneration: { increment: 1 },
+        },
+      });
+      expect(tx.message.deleteMany).toHaveBeenCalledTimes(preserveHistory ? 0 : 1);
+      expect(tx.event.deleteMany).toHaveBeenCalledTimes(preserveHistory ? 0 : 1);
+      expect(publish).toHaveBeenCalledWith("thread:thread-1", JSON.stringify({ cursor: 0 }));
+    },
+  );
 
   it("scopes group clear lease cleanup to cancelled run ids", async () => {
     const fanout = new TestFanout();

@@ -38,16 +38,6 @@ msgstr " (непрочитано)"
 msgid "{0, plural, one {# model} other {# models}}"
 msgstr "{0, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}"
 
-#. placeholder {0}: file.name
-#: src/pages/Shell.tsx
-msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
-msgstr "{0} (макс. {ATTACHMENT_MAX_COUNT} вложений)"
-
-#. placeholder {0}: file.name
-#: src/pages/Shell.tsx
-msgid "{0} (over 10 MiB)"
-msgstr "{0} (более 10 МБ)"
-
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
 msgid "{0} {unitLabel}"
@@ -157,6 +147,10 @@ msgstr "{name}: завершено"
 #: src/lib/browser-notifications.ts
 msgid "{name} stopped"
 msgstr "{name}: остановлено"
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "{reconnectCount} need reconnection"
+msgstr ""
 
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
@@ -314,6 +308,12 @@ msgstr ""
 msgid "Add Executor"
 msgstr "Добавить Executor"
 
+#: src/components/composer/ComposerMenu.tsx
+#: src/components/composer/ComposerTools.tsx
+msgid "Add files or photos"
+msgstr ""
+
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "Add folder"
 msgstr ""
@@ -677,10 +677,6 @@ msgid "at {timeSelect}"
 msgstr "в {timeSelect}"
 
 #: src/pages/Shell.tsx
-msgid "Attach file"
-msgstr "Прикрепить файл"
-
-#: src/pages/Shell.tsx
 msgid "Attachment"
 msgstr "Вложение"
 
@@ -930,6 +926,10 @@ msgstr "Изменить пароль"
 msgid "Change pin"
 msgstr ""
 
+#: src/components/composer/command-description.ts
+msgid "Change this bot’s pin"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Changing…"
 msgstr "Изменение…"
@@ -962,7 +962,7 @@ msgstr ""
 msgid "Chat service"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/composer/command-description.ts
 msgid "Chat Settings"
 msgstr "Настройки чата"
 
@@ -1015,6 +1015,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "Выберите новый пароль"
+
+#: src/components/composer/command-description.ts
+msgid "Choose a taught skill"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Choose bots and the tools they can use."
@@ -1183,6 +1187,10 @@ msgstr "Скоро"
 msgid "Command"
 msgstr "Команда"
 
+#: src/components/composer/command-description.ts
+msgid "Compare bots"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "Завершить"
@@ -1311,6 +1319,7 @@ msgstr "Подключить Treg"
 msgid "Connect your account."
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
@@ -1366,6 +1375,10 @@ msgstr ""
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Соединение с {0} все еще не завершено. Вы можете закрыть это и проверить еще раз."
 
+#: src/components/composer/ComposerMenu.tsx
+msgid "Connectors"
+msgstr ""
+
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
@@ -1420,6 +1433,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
 msgstr "Не удалось добавить"
+
+#: src/pages/Shell.tsx
+msgid "Could not add folder. Try again."
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not add MCP server"
@@ -1481,6 +1498,10 @@ msgstr "Не удалось выполнить действие"
 msgid "Could not complete authorization. Try connecting again."
 msgstr ""
 
+#: src/components/composer/composer-actions.ts
+msgid "Could not complete command. Try again."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "Не удалось завершить обновление. Попробуйте снова."
@@ -1490,6 +1511,7 @@ msgstr "Не удалось завершить обновление. Попро�
 msgid "Could not connect"
 msgstr "Не удалось подключиться"
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
@@ -1620,6 +1642,7 @@ msgstr ""
 msgid "Could not load history. Retry."
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not load integrations"
@@ -1639,6 +1662,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
+msgstr ""
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Could not load plugins"
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
@@ -1769,6 +1796,10 @@ msgstr ""
 msgid "Could not save group"
 msgstr "Не удалось сохранить группу"
 
+#: src/components/composer/composer-actions.ts
+msgid "Could not save memory"
+msgstr ""
+
 #: src/pages/Onboarding.tsx
 msgid "Could not save model"
 msgstr "Не удалось сохранить модель"
@@ -1816,6 +1847,10 @@ msgstr "Не удалось отправить электронное письм
 #: src/pages/CallView.tsx
 msgid "Could not send that"
 msgstr "Не удалось отправить это"
+
+#: src/components/composer/composer-actions.ts
+msgid "Could not start a new chat"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
@@ -3011,6 +3046,10 @@ msgstr "Управление серверами MCP"
 msgid "Manage messaging settings"
 msgstr "Управление настройками обмена сообщениями"
 
+#: src/components/composer/ComposerMenu.tsx
+msgid "Manage…"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
 msgstr "Вручную"
@@ -3289,6 +3328,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "Требуется ввод данных"
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Needs reconnection"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Needs takeover"
@@ -3602,6 +3645,14 @@ msgstr "Открыть в полном окне"
 msgid "Open navigation"
 msgstr "Открыть навигацию"
 
+#: src/components/composer/command-description.ts
+msgid "Open routines"
+msgstr ""
+
+#: src/components/composer/command-description.ts
+msgid "Open Settings"
+msgstr ""
+
 #: src/pages/shell/command-palette.tsx
 msgid "Open terminal"
 msgstr ""
@@ -3752,6 +3803,10 @@ msgstr "Закрепить"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "Воспроизведение…"
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Plugins"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
@@ -4370,6 +4425,10 @@ msgstr ""
 msgid "Save"
 msgstr "Сохранить"
 
+#: src/components/composer/command-description.ts
+msgid "Save a memory note"
+msgstr ""
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Save connection"
 msgstr ""
@@ -4576,11 +4635,11 @@ msgstr ""
 msgid "Settings"
 msgstr "Настройки"
 
-#: src/pages/Shell.tsx
+#: src/components/composer/command-description.ts
 msgid "Settings: General"
 msgstr "Настройки: Общие"
 
-#: src/pages/Shell.tsx
+#: src/components/composer/command-description.ts
 msgid "Settings: Usage"
 msgstr "Настройки: Использование"
 
@@ -4634,6 +4693,10 @@ msgstr "Показать пароль"
 msgid "Show settings"
 msgstr "Показать настройки"
 
+#: src/components/composer/command-description.ts
+msgid "Show slash commands"
+msgstr ""
+
 #: src/lib/localized-provider-hint.ts
 #: src/pages/Auth.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -4662,11 +4725,6 @@ msgstr ""
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr ""
 
-#. placeholder {0}: skill.name
-#: src/pages/Shell.tsx
-msgid "Skill {0}"
-msgstr "Навык {0}"
-
 #: src/pages/KnowledgeSection.tsx
 msgid "Skills"
 msgstr "Навыки"
@@ -4692,6 +4750,11 @@ msgstr "Сообщение Slack"
 #: src/pages/RoutineEditor.tsx
 msgid "Slack not enabled"
 msgstr "Slack не включен"
+
+#: src/components/composer/ComposerMenu.tsx
+#: src/components/composer/SlashPicker.tsx
+msgid "Slash commands"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
@@ -4746,6 +4809,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/components/composer/command-description.ts
+msgid "Start a new chat"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "Начать запись"
@@ -4782,6 +4849,10 @@ msgstr "Остановить озвучивание"
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Stop teaching"
 msgstr "Остановить обучение"
+
+#: src/components/composer/command-description.ts
+msgid "Stop the current run"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -5141,6 +5212,10 @@ msgstr "Открепить"
 #: src/pages/Shell.tsx
 msgid "Unsupported file type: {0}"
 msgstr "Неподдерживаемый тип файла: {0}."
+
+#: src/pages/Shell.tsx
+msgid "Up to 4 files, 10 MB each"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
