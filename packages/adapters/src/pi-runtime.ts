@@ -37,6 +37,7 @@ import {
 import { PiRuntimeCredentialStore, toOAuthCredential } from "./pi-credentials.js";
 import { registerLocalProvider } from "./pi-local-provider.js";
 import { assertAnthropicApiKey, assertProviderOAuthAllowed } from "./pi-oauth.js";
+import { registerOllamaRuntime } from "./pi-ollama-provider.js";
 import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   registerOpenAiCompatibleCatalog,
@@ -226,6 +227,12 @@ export class PiAgentRuntime implements AgentRuntime {
         }
         const { models, model, apiKey } = selectedModel;
         if (
+          model.provider === "ollama" &&
+          !model.input.includes("image") &&
+          request.currentTurnImages?.length
+        )
+          throw new Error("This model does not accept images.");
+        if (
           request.model.runtimePin &&
           !getSupportedThinkingLevels(model).includes(request.model.thinkingLevel!)
         ) {
@@ -321,6 +328,12 @@ export class PiAgentRuntime implements AgentRuntime {
             if (steering.length === 0) return undefined;
             seenSteeringIds.push(...steering.map((item) => item.id));
             for (const item of steering) {
+              if (
+                model.provider === "ollama" &&
+                !model.input.includes("image") &&
+                item.images?.length
+              )
+                throw new Error("This model does not accept images.");
               const images = toPiImages(item.images);
               agent.steer({
                 role: "user",
@@ -442,6 +455,8 @@ export class PiAgentRuntime implements AgentRuntime {
           ...initialSteering.flatMap((item) => item.images ?? []),
         ]);
         try {
+          if (model.provider === "ollama" && !model.input.includes("image") && images.length)
+            throw new Error("This model does not accept images.");
           await agent.prompt(initialPrompt, images?.length ? images : undefined);
         } finally {
           try {
@@ -591,7 +606,8 @@ export function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
     !pinned &&
     !model &&
     provider !== "openrouter" &&
-    provider !== OPENAI_COMPATIBLE_PROVIDER_ID
+    provider !== OPENAI_COMPATIBLE_PROVIDER_ID &&
+    provider !== "ollama"
   ) {
     model = models.getModel("openrouter", modelId);
   }
@@ -633,6 +649,7 @@ export function modelsForRequest(
   request: Pick<AgentRunRequest, "model">,
   provider: string,
 ): Models {
+  if (provider === "ollama") return registerOllamaRuntime(builtinModels(), request.model);
   if (request.model.apiKey !== undefined) assertAnthropicApiKey(provider, request.model.apiKey);
   const oauth = request.model.oauth;
   if (oauth) {

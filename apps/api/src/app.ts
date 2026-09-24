@@ -474,6 +474,7 @@ export async function createApp(
       openSignup: env.messagingOpenSignup,
     },
     env: {
+      deploymentKind: env.deploymentKind,
       agentRuntime: env.agentRuntime,
       defaultProvider: env.defaultProvider,
       defaultModel: env.defaultModel,

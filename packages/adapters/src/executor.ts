@@ -38,7 +38,9 @@ import {
   computerProfileNote,
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
+  OLLAMA_NO_IMAGES,
   OPENAI_COMPATIBLE_PROVIDER_ID,
+  ollamaThink,
   RuntimePinError,
   runtimePinProblem,
 } from "@ardurbot/contracts";
@@ -258,6 +260,12 @@ import {
   modelAcceptsImageInput,
   modelIdSupportsImages,
 } from "./model-vision.js";
+import {
+  listOllamaModels,
+  normalizeOllamaUrl,
+  ollamaErrorMessage,
+  showOllamaModel,
+} from "./ollama.js";
 import { toOAuthCredential } from "./pi-credentials.js";
 import {
   parseModelSecret,
@@ -906,7 +914,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
     // Free-form selections must keep the preference that owns this modelId. A
     // intervening delete/change can make findModelCredential fall back to another
     // same-provider credential; reject that mismatch instead of mixing baseUrl.
-    if (!isCatalogModelChoice(provider, modelId) && credential.defaultModel !== modelId) {
+    if (
+      provider !== "ollama" &&
+      !isCatalogModelChoice(provider, modelId) &&
+      credential.defaultModel !== modelId
+    ) {
       throw new Error("Unknown model for that provider");
     }
     const resolved = await resolveModelKey(
@@ -946,7 +958,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       bot,
       snapshot,
       scripted: Boolean(deps.runtime?.describe().capabilities.scripted),
-      loadKey: async (credential, pin) => {
+      loadKey: async (credential, pin, selectDefaultEffort) => {
         const key = await resolveModelKey(
           deps,
           scope.userId,
@@ -955,7 +967,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           pin.provider!,
           pin.modelId!,
           registerSecrets,
-          pin,
+          selectDefaultEffort ? undefined : pin,
         );
         if (
           pin.provider !== "scripted" &&
@@ -1984,7 +1996,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return { error: "Page browser is unavailable on this computer." };
           }
           if (IMAGE_RETURNING_COMPUTER_TOOLS.has(name) && !acceptsImages) {
-            return { error: MODEL_CANNOT_SEE_MESSAGE };
+            return {
+              error: runModelProvider === "ollama" ? OLLAMA_NO_IMAGES : MODEL_CANNOT_SEE_MESSAGE,
+            };
           }
           let connectorCall: ConnectorCall = {
             tool: name,
@@ -5501,6 +5515,57 @@ export async function resolveModelKey(
       const resolved = await resolveModelAuth(plaintext, credential.provider, {
         persist,
       });
+      if (provider === "ollama") {
+        const requestedPin: RuntimePin = pin ?? {
+          runtimeKind: "pi",
+          provider,
+          modelId,
+          effort: null,
+          credentialId: null,
+          revision: 0,
+        };
+        if (resolved.secret.kind !== "openai_compatible")
+          throw new RuntimePinError(
+            runtimePinProblem(requestedPin, "pin-credential-missing", "Connect Ollama again."),
+          );
+        const baseUrl = normalizeOllamaUrl(resolved.secret.baseUrl);
+        let metadata: Awaited<ReturnType<typeof showOllamaModel>>;
+        try {
+          const models = await listOllamaModels(baseUrl);
+          if (!models.some((model) => model.name === modelId))
+            throw new Error("This Ollama model is not installed. Change pin.");
+          metadata = await showOllamaModel(baseUrl, modelId);
+          if (!metadata.contextWindow)
+            throw new Error("Ollama did not report this model's context length. Change pin.");
+        } catch (error) {
+          throw new RuntimePinError(
+            runtimePinProblem(requestedPin, "pin-model-unknown", ollamaErrorMessage(error)),
+          );
+        }
+        if (pin) {
+          try {
+            ollamaThink(pin.effort, metadata);
+          } catch (error) {
+            throw new RuntimePinError(
+              runtimePinProblem(
+                pin,
+                "pin-effort-unsupported",
+                error instanceof Error ? error.message : "Thinking is unavailable.",
+              ),
+            );
+          }
+        }
+        return {
+          apiKey: "local",
+          baseUrl: `${baseUrl}/v1`,
+          reasoning: metadata.reasoning,
+          acceptsImages: metadata.acceptsImages,
+          contextWindow: metadata.contextWindow,
+          maxTokens: Math.max(1, Math.min(4096, Math.floor(metadata.contextWindow / 4))),
+          thinkingLevel: metadata.reasoning ? "medium" : null,
+          redact: [],
+        };
+      }
       const oauth = resolved.secret.kind === "oauth" ? resolved.secret.credential : undefined;
       const baseUrl =
         resolved.secret.kind === "openai_compatible" ? resolved.secret.baseUrl : undefined;

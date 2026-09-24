@@ -13,7 +13,8 @@ export function modelUnavailable(
   return (
     !catalog.some(
       (entry) => entry.provider === provider && entry.id === modelId && !entry.placeholder,
-    ) && !connected.some((entry) => entry.modelId === modelId)
+    ) &&
+    (provider === "ollama" || !connected.some((entry) => entry.modelId === modelId))
   );
 }
 

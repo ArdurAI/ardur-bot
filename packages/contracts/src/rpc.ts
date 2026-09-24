@@ -125,6 +125,7 @@ import {
   MemorySyncStateSchema,
 } from "./memory-documents.js";
 import { channelPairingContract } from "./messaging-actions.js";
+import { OllamaPullProgressSchema, OllamaStatusSchema } from "./ollama.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
@@ -277,6 +278,11 @@ export const appContract = {
       .output(z.object({ ok: z.literal(true) })),
   },
   models: {
+    ollama: oc.output(OllamaStatusSchema),
+    testOllama: oc.input(z.object({ baseUrl: z.string() })).output(OllamaStatusSchema),
+    pullOllama: oc
+      .input(z.object({ model: z.string().trim().min(1).max(256) }))
+      .output(eventIterator(OllamaPullProgressSchema)),
     list: oc.output(z.array(ModelCatalogEntrySchema)),
     credentials: oc.output(z.array(ModelCredentialSchema)),
     connect: oc.input(ModelConnectInputSchema).output(ModelCredentialSchema),

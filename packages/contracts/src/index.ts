@@ -20,6 +20,7 @@ export * from "./mcp.js";
 export * from "./memory-documents.js";
 export { memoryProviderHost } from "./memory-provider-location.js";
 export * from "./messaging-actions.js";
+export * from "./ollama.js";
 export * from "./openai-compatible-ui.js";
 export * from "./provider-errors.js";
 export * from "./reactions.js";
