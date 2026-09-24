@@ -293,6 +293,5 @@ export const HostRuntimeEventSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("done"), text: text.optional() }),
 ]);
 /** Canonical text for a public identifier; hashing it never yields a host credential. */
-export function hostRegistrationIdentityText(tokenHash: string) {
-  return `ardurbot:host-registration:v1:${tokenHash}`;
-}
+// Defined in plain JavaScript so the packaged desktop app can load it.
+export { hostRegistrationIdentityText } from "./host-registration-identity.js";

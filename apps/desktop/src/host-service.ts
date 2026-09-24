@@ -3,8 +3,8 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
-import { hostRegistrationIdentityText } from "@ardurbot/contracts/host-bridge";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
+import { hostRegistrationIdentityText } from "@ardurbot/contracts/host-registration-identity";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface HostServiceConfig {
