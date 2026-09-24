@@ -5,6 +5,32 @@ import { mergeComparison, startComparison } from "./comparison.js";
 import { comparisonFixture, comparisonInput, comparisonScope } from "./comparison-test-fixture.js";
 
 describe("comparison orchestration through P2 admission", () => {
+  it("keeps effort evidence in comparison results and exported JSON", async () => {
+    const f = comparisonFixture();
+    const comparison = await startComparison(f.deps, comparisonScope, comparisonInput);
+    const run = f.state().runs.find((run) => run.id === comparison.results[0]!.runId);
+    run.runtimeInfo = {
+      runtimeKind: "claude-code",
+      effortAttested: false,
+      effortAttestationReason: "Claude Code does not report the applied effort",
+    };
+    const read = await readComparison(f.prisma, comparisonScope, comparison.id);
+    const exported = ComparisonExportSchema.parse(
+      JSON.parse(
+        JSON.stringify({
+          format: "ardurbot.comparison",
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          comparison: read,
+        }),
+      ),
+    );
+    expect(exported.comparison.results[0]!.provenance).toMatchObject({
+      effortAttested: false,
+      effortAttestationReason: "Claude Code does not report the applied effort",
+    });
+    expect(exported.comparison.participants).toEqual(comparison.participants);
+  });
   it("freezes once, admits the current bot, preserves order and reserves participants plus merge once", async () => {
     const f = comparisonFixture();
     const result = await startComparison(f.deps, comparisonScope, comparisonInput);

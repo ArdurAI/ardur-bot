@@ -633,6 +633,42 @@ describe("mutating tool effect idempotency keys", () => {
   });
 });
 
+it("accumulates runtime evidence without losing it on later callbacks", async () => {
+  const f = fixture();
+  f.runtimeRun.mockImplementation(async function* (request) {
+    await request.onRuntimeInfo?.({
+      runtimeKind: "pi",
+      effortAttested: false,
+      effortAttestationReason: "Not reported",
+    });
+    await request.onRuntimeInfo?.({ runtimeKind: "pi", reportedModel: "executed-model" });
+    await request.onRuntimeInfo?.({
+      runtimeKind: "pi",
+      effortAttested: true,
+      effortAttestationReason: null,
+    });
+    await request.onRuntimeInfo?.({ runtimeKind: "pi", sessionId: "session" });
+    yield { type: "done" as const, text: "Done" };
+  });
+  await f.run();
+  const snapshots = f.prisma.run.updateMany.mock.calls
+    .map(([call]) => call.data.runtimeInfo)
+    .filter(Boolean);
+  expect(snapshots).toContainEqual(
+    expect.objectContaining({
+      effortAttested: false,
+      effortAttestationReason: "Not reported",
+      reportedModel: "executed-model",
+    }),
+  );
+  expect(snapshots.at(-1)).toMatchObject({
+    effortAttested: true,
+    effortAttestationReason: null,
+    reportedModel: "executed-model",
+    sessionId: "session",
+  });
+});
+
 it("persists a sanitized typed provider failure through the executor", async () => {
   const f = fixture();
   f.runtimeRun.mockImplementation(async function* () {

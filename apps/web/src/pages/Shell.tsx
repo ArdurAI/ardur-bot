@@ -3356,6 +3356,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                 key={bootstrapMe?.spaceId}
                 bot={active}
                 settings={modelSettings}
+                run={activeSnapshot?.run?.botId === active.id ? activeSnapshot.run : null}
                 onClick={openBotModelSettings}
               />
             ) : null}

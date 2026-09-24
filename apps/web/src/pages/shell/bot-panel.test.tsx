@@ -710,7 +710,7 @@ it("shows the saved native runtime in the header and its availability sentence i
   await act(async () =>
     root.render(<BotModelChip bot={native} settings={null} onClick={vi.fn()} />),
   );
-  expect(container.textContent).toBe("Claude Code · claude-opus-5 · low");
+  expect(container.textContent).toBe("Claude Code · claude-opus-5 · low · requested");
   await act(async () => root.render(settings(native)));
   expect(container.textContent).toContain("Not signed in — run `claude` in a terminal once");
   const runsOn = container.querySelector<HTMLSelectElement>('select[id$="-runtime"]');
@@ -719,6 +719,104 @@ it("shows the saved native runtime in the header and its availability sentence i
   expect(modelSelect().textContent).not.toContain("GPT-6 Astra");
   expect(container.textContent).toContain("Experimental");
 });
+
+it("offers and saves high from the probed native effort list, retaining the pin on recheck", async () => {
+  const native = {
+    ...bot,
+    runtimeKind: "claude-code" as const,
+    modelProvider: "anthropic",
+    modelId: "claude-opus-5",
+    modelCredentialId: "native:claude-code",
+    thinkingLevel: "low" as const,
+    modelPinRevision: 1,
+  };
+  api.availability.mockResolvedValue({
+    runtimeKind: "claude-code",
+    available: true,
+    version: "2.1.281",
+    models: [
+      { id: native.modelId, label: "Opus 5", efforts: ["low", "medium", "high", "xhigh", "max"] },
+    ],
+  });
+  await act(async () => root.render(settings(native)));
+  const select = container.querySelector<HTMLSelectElement>('select[id$="-effort"]')!;
+  expect([...select.options].map((option) => option.value)).toEqual([
+    "",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]);
+  await act(async () => {
+    select.value = "high";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({
+      runtimeKind: "claude-code",
+      thinkingLevel: "high",
+      modelId: "claude-opus-5",
+    }),
+  );
+  api.availability.mockResolvedValue({
+    runtimeKind: "claude-code",
+    available: false,
+    version: "2.2.0",
+    models: [{ id: native.modelId, label: "Opus 5", efforts: ["low"] }],
+  });
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Check again")!
+      .click(),
+  );
+  expect(select.value).toBe("high");
+  expect(select.selectedOptions[0]?.textContent).toBe("high — not available");
+});
+
+it.each([false, true, undefined])(
+  "labels the current Claude pin using effort evidence %s",
+  async (effortAttested) => {
+    const native = {
+      ...bot,
+      runtimeKind: "claude-code" as const,
+      modelProvider: "anthropic",
+      modelId: "claude-opus-5",
+      modelCredentialId: "native:claude-code",
+      thinkingLevel: "high" as const,
+      modelPinRevision: 1,
+    };
+    const run = {
+      runtimePin: {
+        runtimeKind: native.runtimeKind,
+        provider: native.modelProvider,
+        modelId: native.modelId,
+        effort: native.thinkingLevel,
+        credentialId: native.modelCredentialId,
+        revision: 1,
+      },
+      runtimeInfo: { runtimeKind: native.runtimeKind, effortAttested },
+    };
+    await act(async () =>
+      root.render(<BotModelChip bot={native} run={run} settings={null} onClick={vi.fn()} />),
+    );
+    expect(container.textContent).toBe(
+      `Claude Code · claude-opus-5 · high${effortAttested ? "" : " · requested"}`,
+    );
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={{ ...native, modelPinRevision: 2 }}
+          run={run}
+          settings={null}
+          onClick={vi.fn()}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain("high · requested");
+  },
+);
 
 it.each([
   ["claude-code", "claude is not installed on this computer"],

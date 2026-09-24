@@ -1,4 +1,5 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  requested: "已请求",
   "What was wrong?": "哪里做得不好？",
   "What was good?": "哪里做得好？",
   "Remove feedback": "移除反馈",

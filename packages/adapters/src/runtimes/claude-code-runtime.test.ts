@@ -1,7 +1,13 @@
 import type { AgentRunRequest } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
-import { assertClaudeTools, ClaudeStreamParser, claudeArguments } from "./claude-code-runtime.js";
+import { listPiCatalog } from "../pi-models.js";
+import {
+  assertClaudeTools,
+  ClaudeStreamParser,
+  claudeArguments,
+  claudeModels,
+} from "./claude-code-runtime.js";
 import { nativeEnvironment } from "./native-process.js";
 
 const pin: RuntimePin = {
@@ -135,9 +141,7 @@ describe("Claude stream-json boundary", () => {
   });
 });
 
-it("keeps the host compatibility catalog aligned with the pinned built-in catalog", async () => {
-  const { listPiCatalog } = await import("../pi-models.js");
-  const { claudeModels } = await import("./claude-code-runtime.js");
+it("keeps the host compatibility catalog aligned with the pinned built-in catalog", () => {
   const expected = listPiCatalog()
     .filter(
       (model) =>
@@ -150,6 +154,69 @@ it("keeps the host compatibility catalog aligned with the pinned built-in catalo
     )
     .map((model) => ({ id: model.id, label: model.label, efforts: ["low"] }));
   expect(claudeModels()).toEqual(expected);
+});
+
+it.each(["2.1.259", "2.1.280", "2.1.281"])(
+  "offers each model's documented efforts on %s",
+  (version) => {
+    for (const model of claudeModels(version)) {
+      expect(model.efforts).toEqual(
+        ["claude-opus-4-6", "claude-sonnet-4-6"].includes(model.id)
+          ? ["low", "medium", "high", "max"]
+          : ["low", "medium", "high", "xhigh", "max"],
+      );
+    }
+  },
+);
+
+it.each([
+  undefined,
+  "",
+  "garbage",
+  "2.1.258",
+  "2.1.282",
+  "2.2.0",
+  "3.1.281",
+  "2.1.281-beta",
+  "2.1.281+build",
+])("keeps only low for unchecked version %s", (version) => {
+  expect(
+    claudeModels(version).every(
+      (model) => model.efforts.length === 1 && model.efforts[0] === "low",
+    ),
+  ).toBe(true);
+});
+
+it.each([null, "low", "max", "HIGH", 3, {}])(
+  "rejects explicit mismatched or malformed effort %j before MCP effects",
+  (effort) => {
+    const highPin = { ...pin, effort: "high" };
+    const parser = new ClaudeStreamParser(highPin);
+    expect(() => parser.parse({ ...init, effort })).toThrow(
+      expect.objectContaining({
+        problem: expect.objectContaining({ code: "pin-effort-unsupported", pin: highPin }),
+      }),
+    );
+    expect(parser.initialized).toBe(false);
+    expect(parser.effortAttested).toBe(false);
+  },
+);
+
+it("revokes attestation when the result contradicts init", () => {
+  const parser = new ClaudeStreamParser({ ...pin, effort: "high" });
+  parser.parse({ ...init, effort: "high" });
+  expect(parser.effortAttested).toBe(true);
+  expect(() =>
+    parser.parse({
+      type: "result",
+      subtype: "success",
+      effort: "low",
+      modelUsage: { [pin.modelId!]: {} },
+    }),
+  ).toThrow();
+  expect(parser.initialized).toBe(false);
+  expect(parser.finished).toBe(false);
+  expect(parser.effortAttested).toBe(false);
 });
 
 it("keeps comparison sessions free of discovered instructions and mutable memory", () => {

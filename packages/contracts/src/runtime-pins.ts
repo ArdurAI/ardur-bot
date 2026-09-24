@@ -26,6 +26,8 @@ export type RuntimeAvailability = z.infer<typeof RuntimeAvailabilitySchema>;
 export const RuntimeInfoSchema = z.object({
   reportedModel: z.string().optional(),
   reportedModelVersion: z.string().optional(),
+  effortAttested: z.boolean().optional(),
+  effortAttestationReason: z.string().nullable().optional(),
   runtimeKind: RuntimeKindSchema,
   version: z.string().optional(),
   sessionId: z.string().optional(),

@@ -4318,6 +4318,12 @@ msgstr ""
 msgid "Repository URL"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+#: src/pages/shell/bot-model-chip.tsx
+#: src/pages/TeamBoard.tsx
+msgid "requested"
+msgstr "已请求"
+
 #. placeholder {0}: row.requesterName
 #. placeholder {1}: row.botName
 #: src/pages/TeamBoard.tsx

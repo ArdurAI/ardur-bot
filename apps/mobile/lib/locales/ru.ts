@@ -1,4 +1,5 @@
 export const RU_MESSAGES: Record<string, string> = {
+  requested: "запрошено",
   "What was wrong?": "Что было не так?",
   "What was good?": "Что было хорошо?",
   "Remove feedback": "Удалить отзыв",
