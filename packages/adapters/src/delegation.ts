@@ -51,7 +51,14 @@ export async function prepareDelegation(
         runtimePinProblem(
           pin.success
             ? pin.data
-            : { provider: null, modelId: null, credentialId: null, effort: null, revision: 0 },
+            : {
+                runtimeKind: "pi" as const,
+                provider: null,
+                modelId: null,
+                credentialId: null,
+                effort: null,
+                revision: 0,
+              },
           "pin-incomplete",
           "The recipient pin could not be resolved.",
         );
