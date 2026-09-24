@@ -3,6 +3,7 @@ import { BotAvatarValueSchema } from "./bot-avatar.js";
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
+import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
 import {
@@ -622,6 +623,7 @@ export const ConnectionCatalogItemSchema = z.object({
 export type ConnectionCatalogItem = z.infer<typeof ConnectionCatalogItemSchema>;
 
 export const ActionApprovalRuleSchema = z.object({
+  botId: Id.nullable().optional(),
   id: Id,
   effect: z.enum(["always_allow", "require_approval"]),
   matchKind: z.enum(["tool", "connector", "category"]),
@@ -1267,6 +1269,12 @@ export const AppBootstrapSchema = z.object({
 export type AppBootstrap = z.infer<typeof AppBootstrapSchema>;
 
 export const ExportManifestSchema = z.object({
+  learning: z
+    .object({
+      journey: z.array(LearningJourneyEntrySchema),
+      observations: z.array(LearningObservationSchema),
+    })
+    .optional(),
   version: z.literal(1),
   exportedAt: z.string(),
   bot: BotSchema.pick({ name: true, title: true, description: true, instructions: true }),

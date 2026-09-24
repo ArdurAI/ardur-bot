@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import {
@@ -5,15 +6,19 @@ import {
   createLearningGrants,
   enqueueLearningReview,
   learningMember,
+  observeLearningRevision,
   proposalView,
   reviewerDestination,
+  skillDocumentContext,
 } from "@ardurbot/adapters";
 import type { Actor, SpaceLearningConfig } from "@ardurbot/contracts";
 import {
+  CuratorReportSchema,
   ProposalEvidenceSchema,
   ReviewExecutionSchema,
   SpaceLearningConfigInput,
 } from "@ardurbot/contracts";
+import { learningJourney } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 import type { MemoryService } from "@ardurbot/memory";
@@ -37,6 +42,7 @@ export function createLearningService(deps: {
       row
         ? {
             enabled: row.enabled,
+            consolidationEnabled: row.consolidationEnabled,
             reviewerPin: row.reviewerPin,
             budgets: {
               botDailyTokens: row.botDailyTokens,
@@ -85,7 +91,110 @@ export function createLearningService(deps: {
     if (!deps.secrets) throw new Error("Learning changes are unavailable.");
     return createLearningApplyService({ ...deps, secretStore: deps.secrets });
   };
+  async function observation(actor: Actor, documentId: string, revision: number) {
+    await learningMember(deps.prisma, identity(actor));
+    if (!deps.memoryDocuments) throw new Error("Document storage is unavailable.");
+    const history = await deps.memoryDocuments.history(
+      documentId,
+      { cursor: revision + 1, limit: 1 },
+      skillDocumentContext(identity(actor)),
+    );
+    const selected = history.items.find((r) => r.revision === revision);
+    if (!selected) throw new IsolationError();
+    return observeLearningRevision(deps.prisma, selected);
+  }
+  async function journeyData(actor: Actor, botId?: string) {
+    await learningMember(deps.prisma, identity(actor), botId);
+    const bundle = await deps.memoryDocuments?.exportBundle(skillDocumentContext(identity(actor)));
+    const revisions = (bundle?.documents ?? [])
+      .flatMap((d) => d.revisions)
+      .filter((r) => !botId || (r.scopeKey.kind === "bot" && r.scopeKey.botId === botId));
+    const audits = await deps.prisma.learningAudit.findMany({
+      where: { ...identity(actor), ...(botId ? { scopeKey: `bot:${botId}` } : {}) },
+      orderBy: { createdAt: "desc" },
+    });
+    return { entries: learningJourney(revisions, audits), revisions };
+  }
+  async function journey(actor: Actor, botId?: string) {
+    return (await journeyData(actor, botId)).entries;
+  }
+  async function exportLearning(actor: Actor, botId: string) {
+    const { entries, revisions } = await journeyData(actor, botId);
+    const ids = new Set(entries.flatMap((e) => (e.revisionId ? [e.revisionId] : [])));
+    const observations = [];
+    for (const revision of revisions.filter((r) => ids.has(`${r.documentId}:${r.revision}`)))
+      observations.push(await observeLearningRevision(deps.prisma, revision));
+    return { journey: entries, observations };
+  }
   return {
+    observation,
+    journey,
+    exportLearning,
+    async proposal(actor: Actor, proposalId: string) {
+      await learningMember(deps.prisma, identity(actor));
+      const row = await deps.prisma.learningProposal.findFirst({
+        where: { id: proposalId, ...identity(actor) },
+      });
+      if (!row) throw new IsolationError();
+      await learningMember(deps.prisma, identity(actor), row.botId);
+      const proposal = proposalView(row);
+      if (proposal.status === "pending" && new Date(proposal.expiresAt) <= new Date())
+        proposal.status = "expired";
+      return proposal;
+    },
+    assertBot: (actor: Actor, botId: string) => learningMember(deps.prisma, identity(actor), botId),
+    async curator(actor: Actor) {
+      await requireSpaceOwner(deps.prisma, actor);
+      const [reports, skills] = await Promise.all([
+        deps.prisma.learningCuratorRun.findMany({
+          where: { spaceId: actor.spaceId },
+          orderBy: { startedAt: "desc" },
+          take: 20,
+        }),
+        deps.prisma.agentSkill.findMany({
+          where: { ...identity(actor), origin: "learned" },
+          select: { id: true, name: true, staleAt: true, lifecycleTag: true },
+        }),
+      ]);
+      return {
+        reports: reports.map((r) =>
+          CuratorReportSchema.parse({
+            ...r,
+            startedAt: r.startedAt.toISOString(),
+            completedAt: r.completedAt?.toISOString() ?? null,
+          }),
+        ),
+        skills: skills.map((s) => ({ ...s, staleAt: s.staleAt?.toISOString() ?? null })),
+      };
+    },
+    async curate(actor: Actor) {
+      await requireSpaceOwner(deps.prisma, actor);
+      if (
+        !(await deps.prisma.spaceLearningConfig.findUnique({ where: { spaceId: actor.spaceId } }))
+      )
+        await deps.prisma.spaceLearningConfig.create({
+          data: { spaceId: actor.spaceId, configuredBy: actor.userId },
+        });
+      await deps.jobs.enqueue({
+        name: "learning.curate",
+        payload: { spaceId: actor.spaceId, requestedBy: actor.userId, requestId: randomUUID() },
+        replaceKey: `learning.curate:${actor.spaceId}`,
+      });
+      return { ok: true as const };
+    },
+    async skillCare(
+      actor: Actor,
+      skillId: string,
+      lifecycleTag: "normal" | "recovery" | "troubleshooting",
+    ) {
+      await learningMember(deps.prisma, identity(actor));
+      const updated = await deps.prisma.agentSkill.updateMany({
+        where: { id: skillId, ...identity(actor), origin: "learned" },
+        data: { lifecycleTag, staleAt: null },
+      });
+      if (updated.count !== 1) throw new IsolationError();
+      return { ok: true as const };
+    },
     summary,
     settings,
     grants: (actor: Actor) => grants.list({ spaceId: actor.spaceId, userId: actor.userId }),
@@ -139,6 +248,7 @@ export function createLearningService(deps: {
         : config.reviewerPin;
       const data = {
         enabled: config.enabled,
+        consolidationEnabled: config.consolidationEnabled,
         ...(pin ? { reviewerPin: pin } : {}),
         configuredBy: actor.userId,
         ...config.budgets,

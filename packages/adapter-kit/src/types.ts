@@ -421,8 +421,9 @@ export interface AgentRunRequest {
     executionId: string,
     name: string,
     task: string,
+    card?: unknown,
   ) => Promise<
-    | { id: string; tokens: number; deadlineAt: string }
+    | { id: string; tokens: number; deadlineAt: string; prompt?: string }
     | { error: string; problem?: DelegationProblem | RuntimeProblem }
   >;
   executeHelperTool?: (
@@ -555,6 +556,7 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "learning.curate": { spaceId?: string; requestedBy?: string; requestId?: string };
   "learning.review": {
     runId: string;
     historyGeneration: number;

@@ -62,7 +62,7 @@ const PURCHASE_CONNECTOR_SLUGS = new Set(["stripe", "shopify", "paypal", "square
 
 export type ActionApprovalRule = Pick<
   StoredActionApprovalRule,
-  "effect" | "matchKind" | "matchValue"
+  "effect" | "matchKind" | "matchValue" | "botId"
 >;
 
 export function connectorKindFromToolName(toolName: string, connectorKinds: string[] = []): string {
@@ -138,11 +138,11 @@ function ruleMatches(rule: ActionApprovalRule, toolName: string, connectorKind: 
 function ruleSpecificity(rule: ActionApprovalRule): number {
   switch (rule.matchKind) {
     case "tool":
-      return 3;
+      return 3 + (rule.botId ? 3 : 0);
     case "connector":
-      return 2;
+      return 2 + (rule.botId ? 3 : 0);
     case "category":
-      return 1;
+      return 1 + (rule.botId ? 3 : 0);
     default:
       return 0;
   }
@@ -159,6 +159,7 @@ export type ActionApprovalResolved = {
 /** Deterministic rule resolution. Always-allow and require-approval both beat the default. */
 export function resolveActionApprovalDetail(input: {
   toolName: string;
+  botId?: string;
   connectorKind?: string;
   rules: ActionApprovalRule[];
   integrationApproval?: "ask-first" | "allow";
@@ -166,8 +167,10 @@ export function resolveActionApprovalDetail(input: {
   if (input.integrationApproval === "ask-first")
     return { decision: "ask", source: "space_policy", matchingRules: [] };
   const connectorKind = input.connectorKind ?? connectorKindFromToolName(input.toolName);
-  const matchingRules = input.rules.filter((rule) =>
-    ruleMatches(rule, input.toolName, connectorKind),
+  const matchingRules = input.rules.filter(
+    (rule) =>
+      (!rule.botId || rule.botId === input.botId) &&
+      ruleMatches(rule, input.toolName, connectorKind),
   );
   if (matchingRules.length === 0) {
     return {
@@ -187,6 +190,7 @@ export function resolveActionApprovalDetail(input: {
 
 export function resolveActionApproval(input: {
   toolName: string;
+  botId?: string;
   connectorKind?: string;
   rules: ActionApprovalRule[];
 }): "ask" | "allow" {
@@ -248,5 +252,17 @@ export function isApprovalAskBlock(block: {
     actionIds.has("allow") &&
     actionIds.has("deny") &&
     [...actionIds].every((id) => id === "allow" || id === "always" || id === "deny")
+  );
+}
+
+/** Suggestions only use the same conservative read classifier as unattended execution. */
+export function isReadPolicyTool(toolName: string): boolean {
+  if (toolRequiresExplicitApproval(toolName)) return false;
+  if (UNATTENDED_SAFE_BUILTIN_TOOLS.has(toolName))
+    return !["request_takeover", "run_subagent"].includes(toolName);
+  return (
+    !APPROVAL_EXEMPT_TOOLS.has(toolName) &&
+    !APPROVAL_REQUIRED_BUILTIN_TOOLS.has(toolName) &&
+    !connectorToolRequiresApproval(toolName)
   );
 }

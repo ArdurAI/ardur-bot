@@ -27,6 +27,7 @@ function describeRule(rule: ActionApprovalRule): string {
 export function ApprovalRulesSettings() {
   const { t } = useLingui();
   const autoReviewId = useId();
+  const [botNames, setBotNames] = useState<Record<string, string>>({});
   const [rules, setRules] = useState<ActionApprovalRule[]>([]);
   const [autoReview, setAutoReview] = useState<ActionAutoReviewSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +43,8 @@ export function ApprovalRulesSettings() {
         rpc.approvalRules.list(),
         rpc.autoReview.get(),
       ]);
+      const bots = await rpc.bots.list();
+      setBotNames(Object.fromEntries(bots.map((bot) => [bot.id, bot.name])));
       setRules(nextRules);
       setAutoReview(nextAutoReview);
     } catch (err) {
@@ -60,6 +63,7 @@ export function ApprovalRulesSettings() {
     if (
       rules.some(
         (rule) =>
+          !rule.botId &&
           rule.effect === "require_approval" &&
           rule.matchKind === "category" &&
           rule.matchValue === matchValue,
@@ -169,7 +173,13 @@ export function ApprovalRulesSettings() {
               key={rule.id}
               className="flex items-center justify-between gap-3 rounded-lg border border-border px-3.5 py-2"
             >
-              <span className="text-[13.5px] text-foreground/75">{describeRule(rule)}</span>
+              <span className="text-[13.5px] text-foreground/75">
+                <span>{describeRule(rule)}</span>
+                <span className="text-muted-foreground">
+                  {" · "}
+                  {rule.botId ? t`Bot: ${botNames[rule.botId] ?? rule.botId}` : t`All bots`}
+                </span>
+              </span>
               <Button
                 variant="ghost"
                 size="sm"

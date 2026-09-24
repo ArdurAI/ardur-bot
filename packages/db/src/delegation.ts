@@ -12,18 +12,23 @@ import {
   DelegationSnapshotSchema,
   delegationProblem,
   LocalityPolicySchema,
+  TaskCardSchema,
 } from "@ardurbot/contracts";
 import {
   allowsModelDestination,
   delegationDifferences,
   effectiveRemoteAuthority,
   intersectDelegationAuthority,
+  redactTaskValue,
+  taskCardChecklist,
+  taskCardRequest,
 } from "@ardurbot/core";
 import type { Delegation, Prisma, PrismaClient } from "./client.js";
 import { deviceDigest } from "./device-grants.js";
 import { loadRemoteAuthority } from "./dispatch.js";
 import { appendEventInTransaction } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
+import { appendTaskEvent, validateTaskReferences } from "./task-cards.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 export class DelegationAdmissionError extends Error {
@@ -58,18 +63,24 @@ export async function admitDelegation(
     tokens?: number;
     deadlineAt?: Date;
     newChild?: boolean;
+    card?: unknown;
   },
 ) {
   const { run: parent, rootTaskId } = await lockDelegationRootForRun(tx, input.parentRunId);
   if (parent.spaceId !== input.spaceId || parent.userId !== input.userId)
     refuse("authority-exceeded");
-  const fingerprint = deviceDigest(JSON.stringify([input.actingBotId, input.kind, input.prompt]));
+  const request = taskCardRequest(input.prompt, input.card);
+  const fingerprint = deviceDigest(JSON.stringify([input.actingBotId, input.kind, request]));
   const replay = await tx.delegation.findUnique({ where: { admissionKey: input.admissionKey } });
   if (replay) {
-    if (replay.fingerprint !== fingerprint || replay.parentRunId !== parent.id)
+    const expected = replay.card
+      ? fingerprint
+      : deviceDigest(JSON.stringify([input.actingBotId, input.kind, input.prompt]));
+    if (replay.fingerprint !== expected || replay.parentRunId !== parent.id)
       refuse("authority-exceeded");
     return replay;
   }
+  await validateTaskReferences(tx, { spaceId: input.spaceId, userId: input.userId }, request);
   if (parent.cancelRequestedAt || parent.status !== "running") refuse("deadline-passed");
   const ancestor = parent.delegationId
     ? await tx.delegation.findUniqueOrThrow({ where: { id: parent.delegationId } })
@@ -124,7 +135,11 @@ export async function admitDelegation(
   )
     refuse("budget-exhausted");
   const deadlineAt = new Date(
-    Math.min(root.deadlineAt.getTime(), input.deadlineAt?.getTime() ?? Infinity),
+    Math.min(
+      root.deadlineAt.getTime(),
+      input.deadlineAt?.getTime() ??
+        (request.deadlineAt ? new Date(request.deadlineAt).getTime() : Infinity),
+    ),
   );
   if (!Number.isFinite(deadlineAt.getTime()) || deadlineAt <= now) refuse("deadline-passed");
   const snapshot = DelegationSnapshotSchema.parse(input.snapshot);
@@ -227,8 +242,22 @@ export async function admitDelegation(
       reservedTokens: { increment: tokens },
     },
   });
-  return tx.delegation.create({
+  const members = await tx.spaceMember.count({ where: { spaceId: input.spaceId } });
+  const card = TaskCardSchema.parse({
+    ...request,
+    requesterBotId: parent.botId,
+    workerBotId: input.actingBotId,
+    ...(members > 1 ? { responsibleUserId: input.userId } : {}),
+    approvalBoundaries: authority,
+    snapshot,
+    budget: { tokens, deadlineAt: deadlineAt.toISOString() },
+    artifacts: [],
+    timeline: [],
+    reports: [],
+  });
+  const row = await tx.delegation.create({
     data: {
+      card,
       rootTaskId,
       parentRunId: parent.id,
       spaceId: input.spaceId,
@@ -250,6 +279,8 @@ export async function admitDelegation(
       fingerprint,
     },
   });
+  await appendTaskEvent(tx, row, "created");
+  return tx.delegation.findUniqueOrThrow({ where: { id: row.id } });
 }
 
 export async function requestCancel(
@@ -266,6 +297,10 @@ export async function requestCancel(
         where: { rootTaskId: root.rootTaskId },
         data: { cancelRequestedAt: now },
       });
+      const stopping = await tx.delegation.findMany({
+        where: { rootTaskId, status: { in: ["queued", "running"] } },
+      });
+      for (const row of stopping) await appendTaskEvent(tx, row, "cancel-requested");
       await tx.delegation.updateMany({
         where: { rootTaskId, status: { in: ACTIVE_DELEGATIONS } },
         data: { status: "cancel-requested", cancelRequestedAt: now },
@@ -289,21 +324,24 @@ export async function finishDelegation(
   id: string,
   status: "completed" | "failed" | "cancelled",
   text: string,
+  expectedRunId?: string | null,
 ) {
   let row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${row.rootTaskId} FOR UPDATE`;
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
+  if (expectedRunId !== undefined && row.runId !== expectedRunId) return;
   if (row.status === "cancel-requested" && status !== "cancelled") return;
   const changed = await tx.delegation.updateMany({
     where: { id, status: { in: ACTIVE_DELEGATIONS } },
     data: {
       status,
-      result: text,
+      result: redactTaskValue(text).slice(0, 2000),
       completedAt: new Date(),
       ...(status === "cancelled" ? { cancelConfirmedAt: new Date() } : {}),
     },
   });
   if (!changed.count) return;
+  await appendTaskEvent(tx, row, status, text);
   await tx.delegationRoot.update({
     where: { rootTaskId: row.rootTaskId },
     data: {
@@ -315,23 +353,25 @@ export async function finishDelegation(
   const blocks = [
     {
       kind: "text" as const,
-      text: `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${text}`,
+      text: `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactTaskValue(text).slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
     },
   ];
-  const message = await createThreadMessageInTransaction(tx, {
-    threadId: root.coordinatorThreadId,
-    botId: root.coordinatorBotId,
-    role: "bot",
-    blocks,
-    clientNonce: `delegation-summary:${id}`,
-    markUnread: false,
-  });
+  const message = row.summaryMessageId
+    ? await tx.message.update({ where: { id: row.summaryMessageId }, data: { blocks } })
+    : await createThreadMessageInTransaction(tx, {
+        threadId: root.coordinatorThreadId,
+        botId: root.coordinatorBotId,
+        role: "bot",
+        blocks,
+        clientNonce: `delegation-summary:${id}`,
+        markUnread: false,
+      });
   await tx.delegation.update({ where: { id }, data: { summaryMessageId: message.id } });
   return appendEventInTransaction(tx, {
     spaceId: row.spaceId,
     threadId: root.coordinatorThreadId,
     botId: root.coordinatorBotId,
-    type: "thread.message.created",
+    type: row.summaryMessageId ? "thread.message.updated" : "thread.message.created",
     payload: { messageId: message.id, role: "bot", blocks },
   });
 }
@@ -351,6 +391,7 @@ export async function acceptDelegation(
     where: { id, status: "completed" },
     data: { status: "accepted", acceptedAt: new Date() },
   });
+  if (changed.count) await appendTaskEvent(tx, row, "accepted");
   if (changed.count && row.summaryMessageId) {
     const message = await tx.message.findUniqueOrThrow({ where: { id: row.summaryMessageId } });
     const blocks = JSON.parse(JSON.stringify(message.blocks)) as Array<{
@@ -373,6 +414,7 @@ export async function acceptDelegation(
 export function delegationView(row: Delegation): DelegationRecord {
   return {
     ...row,
+    card: row.card ? TaskCardSchema.parse(row.card) : null,
     kind: row.kind as DelegationRecord["kind"],
     status: row.status as DelegationRecord["status"],
     snapshot: DelegationSnapshotSchema.parse(row.snapshot),

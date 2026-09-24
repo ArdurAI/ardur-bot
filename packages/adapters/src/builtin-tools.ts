@@ -4,6 +4,10 @@ import {
   BotSecretName,
   SecretAskPurpose,
   SecretHttpRequest,
+  TaskArtifactSchema,
+  TaskCardRequestSchema,
+  TaskCompletionSchema,
+  TaskProgressSchema,
 } from "@ardurbot/contracts";
 import { z } from "zod";
 
@@ -11,6 +15,7 @@ export const DELEGATION_TOOL_NAMES = new Set([
   "delegation_status",
   "stop_delegation",
   "accept_delegation",
+  "reject_delegation",
   "run_subagent",
   "spawn_bot",
   "archive_bot",
@@ -20,6 +25,35 @@ export const DELEGATION_TOOL_NAMES = new Set([
 ]);
 
 export const builtinAgentTools: ConnectorTool[] = [
+  {
+    name: "report_progress",
+    description: "Update this task card quietly; blocked needs a reason and an action.",
+    inputSchema: z.toJSONSchema(TaskProgressSchema),
+  },
+  {
+    name: "attach_artifact",
+    description: "Attach an artifact id produced by this run, never file content.",
+    inputSchema: z.toJSONSchema(TaskArtifactSchema),
+  },
+  {
+    name: "complete_task",
+    description:
+      "Complete this task with one report per doneWhen index; acceptance is separate. Stop working after completion.",
+    inputSchema: z.toJSONSchema(TaskCompletionSchema),
+  },
+  {
+    name: "reject_delegation",
+    description:
+      "Return a completed card to its worker with a reason. Only the coordinator may reject; another hop and budget reservation are required.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        delegation_id: { type: "string" },
+        reason: { type: "string", minLength: 1, maxLength: 2000 },
+      },
+      required: ["delegation_id", "reason"],
+    },
+  },
   {
     name: "delegation_status",
     description: "Read workers, ids and status for this task or a previous root task.",
@@ -745,6 +779,7 @@ export const builtinAgentTools: ConnectorTool[] = [
     inputSchema: {
       type: "object",
       properties: {
+        card: z.toJSONSchema(TaskCardRequestSchema),
         name: {
           type: "string",
           description: "Short label shown in the thread, e.g. scout or reviewer.",
@@ -790,6 +825,7 @@ export const builtinAgentTools: ConnectorTool[] = [
     inputSchema: {
       type: "object",
       properties: {
+        card: z.toJSONSchema(TaskCardRequestSchema),
         name: { type: "string" },
         title: { type: "string" },
         instructions: { type: "string" },
@@ -872,6 +908,7 @@ export const builtinAgentTools: ConnectorTool[] = [
     inputSchema: {
       type: "object",
       properties: {
+        card: z.toJSONSchema(TaskCardRequestSchema),
         bot_id: { type: "string", description: "Target bot id from your teammate list." },
         confirm_name: {
           type: "string",
@@ -894,6 +931,7 @@ export const builtinAgentTools: ConnectorTool[] = [
     inputSchema: {
       type: "object",
       properties: {
+        card: z.toJSONSchema(TaskCardRequestSchema),
         bot_id: { type: "string", description: "Target member bot id." },
         confirm_name: {
           type: "string",

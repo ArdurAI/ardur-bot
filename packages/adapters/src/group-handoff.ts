@@ -3,7 +3,9 @@ import { MessageBlock } from "@ardurbot/contracts";
 import {
   botMessageHopExhausted,
   nextBotMessageHop,
+  redactTaskValue,
   renderGroupMembersContext,
+  taskCardPrompt,
 } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
@@ -31,8 +33,9 @@ export async function handoffToGroupBot(
     userId: string;
   },
   groupId: string,
-  input: { bot_id?: string; confirm_name?: string; message: string },
+  input: { bot_id?: string; confirm_name?: string; message: string; card?: unknown },
 ) {
+  input = { ...input, message: redactTaskValue(input.message) };
   const deliveryKey = `group-handoff:${run.id}`;
   const committed = await withTransactionRetry(() =>
     deps.prisma.$transaction(async (tx) => {
@@ -138,6 +141,7 @@ export async function handoffToGroupBot(
           kind: "group-handoff",
           admissionKey: deliveryKey,
           prompt: input.message,
+          card: input.card,
         },
         deps.resolveDelegationPin,
       );
@@ -164,7 +168,9 @@ export async function handoffToGroupBot(
           botId: targetId,
           threadId: run.threadId,
           userId: run.userId,
-          prompt: input.message,
+          prompt: admitted.record.card
+            ? taskCardPrompt(admitted.record.card, admitted.record.actingName)
+            : input.message,
           status: "queued",
         },
       });

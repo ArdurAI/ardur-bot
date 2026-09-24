@@ -125,7 +125,10 @@ model ActionApprovalRule {
   matchValue      String
   createdAt       DateTime @default(now())
 
-  @@unique([spaceId, createdByUserId, effect, matchKind, matchValue])
+  botId           String?
+  scopeKey        String   @default("all")
+
+  @@unique([spaceId, createdByUserId, effect, matchKind, matchValue, scopeKey], map: "action_approval_rules_scoped_key")
   @@index([spaceId, createdByUserId])
   @@map("action_approval_rules")
 }
@@ -715,6 +718,9 @@ model ExternalEffect {
   status         String
   request        Json
   result         Json?
+  decisionByUserId String?
+  decisionAt DateTime?
+  decision String?
   reviewDecision String?
   reviewReason   String?
   reviewModel    String?
@@ -816,6 +822,8 @@ model AgentSkill {
   origin      String   @default("user")
   botId       String?
   protected   Boolean  @default(false)
+  lifecycleTag String @default("normal")
+  staleAt DateTime?
   /// user | builtin | plugin — only user skills are writable via API/tools.
   source      String   @default("user")
   createdAt   DateTime @default(now())
@@ -1442,6 +1450,7 @@ model RunKnowledgeExposure {
   kind String
   truncated Boolean
   createdAt DateTime @default(now())
+  @@index([documentId, revisionId, createdAt])
   @@unique([runId, attempt, documentId, revisionId, contentHash, kind])
   @@map("run_knowledge_exposures")
 }
@@ -1450,6 +1459,7 @@ model SpaceLearningConfig {
   spaceId String @id
   space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   enabled Boolean @default(false)
+  consolidationEnabled Boolean @default(false)
   reviewerPin Json?
   configuredBy String
   botDailyTokens Int @default(30000)
@@ -1827,6 +1837,23 @@ model ChatOutbox {
   @@map("chat_outbox")
 }
 
+/// Content-free lifecycle report. No source prose or model output is stored here.
+model LearningCuratorRun {
+  id String @id
+  spaceId String
+  userId String
+  status String @default("running")
+  checked Int @default(0)
+  staleIds Json @default("[]")
+  flaggedIds Json @default("[]")
+  proposalIds Json @default("[]")
+  durationMs Int @default(0)
+  tokens Int?
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  @@index([spaceId, userId, startedAt])
+  @@map("learning_curator_runs")
+}
 model DelegationRoot {
   rootTaskId String @id
   spaceId String
@@ -1848,6 +1875,7 @@ model DelegationRoot {
   @@map("delegation_roots")
 }
 model Delegation {
+  card Json?
   id String @id @default(cuid())
   rootTaskId String
   parentRunId String
@@ -1882,5 +1910,6 @@ model Delegation {
   cancelConfirmedAt DateTime?
   @@index([rootTaskId, status])
   @@index([parentRunId])
+  @@index([spaceId, actingBotId, status])
   @@map("delegations")
 }

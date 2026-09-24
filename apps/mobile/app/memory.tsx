@@ -5,10 +5,19 @@ import type {
 } from "@ardurbot/contracts";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Button,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
+import { LearningObservations } from "../lib/LearningObservations";
 import {
   loadMemoryDestination,
   loadMemoryDocuments,
@@ -27,6 +36,7 @@ export default function Memory() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [open, setOpen] = useState<MemoryDocumentHead | null>(null);
   const [history, setHistory] = useState<MemoryHistoryRevision[]>([]);
+  const [observing, setObserving] = useState<string | null>(null);
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -178,6 +188,19 @@ export default function Memory() {
                 <Text selectable style={styles.body}>
                   {revision.content || t("Deleted")}
                 </Text>
+                <Button
+                  title={t("Observations")}
+                  onPress={() =>
+                    setObserving(
+                      observing === `${open.id}:${revision.revision}`
+                        ? null
+                        : `${open.id}:${revision.revision}`,
+                    )
+                  }
+                />
+                {observing === `${open.id}:${revision.revision}` ? (
+                  <LearningObservations documentId={open.id} revision={revision.revision} />
+                ) : null}
               </View>
             ))}
           </>

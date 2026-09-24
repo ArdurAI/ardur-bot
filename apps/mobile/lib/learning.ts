@@ -1,6 +1,7 @@
 import {
   LearningActionSchema,
   LearningInboxSchema,
+  LearningProposalSchema,
   ProposalEvidenceSchema,
   SpaceLearningConfigSchema,
 } from "@ardurbot/contracts";
@@ -8,6 +9,9 @@ import { rpc } from "./api";
 
 export async function loadLearning(botId?: string) {
   return LearningInboxSchema.parse(await rpc("learning/list", { botId }));
+}
+export async function loadLearningProposal(proposalId: string) {
+  return LearningProposalSchema.parse(await rpc("learning/proposal", { proposalId }));
 }
 export async function learningAction(action: "approve" | "reject" | "revert", proposalId: string) {
   return LearningActionSchema.parse(await rpc(`learning/${action}`, { proposalId }));

@@ -94,12 +94,16 @@ import {
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
 import {
+  CuratorReportSchema,
   LearningActionSchema,
   LearningCountsSchema,
   LearningEditSchema,
   LearningGrantInputSchema,
   LearningGrantSchema,
   LearningInboxSchema,
+  LearningJourneyEntrySchema,
+  LearningObservationSchema,
+  LearningProposalSchema,
   ProposalEvidenceSchema,
   SpaceLearningConfigInput,
   SpaceLearningConfigSchema,
@@ -119,6 +123,7 @@ import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
+import { teamContract } from "./team.js";
 
 const botId = z.object({ botId: Id });
 const groupId = z.object({ groupId: Id });
@@ -681,6 +686,32 @@ export const appContract = {
     remove: oc.input(z.object({ skillId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   learning: {
+    proposal: oc.input(z.object({ proposalId: Id })).output(LearningProposalSchema),
+    observation: oc
+      .input(z.object({ documentId: Id, revision: z.number().int().positive() }))
+      .output(LearningObservationSchema),
+    journey: oc
+      .input(z.object({ botId: Id.optional() }))
+      .output(z.array(LearningJourneyEntrySchema)),
+    curator: oc.output(
+      z.object({
+        reports: z.array(CuratorReportSchema),
+        skills: z.array(
+          z.object({
+            id: Id,
+            name: z.string(),
+            staleAt: z.string().nullable(),
+            lifecycleTag: z.string(),
+          }),
+        ),
+      }),
+    ),
+    curate: oc.input(z.object({})).output(z.object({ ok: z.literal(true) })),
+    skillCare: oc
+      .input(
+        z.object({ skillId: Id, lifecycleTag: z.enum(["normal", "recovery", "troubleshooting"]) }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
     summary: oc.input(z.object({ botId: Id.optional() })).output(LearningCountsSchema),
     settings: oc.output(SpaceLearningConfigSchema),
     configure: oc.input(SpaceLearningConfigInput).output(SpaceLearningConfigSchema),
@@ -963,6 +994,7 @@ export const appContract = {
           effect: z.enum(["always_allow", "require_approval"]),
           matchKind: z.enum(["tool", "connector", "category"]),
           matchValue: z.string().min(1),
+          botId: Id.optional(),
         }),
       )
       .output(ActionApprovalRuleSchema),
@@ -1010,6 +1042,7 @@ export const appContract = {
     query: oc.input(z.object({ q: z.string().max(200) })).output(SearchQueryOutputSchema),
   },
   delegations: delegationsContract,
+  team: teamContract,
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),
   },

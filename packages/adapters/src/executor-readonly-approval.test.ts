@@ -657,3 +657,23 @@ it("persists an uncertain integration delivery and never dispatches its approved
   await f.run();
   expect(f.execute).toHaveBeenCalledTimes(1);
 });
+
+it.each(["bot-1", "different-bot"])(
+  "resolves a read exception only for its named bot (%s)",
+  async (botId) => {
+    const f = fixture({
+      rules: [
+        { effect: "require_approval", matchKind: "tool", matchValue: "demo_get_item" },
+        { effect: "always_allow", matchKind: "tool", matchValue: "demo_get_item", botId },
+      ],
+    });
+    await f.run();
+    if (botId === "bot-1") {
+      expect(f.execute).toHaveBeenCalledOnce();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+    } else {
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+    }
+  },
+);

@@ -7,7 +7,9 @@ import {
   buildBotMessageWakePrompt,
   clampBotMessage,
   nextBotMessageHop,
+  redactTaskValue,
   resolveBotAddress,
+  taskCardPrompt,
 } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
@@ -19,6 +21,7 @@ import { getLogger } from "@ardurbot/logging";
 import type { DelegationResolver } from "./delegation.js";
 import { delegationFailure, prepareDelegation } from "./delegation.js";
 import type { ExecutorDeps } from "./executor.js";
+import { updateTaskCard } from "./task-cards.js";
 
 /**
  * The hop the current run sits at, read back from the message that woke this
@@ -80,10 +83,11 @@ export async function messageBot(
     message: string;
     intent?: BotMessageIntent;
     deliveryKey?: string;
+    card?: unknown;
   },
   options?: { allowTerminalSource?: boolean },
 ) {
-  const message = String(input.message ?? "").trim();
+  const message = redactTaskValue(String(input.message ?? "").trim());
   if (!message) return { ok: false as const, error: "message is required" };
   if (message.length > BOT_MESSAGE_MAX_LENGTH) {
     return {
@@ -129,16 +133,13 @@ export async function messageBot(
       where: { id: parentRun.delegationId },
     });
     if (target.id === delegation.requesterBotId) {
-      await deps.prisma.$transaction((tx) =>
-        appendEventInTransaction(tx, {
-          spaceId: run.spaceId,
-          threadId: run.threadId,
-          botId: run.botId,
-          runId: run.id,
-          type: "delegation.progress",
-          payload: { delegationId: delegation.id, intent, text: message },
-        }),
-      );
+      await updateTaskCard(deps, {
+        ...run,
+        runId: run.id,
+        executionId: input.deliveryKey ?? `peer:${run.id}:${message}`,
+        tool: "report_progress",
+        args: { text: message.slice(0, 2000) },
+      });
       return {
         ok: true as const,
         botId: target.id,
@@ -242,6 +243,7 @@ export async function messageBot(
             kind: "message",
             admissionKey: deliveryKey ?? `message:${run.id}:${target.id}`,
             prompt: message,
+            card: input.card,
           },
           deps.resolveDelegationPin,
         );
@@ -285,7 +287,9 @@ export async function messageBot(
             botId: target.id,
             threadId: targetThreadId,
             userId: run.userId,
-            prompt: wakePrompt,
+            prompt: admitted.record.card
+              ? taskCardPrompt(admitted.record.card, target.name)
+              : wakePrompt,
             status: "queued",
           },
         });
@@ -367,7 +371,7 @@ export async function messageBot(
     delivered: message,
     delegationId: committed.delegationId,
     differences: committed.differences,
-    note: `Sent to ${target.name}. Delivery is async; a reply wakes you later as a new message. Continue independent work; send another update later only if it adds something new.`,
+    note: `Sent to ${target.name}. Delivery is async. Continue independent work. Progress stays on the task card; completion produces one coordinator summary.`,
   };
 }
 
@@ -389,7 +393,7 @@ export async function returnBotMessageOutcome(
   intent: "result" | "status" = "result",
 ) {
   const saved = await deps.prisma.run.findUnique({ where: { id: run.id } });
-  if (saved?.delegationId) {
+  if (saved?.delegationId || saved?.delegationRootTaskId) {
     await markBotOutcomeReturned(deps.prisma, run.id);
     return true;
   }

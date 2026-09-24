@@ -114,6 +114,10 @@ function SessionApp() {
               )
             }
           />
+          <Route
+            path="/app/team"
+            element={user ? <ShellPage team /> : <Navigate to="/sign-in" replace />}
+          />
           <Route path="/app" element={user ? <ShellPage /> : <Navigate to="/sign-in" replace />} />
           <Route
             path="/app/g/:groupId"

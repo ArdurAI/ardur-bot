@@ -117,6 +117,12 @@ msgstr ""
 msgid "{0}'s screen"
 msgstr ""
 
+#. placeholder {0}: o.exposedRuns
+#. placeholder {1}: o.before.runs
+#: src/pages/LearningObservation.tsx
+msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "{botName} adlı botun bilgisayarı"
@@ -189,7 +195,16 @@ msgstr ""
 msgid "About spaces"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Accept"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Acceptance"
+msgstr ""
+
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Accepted"
 msgstr ""
 
@@ -375,6 +390,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Agents:"
 msgstr "Agent'lar:"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "All bots"
+msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Allow"
@@ -585,6 +604,10 @@ msgstr ""
 msgid "Arguments"
 msgstr "Argümanlar"
 
+#: src/pages/TeamBoard.tsx
+msgid "Artifacts"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -723,12 +746,18 @@ msgid "Bearer token (optional)"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Before"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Block link copied."
+msgstr ""
+
+#. placeholder {0}: row.reason
+#: src/pages/TeamBoard.tsx
+msgid "Blocked — {0}"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -778,6 +807,8 @@ msgid "Bot token"
 msgstr ""
 
 #. placeholder {0}: botName ?? proposal.scope.botId
+#. placeholder {0}: botNames[rule.botId] ?? rule.botId
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Bot: {0}"
 msgstr ""
@@ -805,6 +836,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Budget"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -843,6 +878,10 @@ msgstr "Yeni grubu iptal et"
 #: src/pages/Shell.tsx
 msgid "Cancel reply"
 msgstr "Yanıtı iptal et"
+
+#: src/pages/LearningObservation.tsx
+msgid "Cancellations"
+msgstr ""
 
 #: src/components/CloudAgentCard.tsx
 msgid "cancelled"
@@ -926,6 +965,10 @@ msgstr "Durum bildir."
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "E-postanızı kontrol edin"
+
+#: src/pages/LearningCurator.tsx
+msgid "Checked"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1133,6 +1176,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Computer"
 msgstr "Bilgisayar"
 
@@ -1285,6 +1329,10 @@ msgstr ""
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} bağlantısı hâlâ beklemede. Bunu kapatıp daha sonra tekrar kontrol edebilirsin."
 
+#: src/pages/LearningCurator.tsx
+msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1325,6 +1373,10 @@ msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Copy pairing details"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Cost"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -1535,6 +1587,10 @@ msgstr "MCP sunucuları yüklenemedi"
 msgid "Could not load model settings"
 msgstr "Model ayarları yüklenemedi"
 
+#: src/pages/LearningObservation.tsx
+msgid "Could not load observations."
+msgstr ""
+
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
 msgstr ""
@@ -1545,6 +1601,14 @@ msgstr "Beceri yüklenemedi"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Could not load sync status. Retry."
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Could not load Team; retry."
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Could not load the last check."
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -1558,6 +1622,10 @@ msgstr "Bu sohbet yüklenemedi."
 #: src/components/ArtifactFileCard.tsx
 msgid "Could not load this file."
 msgstr "Bu dosya yüklenemedi."
+
+#: src/pages/LearningTimeline.tsx
+msgid "Could not load timeline."
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Could not load update status"
@@ -1739,6 +1807,10 @@ msgstr ""
 msgid "Could not update reaction"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Could not update this task; try again."
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr ""
@@ -1834,6 +1906,10 @@ msgstr "Cron"
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron expression"
 msgstr "Cron ifadesi"
+
+#: src/pages/LearningCurator.tsx
+msgid "Curator"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Current"
@@ -1934,6 +2010,14 @@ msgstr "silindi"
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
 msgstr "Siliniyor…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Delta"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Denials"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Denied"
@@ -2066,6 +2150,10 @@ msgstr "Hesabın yok mu?"
 msgid "Done"
 msgstr "Bitti"
 
+#: src/pages/TeamBoard.tsx
+msgid "Done — waiting for your OK"
+msgstr ""
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -2114,6 +2202,10 @@ msgstr ""
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Önce düzenle"
+
+#: src/pages/TeamBoard.tsx
+msgid "Effort"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2187,6 +2279,10 @@ msgstr "Her hafta"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Executing"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -2269,6 +2365,14 @@ msgstr "Başarısız oldu."
 msgid "Failure handling"
 msgstr "Hata yönetimi"
 
+#: src/pages/LearningObservation.tsx
+msgid "Failures"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Feedback corrections"
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
 msgstr ""
@@ -2318,6 +2422,10 @@ msgstr "MCP bağlantısı tamamlanıyor…"
 msgid "Flag unexpected actions"
 msgstr ""
 
+#: src/pages/LearningCurator.tsx
+msgid "Flags"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Parolanızı mı unuttunuz?"
@@ -2360,6 +2468,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
+msgstr ""
+
+#: src/pages/LearningTimeline.tsx
+msgid "Grant"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -2461,6 +2573,10 @@ msgstr "Nasıl kontrol edilir"
 msgid "I’m done"
 msgstr "Bitirdim"
 
+#: src/pages/TeamBoard.tsx
+msgid "Idle"
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
 msgstr "Bunu duyduysan ses hazır."
@@ -2485,6 +2601,14 @@ msgstr ""
 msgid "Import OpenAPI JSON"
 msgstr "OpenAPI JSON içe aktar"
 
+#: src/pages/LearningObservation.tsx
+msgid "inappropriate"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Inbox"
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
 msgstr ""
@@ -2501,6 +2625,10 @@ msgstr "Varsayılanı devral"
 msgid "Inputs"
 msgstr "Girdiler"
 
+#: src/pages/TeamBoard.tsx
+msgid "Inputs and boundaries"
+msgstr ""
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
 msgstr "Instance API anahtarı"
@@ -2508,6 +2636,10 @@ msgstr "Instance API anahtarı"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "Talimat"
+
+#: src/pages/LearningObservation.tsx
+msgid "integration"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
@@ -2564,6 +2696,10 @@ msgstr "Yanıtlanan mesaja git"
 msgid "just now"
 msgstr "az önce"
 
+#: src/pages/LearningCurator.tsx
+msgid "Keep for recovery"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Keep memories"
 msgstr "Hafızayı koru"
@@ -2583,6 +2719,10 @@ msgstr "Bilgi"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Language"
 msgstr "Dil"
+
+#: src/pages/LearningCurator.tsx
+msgid "Last check"
+msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -2616,6 +2756,10 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning views"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2669,6 +2813,10 @@ msgstr "Entegrasyonlar yükleniyor…"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
 msgstr "Model kataloğu yükleniyor…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Loading observations…"
+msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
@@ -2784,6 +2932,18 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "MCP servers"
 msgstr "MCP sunucuları"
+
+#: src/pages/LearningObservation.tsx
+msgid "Mean elapsed time (ms)"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Mean tokens"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Measurement details"
+msgstr ""
 
 #: src/lib/thinking-level-options.ts
 msgid "medium — balances speed and care"
@@ -2901,6 +3061,7 @@ msgstr "dakika"
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Model"
 msgstr "Model"
 
@@ -3075,6 +3236,10 @@ msgstr ""
 msgid "No chat apps linked yet."
 msgstr ""
 
+#: src/pages/LearningCurator.tsx
+msgid "No checks yet."
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "No destinations found."
 msgstr ""
@@ -3123,10 +3288,6 @@ msgstr "{peerBotName} ile henüz mesaj yok."
 msgid "No model catalog is available."
 msgstr "Kullanılabilir model kataloğu yok."
 
-#: src/pages/LearningInbox.tsx
-msgid "no observations yet"
-msgstr ""
-
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "Sağlayıcı bulunamadı."
@@ -3172,6 +3333,10 @@ msgstr ""
 msgid "Not connected"
 msgstr "Bağlı değil"
 
+#: src/pages/LearningObservation.tsx
+msgid "Not enough runs to tell"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Not in the plugin catalog"
 msgstr ""
@@ -3183,6 +3348,10 @@ msgstr "Şimdi değil"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Not recorded"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Not reported"
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
@@ -3224,6 +3393,10 @@ msgstr "OAuth bağlantısı başarısız"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth expired"
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "Observations"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -3424,6 +3597,10 @@ msgstr ""
 msgid "Personal credential"
 msgstr "Kişisel kimlik bilgisi"
 
+#: src/pages/LearningObservation.tsx
+msgid "pin"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Sabitle"
@@ -3435,6 +3612,10 @@ msgstr "Çalınıyor…"
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Policy version"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Possible regression — review undo"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -3474,15 +3655,36 @@ msgstr ""
 msgid "Project ID"
 msgstr ""
 
+#: src/pages/LearningTimeline.tsx
+msgid "Proposal"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Proposal branch"
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Proposals"
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Propose consolidation"
 msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Propose on a branch"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Proposed consolidation"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "provider"
+msgstr ""
+
 #: src/pages/Onboarding.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "Sağlayıcı"
 
@@ -3509,6 +3711,7 @@ msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "Kuyrukta"
 
@@ -3619,6 +3822,10 @@ msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recovery restores the last saved workspace. Unsaved work may be lost."
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Recovery skill"
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
@@ -3744,6 +3951,14 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Reported met"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Reported unmet"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository authentication"
 msgstr ""
@@ -3758,6 +3973,12 @@ msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository URL"
+msgstr ""
+
+#. placeholder {0}: row.requesterName
+#. placeholder {1}: row.botName
+#: src/pages/TeamBoard.tsx
+msgid "Requested by {0} — acting as {1}"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
@@ -3801,6 +4022,10 @@ msgstr "Parolanızı sıfırlayın"
 msgid "Resetting…"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Responsible human"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Restart to update"
 msgstr ""
@@ -3821,6 +4046,8 @@ msgstr ""
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningObservation.tsx
+#: src/pages/LearningTimeline.tsx
 msgid "Retry"
 msgstr ""
 
@@ -3841,6 +4068,10 @@ msgstr "Ardur Bot'ya dön"
 #: src/pages/KnowledgeSection.tsx
 msgid "rev {0}"
 msgstr "rev {0}"
+
+#: src/pages/TeamBoard.tsx
+msgid "Review approval"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Review destination"
@@ -3877,6 +4108,10 @@ msgstr ""
 #. placeholder {0}: revision.revision
 #: src/pages/MemoryHistory.tsx
 msgid "Revision {0}"
+msgstr ""
+
+#: src/pages/LearningTimeline.tsx
+msgid "Revision and observations"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
@@ -3922,6 +4157,10 @@ msgstr ""
 msgid "Run history"
 msgstr ""
 
+#: src/pages/LearningCurator.tsx
+msgid "Run now"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Run time must be in the future."
 msgstr ""
@@ -3952,8 +4191,16 @@ msgstr ""
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Runtime"
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runtime availability could not be checked."
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "safety"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -4289,6 +4536,10 @@ msgstr ""
 msgid "Software update"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Source revision"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "Alan varsayılanı"
@@ -4326,6 +4577,10 @@ msgstr "Bu yanıtı seslendir"
 msgid "Speaking…"
 msgstr "Konuşuyor…"
 
+#: src/pages/LearningCurator.tsx
+msgid "Stale"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "Kaydı başlat"
@@ -4340,6 +4595,10 @@ msgstr "Başlıyor"
 msgid "Starting…"
 msgstr "Başlatılıyor…"
 
+#: src/pages/LearningObservation.tsx
+msgid "Steering corrections"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Steps"
 msgstr "Adımlar"
@@ -4347,6 +4606,7 @@ msgstr "Adımlar"
 #: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Stop"
 msgstr "Durdur"
 
@@ -4427,6 +4687,14 @@ msgstr ""
 msgid "Take control to open a terminal"
 msgstr ""
 
+#: src/pages/LearningObservation.tsx
+msgid "task"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Task contracts"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Teach a task"
 msgstr "Görev öğret"
@@ -4435,7 +4703,9 @@ msgstr "Görev öğret"
 msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "Öğretme sürüyor. Yeni mesaj göndermeden önce öğretmeyi durdur."
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "Takım"
 
@@ -4596,6 +4866,11 @@ msgstr "Bu abonelik girişi Ardur Bot'da henüz kullanılamıyor. Bir dağıtım
 msgid "Time of day"
 msgstr "Günün saati"
 
+#: src/pages/LearningInbox.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Timeline"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Başlık"
@@ -4603,6 +4878,14 @@ msgstr "Başlık"
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "Kime:"
+
+#: src/pages/LearningCurator.tsx
+msgid "tokens"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Tokens"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -4644,6 +4927,10 @@ msgstr "Atanmamış"
 msgid "Unavailable"
 msgstr ""
 
+#: src/pages/LearningObservation.tsx
+msgid "unclassified"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Undo"
 msgstr ""
@@ -4654,6 +4941,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Unknown"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -4776,6 +5067,10 @@ msgstr "Doğrulanıyor…"
 msgid "Voice"
 msgstr "Ses"
 
+#: src/pages/TeamBoard.tsx
+msgid "Waiting for approval"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Waiting for sign-in…"
@@ -4859,8 +5154,22 @@ msgstr "Ne zaman kullanılır"
 msgid "Where should bots run?"
 msgstr "Botlar nerede çalışsın?"
 
+#: src/pages/LearningObservation.tsx
+msgid "Window"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Working"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"
+msgstr ""
+
+#. placeholder {0}: row.sentence
+#. placeholder {1}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {0} for {1}"
 msgstr ""
 
 #: src/pages/Auth.tsx

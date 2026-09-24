@@ -183,3 +183,18 @@ it("returns the shared admission problem without creating a run", async () => {
   ).toMatchObject({ error: problem.message, problem });
   expect(f.runCreate).not.toHaveBeenCalled();
 });
+
+it("passes a task card through the group admission boundary", async () => {
+  const f = harness([]);
+  const card = { goal: "Check citations", doneWhen: ["Sources agree"], deadlineAt: null };
+  await handoffToGroupBot(f.deps as never, run, "group-1", {
+    bot_id: "bot-b",
+    message: "Check citations",
+    card,
+  });
+  expect(prepareDelegation).toHaveBeenLastCalledWith(
+    expect.anything(),
+    expect.objectContaining({ card, kind: "group-handoff" }),
+    undefined,
+  );
+});
