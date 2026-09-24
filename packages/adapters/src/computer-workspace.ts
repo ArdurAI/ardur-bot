@@ -54,8 +54,18 @@ export async function restoreComputerWorkspace(
   computer: ComputerRef,
   context: AdapterContext,
 ): Promise<void> {
+  if (computer.kind === "desktop" && computer.providerRef.startsWith("host:")) return;
   if (computer.kind === "docker" && home instanceof LocalAgentHomeStore) return;
   await sandbox.importWorkspace(computer, home.exportHome(homeKey, context), context);
+}
+
+/** Preserve OS paths until the host process checks its registered roots. */
+export function isRemoteHostAbsolutePath(computer: ComputerRef, value: string) {
+  return (
+    computer.kind === "desktop" &&
+    computer.providerRef.startsWith("host:") &&
+    (path.posix.isAbsolute(value) || path.win32.isAbsolute(value))
+  );
 }
 
 export async function ensureComputerWorkspaceLayout(
@@ -66,6 +76,8 @@ export async function ensureComputerWorkspaceLayout(
   context: AdapterContext,
 ): Promise<void> {
   if (scope !== "team" || !botId) return;
+  if (computer.kind === "desktop" && computer.providerRef.startsWith("host:") && !context.runId)
+    return;
   let exitCode: number | undefined;
   let stderr = "";
   for await (const event of sandbox.execute(
@@ -88,7 +100,11 @@ export async function checkpointComputerWorkspace(
   computer: ComputerRef,
   context: AdapterContext,
 ): Promise<string> {
-  if (computer.kind === "docker" && home instanceof LocalAgentHomeStore) {
+  if (
+    (computer.kind === "docker" ||
+      (computer.kind === "desktop" && computer.providerRef.startsWith("host:"))) &&
+    home instanceof LocalAgentHomeStore
+  ) {
     return home.revise(homeKey);
   }
   const staging = await mkdtemp(path.join(tmpdir(), "ardurbot-workspace-"));

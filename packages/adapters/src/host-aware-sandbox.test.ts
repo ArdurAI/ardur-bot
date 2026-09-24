@@ -166,3 +166,15 @@ describe("host-aware sandbox", () => {
     await sandbox.destroy(computer, ctx);
   });
 });
+
+it("selects the remote provider only for the packaged bridge setting", async () => {
+  const { RemoteHostSandboxProvider } = await import("./remote-host-sandbox.js");
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+  try {
+    expect(createRunSandbox("desktop", {})).toBeInstanceOf(RemoteHostSandboxProvider);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+  expect(createRunSandbox("desktop", {})).toBeInstanceOf(DesktopSandboxProvider);
+  expect(createRunSandbox("desktop", {})).not.toBeInstanceOf(RemoteHostSandboxProvider);
+});

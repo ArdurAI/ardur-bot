@@ -23,6 +23,7 @@ import {
 import { openBrowserAuth } from "./browser-auth.js";
 import { cliVersion } from "./cli.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
+import { installHostService } from "./host-service-ipc.js";
 import { requestLocalSettings } from "./local-settings.js";
 import {
   LocalStackController,
@@ -101,6 +102,7 @@ let openAppPromise: Promise<boolean> | null = null;
 /** Prior app window kept until setup is persisted (or the switch is abandoned). */
 let pendingPreviousWindow: BrowserWindow | null = null;
 let quitting = false;
+let hostService: ReturnType<typeof installHostService> | undefined;
 let warmWindowTimer: NodeJS.Timeout | undefined;
 // Number of short-lived hidden probe windows currently alive. On Windows/Linux,
 // destroying the last window fires "window-all-closed" -> app.quit(); a probe
@@ -905,6 +907,7 @@ async function openAppOnce(targetUrl: string) {
     await created.loaded;
     if (currentTargetUrl !== targetUrl) await remoteListener.stop();
     currentTargetUrl = targetUrl;
+    await hostService?.activate(targetUrl);
     setupError = null;
     // Keep the previous window until the caller commits (after setup.json is written).
     pendingPreviousWindow =
@@ -1024,6 +1027,11 @@ function safeOrigin(targetUrl: string) {
 }
 
 app.whenReady().then(async () => {
+  hostService = installHostService({
+    window: () => mainWindow,
+    target: () => currentTargetUrl,
+    tray: () => desktopTray,
+  });
   installSessionPermissions(session.defaultSession, permissionTarget);
   const userDataDir = app.getPath("userData");
   localStack = new LocalStackController({
@@ -1469,6 +1477,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   quitting = true;
+  hostService?.stop();
   desktopTray?.destroy();
   desktopTray = null;
   clearTimeout(warmWindowTimer);

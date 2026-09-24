@@ -7,7 +7,7 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs",
+    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs",
     "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --mac --win --linux",
     "pack:dir": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json",
@@ -57,6 +57,10 @@
       {
         "from": "assets/icon.ico",
         "to": "tray.ico"
+      },
+      {
+        "from": "../host-service/dist/host-service.cjs",
+        "to": "host-service/host-service.cjs"
       }
     ],
     "extraMetadata": {

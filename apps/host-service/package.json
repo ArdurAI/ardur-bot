@@ -1,0 +1,25 @@
+{
+  "name": "@ardurbot/host-service",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "node build.mjs",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. apps/host-service/src"
+  },
+  "dependencies": {
+    "@ardurbot/contracts": "workspace:*",
+    "@ardurbot/host-runtime": "workspace:*",
+    "ws": "8.21.3",
+    "zod": "4.6.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "@types/ws": "8.18.1",
+    "typescript": "7.0.2",
+    "tsx": "4.23.13",
+    "vitest": "4.1.11"
+  }
+}

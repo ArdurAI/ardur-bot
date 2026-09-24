@@ -1,0 +1,26 @@
+{
+  "name": "@ardurbot/host-runtime",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ardurbot/adapter-kit": "workspace:*",
+    "@ardurbot/contracts": "workspace:*",
+    "@ardurbot/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.6.2",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "4.1.11",
+    "@types/ws": "8.18.1"
+  }
+}

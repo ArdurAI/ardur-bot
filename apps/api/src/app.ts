@@ -92,6 +92,7 @@ import { cors } from "hono/cors";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
+import { HostBridge } from "./host-bridge.js";
 import { ensureInstanceIdentity } from "./instance-identity.js";
 import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
 import { createLegacyChatDispatch, mountMessagingDispatch } from "./messaging-dispatch.js";
@@ -439,6 +440,7 @@ export async function createApp(
     : undefined;
   reconciler?.start();
 
+  const hostBridge = new HostBridge(prisma, env.encryptionKey);
   const terminals = createTerminalRoutes({
     prisma,
     sandbox,
@@ -446,6 +448,7 @@ export async function createApp(
   });
   const router = createRouter({
     terminals,
+    hostBridge,
     cloudAgent,
     prisma,
     events,
@@ -890,6 +893,28 @@ export async function createApp(
     })();
   }
 
+  app.post("/api/host-bridge/pair", async (c) => {
+    const origin = c.req.header("origin");
+    if (origin && !isTrustedOrigin(origin, env)) return c.json({ error: "Forbidden" }, 403);
+    const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
+    if (!session?.user) return c.json({ error: "Unauthorized" }, 401);
+    const deployment = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
+    if (deployment?.ownerUserId !== session.user.id) return c.json({ error: "Forbidden" }, 403);
+    try {
+      return c.json(await hostBridge.pair(session.user.id));
+    } catch {
+      return c.json(
+        { error: "Disconnect the existing host before connecting this computer." },
+        409,
+      );
+    }
+  });
+  app.get("/api/host-bridge/health", (c) => {
+    if (!hostBridge.isWorker(c.req.header("authorization")))
+      return c.json({ error: "Unauthorized" }, 401);
+    return c.json(hostBridge.hub.health);
+  });
+
   app.get("/health", (c) =>
     c.json({
       ok: true,
@@ -906,8 +931,10 @@ export async function createApp(
   );
 
   return {
-    installTerminal: (server) =>
-      installTerminalWebSocket(server, terminals.gateway, (origin) => isTrustedOrigin(origin, env)),
+    installTerminal: (server) => {
+      installTerminalWebSocket(server, terminals.gateway, (origin) => isTrustedOrigin(origin, env));
+      hostBridge.install(server);
+    },
     app,
     prisma,
     jobs,
@@ -922,6 +949,7 @@ export async function createApp(
     stop: async () => {
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
+      hostBridge.hub.detach();
       await terminals.gateway?.stop();
       shutdown.abort();
       oauthLogins.abortAll();

@@ -39,6 +39,13 @@ export interface ArdurBotDesktopOAuthCallback {
 }
 
 export interface ArdurBotDesktop {
+  host?: {
+    state(): Promise<{ configured: boolean; roots: string[] }>;
+    setup(): Promise<void>;
+    addRoot(): Promise<void>;
+    removeRoot(root: string): Promise<void>;
+    clear(): Promise<void>;
+  };
   devices?: {
     state: () => Promise<{ enabled: boolean; hints: string[] }>;
     setEnabled: (enabled: boolean) => Promise<{ enabled: boolean; hints: string[] }>;

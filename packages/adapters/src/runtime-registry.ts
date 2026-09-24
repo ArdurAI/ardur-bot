@@ -6,6 +6,8 @@ import type {
   RuntimeProblem,
 } from "@ardurbot/contracts";
 import { runtimePinProblem } from "@ardurbot/contracts";
+import { RemoteHostRuntime } from "./remote-host-runtime.js";
+import { createHostClient, usesHostBridge } from "./remote-host-sandbox.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 
@@ -70,8 +72,11 @@ export class RuntimeRegistry {
 }
 
 export function createRuntimeRegistry(pi: AgentRuntime) {
-  const claude = new ClaudeCodeRuntime();
-  const codex = new CodexAppServerRuntime();
+  const client = usesHostBridge() ? createHostClient() : undefined;
+  const claude = client ? new RemoteHostRuntime(client, "claude-code") : new ClaudeCodeRuntime();
+  const codex = client
+    ? new RemoteHostRuntime(client, "codex-app-server")
+    : new CodexAppServerRuntime();
   return new RuntimeRegistry({
     pi: {
       factory: () => pi,
@@ -92,12 +97,16 @@ export function createRuntimeRegistry(pi: AgentRuntime) {
 
 export async function nativeRuntimeAvailability(kind: RuntimeKind): Promise<RuntimeAvailability> {
   if (kind === "pi") return { runtimeKind: kind, available: true, models: [] };
-  if (process.platform === "win32")
-    return {
-      runtimeKind: kind,
-      available: false,
-      models: [],
-      reason: "Native runtimes support macOS and Linux host computers for now.",
-    };
+  if (usesHostBridge()) {
+    const health = await createHostClient().health();
+    return (
+      health?.[kind === "claude-code" ? "claude" : "codex"] ?? {
+        runtimeKind: kind,
+        available: false,
+        models: [],
+        reason: "Host service is not running — open the desktop app.",
+      }
+    );
+  }
   return kind === "claude-code" ? probeClaude() : probeCodex();
 }

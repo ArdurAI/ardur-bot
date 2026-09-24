@@ -314,6 +314,10 @@ msgstr ""
 msgid "Add Executor"
 msgstr "Executor जोड़ें"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Add folder"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
 msgstr "GraphQL जोड़ें"
@@ -1308,6 +1312,7 @@ msgid "Connect your account."
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
@@ -1458,6 +1463,10 @@ msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Could not check this computer."
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -1848,6 +1857,10 @@ msgstr ""
 msgid "Could not update reaction"
 msgstr ""
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Could not update this computer. Try again."
+msgstr ""
+
 #: src/pages/TeamBoard.tsx
 msgid "Could not update this task; try again."
 msgstr ""
@@ -2148,6 +2161,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnect"
 msgstr "डिस्कनेक्ट करें"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Disconnect this computer"
+msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnecting…"
@@ -2625,6 +2642,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Home storage size"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Host service:"
 msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
@@ -3465,6 +3486,14 @@ msgstr ""
 msgid "Not reported"
 msgstr ""
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Not running — open the desktop app"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Not set up"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "कुछ भी नहीं चल रहा"
@@ -3976,6 +4005,7 @@ msgid "Release interrupted computer?"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 msgid "Remove"
@@ -4535,6 +4565,10 @@ msgstr "सर्वर URL"
 msgid "Session ended — open a new terminal"
 msgstr ""
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Set up"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -4954,6 +4988,10 @@ msgstr ""
 msgid "this computer"
 msgstr "यह कंप्यूटर"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "This computer"
+msgstr ""
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "यह फ़ाइल मान्य UTF-8 Markdown नहीं है।"
@@ -4961,6 +4999,10 @@ msgstr "यह फ़ाइल मान्य UTF-8 Markdown नहीं ह�
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "यह Mac"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This Mac"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."

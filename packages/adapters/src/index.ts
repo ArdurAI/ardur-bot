@@ -117,6 +117,8 @@ export * from "./pipedream-connector.js";
 export * from "./realtime.js";
 export * from "./release-watch.js";
 export * from "./remote-execution.js";
+export * from "./remote-host-runtime.js";
+export * from "./remote-host-sandbox.js";
 export * from "./remote-mcp.js";
 export * from "./run-secret.js";
 export * from "./runtime-registry.js";

@@ -314,6 +314,10 @@ msgstr ""
 msgid "Add Executor"
 msgstr "Executor 추가"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Add folder"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
 msgstr "GraphQL 추가"
@@ -1308,6 +1312,7 @@ msgid "Connect your account."
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
@@ -1459,6 +1464,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "가르치기 상태를 확인하지 못했습니다. 화면을 새로고침한 뒤 이어가세요."
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Could not check this computer."
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Could not clear conversation"
@@ -1848,6 +1857,10 @@ msgstr ""
 msgid "Could not update reaction"
 msgstr "반응을 업데이트할 수 없습니다"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Could not update this computer. Try again."
+msgstr ""
+
 #: src/pages/TeamBoard.tsx
 msgid "Could not update this task; try again."
 msgstr ""
@@ -2148,6 +2161,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnect"
 msgstr "연결 해제"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Disconnect this computer"
+msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnecting…"
@@ -2625,6 +2642,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Home storage size"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Host service:"
 msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
@@ -3465,6 +3486,14 @@ msgstr ""
 msgid "Not reported"
 msgstr ""
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Not running — open the desktop app"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Not set up"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "실행 중인 작업 없음"
@@ -3976,6 +4005,7 @@ msgid "Release interrupted computer?"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 msgid "Remove"
@@ -4535,6 +4565,10 @@ msgstr "서버 URL"
 msgid "Session ended — open a new terminal"
 msgstr ""
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Set up"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -4954,6 +4988,10 @@ msgstr ""
 msgid "this computer"
 msgstr "이 컴퓨터"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "This computer"
+msgstr ""
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "이 파일은 올바른 UTF-8 Markdown 형식이 아닙니다."
@@ -4961,6 +4999,10 @@ msgstr "이 파일은 올바른 UTF-8 Markdown 형식이 아닙니다."
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "이 Mac"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This Mac"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."

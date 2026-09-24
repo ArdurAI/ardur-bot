@@ -4,10 +4,10 @@ import { PassThrough, Writable } from "node:stream";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("./ardur-mcp-server.js", () => ({
+vi.mock("@ardurbot/host-runtime/runtimes/ardur-mcp-server", () => ({
   startArdurMcpServer: async () => ({ config: { command: "node", args: [] }, close: vi.fn() }),
 }));
-vi.mock("./native-process.js", async (original) => ({
+vi.mock("@ardurbot/host-runtime/runtimes/native-process", async (original) => ({
   ...(await original<object>()),
   findNativeBinary: async () => "/fake/codex",
 }));

@@ -118,6 +118,8 @@ services:
     environment:
       NODE_ENV: production
       API_HOST: "0.0.0.0"
+      ARDURBOT_HOST_BRIDGE: api
+      API_INTERNAL_URL: http://127.0.0.1:3100
       ARDURBOT_DESKTOP_STACK_TOKEN: ${ARDURBOT_DESKTOP_STACK_TOKEN:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:5173}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://127.0.0.1:5173}
@@ -178,6 +180,8 @@ services:
     env_file:
       - .env
     environment:
+      ARDURBOT_HOST_BRIDGE: api
+      API_INTERNAL_URL: http://api:3100
       BETTER_AUTH_SECRET: ""
       NODE_ENV: production
       DATABASE_URL: postgres://${POSTGRES_USER:-ardurbot}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-ardurbot}

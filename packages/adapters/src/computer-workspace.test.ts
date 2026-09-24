@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkpointComputerWorkspace,
   ensureComputerWorkspaceLayout,
+  isRemoteHostAbsolutePath,
   restoreComputerWorkspace,
 } from "./computer-workspace.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
@@ -24,6 +25,23 @@ afterEach(async () => {
 });
 
 describe("provider-neutral computer workspace", () => {
+  it("preserves registered host paths through Team Computer path mapping on every platform", () => {
+    const computer = {
+      id: "host:computer",
+      botId: "computer",
+      kind: "desktop" as const,
+      providerRef: "host:computer",
+    };
+    expect(isRemoteHostAbsolutePath(computer, "/fixture/project/note.txt")).toBe(true);
+    expect(isRemoteHostAbsolutePath(computer, "C:\\Projects\\note.txt")).toBe(true);
+    expect(isRemoteHostAbsolutePath(computer, "notes/file.txt")).toBe(false);
+    expect(isRemoteHostAbsolutePath({ ...computer, kind: "docker" }, "/fixture/project")).toBe(
+      false,
+    );
+    expect(
+      isRemoteHostAbsolutePath({ ...computer, providerRef: "/fixture/home" }, "/fixture/project"),
+    ).toBe(false);
+  });
   it("prepares shared and bot folders for a Team Computer", async () => {
     const provider = new FakeSandboxProvider();
     const computer = await provider.provision(

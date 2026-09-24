@@ -166,6 +166,7 @@ import {
   toComputerStatus,
 } from "./computer-status.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
+import type { HostBridge } from "./host-bridge.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
@@ -451,6 +452,7 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  hostBridge?: HostBridge;
   terminals?: ReturnType<typeof createTerminalRoutes>;
   cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
@@ -885,16 +887,40 @@ export function createRouter(deps: RouterDeps) {
         }
       }),
     },
+    host: {
+      status: authed.host.status.handler(
+        async ({ context }) =>
+          deps.hostBridge?.status(context.actor.userId) ?? {
+            configured: false,
+            connected: false,
+            health: null,
+          },
+      ),
+      disconnect: authed.host.disconnect.handler(async ({ context }) => {
+        if (!context.actor.isDeploymentOwner || !deps.hostBridge) throw new ORPCError("FORBIDDEN");
+        return deps.hostBridge.disconnect(context.actor.userId);
+      }),
+    },
     runtimes: {
       availability: authed.runtimes.availability.handler(async ({ context, input }) =>
-        input.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, context.actor.userId))
-          ? {
+        process.env.ARDURBOT_HOST_BRIDGE === "api" && input.runtimeKind !== "pi"
+          ? ((await deps.hostBridge?.status(context.actor.userId))?.health?.[
+              input.runtimeKind === "claude-code" ? "claude" : "codex"
+            ] ?? {
               runtimeKind: input.runtimeKind,
               available: false,
               models: [],
-              reason: NATIVE_HOST_OWNER_MESSAGE,
-            }
-          : nativeRuntimeAvailability(input.runtimeKind),
+              reason: "Host service is not running — open the desktop app.",
+            })
+          : input.runtimeKind !== "pi" &&
+              !(await nativeHostOwner(deps.prisma, context.actor.userId))
+            ? {
+                runtimeKind: input.runtimeKind,
+                available: false,
+                models: [],
+                reason: NATIVE_HOST_OWNER_MESSAGE,
+              }
+            : nativeRuntimeAvailability(input.runtimeKind),
       ),
       connectCodex: authed.runtimes.connectCodex.handler(async ({ context }) => {
         if (!(await nativeHostOwner(deps.prisma, context.actor.userId)))

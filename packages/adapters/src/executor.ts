@@ -207,7 +207,7 @@ import {
   teamBotWorkspaceDirectory,
 } from "./computer-support.js";
 import { observationToolResult, parseComputerActions } from "./computer-tools.js";
-import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
+import { checkpointRunComputerWorkspace, isRemoteHostAbsolutePath } from "./computer-workspace.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import { completeHelper } from "./delegation.js";
@@ -1970,7 +1970,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const toolDirectory =
             helperWorkspaces.get(helperToolDelegations.get(executionId) ?? "") ?? taskDirectory;
           const toolWorkspacePath = (value: string) =>
-            toolDirectory ? taskWorkspacePath(toolDirectory, value) : runWorkspacePath(value);
+            isRemoteHostAbsolutePath(computer, value)
+              ? value
+              : toolDirectory
+                ? taskWorkspacePath(toolDirectory, value)
+                : runWorkspacePath(value);
 
           context.signal.throwIfAborted();
           if (handedOff) {
@@ -2618,7 +2622,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               path: requestedPath,
               entries: entries.map((entry) => ({
                 ...entry,
-                path: displayBotWorkspacePath(computerMode, bot.id, requestedPath, entry.path),
+                path: isRemoteHostAbsolutePath(computer, entry.path)
+                  ? entry.path
+                  : displayBotWorkspacePath(computerMode, bot.id, requestedPath, entry.path),
               })),
             };
           }

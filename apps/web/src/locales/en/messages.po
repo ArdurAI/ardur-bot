@@ -314,6 +314,10 @@ msgstr "Add computer connection"
 msgid "Add Executor"
 msgstr "Add Executor"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Add folder"
+msgstr "Add folder"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
 msgstr "Add GraphQL"
@@ -1308,6 +1312,7 @@ msgid "Connect your account."
 msgstr "Connect your account."
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
@@ -1459,6 +1464,10 @@ msgstr "Could not change this document. Reload and try again."
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "Could not check teaching status. Refresh the view to continue."
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Could not check this computer."
+msgstr "Could not check this computer."
 
 #: src/pages/shell/dialogs.tsx
 msgid "Could not clear conversation"
@@ -1848,6 +1857,10 @@ msgstr "Could not update learning. Try again."
 msgid "Could not update reaction"
 msgstr "Could not update reaction"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Could not update this computer. Try again."
+msgstr "Could not update this computer. Try again."
+
 #: src/pages/TeamBoard.tsx
 msgid "Could not update this task; try again."
 msgstr "Could not update this task; try again."
@@ -2148,6 +2161,10 @@ msgstr "Direct MCP"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnect"
 msgstr "Disconnect"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Disconnect this computer"
+msgstr "Disconnect this computer"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnecting…"
@@ -2626,6 +2643,10 @@ msgstr "Home link"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Home storage size"
 msgstr "Home storage size"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Host service:"
+msgstr "Host service:"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
@@ -3465,6 +3486,14 @@ msgstr "Not recorded"
 msgid "Not reported"
 msgstr "Not reported"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Not running — open the desktop app"
+msgstr "Not running — open the desktop app"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Not set up"
+msgstr "Not set up"
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "Nothing is still running"
@@ -3976,6 +4005,7 @@ msgid "Release interrupted computer?"
 msgstr "Release interrupted computer?"
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 msgid "Remove"
@@ -4535,6 +4565,10 @@ msgstr "Server URL"
 msgid "Session ended — open a new terminal"
 msgstr "Session ended — open a new terminal"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Set up"
+msgstr "Set up"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -4954,6 +4988,10 @@ msgstr "This command is not available to this account."
 msgid "this computer"
 msgstr "this computer"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "This computer"
+msgstr "This computer"
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "This file is not valid UTF-8 Markdown."
@@ -4961,6 +4999,10 @@ msgstr "This file is not valid UTF-8 Markdown."
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "this Mac"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This Mac"
+msgstr "This Mac"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."

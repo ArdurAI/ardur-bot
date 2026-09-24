@@ -10,7 +10,9 @@
       "default": "./src/index.ts"
     },
     "./device-paths": "./src/device-paths.js",
-    "./local-settings": "./src/local-settings.js"
+    "./local-settings": "./src/local-settings.js",
+    "./runtime-pins": "./src/runtime-pins.ts",
+    "./host-bridge": "./src/host-bridge.ts"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",

@@ -82,6 +82,7 @@ import {
   VoiceStatusSchema,
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
+import { HostStatusSchema } from "./host-bridge.js";
 import { Id, IsoDate } from "./ids.js";
 import {
   IntegrationCatalogListSchema,
@@ -253,6 +254,10 @@ export const appContract = {
     status: oc.output(ServerUpdateStatusSchema),
     check: oc.input(ServerUpdateRequestSchema).output(ServerUpdateCheckSchema),
     apply: oc.input(ServerUpdateRequestSchema).output(ServerUpdateRunSchema),
+  },
+  host: {
+    status: oc.input(z.object({}).optional()).output(HostStatusSchema),
+    disconnect: oc.input(z.object({}).optional()).output(z.object({ ok: z.literal(true) })),
   },
   runtimes: {
     availability: oc

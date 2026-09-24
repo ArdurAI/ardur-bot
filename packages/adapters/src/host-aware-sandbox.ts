@@ -15,7 +15,13 @@ import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerSecretLoader } from "./computer-connections.js";
 import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
-import { createSandboxProvider, type SandboxProviderOptions } from "./sandbox-factory.js";
+import {
+  createHostClient,
+  RemoteHostSandboxProvider,
+  usesHostBridge,
+} from "./remote-host-sandbox.js";
+import type { SandboxProviderOptions } from "./sandbox-factory.js";
+import { createSandboxProvider } from "./sandbox-factory.js";
 
 export function sandboxKindForBot(envKind: string, computerHost: string | null | undefined) {
   if (envKind === "docker" && computerHost === "this-mac") return "desktop";
@@ -27,6 +33,7 @@ export function createRunSandbox(
   opts: SandboxProviderOptions & { prisma?: PrismaClient; secrets?: ComputerSecretLoader },
 ): SandboxProvider {
   if (kind === "desktop") {
+    if (usesHostBridge()) return new RemoteHostSandboxProvider(createHostClient());
     return new DesktopSandboxProvider({
       root: opts.dataDir,
       hostRoots: [homedir()],
@@ -43,10 +50,12 @@ export function createRunSandbox(
   if (kind !== "docker" || !opts.prisma) return primary;
   return new HostAwareSandbox(
     primary,
-    new DesktopSandboxProvider({
-      root: opts.dataDir,
-      hostRoots: [homedir()],
-    }),
+    usesHostBridge()
+      ? new RemoteHostSandboxProvider(createHostClient())
+      : new DesktopSandboxProvider({
+          root: opts.dataDir,
+          hostRoots: [homedir()],
+        }),
     async () => {
       const settings = await opts.prisma!.deploymentSettings.findUnique({
         where: { id: "default" },

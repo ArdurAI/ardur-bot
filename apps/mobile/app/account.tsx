@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAvatarStyle } from "../components/avatar-style";
 import { BotAvatar } from "../components/bot-avatar";
+import { HostComputerStatus } from "../components/host-computer-status";
 import type { MobileBot, MobileMe } from "../lib/api";
 import {
   currentApiBase,
@@ -239,6 +240,7 @@ export default function Account() {
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
+        <HostComputerStatus />
         <Button
           color={mobileTokens().primary}
           title="AI data sharing"

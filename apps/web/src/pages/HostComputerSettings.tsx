@@ -1,0 +1,123 @@
+import type { HostStatus } from "@ardurbot/contracts";
+import { Button } from "@ardurbot/ui-web";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { useEffect, useState } from "react";
+import { rpc } from "../lib/rpc";
+
+export function HostComputerSettings() {
+  const { t } = useLingui();
+  const [status, setStatus] = useState<HostStatus>({
+    configured: false,
+    connected: false,
+    health: null,
+    roots: [],
+  });
+  const [roots, setRoots] = useState<string[]>([]);
+  const [local, setLocal] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const desktop = window.ardurbotDesktop;
+  async function refresh() {
+    const [remote, host] = await Promise.all([rpc.host.status(), desktop?.host?.state()]);
+    setStatus(remote);
+    setRoots(host?.configured ? host.roots : remote.roots);
+    setLocal(!!host?.configured);
+  }
+  useEffect(() => {
+    let active = true;
+    const poll = () => {
+      if (active) void refresh().catch(() => setError(t`Could not check this computer.`));
+    };
+    poll();
+    const timer = setInterval(poll, 5000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [t]);
+  async function perform(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      await refresh();
+    } catch {
+      setError(t`Could not update this computer. Try again.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const versions = [
+    status.health?.claude.version ? `claude ${status.health.claude.version}` : "",
+    status.health?.codex.version ? `codex ${status.health.codex.version}` : "",
+  ].filter(Boolean);
+  return (
+    <section className="space-y-3 py-4" data-testid="host-computer-settings">
+      <h4 className="text-sm font-medium">
+        {desktop?.platform === "darwin" ? t`This Mac` : t`This computer`}
+      </h4>
+      <p className="text-sm text-muted-foreground">
+        <Trans>Host service:</Trans>{" "}
+        {status.connected
+          ? t`Connected`
+          : status.configured
+            ? t`Not running — open the desktop app`
+            : t`Not set up`}
+        {status.connected && versions.length ? ` · ${versions.join(" · ")}` : ""}
+      </p>
+      {roots.length ? (
+        <ul className="space-y-2">
+          {roots.map((root) => (
+            <li key={root} className="flex items-center justify-between gap-3 text-sm">
+              <span className="break-all">{root}</span>
+              {local && desktop?.host ? (
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => void perform(() => desktop.host!.removeRoot(root))}
+                >
+                  <Trans>Remove</Trans>
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex gap-2">
+        {desktop?.host && (!status.configured || (local && !status.connected)) ? (
+          <Button disabled={busy} onClick={() => void perform(() => desktop.host!.setup())}>
+            <Trans>Set up</Trans>
+          </Button>
+        ) : null}
+        {desktop?.host && local ? (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => void perform(() => desktop.host!.addRoot())}
+          >
+            <Trans>Add folder</Trans>
+          </Button>
+        ) : null}
+        {status.configured ? (
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() =>
+              void perform(async () => {
+                await rpc.host.disconnect();
+                if (local) await desktop?.host?.clear();
+              })
+            }
+          >
+            <Trans>Disconnect this computer</Trans>
+          </Button>
+        ) : null}
+      </div>
+    </section>
+  );
+}

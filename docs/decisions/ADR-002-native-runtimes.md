@@ -17,12 +17,13 @@ session ID, and a hash binding the session to the owner, space, bot, thread, com
 instructions, and complete pin. It is separate from the immutable `Run.runtimePin`.
 Children and duplicates copy the runtime choice with the other pin fields.
 
-Native runtimes currently require a macOS or Linux **host process**, a bot assigned
-to a `desktop` computer, and a deployment with exactly one user. They use that OS
+Native runtimes require a **host process**, a bot assigned
+to a `desktop` computer, and authorization to the paired owner (or a single-user deployment in source mode). They use that OS
 user's installed binary from absolute PATH entries, without a shell. No binary is
 bundled or modified. Container computers are rejected before probing a runtime.
-The packaged desktop API/worker containers cannot reach a host binary through this
-implementation: the authenticated host service in ADR-002 remains separate work.
+Packaged desktop API/worker containers reach the host through the
+[authenticated host service](../host-service.md). Windows file effects remain unavailable
+in its single-file bundle; macOS/Linux owner acceptance remains a release gate.
 Host and container filesystems are not shared or translated implicitly.
 
 ## Claude Code
@@ -127,8 +128,9 @@ and detailed usage accounting remain unfinished.
   deterministic protocol tests do not require a subscription or network access.
 - **Researcher:** a run retains its requested model, effort, runtime, and binding even
   after bot settings change; mismatches fail instead of contaminating comparisons.
-- **Team lead:** children and duplicates preserve runtime intent. Shared deployments
-  are explicitly blocked until host pairing can authorize a user's own OS sign-in.
+- **Team lead:** children and duplicates preserve runtime intent. Packaged host
+  pairing authorizes only the deployment owner; unpaired source deployments still
+  require a single application user before using that OS sign-in.
 - **Local-first user:** can use an installed vendor binary without adding an API key
   to Ardur; Pi remains the default and native services are optional.
 
@@ -171,14 +173,15 @@ take precedence over differently formatted examples in the prose documentation.
 
 1. Apply the additive migration through the normal deployment process. Run the API
    and worker directly on the host under its signed-in user, with a host `desktop`
-   computer and a single Ardur user. Packaged container execution is unsupported.
+   computer and a single Ardur user, or follow the [packaged host acceptance](../host-service.md#owner-acceptance).
 2. Install the unmodified Claude binary yourself and run `claude` once to complete
    its own sign-in. In bot settings select **Runs on → Claude Code (your claude
    sign-in)**, select an offered exact model and `low`, and enable **Experimental**
    only when testing these gates. Without sign-in, settings show the terminal
    instruction; a run fails without switching to Pi.
-3. Select **Runs on → Codex (your ChatGPT sign-in)**. If needed, choose **Connect**
-   and use **Continue with ChatGPT**. After completion, choose an offered model and
+3. Select **Runs on → Codex (your ChatGPT sign-in)**. In a source deployment, choose **Connect**
+   and use **Continue with ChatGPT** if needed. For the packaged host bridge, sign in
+   through the installed Codex CLI first. After completion, choose an offered model and
    effort and enable **Experimental** for verification. Missing executables show
    the unavailable sentence; no ChatGPT login remains an actionable configuration
    failure. Existing Pi connections are not moved or copied.
@@ -205,7 +208,7 @@ do not backfill or overwrite non-null run snapshots. Review concurrent model-pic
 pin-resolver, router, and executor edits together. Keep both native runtimes
 Experimental until the release gates above are evidenced.
 
-## Local validation
+## Native-runtime validation before the host bridge
 
 - `pnpm db:generate`: passed; no database migration was applied.
 - `pnpm check`: blocked by the execution sandbox denying the `tsx` IPC listener

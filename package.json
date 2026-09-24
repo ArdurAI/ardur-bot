@@ -9,7 +9,7 @@
     "node": "^22.22.2 || ^24.0.0 || >=26.0.0"
   },
   "scripts": {
-    "dev": "cross-env COREPACK_ENABLE_DOWNLOAD_PROMPT=0 turbo dev --filter=@ardurbot/api --filter=@ardurbot/worker --filter=@ardurbot/web --filter=@ardurbot/sandbox-supervisor",
+    "dev": "cross-env COREPACK_ENABLE_DOWNLOAD_PROMPT=0 turbo dev --filter=@ardurbot/api --filter=@ardurbot/worker --filter=@ardurbot/web --filter=@ardurbot/sandbox-supervisor --filter=@ardurbot/host-service",
     "build": "turbo build",
     "check": "turbo check",
     "lint": "biome check .",

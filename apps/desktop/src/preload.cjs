@@ -2,6 +2,13 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("ardurbotDesktop", {
   platform: process.platform,
+  host: {
+    state: () => ipcRenderer.invoke("desktop.host.state"),
+    setup: () => ipcRenderer.invoke("desktop.host.setup"),
+    addRoot: () => ipcRenderer.invoke("desktop.host.addRoot"),
+    removeRoot: (root) => ipcRenderer.invoke("desktop.host.removeRoot", root),
+    clear: () => ipcRenderer.invoke("desktop.host.clear"),
+  },
   devices: {
     state: () => ipcRenderer.invoke("desktop.devices.state"),
     setEnabled: (enabled) => ipcRenderer.invoke("desktop.devices.setEnabled", enabled),

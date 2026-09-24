@@ -126,3 +126,10 @@ for build tags, engine discovery, Kubernetes resource/RBAC settings, and the mac
 The profile registry is `packages/contracts/src/computer-profiles.ts`; unpublished digest fields
 remain null. No image is built implicitly during provisioning, and no vendor credentials are
 installed in these profiles.
+
+## Packaged host computers
+
+The desktop-managed [host service](host-service.md) connects outward to the API so
+container workers can use the owner's host computer and native runtimes. Its protocol,
+local folder grants, packaging, offline checks and platform limits are documented
+there. Host data remains on the host; window closure does not stop the service.

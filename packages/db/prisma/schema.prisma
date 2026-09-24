@@ -1916,3 +1916,14 @@ model Delegation {
   @@index([spaceId, actingBotId, status])
   @@map("delegations")
 }
+
+// A deployment has one paired host. Only a SHA-256 digest is persisted.
+model HostRegistration {
+  id String @id @default("default")
+  userId String
+  tokenHash String @unique
+  hostRoots String[] @default([])
+  generation String
+  createdAt DateTime @default(now())
+  @@map("host_registrations")
+}

@@ -134,3 +134,20 @@ describe("Claude stream-json boundary", () => {
     ).toEqual({ HOME: "/home/test", PATH: "/bin" });
   });
 });
+
+it("keeps the host compatibility catalog aligned with the pinned built-in catalog", async () => {
+  const { listPiCatalog } = await import("../pi-models.js");
+  const { claudeModels } = await import("./claude-code-runtime.js");
+  const expected = listPiCatalog()
+    .filter(
+      (model) =>
+        model.provider === "anthropic" &&
+        /^(claude-(?:opus-(?:5(?:-5)?|4-[678])|sonnet-(?:5|4-6)|fable-5(?:-1)?))(?:-\d{8})?$/.test(
+          model.id,
+        ) &&
+        model.thinkingLevels?.includes("low") &&
+        !model.placeholder,
+    )
+    .map((model) => ({ id: model.id, label: model.label, efforts: ["low"] }));
+  expect(claudeModels()).toEqual(expected);
+});
