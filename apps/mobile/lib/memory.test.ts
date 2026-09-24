@@ -4,6 +4,7 @@ const request = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ rpc: request }));
 
 import {
+  loadMemoryDestination,
   loadMemoryDocuments,
   loadMemoryHistory,
   loadMemorySyncState,
@@ -11,6 +12,21 @@ import {
 } from "./memory.js";
 
 describe("native read-only memory contracts", () => {
+  it("shows the semantic host without credentials or a settings mutation", async () => {
+    request.mockClear();
+    request.mockResolvedValueOnce({
+      provider: "graphiti",
+      settings: { baseUrl: "https://memory.example.test" },
+      generation: 1,
+      documentStore: "postgres",
+      documentSettings: {},
+      defaultMemoryScope: "isolated",
+      updatedAt: "2026-09-23T12:00:00Z",
+    });
+    expect(await loadMemoryDestination()).toBe("memory.example.test");
+    expect(request).toHaveBeenCalledWith("memory/providerConfig", {});
+    request.mockClear();
+  });
   it("pages documents and history using shared schemas and no mutation endpoints", async () => {
     request
       .mockResolvedValueOnce({ items: [], nextCursor: "document-next" })

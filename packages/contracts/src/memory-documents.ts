@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RuntimePinSchema } from "./runtime-pins.js";
 
 export const MemoryIdentity = z
   .string()
@@ -19,7 +20,7 @@ export const DocumentScopeSchema = z.discriminatedUnion("kind", [
 ]);
 export const RevisionAuthorSchema = z
   .object({
-    kind: z.enum(["user", "bot", "runtime"]),
+    kind: z.enum(["user", "bot", "runtime", "learning-loop"]),
     userId: MemoryIdentity.optional(),
     botId: MemoryIdentity.optional(),
   })
@@ -31,6 +32,19 @@ export const MemoryModelSchema = z
     effort: z.string().max(80).nullable(),
   })
   .strict();
+export const LearningProvenanceSchema = z
+  .object({
+    proposalId: z.string(),
+    approvingUserId: MemoryIdentity,
+    grantId: z.string().optional(),
+    originatingPin: RuntimePinSchema.nullable(),
+    reviewerPin: RuntimePinSchema,
+    policyVersion: z.string(),
+    action: z.enum(["apply", "revert"]),
+    parentRevision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type LearningProvenance = z.infer<typeof LearningProvenanceSchema>;
 export const DocumentRevisionSchema = z
   .object({
     documentId: MemoryIdentity,
@@ -39,6 +53,7 @@ export const DocumentRevisionSchema = z
     path: z.string().min(1).max(500),
     content: z.string().max(1_000_000),
     author: RevisionAuthorSchema,
+    learning: LearningProvenanceSchema.optional(),
     model: MemoryModelSchema.nullable(),
     runId: MemoryIdentity.nullable(),
     threadId: MemoryIdentity.nullable(),
@@ -56,6 +71,11 @@ export const DocumentDeliverySchema = z
     status: z.enum(["pending", "delivered", "failed"]),
     generation: z.number().int().nonnegative(),
     provider: z.string().nullable(),
+    receipt: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]{1,200}$/)
+      .optional(),
+    retryAt: z.string().datetime().optional(),
   })
   .strict();
 export const GitRevisionSyncSchema = z.object({

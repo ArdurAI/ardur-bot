@@ -134,6 +134,26 @@ export function MemoryHistory({
                 ? `${selected.model.provider} · ${selected.model.modelId} · ${selected.model.effort ?? "—"}`
                 : "—"}
             </dd>
+            {selected.learning ? (
+              <>
+                <dt>
+                  <Trans>Approved by</Trans>
+                </dt>
+                <dd>{selected.learning.approvingUserId}</dd>
+                {selected.learning.grantId ? (
+                  <>
+                    <dt>
+                      <Trans>Learning grant</Trans>
+                    </dt>
+                    <dd>{selected.learning.grantId}</dd>
+                  </>
+                ) : null}
+                <dt>
+                  <Trans>Policy version</Trans>
+                </dt>
+                <dd>{selected.learning.policyVersion}</dd>
+              </>
+            ) : null}
             <dt>
               <Trans>Saved</Trans>
             </dt>

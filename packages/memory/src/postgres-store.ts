@@ -31,6 +31,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
         sourceThreadId: null,
         commitId: null,
         authorKind: "runtime",
+        learning: null,
         authorUserId: row.userId,
         authorBotId: row.botId,
         modelProvider: null,
@@ -54,6 +55,8 @@ export class PostgresMemoryJournal implements MemoryJournal {
           status: row.deliveryStatus as JournalDocument["delivery"]["status"],
           generation: row.deliveryGeneration,
           provider: row.deliveryProvider,
+          ...(row.deliveryReceipt ? { receipt: row.deliveryReceipt } : {}),
+          ...(row.deliveryRetryAt ? { retryAt: row.deliveryRetryAt.toISOString() } : {}),
         },
         revisions: row.revisions.map((r) =>
           DocumentRevisionSchema.parse({
@@ -74,6 +77,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
             runId: r.sourceRunId,
             threadId: r.sourceThreadId,
             references: r.references,
+            ...(r.learning ? { learning: r.learning } : {}),
             createdAt: r.createdAt.toISOString(),
             deletedAt: r.deletedAt?.toISOString() ?? null,
             ...(r.commitId ? { commitId: r.commitId } : {}),
@@ -103,6 +107,8 @@ export class PostgresMemoryJournal implements MemoryJournal {
         deliveryStatus: doc.delivery.status,
         deliveryGeneration: doc.delivery.generation,
         deliveryProvider: doc.delivery.provider,
+        deliveryReceipt: doc.delivery.receipt ?? null,
+        deliveryRetryAt: doc.delivery.retryAt ? new Date(doc.delivery.retryAt) : null,
         updatedAt: new Date(head.createdAt),
       };
       try {
@@ -136,12 +142,14 @@ export class PostgresMemoryJournal implements MemoryJournal {
             sourceRunId: r.runId,
             sourceThreadId: r.threadId,
             authorKind: r.author.kind,
+            ...(r.learning ? { learning: r.learning } : {}),
             authorUserId: r.author.userId,
             authorBotId: r.author.botId,
             modelProvider: r.model?.provider,
             modelId: r.model?.modelId,
             modelEffort: r.model?.effort,
             references: r.references,
+            ...(r.learning ? { learning: r.learning } : {}),
             deletedAt: r.deletedAt ? new Date(r.deletedAt) : null,
             createdAt: new Date(r.createdAt),
           },

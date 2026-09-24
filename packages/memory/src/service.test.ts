@@ -74,6 +74,87 @@ function fixture(network = true) {
 }
 afterEach(() => vi.unstubAllGlobals());
 describe("document-first service and delivery", () => {
+  it("persists async receipts and Retry-After without polling early or exporting vendor state", async () => {
+    const f = fixture();
+    const doc = await f.service.save(
+      { scope: "bot", path: "async.md", content: "Fact" },
+      f.context,
+    );
+    let now = Date.parse("2026-09-23T12:00:00Z");
+    vi.mocked(f.semantic.save).mockResolvedValueOnce({
+      ok: false,
+      pending: true,
+      error: "Queued",
+      receipt: "event-1",
+      retryAfterMs: 9000,
+    });
+    await expect(deliverMemory(f.service, doc.id, 1, f.context, () => now)).rejects.toThrow(
+      "Indexing pending",
+    );
+    expect((await f.service.read(doc.id, f.context))!.delivery).toMatchObject({
+      status: "pending",
+      receipt: "event-1",
+      retryAt: "2026-09-23T12:00:09.000Z",
+    });
+    await expect(deliverMemory(f.service, doc.id, 1, f.context, () => now)).rejects.toThrow(
+      "Indexing pending",
+    );
+    expect(f.semantic.save).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(await f.service.exportBundle(f.context))).not.toContain("event-1");
+    now += 10_000;
+    await deliverMemory(f.service, doc.id, 1, f.context, () => now);
+    expect(f.semantic.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ receipt: "event-1" }),
+      expect.anything(),
+    );
+    expect((await f.service.read(doc.id, f.context))!.delivery).toEqual({
+      status: "delivered",
+      provider: "fixture",
+      generation: 1,
+    });
+  });
+  it("keeps scoped external conclusions labelled and revalidates structured source hashes", async () => {
+    const f = fixture();
+    const doc = await f.service.save(
+      { scope: "bot", path: "fact.md", content: "Source text" },
+      f.context,
+    );
+    vi.mocked(f.semantic.recall).mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          memory: "An extracted relationship",
+          score: 1,
+          source: { documentId: doc.id, revision: 1 },
+        },
+        { memory: "External conclusion", score: 1, unverified: true, scopeDocumentId: doc.id },
+        {
+          memory: "Unauthorized conclusion",
+          score: 1,
+          unverified: true,
+          scopeDocumentId: "foreign",
+        },
+        {
+          memory: "Wrong hash",
+          score: 1,
+          source: { documentId: doc.id, revision: 1, contentHash: "wrong" },
+        },
+      ],
+    });
+    const request = { query: "fact", scope: "shared" as const, botId: f.context.botId!, limit: 10 };
+    expect(await recallDocuments(f.service, f.semantic, request, f.context)).toMatchObject({
+      ok: true,
+      value: [
+        { memory: "An extracted relationship", provenance: memoryCitation(doc) },
+        { memory: "External conclusion", provenance: "from fixture, unverified", unverified: true },
+      ],
+    });
+    await f.service.delete(doc.id, 1, f.context);
+    expect(await recallDocuments(f.service, f.semantic, request, f.context)).toEqual({
+      ok: true,
+      value: [],
+    });
+  });
   it("lets a local delete finish during provider IO and validates recall after that IO", async () => {
     const f = fixture();
     const doc = await f.service.save(
@@ -291,4 +372,26 @@ describe("document-first service and delivery", () => {
     expect(network).not.toHaveBeenCalled();
     expect(f.enqueue).not.toHaveBeenCalled();
   });
+});
+
+it("keeps visible typed setting history out of prompt memory, search and semantic projection", async () => {
+  const f = fixture();
+  const doc = await f.service.commit(
+    {
+      scope: "bot",
+      botId: f.context.botIds[0]!,
+      path: "preferences/setting.md",
+      content: '{"key":"bot.autoSpeak","value":true}',
+      expectedRevision: 0,
+    },
+    f.context,
+  );
+  const legacy = new LifecycleMemoryStore(f.service);
+  expect(
+    (await legacy.read({ scope: "bot", botId: f.context.botIds[0]! }, f.context)).documents,
+  ).toEqual([]);
+  expect(await legacy.search({ scope: "all", query: "autoSpeak" }, f.context)).toEqual([]);
+  await deliverMemory(f.service, doc.id, doc.revision, f.context);
+  expect(f.semantic.save).not.toHaveBeenCalled();
+  expect((await f.service.history(doc.id, {}, f.context)).items).toHaveLength(1);
 });

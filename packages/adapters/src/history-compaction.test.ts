@@ -7,7 +7,6 @@ import type {
 import { historyCompactJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock, RuntimeProblem } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
-import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import { describe, expect, it, vi } from "vitest";
 import {
   compactHistory,
@@ -392,7 +391,7 @@ function compactionHarness(
 }
 
 describe("compactHistory", () => {
-  it("summarizes the next batch, saves it through the provider, and advances the cursor", async () => {
+  it("summarizes the next batch locally and advances the cursor without external writes", async () => {
     const harness = compactionHarness({ deploymentModelKey: "openrouter-key" });
 
     await compactHistory(harness.deps, "thread-1");
@@ -409,15 +408,7 @@ describe("compactHistory", () => {
     expect(request.prompt).toContain("message 0");
     expect(request.prompt).toContain("message 49");
 
-    expect(harness.saveMemory).toHaveBeenCalledWith(
-      {
-        content: "Summary of 50 messages.",
-        scope: "isolated",
-        botId: "bot-1",
-        source: { kind: "history", generation: 0 },
-      },
-      expect.objectContaining({ spaceId: "workspace-1", botId: "bot-1" }),
-    );
+    expect(harness.saveMemory).not.toHaveBeenCalled();
 
     const context = harness.runtime.run.mock.calls[0]![1];
     expect(context).toBeDefined();
@@ -447,15 +438,7 @@ describe("compactHistory", () => {
 
     await compactHistory(harness.deps, "thread-1");
 
-    expect(harness.saveMemory).toHaveBeenCalledOnce();
-    expect(harness.saveMemory).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: "Summary of 50 messages.",
-        scope: "isolated",
-        source: { kind: "history", generation: 0 },
-      }),
-      expect.any(Object),
-    );
+    expect(harness.saveMemory).not.toHaveBeenCalled();
   });
 
   it("serializes attachment metadata into the transcript", async () => {
@@ -598,13 +581,7 @@ describe("compactHistory", () => {
     const [request] = harness.runtime.run.mock.calls[0]!;
     expect(request.prompt).toContain("new message 50");
     expect(request.prompt).not.toContain("message 0");
-    expect(harness.saveMemory).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: "Summary of 50 messages.",
-        source: { kind: "history", generation: 1 },
-      }),
-      expect.any(Object),
-    );
+    expect(harness.saveMemory).not.toHaveBeenCalled();
     expect(harness.thread.historyCompactedUpToSeq).toBe(99);
   });
 
@@ -709,72 +686,18 @@ describe("compactHistory", () => {
     expect(harness.thread.historyCompactionSummary).toBe("valid summary");
   });
 
-  it("purges a stale provider save when clear advances the history generation", async () => {
-    const harness = compactionHarness({
-      deploymentModelKey: "openrouter-key",
-      memoryConfig: {
-        defaultMemoryScope: "shared",
-      },
-    });
-    let releaseSave!: () => void;
-    let saveBegan!: () => void;
-    const saveCanFinish = new Promise<void>((resolve) => {
-      releaseSave = resolve;
-    });
-    const saveStarted = new Promise<void>((resolve) => {
-      saveBegan = resolve;
-    });
-    harness.saveMemory.mockImplementationOnce(async () => {
-      saveBegan();
-      await saveCanFinish;
-      return { ok: true, value: undefined };
-    });
-
-    const pending = compactHistory(harness.deps, "thread-1");
-    await saveStarted;
-    harness.thread.historyCompactedUpToSeq = 49;
-    harness.thread.historyCompactionSummary = null;
-    harness.thread.historyCompactionGeneration = 1;
-    releaseSave();
-    await pending;
-
-    expect(harness.thread.historyCompactionSummary).toBeNull();
-    expect(harness.saveMemory).toHaveBeenCalledOnce();
-    expect(harness.saveMemory).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: "Summary of 50 messages.",
-        source: { kind: "history", generation: 0 },
-      }),
-      expect.any(Object),
-    );
-    expect(harness.purgeHistory).toHaveBeenCalledWith(
-      { botId: "bot-1", generations: [0] },
-      expect.any(Object),
-    );
-  });
-
-  it("continues draining the backlog when a stale-history purge throws", async () => {
+  it("never opens a provider write race with history clearing", async () => {
     const harness = compactionHarness({
       deploymentModelKey: "openrouter-key",
       nextMessageSeq: 150,
     });
-    harness.saveMemory.mockImplementationOnce(async () => {
-      harness.thread.historyCompactionGeneration = 1;
-      return { ok: true, value: undefined };
-    });
-    harness.purgeHistory.mockRejectedValueOnce(new Error("provider unavailable"));
-    const sink = createTestSink();
-    installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
-
-    await expect(compactHistory(harness.deps, "thread-1")).resolves.toBeUndefined();
-
+    harness.saveMemory.mockRejectedValue(new Error("External summary writes are forbidden"));
+    await compactHistory(harness.deps, "thread-1");
+    expect(harness.memoryProviders.resolve).not.toHaveBeenCalled();
+    expect(harness.saveMemory).not.toHaveBeenCalled();
+    expect(harness.purgeHistory).not.toHaveBeenCalled();
+    expect(harness.thread.historyCompactionSummary).toBe("Summary of 50 messages.");
     expect(harness.jobs.enqueue).toHaveBeenCalledWith(historyCompactJob("thread-1"));
-    expect(
-      sink.events.some(
-        (event) => event.message === "history.compact could not purge stale semantic memory",
-      ),
-    ).toBe(true);
-    installLogger(createLogger({ service: "ardurbot-worker", level: "off", sinks: [] }));
   });
 
   it("does not summarize from deployment settings without a scoped resolver", async () => {

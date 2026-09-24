@@ -17,6 +17,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { downloadArtifactBytes } from "../lib/artifact-open";
 import { rpc } from "../lib/rpc";
+import { LearningBadge, LearningInbox } from "./LearningInbox";
 import { MemoryHistory } from "./MemoryHistory";
 import { MemoryImportExport } from "./MemoryImportExport";
 
@@ -48,7 +49,16 @@ export function KnowledgeSection({
           <TabsTrigger value="skills">
             <Trans>Skills</Trans>
           </TabsTrigger>
+          <TabsTrigger value="learning">
+            <span>
+              <Trans>Learning</Trans>
+              <LearningBadge botId={botId} />
+            </span>
+          </TabsTrigger>
         </TabsList>
+        <TabsContent value="learning">
+          <LearningInbox botId={botId} />
+        </TabsContent>
         <TabsContent value="memory">
           <MemoryDocumentList
             key={botId}
@@ -78,8 +88,17 @@ export function SpaceMemorySection() {
           <TabsTrigger value="skills">
             <Trans>Skills</Trans>
           </TabsTrigger>
+          <TabsTrigger value="learning">
+            <span>
+              <Trans>Learning</Trans>
+              <LearningBadge />
+            </span>
+          </TabsTrigger>
         </TabsList>
         <div className="h-[440px] overflow-auto">
+          <TabsContent value="learning">
+            <LearningInbox />
+          </TabsContent>
           <TabsContent
             value="documents"
             className="motion-safe:animate-in motion-safe:fade-in duration-100 motion-reduce:animate-none"

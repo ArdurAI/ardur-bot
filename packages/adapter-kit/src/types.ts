@@ -1,5 +1,6 @@
 import type {
   ConnectionCatalogItem,
+  DocumentScope,
   RuntimeInfo,
   RuntimePin,
   SandboxKind,
@@ -288,6 +289,11 @@ export interface SemanticMemoryCapabilities {
 }
 
 export interface SemanticMemoryResult {
+  /** Structured citation supplied by an adapter, revalidated against the local journal. */
+  source?: { documentId: string; revision: number; contentHash?: string };
+  /** Authorized document partition searched by the adapter; never a model argument. */
+  scopeDocumentId?: string;
+  unverified?: boolean;
   memory: string;
   score: number;
   updatedAt?: string;
@@ -300,6 +306,7 @@ export interface SemanticMemoryResult {
 }
 
 export interface SemanticMemoryForgetRequest {
+  document?: SemanticMemoryDocument;
   id: string;
   reason?: string;
   /** Entity/namespace from a prior recall citation, when the backend scopes deletes. */
@@ -308,9 +315,18 @@ export interface SemanticMemoryForgetRequest {
 
 export type SemanticMemoryResponse<T = void> =
   | { ok: true; value: T }
-  | { ok: false; error: string };
+  | { ok: false; error: string; pending?: boolean; receipt?: string; retryAfterMs?: number };
+
+export interface SemanticMemoryDocument {
+  documentId: string;
+  revision: number;
+  contentHash: string;
+  scopeKey: DocumentScope;
+}
 
 export interface SemanticMemoryRecallRequest {
+  /** Authorized current heads, populated by the document gateway only. */
+  documents?: SemanticMemoryDocument[];
   /** Supplied only by the authorized document gateway, not tool input. */
   documentIds?: string[];
   query: string;
@@ -322,6 +338,8 @@ export interface SemanticMemoryRecallRequest {
 }
 
 export interface SemanticMemorySaveRequest {
+  document?: SemanticMemoryDocument;
+  receipt?: string;
   content: string;
   scope: DurableMemoryScope;
   botId: string;

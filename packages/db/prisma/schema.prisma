@@ -872,6 +872,8 @@ model MemoryDocument {
   deliveryStatus String @default("delivered")
   deliveryGeneration Int @default(0)
   deliveryProvider String?
+  deliveryReceipt String?
+  deliveryRetryAt DateTime?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   revisions MemoryRevision[]
@@ -892,6 +894,7 @@ model MemoryRevision {
   sourceRunId    String?
   sourceThreadId String?
   commitId       String?
+  learning       Json?
   authorKind     String @default("runtime")
   authorUserId   String?
   authorBotId    String?
@@ -1453,6 +1456,10 @@ model LearningProposal {
   thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   historyGeneration Int
   fingerprint String
+  appliedRevisionId String?
+  revertedRevisionId String?
+  appliedAt DateTime?
+  grantId String?
   status String @default("pending")
   body Json
   expiresAt DateTime
@@ -1677,6 +1684,45 @@ model DeviceAuditEvent {
   @@map("device_audit_events")
 }
 
+// Consent and content-free actions are independent of source-thread retention.
+model LearningGrant {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  category String
+  scope Json
+  scopeKey String
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  revokedAt DateTime?
+  maxPerDay Int @default(5)
+  @@index([spaceId, userId, category, scopeKey])
+  @@map("learning_grants")
+}
+model LearningAudit {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  proposalId String?
+  grantId String?
+  action String
+  category String?
+  scopeKey String?
+  beforeRevisionId String?
+  afterRevisionId String?
+  createdAt DateTime @default(now())
+  @@index([spaceId, userId, category, scopeKey, action])
+  @@index([grantId, createdAt])
+  @@map("learning_audits")
+}
+model LearningSuppression {
+  spaceId String
+  userId String
+  fingerprint String
+  createdAt DateTime @default(now())
+  @@id([spaceId, userId, fingerprint])
+  @@map("learning_suppressions")
+}
 
 model ChatInstallation {
   id String @id @default(cuid())

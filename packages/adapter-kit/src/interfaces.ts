@@ -58,6 +58,7 @@ import type {
   ScreenSession,
   SecretRecord,
   SemanticMemoryCapabilities,
+  SemanticMemoryDocument,
   SemanticMemoryForgetRequest,
   SemanticMemoryPurgeHistoryRequest,
   SemanticMemoryRecallRequest,
@@ -218,7 +219,12 @@ export interface MemoryStore {
 /** Optional semantic memory. Durable Markdown memory remains owned by MemoryStore. */
 export interface SemanticMemoryProvider {
   deleteDocument?(
-    request: { documentId: string; botId: string; scope: "isolated" | "shared" },
+    request: {
+      documentId: string;
+      botId: string;
+      scope: "isolated" | "shared";
+      document?: SemanticMemoryDocument;
+    },
     context: AdapterContext,
   ): Promise<SemanticMemoryResponse>;
   describe(): AdapterDescriptor<SemanticMemoryCapabilities>;

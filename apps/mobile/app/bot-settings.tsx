@@ -28,6 +28,7 @@ import {
 } from "../lib/api";
 import { COMPUTER_LIFECYCLE_TIMEOUT_MS } from "../lib/computer";
 import { useI18n } from "../lib/i18n";
+import { loadLearning } from "../lib/learning";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
 
@@ -71,6 +72,19 @@ export default function BotSettingsScreen() {
   const [modelMetaError, setModelMetaError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [learningCounts, setLearningCounts] = useState({ pendingCount: 0, appliedThisWeek: 0 });
+  useEffect(() => {
+    if (!botId) return;
+    let active = true;
+    void loadLearning(botId)
+      .then((value) => {
+        if (active) setLearningCounts(value);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [botId]);
 
   useEffect(() => {
     if (!botId) return;
@@ -314,6 +328,23 @@ export default function BotSettingsScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push({ pathname: "/learning", params: { botId } })}
+        >
+          <Text style={{ color: tokens.foreground }}>{t("Learning")}</Text>
+          {learningCounts.pendingCount > 0 ? (
+            <Text style={{ color: tokens.mutedForeground }}>
+              {learningCounts.pendingCount} {t("suggestions to review")}
+            </Text>
+          ) : null}
+          {learningCounts.appliedThisWeek > 0 ? (
+            <Text style={{ color: tokens.mutedForeground }}>
+              {t("learned")} {learningCounts.appliedThisWeek} {t("things this week")}
+            </Text>
+          ) : null}
+        </Pressable>
+
         {bot ? (
           <View style={{ alignItems: "center", marginBottom: 24 }}>
             <BotAvatar color={color} identity={bot.id} size={64} status={bot.status} />

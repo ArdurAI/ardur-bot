@@ -86,6 +86,11 @@ msgstr "{0} KB"
 msgid "{0} MB"
 msgstr "{0} MB"
 
+#. placeholder {0}: grant.limits.maxPerDay
+#: src/pages/LearningInbox.tsx
+msgid "{0} per day"
+msgstr ""
+
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} rollup hours"
@@ -96,6 +101,11 @@ msgstr ""
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "{0} runs · {1} tokens"
 msgstr "{0} 次运行 · {1} tokens"
+
+#. placeholder {0}: counts.pendingCount
+#: src/pages/LearningInbox.tsx
+msgid "{0} suggestions to review"
+msgstr ""
 
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -114,6 +124,10 @@ msgstr "{botName} 的电脑"
 #: src/pages/ActivityList.tsx
 msgid "{days}d ago"
 msgstr "{days} 天前"
+
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "{failed} failed"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
@@ -465,11 +479,16 @@ msgstr "API 已恢复，但更新未完成。请查看宿主日志。"
 #: src/components/AskCard.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "API key"
 msgstr "API 密钥"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "API key (optional)"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
@@ -483,6 +502,26 @@ msgstr ""
 msgid "Appearance"
 msgstr "外观"
 
+#: src/pages/LearningInbox.tsx
+msgid "Applied"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply memory suggestions for me automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply memory suggestions for this bot automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply skill suggestions for me automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply skill suggestions for this bot automatically"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Approval boundaries"
 msgstr "审批边界"
@@ -492,6 +531,7 @@ msgstr "审批边界"
 msgid "Approval for {0}"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Approve"
@@ -500,6 +540,10 @@ msgstr "批准"
 #: src/pages/shell/message-cards.tsx
 msgid "Approve this server to let your agent use its tools."
 msgstr "批准此服务器后，Agent 才能使用它的工具。"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Approved by"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 msgid "Archive"
@@ -644,6 +688,11 @@ msgstr ""
 msgid "Back to sign in"
 msgstr "返回登录"
 
+#: src/pages/LearningInbox.tsx
+msgid "Base revision"
+msgstr ""
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "Base URL"
@@ -653,6 +702,11 @@ msgstr "Base URL"
 msgid "Bearer token"
 msgstr "Bearer token"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Bearer token (optional)"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Before"
 msgstr ""
@@ -707,6 +761,11 @@ msgstr "要关联的 Bot"
 msgid "Bot token"
 msgstr ""
 
+#. placeholder {0}: botName ?? proposal.scope.botId
+#: src/pages/LearningInbox.tsx
+msgid "Bot: {0}"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Bots"
@@ -750,6 +809,7 @@ msgstr "无法连接服务器。"
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/dialogs.tsx
@@ -1642,6 +1702,10 @@ msgstr "无法更新 Agent 权限"
 msgid "Could not update computer"
 msgstr "无法更新电脑"
 
+#: src/pages/LearningInbox.tsx
+msgid "Could not update learning. Try again."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "无法更新反应"
@@ -1741,6 +1805,10 @@ msgstr "Cron"
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron expression"
 msgstr "Cron 表达式"
+
+#: src/pages/LearningInbox.tsx
+msgid "Current"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Current password"
@@ -1875,6 +1943,7 @@ msgstr ""
 msgid "Destination scope"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
 msgstr ""
@@ -1955,6 +2024,10 @@ msgstr ""
 msgid "Documents"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Documents stay in the local journal."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Don’t have an account?"
 msgstr "还没有账户？"
@@ -2004,6 +2077,10 @@ msgstr "例如 Hivenet Agent、Presales、工时表机器人"
 #: src/pages/Shell.tsx
 msgid "Earlier message"
 msgstr "更早的消息"
+
+#: src/pages/LearningInbox.tsx
+msgid "Edit"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Edit first"
@@ -2079,6 +2156,10 @@ msgstr "每月"
 msgid "Every week"
 msgstr "每周"
 
+#: src/pages/LearningInbox.tsx
+msgid "Evidence"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor 令牌"
@@ -2098,6 +2179,10 @@ msgstr "展开 {0}"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Expired"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
@@ -2374,8 +2459,8 @@ msgstr "导入 OpenAPI JSON"
 msgid "Inbox & email"
 msgstr "收件箱和邮件"
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Indexing sends documents to {locationLine}."
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "Indexed {delivered} of {total}"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -2479,6 +2564,28 @@ msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Later edits overlap this change. Review both versions in History."
+msgstr ""
+
+#. placeholder {0}: counts.appliedThisWeek
+#: src/pages/LearningInbox.tsx
+msgid "learned {0} things this week"
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
+msgid "Learning"
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "Learning grant"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning is off for this space."
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2654,9 +2761,12 @@ msgstr "成员（选择 {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX} 个）"
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
 msgid "Memory"
 msgstr "记忆"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Memory & Skills"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
@@ -2758,6 +2868,10 @@ msgstr "模型"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Model & effort"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "model estimate"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2971,6 +3085,10 @@ msgstr "还没有与 {peerBotName} 的消息。"
 msgid "No model catalog is available."
 msgstr "没有可用的模型目录。"
 
+#: src/pages/LearningInbox.tsx
+msgid "no observations yet"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "未找到提供方。"
@@ -3020,6 +3138,7 @@ msgstr "未连接"
 msgid "Not in the plugin catalog"
 msgstr "不在插件目录中"
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
 msgstr "暂不"
@@ -3035,6 +3154,10 @@ msgstr "没有仍在运行的任务"
 #: src/pages/KnowledgeSection.tsx
 msgid "Nothing remembered yet"
 msgstr "暂无记忆"
+
+#: src/pages/LearningInbox.tsx
+msgid "Nothing to review."
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -3186,6 +3309,10 @@ msgstr "自然"
 msgid "Organization API key"
 msgstr "组织 API 密钥"
 
+#: src/pages/LearningInbox.tsx
+msgid "Originating run"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
@@ -3251,6 +3378,10 @@ msgstr "粘贴你的 API 密钥"
 msgid "Paused"
 msgstr "已暂停"
 
+#: src/pages/LearningInbox.tsx
+msgid "Personal"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Personal credential"
 msgstr "个人凭据"
@@ -3262,6 +3393,11 @@ msgstr "置顶"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "播放中…"
+
+#: src/pages/LearningInbox.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Policy version"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "POST to"
@@ -3458,6 +3594,14 @@ msgstr ""
 msgid "Refreshing…"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Reject"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Rejected"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Release"
 msgstr "释放"
@@ -3637,6 +3781,7 @@ msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Retry"
 msgstr ""
 
@@ -3658,6 +3803,10 @@ msgstr "返回 Ardur Bot"
 msgid "rev {0}"
 msgstr "版本 {0}"
 
+#: src/pages/LearningInbox.tsx
+msgid "Review destination"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr ""
@@ -3674,12 +3823,25 @@ msgstr ""
 msgid "Review tools before your bots can use this account."
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Reviewer"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Reviews use this connection and may incur model charges."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Revision"
+msgstr ""
+
 #. placeholder {0}: revision.revision
 #: src/pages/MemoryHistory.tsx
 msgid "Revision {0}"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "撤销"
@@ -3763,6 +3925,7 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3918,6 +4081,16 @@ msgstr ""
 msgid "Sending…"
 msgstr "正在发送…"
 
+#. placeholder {0}: memoryProviderHost(config!.settings) ?? config!.provider
+#. placeholder {0}: memoryProviderHost(pendingConnection.settings) ?? registration?.name
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Sends memory text to {0}"
+msgstr ""
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Sends memory text to {host}"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr "Sentry 告警"
@@ -3971,6 +4144,7 @@ msgstr "设置帮助"
 msgid "Shape"
 msgstr "形状"
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "共享"
@@ -4164,6 +4338,14 @@ msgstr "子 Agent"
 msgid "Submit"
 msgstr "提交"
 
+#: src/pages/LearningInbox.tsx
+msgid "Suggested content"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Superseded"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Supports images"
@@ -4243,6 +4425,10 @@ msgstr ""
 msgid "Test"
 msgstr "测试"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Test connection"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Test connection and preview"
 msgstr ""
@@ -4250,6 +4436,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "测试运行"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Testing…"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
@@ -4388,6 +4578,10 @@ msgstr "Treg token"
 msgid "Try again"
 msgstr "重试"
 
+#: src/pages/LearningInbox.tsx
+msgid "Turn on"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Type your answer"
 msgstr "输入你的回答"
@@ -4399,6 +4593,14 @@ msgstr "未分配"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Unavailable"
 msgstr "不可用"
+
+#: src/pages/LearningInbox.tsx
+msgid "Undo"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Undone"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
@@ -4562,6 +4764,10 @@ msgstr "它的记忆怎么处理？"
 #: src/pages/shell/message-cards.tsx
 msgid "What do you want me on first?"
 msgstr "你想让我先做什么？"
+
+#: src/pages/LearningInbox.tsx
+msgid "What I learned"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "What result will you demonstrate?"

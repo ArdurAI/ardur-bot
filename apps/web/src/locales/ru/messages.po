@@ -86,6 +86,11 @@ msgstr "{0} КБ"
 msgid "{0} MB"
 msgstr "{0} МБ"
 
+#. placeholder {0}: grant.limits.maxPerDay
+#: src/pages/LearningInbox.tsx
+msgid "{0} per day"
+msgstr ""
+
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} rollup hours"
@@ -96,6 +101,11 @@ msgstr "{0} ч. сводки"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "{0} runs · {1} tokens"
 msgstr "Запусков: {0} · токенов: {1}"
+
+#. placeholder {0}: counts.pendingCount
+#: src/pages/LearningInbox.tsx
+msgid "{0} suggestions to review"
+msgstr ""
 
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -114,6 +124,10 @@ msgstr "Компьютер {botName}"
 #: src/pages/ActivityList.tsx
 msgid "{days}d ago"
 msgstr "{days} дн. назад"
+
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "{failed} failed"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
@@ -465,11 +479,16 @@ msgstr "API вернулся, но обновление не завершило�
 #: src/components/AskCard.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "API key"
 msgstr "API-ключ"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "API key (optional)"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
@@ -483,6 +502,26 @@ msgstr ""
 msgid "Appearance"
 msgstr "Внешний вид"
 
+#: src/pages/LearningInbox.tsx
+msgid "Applied"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply memory suggestions for me automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply memory suggestions for this bot automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply skill suggestions for me automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply skill suggestions for this bot automatically"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Approval boundaries"
 msgstr "Границы одобрения"
@@ -492,6 +531,7 @@ msgstr "Границы одобрения"
 msgid "Approval for {0}"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Approve"
@@ -500,6 +540,10 @@ msgstr "Утвердить"
 #: src/pages/shell/message-cards.tsx
 msgid "Approve this server to let your agent use its tools."
 msgstr "Одобрите этот сервер, чтобы ваш агент мог использовать его инструменты."
+
+#: src/pages/MemoryHistory.tsx
+msgid "Approved by"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 msgid "Archive"
@@ -644,6 +688,11 @@ msgstr ""
 msgid "Back to sign in"
 msgstr "Вернуться ко входу"
 
+#: src/pages/LearningInbox.tsx
+msgid "Base revision"
+msgstr ""
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "Базовый URL"
@@ -653,6 +702,11 @@ msgstr "Базовый URL"
 msgid "Bearer token"
 msgstr "Bearer-токен"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Bearer token (optional)"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Before"
 msgstr ""
@@ -707,6 +761,11 @@ msgstr "Бот для ссылки"
 msgid "Bot token"
 msgstr ""
 
+#. placeholder {0}: botName ?? proposal.scope.botId
+#: src/pages/LearningInbox.tsx
+msgid "Bot: {0}"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Bots"
@@ -750,6 +809,7 @@ msgstr "Не удаётся связаться с сервером."
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/dialogs.tsx
@@ -1642,6 +1702,10 @@ msgstr "Не удалось обновить доступ агента."
 msgid "Could not update computer"
 msgstr "Не удалось обновить компьютер"
 
+#: src/pages/LearningInbox.tsx
+msgid "Could not update learning. Try again."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "Не удалось обновить реакцию"
@@ -1741,6 +1805,10 @@ msgstr "Крон"
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron expression"
 msgstr "Выражение Cron"
+
+#: src/pages/LearningInbox.tsx
+msgid "Current"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Current password"
@@ -1875,6 +1943,7 @@ msgstr "Обновление настольного приложения"
 msgid "Destination scope"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
 msgstr ""
@@ -1955,6 +2024,10 @@ msgstr ""
 msgid "Documents"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Documents stay in the local journal."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Don’t have an account?"
 msgstr "У вас нет учетной записи?"
@@ -2004,6 +2077,10 @@ msgstr "напр. Hivenet Agent, Presales, бот табелей"
 #: src/pages/Shell.tsx
 msgid "Earlier message"
 msgstr "Предыдущее сообщение"
+
+#: src/pages/LearningInbox.tsx
+msgid "Edit"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Edit first"
@@ -2079,6 +2156,10 @@ msgstr "Каждый месяц"
 msgid "Every week"
 msgstr "Каждую неделю"
 
+#: src/pages/LearningInbox.tsx
+msgid "Evidence"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Токен Executor"
@@ -2098,6 +2179,10 @@ msgstr "Развернуть {0}"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Expired"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
@@ -2374,8 +2459,8 @@ msgstr "Импортировать OpenAPI JSON"
 msgid "Inbox & email"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Indexing sends documents to {locationLine}."
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "Indexed {delivered} of {total}"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -2480,6 +2565,28 @@ msgstr ""
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
 msgstr "Позже"
+
+#: src/pages/LearningInbox.tsx
+msgid "Later edits overlap this change. Review both versions in History."
+msgstr ""
+
+#. placeholder {0}: counts.appliedThisWeek
+#: src/pages/LearningInbox.tsx
+msgid "learned {0} things this week"
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
+msgid "Learning"
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "Learning grant"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning is off for this space."
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Leave"
@@ -2654,9 +2761,12 @@ msgstr "Участники (выберите {GROUP_MEMBER_MIN}–{GROUP_MEMBER_
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
 msgid "Memory"
 msgstr "Память"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Memory & Skills"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
@@ -2758,6 +2868,10 @@ msgstr "Модель"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Model & effort"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "model estimate"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2971,6 +3085,10 @@ msgstr "Сообщений с {peerBotName} пока нет."
 msgid "No model catalog is available."
 msgstr "Каталога моделей нет."
 
+#: src/pages/LearningInbox.tsx
+msgid "no observations yet"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "Поставщики не найдены."
@@ -3020,6 +3138,7 @@ msgstr "Не подключено"
 msgid "Not in the plugin catalog"
 msgstr "Нет в каталоге плагинов"
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
 msgstr "Не сейчас"
@@ -3035,6 +3154,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Nothing remembered yet"
 msgstr "Пока ничего не запомнено"
+
+#: src/pages/LearningInbox.tsx
+msgid "Nothing to review."
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -3186,6 +3309,10 @@ msgstr "Органичный"
 msgid "Organization API key"
 msgstr "Ключ API организации"
 
+#: src/pages/LearningInbox.tsx
+msgid "Originating run"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
@@ -3251,6 +3378,10 @@ msgstr "Вставьте свой ключ API"
 msgid "Paused"
 msgstr "Приостановлено"
 
+#: src/pages/LearningInbox.tsx
+msgid "Personal"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Personal credential"
 msgstr "Личные учётные данные"
@@ -3262,6 +3393,11 @@ msgstr "Закрепить"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "Воспроизведение…"
+
+#: src/pages/LearningInbox.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Policy version"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "POST to"
@@ -3458,6 +3594,14 @@ msgstr "Обновить экран"
 msgid "Refreshing…"
 msgstr "Обновление…"
 
+#: src/pages/LearningInbox.tsx
+msgid "Reject"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Rejected"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Release"
 msgstr "Освободить управление"
@@ -3637,6 +3781,7 @@ msgstr "Восстановление вашего рабочего простр�
 
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Retry"
 msgstr ""
 
@@ -3658,6 +3803,10 @@ msgstr "Вернуться в Ardur Bot"
 msgid "rev {0}"
 msgstr "версия {0}"
 
+#: src/pages/LearningInbox.tsx
+msgid "Review destination"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr ""
@@ -3674,12 +3823,25 @@ msgstr ""
 msgid "Review tools before your bots can use this account."
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Reviewer"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Reviews use this connection and may incur model charges."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Revision"
+msgstr ""
+
 #. placeholder {0}: revision.revision
 #: src/pages/MemoryHistory.tsx
 msgid "Revision {0}"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "Отозвать"
@@ -3763,6 +3925,7 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3918,6 +4081,16 @@ msgstr ""
 msgid "Sending…"
 msgstr "Отправка…"
 
+#. placeholder {0}: memoryProviderHost(config!.settings) ?? config!.provider
+#. placeholder {0}: memoryProviderHost(pendingConnection.settings) ?? registration?.name
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Sends memory text to {0}"
+msgstr ""
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Sends memory text to {host}"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr "Оповещение Sentry"
@@ -3971,6 +4144,7 @@ msgstr "Помощь по настройке"
 msgid "Shape"
 msgstr "Форма"
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "Общий"
@@ -4164,6 +4338,14 @@ msgstr "субагент"
 msgid "Submit"
 msgstr "Отправить"
 
+#: src/pages/LearningInbox.tsx
+msgid "Suggested content"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Superseded"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Supports images"
@@ -4243,6 +4425,10 @@ msgstr ""
 msgid "Test"
 msgstr "Тест"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Test connection"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Test connection and preview"
 msgstr ""
@@ -4250,6 +4436,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "Тестовый запуск"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Testing…"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
@@ -4388,6 +4578,10 @@ msgstr "Токен Treg"
 msgid "Try again"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Turn on"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Type your answer"
 msgstr "Введите ответ"
@@ -4399,6 +4593,14 @@ msgstr "Без раздела"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Unavailable"
 msgstr "Недоступно"
+
+#: src/pages/LearningInbox.tsx
+msgid "Undo"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Undone"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
@@ -4561,6 +4763,10 @@ msgstr "Что делать с его памятью?"
 
 #: src/pages/shell/message-cards.tsx
 msgid "What do you want me on first?"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "What I learned"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx

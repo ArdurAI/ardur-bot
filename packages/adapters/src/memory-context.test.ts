@@ -116,3 +116,18 @@ function snapshot(documents: MemorySnapshot["documents"]): MemorySnapshot {
 function storeWith(read: MemoryStore["read"]): MemoryStore {
   return { read } as MemoryStore;
 }
+
+it("does not inject typed settings as durable instructions", async () => {
+  const read = vi.fn(async () =>
+    snapshot([
+      document(
+        "preference",
+        "preferences/setting.md",
+        "Typed setting history",
+        1,
+        "2026-09-23T00:00:00.000Z",
+      ),
+    ]),
+  );
+  expect(await loadAgentMemoryContext(storeWith(read), "bot-1", context)).toBeUndefined();
+});

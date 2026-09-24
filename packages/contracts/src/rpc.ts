@@ -93,8 +93,13 @@ import {
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
 import {
-  LearningProposalSchema,
-  ReviewExecutionSchema,
+  LearningActionSchema,
+  LearningCountsSchema,
+  LearningEditSchema,
+  LearningGrantInputSchema,
+  LearningGrantSchema,
+  LearningInboxSchema,
+  ProposalEvidenceSchema,
   SpaceLearningConfigInput,
   SpaceLearningConfigSchema,
 } from "./learning.js";
@@ -535,6 +540,23 @@ export const appContract = {
       ),
     exportMarkdown: oc.input(z.object({ botId: Id.optional() })).output(z.string()),
     providerConfig: oc.output(SpaceMemoryConfigSchema.nullable()),
+    deliveryProgress: oc.output(
+      z.object({
+        total: z.number(),
+        delivered: z.number(),
+        pending: z.number(),
+        failed: z.number(),
+      }),
+    ),
+    testProvider: oc
+      .input(
+        z.object({
+          provider: z.string().min(1),
+          settings: z.record(z.string(), z.string()),
+          credentials: z.record(z.string(), z.string()),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
     connectProvider: oc
       .input(
         z.object({
@@ -658,14 +680,32 @@ export const appContract = {
     remove: oc.input(z.object({ skillId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   learning: {
+    summary: oc.input(z.object({ botId: Id.optional() })).output(LearningCountsSchema),
     settings: oc.output(SpaceLearningConfigSchema),
     configure: oc.input(SpaceLearningConfigInput).output(SpaceLearningConfigSchema),
-    list: oc.input(z.object({ botId: Id.optional() })).output(
+    list: oc.input(z.object({ botId: Id.optional() })).output(LearningInboxSchema),
+    approve: oc
+      .input(z.object({ proposalId: Id, edits: LearningEditSchema.optional() }))
+      .output(LearningActionSchema),
+    reject: oc
+      .input(z.object({ proposalId: Id, reason: z.string().max(1000).optional() }))
+      .output(LearningActionSchema),
+    edit: oc
+      .input(z.object({ proposalId: Id, edits: LearningEditSchema }))
+      .output(LearningActionSchema),
+    revert: oc.input(z.object({ proposalId: Id })).output(LearningActionSchema),
+    evidence: oc.input(z.object({ proposalId: Id, evidenceId: Id })).output(ProposalEvidenceSchema),
+    grants: oc.output(
       z.object({
-        reviews: z.array(ReviewExecutionSchema),
-        proposals: z.array(LearningProposalSchema),
+        grants: z.array(LearningGrantSchema),
+        offers: z.array(LearningGrantInputSchema.pick({ category: true, scope: true })),
       }),
     ),
+    createGrant: oc.input(LearningGrantInputSchema).output(LearningGrantSchema),
+    revokeGrant: oc.input(z.object({ grantId: Id })).output(z.object({ ok: z.literal(true) })),
+    declineGrant: oc
+      .input(LearningGrantInputSchema.pick({ category: true, scope: true }))
+      .output(z.object({ ok: z.literal(true) })),
     review: oc.input(z.object({ runId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   /** Claude Agent Skills (SKILL.md recipes) shared across assistants (not taught/demo skills). Pi already understands this format; we persist and inject them. */

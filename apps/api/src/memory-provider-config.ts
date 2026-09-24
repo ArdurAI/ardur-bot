@@ -1,4 +1,4 @@
-import type { SecretStore } from "@ardurbot/adapter-kit";
+import type { JobPublisher, SecretStore } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import {
   authenticatedMemoryAccess,
@@ -11,13 +11,15 @@ import {
   toStringRecord,
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { findSpaceMemoryConfig, Prisma, type PrismaClient } from "@ardurbot/db";
+import type { PrismaClient } from "@ardurbot/db";
+import { findSpaceMemoryConfig, Prisma } from "@ardurbot/db";
 import { bundleHash } from "@ardurbot/memory";
 import { ORPCError } from "@orpc/server";
 import { withSerializableRetry } from "./serializable-retry.js";
 
 export interface MemoryProviderConfigDeps {
   prisma: PrismaClient;
+  jobs?: Pick<JobPublisher, "enqueue">;
   dataDir?: string;
   secrets: Pick<SecretStore, "put"> & Partial<Pick<EncryptedSecretStore, "load">>;
   /** Test seam: override DNS/trust classification without probing. */
@@ -40,16 +42,13 @@ export async function requireSpaceOwner(prisma: PrismaClient, actor: Actor): Pro
   if (!roles?.includes("owner")) throw new ORPCError("FORBIDDEN");
 }
 
-export async function persistMemoryProviderConfig(
+async function prepareProviderForActor(
   deps: MemoryProviderConfigDeps,
   actor: Actor,
   input: {
     provider: string;
     settings: Record<string, string>;
     credentials: Record<string, string>;
-    defaultMemoryScope: "isolated" | "shared";
-    expectedGeneration?: number;
-    expectedHash?: string;
   },
 ) {
   await requireSpaceOwner(deps.prisma, actor);
@@ -93,6 +92,35 @@ export async function persistMemoryProviderConfig(
       message: error instanceof Error ? error.message : "Memory provider connection failed",
     });
   }
+  return prepared;
+}
+
+export async function testMemoryProviderConnection(
+  deps: MemoryProviderConfigDeps,
+  actor: Actor,
+  input: {
+    provider: string;
+    settings: Record<string, string>;
+    credentials: Record<string, string>;
+  },
+) {
+  await prepareProviderForActor(deps, actor, input);
+  return { ok: true as const };
+}
+
+export async function persistMemoryProviderConfig(
+  deps: MemoryProviderConfigDeps,
+  actor: Actor,
+  input: {
+    provider: string;
+    settings: Record<string, string>;
+    credentials: Record<string, string>;
+    defaultMemoryScope: "isolated" | "shared";
+    expectedGeneration?: number;
+    expectedHash?: string;
+  },
+) {
+  const prepared = await prepareProviderForActor(deps, actor, input);
   const stored = await deps.secrets.put(JSON.stringify(prepared.credentials), {
     operationId: "memory-provider-config",
     traceId: "memory-provider-config",
@@ -162,6 +190,7 @@ export async function persistMemoryProviderConfig(
           create: {
             spaceId: actor.spaceId,
             userId: actor.userId,
+            generation: (existing?.generation ?? 0) + 1,
             provider: prepared.provider,
             settings: prepared.settings,
             secretId: secret.id,
@@ -178,6 +207,18 @@ export async function persistMemoryProviderConfig(
             defaultMemoryScope: input.defaultMemoryScope,
           },
         });
+        // Retarget all current heads, including other members' private documents, without
+        // changing their content, revision or ownership. Workers reopen each owner's context.
+        await tx.memoryDocument.updateMany({
+          where: { spaceId: actor.spaceId },
+          data: {
+            deliveryStatus: "pending",
+            deliveryProvider: prepared.provider,
+            deliveryGeneration: (existing?.generation ?? 0) + 1,
+            deliveryReceipt: null,
+            deliveryRetryAt: null,
+          },
+        });
         if (existing?.secretId && existing.secretId !== secret.id) {
           if (existing.secretId) await tx.secret.deleteMany({ where: { id: existing.secretId } });
         }
@@ -186,6 +227,30 @@ export async function persistMemoryProviderConfig(
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     ),
   );
+  if (deps.jobs) {
+    const documents = await deps.prisma.memoryDocument.findMany({
+      where: {
+        spaceId: actor.spaceId,
+        deliveryGeneration: config.generation,
+        deliveryStatus: "pending",
+      },
+      select: { id: true, revision: true, userId: true, scope: true },
+    });
+    for (const document of documents)
+      await deps.jobs
+        .enqueue({
+          name: "memory.deliver",
+          payload: {
+            spaceId: actor.spaceId,
+            userId: document.scope === "space-shared" ? actor.userId : document.userId,
+            documentId: document.id,
+            revision: document.revision,
+            generation: config.generation,
+          },
+          replaceKey: `memory.deliver:${actor.spaceId}:${document.id}:${document.revision}:${config.generation}`,
+        })
+        .catch(() => undefined);
+  }
   return serializeSpaceMemoryConfig(config);
 }
 

@@ -28,6 +28,7 @@ export function revisionMarkdown(revision: DocumentRevision): string {
     id: revision.documentId,
     scope: revision.scopeKey,
     author: revision.author,
+    ...(revision.learning ? { learning: revision.learning } : {}),
     bot:
       revision.author.botId ?? (revision.scopeKey.kind === "bot" ? revision.scopeKey.botId : null),
     runId: revision.runId,

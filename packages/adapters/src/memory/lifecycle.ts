@@ -39,53 +39,59 @@ export interface MemoryLifecycleDependencies {
 }
 export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
   const service = new MemoryService({
-    open: (context, action) =>
-      withTransactionRetry(() =>
-        deps.prisma.$transaction(
-          async (tx) => {
-            if (context.memorySessionStart) await tx.$executeRaw`SET LOCAL lock_timeout = '500ms'`;
-            await lockMemorySpace(tx, context.spaceId);
-            const access = await authenticatedMemoryAccess(tx, context);
-            const config = await tx.spaceMemoryConfig.findUnique({
-              where: { spaceId: context.spaceId },
+    open: (context, action) => {
+      const open = async (tx: Prisma.TransactionClient) => {
+        if (context.memorySessionStart) await tx.$executeRaw`SET LOCAL lock_timeout = '500ms'`;
+        await lockMemorySpace(tx, context.spaceId);
+        const access = await authenticatedMemoryAccess(tx, context);
+        const config = await tx.spaceMemoryConfig.findUnique({
+          where: { spaceId: context.spaceId },
+        });
+        if (config?.documentStore === "git") {
+          const user = await tx.user.findUnique({
+            where: { id: context.userId },
+            select: { name: true },
+          });
+          access.displayName = user?.name ?? "Space member";
+        }
+        const semantic = await new SpaceMemoryProviderResolver(tx, deps.secrets).resolve(
+          context.spaceId,
+        );
+        return action({
+          access,
+          beforeWrite: async (documentId) => {
+            const store = await selectDocumentStore(tx, config, deps.dataDir, deps.secrets);
+            const document = await store.read(documentId, access);
+            if (document?.path.startsWith("skills/builtin-")) throw new MemoryAccessError();
+            if (document?.path.startsWith("preferences/") && !context.learning)
+              throw new MemoryAccessError();
+            if (!context.runId) return;
+            const skill = await tx.agentSkill.findFirst({
+              where: { documentId, spaceId: context.spaceId },
             });
-            if (config?.documentStore === "git") {
-              const user = await tx.user.findUnique({
-                where: { id: context.userId },
-                select: { name: true },
-              });
-              access.displayName = user?.name ?? "Space member";
-            }
-            const semantic = await new SpaceMemoryProviderResolver(tx, deps.secrets).resolve(
-              context.spaceId,
-            );
-            return action({
-              access,
-              beforeWrite: async (documentId) => {
-                const store = await selectDocumentStore(tx, config, deps.dataDir, deps.secrets);
-                const document = await store.read(documentId, access);
-                if (document?.path.startsWith("skills/builtin-")) throw new MemoryAccessError();
-                if (!context.runId) return;
-                const skill = await tx.agentSkill.findFirst({
-                  where: { documentId, spaceId: context.spaceId },
-                });
-                if (
-                  skill &&
-                  (skill.protected ||
-                    !["user", "learned"].includes(skill.origin) ||
-                    !["user", "learned"].includes(skill.source) ||
-                    (skill.origin === "learned" && skill.botId !== context.botId))
-                )
-                  throw new MemoryAccessError();
-              },
-              store: await selectDocumentStore(tx, config, deps.dataDir, deps.secrets),
-              generation: config?.generation ?? 0,
-              semantic: semantic?.provider ?? null,
-            });
+            if (
+              skill &&
+              (skill.protected ||
+                !["user", "learned"].includes(skill.origin) ||
+                !["user", "learned"].includes(skill.source) ||
+                (skill.origin === "learned" && skill.botId && skill.botId !== context.botId))
+            )
+              throw new MemoryAccessError();
           },
-          { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 60_000 },
-        ),
-      ),
+          store: await selectDocumentStore(tx, config, deps.dataDir, deps.secrets),
+          generation: config?.generation ?? 0,
+          semantic: semantic?.provider ?? null,
+        });
+      };
+      return context.databaseTransaction
+        ? open(context.databaseTransaction)
+        : withTransactionRetry(() =>
+            deps.prisma.$transaction(open, {
+              isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+              timeout: 60_000,
+            }),
+          );
+    },
     enqueueGit: (context) =>
       deps.jobs.enqueue({
         name: "memory.git-push",

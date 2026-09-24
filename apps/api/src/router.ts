@@ -166,6 +166,7 @@ import {
   disconnectMemoryProvider,
   persistMemoryProviderConfig,
   serializeSpaceMemoryConfig,
+  testMemoryProviderConnection,
   updateMemoryProviderDefaultScope,
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
@@ -2418,6 +2419,12 @@ export function createRouter(deps: RouterDeps) {
         const config = await findSpaceMemoryConfig(deps.prisma, context.actor.spaceId);
         return config ? serializeSpaceMemoryConfig(config) : null;
       }),
+      testProvider: authed.memory.testProvider.handler(({ context, input }) =>
+        testMemoryProviderConnection(deps, context.actor, input),
+      ),
+      deliveryProgress: authed.memory.deliveryProgress.handler(({ context }) =>
+        memoryRpc(() => deps.memoryDocuments!.deliveryProgress(memoryContext(context.actor))),
+      ),
       connectProvider: authed.memory.connectProvider.handler(async ({ context, input }) =>
         persistMemoryProviderConfig(deps, context.actor, input),
       ),
@@ -2782,6 +2789,34 @@ export function createRouter(deps: RouterDeps) {
       ),
     },
     learning: {
+      summary: authed.learning.summary.handler(({ context, input }) =>
+        learning.summary(context.actor, input.botId),
+      ),
+      approve: authed.learning.approve.handler(({ context, input }) =>
+        learning.approve(input.proposalId, context.actor, input.edits),
+      ),
+      reject: authed.learning.reject.handler(({ context, input }) =>
+        learning.reject(input.proposalId, context.actor, input.reason),
+      ),
+      edit: authed.learning.edit.handler(({ context, input }) =>
+        learning.edit(input.proposalId, context.actor, input.edits),
+      ),
+      revert: authed.learning.revert.handler(({ context, input }) =>
+        learning.revert(input.proposalId, context.actor),
+      ),
+      evidence: authed.learning.evidence.handler(({ context, input }) =>
+        learning.evidence(context.actor, input.proposalId, input.evidenceId),
+      ),
+      grants: authed.learning.grants.handler(({ context }) => learning.grants(context.actor)),
+      createGrant: authed.learning.createGrant.handler(({ context, input }) =>
+        learning.createGrant(context.actor, input),
+      ),
+      revokeGrant: authed.learning.revokeGrant.handler(({ context, input }) =>
+        learning.revokeGrant(context.actor, input.grantId),
+      ),
+      declineGrant: authed.learning.declineGrant.handler(({ context, input }) =>
+        learning.declineGrant(context.actor, input),
+      ),
       settings: authed.learning.settings.handler(({ context }) => learning.settings(context.actor)),
       configure: authed.learning.configure.handler(({ context, input }) =>
         learning.configure(context.actor, input),

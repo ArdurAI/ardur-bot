@@ -86,6 +86,11 @@ msgstr "{0} KB"
 msgid "{0} MB"
 msgstr "{0} MB"
 
+#. placeholder {0}: grant.limits.maxPerDay
+#: src/pages/LearningInbox.tsx
+msgid "{0} per day"
+msgstr ""
+
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} rollup hours"
@@ -96,6 +101,11 @@ msgstr ""
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "{0} runs · {1} tokens"
 msgstr "{0}회 실행 · 토큰 {1}개"
+
+#. placeholder {0}: counts.pendingCount
+#: src/pages/LearningInbox.tsx
+msgid "{0} suggestions to review"
+msgstr ""
 
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -114,6 +124,10 @@ msgstr "{botName}의 컴퓨터"
 #: src/pages/ActivityList.tsx
 msgid "{days}d ago"
 msgstr "{days}일 전"
+
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "{failed} failed"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
@@ -465,11 +479,16 @@ msgstr "API가 다시 작동하지만 업데이트가 완료되지 않았습니�
 #: src/components/AskCard.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "API key"
 msgstr "API 키"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "API key (optional)"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "API key header"
@@ -483,6 +502,26 @@ msgstr ""
 msgid "Appearance"
 msgstr "모양"
 
+#: src/pages/LearningInbox.tsx
+msgid "Applied"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply memory suggestions for me automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply memory suggestions for this bot automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply skill suggestions for me automatically"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Apply skill suggestions for this bot automatically"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Approval boundaries"
 msgstr "승인이 필요한 범위"
@@ -492,6 +531,7 @@ msgstr "승인이 필요한 범위"
 msgid "Approval for {0}"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Approve"
@@ -500,6 +540,10 @@ msgstr "승인"
 #: src/pages/shell/message-cards.tsx
 msgid "Approve this server to let your agent use its tools."
 msgstr "이 서버를 승인하면 Bot이 제공되는 도구를 사용할 수 있습니다."
+
+#: src/pages/MemoryHistory.tsx
+msgid "Approved by"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 msgid "Archive"
@@ -644,6 +688,11 @@ msgstr ""
 msgid "Back to sign in"
 msgstr "로그인으로 돌아가기"
 
+#: src/pages/LearningInbox.tsx
+msgid "Base revision"
+msgstr ""
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
 msgstr "서버 주소"
@@ -653,6 +702,11 @@ msgstr "서버 주소"
 msgid "Bearer token"
 msgstr "Bearer 토큰"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Bearer token (optional)"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Before"
 msgstr ""
@@ -707,6 +761,11 @@ msgstr "연결할 Bot"
 msgid "Bot token"
 msgstr ""
 
+#. placeholder {0}: botName ?? proposal.scope.botId
+#: src/pages/LearningInbox.tsx
+msgid "Bot: {0}"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Bots"
@@ -750,6 +809,7 @@ msgstr "서버에 연결할 수 없습니다."
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/dialogs.tsx
@@ -1642,6 +1702,10 @@ msgstr "Bot의 서버 사용 권한을 변경하지 못했습니다."
 msgid "Could not update computer"
 msgstr "컴퓨터를 업데이트할 수 없습니다"
 
+#: src/pages/LearningInbox.tsx
+msgid "Could not update learning. Try again."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "반응을 업데이트할 수 없습니다"
@@ -1741,6 +1805,10 @@ msgstr "Cron"
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron expression"
 msgstr "Cron 표현식"
+
+#: src/pages/LearningInbox.tsx
+msgid "Current"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Current password"
@@ -1875,6 +1943,7 @@ msgstr ""
 msgid "Destination scope"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
 msgstr ""
@@ -1955,6 +2024,10 @@ msgstr ""
 msgid "Documents"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Documents stay in the local journal."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Don’t have an account?"
 msgstr "계정이 없나요?"
@@ -2004,6 +2077,10 @@ msgstr "예: Hivenet Agent, Presales, 근무표 봇"
 #: src/pages/Shell.tsx
 msgid "Earlier message"
 msgstr "이전 메시지"
+
+#: src/pages/LearningInbox.tsx
+msgid "Edit"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Edit first"
@@ -2079,6 +2156,10 @@ msgstr "매월"
 msgid "Every week"
 msgstr "매주"
 
+#: src/pages/LearningInbox.tsx
+msgid "Evidence"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor 토큰"
@@ -2098,6 +2179,10 @@ msgstr "{0} 펼치기"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Expired"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
@@ -2374,8 +2459,8 @@ msgstr "OpenAPI JSON 가져오기"
 msgid "Inbox & email"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Indexing sends documents to {locationLine}."
+#: src/pages/MemoryDeliveryProgress.tsx
+msgid "Indexed {delivered} of {total}"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -2479,6 +2564,28 @@ msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Later edits overlap this change. Review both versions in History."
+msgstr ""
+
+#. placeholder {0}: counts.appliedThisWeek
+#: src/pages/LearningInbox.tsx
+msgid "learned {0} things this week"
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
+msgid "Learning"
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "Learning grant"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning is off for this space."
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2654,9 +2761,12 @@ msgstr "참여 Bot ({GROUP_MEMBER_MIN}~{GROUP_MEMBER_MAX}개 선택)"
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
 msgid "Memory"
 msgstr "기억"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Memory & Skills"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
@@ -2758,6 +2868,10 @@ msgstr "모델"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Model & effort"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "model estimate"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -2971,6 +3085,10 @@ msgstr "{peerBotName}와의 메시지가 아직 없습니다."
 msgid "No model catalog is available."
 msgstr "사용 가능한 모델 목록이 없습니다."
 
+#: src/pages/LearningInbox.tsx
+msgid "no observations yet"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "검색된 AI 서비스가 없습니다."
@@ -3020,6 +3138,7 @@ msgstr "연결되지 않음"
 msgid "Not in the plugin catalog"
 msgstr "플러그인 카탈로그에 없음"
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
 msgstr "나중에"
@@ -3035,6 +3154,10 @@ msgstr "실행 중인 작업 없음"
 #: src/pages/KnowledgeSection.tsx
 msgid "Nothing remembered yet"
 msgstr "아직 기억한 내용이 없습니다"
+
+#: src/pages/LearningInbox.tsx
+msgid "Nothing to review."
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -3186,6 +3309,10 @@ msgstr "자연스럽게"
 msgid "Organization API key"
 msgstr "조직 API 키"
 
+#: src/pages/LearningInbox.tsx
+msgid "Originating run"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
@@ -3251,6 +3378,10 @@ msgstr "API 키를 붙여넣으세요"
 msgid "Paused"
 msgstr "일시 중지됨"
 
+#: src/pages/LearningInbox.tsx
+msgid "Personal"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Personal credential"
 msgstr "내 인증 정보"
@@ -3262,6 +3393,11 @@ msgstr "고정"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "재생 중…"
+
+#: src/pages/LearningInbox.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Policy version"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "POST to"
@@ -3458,6 +3594,14 @@ msgstr "화면 새로고침"
 msgid "Refreshing…"
 msgstr "새로고침 중…"
 
+#: src/pages/LearningInbox.tsx
+msgid "Reject"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Rejected"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Release"
 msgstr "제어권 돌려주기"
@@ -3637,6 +3781,7 @@ msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Retry"
 msgstr ""
 
@@ -3658,6 +3803,10 @@ msgstr "Ardur Bot로 돌아가기"
 msgid "rev {0}"
 msgstr "리비전 {0}"
 
+#: src/pages/LearningInbox.tsx
+msgid "Review destination"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr ""
@@ -3674,12 +3823,25 @@ msgstr ""
 msgid "Review tools before your bots can use this account."
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Reviewer"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Reviews use this connection and may incur model charges."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Revision"
+msgstr ""
+
 #. placeholder {0}: revision.revision
 #: src/pages/MemoryHistory.tsx
 msgid "Revision {0}"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "연결 해제"
@@ -3763,6 +3925,7 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3918,6 +4081,16 @@ msgstr ""
 msgid "Sending…"
 msgstr "보내는 중…"
 
+#. placeholder {0}: memoryProviderHost(config!.settings) ?? config!.provider
+#. placeholder {0}: memoryProviderHost(pendingConnection.settings) ?? registration?.name
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Sends memory text to {0}"
+msgstr ""
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Sends memory text to {host}"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr "Sentry 알림"
@@ -3971,6 +4144,7 @@ msgstr "설정 도움말"
 msgid "Shape"
 msgstr "모양"
 
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "함께 사용"
@@ -4164,6 +4338,14 @@ msgstr "보조 에이전트"
 msgid "Submit"
 msgstr "확인"
 
+#: src/pages/LearningInbox.tsx
+msgid "Suggested content"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Superseded"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Supports images"
@@ -4243,6 +4425,10 @@ msgstr ""
 msgid "Test"
 msgstr "시험 실행"
 
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Test connection"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Test connection and preview"
 msgstr ""
@@ -4250,6 +4436,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "테스트 실행"
+
+#: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
+msgid "Testing…"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
@@ -4388,6 +4578,10 @@ msgstr "Treg 토큰"
 msgid "Try again"
 msgstr "다시 시도"
 
+#: src/pages/LearningInbox.tsx
+msgid "Turn on"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Type your answer"
 msgstr "답변을 입력하세요"
@@ -4399,6 +4593,14 @@ msgstr "섹션 없음"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Unavailable"
 msgstr "사용할 수 없음"
+
+#: src/pages/LearningInbox.tsx
+msgid "Undo"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Undone"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
@@ -4561,6 +4763,10 @@ msgstr "이 Bot의 기억은 어떻게 할까요?"
 
 #: src/pages/shell/message-cards.tsx
 msgid "What do you want me on first?"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "What I learned"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx

@@ -32,6 +32,38 @@ function resolverFor(
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe("semantic provider registration", () => {
+  it.each(["mem0", "mem0-oss", "graphiti"])("constructs %s without network IO", (provider) => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    expect(
+      createMemoryProvider(
+        provider,
+        { baseUrl: "http://127.0.0.1:8000" },
+        provider === "mem0" ? { apiKey: "fixture-placeholder" } : {},
+      ).describe().id,
+    ).toBe(provider);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each(["mem0-oss", "graphiti"])(
+    "resolves encrypted empty credentials for %s",
+    async (provider) => {
+      const f = resolverFor("{}", { ownerUserId: "config-author" });
+      f.prisma.spaceMemoryConfig.findUnique.mockResolvedValue({
+        userId: "config-author",
+        provider,
+        settings: { baseUrl: "http://127.0.0.1:8000", endpointTrust: "private" },
+        defaultMemoryScope: "shared",
+        secret: { ciphertext: "encrypted" },
+      } as never);
+      const resolved = await f.resolver.resolve("space");
+      expect(resolved?.provider.constructor.name).toBe(
+        provider === "graphiti" ? "GraphitiMemoryProvider" : "Mem0MemoryProvider",
+      );
+    },
+  );
+});
+
 describe("SpaceMemoryProviderResolver", () => {
   it.each([null, "another-user"])(
     "fails closed for saved local configurations without current deployment-owner authorization: %s",
