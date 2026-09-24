@@ -22,6 +22,8 @@ The Account, Capabilities, Memory, System, Extensions, Developer, Skills, Integr
 { id: "account", group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./account/AccountSettings")), available: always },
 ```
 
+Capabilities and Memory now use their pages under `pages/capabilities/` and `pages/memory/` in those existing slots. Memory → Memory storage → Manage opens the existing embedded storage settings, including Git repository memory and semantic providers; Back to memory returns to the proposal and document view. Skills opens the existing Skills section under Customize. The Capabilities Computers link opens the owner section for deployment owners and a read-only computer list for other members. Both pages register their setting rows with search and release busy state when unmounted.
+
 Use `desktopOnly` for System, Extensions and Developer. Keep the `computer` id for Computers and `integrations` for Integrations. There is no `connectors` alias. Integrations and MCP are always available under Customize. Native routes and RPC namespaces retain their existing names.
 
 The sidebar and composer both open Settings → Integrations, backed by the trusted integration registry. `initialIntegration` carries composer reconnection into `IntegrationCatalog.reconnectId`. MCP embeds the existing servers overlay, with Add MCP server revealing the form and Manage MCP servers showing existing connections. Developer shows the connected server URL and desktop version. The legacy plugin catalog dialog is no longer on the sidebar path. Its obsolete GraphQL browser entry test is retired; backend GraphQL tests remain.

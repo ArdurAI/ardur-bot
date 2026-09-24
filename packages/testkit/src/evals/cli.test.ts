@@ -2,13 +2,13 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, it } from "vitest";
 
-it("lists eval cases without importing a generated database client or runtime adapters", () => {
+it("lists eval cases without importing database, runtime, or container dependencies", () => {
   const guard = `
     import { registerHooks } from 'node:module';
     registerHooks({
       resolve(specifier, context, nextResolve) {
-        if (specifier === '@ardurbot/db' || specifier === '@ardurbot/adapters') {
-          throw new Error('Runtime imported before database generation');
+        if (['@ardurbot/db', '@ardurbot/adapters', '@testcontainers/postgresql'].includes(specifier)) {
+          throw new Error('Live dependencies imported while listing eval cases');
         }
         return nextResolve(specifier, context);
       }

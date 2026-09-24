@@ -46,6 +46,7 @@ export interface DocumentListInput {
   includeDeleted?: boolean;
 }
 export interface DocumentCommit {
+  kind?: "profile" | "preferences" | "topic";
   id?: string;
   scopeKey: DocumentScope;
   path: string;

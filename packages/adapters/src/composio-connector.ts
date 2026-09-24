@@ -16,6 +16,14 @@ import {
   type ToolkitDirectoryEntry,
 } from "./composio-catalog-cache.js";
 import { DestinationEmulator } from "./destination-emulator.js";
+import {
+  CATALOG_EXECUTE,
+  catalogEntries,
+  executeLazyCatalogControl,
+  isLazyCatalogControlRoute,
+  lazyCatalogTools,
+  resolveCatalogCall,
+} from "./lazy-tool-catalog.js";
 import { isVitestRuntime } from "./test-runtime.js";
 
 type ComposioSession = Awaited<ReturnType<Composio["create"]>>;
@@ -372,11 +380,29 @@ export class ComposioConnector implements ComposioProvider {
     if (connections.length === 0) return [];
     const session = await this.sessionForExecute(context.userId, connections);
     const raw = await session.tools();
-    return asConnectorTools(raw);
+    const tools = asConnectorTools(raw);
+    return context.toolAccessMode === "when-needed" && tools.length
+      ? lazyCatalogTools("composio", "composio", "connected", catalogEntries(tools))
+      : tools;
   }
 
+  async resolveCall(call: ConnectorCall, context: AdapterContext) {
+    if (call.route?.toolName !== CATALOG_EXECUTE) return undefined;
+    return resolveCatalogCall(
+      call,
+      catalogEntries(await this.discoverTools({ ...context, toolAccessMode: "all" })),
+    );
+  }
   async *execute(call: ConnectorCall, context: AdapterContext): AsyncIterable<ConnectorEvent> {
     try {
+      if (isLazyCatalogControlRoute(call.route)) {
+        yield* executeLazyCatalogControl(
+          call,
+          catalogEntries(await this.discoverTools({ ...context, toolAccessMode: "all" })),
+          (resolved) => this.execute(resolved, context),
+        );
+        return;
+      }
       const session = await this.sessionForExecute(
         context.userId,
         connectedComposioConnections(context),

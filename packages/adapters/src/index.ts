@@ -90,6 +90,7 @@ export { validateGitBranch, validateGitRemote } from "./memory/git-transport.js"
 export { GraphitiMemoryProvider } from "./memory/graphiti-memory-provider.js";
 export * from "./memory/lifecycle.js";
 export { Mem0MemoryProvider } from "./memory/mem0-memory-provider.js";
+export * from "./memory-intent.js";
 export * from "./memory-provider-factory.js";
 export * from "./messaging/delivery.js";
 export * from "./messaging/dispatch.js";

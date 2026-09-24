@@ -100,6 +100,9 @@ export class HostAwareSandbox implements SandboxProvider {
     return computer.kind === "desktop" ? this.host : this.isolated;
   }
 
+  async supportsNetworkEgress(computer: ComputerRef, context: AdapterContext) {
+    return this.route(computer).supportsNetworkEgress?.(computer, context) ?? false;
+  }
   async provision(
     request: {
       botId: string;
@@ -108,6 +111,7 @@ export class HostAwareSandbox implements SandboxProvider {
       providerKind?: ComputerRef["kind"];
       connectionId?: string | null;
       imageProfile?: ComputerRef["imageProfile"];
+      networkEgress?: boolean;
     },
     context: AdapterContext,
   ) {

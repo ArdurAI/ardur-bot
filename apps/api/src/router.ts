@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type {
   AdapterContext,
   AgentHomeStore,
+  AgentRuntime,
   ArtifactStore,
   ConnectorCatalogItem,
   JobPublisher,
@@ -74,6 +75,7 @@ import {
   prepareApiInstall,
   prepareGraphqlInstall,
   probeOpenAiCompatibleModels,
+  proposeMemoryIntent,
   provisionComputer,
   pullOllamaModel,
   queueComputerUpdate,
@@ -163,6 +165,7 @@ import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
+import { createCapabilitySettings } from "./capability-settings.js";
 import { createCommandRoutes } from "./command-routes.js";
 import { createComparisons } from "./comparisons.js";
 import {
@@ -466,6 +469,7 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  runtime?: AgentRuntime;
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
   terminals?: ReturnType<typeof createTerminalRoutes>;
@@ -2550,6 +2554,9 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     memory: {
+      propose: authed.memory.propose.handler(({ context, input }) =>
+        proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+      ),
       remember: authed.memory.remember.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         await memoryRpc(() =>
@@ -3102,6 +3109,15 @@ export function createRouter(deps: RouterDeps) {
       ),
     },
     capabilities: {
+      settings: authed.capabilities.settings.handler(({ context }) =>
+        createCapabilitySettings(deps).settings(context.actor),
+      ),
+      configure: authed.capabilities.configure.handler(({ context, input }) =>
+        createCapabilitySettings(deps).configure(context.actor, input),
+      ),
+      network: authed.capabilities.network.handler(({ context, input }) =>
+        createCapabilitySettings(deps).network(context.actor, input),
+      ),
       list: authed.capabilities.list.handler(async ({ context }) => {
         const rows = await deps.prisma.capabilityInstall.findMany({
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId },

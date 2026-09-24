@@ -187,6 +187,9 @@ model Space {
   botInstructionsAuthorId String?
   botInstructionsRevision Int @default(0)
   requireTrustedDevices Boolean @default(false)
+  toolAccessMode String @default("when-needed")
+  connectorSearch Boolean @default(false)
+  inlineVisualizations Boolean @default(true)
   comparisons Comparison[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
@@ -899,6 +902,7 @@ model CapabilityInstall {
 }
 
 model MemoryDocument {
+  kind String @default("topic")
   id        String           @id @default(cuid())
   spaceId   String
   space     Space            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -928,6 +932,7 @@ model MemoryDocument {
 }
 
 model MemoryRevision {
+  kind String @default("topic")
   id             String         @id @default(cuid())
   documentId     String
   document       MemoryDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -997,6 +1002,7 @@ model ComputerUpdate {
 }
 
 model Computer {
+  networkEgress Boolean @default(true)
   imageProfile String @default("base")
   connectionId String?
   screenGeneration Int @default(0)

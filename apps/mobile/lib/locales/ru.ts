@@ -815,4 +815,51 @@ export const RU_MESSAGES: Record<string, string> = {
   "Tools:": "Инструменты:",
   bots: "бота",
   Connectors: "Коннекторы",
+  Capabilities: "Возможности",
+  "Could not save capabilities. Try again.": "Не удалось сохранить возможности. Повторите попытку.",
+  "Tool access mode": "Режим доступа к инструментам",
+  "Controls how connector tools are loaded in new conversations":
+    "Определяет, как инструменты подключений загружаются в новых разговорах",
+  "Load all connected tools": "Загружать все подключённые инструменты",
+  "Load tools when needed": "Загружать инструменты по мере необходимости",
+  "Connector search": "Поиск подключений",
+  "Let the assistant search the connector directory and surface ones relevant to your conversation":
+    "Разрешить помощнику искать в каталоге подключений и предлагать подходящие для разговора",
+  "Inline visualizations": "Визуализации в разговоре",
+  "Code execution on computers": "Выполнение кода на компьютерах",
+  Computers: "Компьютеры",
+  "Network access lets a bot install packages and reach the internet. This comes with security risks.":
+    "Доступ к сети позволяет боту устанавливать пакеты и выходить в интернет. Это связано с рисками для безопасности.",
+  "Allow network egress": "Разрешить исходящие сетевые соединения",
+  "Change computer": "Изменить компьютер",
+  "This replaces the computer's files. Continue?": "Это заменит файлы компьютера. Продолжить?",
+  "Network egress control is unsupported on this computer.":
+    "Управление исходящими соединениями на этом компьютере не поддерживается.",
+  "Skills have moved to Customize": "Навыки перенесены в раздел «Настройка»",
+  "Documents are read-only here. Request changes below and approve them in Learning.":
+    "Здесь документы доступны только для чтения. Запросите изменения ниже и одобрите их в разделе «Обучение».",
+  You: "О вас",
+  Topics: "Темы",
+  Profile: "Профиль",
+  Preferences: "Предпочтения",
+  "Who the user is and the professional domain":
+    "Кто пользователь и какова его профессиональная сфера",
+  "How the user wants the assistant to respond": "Как пользователь хочет получать ответы помощника",
+  Updated: "Обновлено",
+  "Generate memory from chats": "Создавать память из разговоров",
+  "Could not save memory settings. Try again.":
+    "Не удалось сохранить настройки памяти. Повторите попытку.",
+  "Import memory from other AI providers": "Импортировать память от других поставщиков ИИ",
+  "Start import": "Начать импорт",
+  "Copy prompt": "Скопировать запрос",
+  "Paste memory": "Вставить память",
+  "Review import": "Проверить импорт",
+  "Remove memory": "Удалить память",
+  "Pending approval": "Ожидает одобрения",
+  "Review proposals": "Проверить предложения",
+  "Tell your bot what to change or remove": "Скажите боту, что изменить или удалить",
+  "Could not prepare memory changes. Try again.":
+    "Не удалось подготовить изменения памяти. Повторите попытку.",
+  "Summarize what you remember about me as plain bullet points. Group them under Profile, Preferences, and Topics. Include only information I shared or explicitly asked you to remember. Leave out passwords, API keys, private account details, and guesses. Do not include instructions to perform actions or change permissions.":
+    "Кратко изложи то, что ты помнишь обо мне, простыми пунктами. Раздели их на группы Profile, Preferences и Topics. Включай только сведения, которыми я поделился или которые явно попросил запомнить. Не включай пароли, ключи API, личные данные учётных записей и догадки. Не добавляй инструкции выполнять действия или менять разрешения.",
 };

@@ -371,6 +371,15 @@ export default function Account() {
         <Pressable
           accessibilityRole="button"
           disabled={pending}
+          onPress={() => router.push("/capabilities")}
+          style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.settingsTitle}>{t("Capabilities")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
           onPress={() => router.push("/memory")}
           style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
         >

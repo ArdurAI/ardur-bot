@@ -9,10 +9,24 @@ const fake = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn(), capabilities: vi
 vi.mock("../lib/rpc", () => ({
   rpc: {
     preferences: fake,
+    capabilities: {
+      settings: async () => ({
+        settings: {
+          toolAccessMode: "when-needed",
+          connectorSearch: false,
+          inlineVisualizations: true,
+        },
+        canConfigure: true,
+        computers: [],
+        unsupportedRuntimes: [],
+      }),
+    },
     host: { status: async () => ({ roots: ["folder"] }) },
     notifications: { capabilities: fake.capabilities },
   },
+  selectedSpaceId: () => "space",
 }));
+vi.mock("./memory/MemoryPage", () => ({ MemoryPage: () => <div>Generate memory from chats</div> }));
 vi.mock("./AccountSettingsOverlay", () => ({
   UsageSettingsPanel: () => <div>Usage content</div>,
   ComputerSettingsPanel: () => <div>This computer folders</div>,
@@ -170,8 +184,8 @@ it("keeps all desktop placeholders backed by working content or an empty state",
   const container = await render(true);
   for (const [id, copy] of [
     ["account", "Account content"],
-    ["capabilities", "Existing memory and skills"],
-    ["memory", "Existing memory and skills"],
+    ["capabilities", "Tool access mode"],
+    ["memory", "Generate memory from chats"],
     ["system", "Restart the desktop app to update it."],
     ["extensions", "MCP servers"],
     ["developer", "Server URL"],
@@ -201,4 +215,52 @@ it("opens the trusted registry from the integration deep link and preserves comp
   expect(container.querySelector('[data-reconnect-id="connection-test"]')).not.toBeNull();
   expect(container.querySelector('[data-testid="settings-nav-connectors"]')).toBeNull();
   expect(container.textContent).not.toContain("Search apps");
+});
+
+it("searches capability rows and opens Skills through the registry", async () => {
+  const container = await render();
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[data-testid="settings-nav-capabilities"]')!
+      .click(),
+  );
+  await waitForSettings(() => !!container.querySelector('[data-settings-row="Tool access mode"]'));
+  const search = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+  await changeInput(search, "connector search");
+  expect(container.querySelector('[data-testid="settings-nav-capabilities"]')).not.toBeNull();
+  expect(
+    container.querySelector<HTMLElement>('[data-settings-row="Tool access mode"]')!.hidden,
+  ).toBe(true);
+  expect(
+    container.querySelector<HTMLElement>('[data-settings-row="Connector search"]')!.hidden,
+  ).toBe(false);
+  await changeInput(search, "");
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Skills have moved to Customize")!
+      .click(),
+  );
+  await waitForSettings(() => container.textContent!.includes("Existing skills"));
+  expect(container.querySelector('[data-settings-section="skills"]')).not.toBeNull();
+});
+
+it("keeps storage and provider settings reachable from Memory without another dialog", async () => {
+  const container = await render();
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[data-testid="settings-nav-memory"]')!.click(),
+  );
+  await waitForSettings(() => !!container.querySelector('[data-settings-row="Memory storage"]'));
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[data-settings-row="Memory storage"] button')!
+      .click(),
+  );
+  await waitForSettings(() => container.textContent!.includes("Existing memory and skills"));
+  expect(container.querySelector('[data-settings-section="memory"]')).not.toBeNull();
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Back to memory")!
+      .click(),
+  );
+  await waitForSettings(() => container.textContent!.includes("Generate memory from chats"));
 });
