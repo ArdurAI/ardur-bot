@@ -4,6 +4,40 @@ Desktop previews are unsigned. No Developer ID, notarization credentials, or Win
 is configured. Work lands on `dev`; `main` moves only after a human verifies a build. CI quality
 and performance checks are advisory. Packaging must still finish before an artifact can be published.
 
+## Development phone pairing
+
+For phone pairing against `pnpm dev`, export the same `ARDURBOT_DESKTOP_STACK_TOKEN`
+in the shells that start the server and the unpackaged desktop app. Generate it once
+with `openssl rand -hex 32`; keep the value private and out of tracked files. Restart
+both processes after setting it. Start the server with `pnpm dev`, then the desktop
+with `ARDURBOT_WEB_URL=http://127.0.0.1:5173 pnpm --filter @ardurbot/desktop dev`.
+Use Settings → Devices to enable network reachability and pair the phone. The
+development exception requires a loopback target and is disabled in packaged builds.
+Packaged existing-instance connections must use an app-managed "This computer" home
+for this listener. The listener exposes only the device API over TLS on the private
+network; it does not forward cookies, general RPC, or the stack token to phones.
+
+## Native Codex compatibility
+
+Codex owns its ChatGPT sign-in. Native pins use `native:codex-app-server` and never
+load a hosted model connection's key or OAuth material. An explicitly selected
+hosted connection is refused. Restart the source worker and desktop after changing
+runtime code; an already running bundle does not pick up these changes.
+
+Codex CLI 0.156.1 was verified with `initialize`, `account/read`, and `model/list`.
+Its generated app-server schema also contains the `thread/start`, `thread/resume`,
+`turn/start`, `turn/interrupt`, `turn/steer`, `config/read`, and `skills/list` APIs
+used here. There is no numeric version gate; the availability probe checks the
+protocol and preserves the version and sign-in result. A missing method or invalid
+protocol parameters report an unsupported version; a transport failure reports
+that Codex could not be reached.
+
+The [official app-server documentation](https://developers.openai.com/codex/app-server/)
+describes the stdio handshake and the version-specific
+`codex app-server generate-json-schema --out <directory>` command. Protocol and
+credential regressions run offline; actual model execution still requires the
+selected model and effort to be returned by the installed CLI.
+
 ## Build contract
 
 A `v*` tag push runs `.github/workflows/release-desktop.yml`. Manual dispatch accepts an existing

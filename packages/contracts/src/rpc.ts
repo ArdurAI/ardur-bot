@@ -238,6 +238,12 @@ export const appContract = {
       .input(PreferencesPatchSchema.extend({ avatarStyle: AvatarStyleSchema.optional() }))
       .output(MeSchema.extend({ preferences: UserPreferencesSchema })),
   },
+  system: {
+    dispatch: oc.output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+    setDispatch: oc
+      .input(z.object({ enabled: z.boolean() }))
+      .output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+  },
   spaces: {
     list: oc.output(SpaceNavigationSchema),
     create: oc.input(z.object({ name: z.string().trim().min(1).max(60) })).output(SpaceSchema),

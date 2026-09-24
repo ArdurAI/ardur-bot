@@ -140,7 +140,11 @@ import type { PendingAttachment } from "../components/composer/attachments";
 import { prepareComposerAttachments } from "../components/composer/attachments";
 import { ComposerTools } from "../components/composer/ComposerTools";
 import { runComposerAction } from "../components/composer/composer-actions";
-import { pickComposerFolder, splitComposerDrop } from "../components/composer/folders";
+import {
+  composerFolderError,
+  pickComposerFolder,
+  splitComposerDrop,
+} from "../components/composer/folders";
 import { useComposerCommands } from "../components/composer/use-composer-commands";
 import type { FeedbackEdit } from "../components/MessageFeedback";
 import { MessageFeedback } from "../components/MessageFeedback";
@@ -244,6 +248,7 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { SidebarSettings } from "./shell/sidebar-settings";
+import { SystemDictation } from "./system/SystemDictation";
 import { TeamBoard } from "./TeamBoard";
 import { WindowChrome } from "./WindowChrome";
 
@@ -5051,12 +5056,12 @@ export const Composer = memo(function Composer({
   const desktop = desktopBridge();
   const folderAvailable = canAddComposerFolder(Boolean(desktop?.host), computerKind);
   async function addFolder(dropped?: File) {
-    if (!folderAvailable || !desktop?.host) return;
     try {
-      const folder = await pickComposerFolder(desktop.host, dropped);
+      if (computerKind !== "desktop") throw new Error("Folders require this computer.");
+      const folder = await pickComposerFolder(desktop?.host, dropped);
       if (folder) insertMention(folder);
-    } catch {
-      onComposerError(t`Could not add folder. Try again.`);
+    } catch (error) {
+      onComposerError(composerFolderError(error, t`Could not add folder. Try again.`));
     }
   }
 
@@ -5184,6 +5189,7 @@ export const Composer = memo(function Composer({
       onDrop={handleDrop}
       className="composer-drop-target relative z-30 m-0 min-w-0 border-0 px-3 pb-4 pt-3 md:px-6 md:pb-6"
     >
+      <SystemDictation textarea={textareaRef} setDraft={setDraft} />
       {sendError || runError ? (
         <div
           ref={runErrorRef}

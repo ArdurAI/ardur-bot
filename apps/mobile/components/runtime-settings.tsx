@@ -118,6 +118,20 @@ export function RuntimeSettings({
               onValueChange={onExperimental}
             />
           </View>
+          {availability ? (
+            <Text style={{ color: tokens.mutedForeground }}>
+              {[
+                availability.version,
+                availability.signedIn === true
+                  ? t("Signed in")
+                  : availability.available
+                    ? t("Available")
+                    : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+          ) : null}
           {availability?.reason ? (
             <Text accessibilityRole="text" style={{ color: tokens.mutedForeground }}>
               {availability.reason}
@@ -131,7 +145,7 @@ export function RuntimeSettings({
           <Pressable accessibilityRole="button" onPress={() => setRefresh((value) => value + 1)}>
             <Text style={{ color: tokens.foreground }}>{t("Check again")}</Text>
           </Pressable>
-          {kind === "codex-app-server" && !availability?.available ? (
+          {kind === "codex-app-server" && availability?.signedIn === false ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => {

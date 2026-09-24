@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ProductEventSchema } from "./events.js";
 import { RunFailurePayloadSchema } from "./provider-errors.js";
-import { RuntimePinSchema, runtimePinMessage, runtimePinProblem } from "./runtime-pins.js";
+import {
+  RuntimePinError,
+  RuntimePinSchema,
+  runtimePinMessage,
+  runtimePinProblem,
+} from "./runtime-pins.js";
 
 const pin = {
   provider: "local",
@@ -44,4 +49,24 @@ describe("runtime pin contracts", () => {
       "pinned to Claude Code · local · model · high",
     );
   });
+});
+
+it("uses the real reason and offers Connect only for a hosted credential failure", () => {
+  const native = {
+    ...pin,
+    runtimeKind: "codex-app-server" as const,
+    credentialId: "native:codex-app-server",
+  };
+  for (const selected of [pin, native]) {
+    const problem = runtimePinProblem(
+      selected,
+      "pin-model-unknown",
+      "The pinned model is unavailable in this runtime.",
+    );
+    expect(new RuntimePinError(problem).message).toBe(problem.reason);
+    expect(problem.actions).toEqual(["change-pin"]);
+  }
+  const missing = runtimePinProblem(pin, "pin-credential-missing", "Missing connection");
+  expect(missing.actions).toEqual(["connect", "change-pin"]);
+  expect(new RuntimePinError(missing).message).toContain("connect it or change the pin");
 });

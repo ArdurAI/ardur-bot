@@ -21,6 +21,7 @@ import { LocalSettingsPage } from "./pages/LocalSettings";
 import { McpOAuthCallbackPage } from "./pages/McpOAuthCallback";
 import { SharedCommandPage, SharedCommandSignIn } from "./pages/SharedCommand";
 import { ShellPage } from "./pages/Shell";
+import { QuickComposer } from "./pages/system/QuickComposer";
 
 const AuthPage = lazy(() =>
   import("./pages/Auth").then((module) => ({ default: module.AuthPage })),
@@ -79,6 +80,10 @@ function SessionApp() {
     <div className="h-full" data-ardurbot-app-state="ready">
       <Suspense fallback={<div className="h-full bg-background" />}>
         <Routes>
+          <Route
+            path="/desktop/quick-access"
+            element={<QuickComposer signedIn={Boolean(user)} />}
+          />
           <Route
             path="/commands/:runId/:commandId"
             element={user ? <SharedCommandPage /> : <SharedCommandSignIn />}

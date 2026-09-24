@@ -1,5 +1,5 @@
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, value?: unknown) => Promise<unknown>>(),
@@ -51,8 +51,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   fake.handlers.clear();
   fake.keepRunning = true;
+  vi.spyOn(console, "error").mockImplementation(() => {});
   fake.read.mockResolvedValue({ apiUrl: "https://example.test", hostRoots: [] });
 });
+afterEach(() => vi.restoreAllMocks());
 function fixture() {
   const frame = { url: "https://example.test/app" };
   const window = { webContents: { mainFrame: frame } } as unknown as BrowserWindow;
@@ -85,7 +87,7 @@ describe("host folder selection", () => {
     expect(await f.add(f.event)).toBeNull();
     await expect(
       f.add({ ...f.event, senderFrame: { url: "https://other.test" } }),
-    ).rejects.toThrow();
+    ).resolves.toEqual({ error: "Host service is unavailable here." });
     expect(fake.write).not.toHaveBeenCalled();
   });
   it("authorizes and validates lifecycle changes before stopping the host with its window", async () => {
@@ -107,4 +109,14 @@ describe("host folder selection", () => {
     service.windowClosed();
     expect(fake.stop).toHaveBeenCalledOnce();
   });
+});
+
+it("logs an underlying folder error once and returns only a safe reason to preload", async () => {
+  const f = fixture();
+  const failure = new Error("Set up this computer first.");
+  fake.read.mockRejectedValueOnce(failure);
+  await expect(f.add(f.event)).resolves.toEqual({ error: failure.message });
+  expect(console.error).toHaveBeenCalledExactlyOnceWith("Could not add folder.", failure);
+  fake.read.mockRejectedValueOnce(new Error("private storage details"));
+  await expect(f.add(f.event)).resolves.toEqual({ error: "Could not add folder. Try again." });
 });

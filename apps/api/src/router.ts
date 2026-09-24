@@ -214,6 +214,7 @@ import {
   readServerUpdateStatus,
   UpdaterProxyError,
 } from "./server-update.js";
+import { createSystemSettings } from "./system/settings.js";
 import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-skills.js";
 import { acceptTeamTask, teamBoard } from "./team.js";
 import type { createTerminalRoutes } from "./terminal-routes.js";
@@ -579,8 +580,15 @@ export function createRouter(deps: RouterDeps) {
     return next({ context: { ...context, actor: context.actor } });
   });
 
+  const systemSettings = createSystemSettings(deps.prisma);
   const commands = createCommandRoutes(deps);
   return os.router({
+    system: {
+      dispatch: authed.system.dispatch.handler(({ context }) => systemSettings.get(context.actor)),
+      setDispatch: authed.system.setDispatch.handler(({ context, input }) =>
+        systemSettings.set(context.actor, input.enabled),
+      ),
+    },
     channelPairing: {
       installations: authed.channelPairing.installations.handler(({ context }) =>
         channelPairing.installations(context.actor),

@@ -54,7 +54,7 @@ export const settingsSections: SettingsRegistration[] = [
   { id: "voice", group: "Settings", label: msg`Voice`, icon: Volume2, component: lazy(() => import("./settings/VoiceSection")), available: always },
   { id: "usage", group: "Settings", label: msg`Usage`, icon: Gauge, component: lazy(() => import("./AccountSettingsOverlay").then((m) => ({ default: m.UsageSettingsPanel }))), available: always },
   { id: "learning", group: "Settings", label: msg`Learning`, icon: BookOpen, component: lazy(() => import("./settings/LearningSection")), available: always },
-  { id: "system", group: "Desktop app", label: msg`System`, icon: Monitor, component: lazy(() => import("./AccountSettingsOverlay").then((m) => ({ default: m.ComputerSettingsPanel }))), available: desktopOnly },
+  { id: "system", group: "Desktop app", label: msg`System`, icon: Monitor, component: lazy(() => import("./system/SystemPage")), available: desktopOnly },
   { id: "extensions", group: "Desktop app", label: msg`Extensions`, icon: Blocks, component: lazy(() => import("./settings/McpSection")), available: desktopOnly },
   { id: "developer", group: "Desktop app", label: msg`Developer`, icon: Code, component: lazy(() => import("./settings/DeveloperSection")), available: desktopOnly },
   { id: "skills", group: "Customize", label: msg`Skills`, icon: BookOpen, component: lazy(() => import("./settings/SkillsSection")), available: always },

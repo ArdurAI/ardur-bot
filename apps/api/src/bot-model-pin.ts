@@ -52,6 +52,11 @@ export async function botModelPinUpdate(
     if (runtimeKind !== "claude-code" && runtimeKind !== "codex-app-server")
       throw new ORPCError("BAD_REQUEST", { message: "Choose a runtime." });
     const nativeProvider = runtimeKind === "claude-code" ? "anthropic" : "openai-codex";
+    if (input.modelCredentialId && input.modelCredentialId !== `native:${runtimeKind}`)
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Native runtimes use their own sign-in. Remove the pinned connection or change the runtime.",
+      });
     const effort = input.thinkingLevel ?? existing.thinkingLevel;
     if (provider !== nativeProvider || !modelId || !effort)
       throw new ORPCError("BAD_REQUEST", {

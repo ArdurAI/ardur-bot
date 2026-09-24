@@ -73,7 +73,9 @@ function fixture() {
     spaceMember: { findUnique: vi.fn(async () => ({ id: "member" })) },
     bot: { findFirst: vi.fn(async () => ({ id: "bot" })) },
     botMcpServer: { findFirst: vi.fn(async () => assignment) },
-    remoteAuthorityPolicy: { findMany: vi.fn(async () => []) },
+    remoteAuthorityPolicy: {
+      findMany: vi.fn(async () => [] as { layer: string; scopes: string[] }[]),
+    },
     deviceAuditEvent: { create: vi.fn(async () => ({})) },
     deviceApprovalBinding: {
       findUnique: vi.fn(async () => binding),
@@ -318,4 +320,15 @@ it("binds remote built-ins to their bot resource without changing local or conne
   expect(
     remoteBuiltinApprovalRoute({ botId: "bot", originDeviceGrantId: "grant" }, "custom", false),
   ).toBeUndefined();
+});
+
+it("rechecks Dispatch inside the approval transaction before consuming a binding", async () => {
+  const f = fixture();
+  f.tx.remoteAuthorityPolicy.findMany.mockResolvedValue([
+    { layer: "desktop-dispatch", scopes: [] },
+  ]);
+  await expect(validateDeviceApproval(f.db, f.effect, f.answer)).rejects.toThrow(
+    "Dispatch is off on this computer",
+  );
+  expect(f.tx.deviceApprovalBinding.updateMany).not.toHaveBeenCalled();
 });

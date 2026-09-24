@@ -833,6 +833,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Revision and observations": "Версия и наблюдения",
   "Run now": "Запустить сейчас",
   "Runs on": "Работает на",
+  Available: "Доступно",
+  "Signed in": "Вход выполнен",
   "Runtime availability could not be checked.":
     "Не удалось проверить доступность среды выполнения.",
   "Saved locally. GitHub sync failed.": "Сохранено локально. Не удалось синхронизировать с GitHub.",

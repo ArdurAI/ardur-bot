@@ -80,10 +80,10 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
     window.ardurbotDesktop = {
       platform: "darwin",
       devices: {
-        state: async () => ({ enabled, hints: [] }),
+        state: async () => ({ enabled, hints: [], available: true, mode: "new" }),
         setEnabled: async (value: boolean) => {
           enabled = value;
-          return { enabled, hints: [] };
+          return { enabled, hints: [], available: true, mode: "new" };
         },
       },
     } as typeof window.ardurbotDesktop;
@@ -105,6 +105,25 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   await captureScreenshot(page, testInfo, "settings-devices-pairing");
   await settings.getByRole("button", { name: "Revoke", exact: true }).click();
   await expect(settings.getByText("Test phone · Revoked", { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    window.ardurbotDesktop!.devices!.state = async () => ({
+      enabled: false,
+      hints: [],
+      available: false,
+      mode: "existing",
+    });
+  });
+  await settings.getByTestId("settings-nav-general").click();
+  await settings.getByTestId("settings-nav-devices").click();
+  await expect(
+    settings.getByText(
+      "Phone pairing needs a home run by this app. Set up This computer to use it.",
+    ),
+  ).toBeVisible();
+  await expect(settings.getByLabel("Your phone can reach this Mac on your network.")).toHaveCount(
+    0,
+  );
+  await captureScreenshot(page, testInfo, "settings-devices-existing-instance");
 });
 
 test("activity opens a shared-room task without the personal bot transcript", async ({

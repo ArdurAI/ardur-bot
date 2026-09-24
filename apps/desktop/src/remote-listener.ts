@@ -4,6 +4,8 @@ import { createServer } from "node:https";
 import { networkInterfaces } from "node:os";
 import { isDeviceApiPath } from "@ardurbot/contracts/device-paths";
 
+import { isLoopbackHost } from "./setup-config.js";
+
 export const DEVICE_LISTENER_PORT = 43119;
 export function privateDeviceAddress(address: string): boolean {
   const octets = address.split(".").map(Number);
@@ -36,7 +38,11 @@ export function allowedDeviceRequest(
 /** No cookies, authorization headers, redirects, websocket upgrades, arbitrary targets or RPC forwarding. */
 export function deviceProxy(target: string, request: typeof fetch = fetch) {
   const origin = new URL(target);
-  if (origin.hostname !== "127.0.0.1" || origin.origin !== target || origin.protocol !== "http:")
+  if (
+    !isLoopbackHost(origin.hostname) ||
+    origin.origin !== target ||
+    !["http:", "https:"].includes(origin.protocol)
+  )
     throw new Error("A local home is required.");
   return async (incoming: IncomingMessage, outgoing: ServerResponse) => {
     outgoing.setHeader("cache-control", "no-store");
