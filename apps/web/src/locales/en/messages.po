@@ -117,6 +117,12 @@ msgstr "{0} will still respond to direct mentions."
 msgid "{0}'s screen"
 msgstr "{0}'s screen"
 
+#. placeholder {0}: o.exposedRuns
+#. placeholder {1}: o.before.runs
+#: src/pages/LearningObservation.tsx
+msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
+msgstr "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
+
 #: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "{botName}’s computer"
@@ -188,6 +194,10 @@ msgstr "About groups"
 #: src/pages/shell/bot-picker.tsx
 msgid "About spaces"
 msgstr "About spaces"
+
+#: src/pages/LearningObservation.tsx
+msgid "Acceptance"
+msgstr "Acceptance"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
@@ -371,6 +381,10 @@ msgstr "Agent connections"
 #: src/pages/McpServersOverlay.tsx
 msgid "Agents:"
 msgstr "Agents:"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "All bots"
+msgstr "All bots"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Allow"
@@ -703,6 +717,7 @@ msgid "Bearer token (optional)"
 msgstr "Bearer token (optional)"
 
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Before"
 msgstr "Before"
@@ -758,6 +773,8 @@ msgid "Bot token"
 msgstr "Bot token"
 
 #. placeholder {0}: botName ?? proposal.scope.botId
+#. placeholder {0}: botNames[rule.botId] ?? rule.botId
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Bot: {0}"
 msgstr "Bot: {0}"
@@ -823,6 +840,10 @@ msgstr "Cancel new group"
 #: src/pages/Shell.tsx
 msgid "Cancel reply"
 msgstr "Cancel reply"
+
+#: src/pages/LearningObservation.tsx
+msgid "Cancellations"
+msgstr "Cancellations"
 
 #: src/components/CloudAgentCard.tsx
 msgid "cancelled"
@@ -901,6 +922,10 @@ msgstr "Check in."
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "Check your email"
+
+#: src/pages/LearningCurator.tsx
+msgid "Checked"
+msgstr "Checked"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1227,6 +1252,10 @@ msgstr "Connection lost — reconnecting"
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Connection to {0} is still pending. You can close this and check again."
 
+#: src/pages/LearningCurator.tsx
+msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
+msgstr "Consolidation uses the review connection and may incur model charges. Approval is required."
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1473,6 +1502,10 @@ msgstr "Could not load MCP servers"
 msgid "Could not load model settings"
 msgstr "Could not load model settings"
 
+#: src/pages/LearningObservation.tsx
+msgid "Could not load observations."
+msgstr "Could not load observations."
+
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
 msgstr "Could not load or save tools."
@@ -1485,6 +1518,10 @@ msgstr "Could not load skill"
 msgid "Could not load sync status. Retry."
 msgstr "Could not load sync status. Retry."
 
+#: src/pages/LearningCurator.tsx
+msgid "Could not load the last check."
+msgstr "Could not load the last check."
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
 msgstr "Could not load this account’s tools."
@@ -1496,6 +1533,10 @@ msgstr "Could not load this chat."
 #: src/components/ArtifactFileCard.tsx
 msgid "Could not load this file."
 msgstr "Could not load this file."
+
+#: src/pages/LearningTimeline.tsx
+msgid "Could not load timeline."
+msgstr "Could not load timeline."
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Could not load update status"
@@ -1765,6 +1806,10 @@ msgstr "Cron"
 msgid "Cron expression"
 msgstr "Cron expression"
 
+#: src/pages/LearningCurator.tsx
+msgid "Curator"
+msgstr "Curator"
+
 #: src/pages/LearningInbox.tsx
 msgid "Current"
 msgstr "Current"
@@ -1864,6 +1909,14 @@ msgstr "deleted"
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
 msgstr "Deleting…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Delta"
+msgstr "Delta"
+
+#: src/pages/LearningObservation.tsx
+msgid "Denials"
+msgstr "Denials"
 
 #: src/components/AskCard.tsx
 msgid "Denied"
@@ -2194,6 +2247,14 @@ msgstr "Failed."
 msgid "Failure handling"
 msgstr "Failure handling"
 
+#: src/pages/LearningObservation.tsx
+msgid "Failures"
+msgstr "Failures"
+
+#: src/pages/LearningObservation.tsx
+msgid "Feedback corrections"
+msgstr "Feedback corrections"
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
 msgstr "Find a destination"
@@ -2243,6 +2304,10 @@ msgstr "Finishing MCP connection…"
 msgid "Flag unexpected actions"
 msgstr "Flag unexpected actions"
 
+#: src/pages/LearningCurator.tsx
+msgid "Flags"
+msgstr "Flags"
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Forgot password?"
@@ -2286,6 +2351,10 @@ msgstr "Git repository"
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
 msgstr "GitLab host"
+
+#: src/pages/LearningTimeline.tsx
+msgid "Grant"
+msgstr "Grant"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Grant only the repositories and permissions this bot needs."
@@ -2410,6 +2479,14 @@ msgstr "Import memory bundle"
 msgid "Import OpenAPI JSON"
 msgstr "Import OpenAPI JSON"
 
+#: src/pages/LearningObservation.tsx
+msgid "inappropriate"
+msgstr "inappropriate"
+
+#: src/pages/LearningInbox.tsx
+msgid "Inbox"
+msgstr "Inbox"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
 msgstr "Inbox & email"
@@ -2433,6 +2510,10 @@ msgstr "Instance API key"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "Instruction"
+
+#: src/pages/LearningObservation.tsx
+msgid "integration"
+msgstr "integration"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
@@ -2489,6 +2570,10 @@ msgstr "Jump to replied message"
 msgid "just now"
 msgstr "just now"
 
+#: src/pages/LearningCurator.tsx
+msgid "Keep for recovery"
+msgstr "Keep for recovery"
+
 #: src/pages/shell/dialogs.tsx
 msgid "Keep memories"
 msgstr "Keep memories"
@@ -2508,6 +2593,10 @@ msgstr "Knowledge"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Language"
 msgstr "Language"
+
+#: src/pages/LearningCurator.tsx
+msgid "Last check"
+msgstr "Last check"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -2542,6 +2631,10 @@ msgstr "Learning grant"
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
 msgstr "Learning is off for this space."
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning views"
+msgstr "Learning views"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Leave"
@@ -2590,6 +2683,10 @@ msgstr "Loading integrations…"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
 msgstr "Loading model catalog…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Loading observations…"
+msgstr "Loading observations…"
 
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
@@ -2701,6 +2798,18 @@ msgstr "MCP endpoint"
 #: src/pages/McpServersOverlay.tsx
 msgid "MCP servers"
 msgstr "MCP servers"
+
+#: src/pages/LearningObservation.tsx
+msgid "Mean elapsed time (ms)"
+msgstr "Mean elapsed time (ms)"
+
+#: src/pages/LearningObservation.tsx
+msgid "Mean tokens"
+msgstr "Mean tokens"
+
+#: src/pages/LearningObservation.tsx
+msgid "Measurement details"
+msgstr "Measurement details"
 
 #: src/lib/thinking-level-options.ts
 msgid "medium — balances speed and care"
@@ -2991,6 +3100,10 @@ msgstr "No bots match"
 msgid "No chat apps linked yet."
 msgstr "No chat apps linked yet."
 
+#: src/pages/LearningCurator.tsx
+msgid "No checks yet."
+msgstr "No checks yet."
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "No destinations found."
 msgstr "No destinations found."
@@ -3039,10 +3152,6 @@ msgstr "No messages with {peerBotName} yet."
 msgid "No model catalog is available."
 msgstr "No model catalog is available."
 
-#: src/pages/LearningInbox.tsx
-msgid "no observations yet"
-msgstr "no observations yet"
-
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "No providers found."
@@ -3083,6 +3192,10 @@ msgstr "None yet"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
 msgstr "Not connected"
+
+#: src/pages/LearningObservation.tsx
+msgid "Not enough runs to tell"
+msgstr "Not enough runs to tell"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Not in the plugin catalog"
@@ -3137,6 +3250,10 @@ msgstr "OAuth connection failed"
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth expired"
 msgstr "OAuth expired"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Observations"
+msgstr "Observations"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Obsidian Sync may copy this folder to your other devices"
@@ -3336,6 +3453,10 @@ msgstr "Personal"
 msgid "Personal credential"
 msgstr "Personal credential"
 
+#: src/pages/LearningObservation.tsx
+msgid "pin"
+msgstr "pin"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Pin"
@@ -3348,6 +3469,10 @@ msgstr "Playing…"
 #: src/pages/MemoryHistory.tsx
 msgid "Policy version"
 msgstr "Policy version"
+
+#: src/pages/LearningInbox.tsx
+msgid "Possible regression — review undo"
+msgstr "Possible regression — review undo"
 
 #: src/pages/RoutineEditor.tsx
 msgid "POST to"
@@ -3386,13 +3511,33 @@ msgstr "Private workspace with its own bots and groups."
 msgid "Project ID"
 msgstr "Project ID"
 
+#: src/pages/LearningTimeline.tsx
+msgid "Proposal"
+msgstr "Proposal"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Proposal branch"
 msgstr "Proposal branch"
 
+#: src/pages/LearningCurator.tsx
+msgid "Proposals"
+msgstr "Proposals"
+
+#: src/pages/LearningCurator.tsx
+msgid "Propose consolidation"
+msgstr "Propose consolidation"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Propose on a branch"
 msgstr "Propose on a branch"
+
+#: src/pages/LearningInbox.tsx
+msgid "Proposed consolidation"
+msgstr "Proposed consolidation"
+
+#: src/pages/LearningObservation.tsx
+msgid "provider"
+msgstr "provider"
 
 #: src/pages/Onboarding.tsx
 msgid "Provider"
@@ -3531,6 +3676,10 @@ msgstr "Recovery is unavailable until the previous operation has stopped."
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recovery restores the last saved workspace. Unsaved work may be lost."
 msgstr "Recovery restores the last saved workspace. Unsaved work may be lost."
+
+#: src/pages/LearningCurator.tsx
+msgid "Recovery skill"
+msgstr "Recovery skill"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recreating the computer"
@@ -3732,6 +3881,8 @@ msgstr "Restoring your workspace"
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningObservation.tsx
+#: src/pages/LearningTimeline.tsx
 msgid "Retry"
 msgstr "Retry"
 
@@ -3790,6 +3941,10 @@ msgstr "Revision"
 msgid "Revision {0}"
 msgstr "Revision {0}"
 
+#: src/pages/LearningTimeline.tsx
+msgid "Revision and observations"
+msgstr "Revision and observations"
+
 #: src/pages/DevicesSettings.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -3833,6 +3988,10 @@ msgstr "Run at"
 msgid "Run history"
 msgstr "Run history"
 
+#: src/pages/LearningCurator.tsx
+msgid "Run now"
+msgstr "Run now"
+
 #: src/pages/Shell.tsx
 msgid "Run time must be in the future."
 msgstr "Run time must be in the future."
@@ -3860,6 +4019,10 @@ msgstr "Runs on"
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr "Runs when this bot receives a verified message from this provider."
+
+#: src/pages/LearningObservation.tsx
+msgid "safety"
+msgstr "safety"
 
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -4189,6 +4352,10 @@ msgstr "Slack not enabled"
 msgid "Software update"
 msgstr "Software update"
 
+#: src/pages/LearningInbox.tsx
+msgid "Source revision"
+msgstr "Source revision"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "Space default"
@@ -4226,6 +4393,10 @@ msgstr "Speak this reply"
 msgid "Speaking…"
 msgstr "Speaking…"
 
+#: src/pages/LearningCurator.tsx
+msgid "Stale"
+msgstr "Stale"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "Start recording"
@@ -4239,6 +4410,10 @@ msgstr "Starting"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "Starting…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Steering corrections"
+msgstr "Steering corrections"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Steps"
@@ -4321,6 +4496,14 @@ msgstr "Take control"
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control to open a terminal"
 msgstr "Take control to open a terminal"
+
+#: src/pages/LearningObservation.tsx
+msgid "task"
+msgstr "task"
+
+#: src/pages/LearningObservation.tsx
+msgid "Task contracts"
+msgstr "Task contracts"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Teach a task"
@@ -4486,6 +4669,10 @@ msgstr "This subscription sign-in is not available in Ardur Bot yet. Use a deplo
 msgid "Time of day"
 msgstr "Time of day"
 
+#: src/pages/LearningInbox.tsx
+msgid "Timeline"
+msgstr "Timeline"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Title"
@@ -4493,6 +4680,10 @@ msgstr "Title"
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "To:"
+
+#: src/pages/LearningCurator.tsx
+msgid "tokens"
+msgstr "tokens"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -4534,6 +4725,10 @@ msgstr "Unassigned"
 msgid "Unavailable"
 msgstr "Unavailable"
 
+#: src/pages/LearningObservation.tsx
+msgid "unclassified"
+msgstr "unclassified"
+
 #: src/pages/LearningInbox.tsx
 msgid "Undo"
 msgstr "Undo"
@@ -4545,6 +4740,10 @@ msgstr "Undone"
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr "Uninstall"
+
+#: src/pages/LearningCurator.tsx
+msgid "Unknown"
+msgstr "Unknown"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -4748,6 +4947,10 @@ msgstr "When to use"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Where should bots run?"
+
+#: src/pages/LearningObservation.tsx
+msgid "Window"
+msgstr "Window"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"

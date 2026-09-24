@@ -1263,7 +1263,12 @@ describe("answerRunInput", () => {
     });
     expect(tx.externalEffect.update).toHaveBeenCalledWith({
       where: { id: "effect-1" },
-      data: { status: "approved" },
+      data: {
+        status: "approved",
+        decision: "allow",
+        decisionByUserId: "user-1",
+        decisionAt: expect.any(Date),
+      },
     });
   });
 
@@ -1335,16 +1340,22 @@ describe("answerRunInput", () => {
     expect(tx.task.updateMany).not.toHaveBeenCalled();
     expect(tx.externalEffect.update).toHaveBeenCalledWith({
       where: { id: "effect-1" },
-      data: { status: "approved" },
+      data: {
+        status: "approved",
+        decision: "allow",
+        decisionByUserId: "user-1",
+        decisionAt: expect.any(Date),
+      },
     });
     expect(tx.actionApprovalRule.upsert).toHaveBeenCalledWith({
       where: {
-        spaceId_createdByUserId_effect_matchKind_matchValue: {
+        spaceId_createdByUserId_effect_matchKind_matchValue_scopeKey: {
           spaceId: "workspace-1",
           createdByUserId: "user-1",
           effect: "always_allow",
           matchKind: "tool",
           matchValue: "destination.write",
+          scopeKey: "all",
         },
       },
       create: {

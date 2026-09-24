@@ -19,6 +19,7 @@ afterEach(async () => {
 
 function handlers(overrides: Partial<BackgroundJobHandlers> = {}): BackgroundJobHandlers {
   return {
+    "learning.curate": async () => undefined,
     "learning.review": async () => undefined,
     "memory.git-push": async () => undefined,
     "memory.deliver": async () => undefined,

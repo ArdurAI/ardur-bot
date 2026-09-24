@@ -10,7 +10,7 @@ import {
   learningApprovalBlock,
   RuntimePinSchema,
 } from "@ardurbot/contracts";
-import { parseSkillMd, redactLearningText } from "@ardurbot/core";
+import { isReadPolicyTool, parseSkillMd, redactLearningText } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
@@ -261,6 +261,86 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       policyVersion: review.policyVersion,
     };
   }
+  async function revertChange(
+    tx: Prisma.TransactionClient,
+    proposal: LearningProposal,
+    context: MemoryOperationContext,
+    audit: (action: string, before?: string, after?: string, grantId?: string) => Promise<unknown>,
+    onCommit: (doc: MemoryDocumentHead, context: MemoryOperationContext) => void,
+  ) {
+    const actor = { spaceId: context.spaceId, userId: context.userId };
+    if (proposal.status !== "applied" || !proposal.documentId || !proposal.appliedRevisionId)
+      throw new Error("This suggestion has no applied change to undo.");
+    const head = await target(tx, proposal, context, proposal.documentId, true);
+    if (!head) throw new IsolationError();
+    const revision = Number(proposal.appliedRevisionId.split(":").at(-1));
+    const history = await memory().history(head.id, { cursor: revision + 1, limit: 2 }, context);
+    const applied = history.items.find((item) => item.revision === revision);
+    const parent = history.items.find((item) => item.revision === revision - 1);
+    if (!applied || (revision > 1 && !parent)) throw new IsolationError();
+    const inverse = head.deletedAt
+      ? null
+      : revision === 1
+        ? head.revision === revision
+          ? ""
+          : null
+        : inverseLearningChange(parent!.content, applied.content, head.content);
+    let settingConflict = false;
+    let conflictBefore = parent?.content ?? "";
+    let conflictCurrent = head.content;
+    if (proposal.type === "preference") {
+      const key =
+        proposal.typedDelta!.key === "bot.notifyOnFinish" ? "notifyOnFinish" : "autoSpeak";
+      const bot = await tx.bot.findFirst({ where: { id: proposal.scope.botId, ...actor } });
+      if (!bot) throw new IsolationError();
+      conflictBefore = JSON.stringify({
+        key: proposal.typedDelta!.key,
+        value: proposal.settingBefore,
+      });
+      conflictCurrent = JSON.stringify({ key: proposal.typedDelta!.key, value: bot[key] });
+      settingConflict = bot[key] !== proposal.typedDelta!.value;
+      if (!settingConflict && inverse !== null) {
+        const changed = await tx.bot.updateMany({
+          where: { id: bot!.id, ...actor, [key]: proposal.typedDelta!.value },
+          data: { [key]: proposal.settingBefore },
+        });
+        settingConflict = changed.count !== 1;
+      }
+    }
+    if (inverse === null || settingConflict) {
+      await audit("revert-conflict", proposal.appliedRevisionId, `${head.id}:${head.revision}`);
+      return {
+        proposal,
+        conflict: {
+          before: redactLearningText(conflictBefore, context.knownSecrets),
+          applied: redactLearningText(applied.content, context.knownSecrets),
+          current: redactLearningText(conflictCurrent, context.knownSecrets),
+          expectedRevision: head.revision,
+        },
+      };
+    }
+    await attribution(tx, proposal, context, head.revision, "revert");
+    const doc =
+      revision === 1
+        ? await memory().delete(head.id, head.revision, context)
+        : await memory().update(head.id, inverse, head.revision, context);
+    if (proposal.type === "skill") {
+      const metadata = doc.deletedAt ? null : parseSkillMd(doc.content);
+      if (metadata && "error" in metadata) throw new Error("Review this skill before undoing it.");
+      await tx.agentSkill.updateMany({
+        where: { documentId: doc.id, ...actor },
+        data: {
+          activeRevision: doc.revision,
+          ...(metadata ? { name: metadata.name, description: metadata.description } : {}),
+        },
+      });
+    }
+    proposal.status = "reverted";
+    await audit("revert", `${head.id}:${head.revision}`, `${doc.id}:${doc.revision}`);
+    const saved = await save(tx, proposal, { revertedRevisionId: `${doc.id}:${doc.revision}` });
+    onCommit(doc, context);
+    return { proposal: saved };
+  }
   async function apply(id: string, actor: Identity, edits?: LearningEdit, grantId?: string) {
     actor = { spaceId: actor.spaceId, userId: actor.userId };
     let committed: { doc: MemoryDocumentHead; context: MemoryOperationContext } | undefined;
@@ -290,6 +370,76 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
           where: { grantId, action: "auto-apply", createdAt: { gte: day } },
         });
         if (used >= grant.maxPerDay) throw new Error("The daily learning limit has been reached.");
+      }
+      if (proposal.operation === "revert-suggestion") {
+        if (grantId || edits || !proposal.revertsProposalId)
+          throw new Error("Approve this revert explicitly.");
+        const originalRow = await tx.learningProposal.findFirst({
+          where: { id: proposal.revertsProposalId, ...actor },
+        });
+        if (!originalRow) throw new IsolationError();
+        const original = proposalView(originalRow);
+        if (
+          original.scope.botId !== proposal.scope.botId ||
+          original.type !== proposal.type ||
+          original.appliedRevisionId !== proposal.observation?.revisionId ||
+          original.documentId !== proposal.target.documentId
+        )
+          throw new IsolationError();
+        const result = await revertChange(tx, original, context, audit, (doc, context) => {
+          committed = { doc, context };
+        });
+        if (result.conflict) return { proposal, conflict: result.conflict };
+        proposal.status = "reverted";
+        await audit(
+          "approve-revert",
+          original.appliedRevisionId,
+          result.proposal.revertedRevisionId,
+        );
+        return {
+          proposal: await save(tx, proposal, {
+            appliedAt: new Date(),
+            revertedRevisionId: result.proposal.revertedRevisionId,
+          }),
+        };
+      }
+      if (proposal.type === "policy-suggestion") {
+        if (
+          grantId ||
+          edits ||
+          !proposal.policyTool ||
+          !proposal.scope.botId ||
+          !isReadPolicyTool(proposal.policyTool)
+        )
+          throw new Error("Approve a read-only policy for one bot explicitly.");
+        const match = {
+          spaceId: actor.spaceId,
+          createdByUserId: actor.userId,
+          effect: "always_allow",
+          matchKind: "tool",
+          matchValue: proposal.policyTool,
+          scopeKey: `bot:${proposal.scope.botId}`,
+        };
+        const rule = await tx.actionApprovalRule.upsert({
+          where: { spaceId_createdByUserId_effect_matchKind_matchValue_scopeKey: match },
+          create: { ...match, botId: proposal.scope.botId },
+          update: {},
+        });
+        proposal.policyRuleId = rule.id;
+        proposal.status = "applied";
+        await audit("approve-policy");
+        return { proposal: await save(tx, proposal, { appliedAt: new Date() }) };
+      }
+      if (proposal.operation === "consolidation") {
+        if (grantId) throw new Error("Approve consolidation explicitly.");
+        for (const participant of proposal.participatingRevisions ?? []) {
+          const current = await target(tx, proposal, context, participant.documentId);
+          if (!current || current.revision !== participant.revision) {
+            proposal.status = "superseded";
+            await audit("superseded");
+            return { proposal: await save(tx, proposal) };
+          }
+        }
       }
       const head = await target(tx, proposal, context);
       if ((head?.revision ?? 0) !== (proposal.expectedBaseRevision ?? 0)) {
@@ -402,7 +552,11 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       return operation(id, actor, async (tx, proposal, context, audit) => {
         if (proposal.status !== "pending" || new Date(proposal.expiresAt) <= new Date())
           throw new Error("This suggestion is no longer pending.");
-        if (learningApprovalBlock(proposal))
+        if (
+          proposal.operation ||
+          proposal.type === "policy-suggestion" ||
+          learningApprovalBlock(proposal)
+        )
           throw new Error("This suggestion cannot be edited here.");
         const head = await target(tx, proposal, context);
         await editContent(tx, proposal, context, edits, head);
@@ -419,7 +573,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
           await tx.learningSuppression.upsert({
             where: { spaceId_userId_fingerprint: { ...actor, fingerprint } },
             create: { ...actor, fingerprint },
-            update: {},
+            update: proposal.type === "policy-suggestion" ? { createdAt: new Date() } : {},
           });
         proposal.status = "rejected";
         await audit("reject");
@@ -430,82 +584,9 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       actor = { spaceId: actor.spaceId, userId: actor.userId };
       let committed: { doc: MemoryDocumentHead; context: MemoryOperationContext } | undefined;
       const result = await operation(id, actor, async (tx, proposal, context, audit) => {
-        if (proposal.status !== "applied" || !proposal.documentId || !proposal.appliedRevisionId)
-          throw new Error("This suggestion has no applied change to undo.");
-        const head = await target(tx, proposal, context, proposal.documentId, true);
-        if (!head) throw new IsolationError();
-        const revision = Number(proposal.appliedRevisionId.split(":").at(-1));
-        const history = await memory().history(
-          head.id,
-          { cursor: revision + 1, limit: 2 },
-          context,
-        );
-        const applied = history.items.find((item) => item.revision === revision);
-        const parent = history.items.find((item) => item.revision === revision - 1);
-        if (!applied || (revision > 1 && !parent)) throw new IsolationError();
-        const inverse = head.deletedAt
-          ? null
-          : revision === 1
-            ? head.revision === revision
-              ? ""
-              : null
-            : inverseLearningChange(parent!.content, applied.content, head.content);
-        let settingConflict = false;
-        let conflictBefore = parent?.content ?? "";
-        let conflictCurrent = head.content;
-        if (proposal.type === "preference") {
-          const key =
-            proposal.typedDelta!.key === "bot.notifyOnFinish" ? "notifyOnFinish" : "autoSpeak";
-          const bot = await tx.bot.findFirst({ where: { id: proposal.scope.botId, ...actor } });
-          if (!bot) throw new IsolationError();
-          conflictBefore = JSON.stringify({
-            key: proposal.typedDelta!.key,
-            value: proposal.settingBefore,
-          });
-          conflictCurrent = JSON.stringify({ key: proposal.typedDelta!.key, value: bot[key] });
-          settingConflict = bot[key] !== proposal.typedDelta!.value;
-          if (!settingConflict && inverse !== null) {
-            const changed = await tx.bot.updateMany({
-              where: { id: bot!.id, ...actor, [key]: proposal.typedDelta!.value },
-              data: { [key]: proposal.settingBefore },
-            });
-            settingConflict = changed.count !== 1;
-          }
-        }
-        if (inverse === null || settingConflict) {
-          await audit("revert-conflict", proposal.appliedRevisionId, `${head.id}:${head.revision}`);
-          return {
-            proposal,
-            conflict: {
-              before: redactLearningText(conflictBefore, context.knownSecrets),
-              applied: redactLearningText(applied.content, context.knownSecrets),
-              current: redactLearningText(conflictCurrent, context.knownSecrets),
-              expectedRevision: head.revision,
-            },
-          };
-        }
-        await attribution(tx, proposal, context, head.revision, "revert");
-        const doc =
-          revision === 1
-            ? await memory().delete(head.id, head.revision, context)
-            : await memory().update(head.id, inverse, head.revision, context);
-        if (proposal.type === "skill") {
-          const metadata = doc.deletedAt ? null : parseSkillMd(doc.content);
-          if (metadata && "error" in metadata)
-            throw new Error("Review this skill before undoing it.");
-          await tx.agentSkill.updateMany({
-            where: { documentId: doc.id, ...actor },
-            data: {
-              activeRevision: doc.revision,
-              ...(metadata ? { name: metadata.name, description: metadata.description } : {}),
-            },
-          });
-        }
-        proposal.status = "reverted";
-        await audit("revert", `${head.id}:${head.revision}`, `${doc.id}:${doc.revision}`);
-        const saved = await save(tx, proposal, { revertedRevisionId: `${doc.id}:${doc.revision}` });
-        committed = { doc, context };
-        return { proposal: saved };
+        return revertChange(tx, proposal, context, audit, (doc, context) => {
+          committed = { doc, context };
+        });
       });
       if (committed) await memory().schedule(committed.doc, committed.context);
       return result;

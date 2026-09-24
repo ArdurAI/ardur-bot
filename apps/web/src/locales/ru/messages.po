@@ -117,6 +117,12 @@ msgstr "{0} по-прежнему будет отвечать на прямые 
 msgid "{0}'s screen"
 msgstr "Экран {0}"
 
+#. placeholder {0}: o.exposedRuns
+#. placeholder {1}: o.before.runs
+#: src/pages/LearningObservation.tsx
+msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "Компьютер {botName}"
@@ -188,6 +194,10 @@ msgstr "О группах"
 #: src/pages/shell/bot-picker.tsx
 msgid "About spaces"
 msgstr "О пространствах"
+
+#: src/pages/LearningObservation.tsx
+msgid "Acceptance"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
@@ -371,6 +381,10 @@ msgstr "Подключения агента"
 #: src/pages/McpServersOverlay.tsx
 msgid "Agents:"
 msgstr "Агенты:"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "All bots"
+msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Allow"
@@ -703,6 +717,7 @@ msgid "Bearer token (optional)"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Before"
 msgstr ""
@@ -758,6 +773,8 @@ msgid "Bot token"
 msgstr ""
 
 #. placeholder {0}: botName ?? proposal.scope.botId
+#. placeholder {0}: botNames[rule.botId] ?? rule.botId
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Bot: {0}"
 msgstr ""
@@ -823,6 +840,10 @@ msgstr "Отменить создание группы"
 #: src/pages/Shell.tsx
 msgid "Cancel reply"
 msgstr "Отменить ответ"
+
+#: src/pages/LearningObservation.tsx
+msgid "Cancellations"
+msgstr ""
 
 #: src/components/CloudAgentCard.tsx
 msgid "cancelled"
@@ -901,6 +922,10 @@ msgstr "Проверить."
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "Проверьте свою электронную почту"
+
+#: src/pages/LearningCurator.tsx
+msgid "Checked"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1227,6 +1252,10 @@ msgstr ""
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Соединение с {0} все еще не завершено. Вы можете закрыть это и проверить еще раз."
 
+#: src/pages/LearningCurator.tsx
+msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1473,6 +1502,10 @@ msgstr "Не удалось загрузить серверы MCP."
 msgid "Could not load model settings"
 msgstr "Не удалось загрузить настройки модели."
 
+#: src/pages/LearningObservation.tsx
+msgid "Could not load observations."
+msgstr ""
+
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
 msgstr ""
@@ -1483,6 +1516,10 @@ msgstr "Не удалось загрузить навык"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Could not load sync status. Retry."
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Could not load the last check."
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -1496,6 +1533,10 @@ msgstr "Не удалось загрузить этот чат."
 #: src/components/ArtifactFileCard.tsx
 msgid "Could not load this file."
 msgstr "Не удалось загрузить этот файл."
+
+#: src/pages/LearningTimeline.tsx
+msgid "Could not load timeline."
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Could not load update status"
@@ -1765,6 +1806,10 @@ msgstr "Крон"
 msgid "Cron expression"
 msgstr "Выражение Cron"
 
+#: src/pages/LearningCurator.tsx
+msgid "Curator"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Current"
 msgstr ""
@@ -1864,6 +1909,14 @@ msgstr "удалено"
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
 msgstr "Удаление…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Delta"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Denials"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Denied"
@@ -2194,6 +2247,14 @@ msgstr "Неуспешный."
 msgid "Failure handling"
 msgstr "Обработка сбоев"
 
+#: src/pages/LearningObservation.tsx
+msgid "Failures"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Feedback corrections"
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
 msgstr ""
@@ -2243,6 +2304,10 @@ msgstr "Завершение подключения MCP…"
 msgid "Flag unexpected actions"
 msgstr "Пометить неожиданные действия"
 
+#: src/pages/LearningCurator.tsx
+msgid "Flags"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Забыли пароль?"
@@ -2285,6 +2350,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
+msgstr ""
+
+#: src/pages/LearningTimeline.tsx
+msgid "Grant"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -2410,6 +2479,14 @@ msgstr ""
 msgid "Import OpenAPI JSON"
 msgstr "Импортировать OpenAPI JSON"
 
+#: src/pages/LearningObservation.tsx
+msgid "inappropriate"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Inbox"
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
 msgstr ""
@@ -2433,6 +2510,10 @@ msgstr "Ключ API экземпляра"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "Инструкция"
+
+#: src/pages/LearningObservation.tsx
+msgid "integration"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
@@ -2489,6 +2570,10 @@ msgstr "Перейти к ответному сообщению"
 msgid "just now"
 msgstr "только что"
 
+#: src/pages/LearningCurator.tsx
+msgid "Keep for recovery"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Keep memories"
 msgstr "Сохранить память"
@@ -2508,6 +2593,10 @@ msgstr "Знание"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Language"
 msgstr "Язык"
+
+#: src/pages/LearningCurator.tsx
+msgid "Last check"
+msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -2541,6 +2630,10 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning views"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2590,6 +2683,10 @@ msgstr "Загрузка интеграций…"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
 msgstr "Загрузка каталога моделей…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Loading observations…"
+msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
@@ -2701,6 +2798,18 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "MCP servers"
 msgstr "MCP-серверы"
+
+#: src/pages/LearningObservation.tsx
+msgid "Mean elapsed time (ms)"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Mean tokens"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Measurement details"
+msgstr ""
 
 #: src/lib/thinking-level-options.ts
 msgid "medium — balances speed and care"
@@ -2991,6 +3100,10 @@ msgstr "Ни один бот не подходит"
 msgid "No chat apps linked yet."
 msgstr "Приложения для чата пока не связаны."
 
+#: src/pages/LearningCurator.tsx
+msgid "No checks yet."
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "No destinations found."
 msgstr ""
@@ -3039,10 +3152,6 @@ msgstr "Сообщений с {peerBotName} пока нет."
 msgid "No model catalog is available."
 msgstr "Каталога моделей нет."
 
-#: src/pages/LearningInbox.tsx
-msgid "no observations yet"
-msgstr ""
-
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "Поставщики не найдены."
@@ -3083,6 +3192,10 @@ msgstr "Пока нет"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
 msgstr "Не подключено"
+
+#: src/pages/LearningObservation.tsx
+msgid "Not enough runs to tell"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Not in the plugin catalog"
@@ -3137,6 +3250,10 @@ msgstr "Соединение OAuth не удалось"
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth expired"
 msgstr "Срок действия OAuth истек"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Observations"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Obsidian Sync may copy this folder to your other devices"
@@ -3336,6 +3453,10 @@ msgstr ""
 msgid "Personal credential"
 msgstr "Личные учётные данные"
 
+#: src/pages/LearningObservation.tsx
+msgid "pin"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Закрепить"
@@ -3347,6 +3468,10 @@ msgstr "Воспроизведение…"
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Policy version"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Possible regression — review undo"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -3386,12 +3511,32 @@ msgstr "Приватное пространство со своими ботам
 msgid "Project ID"
 msgstr "ID проекта"
 
+#: src/pages/LearningTimeline.tsx
+msgid "Proposal"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Proposal branch"
 msgstr ""
 
+#: src/pages/LearningCurator.tsx
+msgid "Proposals"
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Propose consolidation"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Propose on a branch"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Proposed consolidation"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "provider"
 msgstr ""
 
 #: src/pages/Onboarding.tsx
@@ -3531,6 +3676,10 @@ msgstr "Восстановление недоступно, пока не зав�
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recovery restores the last saved workspace. Unsaved work may be lost."
 msgstr "Восстановление возвращает последнее сохраненное рабочее пространство. Несохраненные изменения могут быть потеряны."
+
+#: src/pages/LearningCurator.tsx
+msgid "Recovery skill"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recreating the computer"
@@ -3732,6 +3881,8 @@ msgstr "Восстановление вашего рабочего простр�
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningObservation.tsx
+#: src/pages/LearningTimeline.tsx
 msgid "Retry"
 msgstr ""
 
@@ -3790,6 +3941,10 @@ msgstr ""
 msgid "Revision {0}"
 msgstr ""
 
+#: src/pages/LearningTimeline.tsx
+msgid "Revision and observations"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -3833,6 +3988,10 @@ msgstr "Запустить в"
 msgid "Run history"
 msgstr "История запуска"
 
+#: src/pages/LearningCurator.tsx
+msgid "Run now"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Run time must be in the future."
 msgstr "Время выполнения должно быть в будущем."
@@ -3860,6 +4019,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr "Запускается, когда этот бот получает проверенное сообщение от этого провайдера."
+
+#: src/pages/LearningObservation.tsx
+msgid "safety"
+msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -4189,6 +4352,10 @@ msgstr "Slack не включен"
 msgid "Software update"
 msgstr "Обновление программного обеспечения"
 
+#: src/pages/LearningInbox.tsx
+msgid "Source revision"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "Пространство по умолчанию"
@@ -4226,6 +4393,10 @@ msgstr "Озвучить этот ответ"
 msgid "Speaking…"
 msgstr "Озвучивание…"
 
+#: src/pages/LearningCurator.tsx
+msgid "Stale"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "Начать запись"
@@ -4239,6 +4410,10 @@ msgstr "Запуск"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "Запуск…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Steering corrections"
+msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Steps"
@@ -4320,6 +4495,14 @@ msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control to open a terminal"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "task"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Task contracts"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -4486,6 +4669,10 @@ msgstr "Вход по этой подписке пока недоступен в
 msgid "Time of day"
 msgstr "Время суток"
 
+#: src/pages/LearningInbox.tsx
+msgid "Timeline"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Заголовок"
@@ -4493,6 +4680,10 @@ msgstr "Заголовок"
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "К:"
+
+#: src/pages/LearningCurator.tsx
+msgid "tokens"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -4534,6 +4725,10 @@ msgstr "Без раздела"
 msgid "Unavailable"
 msgstr "Недоступно"
 
+#: src/pages/LearningObservation.tsx
+msgid "unclassified"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Undo"
 msgstr ""
@@ -4545,6 +4740,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr "Удалить"
+
+#: src/pages/LearningCurator.tsx
+msgid "Unknown"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -4748,6 +4947,10 @@ msgstr "Когда использовать"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Где должны работать боты?"
+
+#: src/pages/LearningObservation.tsx
+msgid "Window"
+msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"

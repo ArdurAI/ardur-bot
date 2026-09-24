@@ -7,6 +7,8 @@ import { createLearningApplyService } from "./learning-apply.js";
 import { applyGrantedLearning } from "./learning-auto-apply.js";
 import { createLearningGrants } from "./learning-grants.js";
 import { inverseLearningChange } from "./learning-inverse.js";
+import { projectLearningObservation } from "./learning-outcomes.js";
+import { policySuppressed } from "./learning-policy.js";
 import { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 import { parseRevisionMarkdown, revisionMarkdown } from "./memory/markdown-files.js";
 
@@ -96,6 +98,9 @@ function fixture() {
     learningGrant: table(grants),
     learningSuppression: table(suppressions),
     agentSkill: table(skills),
+    actionApprovalRule: {
+      upsert: vi.fn(async ({ create }: { create: Row }) => ({ id: "rule", ...create })),
+    },
     spaceMember: table([{ ...actor, role: "owner" }]),
     bot: table([bot]),
     thread: table([thread]),
@@ -647,4 +652,93 @@ it("shows the actual visible setting when an intervening preference edit conflic
   const result = await f.apply.revert(proposal.id, actor);
   expect(JSON.parse(result.conflict!.current)).toEqual({ key: "bot.autoSpeak", value: false });
   expect(f.bot.autoSpeak).toBe(false);
+});
+
+it("applies a read policy only by human approval and stores the exact bot scope", async () => {
+  const f = fixture();
+  const p = await f.proposal(undefined, {
+    type: "policy-suggestion",
+    policyTool: "GMAIL_LIST_MESSAGES",
+    proposedContent: undefined,
+    typedDelta: { key: "approval.tool", value: "GMAIL_LIST_MESSAGES" },
+  });
+  await expect(f.apply.autoApply(p.id, f.grant().id as string)).rejects.toThrow();
+  expect(f.db.actionApprovalRule.upsert).not.toHaveBeenCalled();
+  const result = await f.apply.approve(p.id, actor);
+  expect(result.proposal.status).toBe("applied");
+  expect(result.proposal.policyRuleId).toBe("rule");
+  expect(f.db.actionApprovalRule.upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      create: expect.objectContaining({
+        botId: "bot",
+        scopeKey: "bot:bot",
+        effect: "always_allow",
+        matchKind: "tool",
+        matchValue: "GMAIL_LIST_MESSAGES",
+      }),
+    }),
+  );
+  expect(f.memoryDb.revisions).toHaveLength(0);
+});
+it("refuses consequential policy suggestions even on the manual apply path", async () => {
+  const f = fixture();
+  const p = await f.proposal(undefined, {
+    type: "policy-suggestion",
+    policyTool: "GMAIL_SEND_EMAIL",
+    proposedContent: undefined,
+    typedDelta: { key: "approval.tool", value: "GMAIL_SEND_EMAIL" },
+  });
+  await expect(f.apply.approve(p.id, actor)).rejects.toThrow();
+  expect(f.db.actionApprovalRule.upsert).not.toHaveBeenCalled();
+});
+it("rejecting a policy suggestion suppresses it for thirty days without writing an approval rule", async () => {
+  const f = fixture();
+  const p = await f.proposal(undefined, {
+    type: "policy-suggestion",
+    policyTool: "GMAIL_LIST_MESSAGES",
+    proposedContent: undefined,
+    typedDelta: { key: "approval.tool", value: "GMAIL_LIST_MESSAGES" },
+  });
+  f.suppressions.push({
+    ...actor,
+    fingerprint: proposalFingerprint(p),
+    createdAt: new Date("2020-01-01Z"),
+  });
+  await f.apply.reject(p.id, actor);
+  expect(f.db.actionApprovalRule.upsert).not.toHaveBeenCalled();
+  const rejectedAt = f.suppressions[0]!.createdAt as Date;
+  expect(rejectedAt.getTime()).toBeGreaterThan(new Date("2020-01-01Z").getTime());
+  expect(policySuppressed(rejectedAt, new Date(rejectedAt.getTime() + 29 * 86400000))).toBe(true);
+  expect(policySuppressed(rejectedAt, new Date(rejectedAt.getTime() + 30 * 86400000))).toBe(false);
+});
+it("requires human approval for curator reverts and shares Undo's revision path", async () => {
+  const f = fixture();
+  const original = await f.proposal("Original instruction.");
+  const applied = (await f.apply.approve(original.id, actor)).proposal;
+  const suggestion = await f.proposal(undefined, {
+    operation: "revert-suggestion",
+    revertsProposalId: original.id,
+    target: { documentId: applied.documentId },
+    proposedContent: "",
+    observation: { revisionId: applied.appliedRevisionId } as never,
+  });
+  // Stored observations are validated contracts, not arbitrary rationale text.
+  const row = f.proposals.find((r) => r.id === suggestion.id)!;
+  (row.body as LearningProposal).observation = projectLearningObservation({
+    documentId: applied.documentId!,
+    revisionId: applied.appliedRevisionId!,
+    createdAt: new Date(),
+    now: new Date(),
+    runs: [],
+    exposures: [],
+  });
+  await expect(f.apply.autoApply(suggestion.id, f.grant().id as string)).rejects.toThrow();
+  expect((await f.service.read(applied.documentId!, f.context))!.content).toBe(
+    "Use numbered steps.",
+  );
+  expect((await f.apply.approve(suggestion.id, actor)).proposal.status).toBe("reverted");
+  expect((await f.service.read(applied.documentId!, f.context))!.content).toBe(
+    "Original instruction.",
+  );
+  expect(f.proposals.find((r) => r.id === original.id)!.status).toBe("reverted");
 });

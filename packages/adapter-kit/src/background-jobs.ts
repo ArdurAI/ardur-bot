@@ -7,6 +7,11 @@ import type {
 } from "./types.js";
 
 const payloadSchemas = {
+  "learning.curate": z.object({
+    spaceId: z.string().min(1).optional(),
+    requestedBy: z.string().min(1).optional(),
+    requestId: z.string().min(1).optional(),
+  }),
   "memory.git-push": z.object({
     spaceId: z.string().min(1),
     userId: z.string().min(1),

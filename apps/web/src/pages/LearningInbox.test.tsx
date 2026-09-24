@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
+  proposal: vi.fn(),
   summary: vi.fn(),
   settings: vi.fn(),
   grants: vi.fn(),
@@ -15,6 +16,11 @@ const api = vi.hoisted(() => ({
   revert: vi.fn(),
   evidence: vi.fn(),
   configure: vi.fn(),
+  observation: vi.fn(),
+  journey: vi.fn(),
+  curator: vi.fn(),
+  curate: vi.fn(),
+  skillCare: vi.fn(),
 }));
 vi.mock("../lib/rpc", () => ({ rpc: { learning: api } }));
 vi.mock("@lingui/react/macro", () => ({
@@ -25,6 +31,10 @@ vi.mock("@lingui/react/macro", () => ({
   }),
 }));
 vi.mock("@ardurbot/ui-web", () => ({
+  Tabs: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  TabsList: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  TabsContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  TabsTrigger: ({ children }: { children: ReactNode }) => <button type="button">{children}</button>,
   Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
     <button {...props} />
   ),
@@ -48,6 +58,32 @@ vi.mock("@ardurbot/ui-web", () => ({
 
 import { LearningInbox } from "./LearningInbox";
 
+const observation = {
+  documentId: "doc",
+  revisionId: "doc:2",
+  exposedRuns: 1,
+  correctionsAfter: { feedback: 1, steering: 0 },
+  before: {
+    runs: 9,
+    comparableExposedRuns: 1,
+    corrections: { feedback: 3, steering: 0 },
+    window: { from: "2026-09-03T00:00:00.000Z", to: "2026-09-10T00:00:00.000Z" },
+  },
+  denialsAfter: { inappropriate: 0, safety: 0, unknown: 0 },
+  failuresAfter: { task: 0, integration: 0, provider: 0, pin: 0, unknown: 0 },
+  cancellationsAfter: 0,
+  acceptance: { accepted: 0, evaluated: 0, contracts: 0 },
+  timeTokensDelta: {
+    timeMs: { beforeSamples: 9, afterSamples: 1, beforeMean: 60000, afterMean: 60000, delta: null },
+    tokens: { beforeSamples: 9, afterSamples: 1, beforeMean: 100, afterMean: 100, delta: null },
+  },
+  window: { from: "2026-09-10T00:00:00.000Z", to: "2026-09-17T00:00:00.000Z" },
+  missing: [
+    "No feedback is not approval.",
+    "Task-contract acceptance is unavailable.",
+    "Not enough runs to tell",
+  ],
+};
 const proposal = {
   id: "proposal",
   type: "memory",
@@ -77,6 +113,26 @@ beforeEach(() => {
   api.summary.mockImplementation(() => api.list());
   api.settings.mockResolvedValue({ enabled: true, canConfigure: false });
   api.grants.mockResolvedValue({ grants: [], offers: [] });
+  api.journey.mockResolvedValue([]);
+  api.curator.mockResolvedValue({ reports: [], skills: [] });
+  api.observation.mockResolvedValue(observation);
+  api.proposal.mockResolvedValue(proposal);
+});
+it("opens an older timeline proposal even when it is outside the inbox page", async () => {
+  api.list.mockResolvedValue({ reviews: [], proposals: [], pendingCount: 0, appliedThisWeek: 0 });
+  api.journey.mockResolvedValue([
+    {
+      id: "audit:old",
+      at: "2026-09-01T00:00:00Z",
+      action: "curator-policy",
+      proposalId: proposal.id,
+    },
+  ]);
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  await click("Proposal");
+  expect(api.proposal).toHaveBeenCalledWith({ proposalId: proposal.id });
+  expect(container.querySelector("article details")?.hasAttribute("open")).toBe(true);
+  expect(container.textContent).toContain(proposal.proposedContent);
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -116,7 +172,14 @@ it("separates pending copy from applied copy, approves without removing the card
   expect(container.querySelector("article")).toBe(card);
   expect(container.textContent).toContain("learned 1 things this week");
   expect(container.textContent).toContain("Applied");
-  expect(container.textContent).toContain("no observations yet");
+  await act(async () => {
+    const details = container.querySelector("article details")! as HTMLDetailsElement;
+    details.open = true;
+    details.dispatchEvent(new Event("toggle", { bubbles: true }));
+  });
+  expect(container.textContent).toContain("Not enough runs to tell");
+  expect(container.textContent).toContain("No feedback is not approval");
+  expect(api.observation).toHaveBeenCalledWith({ documentId: "document", revision: 1 });
   api.revert.mockImplementation(async () => {
     api.list.mockResolvedValue({
       reviews: [],

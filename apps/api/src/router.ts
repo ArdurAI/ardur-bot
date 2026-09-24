@@ -2757,6 +2757,20 @@ export function createRouter(deps: RouterDeps) {
       ),
     },
     learning: {
+      proposal: authed.learning.proposal.handler(({ context, input }) =>
+        learning.proposal(context.actor, input.proposalId),
+      ),
+      observation: authed.learning.observation.handler(({ context, input }) =>
+        learning.observation(context.actor, input.documentId, input.revision),
+      ),
+      journey: authed.learning.journey.handler(({ context, input }) =>
+        learning.journey(context.actor, input.botId),
+      ),
+      curator: authed.learning.curator.handler(({ context }) => learning.curator(context.actor)),
+      curate: authed.learning.curate.handler(({ context }) => learning.curate(context.actor)),
+      skillCare: authed.learning.skillCare.handler(({ context, input }) =>
+        learning.skillCare(context.actor, input.skillId, input.lifecycleTag),
+      ),
       summary: authed.learning.summary.handler(({ context, input }) =>
         learning.summary(context.actor, input.botId),
       ),
@@ -4555,18 +4569,21 @@ export function createRouter(deps: RouterDeps) {
           effect: row.effect as "always_allow" | "require_approval",
           matchKind: row.matchKind as "tool" | "connector" | "category",
           matchValue: row.matchValue,
+          botId: row.botId,
           createdAt: row.createdAt.toISOString(),
         }));
       }),
       set: authed.approvalRules.set.handler(async ({ context, input }) => {
+        if (input.botId) await learning.assertBot(context.actor, input.botId);
         const row = await deps.prisma.actionApprovalRule.upsert({
           where: {
-            spaceId_createdByUserId_effect_matchKind_matchValue: {
+            spaceId_createdByUserId_effect_matchKind_matchValue_scopeKey: {
               spaceId: context.actor.spaceId,
               createdByUserId: context.actor.userId,
               effect: input.effect,
               matchKind: input.matchKind,
               matchValue: input.matchValue,
+              scopeKey: input.botId ? `bot:${input.botId}` : "all",
             },
           },
           create: {
@@ -4575,6 +4592,8 @@ export function createRouter(deps: RouterDeps) {
             effect: input.effect,
             matchKind: input.matchKind,
             matchValue: input.matchValue,
+            botId: input.botId,
+            scopeKey: input.botId ? `bot:${input.botId}` : "all",
           },
           update: {},
         });
@@ -4583,6 +4602,7 @@ export function createRouter(deps: RouterDeps) {
           effect: row.effect as "always_allow" | "require_approval",
           matchKind: row.matchKind as "tool" | "connector" | "category",
           matchValue: row.matchValue,
+          botId: row.botId,
           createdAt: row.createdAt.toISOString(),
         };
       }),
@@ -4740,6 +4760,7 @@ export function createRouter(deps: RouterDeps) {
         ]);
         return {
           version: 1 as const,
+          learning: await learning.exportLearning(context.actor, input.botId),
           exportedAt: new Date().toISOString(),
           bot: {
             name: bot.name,

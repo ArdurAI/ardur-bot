@@ -117,6 +117,12 @@ msgstr ""
 msgid "{0}'s screen"
 msgstr "{0}의 화면"
 
+#. placeholder {0}: o.exposedRuns
+#. placeholder {1}: o.before.runs
+#: src/pages/LearningObservation.tsx
+msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "{botName}의 컴퓨터"
@@ -187,6 +193,10 @@ msgstr ""
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About spaces"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Acceptance"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -371,6 +381,10 @@ msgstr "Agent 연결"
 #: src/pages/McpServersOverlay.tsx
 msgid "Agents:"
 msgstr "사용 Bot:"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "All bots"
+msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Allow"
@@ -703,6 +717,7 @@ msgid "Bearer token (optional)"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Before"
 msgstr ""
@@ -758,6 +773,8 @@ msgid "Bot token"
 msgstr ""
 
 #. placeholder {0}: botName ?? proposal.scope.botId
+#. placeholder {0}: botNames[rule.botId] ?? rule.botId
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Bot: {0}"
 msgstr ""
@@ -823,6 +840,10 @@ msgstr "새 그룹 만들기 취소"
 #: src/pages/Shell.tsx
 msgid "Cancel reply"
 msgstr "답장 취소"
+
+#: src/pages/LearningObservation.tsx
+msgid "Cancellations"
+msgstr ""
 
 #: src/components/CloudAgentCard.tsx
 msgid "cancelled"
@@ -901,6 +922,10 @@ msgstr "확인해 주세요."
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "이메일을 확인하세요"
+
+#: src/pages/LearningCurator.tsx
+msgid "Checked"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1227,6 +1252,10 @@ msgstr ""
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} 연결이 아직 진행 중입니다. 이 창을 닫고 나중에 다시 확인할 수 있습니다."
 
+#: src/pages/LearningCurator.tsx
+msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1473,6 +1502,10 @@ msgstr "MCP 서버 목록을 불러오지 못했습니다."
 msgid "Could not load model settings"
 msgstr "AI 모델 설정을 불러오지 못했습니다."
 
+#: src/pages/LearningObservation.tsx
+msgid "Could not load observations."
+msgstr ""
+
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
 msgstr ""
@@ -1483,6 +1516,10 @@ msgstr "스킬을 불러오지 못했습니다"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Could not load sync status. Retry."
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Could not load the last check."
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -1496,6 +1533,10 @@ msgstr "이 채팅을 불러오지 못했습니다."
 #: src/components/ArtifactFileCard.tsx
 msgid "Could not load this file."
 msgstr "파일을 불러오지 못했습니다."
+
+#: src/pages/LearningTimeline.tsx
+msgid "Could not load timeline."
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Could not load update status"
@@ -1765,6 +1806,10 @@ msgstr "Cron"
 msgid "Cron expression"
 msgstr "Cron 표현식"
 
+#: src/pages/LearningCurator.tsx
+msgid "Curator"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Current"
 msgstr ""
@@ -1864,6 +1909,14 @@ msgstr "삭제됨"
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
 msgstr "삭제 중…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Delta"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Denials"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Denied"
@@ -2194,6 +2247,14 @@ msgstr "실패했습니다."
 msgid "Failure handling"
 msgstr "실패했을 때 처리"
 
+#: src/pages/LearningObservation.tsx
+msgid "Failures"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Feedback corrections"
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
 msgstr ""
@@ -2243,6 +2304,10 @@ msgstr "MCP 연결을 마무리하는 중…"
 msgid "Flag unexpected actions"
 msgstr "예상하지 못한 작업 표시"
 
+#: src/pages/LearningCurator.tsx
+msgid "Flags"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "비밀번호를 잊으셨나요?"
@@ -2285,6 +2350,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
+msgstr ""
+
+#: src/pages/LearningTimeline.tsx
+msgid "Grant"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
@@ -2410,6 +2479,14 @@ msgstr ""
 msgid "Import OpenAPI JSON"
 msgstr "OpenAPI JSON 가져오기"
 
+#: src/pages/LearningObservation.tsx
+msgid "inappropriate"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Inbox"
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
 msgstr ""
@@ -2433,6 +2510,10 @@ msgstr "인스턴스 API 키"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "실행할 내용"
+
+#: src/pages/LearningObservation.tsx
+msgid "integration"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
@@ -2489,6 +2570,10 @@ msgstr "답장한 메시지로 이동"
 msgid "just now"
 msgstr "방금"
 
+#: src/pages/LearningCurator.tsx
+msgid "Keep for recovery"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Keep memories"
 msgstr "기억은 유지"
@@ -2508,6 +2593,10 @@ msgstr "지식"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Language"
 msgstr "언어"
+
+#: src/pages/LearningCurator.tsx
+msgid "Last check"
+msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -2541,6 +2630,10 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning views"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2590,6 +2683,10 @@ msgstr "연동 목록을 불러오는 중…"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
 msgstr "모델 목록을 불러오는 중…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Loading observations…"
+msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
@@ -2701,6 +2798,18 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "MCP servers"
 msgstr "MCP 서버"
+
+#: src/pages/LearningObservation.tsx
+msgid "Mean elapsed time (ms)"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Mean tokens"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Measurement details"
+msgstr ""
 
 #: src/lib/thinking-level-options.ts
 msgid "medium — balances speed and care"
@@ -2991,6 +3100,10 @@ msgstr ""
 msgid "No chat apps linked yet."
 msgstr "아직 연결된 채팅 앱이 없습니다."
 
+#: src/pages/LearningCurator.tsx
+msgid "No checks yet."
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "No destinations found."
 msgstr ""
@@ -3039,10 +3152,6 @@ msgstr "{peerBotName}와의 메시지가 아직 없습니다."
 msgid "No model catalog is available."
 msgstr "사용 가능한 모델 목록이 없습니다."
 
-#: src/pages/LearningInbox.tsx
-msgid "no observations yet"
-msgstr ""
-
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "검색된 AI 서비스가 없습니다."
@@ -3083,6 +3192,10 @@ msgstr "아직 없음"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
 msgstr "연결되지 않음"
+
+#: src/pages/LearningObservation.tsx
+msgid "Not enough runs to tell"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Not in the plugin catalog"
@@ -3136,6 +3249,10 @@ msgstr "OAuth 연결 실패"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth expired"
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "Observations"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -3336,6 +3453,10 @@ msgstr ""
 msgid "Personal credential"
 msgstr "내 인증 정보"
 
+#: src/pages/LearningObservation.tsx
+msgid "pin"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "고정"
@@ -3347,6 +3468,10 @@ msgstr "재생 중…"
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Policy version"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Possible regression — review undo"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -3386,12 +3511,32 @@ msgstr ""
 msgid "Project ID"
 msgstr ""
 
+#: src/pages/LearningTimeline.tsx
+msgid "Proposal"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Proposal branch"
 msgstr ""
 
+#: src/pages/LearningCurator.tsx
+msgid "Proposals"
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Propose consolidation"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Propose on a branch"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Proposed consolidation"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "provider"
 msgstr ""
 
 #: src/pages/Onboarding.tsx
@@ -3530,6 +3675,10 @@ msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recovery restores the last saved workspace. Unsaved work may be lost."
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Recovery skill"
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
@@ -3732,6 +3881,8 @@ msgstr ""
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningObservation.tsx
+#: src/pages/LearningTimeline.tsx
 msgid "Retry"
 msgstr ""
 
@@ -3790,6 +3941,10 @@ msgstr ""
 msgid "Revision {0}"
 msgstr ""
 
+#: src/pages/LearningTimeline.tsx
+msgid "Revision and observations"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -3833,6 +3988,10 @@ msgstr "실행 시간"
 msgid "Run history"
 msgstr "실행 기록"
 
+#: src/pages/LearningCurator.tsx
+msgid "Run now"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Run time must be in the future."
 msgstr "실행 시간은 미래여야 합니다."
@@ -3859,6 +4018,10 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "safety"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -4189,6 +4352,10 @@ msgstr ""
 msgid "Software update"
 msgstr "소프트웨어 업데이트"
 
+#: src/pages/LearningInbox.tsx
+msgid "Source revision"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "스페이스 기본값"
@@ -4226,6 +4393,10 @@ msgstr "이 답변 읽기"
 msgid "Speaking…"
 msgstr "말하는 중…"
 
+#: src/pages/LearningCurator.tsx
+msgid "Stale"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "작업 녹화 시작"
@@ -4239,6 +4410,10 @@ msgstr "시작 중"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "시작하는 중…"
+
+#: src/pages/LearningObservation.tsx
+msgid "Steering corrections"
+msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Steps"
@@ -4320,6 +4495,14 @@ msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control to open a terminal"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "task"
+msgstr ""
+
+#: src/pages/LearningObservation.tsx
+msgid "Task contracts"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -4486,6 +4669,10 @@ msgstr "이 구독 로그인 방식은 아직 Ardur Bot에서 지원되지 않�
 msgid "Time of day"
 msgstr "실행 시각"
 
+#: src/pages/LearningInbox.tsx
+msgid "Timeline"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "역할"
@@ -4493,6 +4680,10 @@ msgstr "역할"
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "받는 사람:"
+
+#: src/pages/LearningCurator.tsx
+msgid "tokens"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -4534,6 +4725,10 @@ msgstr "섹션 없음"
 msgid "Unavailable"
 msgstr "사용할 수 없음"
 
+#: src/pages/LearningObservation.tsx
+msgid "unclassified"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Undo"
 msgstr ""
@@ -4544,6 +4739,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
+msgstr ""
+
+#: src/pages/LearningCurator.tsx
+msgid "Unknown"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -4748,6 +4947,10 @@ msgstr "언제 사용할지"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Bot을 어디에서 실행할까요?"
+
+#: src/pages/LearningObservation.tsx
+msgid "Window"
+msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"

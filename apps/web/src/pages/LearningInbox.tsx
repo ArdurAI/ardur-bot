@@ -6,10 +6,21 @@ import type {
   SpaceLearningConfig,
 } from "@ardurbot/contracts";
 import { learningApprovalBlock } from "@ardurbot/contracts";
-import { Button, Switch, Textarea } from "@ardurbot/ui-web";
+import {
+  Button,
+  Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Textarea,
+} from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { LearningCurator } from "./LearningCurator";
+import { LearningObservations, LearningObservationView } from "./LearningObservation";
+import { LearningTimeline } from "./LearningTimeline";
 
 type Inbox = Awaited<ReturnType<typeof rpc.learning.list>>;
 type Conflict = NonNullable<Awaited<ReturnType<typeof rpc.learning.revert>>["conflict"]>;
@@ -49,7 +60,10 @@ export function LearningBadge({ botId }: { botId?: string }) {
 }
 export function LearningInbox({ botId }: { botId?: string }) {
   const { t } = useLingui();
+  const [tab, setTab] = useState("inbox");
   const [inbox, setInbox] = useState<Inbox | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<LearningProposal | null>(null);
   const [settings, setSettings] = useState<SpaceLearningConfig | null>(null);
   const [grants, setGrants] = useState<LearningGrant[]>([]);
   const [offers, setOffers] = useState<Array<Pick<LearningGrantInput, "category" | "scope">>>([]);
@@ -60,17 +74,19 @@ export function LearningInbox({ botId }: { botId?: string }) {
   const request = useRef(0);
   const load = useCallback(async () => {
     const current = ++request.current;
-    const [list, config, consent] = await Promise.all([
+    const [list, config, consent, proposal] = await Promise.all([
       rpc.learning.list({ botId }),
       rpc.learning.settings(),
       rpc.learning.grants(),
+      selectedId ? rpc.learning.proposal({ proposalId: selectedId }) : null,
     ]);
     if (current !== request.current) return;
     setInbox(list);
+    setSelected(proposal);
     setSettings(config);
     setGrants(consent.grants);
     setOffers(consent.offers);
-  }, [botId]);
+  }, [botId, selectedId]);
   useEffect(() => {
     let active = true;
     void load().catch(() => {
@@ -120,6 +136,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
                 void change(() =>
                   rpc.learning.configure({
                     enabled,
+                    consolidationEnabled: settings.consolidationEnabled,
                     reviewerPin: settings.reviewerPin ?? settings.destination,
                     budgets: settings.budgets,
                   }),
@@ -153,21 +170,49 @@ export function LearningInbox({ botId }: { botId?: string }) {
           </Button>
         </div>
       ) : null}
-      <LearningBadge botId={botId} />
-      {inbox?.proposals.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          <Trans>Nothing to review.</Trans>
-        </p>
+      {settings?.canConfigure ? (
+        <LearningCurator settings={settings} busy={busy} change={change} />
       ) : null}
-      {inbox?.proposals.map((proposal) => (
-        <LearningCard
-          key={proposal.id}
-          proposal={proposal}
-          botName={proposal.scope.botId ? inbox.botNames?.[proposal.scope.botId] : undefined}
-          busy={busy}
-          change={change}
-        />
-      ))}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList aria-label={t`Learning views`}>
+          <TabsTrigger value="inbox">
+            <Trans>Inbox</Trans>
+          </TabsTrigger>
+          <TabsTrigger value="timeline">
+            <Trans>Timeline</Trans>
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="timeline">
+          <LearningTimeline
+            botId={botId}
+            openProposal={(id) => {
+              setSelectedId(id);
+              setTab("inbox");
+            }}
+          />
+        </TabsContent>
+        <TabsContent value="inbox">
+          <LearningBadge botId={botId} />
+          {inbox?.proposals.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              <Trans>Nothing to review.</Trans>
+            </p>
+          ) : null}
+          {[
+            ...(selected ? [selected] : []),
+            ...(inbox?.proposals.filter((p) => p.id !== selected?.id) ?? []),
+          ].map((proposal) => (
+            <LearningCard
+              key={proposal.id}
+              proposal={proposal}
+              botName={proposal.scope.botId ? inbox?.botNames?.[proposal.scope.botId] : undefined}
+              expanded={proposal.id === selectedId}
+              busy={busy}
+              change={change}
+            />
+          ))}
+        </TabsContent>
+      </Tabs>
       {offers
         .filter((offer) => !botId || (offer.scope.kind === "bot" && offer.scope.botId === botId))
         .map((offer) => (
@@ -239,15 +284,21 @@ export function LearningInbox({ botId }: { botId?: string }) {
 function LearningCard({
   proposal,
   botName,
+  expanded = false,
   busy,
   change,
 }: {
   proposal: LearningProposal;
   botName?: string;
+  expanded?: boolean;
   busy: boolean;
   change: (action: () => Promise<unknown>) => Promise<void>;
 }) {
   const { t } = useLingui();
+  const [detailsOpen, setDetailsOpen] = useState(expanded);
+  useEffect(() => {
+    if (expanded) setDetailsOpen(true);
+  }, [expanded]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(proposal.proposedContent ?? "");
   const [settingValue, setSettingValue] = useState(proposal.typedDelta?.value === true);
@@ -259,11 +310,20 @@ function LearningCard({
     <article
       className="rounded-lg border p-3 motion-safe:animate-in motion-safe:fade-in duration-100 motion-reduce:animate-none"
       data-status={proposal.status}
+      id={`learning-${proposal.id}`}
     >
       <p className="truncate text-sm font-medium">
-        {proposal.proposedContent?.split("\n").find((line) => line.trim() && line !== "---") ??
-          proposal.typedDelta?.key ??
-          proposal.type}
+        {proposal.operation === "revert-suggestion"
+          ? t`Possible regression — review undo`
+          : proposal.operation === "consolidation"
+            ? t`Proposed consolidation`
+            : proposal.type === "policy-suggestion"
+              ? proposal.rationale
+              : (proposal.proposedContent
+                  ?.split("\n")
+                  .find((line) => line.trim() && line !== "---") ??
+                proposal.typedDelta?.key ??
+                proposal.type)}
       </p>
       <p className="text-xs text-muted-foreground">
         {proposal.scope.botId
@@ -290,7 +350,9 @@ function LearningCard({
             </Button>
             <Button
               variant="ghost"
-              disabled={busy || !!blocked}
+              disabled={
+                busy || !!blocked || !!proposal.operation || proposal.type === "policy-suggestion"
+              }
               onClick={() => setEditing((value) => !value)}
             >
               <Trans>Edit</Trans>
@@ -301,18 +363,20 @@ function LearningCard({
             <span className="text-sm">
               <Trans>Applied</Trans>
             </span>
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() =>
-                void change(async () => {
-                  const result = await rpc.learning.revert({ proposalId: proposal.id });
-                  setConflict(result.conflict ?? null);
-                })
-              }
-            >
-              <Trans>Undo</Trans>
-            </Button>
+            {proposal.appliedRevisionId ? (
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() =>
+                  void change(async () => {
+                    const result = await rpc.learning.revert({ proposalId: proposal.id });
+                    setConflict(result.conflict ?? null);
+                  })
+                }
+              >
+                <Trans>Undo</Trans>
+              </Button>
+            ) : null}
           </>
         ) : (
           <span className="text-sm">
@@ -363,15 +427,24 @@ function LearningCard({
           </Button>
         </div>
       ) : null}
-      <details className="mt-2 text-xs">
+      <details
+        open={detailsOpen}
+        className="mt-2 text-xs"
+        onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
+      >
         <summary>
           <Trans>Details</Trans>
         </summary>
         <pre className="max-h-64 overflow-auto whitespace-pre-wrap py-2">{proposal.diff}</pre>
         <p>{proposal.rationale}</p>
-        <p>
-          <Trans>model estimate</Trans>: {Math.round(proposal.confidence.value * 100)}%
-        </p>
+        {proposal.observation ? (
+          <LearningObservationView observation={proposal.observation} />
+        ) : null}
+        {proposal.confidence ? (
+          <p>
+            <Trans>model estimate</Trans>: {Math.round(proposal.confidence.value * 100)}%
+          </p>
+        ) : null}
         <p>
           <Trans>Base revision</Trans>: {proposal.expectedBaseRevision ?? 0}
         </p>
@@ -423,10 +496,16 @@ function LearningCard({
             <Trans>Revision</Trans>: {proposal.appliedRevisionId}
           </p>
         ) : null}
-        {proposal.status === "applied" ? (
-          <p>
-            <Trans>no observations yet</Trans>
+        {proposal.participatingRevisions?.map((r) => (
+          <p key={r.documentId}>
+            <Trans>Source revision</Trans>: {r.documentId}:{r.revision}
           </p>
+        ))}
+        {detailsOpen && proposal.documentId && proposal.appliedRevisionId ? (
+          <LearningObservations
+            documentId={proposal.documentId}
+            revision={Number(proposal.appliedRevisionId.split(":").at(-1))}
+          />
         ) : null}
       </details>
       {conflict ? (

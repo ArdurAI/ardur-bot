@@ -18,6 +18,7 @@ import { scheduleComputerSleep, sleepComputerIfIdle } from "./computer-idle.js";
 import { performComputerUpdate } from "./computer-update.js";
 import type { createRunExecutor } from "./executor.js";
 import { compactHistory } from "./history-compaction.js";
+import { curateLearningSpaces } from "./learning-curator.js";
 import { enqueueLearningReview } from "./learning-queue.js";
 import { reviewLearning } from "./learning-review.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
@@ -57,6 +58,7 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
+    "learning.curate": (payload) => curateLearningSpaces(deps, payload),
     "learning.review": (payload) =>
       reviewLearning(
         {

@@ -687,17 +687,23 @@ async function commitAnswerRunInput(
     const allowed = input.answer === "allow" || input.answer === "always";
     await tx.externalEffect.update({
       where: { id: approvalEffect!.id },
-      data: { status: allowed ? "approved" : "denied" },
+      data: {
+        status: allowed ? "approved" : "denied",
+        decision: allowed ? "allow" : "deny",
+        decisionByUserId: input.answeredByUserId,
+        decisionAt: new Date(),
+      },
     });
     if (input.answer === "always") {
       await tx.actionApprovalRule.upsert({
         where: {
-          spaceId_createdByUserId_effect_matchKind_matchValue: {
+          spaceId_createdByUserId_effect_matchKind_matchValue_scopeKey: {
             spaceId: input.spaceId,
             createdByUserId: approvalUserId!,
             effect: "always_allow",
             matchKind: "tool",
             matchValue: approvalEffect!.kind,
+            scopeKey: "all",
           },
         },
         create: {

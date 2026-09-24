@@ -31,7 +31,8 @@ export async function matchingLearningGrant(
   proposal: LearningProposal,
   now = new Date(),
 ) {
-  if (!proposal.scope.userId || !["memory", "skill"].includes(proposal.type)) return null;
+  if (proposal.operation || !proposal.scope.userId || !["memory", "skill"].includes(proposal.type))
+    return null;
   const suppressed = await tx.learningSuppression.findUnique({
     where: {
       spaceId_userId_fingerprint: {
@@ -184,7 +185,15 @@ export function createLearningGrants(prisma: PrismaClient) {
         const grant = await tx.learningGrant.findFirst({ where: { id, ...actor } });
         if (!grant) throw new IsolationError();
         await tx.learningGrant.update({ where: { id }, data: { revokedAt: new Date() } });
-        await tx.learningAudit.create({ data: { ...actor, action: "grant-revoked", grantId: id } });
+        await tx.learningAudit.create({
+          data: {
+            ...actor,
+            action: "grant-revoked",
+            grantId: id,
+            category: grant.category,
+            scopeKey: grant.scopeKey,
+          },
+        });
       });
       return { ok: true as const };
     },

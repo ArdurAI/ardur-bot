@@ -665,6 +665,14 @@ export function toolCompletionAuditPayload(
   };
   if (error !== undefined) {
     payload.error = sanitizeConnectorError(error, secrets);
+    payload.errorClass =
+      error instanceof RuntimePinError
+        ? "pin"
+        : !BUILTIN_AGENT_TOOL_NAMES.has(completion.name)
+          ? "integration"
+          : classifyProviderError(error) !== "other"
+            ? "provider"
+            : "unknown";
   }
   if (!isAuditableToolResult(completion.result)) return payload;
 
@@ -1603,7 +1611,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           approvalRulesPromise ??= deps.prisma.actionApprovalRule
             .findMany({
               where: { spaceId: run.spaceId, createdByUserId: run.userId },
-              select: { effect: true, matchKind: true, matchValue: true },
+              select: { effect: true, matchKind: true, matchValue: true, botId: true },
             })
             .then((rules) => rules as ActionApprovalRule[]);
           return approvalRulesPromise;
@@ -2038,6 +2046,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? { decision: "ask" as const, source: "default" as const, matchingRules: [] }
             : resolveActionApprovalDetail({
                 toolName: name,
+                botId: run.botId,
                 connectorKind,
                 rules: await loadApprovalRules(),
                 integrationApproval,

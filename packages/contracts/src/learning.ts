@@ -52,34 +52,132 @@ export const LearningCandidateSchema = z
     (value) => (value.proposedContent !== undefined) !== (value.typedDelta !== undefined),
     "Provide content or a typed delta.",
   );
-export const LearningProposalSchema = LearningCandidateSchema.safeExtend({
-  id: z.string(),
-  diff: z.string().max(40000),
-  status: z.enum([
-    "pending",
-    "approved",
-    "rejected",
-    "applied",
-    "expired",
-    "superseded",
-    "reverted",
-  ]),
-  expiresAt: z.string().datetime(),
-  appliedRevisionId: z.string().optional(),
-  revertedRevisionId: z.string().optional(),
-  appliedAt: z.string().datetime().optional(),
-  documentId: z.string().optional(),
-  blockedReason: z.string().optional(),
-  settingBefore: z.boolean().optional(),
-  provenance: z
-    .object({
-      runId: z.string(),
-      originatingPin: RuntimePinSchema.nullable(),
-      reviewerPin: RuntimePinSchema,
-      policyVersion: z.string(),
-    })
-    .optional(),
+export const ObservationWindowSchema = z.object({
+  from: z.string().datetime(),
+  to: z.string().datetime(),
 });
+const CorrectionsSchema = z.object({
+  feedback: z.number().int().nonnegative(),
+  steering: z.number().int().nonnegative(),
+});
+const DeltaSchema = z.object({
+  beforeSamples: z.number().int(),
+  afterSamples: z.number().int(),
+  beforeMean: z.number().nullable(),
+  afterMean: z.number().nullable(),
+  delta: z.number().nullable(),
+});
+export const LearningObservationSchema = z.object({
+  documentId: z.string(),
+  revisionId: z.string(),
+  exposedRuns: z.number().int().nonnegative(),
+  correctionsAfter: CorrectionsSchema,
+  before: z.object({
+    runs: z.number().int(),
+    comparableExposedRuns: z.number().int(),
+    corrections: CorrectionsSchema,
+    window: ObservationWindowSchema,
+  }),
+  denialsAfter: z.object({
+    inappropriate: z.number().int(),
+    safety: z.number().int(),
+    unknown: z.number().int(),
+  }),
+  failuresAfter: z.object({
+    task: z.number().int(),
+    integration: z.number().int(),
+    provider: z.number().int(),
+    pin: z.number().int(),
+    unknown: z.number().int(),
+  }),
+  cancellationsAfter: z.number().int(),
+  timeTokensDelta: z.object({ timeMs: DeltaSchema, tokens: DeltaSchema }),
+  acceptance: z.object({
+    accepted: z.number().int(),
+    evaluated: z.number().int(),
+    contracts: z.number().int(),
+  }),
+  window: ObservationWindowSchema,
+  missing: z.array(z.string()),
+});
+export type LearningObservation = z.infer<typeof LearningObservationSchema>;
+export function learningObservationSummary(value: LearningObservation): string {
+  const after = value.correctionsAfter.feedback + value.correctionsAfter.steering;
+  const before = value.before.corrections.feedback + value.before.corrections.steering;
+  return `${after} corrections in ${value.exposedRuns} exposed runs; before: ${before} in ${value.before.runs} comparable runs`;
+}
+export function learningObservationUnmeasured(value: LearningObservation): boolean {
+  return value.exposedRuns < 5 || value.before.runs < 5;
+}
+export const LearningJourneyEntrySchema = z.object({
+  id: z.string(),
+  at: z.string().datetime(),
+  action: z.string(),
+  botId: z.string().optional(),
+  proposalId: z.string().optional(),
+  revisionId: z.string().optional(),
+  documentId: z.string().optional(),
+  grantId: z.string().optional(),
+});
+export type LearningJourneyEntry = z.infer<typeof LearningJourneyEntrySchema>;
+export const CuratorReportSchema = z.object({
+  id: z.string(),
+  startedAt: z.string().datetime(),
+  completedAt: z.string().datetime().nullable(),
+  status: z.enum(["running", "completed", "failed"]),
+  checked: z.number().int(),
+  staleIds: z.array(z.string()),
+  flaggedIds: z.array(z.string()),
+  proposalIds: z.array(z.string()),
+  durationMs: z.number().int(),
+  tokens: z.number().int().nullable(),
+});
+export type CuratorReport = z.infer<typeof CuratorReportSchema>;
+export const LearningProposalSchema = z
+  .object({
+    ...LearningCandidateSchema.shape,
+    confidence: LearningCandidateSchema.shape.confidence.optional(),
+    operation: z.enum(["revert-suggestion", "consolidation"]).optional(),
+    revertsProposalId: z.string().optional(),
+    participatingRevisions: z
+      .array(z.object({ documentId: z.string(), revision: z.number().int().positive() }))
+      .max(10)
+      .optional(),
+    policyTool: z.string().min(1).max(160).optional(),
+    policyRuleId: z.string().optional(),
+    observation: LearningObservationSchema.optional(),
+    id: z.string(),
+    diff: z.string().max(40000),
+    status: z.enum([
+      "pending",
+      "approved",
+      "rejected",
+      "applied",
+      "expired",
+      "superseded",
+      "reverted",
+    ]),
+    expiresAt: z.string().datetime(),
+    appliedRevisionId: z.string().optional(),
+    revertedRevisionId: z.string().optional(),
+    appliedAt: z.string().datetime().optional(),
+    documentId: z.string().optional(),
+    blockedReason: z.string().optional(),
+    settingBefore: z.boolean().optional(),
+    provenance: z
+      .object({
+        runId: z.string(),
+        originatingPin: RuntimePinSchema.nullable(),
+        reviewerPin: RuntimePinSchema,
+        policyVersion: z.string(),
+      })
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (value) => (value.proposedContent !== undefined) !== (value.typedDelta !== undefined),
+    "Provide content or a typed delta.",
+  );
 export type LearningProposal = z.infer<typeof LearningProposalSchema>;
 export type LearningCandidate = z.infer<typeof LearningCandidateSchema>;
 export const ObservedOutcomeSchema = z
@@ -165,6 +263,7 @@ export const LearningBudgetsSchema = z.object({
 export const SpaceLearningConfigInput = z
   .object({
     enabled: z.boolean().default(false),
+    consolidationEnabled: z.boolean().default(false),
     reviewerPin: RuntimePinSchema.nullable().default(null),
     budgets: LearningBudgetsSchema.default(() => LearningBudgetsSchema.parse({})),
   })
@@ -243,7 +342,7 @@ export const LearningInboxSchema = z.object({
 });
 export function learningApprovalBlock(proposal: LearningProposal): string | undefined {
   if (!proposal.scope.userId) return "Shared skills need a reviewer — coming later";
-  if (["policy-suggestion", "pin-insight", "harness-issue"].includes(proposal.type))
+  if (["pin-insight", "harness-issue"].includes(proposal.type))
     return "This suggestion cannot be approved here yet.";
   if (
     proposal.type === "preference" &&
@@ -252,5 +351,25 @@ export function learningApprovalBlock(proposal: LearningProposal): string | unde
       typeof proposal.typedDelta?.value !== "boolean")
   )
     return "This preference needs a visible setting before it can be applied.";
+  if (proposal.type === "policy-suggestion" && (!proposal.policyTool || !proposal.scope.botId))
+    return "This suggestion cannot be approved here yet.";
   return proposal.blockedReason;
+}
+
+export function learningJourneyLabel(action: string): string {
+  const labels: Record<string, string> = {
+    applied: "Applied",
+    approve: "Applied",
+    "auto-apply": "Applied with a grant",
+    revert: "Undone",
+    "approve-revert": "Undo approved",
+    "approve-policy": "Policy approved",
+    "grant-created": "Automatic learning turned on",
+    "grant-revoked": "Automatic learning turned off",
+    "curator-stale": "Marked stale",
+    "curator-regression": "Possible regression",
+    "curator-consolidation": "Proposed consolidation",
+    "curator-policy": "Proposed policy",
+  };
+  return labels[action] ?? "Learning change";
 }

@@ -332,3 +332,22 @@ describe("applyJudgeDecision", () => {
     expect(applyJudgeDecision({ decision: "error", consequential: false })).toBe("allow");
   });
 });
+
+it("keeps a bot-scoped exception out of every other bot and out of calls without bot identity", () => {
+  const rules = [
+    {
+      effect: "require_approval" as const,
+      matchKind: "tool" as const,
+      matchValue: "demo_get_item",
+    },
+    {
+      effect: "always_allow" as const,
+      matchKind: "tool" as const,
+      matchValue: "demo_get_item",
+      botId: "one",
+    },
+  ];
+  expect(resolveActionApproval({ toolName: "demo_get_item", botId: "one", rules })).toBe("allow");
+  expect(resolveActionApproval({ toolName: "demo_get_item", botId: "two", rules })).toBe("ask");
+  expect(resolveActionApproval({ toolName: "demo_get_item", rules })).toBe("ask");
+});
