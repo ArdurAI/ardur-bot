@@ -45,8 +45,10 @@ export const LearningProvenanceSchema = z
   })
   .strict();
 export type LearningProvenance = z.infer<typeof LearningProvenanceSchema>;
+export const MemoryDocumentKindSchema = z.enum(["profile", "preferences", "topic"]);
 export const DocumentRevisionSchema = z
   .object({
+    kind: MemoryDocumentKindSchema.optional(),
     documentId: MemoryIdentity,
     revision: z.number().int().positive(),
     scopeKey: DocumentScopeSchema,

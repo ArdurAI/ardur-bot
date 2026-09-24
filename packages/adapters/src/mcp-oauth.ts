@@ -28,6 +28,10 @@ type OAuthState = {
 };
 
 export type OAuthMaterial = {
+  redactions?: string[];
+  command?: string;
+  args?: string[];
+  cwd?: string;
   secret?: string;
   env?: Record<string, string>;
   headers?: Record<string, string>;
@@ -43,6 +47,8 @@ export function oauthMaterialSecrets(material: OAuthMaterial): string[] {
     const bearer = value.match(/^Bearer\s+(.+)$/i);
     if (bearer?.[1]) values.push(bearer[1]);
   };
+  for (const value of material.redactions ?? []) add(value);
+  for (const value of material.args ?? []) if (!value.startsWith("-")) add(value);
   add(material.secret);
   add(material.oauth?.tokens?.access_token);
   add(material.oauth?.tokens?.refresh_token);

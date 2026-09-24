@@ -6,6 +6,10 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const request = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ rpc: request }));
+vi.mock("./MemoryControls", () => ({
+  MemoryControls: () => null,
+  MemoryIntentControls: () => null,
+}));
 vi.mock("./i18n", () => ({ useI18n: () => ({ t: (value: string) => value }) }));
 vi.mock("./appearance", () => ({ mobileTokens: () => ({ border: "gray", destructive: "red" }) }));
 vi.mock("./native", () => ({
@@ -236,7 +240,7 @@ it("opens observations for an owner-authored revision from native document histo
     await act(async () => root.render(createElement(Memory)));
     await act(async () =>
       [...container.querySelectorAll("button")]
-        .find((b) => b.textContent?.includes("notes.md"))!
+        .find((b) => b.textContent?.includes("Use numbered steps."))!
         .click(),
     );
     expect(request.mock.calls.some(([path]) => path === "learning/observation")).toBe(false);

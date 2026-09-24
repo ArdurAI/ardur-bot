@@ -25,6 +25,7 @@ export function historyNotePath(revision: DocumentRevision, writer = ""): string
 export function revisionMarkdown(revision: DocumentRevision): string {
   const { content } = revision;
   const metadata = {
+    ...(revision.kind ? { kind: revision.kind } : {}),
     id: revision.documentId,
     scope: revision.scopeKey,
     author: revision.author,

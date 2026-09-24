@@ -78,15 +78,47 @@ describe("isolated device routes", () => {
       { botId: "bot" },
     );
   });
-  it.each(["pairing/start", "integrationSetup/save", "actionApprovalRules/create", "bots/update"])(
-    "blocks permission expansion via %s",
+  it.each([
+    "pairing/start",
+    "integrationSetup/save",
+    "actionApprovalRules/create",
+    "bots/update",
+    "account/updateProfile",
+    "account/updateInstructions",
+    "account/setTrustedDevices",
+    "account/approveDevice",
+    "account/disconnectDevice",
+    "account/sessions",
+    "account/revokeSession",
+    "account/revokeOtherSessions",
+  ])("blocks permission expansion via %s", async (procedure) => {
+    const f = fixture();
+    const response = await f.call(f.signed("rpc", { procedure, input: {} }));
+    expect(response.status).toBe(403);
+    expect(f.read).not.toHaveBeenCalled();
+  });
+  it.each(["connectors/summary", "customizationSkills/list", "plugins/list", "integrations/list"])(
+    "allows the read-only customization procedure %s",
     async (procedure) => {
       const f = fixture();
-      const response = await f.call(f.signed("rpc", { procedure, input: {} }));
-      expect(response.status).toBe(403);
-      expect(f.read).not.toHaveBeenCalled();
+      expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).toBe(200);
+      expect(f.read).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: "owner", spaceId: "space" }),
+        procedure,
+        {},
+      );
     },
   );
+  it.each([
+    "customizationSkills/import",
+    "plugins/install",
+    "developer/apply",
+    "extensions/register",
+  ])("refuses the customization mutation %s for a read-only phone", async (procedure) => {
+    const f = fixture();
+    expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).toBe(403);
+    expect(f.read).not.toHaveBeenCalled();
+  });
   it("rejects a revoked device on its next request", async () => {
     const f = fixture();
     f.grant.revokedAt = new Date();

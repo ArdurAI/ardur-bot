@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({
   integrations: vi.fn(),
+  summary: vi.fn(),
   servers: vi.fn(),
   send: vi.fn(),
   action: vi.fn(),
@@ -17,7 +18,11 @@ const fake = vi.hoisted(() => ({
   open: vi.fn(),
 }));
 vi.mock("../../lib/rpc", () => ({
-  rpc: { integrations: { list: fake.integrations }, mcp: { servers: { list: fake.servers } } },
+  rpc: {
+    integrations: { list: fake.integrations },
+    connectors: { summary: fake.summary },
+    mcp: { servers: { list: fake.servers } },
+  },
   selectedSpaceId: () => "space",
 }));
 vi.mock("../../lib/auth", () => ({ authClient: {} }));
@@ -67,6 +72,7 @@ beforeEach(() => {
     connections: [{ id: "connection", catalogId: "reports", state: "not-connected" }],
   });
   fake.servers.mockResolvedValue([{ id: "mcp", name: "Local tools" }]);
+  fake.summary.mockResolvedValue({ needingReconnection: 1 });
 });
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
@@ -251,6 +257,9 @@ describe("composer controls", () => {
   it("refreshes connector status from the same Settings query and inserts its chip", async () => {
     await mount();
     await openMenu();
+    expect(fake.summary).toHaveBeenCalled();
+    expect(menuItem("Integrations").textContent).toContain("1 need reconnection");
+    fake.summary.mockResolvedValue({ needingReconnection: 0 });
     fake.integrations.mockResolvedValue({
       catalog: [{ id: "reports", name: "Reports" }],
       connections: [{ id: "connection", catalogId: "reports", state: "connected" }],

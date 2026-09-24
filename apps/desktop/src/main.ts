@@ -12,6 +12,7 @@ import { openBrowserAuth } from "./browser-auth.js";
 import { cliVersion } from "./cli.js";
 import { installDevices } from "./devices-ipc.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
+import { installCustomizationIpc } from "./extensions/ipc.js";
 import { installHostService } from "./host-service-ipc.js";
 import {
   focusIntegration,
@@ -1063,6 +1064,7 @@ app.whenReady().then(async () => {
   registerIntegrationProtocol(app);
   const initialLink = process.argv.find((arg) => arg.startsWith("ardurbot:"));
   if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
+  installCustomizationIpc({ window: () => mainWindow, target: () => currentTargetUrl });
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
   hostService = installHostService({
     window: () => mainWindow,

@@ -35,6 +35,7 @@ import {
   BOT_TITLE_MAX_LENGTH,
   BotSecretName,
   BotSecretSubmission,
+  CapabilityPreferencesSchema,
   computerProfileNote,
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
@@ -50,10 +51,13 @@ import {
   appendToolCallSegment,
   applyJudgeDecision,
   assertTransition,
+  botInstructionText,
   botMessageAllowsSilence,
+  capabilityAllowsTool,
   connectorKindFromToolName,
   containsSecret,
   createStreamingRedactor,
+  effectiveToolAccessMode,
   endsSentence,
   expandSkillReferencesInPrompt,
   formatSkillRunPrompt,
@@ -112,9 +116,11 @@ import {
   startDelegation,
   type ThreadEvents,
 } from "@ardurbot/db";
+import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
 import { parse as parseShellCommand } from "shell-quote";
+import { loadAccountInstructionContext } from "./account-instructions.js";
 import {
   connectAgent,
   messageConnectedAgent,
@@ -240,6 +246,7 @@ import {
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
 import { integrationApprovalDetailsForCall } from "./integration-access.js";
+import { integrationCatalog } from "./integration-catalog.js";
 import {
   assertConnectorToolArgs,
   CATALOG_EXECUTE,
@@ -1322,6 +1329,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   botId: run.botId,
                   spaceId: run.spaceId,
                   status: run.trigger === "skill" ? { in: ["saved", "draft"] } : "saved",
+                  enabled: true,
                 },
               }),
           comparisonRun
@@ -1372,6 +1380,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           bot.runtimeExperimental,
         );
         if ("kind" in runtimeSelection) throw new RuntimePinError(runtimeSelection);
+        const accountContext = await loadAccountInstructionContext(deps.prisma, run);
+        accountContext.instructions = redactSecrets(accountContext.instructions, runSecrets);
+        accountContext.displayName = redactSecrets(accountContext.displayName, runSecrets);
         const runtime = runtimeSelection.runtime;
         const native =
           selected.pin.runtimeKind !== "pi" && !comparisonRun
@@ -1382,7 +1393,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 spaceId: run.spaceId,
                 botId: bot.id,
                 computerId: bot.computerId,
-                instructions: bot.instructions,
+                instructions: botInstructionText(bot, accountContext),
                 historyGeneration: thread.historyCompactionGeneration,
                 pin: selected.pin,
               })
@@ -1398,7 +1409,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
         await deps.prisma.run.updateMany({
           where: { id: runId, leaseOwner: workerId, leaseFence: fence },
-          data: { runtimeInfo },
+          data: { runtimeInfo, accountInstructionContext: accountContext },
         });
         const delegatedTokens = run.delegationId
           ? await enforceDelegationDestination(deps.prisma, run.delegationId, selected)
@@ -1440,6 +1451,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           storedConnections,
           connectedComposio.map((connection) => connection.provider),
         );
+        const capabilities = CapabilityPreferencesSchema.parse(
+          (await deps.prisma.space.findUnique({ where: { id: run.spaceId } })) ?? {},
+        );
         const context: MemoryOperationContext & { botId: string; runId: string } = {
           memoryGeneration:
             configuredMemory?.generation ??
@@ -1459,6 +1473,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           },
           threadId: thread.id,
           knownSecrets: runSecrets,
+          toolAccessMode: effectiveToolAccessMode(
+            capabilities.toolAccessMode,
+            selected.pin.runtimeKind,
+          ),
           operationId: runId,
           traceId: runId,
           spaceId: run.spaceId,
@@ -1745,7 +1763,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }),
           // Cross-owner agent connections only exist for chat-linked bots.
           ...(hasMessagingIdentity ? agentConnectionTools : []),
-        ];
+        ].filter((tool) => capabilityAllowsTool(capabilities, tool.name));
         const exposedConnectorTools = discovered.filter(
           (tool) => !builtinAgentTools.some((builtin) => builtin.name === tool.name),
         );
@@ -2011,6 +2029,40 @@ export function createRunExecutor(deps: ExecutorDeps) {
           context.signal.throwIfAborted();
           if (comparisonRun && !comparisonToolAllowed(name))
             return { error: "This tool is unavailable in a controlled comparison." };
+          if (!capabilityAllowsTool(capabilities, name))
+            return { error: "This capability is disabled in this space." };
+          if (name === "search_connectors") {
+            const query = String(args.query ?? "")
+              .trim()
+              .toLowerCase()
+              .slice(0, 200);
+            const results = integrationCatalog
+              .filter(
+                (item) =>
+                  item.available &&
+                  `${item.name} ${item.vendor} ${item.riskClass}`.toLowerCase().includes(query),
+              )
+              .slice(0, 5);
+            if (results.length)
+              await publishMessage(
+                deps,
+                run,
+                "bot",
+                results.map((item) => ({
+                  kind: "app_connect" as const,
+                  connectorId: "trusted-catalog",
+                  provider: item.id,
+                  name: item.name,
+                  description: "",
+                  logo: null,
+                  status: "pending" as const,
+                })),
+              );
+            return {
+              connectors: results.map(({ id, name }) => ({ id, name })),
+              requiresUserConnection: true,
+            };
+          }
           if (handedOff) {
             return { error: "This stage was handed off. End the turn without more tool calls." };
           }
@@ -3187,7 +3239,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     transport: parsed.transport,
                     endpoint: parsed.endpoint ?? null,
                     command: parsed.command ?? null,
-                    args: parsed.args as unknown as Prisma.InputJsonValue,
+                    args: redactMcpArguments(parsed.args, [
+                      ...Object.values(parsed.env),
+                      ...(parsed.secret ? [parsed.secret] : []),
+                    ]) as Prisma.InputJsonValue,
                     env: Object.fromEntries(Object.keys(parsed.env).map((key) => [key, true])),
                     headers: Object.fromEntries(
                       Object.keys(parsed.headers).map((key) => [key, true]),
@@ -3946,6 +4001,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 )}\nWhen the user asks to run a taught skill by name, follow that skill's playbook exactly. The full playbook is included in the user task when they invoke it.`
             : undefined;
         const agentSkillsLine = formatSkillsCatalogInstruction(agentSkills);
+        const pluginInstructions = agentSkills
+          .filter((skill) => skill.componentKind === "instructions")
+          .map((skill) => skill.content)
+          .join("\n\n");
         const missingImagesInstruction = missingTurnImagesInstruction(
           turnBlocks,
           currentTurnImages,
@@ -4075,7 +4134,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               sourceMessageId: run.sourceMessageId,
               prompt: redactSecrets(prompt, runSecrets),
               instructions: [
-                bot.instructions || `${bot.name}: ${bot.title}\n${bot.description}`,
+                botInstructionText(bot, accountContext),
                 formatCurrentTimeInstruction(),
                 groupContext,
                 messagingContext,
@@ -4100,6 +4159,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 "archive_bot safely archives a bot this bot created, and only that bot. Use it when the user asks to remove that bot or when it is finished and unused. The user can restore it or permanently delete it later. confirm_name must exactly match its name.",
                 pluginLine,
                 agentSkillsLine,
+                pluginInstructions,
                 taughtSkillsLine,
                 'For charts and data visualization, use the render_plot tool: it renders bar, line, scatter, histogram, heatmap, faceted and many more chart types from a JSON spec and attaches the PNG to the chat. Call render_plot with {"help": true} before your first chart to read the full guide.',
                 "When the user asks you to add or connect an MCP server (and gives you its details), use add_mcp_server. If it uses browser sign-in, an approval card appears in the chat — tell the user to click Authorize on it.",

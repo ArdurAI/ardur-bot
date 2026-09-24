@@ -4,6 +4,7 @@ import type { ComputerAction, ComputerObservation, ComputerRef } from "@ardurbot
 import type { ComputerMode } from "@ardurbot/contracts";
 
 export function toComputerRef(computer: {
+  networkEgress?: boolean;
   homeKey: string;
   imageProfile?: string;
   connectionId?: string | null;
@@ -12,6 +13,7 @@ export function toComputerRef(computer: {
 }): ComputerRef {
   if (!computer.providerRef) throw new Error("computer provider reference is missing");
   return {
+    networkEgress: computer.networkEgress ?? true,
     imageProfile: (computer.imageProfile ?? "base") as ComputerRef["imageProfile"],
     connectionId: computer.connectionId,
     id: computer.providerRef,

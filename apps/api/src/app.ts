@@ -93,6 +93,7 @@ import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { HostBridge } from "./host-bridge.js";
+import { mountHostMcpRoutes } from "./host-mcp-routes.js";
 import { sourceHostStatus } from "./host-status.js";
 import { ensureInstanceIdentity } from "./instance-identity.js";
 import { IntegrationConnections } from "./integration-connections.js";
@@ -249,6 +250,7 @@ export async function createApp(
       prisma,
       secrets,
     });
+  const hostBridge = new HostBridge(prisma, env.encryptionKey);
   const mcpOAuth = new McpOAuthBroker(prisma, secrets, remoteConnectors);
   const integrationConnections = new IntegrationConnections(
     prisma,
@@ -256,7 +258,11 @@ export async function createApp(
     secrets,
     env.webOrigin,
     remoteConnectors,
-    { stdioEnabled: env.mcpStdioEnabled, allowedCommands: env.mcpStdioAllowedCommands },
+    {
+      stdioEnabled: env.mcpStdioEnabled,
+      allowedCommands: env.mcpStdioAllowedCommands,
+      hostMcp: hostBridge,
+    },
     async (actor) =>
       (
         (await sourceHostStatus(prisma, actor.userId, env.sandboxProvider)) ??
@@ -275,6 +281,7 @@ export async function createApp(
     secrets,
     {
       sandbox,
+      hostMcp: hostBridge,
       stdioEnabled: env.mcpStdioEnabled,
       allowedCommands: env.mcpStdioAllowedCommands,
       network: remoteConnectors,
@@ -459,13 +466,13 @@ export async function createApp(
     : undefined;
   reconciler?.start();
 
-  const hostBridge = new HostBridge(prisma, env.encryptionKey);
   const terminals = createTerminalRoutes({
     prisma,
     sandbox,
     trustedOrigin: (origin) => isTrustedOrigin(origin, env),
   });
   const router = createRouter({
+    runtime,
     resolveComparisonPin: (bot) =>
       executor.resolveModel({ spaceId: bot.spaceId, userId: bot.userId, botId: bot.id }),
     terminals,
@@ -632,6 +639,7 @@ export async function createApp(
         actor,
         signal: c.req.raw.signal,
         authSessionId: session?.session.id,
+        authHeaders: sessionHeaders(c.req.raw),
         origin: c.req.header("origin"),
       },
     });
@@ -918,6 +926,7 @@ export async function createApp(
     })();
   }
 
+  mountHostMcpRoutes(app, { prisma, secrets, hostBridge });
   app.post("/api/host-bridge/pair", async (c) => {
     const origin = c.req.header("origin");
     if (origin && !isTrustedOrigin(origin, env)) return c.json({ error: "Forbidden" }, 403);

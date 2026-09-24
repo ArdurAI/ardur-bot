@@ -453,6 +453,15 @@ describe("MCP connector session cache", () => {
       signal: new AbortController().signal,
     } as never;
     const [search, load, execute] = await connector.discoverTools(context);
+    expect(
+      await connector.discoverTools({ ...(context as object), toolAccessMode: "all" } as never),
+    ).toHaveLength(30);
+    expect(
+      await connector.discoverTools({
+        ...(context as object),
+        toolAccessMode: "when-needed",
+      } as never),
+    ).toHaveLength(3);
     const collect = async (call: Parameters<McpConnector["execute"]>[0]) => {
       const events: unknown[] = [];
       for await (const event of connector.execute(call as never, context)) events.push(event);
@@ -505,7 +514,7 @@ describe("MCP connector session cache", () => {
       },
     ]);
     expect(JSON.stringify(indexed)).not.toContain("inputSchema");
-    expect(search!.description).toContain("demo:");
+    expect(search!.description).toContain("Find the final report");
     expect(search!.description).toContain("tool_00");
 
     const expanded = await collect({

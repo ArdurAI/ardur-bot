@@ -9,6 +9,10 @@ import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostAgent } from "./host-agent.js";
 import { nativeEnvironment } from "./runtimes/native-process.js";
 
+vi.mock("node:os", async (original) => ({
+  ...(await original<object>()),
+  hostname: () => "Test computer",
+}));
 vi.mock("./runtimes/claude-code-runtime.js", async (original) => ({
   ...(await original<object>()),
   probeClaude: async () => ({
@@ -80,11 +84,20 @@ async function fixture(runtime?: AgentRuntime) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "host-agent-")));
   roots.push(root);
   const frames: HostFrame[] = [];
+  const pendingEnds = new Map<string, () => void>();
+  function completed(id: string) {
+    if (frames.some((frame) => frame.type === "end" && frame.id === id)) return Promise.resolve();
+    return new Promise<void>((resolve) => pendingEnds.set(id, resolve));
+  }
   const agent = new HostAgent(
     { root, hostRoots: [root] },
     {
       send: async (frame) => {
         frames.push(decodeHostFrame(encodeHostFrame(frame)));
+        if (frame.type === "end") {
+          pendingEnds.get(frame.id)?.();
+          pendingEnds.delete(frame.id);
+        }
       },
       close: vi.fn(),
     },
@@ -92,7 +105,7 @@ async function fixture(runtime?: AgentRuntime) {
   );
   agents.push(agent);
   await agent.initialize();
-  return { root, frames, agent };
+  return { root, frames, agent, completed };
 }
 function fakeRuntime(events: number): AgentRuntime {
   return {
@@ -174,12 +187,13 @@ describe("host process operations", () => {
     );
   });
   it("streams file chunks inside registered roots and refuses symlink escape in the host", async () => {
-    const { agent, frames, root } = await fixture();
+    const { agent, frames, root, completed } = await fixture();
     await writeFile(path.join(root, "allowed.txt"), "file contents");
     await agent.receive(
       request({ op: "computer.files.read", homeKey: "bot", path: path.join(root, "allowed.txt") }),
     );
-    await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
+    await completed("req");
+    expect(frames.at(-1)).toMatchObject({ type: "end", id: "req" });
     expect(frames[0]).toMatchObject({
       channel: "file",
       data: Buffer.from("file contents").toString("base64"),
@@ -188,7 +202,8 @@ describe("host process operations", () => {
       ...request({ op: "computer.files.list", homeKey: "bot", path: root }),
       id: "listing",
     });
-    await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ id: "listing", type: "end" }));
+    await completed("listing");
+    expect(frames.at(-1)).toMatchObject({ id: "listing", type: "end" });
     expect(frames).toContainEqual(
       expect.objectContaining({
         channel: "result",
@@ -209,13 +224,12 @@ describe("host process operations", () => {
       }),
       id: "second",
     });
-    await vi.waitFor(() =>
-      expect(frames.at(-1)).toMatchObject({
-        id: "second",
-        type: "end",
-        problem: { code: "runtime-unavailable" },
-      }),
-    );
+    await completed("second");
+    expect(frames.at(-1)).toMatchObject({
+      id: "second",
+      type: "end",
+      problem: { code: "runtime-unavailable" },
+    });
     expect(JSON.stringify(frames)).not.toContain("never transmitted");
   });
   it("keeps homes separate when space and computer identifiers contain separators", async () => {
@@ -245,6 +259,7 @@ describe("host process operations", () => {
 it("reports the host inventory through health and the run-scoped environment operation", async () => {
   const { agent, frames } = await fixture();
   const health = await agent.health();
+  expect(health.name).toBe("Test computer");
   expect(health.environment?.tools[0]).toMatchObject({ name: "gh", status: "signed in" });
   await agent.receive(request({ op: "computer.environment", homeKey: "bot" }));
   await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));

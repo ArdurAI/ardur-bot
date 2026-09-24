@@ -8,6 +8,7 @@ import { IntegrationCatalog } from "./IntegrationCatalog";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
+  servers: vi.fn(),
   connect: vi.fn(),
   grants: vi.fn(),
   assign: vi.fn(),
@@ -21,7 +22,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("../../../lib/rpc", () => ({
   selectedSpaceId: () => "space",
-  rpc: { integrations: api, bots: { list: api.bots } },
+  rpc: { integrations: api, bots: { list: api.bots }, mcp: { servers: { list: api.servers } } },
 }));
 vi.mock("../../../lib/mcp-connect", () => ({
   MCP_OAUTH_CHANNEL: "test",
@@ -50,6 +51,28 @@ vi.mock("@ardurbot/ui-web", () => {
     }) => <button {...props} aria-pressed={pressed} onClick={() => onPressedChange(!pressed)} />,
     NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
     NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
+    Badge: Container,
+    Tabs: ({
+      children,
+      value,
+      onValueChange,
+    }: {
+      children: ReactNode;
+      value: string;
+      onValueChange(value: string): void;
+    }) => (
+      <select
+        aria-label="Source"
+        value={value}
+        onChange={(event) => onValueChange(event.target.value)}
+      >
+        {children}
+      </select>
+    ),
+    TabsList: ({ children }: { children: ReactNode }) => children,
+    TabsTrigger: ({ children, value }: { children: ReactNode; value: string }) => (
+      <option value={value}>{children}</option>
+    ),
     Card: Container,
     CardContent: Container,
     CardHeader: Container,
@@ -157,6 +180,17 @@ beforeEach(() => {
   );
   vi.spyOn(window, "open").mockReturnValue({ close: vi.fn() } as unknown as Window);
   api.list.mockImplementation(async () => ({ catalog, connections }));
+  api.servers.mockImplementation(async () =>
+    connections.map((connection) => ({
+      id: connection.id,
+      name: catalog.find((item) => item.id === connection.catalogId)?.name,
+      catalogId: connection.catalogId,
+      transport: "streamable_http",
+      enabled: connection.state !== "not-connected",
+      oauthStatus: "none",
+      connectionState: connection.state,
+    })),
+  );
   api.bots.mockResolvedValue([{ id: "bot", name: "Helper", archivedAt: null }]);
   api.grants.mockResolvedValue([]);
   api.resourceTools.mockResolvedValue([]);
@@ -196,6 +230,21 @@ const click = async (element: HTMLElement) => {
 };
 
 describe("Settings integration catalog", () => {
+  it("filters Yours and Catalog without mixing custom MCP servers into product accounts", async () => {
+    connections = [connected];
+    await mount();
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(8);
+    const source = container.querySelector<HTMLSelectElement>('select[aria-label="Source"]')!;
+    await act(async () => {
+      source.value = "yours";
+      source.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(container.querySelector("tbody")?.textContent).toContain("GitHub");
+    await fill("Search integrations", "no match");
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(0);
+    expect(container.textContent).toContain("No items found.");
+  });
   it("shows eight cards with remote and host options", async () => {
     await mount();
     expect(container.querySelectorAll('[data-testid^="integration-"]')).toHaveLength(9);
