@@ -211,6 +211,7 @@ import { useModelSettings } from "../lib/use-model-settings";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
+import { Board as ProjectBoard } from "./board/Board";
 import { CompareStart } from "./CompareStart";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
@@ -333,10 +334,11 @@ function readCollapsedSidebarSections(userId: string | null | undefined): Set<st
   }
 }
 
-export function ShellPage({ team = false }: { team?: boolean }) {
+export function ShellPage({ team = false, board = false }: { team?: boolean; board?: boolean }) {
+  const TaskPage = board ? ProjectBoard : TeamBoard;
   const { t } = useLingui();
-  const teamView = useRef(team);
-  teamView.current = team;
+  const teamView = useRef(team || board);
+  teamView.current = team || board;
   const { botId, groupId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -661,7 +663,8 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   const autoSpokenBotId = useRef<string | null>(null);
 
   const inGroup = Boolean(groupId);
-  const active = team || inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
+  const active =
+    team || board || inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
   computerOpenRef.current = computerOpen;
@@ -2681,6 +2684,17 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             : "md:w-[316px]"
         }`}
       >
+        <Button
+          variant="ghost"
+          className="m-2"
+          aria-pressed={board}
+          onClick={() => {
+            navigate("/app/board");
+            setMobileSidebarOpen(false);
+          }}
+        >
+          <Trans>Board</Trans>
+        </Button>
         {bots.length >= 2 ? (
           <Button
             variant="ghost"
@@ -3267,13 +3281,14 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         }}
       />
 
-      {team ? (
+      {team || board ? (
         <main
           aria-hidden={mobileSidebarOpen || undefined}
           inert={mobileSidebarOpen}
           className="flex min-w-0 flex-1 flex-col bg-background"
         >
-          <TeamBoard
+          <TaskPage
+            bots={bots}
             key={bootstrapMe?.spaceId}
             navigation={
               <Button
@@ -3295,7 +3310,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
       <main
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
-        className={`${team ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
+        className={`${team || board ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
           <div className="flex min-w-0 items-center gap-2">

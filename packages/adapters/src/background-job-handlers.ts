@@ -11,6 +11,7 @@ import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { deliverMemory } from "@ardurbot/memory";
+import { executeBoardCommand } from "./board/worker.js";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { expireComputerControl } from "./computer-control.js";
@@ -41,6 +42,7 @@ export function createBackgroundJobHandlers(deps: {
   deploymentModelKey?: string;
   messaging?: MessagingSurface;
   cloudAgent?: CloudAgentConnection | null;
+  dataDir?: string;
 }): BackgroundJobHandlers {
   const deliverMessaging = async (runId?: string) => {
     if (!deps.messaging) return;
@@ -58,6 +60,8 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
+    "board.run": ({ requestId }) =>
+      executeBoardCommand({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" }, requestId),
     "learning.curate": (payload) => curateLearningSpaces(deps, payload),
     "learning.review": (payload) =>
       reviewLearning(

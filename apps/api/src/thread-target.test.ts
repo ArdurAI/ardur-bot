@@ -949,6 +949,56 @@ function groupTarget() {
 }
 
 describe("sendThreadMessage", () => {
+  it("stores Board identity and close permission on a newly queued run before enqueue", async () => {
+    const tx = {
+      thread: { update: vi.fn(async () => ({ nextMessageSeq: 1, nextEventSeq: 1 })) },
+      message: {
+        create: vi.fn(async () => ({
+          id: "message",
+          seq: 1,
+          threadId: "thread",
+          blocks: [{ kind: "text", text: "Board task" }],
+          createdAt: new Date(),
+        })),
+        update: vi.fn(),
+      },
+      run: {
+        findMany: vi.fn(async () => []),
+        findUnique: vi.fn(async () => ({ status: "queued", startedAt: null })),
+        create: vi.fn(async () => ({ id: "run", taskId: "task", status: "queued" })),
+      },
+      task: { create: vi.fn(async () => ({ id: "task" })) },
+      event: { create: vi.fn(async () => ({ id: "event", seq: 1, createdAt: new Date() })) },
+    };
+    const prisma = {
+      message: { findUnique: vi.fn(async () => null) },
+      $transaction: vi.fn(async (work: (client: typeof tx) => unknown) => work(tx)),
+    } as unknown as PrismaClient;
+    const enqueue = vi.fn(async () => {
+      expect(tx.run.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          boardWorkspaceId: "workspace",
+          boardItemId: "board-a",
+          boardCloseWhenDone: false,
+        }),
+      });
+    });
+    await sendThreadMessage(
+      {
+        prisma,
+        events: { notify: vi.fn(async () => undefined) } as never,
+        jobs: { enqueue } as never,
+      },
+      { userId: "owner", spaceId: "space" } as Actor,
+      { kind: "bot", botId: "builder", threadId: "thread" } as ThreadTarget,
+      {
+        text: "Board task",
+        clientNonce: "board-click",
+        board: { workspaceId: "workspace", itemId: "board-a", closeWhenDone: false },
+      },
+    );
+    expect(enqueue).toHaveBeenCalled();
+  });
   it("answers a waiting question with a free-text chat message", async () => {
     const tx = {
       $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),

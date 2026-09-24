@@ -210,6 +210,11 @@ msgstr ""
 msgid "Acceptance"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Acceptance criteria"
+msgstr ""
+
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Accepted"
@@ -676,6 +681,11 @@ msgstr ""
 msgid "asks first"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Assignee"
+msgstr ""
+
 #. placeholder {0}: preset.time
 #: src/pages/RoutineSchedule.tsx
 msgid "at {0}"
@@ -776,9 +786,27 @@ msgstr ""
 msgid "Block link copied."
 msgstr ""
 
+#: src/pages/board/Board.tsx
+msgid "Blocked"
+msgstr ""
+
 #. placeholder {0}: row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Blocked by"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Blocks"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+#: src/pages/Shell.tsx
+msgid "Board"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -794,6 +822,7 @@ msgstr "Inicializando o computador do {0}"
 msgid "bot"
 msgstr "bot"
 
+#: src/pages/board/Board.tsx
 #: src/pages/ChannelPairingSettings.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/MemoryHistory.tsx
@@ -1056,6 +1085,10 @@ msgstr ""
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Escolha qual modelo conectado a Ardur Bot usa."
 
+#: src/pages/board/Board.tsx
+msgid "Claim"
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr ""
@@ -1094,6 +1127,7 @@ msgstr ""
 msgid "Client secret"
 msgstr ""
 
+#: src/pages/board/Board.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -1157,6 +1191,10 @@ msgstr "Fechar configurações do usuário"
 msgid "Close voice settings"
 msgstr "Fechar configurações de voz"
 
+#: src/pages/board/Board.tsx
+msgid "Close when the bot reports done"
+msgstr ""
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
 msgstr "Nuvem"
@@ -1198,6 +1236,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "Comando"
+
+#: src/pages/board/Board.tsx
+msgid "Comment"
+msgstr ""
 
 #: src/components/composer/command-description.ts
 msgid "Compare bots"
@@ -1942,6 +1984,11 @@ msgstr ""
 msgid "Could not update this computer. Try again."
 msgstr ""
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Could not update this item."
+msgstr ""
+
 #: src/pages/TeamBoard.tsx
 msgid "Could not update this task; try again."
 msgstr ""
@@ -2021,6 +2068,10 @@ msgstr "Crie o seu Ardur Bot"
 
 #: src/components/AskCard.tsx
 msgid "Created"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
@@ -2116,6 +2167,14 @@ msgstr "Padrão ({0})"
 msgid "Default scope"
 msgstr "Escopo padrão"
 
+#: src/pages/board/ItemForm.tsx
+msgid "Defer until"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Deferred"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -2175,6 +2234,11 @@ msgstr "Negado"
 msgid "Deny"
 msgstr "Negar"
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/Graph.tsx
+msgid "Dependencies"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Deploy private key"
 msgstr ""
@@ -2188,6 +2252,7 @@ msgstr "Padrão de implantação"
 msgid "Describe what this bot does"
 msgstr "Descreva o que este bot faz"
 
+#: src/pages/board/ItemForm.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "Descrição"
@@ -2306,6 +2371,7 @@ msgid "Don’t have an account?"
 msgstr "Não tem uma conta?"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Concluído"
@@ -2343,6 +2409,10 @@ msgstr "Habilidade de rascunho"
 msgid "Drag, drop, or paste an image"
 msgstr "Arraste, solte ou cole uma imagem"
 
+#: src/pages/board/ItemForm.tsx
+msgid "Due"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Duplicate"
 msgstr "Duplicar"
@@ -2359,6 +2429,7 @@ msgstr "ex.: Hivenet Agent, Presales, bot de planilhas"
 msgid "Earlier message"
 msgstr ""
 
+#: src/pages/board/Board.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
@@ -2424,6 +2495,14 @@ msgstr "Digite um número inteiro de 1 a 1000 para o limite de imagens."
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "Digite este código em <0>{0}</0>"
+
+#: src/pages/board/Board.tsx
+msgid "Epic"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Epics"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -2495,6 +2574,7 @@ msgstr ""
 msgid "Expires in five minutes."
 msgstr ""
 
+#: src/pages/board/Board.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Exportar"
@@ -2726,6 +2806,7 @@ msgstr ""
 msgid "high — slower, checks more carefully"
 msgstr ""
 
+#: src/pages/board/Board.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "History"
 msgstr ""
@@ -2803,6 +2884,10 @@ msgstr ""
 msgid "Import OpenAPI JSON"
 msgstr "Importar OpenAPI JSON"
 
+#: src/pages/board/Board.tsx
+msgid "In progress"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "inappropriate"
 msgstr ""
@@ -2834,6 +2919,10 @@ msgstr "Entradas"
 
 #: src/pages/TeamBoard.tsx
 msgid "Inputs and boundaries"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Install Beads"
 msgstr ""
 
 #: src/components/OllamaSettings.tsx
@@ -2941,6 +3030,14 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Kubernetes context"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Label"
+msgstr ""
+
+#: src/pages/board/ItemForm.tsx
+msgid "Labels"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
@@ -3070,6 +3167,7 @@ msgid "Loading your tools."
 msgstr ""
 
 #: src/App.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -3373,6 +3471,7 @@ msgstr "Modelos do servidor"
 msgid "Monthly"
 msgstr "Mensalmente"
 
+#: src/pages/board/ItemForm.tsx
 #: src/pages/Shell.tsx
 msgid "More"
 msgstr ""
@@ -3453,6 +3552,11 @@ msgstr "Novo bot"
 #: src/pages/GroupPanel.tsx
 msgid "New group"
 msgstr "Novo grupo"
+
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "New item"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New open-work item"
@@ -3862,6 +3966,10 @@ msgstr ""
 msgid "Pairing code"
 msgstr ""
 
+#: src/pages/board/ItemForm.tsx
+msgid "Parent"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Parent page"
 msgstr ""
@@ -3966,6 +4074,10 @@ msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Previous"
+msgstr ""
+
+#: src/pages/board/ItemForm.tsx
+msgid "Priority"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -4079,6 +4191,10 @@ msgstr "somente leitura"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Ready"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -4394,6 +4510,7 @@ msgstr "Restaure o último espaço de trabalho salvo. O trabalho não salvo no c
 msgid "Restoring your workspace"
 msgstr ""
 
+#: src/pages/board/Board.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -4574,6 +4691,7 @@ msgstr ""
 #: src/components/MessageFeedback.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/board/ItemForm.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -4669,6 +4787,7 @@ msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -4745,6 +4864,11 @@ msgstr "Enviar link de redefinição"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Send this code to the bot in a private message. Expires in five minutes."
+msgstr ""
+
+#. placeholder {0}: chosenBot.name
+#: src/pages/board/Board.tsx
+msgid "Send to {0}"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -4974,6 +5098,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Standard"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Start a board in this folder"
 msgstr ""
 
 #: src/components/composer/command-description.ts
@@ -5239,6 +5367,10 @@ msgstr ""
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Este arquivo não é válido UTF-8 Markdown."
 
+#: src/pages/board/Board.tsx
+msgid "This folder has no board"
+msgstr ""
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "esse Mac"
@@ -5296,6 +5428,7 @@ msgstr "Hora do dia"
 msgid "Timeline"
 msgstr ""
 
+#: src/pages/board/ItemForm.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Título"
@@ -5347,6 +5480,11 @@ msgstr "Tentar novamente"
 
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Type"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -5498,6 +5636,10 @@ msgstr "Verificar e adicionar"
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "Verificando…"
+
+#: src/pages/board/Board.tsx
+msgid "View"
+msgstr ""
 
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx

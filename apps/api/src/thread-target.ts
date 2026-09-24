@@ -627,6 +627,7 @@ export async function sendThreadMessage(
   actor: Actor,
   target: ThreadTarget,
   input: {
+    board?: { workspaceId: string; itemId: string; closeWhenDone: boolean };
     text?: string;
     artifactIds?: string[];
     mentions?: MentionTargetInput[];
@@ -714,6 +715,10 @@ export async function sendThreadMessage(
           },
           select: { id: true, taskId: true, status: true },
         });
+        if (input.board && activeRuns.length)
+          throw new ORPCError("CONFLICT", {
+            message: "This bot is already working. Try again when it finishes.",
+          });
         const waitingRuns = activeRuns.filter((run) => run.status === "waiting_input");
         if (waitingRuns.length) {
           const answerText = input.text?.trim();
@@ -812,6 +817,13 @@ export async function sendThreadMessage(
             userId: actor.userId,
             status: "queued",
             trigger: "user",
+            ...(input.board
+              ? {
+                  boardWorkspaceId: input.board.workspaceId,
+                  boardItemId: input.board.itemId,
+                  boardCloseWhenDone: input.board.closeWhenDone,
+                }
+              : {}),
             clientNonce: sendRunClientNonce(input.clientNonce, message.id),
             sourceMessageId: message.id,
           },

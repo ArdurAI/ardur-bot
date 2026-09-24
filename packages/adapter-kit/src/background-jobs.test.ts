@@ -10,6 +10,7 @@ import type { BackgroundJobHandlers } from "./types.js";
 
 function handlers(): BackgroundJobHandlers {
   return {
+    "board.run": vi.fn(async () => undefined),
     "learning.curate": async () => undefined,
     "learning.review": async () => undefined,
     "memory.git-push": async () => undefined,

@@ -10,6 +10,7 @@ import {
   TaskProgressSchema,
 } from "@ardurbot/contracts";
 import { z } from "zod";
+import { boardTools } from "./board/tools.js";
 
 export const DELEGATION_TOOL_NAMES = new Set([
   "delegation_status",
@@ -25,6 +26,7 @@ export const DELEGATION_TOOL_NAMES = new Set([
 ]);
 
 export const builtinAgentTools: ConnectorTool[] = [
+  ...boardTools,
   {
     name: "report_progress",
     description: "Update this task card quietly; blocked needs a reason and an action.",

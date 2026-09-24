@@ -210,6 +210,11 @@ msgstr "Accept"
 msgid "Acceptance"
 msgstr "Acceptance"
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Acceptance criteria"
+msgstr "Acceptance criteria"
+
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Accepted"
@@ -676,6 +681,11 @@ msgstr "Ask the server owner to configure this provider."
 msgid "asks first"
 msgstr "asks first"
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Assignee"
+msgstr "Assignee"
+
 #. placeholder {0}: preset.time
 #: src/pages/RoutineSchedule.tsx
 msgid "at {0}"
@@ -776,10 +786,28 @@ msgstr "Before"
 msgid "Block link copied."
 msgstr "Block link copied."
 
+#: src/pages/board/Board.tsx
+msgid "Blocked"
+msgstr "Blocked"
+
 #. placeholder {0}: row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Blocked — {0}"
+
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Blocked by"
+msgstr "Blocked by"
+
+#: src/pages/board/Board.tsx
+msgid "Blocks"
+msgstr "Blocks"
+
+#: src/pages/board/Board.tsx
+#: src/pages/Shell.tsx
+msgid "Board"
+msgstr "Board"
 
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
@@ -794,6 +822,7 @@ msgstr "Booting up {0}’s computer"
 msgid "bot"
 msgstr "bot"
 
+#: src/pages/board/Board.tsx
 #: src/pages/ChannelPairingSettings.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/MemoryHistory.tsx
@@ -1056,6 +1085,10 @@ msgstr "Choose folder"
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Choose which connected model Ardur Bot uses."
 
+#: src/pages/board/Board.tsx
+msgid "Claim"
+msgstr "Claim"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr "Claude Code (your claude sign-in)"
@@ -1094,6 +1127,7 @@ msgstr "Client ID"
 msgid "Client secret"
 msgstr "Client secret"
 
+#: src/pages/board/Board.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -1157,6 +1191,10 @@ msgstr "Close user settings"
 msgid "Close voice settings"
 msgstr "Close voice settings"
 
+#: src/pages/board/Board.tsx
+msgid "Close when the bot reports done"
+msgstr "Close when the bot reports done"
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
 msgstr "Cloud"
@@ -1198,6 +1236,10 @@ msgstr "Coming soon"
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "Command"
+
+#: src/pages/board/Board.tsx
+msgid "Comment"
+msgstr "Comment"
 
 #: src/components/composer/command-description.ts
 msgid "Compare bots"
@@ -1942,6 +1984,11 @@ msgstr "Could not update reaction"
 msgid "Could not update this computer. Try again."
 msgstr "Could not update this computer. Try again."
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Could not update this item."
+msgstr "Could not update this item."
+
 #: src/pages/TeamBoard.tsx
 msgid "Could not update this task; try again."
 msgstr "Could not update this task; try again."
@@ -2022,6 +2069,10 @@ msgstr "Create your Ardur Bot"
 #: src/components/AskCard.tsx
 msgid "Created"
 msgstr "Created"
+
+#: src/pages/board/Board.tsx
+msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
+msgstr "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -2116,6 +2167,14 @@ msgstr "Default ({0})"
 msgid "Default scope"
 msgstr "Default scope"
 
+#: src/pages/board/ItemForm.tsx
+msgid "Defer until"
+msgstr "Defer until"
+
+#: src/pages/board/Board.tsx
+msgid "Deferred"
+msgstr "Deferred"
+
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -2175,6 +2234,11 @@ msgstr "Denied"
 msgid "Deny"
 msgstr "Deny"
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/Graph.tsx
+msgid "Dependencies"
+msgstr "Dependencies"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Deploy private key"
 msgstr "Deploy private key"
@@ -2188,6 +2252,7 @@ msgstr "Deployment default"
 msgid "Describe what this bot does"
 msgstr "Describe what this bot does"
 
+#: src/pages/board/ItemForm.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "Description"
@@ -2306,6 +2371,7 @@ msgid "Don’t have an account?"
 msgstr "Don’t have an account?"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Done"
@@ -2343,6 +2409,10 @@ msgstr "Draft skill"
 msgid "Drag, drop, or paste an image"
 msgstr "Drag, drop, or paste an image"
 
+#: src/pages/board/ItemForm.tsx
+msgid "Due"
+msgstr "Due"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Duplicate"
 msgstr "Duplicate"
@@ -2359,6 +2429,7 @@ msgstr "e.g. Hivenet Agent, Presales, Timesheets bot"
 msgid "Earlier message"
 msgstr "Earlier message"
 
+#: src/pages/board/Board.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr "Edit"
@@ -2424,6 +2495,14 @@ msgstr "Enter a whole number from 1 to 1000 for the image limit."
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "Enter this code at <0>{0}</0>"
+
+#: src/pages/board/Board.tsx
+msgid "Epic"
+msgstr "Epic"
+
+#: src/pages/board/Board.tsx
+msgid "Epics"
+msgstr "Epics"
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -2495,6 +2574,7 @@ msgstr "Expired"
 msgid "Expires in five minutes."
 msgstr "Expires in five minutes."
 
+#: src/pages/board/Board.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Export"
@@ -2726,6 +2806,7 @@ msgstr "Hide password"
 msgid "high — slower, checks more carefully"
 msgstr "high — slower, checks more carefully"
 
+#: src/pages/board/Board.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "History"
 msgstr "History"
@@ -2803,6 +2884,10 @@ msgstr "Import memory bundle"
 msgid "Import OpenAPI JSON"
 msgstr "Import OpenAPI JSON"
 
+#: src/pages/board/Board.tsx
+msgid "In progress"
+msgstr "In progress"
+
 #: src/pages/LearningObservation.tsx
 msgid "inappropriate"
 msgstr "inappropriate"
@@ -2835,6 +2920,10 @@ msgstr "Inputs"
 #: src/pages/TeamBoard.tsx
 msgid "Inputs and boundaries"
 msgstr "Inputs and boundaries"
+
+#: src/pages/board/Board.tsx
+msgid "Install Beads"
+msgstr "Install Beads"
 
 #: src/components/OllamaSettings.tsx
 msgid "Installed models"
@@ -2942,6 +3031,14 @@ msgstr "Kubeconfig path on the server"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Kubernetes context"
 msgstr "Kubernetes context"
+
+#: src/pages/board/Board.tsx
+msgid "Label"
+msgstr "Label"
+
+#: src/pages/board/ItemForm.tsx
+msgid "Labels"
+msgstr "Labels"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Language"
@@ -3070,6 +3167,7 @@ msgid "Loading your tools."
 msgstr "Loading your tools."
 
 #: src/App.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -3373,6 +3471,7 @@ msgstr "Models from server"
 msgid "Monthly"
 msgstr "Monthly"
 
+#: src/pages/board/ItemForm.tsx
 #: src/pages/Shell.tsx
 msgid "More"
 msgstr "More"
@@ -3453,6 +3552,11 @@ msgstr "New bot"
 #: src/pages/GroupPanel.tsx
 msgid "New group"
 msgstr "New group"
+
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "New item"
+msgstr "New item"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New open-work item"
@@ -3862,6 +3966,10 @@ msgstr "Pair device"
 msgid "Pairing code"
 msgstr "Pairing code"
 
+#: src/pages/board/ItemForm.tsx
+msgid "Parent"
+msgstr "Parent"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Parent page"
 msgstr "Parent page"
@@ -3967,6 +4075,10 @@ msgstr "Preview migration"
 #: src/pages/shell/computer-terminal.tsx
 msgid "Previous"
 msgstr "Previous"
+
+#: src/pages/board/ItemForm.tsx
+msgid "Priority"
+msgstr "Priority"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
@@ -4080,6 +4192,10 @@ msgstr "read-only"
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr "Reads can run without asking once you allow them. Writes always ask."
+
+#: src/pages/board/Board.tsx
+msgid "Ready"
+msgstr "Ready"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -4394,6 +4510,7 @@ msgstr "Restore the last saved workspace. Unsaved work on the computer is lost."
 msgid "Restoring your workspace"
 msgstr "Restoring your workspace"
 
+#: src/pages/board/Board.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -4574,6 +4691,7 @@ msgstr "Same task, {count} bots"
 #: src/components/MessageFeedback.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/board/ItemForm.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -4669,6 +4787,7 @@ msgstr "Screen and terminal: Not available on this computer"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -4746,6 +4865,11 @@ msgstr "Send reset link"
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Send this code to the bot in a private message. Expires in five minutes."
 msgstr "Send this code to the bot in a private message. Expires in five minutes."
+
+#. placeholder {0}: chosenBot.name
+#: src/pages/board/Board.tsx
+msgid "Send to {0}"
+msgstr "Send to {0}"
 
 #: src/components/AskCard.tsx
 msgid "Sending…"
@@ -4975,6 +5099,10 @@ msgstr "Stale"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Standard"
 msgstr "Standard"
+
+#: src/pages/board/Board.tsx
+msgid "Start a board in this folder"
+msgstr "Start a board in this folder"
 
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
@@ -5239,6 +5367,10 @@ msgstr "This computer"
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "This file is not valid UTF-8 Markdown."
 
+#: src/pages/board/Board.tsx
+msgid "This folder has no board"
+msgstr "This folder has no board"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "this Mac"
@@ -5296,6 +5428,7 @@ msgstr "Time of day"
 msgid "Timeline"
 msgstr "Timeline"
 
+#: src/pages/board/ItemForm.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Title"
@@ -5348,6 +5481,11 @@ msgstr "Try again"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr "Turn on"
+
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Type"
+msgstr "Type"
 
 #: src/components/AskCard.tsx
 msgid "Type your answer"
@@ -5498,6 +5636,10 @@ msgstr "Verify and add"
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "Verifying…"
+
+#: src/pages/board/Board.tsx
+msgid "View"
+msgstr "View"
 
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx

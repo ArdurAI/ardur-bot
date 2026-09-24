@@ -639,4 +639,22 @@ export const RU_MESSAGES: Record<string, string> = {
   "Your phone's built-in voice. Free, no account needed":
     "Встроенный голос телефона. Бесплатно, без аккаунта",
   "Could not save that preference": "Не удалось сохранить эту настройку",
+  Board: "Доска",
+  Ready: "Готово к работе",
+  Blocks: "Блокирует",
+  "Blocked by": "Заблокировано",
+  "Acceptance criteria": "Критерии приёмки",
+  "Could not load Board; retry.": "Не удалось загрузить доску. Повторите попытку.",
+  "Beads is not installed on this computer": "Beads не установлен на этом компьютере",
+  "This folder has no board": "В этой папке нет доски",
+  "Another write is in progress": "Выполняется другая запись",
+  "The board is unavailable. Check this computer and its registered folders.":
+    "Доска недоступна. Проверьте компьютер и зарегистрированные папки.",
+  "Open the desktop app to use this board.":
+    "Откройте приложение на компьютере, чтобы использовать доску.",
+  "This board is only available to this computer's owner.":
+    "Эта доска доступна только владельцу компьютера.",
+  "Beads version {version} is not supported yet": "Версия Beads {version} пока не поддерживается",
+  "The board command timed out.": "Время выполнения команды доски истекло.",
+  "Dolt is not installed on this computer.": "На этом компьютере не установлен Dolt.",
 };

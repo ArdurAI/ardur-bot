@@ -67,7 +67,7 @@ export class HostHub {
       !host ||
       this.pending.size >= HOST_IN_FLIGHT ||
       this.seen.has(request.id) ||
-      this.lostRuns.has(request.scope.runId) ||
+      (this.lostRuns.has(request.scope.runId) && request.operation.op !== "board.run") ||
       this.lostRuns.size >= 100_000
     ) {
       await worker.send({

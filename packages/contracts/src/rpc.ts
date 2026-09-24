@@ -2,6 +2,7 @@ import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
+import { boardContract } from "./board.js";
 import { CommandBlockSchema } from "./command-blocks.js";
 import { ComparisonExportSchema, comparisonsContract } from "./comparison.js";
 import {
@@ -197,6 +198,7 @@ const threadSendInput = threadTarget
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
 export const appContract = {
+  board: boardContract,
   channelPairing: channelPairingContract,
   devices: devicesContract,
   pairing: pairingContract,

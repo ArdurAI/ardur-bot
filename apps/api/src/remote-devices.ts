@@ -181,6 +181,9 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "threads/markRead",
   "botSections/list",
   "team/board",
+  "board/workspaces",
+  "board/snapshot",
+  "board/show",
   "comparisons/list",
   "comparisons/get",
 ]);

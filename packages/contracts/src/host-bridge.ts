@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { BoardRunSchema } from "./board.js";
 import {
   RuntimeAvailabilitySchema,
   RuntimeInfoSchema,
@@ -125,6 +126,7 @@ export const HostTurnSchema = z.strictObject({
 });
 export type HostTurn = z.infer<typeof HostTurnSchema>;
 export const HostOperationSchema = z.discriminatedUnion("op", [
+  z.strictObject({ op: z.literal("board.run"), request: BoardRunSchema }),
   z.strictObject({ op: z.literal("computer.environment"), homeKey: id }),
   z.strictObject({
     op: z.literal("computer.exec"),

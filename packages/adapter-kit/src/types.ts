@@ -559,6 +559,7 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "board.run": { requestId: string };
   "learning.curate": { spaceId?: string; requestedBy?: string; requestId?: string };
   "learning.review": {
     runId: string;

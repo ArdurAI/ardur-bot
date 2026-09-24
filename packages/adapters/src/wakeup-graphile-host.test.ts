@@ -61,6 +61,7 @@ it("replaces waiting Git pushes per space and serializes their execution", async
 
 function handlers(): BackgroundJobHandlers {
   return {
+    "board.run": vi.fn(async () => undefined),
     "learning.curate": async () => undefined,
     "learning.review": async () => undefined,
     "memory.git-push": async () => undefined,
