@@ -1,9 +1,10 @@
 import type { ComputerStatus, IdeRoot } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
-import { ComputerTerminalSession } from "../shell/computer-terminal";
+
+const ComputerTerminalSession = lazy(() => import("../shell/terminal-session"));
 
 export function IdeTerminal({ root }: { root: IdeRoot }) {
   const { t } = useLingui();
@@ -80,11 +81,13 @@ export function IdeTerminal({ root }: { root: IdeRoot }) {
           >{t`Release`}</Button>
         </div>
         <div className="min-h-0 flex-1">
-          <ComputerTerminalSession
-            botId={root.botId}
-            computerId={root.computerId}
-            workspace="computer"
-          />
+          <Suspense fallback={null}>
+            <ComputerTerminalSession
+              botId={root.botId}
+              computerId={root.computerId}
+              workspace="computer"
+            />
+          </Suspense>
         </div>
       </div>
     );

@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
-it("keeps CodeMirror behind the lazy IDE route in the static import graph", () => {
+it("keeps the IDE, editor, diff and terminal session out of the initial import graph", () => {
   const root = path.dirname(fileURLToPath(import.meta.url));
   const visit = (directory: string): string[] =>
     readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
@@ -42,8 +42,24 @@ it("keeps CodeMirror behind the lazy IDE route in the static import graph", () =
       if (target) walk(target);
     }
   }
-  walk(path.join(root, "App.tsx"));
-  expect(seen.has(path.join(root, "pages/ide/editor.tsx"))).toBe(false);
+  walk(path.join(root, "main.tsx"));
+  for (const file of [
+    "pages/ide/IdePage.tsx",
+    "pages/ide/editor.tsx",
+    "pages/ide/unsaved.ts",
+    "pages/ide/diff.tsx",
+    "pages/ide/terminal.tsx",
+    "pages/shell/terminal-session.tsx",
+  ])
+    expect(seen.has(path.join(root, file)), file).toBe(false);
+  expect(sources.get(path.join(root, "main.tsx"))).toContain("<BrowserRouter>");
+  expect(sources.get(path.join(root, "main.tsx"))).not.toMatch(
+    /createBrowserRouter|RouterProvider/,
+  );
+  for (const source of sources.values()) {
+    expect(source).not.toMatch(/\buseBlocker\b/);
+    expect(imports(source).some((name) => name.includes("ide-files"))).toBe(false);
+  }
   expect(sources.get(path.join(root, "App.tsx"))).toContain(
     'lazy(() => import("./pages/ide/IdePage"))',
   );

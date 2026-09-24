@@ -1,4 +1,8 @@
-import { decodeTerminalFrame, encodeTerminalFrame } from "@ardurbot/contracts";
+import {
+  DEFAULT_USER_PREFERENCES,
+  decodeTerminalFrame,
+  encodeTerminalFrame,
+} from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 import { bots, installPerformanceFixture } from "./performance-fixture";
@@ -41,7 +45,8 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
       request.postDataJSON()?.json ?? JSON.parse(url.searchParams.get("data") ?? "{}").json ?? {};
     const operation = url.pathname.slice(5);
     let result: unknown;
-    if (operation === "ide/roots") result = roots;
+    if (operation === "preferences/get") result = DEFAULT_USER_PREFERENCES;
+    else if (operation === "ide/roots") result = roots;
     else if (operation === "bots/list") result = bots;
     else if (operation === "ide/list")
       result =
@@ -156,7 +161,7 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
     await page.evaluate(() =>
       performance
         .getEntriesByType("resource")
-        .some((entry) => entry.name.includes("ide-codemirror")),
+        .some((entry) => /\/(?:IdePage|ide-codemirror|terminal-session|diff)-/.test(entry.name)),
     ),
   ).toBe(false);
   await page.goto("/app/ide");
@@ -187,6 +192,10 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
   await page.getByRole("button", { name: "main.ts", exact: true }).click();
   const editor = page.locator('[data-ide-editor][aria-label="src/main.ts"]');
   await editor.fill("const answer = 42;\nconsole.log(answer);\n");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.getByRole("link", { name: "Bots", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/ide$/);
+  await expect(editor).toContainText("const answer = 42;");
   await page.keyboard.press("ControlOrMeta+s");
   await expect(page.getByRole("status")).toHaveText("Saved");
   expect(files.get("src/main.ts")).toContain("42");
@@ -233,4 +242,30 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
   await page.keyboard.press("Enter");
   await expect.poll(() => commands.join("")).toContain("pwd");
   await captureScreenshot(page, testInfo, "ide-terminal");
+
+  // Traverse entries made by BrowserRouter, rather than reloading the document.
+  await page.getByRole("link", { name: "Bots", exact: true }).click();
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "IDE", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "src", exact: true }).click();
+  await page.getByRole("button", { name: "main.ts", exact: true }).click();
+  await editor.fill("unsaved buffer");
+  await expect(page.getByRole("img", { name: "Unsaved changes", exact: true })).toBeVisible();
+  const index = await page.evaluate(() => window.history.state.idx);
+  const length = await page.evaluate(() => window.history.length);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const dialogReady = page.waitForEvent("dialog", { timeout: 10_000 });
+    await page.evaluate(() => window.history.forward());
+    const dialog = await dialogReady;
+    expect(dialog.type()).toBe("confirm");
+    expect(dialog.message()).toBe("Unsaved changes");
+    await dialog.dismiss();
+    await expect.poll(() => page.evaluate(() => window.history.state.idx)).toBe(index);
+    await expect(editor).toHaveText("unsaved buffer");
+    expect(await page.evaluate(() => window.history.length)).toBe(length);
+  }
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.evaluate(() => window.history.forward());
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
 });

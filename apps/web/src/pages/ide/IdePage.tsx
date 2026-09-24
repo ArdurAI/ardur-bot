@@ -3,11 +3,11 @@ import { ideHandoffText } from "@ardurbot/contracts";
 import { Button, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { rpc } from "../../lib/rpc";
 import { WindowChrome } from "../WindowChrome";
-import { Changes, SideBySideDiff, useChanges } from "./changes";
+import { Changes, useChanges } from "./changes";
 import { AskBot, QuickOpen } from "./dialogs";
 import type { EditorHandle, EditorSelection } from "./editor";
 import Editor from "./editor";
@@ -17,6 +17,8 @@ import { basename, clamp, ideShortcut, modified, readLayout, saveLayout } from "
 import { Splitter } from "./splitter";
 import { IdeTerminal } from "./terminal";
 import { useUnsavedChanges } from "./unsaved";
+
+const SideBySideDiff = lazy(() => import("./diff"));
 
 export default function IdePage() {
   const { t } = useLingui();
@@ -349,7 +351,9 @@ export default function IdePage() {
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">
             {diff ? (
-              <SideBySideDiff change={diff} />
+              <Suspense fallback={null}>
+                <SideBySideDiff change={diff} />
+              </Suspense>
             ) : tab ? (
               <div className="flex h-full flex-col">
                 {tab.readOnly ? (

@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { BrowserRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => ({
@@ -12,9 +12,13 @@ const session = vi.hoisted(() => ({
 }));
 vi.mock("./lib/auth", () => ({ authClient: { useSession: () => session } }));
 vi.mock("./lib/performance", () => ({ markOnce: vi.fn(), markAfterPaint: vi.fn() }));
+vi.mock("./lib/preferences", () => ({ resetPreferences: vi.fn() }));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
+}));
+vi.mock("./components/PreferencesProvider", () => ({
+  PreferencesProvider: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("./pages/Shell", () => ({ ShellPage: () => <p>Bot route</p> }));
 vi.mock("./pages/ide/IdePage", () => ({ default: () => <p>IDE route</p> }));
@@ -43,13 +47,18 @@ describe("App routing", () => {
     session.data = signedIn ? { user: { id: "user" } } : null;
     const host = document.createElement("div"),
       render = createRoot(host);
-    const router = createMemoryRouter([{ path: "*", element: <App /> }], { initialEntries: [url] });
+    window.history.replaceState(null, "", url);
     try {
-      await act(async () => render.render(<RouterProvider router={router} />));
+      await act(async () =>
+        render.render(
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>,
+        ),
+      );
       await vi.waitFor(() => expect(host.textContent).toBe(expected));
     } finally {
       await act(async () => render.unmount());
-      router.dispose();
       vi.unstubAllGlobals();
     }
   });

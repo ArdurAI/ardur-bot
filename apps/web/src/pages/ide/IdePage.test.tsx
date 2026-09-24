@@ -2,7 +2,7 @@
 import type { ComponentProps, ReactNode, Ref } from "react";
 import { act, useImperativeHandle, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -87,9 +87,7 @@ vi.mock("./editor", () => ({
 
 import IdePage from "./IdePage";
 
-let host: HTMLDivElement,
-  renderer: ReturnType<typeof createRoot>,
-  router: ReturnType<typeof createMemoryRouter>;
+let host: HTMLDivElement, renderer: ReturnType<typeof createRoot>;
 const tick = () =>
   act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -158,19 +156,21 @@ beforeEach(async () => {
   host = document.createElement("div");
   document.body.append(host);
   renderer = createRoot(host);
-  router = createMemoryRouter(
-    [
-      { path: "/app/ide", element: <IdePage /> },
-      { path: "/app", element: <p>Bots page</p> },
-    ],
-    { initialEntries: ["/app/ide"] },
+  window.history.replaceState(null, "", "/app/ide");
+  await act(async () =>
+    renderer.render(
+      <BrowserRouter>
+        <Routes>
+          <Route path="/app/ide" element={<IdePage />} />
+          <Route path="/app" element={<p>Bots page</p>} />
+        </Routes>
+      </BrowserRouter>,
+    ),
   );
-  await act(async () => renderer.render(<RouterProvider router={router} />));
   await tick();
 });
 afterEach(async () => {
   await act(async () => renderer.unmount());
-  router.dispose();
   host.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -214,16 +214,16 @@ describe("IDE page", () => {
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
     await act(async () => {
-      void router.navigate("/app");
+      host.querySelector<HTMLAnchorElement>('a[href="/app"]')!.click();
     });
     await tick();
-    expect(router.state.location.pathname).toBe("/app/ide");
+    expect(window.location.pathname).toBe("/app/ide");
     vi.mocked(window.confirm).mockReturnValue(true);
     await act(async () => {
-      void router.navigate("/app");
+      host.querySelector<HTMLAnchorElement>('a[href="/app"]')!.click();
     });
     await tick();
-    expect(router.state.location.pathname).toBe("/app");
+    expect(window.location.pathname).toBe("/app");
   });
   it("shows a read-only large file and never mounts a binary file", async () => {
     api.read.mockResolvedValue({
@@ -297,7 +297,10 @@ describe("IDE page", () => {
     await tick();
     await click("Changes");
     await click("src/main.ts");
-    expect(host.querySelector('[data-testid="ide-diff"]')?.textContent).toContain("old");
+    await vi.waitFor(async () => {
+      await tick();
+      expect(host.querySelector('[data-testid="ide-diff"]')?.textContent).toContain("old");
+    });
     expect(host.querySelector('[data-testid="ide-diff"]')?.textContent).toContain("new");
     await click("Terminal");
     expect(host.querySelector('[data-terminal-computer="computer"]')).not.toBeNull();

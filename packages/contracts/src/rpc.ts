@@ -217,6 +217,46 @@ const threadSendInput = threadTarget
   });
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
+// Keep IDE-only construction removable from the browser contracts barrel.
+const ideContract = /* @__PURE__ */ createIdeContract();
+function createIdeContract() {
+  return {
+    roots: oc.output(z.array(IdeRootSchema)),
+    list: oc
+      .input(z.object({ rootId: Id, path: IdePathSchema.default("") }))
+      .output(z.array(IdeEntrySchema)),
+    read: oc.input(z.object({ rootId: Id, path: IdePathSchema.min(1) })).output(IdeFileSchema),
+    save: oc
+      .input(
+        z.object({
+          rootId: Id,
+          path: IdePathSchema.min(1),
+          content: z.string().max(IDE_FILE_BYTES),
+          version: z.string().regex(/^[a-f0-9]{64}$/),
+          approved: z.boolean().default(false),
+        }),
+      )
+      .output(
+        z.object({
+          saved: z.boolean(),
+          approvalRequired: z.boolean(),
+          version: z.string().optional(),
+          reason: z.string().optional(),
+        }),
+      ),
+    changes: oc
+      .input(
+        z.object({
+          rootId: Id,
+          since: z.iso.datetime(),
+          until: z.iso.datetime(),
+          cursor: Id.optional(),
+        }),
+      )
+      .output(z.object({ items: z.array(IdeChangeSchema), nextCursor: Id.nullable() })),
+  };
+}
+
 export const appContract = {
   channelPairing: channelPairingContract,
   devices: devicesContract,
@@ -461,41 +501,7 @@ export const appContract = {
     markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
     markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
   },
-  ide: {
-    roots: oc.output(z.array(IdeRootSchema)),
-    list: oc
-      .input(z.object({ rootId: Id, path: IdePathSchema.default("") }))
-      .output(z.array(IdeEntrySchema)),
-    read: oc.input(z.object({ rootId: Id, path: IdePathSchema.min(1) })).output(IdeFileSchema),
-    save: oc
-      .input(
-        z.object({
-          rootId: Id,
-          path: IdePathSchema.min(1),
-          content: z.string().max(IDE_FILE_BYTES),
-          version: z.string().regex(/^[a-f0-9]{64}$/),
-          approved: z.boolean().default(false),
-        }),
-      )
-      .output(
-        z.object({
-          saved: z.boolean(),
-          approvalRequired: z.boolean(),
-          version: z.string().optional(),
-          reason: z.string().optional(),
-        }),
-      ),
-    changes: oc
-      .input(
-        z.object({
-          rootId: Id,
-          since: z.iso.datetime(),
-          until: z.iso.datetime(),
-          cursor: Id.optional(),
-        }),
-      )
-      .output(z.object({ items: z.array(IdeChangeSchema), nextCursor: Id.nullable() })),
-  },
+  ide: ideContract,
   terminal: {
     close: oc
       .input(z.object({ botId: Id, computerId: Id, sessionId: Id }))

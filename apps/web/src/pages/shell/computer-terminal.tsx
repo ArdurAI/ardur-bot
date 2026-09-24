@@ -5,7 +5,7 @@ import { Trans } from "@lingui/react/macro";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
 
-const Terminal = lazy(() => import("@ardurbot/ui-web/terminal"));
+const ComputerTerminalSession = lazy(() => import("./terminal-session"));
 
 export function useComputerTerminal({
   computer,
@@ -93,7 +93,13 @@ export function useComputerTerminal({
         !busy &&
         computer?.computerId &&
         botId ? (
-        <ComputerTerminalSession botId={botId} computerId={computer.computerId} />
+        <Suspense
+          fallback={
+            <p role="status" className="p-4 text-sm text-muted-foreground">{t`Opening terminal`}</p>
+          }
+        >
+          <ComputerTerminalSession botId={botId} computerId={computer.computerId} />
+        </Suspense>
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground">
           <p role="status">{failed ? t`Terminal could not open; try again` : state}</p>
@@ -108,41 +114,4 @@ export function useComputerTerminal({
         </div>
       ),
   };
-}
-
-export function ComputerTerminalSession({
-  botId,
-  computerId,
-  workspace,
-}: {
-  botId: string;
-  computerId: string;
-  workspace?: "computer";
-}) {
-  return (
-    <Suspense
-      fallback={
-        <p role="status" className="p-4 text-sm text-muted-foreground">
-          <Trans>Opening terminal</Trans>
-        </p>
-      }
-    >
-      <Terminal
-        key={`${computerId}:${botId}`}
-        close={(sessionId) => rpc.terminal.close({ botId, computerId, sessionId })}
-        ticket={(sessionId) => rpc.terminal.ticket({ botId, computerId, sessionId, workspace })}
-        labels={{
-          terminal: t`Terminal`,
-          reconnect: t`Reconnect`,
-          opening: t`Opening terminal`,
-          connecting: t`Connection lost — reconnecting`,
-          ended: t`Session ended — open a new terminal`,
-          newSession: t`Open a new terminal`,
-          find: t`Find in terminal`,
-          previous: t`Previous`,
-          next: t`Next`,
-        }}
-      />
-    </Suspense>
-  );
 }

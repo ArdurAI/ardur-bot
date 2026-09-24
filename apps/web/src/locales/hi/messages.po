@@ -415,7 +415,7 @@ msgstr "उन्नत"
 msgid "Advanced..."
 msgstr ""
 
-#: src/pages/ide/changes.tsx
+#: src/pages/ide/diff.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
@@ -835,7 +835,7 @@ msgstr "बियरर टोकन"
 msgid "Bearer token (optional)"
 msgstr ""
 
-#: src/pages/ide/changes.tsx
+#: src/pages/ide/diff.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
@@ -1533,7 +1533,7 @@ msgstr "कनेक्ट हो रहा है…"
 msgid "Connection"
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Connection lost — reconnecting"
 msgstr ""
 
@@ -2868,7 +2868,7 @@ msgstr ""
 msgid "Find a destination"
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Find in terminal"
 msgstr ""
 
@@ -3894,7 +3894,7 @@ msgstr "नई स्किल"
 msgid "New space"
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Next"
 msgstr ""
 
@@ -4073,7 +4073,7 @@ msgid "Not now"
 msgstr "अभी नहीं"
 
 #: src/components/ThreadCommandBlock.tsx
-#: src/pages/ide/changes.tsx
+#: src/pages/ide/diff.tsx
 msgid "Not recorded"
 msgstr ""
 
@@ -4206,7 +4206,7 @@ msgstr "खोलें"
 msgid "Open {0}"
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Open a new terminal"
 msgstr ""
 
@@ -4276,6 +4276,7 @@ msgid "Opening chat…"
 msgstr "चैट खुल रही है…"
 
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Opening terminal"
 msgstr ""
 
@@ -4465,7 +4466,7 @@ msgstr ""
 msgid "Preview migration"
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Previous"
 msgstr ""
 
@@ -4628,7 +4629,7 @@ msgstr "हाल के"
 msgid "Recheck"
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Reconnect"
 msgstr ""
 
@@ -5396,7 +5397,7 @@ msgstr "सर्वर का नाम"
 msgid "Server URL"
 msgstr "सर्वर URL"
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Session ended — open a new terminal"
 msgstr ""
 
@@ -5791,6 +5792,7 @@ msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Terminal"
 msgstr ""
 
