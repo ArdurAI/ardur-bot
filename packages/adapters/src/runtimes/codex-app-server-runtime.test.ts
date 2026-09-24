@@ -2,26 +2,38 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const native = vi.hoisted(() => ({ binary: vi.fn(), version: vi.fn() }));
+beforeEach(() => {
+  native.binary.mockResolvedValue("/fake/codex");
+  native.version.mockResolvedValue({ code: 0, version: "0.156.1" });
+});
+afterEach(() => vi.clearAllMocks());
 
 vi.mock("@ardurbot/host-runtime/runtimes/ardur-mcp-server", () => ({
   startArdurMcpServer: async () => ({ config: { command: "node", args: [] }, close: vi.fn() }),
 }));
 vi.mock("@ardurbot/host-runtime/runtimes/native-process", async (original) => ({
   ...(await original<object>()),
-  findNativeBinary: async () => "/fake/codex",
+  findNativeBinary: native.binary,
+  probeCommand: native.version,
 }));
 
-import { CodexAppServerRuntime } from "./codex-app-server-runtime.js";
+import { resolveRunModelPin } from "../run-model-pin.js";
+import { CodexAppServerRuntime, probeCodex } from "./codex-app-server-runtime.js";
 
 type Message = {
   id?: number | string;
   method?: string;
   params?: Record<string, unknown>;
   result?: unknown;
+  error?: { code: number };
 };
 function fixture(
   mode:
+    | "unsupported"
+    | "unreachable"
     | "success"
     | "login"
     | "reroute"
@@ -43,7 +55,9 @@ function fixture(
       const result = (value: unknown) => send({ id: message.id, result: value });
       switch (message.method) {
         case "initialize":
-          result({ userAgent: "test" });
+          if (mode === "unsupported" || mode === "unreachable")
+            send({ id: message.id, error: { code: mode === "unsupported" ? -32601 : -32000 } });
+          else result({ userAgent: "test" });
           break;
         case "account/read":
           result({ account: mode === "login" ? null : { type: "chatgpt" } });
@@ -276,4 +290,100 @@ it("counts cumulative comparison usage once across repeated notifications and mo
     { type: "usage", provider: "openai-codex", model: "model", inputTokens: 10, outputTokens: 5 },
     { type: "usage", provider: "openai-codex", model: "model", inputTokens: 20, outputTokens: 3 },
   ]);
+});
+
+describe("Codex availability", () => {
+  it("accepts 0.156.1 through the protocol and reports sign-in and models", async () => {
+    const f = fixture();
+    await expect(probeCodex(f.spawn)).resolves.toEqual({
+      runtimeKind: "codex-app-server",
+      version: "0.156.1",
+      signedIn: true,
+      available: true,
+      models: [{ id: "model", label: "Model", efforts: ["high"] }],
+    });
+  });
+  it("reports a missing binary without attempting sign-in", async () => {
+    native.binary.mockResolvedValue(null);
+    const f = fixture();
+    await expect(probeCodex(f.spawn)).resolves.toMatchObject({
+      available: false,
+      reason: "Codex is not installed.",
+    });
+    expect(f.spawn).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["login", "Not signed in — run codex login."],
+    ["unsupported", "Codex version 0.156.1 is not supported yet."],
+    ["unreachable", "Codex could not be reached. Check again or restart the desktop app."],
+  ] as const)("distinguishes %s from missing installation", async (mode, reason) => {
+    const f = fixture(mode);
+    const result = await probeCodex(f.spawn);
+    expect(result).toMatchObject({ available: false, version: "0.156.1", reason, models: [] });
+    if (mode === "login") expect(result.signedIn).toBe(false);
+  });
+  it("refuses an explicitly bound hosted connection even before its secret is loaded", async () => {
+    const f = fixture();
+    f.request.model.runtimePin!.credentialId = "hosted-connection";
+    await expect(f.collect()).rejects.toMatchObject({ problem: { code: "runtime-unavailable" } });
+    expect(f.spawn).not.toHaveBeenCalled();
+  });
+  it("still refuses explicitly supplied key or OAuth material before spawning", async () => {
+    for (const auth of [
+      { apiKey: "test-key" },
+      {
+        oauth: {
+          credential: {
+            type: "oauth" as const,
+            access: "test-access",
+            refresh: "test-refresh",
+            expires: 0,
+          },
+        },
+      },
+    ]) {
+      const f = fixture();
+      Object.assign(f.request.model, auth);
+      await expect(f.collect()).rejects.toMatchObject({
+        problem: {
+          code: "runtime-unavailable",
+          reason:
+            "Codex uses its own ChatGPT sign-in. Remove the pinned connection or change the runtime.",
+        },
+      });
+      expect(f.spawn).not.toHaveBeenCalled();
+    }
+  });
+});
+
+it("runs a native pin while the space has an inherited hosted credential", async () => {
+  const f = fixture();
+  const hosted = vi.fn(async () => ({
+    id: "hosted-connection",
+    provider: "openai-codex",
+    secretId: "hosted-secret",
+  }));
+  const loadKey = vi.fn();
+  const selected = await resolveRunModelPin({
+    prisma: {
+      userModelCredential: { findFirst: hosted },
+      spaceModelPreference: { findFirst: hosted },
+    } as never,
+    scope: { userId: "owner", spaceId: "space" },
+    bot: {
+      runtimeKind: "codex-app-server",
+      modelProvider: "openai-codex",
+      modelId: "model",
+      thinkingLevel: "high",
+      modelCredentialId: "native:codex-app-server",
+      modelPinRevision: 1,
+    },
+    scripted: false,
+    loadKey,
+  });
+  if (selected.kind !== "resolved") throw new Error(selected.reason);
+  f.request.model = selected;
+  expect(await f.collect()).toEqual([{ type: "text", text: "hello" }, { type: "done" }]);
+  expect(hosted).not.toHaveBeenCalled();
+  expect(loadKey).not.toHaveBeenCalled();
 });

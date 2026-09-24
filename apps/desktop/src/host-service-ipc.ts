@@ -1,4 +1,5 @@
 import path from "node:path";
+import { DESKTOP_FOLDER_ERRORS } from "@ardurbot/contracts/desktop-errors";
 import type { BrowserWindow, IpcMainInvokeEvent, Tray } from "electron";
 import { app, dialog, ipcMain, safeStorage } from "electron";
 import {
@@ -50,7 +51,16 @@ export function installHostService(options: {
         () => undefined,
         () => undefined,
       );
-      return result;
+      if (name !== "addRoot") return result;
+      return result.catch((error: unknown) => {
+        console.error("Could not add folder.", error);
+        const message = error instanceof Error ? error.message : "";
+        return {
+          error: DESKTOP_FOLDER_ERRORS.some((known) => known === message)
+            ? message
+            : "Could not add folder. Try again.",
+        };
+      });
     });
   }
   register("state", async (event) => {

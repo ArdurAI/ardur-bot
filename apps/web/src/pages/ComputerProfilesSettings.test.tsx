@@ -121,3 +121,42 @@ it("shows unavailable controls from Kubernetes capability flags", async () => {
   expect(element.textContent).toContain("Screen and terminal: Not available on this computer");
   await act(async () => root.unmount());
 });
+
+it("keeps a stopped engine quiet until Retry and clears its reason after recovery", async () => {
+  vi.useFakeTimers();
+  const message =
+    "Docker is not running or not reachable at /fixture/docker.sock. Start Docker Desktop and try again.";
+  api.engine.mockRejectedValueOnce(new Error(message));
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  const render = () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={{ ...status }}
+        connections={[]}
+        onChanged={async () => {}}
+      />,
+    );
+  try {
+    await act(async () => render());
+    expect(element.textContent).toContain(message);
+    for (let i = 0; i < 6; i++)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+        render();
+      });
+    expect(api.engine).toHaveBeenCalledOnce();
+    await act(async () =>
+      [...element.querySelectorAll("button")]
+        .find((button) => button.textContent === "Retry")!
+        .click(),
+    );
+    expect(api.engine).toHaveBeenCalledTimes(2);
+    expect(element.textContent).not.toContain(message);
+  } finally {
+    await act(async () => root.unmount());
+    vi.useRealTimers();
+  }
+});

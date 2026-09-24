@@ -58,3 +58,10 @@ describe("restricted LAN listener", () => {
     expect(output.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
   });
 });
+
+it("allows development loopback targets while rejecting LAN and public proxy destinations", () => {
+  for (const target of ["http://127.0.0.1:5173", "http://localhost:5173", "http://[::1]:5173"])
+    expect(() => deviceProxy(target)).not.toThrow();
+  for (const target of ["http://192.168.1.2:5173", "https://example.test", "file:///fixture"])
+    expect(() => deviceProxy(target)).toThrow("A local home is required.");
+});

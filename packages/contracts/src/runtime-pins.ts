@@ -19,6 +19,7 @@ export const RuntimeAvailabilitySchema = z.object({
   available: z.boolean(),
   reason: z.string().optional(),
   version: z.string().optional(),
+  signedIn: z.boolean().optional(),
   models: z.array(z.object({ id: z.string(), label: z.string(), efforts: z.array(z.string()) })),
 });
 export type RuntimeAvailability = z.infer<typeof RuntimeAvailabilitySchema>;
@@ -75,7 +76,16 @@ export function runtimePinProblem(
   code: RuntimeProblem["code"],
   reason: string,
 ): RuntimeProblem {
-  return { kind: "problem", code, pin, reason, actions: ["connect", "change-pin"] };
+  return {
+    kind: "problem",
+    code,
+    pin,
+    reason,
+    actions:
+      pin.runtimeKind === "pi" && code === "pin-credential-missing"
+        ? ["connect", "change-pin"]
+        : ["change-pin"],
+  };
 }
 
 export function runtimePinMessage(
@@ -92,14 +102,18 @@ export function runtimePinMessage(
           ? "thinking off"
           : "thinking on"
       : (pin.effort ?? "an unset effort");
-  return `This bot is pinned to ${runtime}${labels?.provider ?? pin.provider ?? "an unset provider"} · ${labels?.model ?? pin.modelId ?? "an unset model"} · ${effort}; connect it or change the pin.`;
+  const recovery =
+    pin.runtimeKind === "pi"
+      ? "connect it or change the pin"
+      : "check the runtime or change the pin";
+  return `This bot is pinned to ${runtime}${labels?.provider ?? pin.provider ?? "an unset provider"} · ${labels?.model ?? pin.modelId ?? "an unset model"} · ${effort}; ${recovery}.`;
 }
 
 /** Carries a configuration failure across adapter boundaries without losing its type. */
 export class RuntimePinError extends Error {
   constructor(readonly problem: RuntimeProblem) {
     super(
-      problem.code === "locality-denied" || problem.code.startsWith("runtime-")
+      problem.pin.runtimeKind !== "pi" || problem.code !== "pin-credential-missing"
         ? problem.reason
         : runtimePinMessage(problem.pin),
     );

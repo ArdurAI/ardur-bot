@@ -1,9 +1,14 @@
-import type { DeviceGrantView, PairingPayload } from "@ardurbot/contracts";
+import type {
+  DesktopDeviceListenerState,
+  DeviceGrantView,
+  PairingPayload,
+} from "@ardurbot/contracts";
 import { DEFAULT_DEVICE_SCOPES } from "@ardurbot/contracts";
 import { Button, Input, Switch } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { toQR } from "toqr";
+import { knownActionError } from "../lib/known-action-error";
 import { rpc } from "../lib/rpc";
 import { ChannelPairingSettings } from "./ChannelPairingSettings";
 
@@ -41,7 +46,7 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
     shortCode: string;
     expiresAt: string;
   } | null>(null);
-  const [listener, setListener] = useState({ enabled: false, hints: [] as string[] });
+  const [listener, setListener] = useState<DesktopDeviceListenerState | null>(null);
   const [consequential, setConsequential] = useState(false);
   const [delegate, setDelegate] = useState(false);
   const [rename, setRename] = useState<{ id: string; name: string } | null>(null);
@@ -60,8 +65,26 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
     try {
       await work();
       await refresh();
-    } catch {
-      setError(t`This change could not finish; try again.`);
+    } catch (error) {
+      setError(
+        knownActionError(
+          error,
+          [
+            "Open Devices on your Mac.",
+            "Phone pairing needs a home run by this app. Set up This computer to use it.",
+            "Start your home before pairing a phone.",
+            "Update your home before pairing a phone.",
+            "Pair your phone again with this home.",
+            "Connect this Mac to your network first.",
+            "Pair and manage devices from the home owner account.",
+            "These permissions are unavailable at home.",
+            "This device is no longer available.",
+            "This pairing code is unavailable; start pairing again at home.",
+            "Pairing is locked for 15 minutes; try again later.",
+          ],
+          t`This change could not finish; try again.`,
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -72,7 +95,7 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
     void desktop
       ?.state()
       .then(setListener)
-      .catch(() => undefined);
+      .catch(() => setError(t`Restart the desktop app to update it.`));
     const timer = setInterval(() => {
       void refresh().catch(() => undefined);
     }, 5_000);
@@ -90,7 +113,14 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
         <summary>{t`Home fingerprint`}</summary>
         <p className="break-all font-mono text-xs">{fingerprint}</p>
       </details>
-      {desktop ? (
+      {desktop && listener && !listener.available ? (
+        <p role="status">
+          {listener.available === undefined
+            ? t`Restart the desktop app to update it.`
+            : t`Phone pairing needs a home run by this app. Set up This computer to use it.`}
+        </p>
+      ) : null}
+      {desktop && listener?.available ? (
         <div className="flex items-center justify-between gap-3">
           <label htmlFor="lan-listener">{t`Your phone can reach this Mac on your network.`}</label>
           <Switch
@@ -117,7 +147,7 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
                   ...(consequential ? ["consequential" as const] : []),
                   ...(delegate ? ["delegate" as const] : []),
                 ],
-                hints: listener.hints,
+                hints: listener?.hints ?? [],
               }),
             ),
           )

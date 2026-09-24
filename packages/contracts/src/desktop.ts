@@ -38,6 +38,14 @@ export interface ArdurBotDesktopOAuthCallback {
   state?: string;
 }
 
+export interface DesktopDeviceListenerState {
+  enabled: boolean;
+  hints: string[];
+  mode?: DesktopInstanceMode;
+  available?: boolean;
+  reason?: string;
+}
+
 export interface ArdurBotDesktop {
   host?: {
     state(): Promise<{ configured: boolean; roots: string[] }>;
@@ -49,8 +57,8 @@ export interface ArdurBotDesktop {
     clear(): Promise<void>;
   };
   devices?: {
-    state: () => Promise<{ enabled: boolean; hints: string[] }>;
-    setEnabled: (enabled: boolean) => Promise<{ enabled: boolean; hints: string[] }>;
+    state: () => Promise<DesktopDeviceListenerState>;
+    setEnabled: (enabled: boolean) => Promise<DesktopDeviceListenerState>;
   };
   memoryFolders?: {
     available: () => Promise<boolean>;
