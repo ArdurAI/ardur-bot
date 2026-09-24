@@ -238,7 +238,6 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "Cuenta"
@@ -260,6 +259,7 @@ msgid "Accounts"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/account/AccountMore.tsx
 msgid "Action confirmations"
 msgstr "Confirmaciones de acción"
 
@@ -404,7 +404,7 @@ msgid "Adding…"
 msgstr "Agregando…"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountMore.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -781,10 +781,6 @@ msgstr ""
 msgid "Avatar Studio"
 msgstr "Estudio de avatares"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Avatars"
-msgstr "Avatares"
-
 #. placeholder {0}: state.awakeRoutines
 #: src/pages/system/SystemPage.tsx
 msgid "Awake for {0} routines"
@@ -1004,7 +1000,7 @@ msgstr ""
 msgid "Change model: {label}"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 msgid "Change password"
 msgstr "Cambiar contraseña"
 
@@ -1016,7 +1012,7 @@ msgstr ""
 msgid "Change this bot’s pin"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 msgid "Changing…"
 msgstr "Cambiando…"
 
@@ -1031,10 +1027,6 @@ msgstr "No se pudo renderizar el gráfico: {error}"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Chat apps"
 msgstr "Apps de chat"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Chat apps, group channels, and agent connections."
-msgstr "Apps de chat, canales de grupo y conexiones de agentes."
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Chat bot"
@@ -1376,7 +1368,7 @@ msgstr "Confirmar eliminación"
 msgid "Confirm delete {0}"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Confirm password"
 msgstr "Confirmar contraseña"
@@ -1599,7 +1591,7 @@ msgstr "No se pudo autorizar esta app"
 msgid "Could not change memory location. Check the folder and preview again."
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 msgid "Could not change password"
 msgstr "No se pudo cambiar la contraseña"
 
@@ -1906,7 +1898,7 @@ msgstr ""
 msgid "Could not play a test clip"
 msgstr "No se pudo reproducir un clip de prueba"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Could not reach the server"
 msgstr "No se pudo alcanzar el servidor"
@@ -2138,10 +2130,6 @@ msgstr ""
 msgid "Couldn't load messaging settings"
 msgstr "No se pudo cargar la configuración de mensajería"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Couldn't update avatars"
-msgstr "No se pudieron actualizar los avatares"
-
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't update messaging settings"
 msgstr "No se pudo actualizar la configuración de mensajería"
@@ -2252,7 +2240,7 @@ msgstr ""
 msgid "Current"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 msgid "Current password"
 msgstr "Contraseña actual"
 
@@ -3215,7 +3203,7 @@ msgstr ""
 msgid "Kubernetes context"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountLanguage.tsx
 msgid "Language"
 msgstr "Idioma"
 
@@ -3417,6 +3405,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "Asegúrate de que no quede nada en ejecución en este ordenador."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/pages/account/AccountMore.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Manage"
@@ -3431,7 +3420,7 @@ msgstr ""
 msgid "Manage MCP servers"
 msgstr "Gestionar servidores MCP"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountMore.tsx
 msgid "Manage messaging settings"
 msgstr "Administrar configuración de mensajería"
 
@@ -3609,7 +3598,7 @@ msgstr "Mensaje…"
 msgid "Messaged {peer}"
 msgstr "Mensaje enviado a {peer}"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Messaging"
 msgstr "Mensajería"
@@ -3789,7 +3778,7 @@ msgstr "Nuevo grupo"
 msgid "New open-work item"
 msgstr "Nuevo elemento de trabajo abierto"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "New password"
 msgstr "Nueva contraseña"
@@ -4203,10 +4192,6 @@ msgstr ""
 msgid "Optional"
 msgstr "Opcional"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Optional controls most people never need"
-msgstr "Controles opcionales que la mayoría nunca necesita"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Optional header value"
 msgstr "Valor de encabezado opcional"
@@ -4224,7 +4209,6 @@ msgid "Or paste kubeconfig contents"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 msgid "Organic"
 msgstr "Orgánico"
 
@@ -4270,7 +4254,7 @@ msgid "Park"
 msgstr "Aparcar"
 
 #: src/components/AskCard.tsx
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Password"
 msgstr "Contraseña"
@@ -4279,12 +4263,12 @@ msgstr "Contraseña"
 msgid "Password recovery is not configured for this server"
 msgstr "La recuperación de contraseña no está configurada para este servidor"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Password updated"
 msgstr "Contraseña actualizada"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Passwords do not match"
 msgstr "Las contraseñas no coinciden"
@@ -4954,7 +4938,6 @@ msgid "Revoked"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 msgid "Robot"
 msgstr "Robot"
 
@@ -5277,7 +5260,7 @@ msgid "Server"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountMore.tsx
 #: src/pages/LocalSettings.tsx
 msgid "Server integrations"
 msgstr ""

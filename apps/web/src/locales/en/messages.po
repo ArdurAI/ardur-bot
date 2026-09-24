@@ -238,7 +238,6 @@ msgstr "Accessibility"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "Account"
@@ -260,6 +259,7 @@ msgid "Accounts"
 msgstr "Accounts"
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/account/AccountMore.tsx
 msgid "Action confirmations"
 msgstr "Action confirmations"
 
@@ -404,7 +404,7 @@ msgid "Adding…"
 msgstr "Adding…"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountMore.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -781,10 +781,6 @@ msgstr "Avatar"
 msgid "Avatar Studio"
 msgstr "Avatar Studio"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Avatars"
-msgstr "Avatars"
-
 #. placeholder {0}: state.awakeRoutines
 #: src/pages/system/SystemPage.tsx
 msgid "Awake for {0} routines"
@@ -1004,7 +1000,7 @@ msgstr "Change model"
 msgid "Change model: {label}"
 msgstr "Change model: {label}"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 msgid "Change password"
 msgstr "Change password"
 
@@ -1016,7 +1012,7 @@ msgstr "Change pin"
 msgid "Change this bot’s pin"
 msgstr "Change this bot’s pin"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 msgid "Changing…"
 msgstr "Changing…"
 
@@ -1031,10 +1027,6 @@ msgstr "Chart failed to render: {error}"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Chat apps"
 msgstr "Chat apps"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Chat apps, group channels, and agent connections."
-msgstr "Chat apps, group channels, and agent connections."
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Chat bot"
@@ -1376,7 +1368,7 @@ msgstr "Confirm delete"
 msgid "Confirm delete {0}"
 msgstr "Confirm delete {0}"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Confirm password"
 msgstr "Confirm password"
@@ -1599,7 +1591,7 @@ msgstr "Could not authorize this app"
 msgid "Could not change memory location. Check the folder and preview again."
 msgstr "Could not change memory location. Check the folder and preview again."
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 msgid "Could not change password"
 msgstr "Could not change password"
 
@@ -1906,7 +1898,7 @@ msgstr "Could not pair this account. Check its settings and try again."
 msgid "Could not play a test clip"
 msgstr "Could not play a test clip"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Could not reach the server"
 msgstr "Could not reach the server"
@@ -2138,10 +2130,6 @@ msgstr "Could not update uploaded files."
 msgid "Couldn't load messaging settings"
 msgstr "Couldn't load messaging settings"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Couldn't update avatars"
-msgstr "Couldn't update avatars"
-
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't update messaging settings"
 msgstr "Couldn't update messaging settings"
@@ -2252,7 +2240,7 @@ msgstr "Curator"
 msgid "Current"
 msgstr "Current"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 msgid "Current password"
 msgstr "Current password"
 
@@ -3215,7 +3203,7 @@ msgstr "Kubeconfig path on the server"
 msgid "Kubernetes context"
 msgstr "Kubernetes context"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountLanguage.tsx
 msgid "Language"
 msgstr "Language"
 
@@ -3417,6 +3405,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "Make sure nothing is still running on this computer."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/pages/account/AccountMore.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Manage"
@@ -3431,7 +3420,7 @@ msgstr "Manage devices from the home owner account."
 msgid "Manage MCP servers"
 msgstr "Manage MCP servers"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountMore.tsx
 msgid "Manage messaging settings"
 msgstr "Manage messaging settings"
 
@@ -3609,7 +3598,7 @@ msgstr "Message…"
 msgid "Messaged {peer}"
 msgstr "Messaged {peer}"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Messaging"
 msgstr "Messaging"
@@ -3789,7 +3778,7 @@ msgstr "New group"
 msgid "New open-work item"
 msgstr "New open-work item"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "New password"
 msgstr "New password"
@@ -4203,10 +4192,6 @@ msgstr "Operations"
 msgid "Optional"
 msgstr "Optional"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Optional controls most people never need"
-msgstr "Optional controls most people never need"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Optional header value"
 msgstr "Optional header value"
@@ -4224,7 +4209,6 @@ msgid "Or paste kubeconfig contents"
 msgstr "Or paste kubeconfig contents"
 
 #: src/pages/account/AccountProfile.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 msgid "Organic"
 msgstr "Organic"
 
@@ -4270,7 +4254,7 @@ msgid "Park"
 msgstr "Park"
 
 #: src/components/AskCard.tsx
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Password"
 msgstr "Password"
@@ -4279,12 +4263,12 @@ msgstr "Password"
 msgid "Password recovery is not configured for this server"
 msgstr "Password recovery is not configured for this server"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Password updated"
 msgstr "Password updated"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "Passwords do not match"
 msgstr "Passwords do not match"
@@ -4954,7 +4938,6 @@ msgid "Revoked"
 msgstr "Revoked"
 
 #: src/pages/account/AccountProfile.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 msgid "Robot"
 msgstr "Robot"
 
@@ -5277,7 +5260,7 @@ msgid "Server"
 msgstr "Server"
 
 #: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/account/AccountMore.tsx
 #: src/pages/LocalSettings.tsx
 msgid "Server integrations"
 msgstr "Server integrations"

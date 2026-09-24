@@ -1,7 +1,6 @@
 import type {
   AccountProfileInput,
   AccountSession,
-  AvatarStyle,
   LocalDevice,
   AccountSettings as Settings,
 } from "@ardurbot/contracts";
@@ -15,19 +14,25 @@ import {
 } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
+import { SettingsRow } from "../../components/SettingsRow";
 import { authClient } from "../../lib/auth";
 import { rpc } from "../../lib/rpc";
+import type { SettingsPageProps } from "../settings-types";
+import { AccountMore } from "./AccountMore";
 import { AccountProfile } from "./AccountProfile";
+import { AccountSignIn } from "./AccountSignIn";
 import { ActiveSessionsTable, LocalDevicesTable } from "./AccountTables";
 
 export function AccountSettings({
   onProfileSaved,
   onAvatarStyleChange,
   onBusyChange,
-}: {
+  email,
+  messagingEnabled,
+  onOpenMessaging,
+  isDeploymentOwner,
+}: Partial<SettingsPageProps> & {
   onProfileSaved?: (profile: AccountProfileInput) => void;
-  onAvatarStyleChange?: (style: AvatarStyle) => Promise<void>;
-  onBusyChange?: (busy: boolean) => void;
 } = {}) {
   const { t } = useLingui();
   const [account, setAccount] = useState<Settings | null>(null);
@@ -36,6 +41,7 @@ export function AccountSettings({
   const [currentRegistrationId, setRegistrationId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
   const [error, setError] = useState("");
   const [sessionError, setSessionError] = useState(false);
   const [devicesError, setDevicesError] = useState(false);
@@ -43,9 +49,9 @@ export function AccountSettings({
   const [copied, setCopied] = useState(false);
   const [reload, setReload] = useState(0);
   useEffect(() => {
-    onBusyChange?.(busy || profileBusy);
+    onBusyChange?.(busy || profileBusy || passwordBusy);
     return () => onBusyChange?.(false);
-  }, [busy, profileBusy, onBusyChange]);
+  }, [busy, profileBusy, passwordBusy, onBusyChange]);
 
   useEffect(() => {
     if (busy) return;
@@ -173,23 +179,22 @@ export function AccountSettings({
             }}
           />
           <section
+            data-settings-group
             className="space-y-4 border-t border-border pt-6"
             aria-labelledby="account-actions-title"
           >
             <h3 id="account-actions-title" className="text-base font-medium">{t`Account`}</h3>
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-sm">{t`Log out of all devices`}</span>
+            <SettingsRow label={t`Log out of all devices`}>
               <Button
                 variant="outline"
                 disabled={busy}
                 onClick={() => setConfirmLogout(true)}
               >{t`Log out`}</Button>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 text-sm">
-                <span className="block text-muted-foreground">{t`Space ID`}</span>
-                <code className="break-all">{account.spaceId}</code>
-              </div>
+            </SettingsRow>
+            <SettingsRow
+              label={t`Space ID`}
+              content={<code className="block break-all pt-2 text-sm">{account.spaceId}</code>}
+            >
               <Button
                 variant="ghost"
                 aria-label={t`Copy Space ID`}
@@ -202,41 +207,34 @@ export function AccountSettings({
               >
                 {copied ? t`Copied` : t`Copy`}
               </Button>
-            </div>
+            </SettingsRow>
           </section>
-          <section className="border-t border-border pt-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <label
-                  htmlFor="account-trusted-devices"
-                  className="text-sm font-medium"
-                >{t`Require trusted devices`}</label>
-                <p
-                  id="account-trust-description"
-                  className="mt-1 text-sm text-muted-foreground"
-                >{t`Verify each new device before it can connect to your computer remotely`}</p>
-              </div>
-              <Switch
-                id="account-trusted-devices"
-                aria-describedby="account-trust-description"
-                checked={account.requireTrustedDevices}
-                disabled={
-                  busy ||
-                  !account.canManageDevices ||
-                  (!account.desktopAvailable && !account.requireTrustedDevices)
-                }
-                onCheckedChange={(required) =>
-                  void perform(async () => {
-                    const result = await rpc.account.setTrustedDevices({ required });
-                    setAccount({ ...account, requireTrustedDevices: result.required });
-                  })
-                }
-              />
-            </div>
-            {!account.desktopAvailable ? (
-              <p className="mt-2 text-sm text-muted-foreground">{t`Connect a desktop app to approve new devices.`}</p>
-            ) : null}
-          </section>
+          <SettingsRow
+            label={t`Require trusted devices`}
+            description={t`Verify each new device before it can connect to your computer remotely`}
+            content={
+              !account.desktopAvailable ? (
+                <p className="mt-2 text-sm text-muted-foreground">{t`Connect a desktop app to approve new devices.`}</p>
+              ) : null
+            }
+          >
+            <Switch
+              id="account-trusted-devices"
+              aria-label={t`Require trusted devices`}
+              checked={account.requireTrustedDevices}
+              disabled={
+                busy ||
+                !account.canManageDevices ||
+                (!account.desktopAvailable && !account.requireTrustedDevices)
+              }
+              onCheckedChange={(required) =>
+                void perform(async () => {
+                  const result = await rpc.account.setTrustedDevices({ required });
+                  setAccount({ ...account, requireTrustedDevices: result.required });
+                })
+              }
+            />
+          </SettingsRow>
         </>
       ) : !error ? (
         <p
@@ -244,65 +242,74 @@ export function AccountSettings({
           className="text-sm text-muted-foreground"
         >{t`Loading account settings…`}</p>
       ) : null}
-      <section
-        className="space-y-2 border-t border-border pt-6"
-        aria-labelledby="account-local-devices-title"
-      >
-        <h3
-          id="account-local-devices-title"
-          className="text-base font-medium"
-        >{t`Local devices`}</h3>
-        <p className="text-sm text-muted-foreground">{t`Computers that can run tasks with access to local files, computer use, browser use, and local MCPs`}</p>
-        {devicesError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {t`Could not load devices.`}{" "}
-            <Button
-              variant="ghost"
-              onClick={() => setReload((value) => value + 1)}
-            >{t`Retry`}</Button>
-          </p>
-        ) : (
-          <LocalDevicesTable
-            devices={devices}
-            currentRegistrationId={currentRegistrationId}
-            canManage={account?.canManageDevices ?? false}
-            busy={busy}
-            onApprove={(id) =>
-              void perform(async () => {
-                await rpc.account.approveDevice({ id });
-                setDevices(await rpc.account.localDevices());
-              })
-            }
-            onDisconnect={(device) => void perform(() => disconnect(device))}
-          />
-        )}
-      </section>
-      <section
-        className="space-y-2 border-t border-border pt-6"
-        aria-labelledby="account-sessions-title"
-      >
-        <h3 id="account-sessions-title" className="text-base font-medium">{t`Active sessions`}</h3>
-        {sessionError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {t`Sign in again to manage sessions.`}{" "}
-            <Button
-              variant="ghost"
-              onClick={() =>
+      <SettingsRow
+        label={t`Local devices`}
+        description={t`Computers that can run tasks with access to local files, computer use, browser use, and local MCPs`}
+        content={
+          devicesError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {t`Could not load devices.`}{" "}
+              <Button
+                variant="ghost"
+                onClick={() => setReload((value) => value + 1)}
+              >{t`Retry`}</Button>
+            </p>
+          ) : (
+            <LocalDevicesTable
+              devices={devices}
+              currentRegistrationId={currentRegistrationId}
+              canManage={account?.canManageDevices ?? false}
+              busy={busy}
+              onApprove={(id) =>
                 void perform(async () => {
-                  await authClient.signOut();
-                  window.location.assign("/sign-in");
+                  await rpc.account.approveDevice({ id });
+                  setDevices(await rpc.account.localDevices());
                 })
               }
-            >{t`Sign in`}</Button>
-          </p>
-        ) : (
-          <ActiveSessionsTable
-            sessions={sessions}
-            busy={busy}
-            onRevoke={(session) => void perform(() => revoke(session))}
-          />
-        )}
-      </section>
+              onDisconnect={(device) => void perform(() => disconnect(device))}
+            />
+          )
+        }
+      >
+        {null}
+      </SettingsRow>
+      <SettingsRow
+        label={t`Active sessions`}
+        content={
+          sessionError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {t`Sign in again to manage sessions.`}{" "}
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  void perform(async () => {
+                    await authClient.signOut();
+                    window.location.assign("/sign-in");
+                  })
+                }
+              >{t`Sign in`}</Button>
+            </p>
+          ) : (
+            <ActiveSessionsTable
+              sessions={sessions}
+              busy={busy}
+              onRevoke={(session) => void perform(() => revoke(session))}
+            />
+          )
+        }
+      >
+        {null}
+      </SettingsRow>
+      <AccountSignIn
+        email={email}
+        onBusyChange={setPasswordBusy}
+        onChanged={() => setReload((value) => value + 1)}
+      />
+      <AccountMore
+        messagingEnabled={messagingEnabled}
+        onOpenMessaging={onOpenMessaging}
+        isDeploymentOwner={isDeploymentOwner}
+      />
       <AlertDialog
         open={confirmLogout}
         onOpenChange={(open) => {

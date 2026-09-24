@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+// Whole-repository disk scans need a separate budget from individual unit tests.
+const repositoryScanTimeoutMs = 120_000;
 // Assemble the search terms so this test does not exempt itself from the scan.
 const forbidden = [
   ["pi-anthropic", "oauth"].join("-"),
@@ -53,24 +55,32 @@ function contextFiles(directory = ""): string[] {
 }
 
 describe("subscription credential boundary", () => {
-  it("keeps removed OAuth and native credential access out of tracked source", () => {
-    const paths = execFileSync(
-      "git",
-      ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-      {
-        cwd: root,
-        encoding: "utf8",
-      },
-    )
-      .split("\0")
-      .filter(Boolean);
-    expect(violations([...new Set(paths)])).toEqual([]);
-  });
+  it(
+    "keeps removed OAuth and native credential access out of tracked source",
+    () => {
+      const paths = execFileSync(
+        "git",
+        ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        {
+          cwd: root,
+          encoding: "utf8",
+        },
+      )
+        .split("\0")
+        .filter(Boolean);
+      expect(violations([...new Set(paths)])).toEqual([]);
+    },
+    repositoryScanTimeoutMs,
+  );
 
-  it("keeps the server image source context free of removed OAuth and native credential access", () => {
-    // Includes untracked and gitignored files Docker would copy, excluding only Docker ignores.
-    expect(violations(contextFiles())).toEqual([]);
-  });
+  it(
+    "keeps the server image source context free of removed OAuth and native credential access",
+    () => {
+      // Includes untracked and gitignored files Docker would copy, excluding only Docker ignores.
+      expect(violations(contextFiles())).toEqual([]);
+    },
+    repositoryScanTimeoutMs,
+  );
 
   it("requires review if the server Dockerfile or ignore rules change the scanned context", () => {
     const dockerfile = readFileSync(resolve(root, "infra/compose/Dockerfile"), "utf8");

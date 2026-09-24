@@ -8,6 +8,7 @@ import { SettingsRow } from "../../components/SettingsRow";
 import { requestBrowserNotificationPermission } from "../../lib/browser-notifications";
 import { desktopBridge } from "../../lib/desktop";
 import { rpc } from "../../lib/rpc";
+import { AccountLanguage } from "../account/AccountLanguage";
 import { SettingsSupportLinks } from "../settings-support-links";
 import type { SettingsPageProps } from "../settings-types";
 
@@ -202,6 +203,7 @@ export default function GeneralSettings({
           </NativeSelect>
         </SettingsRow>
       </section>
+      <AccountLanguage />
       {isDeploymentOwner || keepRunning !== null ? (
         <section data-settings-group>
           <h3 className="text-sm font-medium">

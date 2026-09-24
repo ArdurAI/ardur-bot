@@ -40,6 +40,7 @@ vi.mock("./host-service.js", () => ({
     stop = fake.stop;
   },
   hostServiceLaunch: vi.fn(),
+  hostServiceIdentity: vi.fn(() => "fixture-registration"),
   hostStorageAvailable: vi.fn(),
   selectedHostRoot: async (path: string) => path,
 }));
@@ -102,7 +103,10 @@ describe("host folder selection", () => {
     expect(fake.saveLifecycle).not.toHaveBeenCalled();
     await setKeepRunning(event, false);
     expect(fake.saveLifecycle).toHaveBeenCalledWith(false);
-    expect(await fake.handlers.get("desktop.host.state")!(event)).toMatchObject({
+    expect(await fake.handlers.get("desktop.host.state")!(event)).toEqual({
+      configured: true,
+      roots: [],
+      registrationId: "fixture-registration",
       keepRunning: false,
     });
     expect(service.keepRunning).toBe(false);

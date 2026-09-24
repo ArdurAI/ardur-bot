@@ -23,10 +23,14 @@ vi.mock("../../lib/auth", () => ({
 vi.mock("../../components/ai/primitives", () => ({
   SuccessPop: ({ label }: { label: string }) => <span>{label}</span>,
 }));
+vi.mock("../../components/ApprovalRulesSettings", () => ({ ApprovalRulesSettings: () => null }));
 vi.mock("@lingui/react/macro", () => {
   const t = (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, i) => text + part + (values[i] ?? ""), "");
-  return { useLingui: () => ({ t, i18n: { locale: "en" } }) };
+  return {
+    useLingui: () => ({ t, i18n: { locale: "en" } }),
+    Trans: ({ children }: { children: ReactNode }) => children,
+  };
 });
 vi.mock("@ardurbot/ui-web", () => {
   const box = ({ children }: { children?: ReactNode }) => <div>{children}</div>;

@@ -3,8 +3,6 @@ import { WorkTypeSchema } from "@ardurbot/contracts";
 import {
   BotAvatar,
   Button,
-  Field,
-  FieldLabel,
   Input,
   NativeSelect,
   NativeSelectOption,
@@ -14,6 +12,7 @@ import {
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { SuccessPop } from "../../components/ai/primitives";
+import { SettingsRow } from "../../components/SettingsRow";
 import { rpc } from "../../lib/rpc";
 
 export function AccountProfile({
@@ -82,9 +81,10 @@ export function AccountProfile({
     }
   }
   return (
-    <section aria-labelledby="account-profile-title" className="space-y-5">
+    <section data-settings-group aria-labelledby="account-profile-title" className="space-y-5">
       <h3 id="account-profile-title" className="text-base font-medium">{t`Profile`}</h3>
       <form
+        data-settings-group
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
@@ -92,55 +92,59 @@ export function AccountProfile({
         }}
         onChange={() => setSaved("")}
       >
-        <fieldset disabled={busy} className="space-y-4">
-          <legend className="mb-2 text-sm font-medium">{t`Avatar`}</legend>
-          <div className="flex gap-2">
-            {(["robot", "organic"] as const).map((style) => (
-              <Toggle
-                key={style}
-                variant="outline"
-                pressed={profile.avatarStyle === style}
-                onPressedChange={() => {
-                  setProfile({ ...profile, avatarStyle: style });
-                  setSaved("");
-                }}
-                className="h-auto gap-2 p-2"
-              >
-                <BotAvatar
-                  color="currentColor"
-                  identity="account-avatar"
-                  size={32}
-                  variant={style}
-                />
-                <span>{style === "robot" ? t`Robot` : t`Organic`}</span>
-              </Toggle>
-            ))}
-          </div>
-          <Field>
-            <FieldLabel htmlFor="account-full-name">{t`Full name`}</FieldLabel>
+        <fieldset disabled={busy}>
+          <SettingsRow label={t`Avatar`}>
+            <div className="flex gap-2" data-testid="avatar-style-select">
+              {(["robot", "organic"] as const).map((style) => (
+                <Toggle
+                  key={style}
+                  variant="outline"
+                  data-testid={`avatar-style-${style}`}
+                  pressed={profile.avatarStyle === style}
+                  onPressedChange={() => {
+                    setProfile({ ...profile, avatarStyle: style });
+                    setSaved("");
+                  }}
+                  className="h-auto gap-2 p-2"
+                >
+                  <BotAvatar
+                    color="currentColor"
+                    identity="account-avatar"
+                    size={32}
+                    variant={style}
+                  />
+                  <span>{style === "robot" ? t`Robot` : t`Organic`}</span>
+                </Toggle>
+              ))}
+            </div>
+          </SettingsRow>
+          <SettingsRow label={t`Full name`}>
             <Input
               id="account-full-name"
+              aria-label={t`Full name`}
+              className="w-40 sm:w-64"
               autoComplete="name"
               maxLength={120}
               required
               value={profile.name}
               onChange={(event) => setProfile({ ...profile, name: event.target.value })}
             />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="account-display-name">{t`What should your bots call you?`}</FieldLabel>
+          </SettingsRow>
+          <SettingsRow label={t`What should your bots call you?`}>
             <Input
               id="account-display-name"
+              aria-label={t`What should your bots call you?`}
+              className="w-40 sm:w-64"
               autoComplete="nickname"
               maxLength={60}
               value={profile.displayName}
               onChange={(event) => setProfile({ ...profile, displayName: event.target.value })}
             />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="account-work">{t`What best describes your work?`}</FieldLabel>
+          </SettingsRow>
+          <SettingsRow label={t`What best describes your work?`}>
             <NativeSelect
               id="account-work"
+              aria-label={t`What best describes your work?`}
               value={profile.workType}
               onChange={(event) =>
                 setProfile({ ...profile, workType: WorkTypeSchema.parse(event.target.value) })
@@ -152,7 +156,7 @@ export function AccountProfile({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
-          </Field>
+          </SettingsRow>
         </fieldset>
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={busy || !profile.name.trim()}>{t`Save`}</Button>
@@ -160,34 +164,40 @@ export function AccountProfile({
         </div>
       </form>
       <form
+        data-settings-group
         className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
           void save("instructions");
         }}
       >
-        <Field>
-          <FieldLabel htmlFor="account-instructions">{t`Instructions for all bots`}</FieldLabel>
-          <Textarea
-            id="account-instructions"
-            rows={5}
-            maxLength={4000}
-            disabled={busy || !account.canEditInstructions}
-            value={instructions}
-            onChange={(event) => {
-              setInstructions(event.target.value);
-              setSaved("");
-            }}
-          />
-        </Field>
-        {account.canEditInstructions ? (
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={busy}>{t`Save`}</Button>
-            {saved === "instructions" ? <SuccessPop label={t`Saved`} /> : null}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">{t`Only space owners and admins can edit these instructions.`}</p>
-        )}
+        <SettingsRow
+          label={t`Instructions for all bots`}
+          content={
+            <Textarea
+              id="account-instructions"
+              aria-label={t`Instructions for all bots`}
+              className="mt-3"
+              rows={5}
+              maxLength={4000}
+              disabled={busy || !account.canEditInstructions}
+              value={instructions}
+              onChange={(event) => {
+                setInstructions(event.target.value);
+                setSaved("");
+              }}
+            />
+          }
+        >
+          {account.canEditInstructions ? (
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={busy}>{t`Save`}</Button>
+              {saved === "instructions" ? <SuccessPop label={t`Saved`} /> : null}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t`Only space owners and admins can edit these instructions.`}</p>
+          )}
+        </SettingsRow>
       </form>
       {error ? (
         <div role="alert" className="text-sm text-destructive">

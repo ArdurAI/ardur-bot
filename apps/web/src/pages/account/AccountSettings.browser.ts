@@ -1,3 +1,4 @@
+import { DEFAULT_USER_PREFERENCES } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { accountFixture, localDevicesFixture, sessionsFixture } from "./account-fixtures";
 
@@ -18,6 +19,15 @@ test("Account profile, trust, sessions, and desktop badge work with offline fixt
   let profile = { ...accountFixture };
   let devices = structuredClone(localDevicesFixture);
   let sessions = structuredClone(sessionsFixture);
+  await page.route("**/rpc/**", (route) => {
+    throw new Error(`Unexpected RPC: ${new URL(route.request().url()).pathname}`);
+  });
+  await page.route("**/rpc/preferences/get", (route) =>
+    route.fulfill({ json: { json: DEFAULT_USER_PREFERENCES } }),
+  );
+  await page.route("**/rpc/notifications/capabilities", (route) =>
+    route.fulfill({ json: { json: { dispatchPush: false } } }),
+  );
   await page.route("**/api/auth/**", (route) => route.fulfill({ json: null }));
   await page.route("**/rpc/account/**", async (route) => {
     const action = new URL(route.request().url()).pathname.split("/").at(-1);
@@ -72,13 +82,35 @@ test("Account profile, trust, sessions, and desktop badge work with offline fixt
     }),
   );
   await page.goto("/account-verification");
-  await expect(page.getByLabel("Full name", { exact: true })).toHaveValue("Test operator", {
-    timeout: 30000,
-  });
-  await page.getByLabel("What should your bots call you?").fill("Chief");
+  await expect(page.getByRole("textbox", { name: "Full name", exact: true })).toHaveValue(
+    "Test operator",
+    {
+      timeout: 30000,
+    },
+  );
+  await expect(page.getByTestId("settings-nav-account")).toHaveCount(1);
+  const search = page.getByRole("searchbox", { name: "Search settings" });
+  await search.fill("call you");
+  await expect(page.getByTestId("settings-nav-account")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Full name", exact: true })).toBeHidden();
+  await expect(
+    page.getByRole("textbox", { name: "What should your bots call you?" }),
+  ).toBeVisible();
+  await search.fill("");
+  await page.getByTestId("settings-nav-general").click();
+  await expect(page.getByRole("combobox", { name: "Language" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Full name", exact: true })).toHaveCount(0);
+  await page.getByTestId("settings-nav-privacy").click();
+  await expect(page.getByRole("group", { name: "Export data", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Instructions for all bots" })).toHaveCount(0);
+  await page.getByTestId("settings-nav-account").click();
+  await expect(page.getByRole("group", { name: "Export data", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Delete account", exact: true })).toHaveCount(0);
+  await page.getByRole("textbox", { name: "What should your bots call you?" }).fill("Chief");
   await page.getByRole("button", { name: "Save", exact: true }).first().click();
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
   expect(profile.displayName).toBe("Chief");
+  await page.screenshot({ path: testInfo.outputPath("account-profile.png"), fullPage: true });
   await expect(page.getByText("This computer", { exact: true })).toBeVisible();
   await page.getByRole("switch", { name: "Require trusted devices" }).click();
   await expect(page.getByRole("switch", { name: "Require trusted devices" })).toBeChecked();
@@ -91,6 +123,7 @@ test("Account profile, trust, sessions, and desktop badge work with offline fixt
   await page.getByRole("menuitem", { name: "Sign out", exact: true }).click();
   await expect(page.getByText("Showing 11–13 of 13")).toBeVisible();
   await page.getByRole("button", { name: "Previous", exact: true }).click();
+  await page.getByRole("table", { name: "Active sessions" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("account-settings.png"), fullPage: true });
   await testInfo.attach("Account settings", {
     path: testInfo.outputPath("account-settings.png"),

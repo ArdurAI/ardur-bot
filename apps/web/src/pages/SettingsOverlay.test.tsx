@@ -14,11 +14,11 @@ vi.mock("../lib/rpc", () => ({
   },
 }));
 vi.mock("./AccountSettingsOverlay", () => ({
-  GeneralSettingsPanels: () => <div>Account content</div>,
   UsageSettingsPanel: () => <div>Usage content</div>,
   ComputerSettingsPanel: () => <div>This computer folders</div>,
   UpdatesSettingsPanel: () => <div>Update content</div>,
 }));
+vi.mock("./account/AccountSettings", () => ({ default: () => <div>Account content</div> }));
 vi.mock("./MemorySettingsOverlay", () => ({
   MemorySettingsOverlay: () => <div>Existing memory and skills</div>,
 }));
@@ -69,6 +69,10 @@ beforeEach(() => {
     },
   }));
 });
+async function waitForSection(check: () => boolean) {
+  await act(() => vi.dynamicImportSettled());
+  await waitForSettings(check);
+}
 async function render(desktop = false) {
   if (desktop)
     window.ardurbotDesktop = { platform: "darwin" } as NonNullable<Window["ardurbotDesktop"]>;
@@ -77,7 +81,7 @@ async function render(desktop = false) {
       <SettingsOverlay {...props} isDeploymentOwner />
     </PreferencesProvider>,
   );
-  await waitForSettings(() => !!result.container.querySelector('[data-settings-row="Chat font"]'));
+  await waitForSection(() => !!result.container.querySelector('[data-settings-row="Chat font"]'));
   return result.container;
 }
 it("filters sections and open row labels, then clears search on navigation", async () => {
@@ -91,7 +95,7 @@ it("filters sections and open row labels, then clears search on navigation", asy
   await act(async () =>
     container.querySelector<HTMLButtonElement>('[data-testid="settings-nav-privacy"]')!.click(),
   );
-  await waitForSettings(() => container.textContent!.includes("Your data"));
+  await waitForSection(() => container.textContent!.includes("Your data"));
   expect(search.value).toBe("");
   expect(container.textContent).not.toContain("How we protect your data");
 });
@@ -180,7 +184,7 @@ it("keeps all desktop placeholders backed by working content or an empty state",
     await act(async () =>
       container.querySelector<HTMLButtonElement>(`[data-testid="settings-nav-${id}"]`)!.click(),
     );
-    await waitForSettings(() => container.textContent!.includes(copy!));
+    await waitForSection(() => container.textContent!.includes(copy!));
   }
   expect(container.querySelector('[data-testid="settings-nav-local-api"]')).toBeNull();
 });
@@ -192,7 +196,7 @@ it("opens the trusted registry from the integration deep link and preserves comp
       initialIntegration="connection-test"
     />,
   );
-  await waitForSettings(() => container.textContent!.includes("Connected apps"));
+  await waitForSection(() => container.textContent!.includes("Connected apps"));
   expect(container.querySelector('[data-settings-section="integrations"]')).not.toBeNull();
   expect(container.querySelector('[data-reconnect-id="connection-test"]')).not.toBeNull();
   expect(container.querySelector('[data-testid="settings-nav-connectors"]')).toBeNull();

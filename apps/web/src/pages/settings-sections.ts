@@ -44,7 +44,7 @@ const memory = lazy(() => import("./settings/MemorySection"));
 // biome-ignore format: One registration per line keeps independent settings streams easy to merge.
 export const settingsSections: SettingsRegistration[] = [
   { id: "general", group: "Settings", label: msg`General`, icon: Settings, component: lazy(() => import("./settings/GeneralSettings")), available: always },
-  { id: "account", group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./AccountSettingsOverlay").then((m) => ({ default: m.GeneralSettingsPanels }))), available: always },
+  { id: "account", group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./account/AccountSettings")), available: always },
   { id: "privacy", group: "Settings", label: msg`Privacy`, icon: Shield, component: lazy(() => import("./settings/PrivacySettings")), available: always },
   { id: "capabilities", group: "Settings", label: msg`Capabilities`, icon: Sparkles, component: memory, available: always },
   { id: "memory", group: "Settings", label: msg`Memory`, icon: Brain, component: memory, available: always },

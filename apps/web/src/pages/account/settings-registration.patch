@@ -1,6 +1,0 @@
-diff --git a/apps/web/src/pages/settings-sections.ts b/apps/web/src/pages/settings-sections.ts
---- a/apps/web/src/pages/settings-sections.ts
-+++ b/apps/web/src/pages/settings-sections.ts
-@@ -47,1 +47,1 @@
--  { id: "account", group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./AccountSettingsOverlay").then((m) => ({ default: m.GeneralSettingsPanels }))), available: always },
-+  { id: "account", group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./account/AccountSettings")), available: always },
