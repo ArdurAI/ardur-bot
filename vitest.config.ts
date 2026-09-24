@@ -3,6 +3,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    // Bound concurrent module graphs so full runs fit worker startup and test budgets.
+    maxWorkers: 4,
     setupFiles: ["./packages/testkit/src/pin-test-env.ts"],
     include: [
       "scripts/*.test.ts",
