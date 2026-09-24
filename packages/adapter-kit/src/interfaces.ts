@@ -99,6 +99,12 @@ export interface SandboxProvider {
   ): Promise<ComputerRef>;
   /** Perform idempotent provider setup after the lifecycle has captured the reference. */
   prepare(computer: ComputerRef, context: AdapterContext): Promise<void>;
+  /** Resolve the same cwd used by execute, before a command launch is recorded. */
+  resolveCommandCwd?(
+    computer: ComputerRef,
+    cwd: string | undefined,
+    context: AdapterContext,
+  ): Promise<string | null>;
   execute(
     computer: ComputerRef,
     request: CommandRequest,
@@ -209,6 +215,10 @@ export interface MemoryStore {
 
 /** Optional semantic memory. Durable Markdown memory remains owned by MemoryStore. */
 export interface SemanticMemoryProvider {
+  deleteDocument?(
+    request: { documentId: string; botId: string; scope: "isolated" | "shared" },
+    context: AdapterContext,
+  ): Promise<SemanticMemoryResponse>;
   describe(): AdapterDescriptor<SemanticMemoryCapabilities>;
   recall(
     request: SemanticMemoryRecallRequest,

@@ -21,6 +21,57 @@ function provider() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("SupermemoryMemoryProvider", () => {
+  it("replaces a document slot on retries and searches only authorized document slots", async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, init: RequestInit) =>
+        new Response(init.method === "POST" ? JSON.stringify({ results: [] }) : "", {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const selected = provider();
+    for (let retry = 0; retry < 2; retry += 1)
+      expect(
+        await selected.save(
+          {
+            content: "[ardur-memory:doc:1]\nFact",
+            scope: "shared",
+            botId: "bot-1",
+            source: { kind: "durable", documentId: "doc", revision: 1 },
+          },
+          context,
+        ),
+      ).toMatchObject({ ok: true });
+    expect(fetchMock.mock.calls.map((call) => call[1].method)).toEqual([
+      "DELETE",
+      "POST",
+      "DELETE",
+      "POST",
+    ]);
+    expect(fetchMock.mock.calls[0]![0]).toContain("ardurbot%3Adocument%3Aworkspace-1%3Adoc");
+    fetchMock.mockClear();
+    await selected.recall(
+      { query: "Fact", scope: "shared", botId: "bot-1", limit: 5, documentIds: ["doc"] },
+      context,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1].body)).containerTag).toBe(
+      "ardurbot:document:workspace-1:doc",
+    );
+    fetchMock.mockClear();
+    expect(
+      await selected.save(
+        {
+          content: "x".repeat(10_001),
+          scope: "isolated",
+          botId: "bot-1",
+          source: { kind: "durable", documentId: "doc", revision: 2 },
+        },
+        context,
+      ),
+    ).toMatchObject({ ok: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   it("keeps Supermemory namespaces inside the adapter and omits empty history", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ results: [] }), {

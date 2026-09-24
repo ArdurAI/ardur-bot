@@ -7,7 +7,7 @@ import { expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), get: vi.fn() }));
 vi.mock("../lib/rpc", () => ({
-  rpc: { agentSkills: api, memory: { list: async () => [] } },
+  rpc: { agentSkills: api, memory: { list: async () => ({ items: [], nextCursor: null }) } },
 }));
 vi.mock("../lib/artifact-open", () => ({ downloadArtifactBytes: vi.fn() }));
 vi.mock("@lingui/react/macro", () => {

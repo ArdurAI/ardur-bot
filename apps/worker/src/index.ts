@@ -11,6 +11,7 @@ import {
   createCloudAgentConnection,
   createConnectorStack,
   createJobReconciler,
+  createMemoryLifecycle,
   createMessagingContextLoader,
   createPostgresReconciliationLeadership,
   createRunExecutor,
@@ -39,6 +40,7 @@ import {
   pipedreamConfigFromEnv,
   reconcileCloudAgents,
   reconcileComputerUpdates,
+  reconcileMemoryDelivery,
   resolveDeploymentModel,
   resolvePiSessionRoot,
   resolveSandboxProvider,
@@ -54,7 +56,6 @@ import {
 } from "@ardurbot/db";
 import { SERVICE_NAMES } from "@ardurbot/logging";
 import { createRootLogger } from "@ardurbot/logging/axiom";
-import { MarkdownMemoryStore } from "@ardurbot/memory";
 
 const logger = createRootLogger(SERVICE_NAMES.worker);
 
@@ -165,11 +166,14 @@ async function main() {
     });
   // One provider instance so emulator launches and polls share the same Map.
   const cloudAgent = createCloudAgentConnection();
+  const memoryLifecycleDeps = { prisma, secrets, jobs, dataDir };
+  const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
   const executor = createRunExecutor({
     prisma,
     runtime,
     sandbox,
-    memory: new MarkdownMemoryStore(prisma),
+    memory,
+    memoryDocuments,
     memoryProviders,
     home,
     artifacts,
@@ -214,6 +218,7 @@ async function main() {
     runtime,
     secretStore: secrets,
     memoryProviders,
+    memoryDocuments,
     deploymentModelKey,
     messaging,
     cloudAgent,
@@ -244,6 +249,7 @@ async function main() {
     leadership: createPostgresReconciliationLeadership(pool),
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
+    reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
   });
   reconciler.start();
 

@@ -138,6 +138,7 @@ import {
 } from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
+import { ThreadCommandBlock } from "../components/ThreadCommandBlock";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
@@ -5939,6 +5940,8 @@ const MessageView = memo(function MessageView({
     <>
       {messageContext}
       {message.blocks.map((block, i) => {
+        if (block.kind === "command")
+          return <ThreadCommandBlock key={block.command.commandId} block={block.command} />;
         if (isToolActivityBlock(block)) return null;
         if (block.kind === "handoff") {
           const from = memberName?.(block.fromBotId) ?? t`bot`;

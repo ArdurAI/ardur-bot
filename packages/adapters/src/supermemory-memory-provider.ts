@@ -9,6 +9,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import {
   deleteSupermemoryContainer,
+  MAX_MEMORY_CONTENT_CHARS,
   parseSupermemoryBaseUrl,
   probeSupermemory,
   type SupermemoryConnectionConfig,
@@ -98,10 +99,16 @@ function historyContainerTag(botId: string, generation: number): string {
 }
 
 function recallContainerTags(request: SemanticMemoryRecallRequest, spaceId: string): string[] {
+  if (request.documentIds)
+    return request.documentIds.map((id) => documentContainerTag(spaceId, id));
   const tags = durableContainerTags(request.scope, request.botId, spaceId);
   return request.historyGeneration === undefined
     ? tags
     : [...tags, historyContainerTag(request.botId, request.historyGeneration)];
+}
+
+function documentContainerTag(spaceId: string, id: string) {
+  return `ardurbot:document:${spaceId}:${id}`;
 }
 
 export class SupermemoryMemoryProvider implements SemanticMemoryProvider {
@@ -148,6 +155,20 @@ export class SupermemoryMemoryProvider implements SemanticMemoryProvider {
     request: SemanticMemorySaveRequest,
     context: AdapterContext,
   ): Promise<SemanticMemoryResponse> {
+    if (request.source.kind === "durable" && request.source.documentId) {
+      if (request.content.length > MAX_MEMORY_CONTENT_CHARS)
+        return { ok: false, error: "This document is too long for the selected indexing service." };
+      const tag = documentContainerTag(context.spaceId, request.source.documentId);
+      const cleared = await deleteSupermemoryContainer(tag, this.connection, context.signal);
+      if (!cleared.ok) return cleared;
+      const saved = await saveSupermemoryMemoryToContainers(
+        request.content,
+        [tag],
+        this.connection,
+        context.signal,
+      );
+      return saved.ok ? { ok: true, value: undefined } : saved;
+    }
     const tags =
       request.source.kind === "history"
         ? [historyContainerTag(request.botId, request.source.generation)]
@@ -178,6 +199,18 @@ export class SupermemoryMemoryProvider implements SemanticMemoryProvider {
     return errors.length > 0
       ? { ok: false, error: errors.join("; ") }
       : { ok: true, value: undefined };
+  }
+
+  async deleteDocument(
+    request: { documentId: string },
+    context: AdapterContext,
+  ): Promise<SemanticMemoryResponse> {
+    const deleted = await deleteSupermemoryContainer(
+      documentContainerTag(context.spaceId, request.documentId),
+      this.connection,
+      context.signal,
+    );
+    return deleted.ok ? { ok: true, value: undefined } : deleted;
   }
 
   static async probe(connection: SupermemoryConnectionConfig) {

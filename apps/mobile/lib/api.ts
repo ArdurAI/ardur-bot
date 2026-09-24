@@ -18,11 +18,13 @@ import {
   aiDataUsesForProcedure,
   cancelResponseBody,
   ensureAiDataConsent,
+  isCommandEvent,
   isRunTerminalEvent,
   mergeThreadHistory,
   prependThreadHistoryPage,
   progressMessageId,
   readBoundedJsonResponse,
+  reduceCommandMessages,
   reduceLiveMessageBlocks,
   runFailureError,
   signupRequiresEmailVerification,
@@ -909,6 +911,7 @@ export function blockText(message: MobileMessage) {
 }
 
 type ThreadEvent = {
+  createdAt?: string;
   id?: string;
   botId?: string;
   type: string;
@@ -974,6 +977,32 @@ export function applyMobileThreadEvent(
   event: ThreadEvent,
 ): MobileSnapshot | null {
   if (!prev) return prev;
+  if (isCommandEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
+  if (isCommandEvent(event.type))
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: reduceCommandMessages(prev.messages, {
+        ...event,
+        id: event.id ?? String(event.seq),
+        seq: event.seq ?? 0,
+        payload: event.payload ?? {},
+        threadId: prev.threadId,
+        createdAt: event.createdAt ?? new Date().toISOString(),
+      }),
+    };
+  if (isRunTerminalEvent(event))
+    prev = {
+      ...prev,
+      messages: reduceCommandMessages(prev.messages, {
+        ...event,
+        id: event.id ?? String(event.seq),
+        seq: event.seq ?? 0,
+        payload: event.payload ?? {},
+        threadId: prev.threadId,
+        createdAt: event.createdAt ?? new Date().toISOString(),
+      }),
+    };
   if (event.type === "thread.cleared") {
     return {
       ...prev,

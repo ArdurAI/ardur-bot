@@ -14,6 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import type {
   AdapterContext,
   CommandRequest,
@@ -28,7 +29,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
-import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
+import { boundedSandboxCommandTimeoutMs, createBoundedCommandOutput } from "@ardurbot/core";
 import {
   applyPlaceholderAction,
   boundedComputerActions,
@@ -116,6 +117,15 @@ export class DesktopSandboxProvider implements SandboxProvider {
   }
 
   async prepare(_computer: ComputerRef, _context: AdapterContext): Promise<void> {}
+
+  async resolveCommandCwd(
+    computer: ComputerRef,
+    cwd: string | undefined,
+    _context: AdapterContext,
+  ): Promise<string | null> {
+    const box = this.boxFor(computer);
+    return box ? resolveExecuteCwd(cwd, box.home) : null;
+  }
 
   async *execute(
     computer: ComputerRef,
@@ -700,8 +710,10 @@ function runCommand(
       env: process.env,
       detached: process.platform !== "win32",
     });
-    let stdout = "";
-    let stderr = "";
+    const stdout = createBoundedCommandOutput();
+    const outDecoder = new StringDecoder("utf8");
+    const stderr = createBoundedCommandOutput();
+    const errDecoder = new StringDecoder("utf8");
     let settled = false;
     const finish = (result: { stdout: string; stderr: string; code: number }) => {
       if (settled) return;
@@ -714,7 +726,9 @@ function runCommand(
       killProcessTree(child.pid);
       child.stdout?.destroy();
       child.stderr?.destroy();
-      finish({ stdout, stderr: appendLine(stderr, message), code });
+      const retained = stderr.value();
+      stderr.push(`${retained && !retained.endsWith("\n") ? "\n" : ""}${appendLine("", message)}`);
+      finish({ stdout: stdout.value(), stderr: stderr.value(), code });
     };
     const abort = () => terminate("command aborted", 130);
     const timeout = setTimeout(
@@ -724,10 +738,10 @@ function runCommand(
     timeout.unref?.();
     signal.addEventListener("abort", abort, { once: true });
     child.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
+      if (!stdout.truncated) stdout.push(outDecoder.write(chunk));
     });
     child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
+      if (!stderr.truncated) stderr.push(errDecoder.write(chunk));
     });
     child.on("error", (error) => {
       if (argv[0] === "echo") {
@@ -737,7 +751,9 @@ function runCommand(
       finish({ stdout: "", stderr: error.message, code: 1 });
     });
     child.on("close", (code) => {
-      finish({ stdout, stderr, code: code ?? 0 });
+      stdout.push(outDecoder.end());
+      stderr.push(errDecoder.end());
+      finish({ stdout: stdout.value(), stderr: stderr.value(), code: code ?? 0 });
     });
     if (signal.aborted) abort();
   });

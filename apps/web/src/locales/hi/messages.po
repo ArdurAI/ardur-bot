@@ -63,6 +63,13 @@ msgstr "{0} कनेक्शन"
 msgid "{0} default"
 msgstr ""
 
+#. placeholder {0}: preview.documents
+#. placeholder {1}: preview.revisions
+#: src/pages/MemoryImportExport.tsx
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "{0} documents, {1} revisions"
+msgstr ""
+
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} handling"
@@ -334,6 +341,10 @@ msgstr "उन्नत"
 msgid "Advanced..."
 msgstr ""
 
+#: src/pages/MemoryHistory.tsx
+msgid "After"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Agent computer"
 msgstr "एजेंट कंप्यूटर"
@@ -420,6 +431,10 @@ msgstr "इस टूल को हमेशा अनुमति दें"
 #: src/components/AskCard.tsx
 msgid "Always allowed"
 msgstr "हमेशा अनुमत"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Another service"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Answer"
@@ -557,6 +572,10 @@ msgstr "फ़ाइल संलग्न करें"
 msgid "Attachment"
 msgstr "अटैचमेंट"
 
+#: src/pages/MemoryHistory.tsx
+msgid "Author"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Authorization code or callback URL"
@@ -617,6 +636,14 @@ msgstr "बेस URL"
 msgid "Bearer token"
 msgstr "बियरर टोकन"
 
+#: src/pages/MemoryHistory.tsx
+msgid "Before"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Block link copied."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "लाइव डेस्कटॉप शुरू हो रहा है…"
@@ -631,6 +658,7 @@ msgid "bot"
 msgstr "बॉट"
 
 #: src/pages/IntegrationSetup.tsx
+#: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Bot"
@@ -678,6 +706,10 @@ msgstr ""
 msgid "Browse MCP servers"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Built-in"
+msgstr ""
+
 #: src/pages/CallView.tsx
 msgid "Call"
 msgstr "कॉल"
@@ -692,6 +724,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
@@ -803,6 +836,10 @@ msgstr ""
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
 msgstr "फ़ाइल चुनें"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Choose folder"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
@@ -936,6 +973,10 @@ msgstr "कमांड"
 msgid "Complete"
 msgstr "पूर्ण"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Completion not recorded"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -989,6 +1030,12 @@ msgstr "पासवर्ड की पुष्टि करें"
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
 
+#. placeholder {0}: conflict.path
+#: src/pages/MemoryImportExport.tsx
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Conflict: {0}"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Confluence space keys or IDs"
 msgstr ""
@@ -1036,7 +1083,6 @@ msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1099,6 +1145,18 @@ msgstr "ईमेल से जारी रखें"
 msgid "Copy"
 msgstr "कॉपी करें"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy block link"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy command"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Copy output"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Copy pairing details"
 msgstr ""
@@ -1115,9 +1173,17 @@ msgstr "MCP सर्वर जोड़ा नहीं जा सका"
 msgid "Could not approve this server"
 msgstr "इस सर्वर को अनुमोदित नहीं किया जा सका"
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not attach the folder. Retry."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not authorize this app"
 msgstr "इस ऐप को ऑथराइज़ नहीं किया जा सका"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not change memory location. Check the folder and preview again."
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Could not change password"
@@ -1126,6 +1192,14 @@ msgstr "पासवर्ड बदला नहीं जा सका"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not change the default model"
 msgstr "डिफ़ॉल्ट मॉडल बदला नहीं जा सका"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not change the default scope. Retry."
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Could not change this document. Reload and try again."
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
@@ -1152,13 +1226,16 @@ msgstr ""
 msgid "Could not connect"
 msgstr "कनेक्ट नहीं हो सका"
 
-#. placeholder {0}: registration.name
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Could not connect {0}"
-msgstr "{0} कनेक्ट नहीं हो सका"
-
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not connect or load integrations."
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not connect the memory service. Check the connection and retry."
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Could not connect the memory service. Preview again and retry."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1222,10 +1299,6 @@ msgstr "स्किल हटाई नहीं जा सकी"
 msgid "Could not delete space"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Could not disconnect memory provider"
-msgstr "मेमोरी प्रोवाइडर डिस्कनेक्ट नहीं हो सका"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not disconnect OAuth"
 msgstr "OAuth डिस्कनेक्ट नहीं हो सका"
@@ -1247,6 +1320,14 @@ msgstr "{0} डाउनलोड नहीं हो सका। पुनः 
 msgid "Could not download {name}. Try again."
 msgstr "{name} डाउनलोड नहीं हो सका। पुनः प्रयास करें।"
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Could not export memory. Retry."
+msgstr ""
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Could not import these documents. Check scopes and conflicts, then preview again."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "कनेक्टर इंस्टॉल नहीं हो सका"
@@ -1265,6 +1346,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "Could not load history. Retry."
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1326,6 +1411,10 @@ msgstr "सर्वर से संपर्क नहीं हो सका"
 msgid "Could not reach this model server"
 msgstr "इस मॉडल सर्वर तक नहीं पहुंचा जा सका"
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Could not read this memory bundle. Choose a valid export."
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not remove"
 msgstr "हटाया नहीं जा सका"
@@ -1357,6 +1446,10 @@ msgstr "चार्ट रेंडर नहीं हो सका"
 #: src/pages/Auth.tsx
 msgid "Could not reset password"
 msgstr "पासवर्ड रीसेट नहीं किया जा सका"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Could not restore this revision. Reload and try again."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
@@ -1456,10 +1549,6 @@ msgstr "कंप्यूटर अपडेट नहीं हो सका"
 msgid "Could not update reaction"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Could not update the default memory scope"
-msgstr "डिफ़ॉल्ट मेमोरी स्कोप अपडेट नहीं हो सका"
-
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr ""
@@ -1543,6 +1632,10 @@ msgstr "क्रेडेंशियल सहेजा गया"
 #: src/pages/PluginsOverlay.tsx
 msgid "Credentials are encrypted and never sent to the model."
 msgstr "क्रेडेंशियल एन्क्रिप्टेड होते हैं और मॉडल को कभी नहीं भेजे जाते।"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Credentials are stored encrypted on your server."
+msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Cron"
@@ -1677,6 +1770,14 @@ msgstr ""
 msgid "Desktop update"
 msgstr ""
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Destination scope"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Details"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Device name"
 msgstr ""
@@ -1699,12 +1800,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnect"
 msgstr "डिस्कनेक्ट करें"
 
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnecting…"
 msgstr "डिस्कनेक्ट हो रहा है…"
@@ -1743,8 +1842,16 @@ msgstr "Docker"
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker अतिरिक्त सुरक्षा के लिए आपके कंप्यूटर तक पहुँच सीमित करता है। {hostLabel} चुनने पर बॉट्स आपकी स्थानीय फ़ाइलों और टूल्स के साथ काम कर सकते हैं।"
 
+#: src/pages/KnowledgeSection.tsx
+msgid "Document"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Documentation"
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Documents"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -1875,6 +1982,10 @@ msgstr "हर सप्ताह"
 msgid "Executor token"
 msgstr "Executor टोकन"
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Existing documents keep their scope."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
 msgstr "विस्तृत करें"
@@ -1888,9 +1999,18 @@ msgstr ""
 msgid "Expires in five minutes."
 msgstr ""
 
+#: src/pages/MemoryImportExport.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "एक्सपोर्ट करें"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Export block"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Export run"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
@@ -2003,6 +2123,14 @@ msgstr ""
 msgid "Git event"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Git repository"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Git repository: Coming next."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
 msgstr ""
@@ -2073,6 +2201,10 @@ msgstr ""
 msgid "high — slower, checks more carefully"
 msgstr ""
 
+#: src/pages/KnowledgeSection.tsx
+msgid "History"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Home fingerprint"
 msgstr ""
@@ -2114,12 +2246,24 @@ msgstr ""
 msgid "Image upload area"
 msgstr "छवि अपलोड क्षेत्र"
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Import"
+msgstr ""
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Import memory bundle"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Import OpenAPI JSON"
 msgstr "OpenAPI JSON इम्पोर्ट करें"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Indexing sends documents to {locationLine}."
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -2169,7 +2313,6 @@ msgstr "अंतराल मात्रा"
 msgid "Interval unit"
 msgstr "अंतराल इकाई"
 
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
 msgstr "पृथक"
@@ -2197,6 +2340,10 @@ msgstr "अभी-अभी"
 #: src/pages/shell/dialogs.tsx
 msgid "Keep memories"
 msgstr "मेमोरी रखें"
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Keep scope"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "key"
@@ -2254,6 +2401,10 @@ msgstr "सुना जा रहा है…"
 msgid "Load earlier messages"
 msgstr "पुराने संदेश लोड करें"
 
+#: src/pages/MemoryHistory.tsx
+msgid "Load more history to compare."
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Loading activity…"
 msgstr "गतिविधि लोड हो रही है…"
@@ -2261,10 +2412,6 @@ msgstr "गतिविधि लोड हो रही है…"
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading integrations…"
 msgstr "इंटीग्रेशन लोड हो रहे हैं…"
-
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Loading memory settings…"
-msgstr "मेमोरी सेटिंग्स लोड हो रही हैं…"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
@@ -2294,6 +2441,7 @@ msgstr ""
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 msgid "Loading…"
 msgstr "लोड हो रहा है…"
@@ -2337,10 +2485,6 @@ msgstr "MCP सर्वर प्रबंधित करें"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Manage messaging settings"
 msgstr ""
-
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Manage the Space semantic memory provider."
-msgstr "वर्कस्पेस के सिमेंटिक मेमोरी प्रोवाइडर को प्रबंधित करें।"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
@@ -2402,9 +2546,25 @@ msgstr "सदस्य ({GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX} चुनें
 msgid "Memory"
 msgstr "मेमोरी"
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Memory folder on your server"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Memory location"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Memory location and documents"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Memory scope"
 msgstr "मेमोरी स्कोप"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Memory service"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Mentions"
@@ -2476,6 +2636,7 @@ msgstr "मिनट"
 msgid "minutes"
 msgstr "मिनट"
 
+#: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -2530,6 +2691,14 @@ msgstr ""
 msgid "More computer actions"
 msgstr ""
 
+#: src/pages/KnowledgeSection.tsx
+msgid "More documents"
+msgstr ""
+
+#: src/pages/MemoryHistory.tsx
+msgid "More history"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "उन्हें अपनी साझा मेमोरी में ले जाएं।"
@@ -2537,6 +2706,10 @@ msgstr "उन्हें अपनी साझा मेमोरी मे�
 #: src/pages/BotContextMenu.tsx
 msgid "Move to"
 msgstr "यहां ले जाएं"
+
+#: src/pages/MemoryImportExport.tsx
+msgid "My documents"
+msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/Auth.tsx
@@ -2637,6 +2810,10 @@ msgstr ""
 msgid "No destinations found."
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "No embedding service is configured."
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "No exceptions. Actions run automatically."
 msgstr "कोई अपवाद नहीं। कार्रवाइयां स्वतः चलती हैं।"
@@ -2655,6 +2832,10 @@ msgstr "इस डिप्लॉयमेंट पर कोई प्रब�
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No matching models"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "No matching output."
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -2722,6 +2903,10 @@ msgstr ""
 msgid "Not now"
 msgstr "अभी नहीं"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Not recorded"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "कुछ भी नहीं चल रहा"
@@ -2759,6 +2944,14 @@ msgstr "OAuth कनेक्शन विफल"
 msgid "OAuth expired"
 msgstr ""
 
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Obsidian Sync may copy this folder to your other devices"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Obsidian vault"
+msgstr ""
+
 #: src/lib/thinking-level-options.ts
 msgid "off — no extra thinking"
 msgstr ""
@@ -2771,6 +2964,14 @@ msgstr ""
 #: src/pages/RoutineSchedule.tsx
 msgid "on the 1st at {0}"
 msgstr "1 तारीख को {0} बजे"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "On this device"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "On your server"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Only empty spaces can be deleted. Delete its bots and groups first."
@@ -2930,9 +3131,21 @@ msgstr ""
 msgid "Preview {0}"
 msgstr "{0} का प्रीव्यू"
 
+#: src/pages/MemoryImportExport.tsx
+msgid "Preview import"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Preview migration"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "निजी"
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Private to each bot"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Private workspace with its own bots and groups."
@@ -2942,7 +3155,6 @@ msgstr ""
 msgid "Project ID"
 msgstr ""
 
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Provider"
 msgstr "प्रोवाइडर"
@@ -3172,6 +3384,18 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun"
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun is unavailable; reopen this block to check again."
+msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Rerun requested."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr ""
@@ -3205,6 +3429,7 @@ msgstr "रीसेट हो रहा है…"
 msgid "Restart to update"
 msgstr ""
 
+#: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
 msgid "Restore"
 msgstr "बहाल करें"
@@ -3215,6 +3440,10 @@ msgstr "अंतिम सहेजे गए वर्कस्पेस क�
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Retry"
 msgstr ""
 
 #: src/App.tsx
@@ -3247,6 +3476,11 @@ msgstr ""
 msgid "Review tools before your bots can use this account."
 msgstr ""
 
+#. placeholder {0}: revision.revision
+#: src/pages/MemoryHistory.tsx
+msgid "Revision {0}"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
@@ -3276,6 +3510,10 @@ msgstr "रूटीन"
 #: src/pages/RoutineEditor.tsx
 msgid "Routines"
 msgstr "रूटीन्स"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Run"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Run at"
@@ -3331,8 +3569,17 @@ msgstr "सहेजें"
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/ExternalConversationSettings.tsx
+#: src/pages/MemoryHistory.tsx
 msgid "Saved"
 msgstr "सहेजा गया"
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Saved locally. Indexing failed."
+msgstr ""
+
+#: src/pages/KnowledgeSection.tsx
+msgid "Saved locally. Indexing pending."
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
@@ -3372,6 +3619,7 @@ msgid "Say yes or no, or answer in a sentence."
 msgstr "हां या ना कहें, या एक वाक्य में उत्तर दें।"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
+#: src/components/ThreadCommandBlock.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -3405,6 +3653,10 @@ msgstr ""
 msgid "Search providers"
 msgstr "प्रोवाइडर्स खोजें"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Search run output"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -3413,6 +3665,10 @@ msgstr "खोजा जा रहा है…"
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "एक बॉट चुनें"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Select the text to copy it."
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -3487,7 +3743,6 @@ msgstr "सेटअप सहायता"
 msgid "Shape"
 msgstr "आकार"
 
-#: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "साझा"
@@ -3495,10 +3750,6 @@ msgstr "साझा"
 #: src/pages/shell/dialogs.tsx
 msgid "Shared chat with 2-6 bots. They all reply in the same thread."
 msgstr ""
-
-#: src/pages/KnowledgeSection.tsx
-msgid "Shared documents"
-msgstr "साझा दस्तावेज़"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -3590,6 +3841,11 @@ msgstr "स्पेस डिफ़ॉल्ट"
 #: src/pages/CallView.tsx
 msgid "Space interrupts · Esc hangs up"
 msgstr "स्पेस से बीच में रोकें · Esc से कॉल समाप्त करें"
+
+#: src/pages/MemoryImportExport.tsx
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Space shared"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Spaces"
@@ -3734,12 +3990,16 @@ msgid "The connection was cancelled."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
-msgid "The selected memory provider is not available in this build."
-msgstr "चयनित मेमोरी प्रोवाइडर इस बिल्ड में उपलब्ध नहीं है।"
+msgid "The service may use its own embedding providers. Check its settings before saving private documents."
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Thinking"
 msgstr "सोच रहा है"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This action could not finish; try again."
+msgstr ""
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
@@ -3765,6 +4025,10 @@ msgstr ""
 msgid "This chat is view-only"
 msgstr "यह चैट केवल देखने के लिए है"
 
+#: src/pages/SharedCommand.tsx
+msgid "This command is not available to this account."
+msgstr ""
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "यह कंप्यूटर"
@@ -3779,6 +4043,10 @@ msgstr "यह Mac"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "This path is on your server, which may be a different machine."
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -3951,6 +4219,10 @@ msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
+msgstr ""
+
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Use this location"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx

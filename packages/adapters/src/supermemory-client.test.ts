@@ -317,10 +317,17 @@ describe("deleteSupermemoryContainer", () => {
     vi.unstubAllGlobals();
   });
 
-  it("reports a non-OK response instead of throwing", async () => {
+  it("treats an already deleted container as idempotent success", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
     const result = await deleteSupermemoryContainer("ardurbot:bot-123", config);
-    expect(result).toEqual({ ok: false, error: expect.stringContaining("404") });
+    expect(result).toEqual({ ok: true });
+    vi.unstubAllGlobals();
+  });
+  it("keeps deletion failures retryable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));
+    expect(await deleteSupermemoryContainer("ardurbot:document:space:doc", config)).toMatchObject({
+      ok: false,
+    });
     vi.unstubAllGlobals();
   });
 });

@@ -1,5 +1,10 @@
 import * as z from "zod";
 import { BotSecretDestination } from "./bot-secrets.js";
+import {
+  CommandAuditPayloadSchema,
+  CommandBlockSchema,
+  CommandEventPayloadSchema,
+} from "./command-blocks.js";
 import { Id } from "./ids.js";
 import { McpTransportSchema } from "./mcp.js";
 import { RunFailurePayloadSchema } from "./provider-errors.js";
@@ -36,6 +41,11 @@ export const ProductEventType = z.enum([
   "skill.draft.created",
   "skill.saved",
   "effect.recorded",
+  "command.intent",
+  "command.started",
+  "command.finished",
+  "command.exported",
+  "command.shared",
   "agent.tool.called",
   "agent.tool.completed",
   "effect.reconciled",
@@ -91,6 +101,7 @@ export const SecretAskPurpose = z.enum(["otp", "password", "api_key"]);
 export type SecretAskPurpose = z.infer<typeof SecretAskPurpose>;
 
 export const MessageBlock = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("command"), command: CommandBlockSchema }),
   z.object({ kind: z.literal("text"), text: z.string() }),
   z.object({
     kind: z.literal("card"),
@@ -284,6 +295,16 @@ export const ProductEventSchema = z
     payload: z.record(z.string(), z.unknown()),
   })
   .superRefine((event, ctx) => {
+    if (event.type.startsWith("command.")) {
+      const schema =
+        event.type === "command.exported" || event.type === "command.shared"
+          ? CommandAuditPayloadSchema
+          : CommandEventPayloadSchema;
+      const parsed = schema.safeParse(event.payload);
+      if (!parsed.success)
+        for (const issue of parsed.error.issues)
+          ctx.addIssue({ ...issue, path: ["payload", ...issue.path] });
+    }
     if (
       event.type !== "run.failed" ||
       (event.payload.providerErrorKind === undefined && event.payload.runtimeProblem === undefined)

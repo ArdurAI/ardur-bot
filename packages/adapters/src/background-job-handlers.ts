@@ -9,6 +9,8 @@ import type {
 import { messagingDeliverJob } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import type { MemoryService } from "@ardurbot/memory";
+import { deliverMemory } from "@ardurbot/memory";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { expireComputerControl } from "./computer-control.js";
@@ -32,6 +34,7 @@ export function createBackgroundJobHandlers(deps: {
   runtime: AgentRuntime;
   secretStore: EncryptedSecretStore;
   memoryProviders: MemoryProviderResolver;
+  memoryDocuments?: MemoryService;
   deploymentModelKey?: string;
   messaging?: MessagingSurface;
   cloudAgent?: CloudAgentConnection | null;
@@ -52,6 +55,17 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
+    "memory.deliver": async (payload) => {
+      if (!deps.memoryDocuments) throw new Error("Memory delivery is unavailable.");
+      await deliverMemory(deps.memoryDocuments, payload.documentId, payload.revision, {
+        spaceId: payload.spaceId,
+        userId: payload.userId,
+        memoryGeneration: payload.generation,
+        operationId: "memory.deliver",
+        traceId: "memory.deliver",
+        signal: AbortSignal.timeout(30_000),
+      });
+    },
     "run.continue": async (payload) => {
       await deps.executor.continueRun(payload.runId, deps.workerId);
       // Automatic messaging mirror: once the run's bot messages are durable,

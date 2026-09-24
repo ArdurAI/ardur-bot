@@ -206,7 +206,7 @@ export async function deleteSupermemoryContainer(
         signal: requestSignal(signal),
       },
     );
-    if (!response.ok) {
+    if (!response.ok && response.status !== 404) {
       return { ok: false, error: `Supermemory container delete failed: ${response.status}` };
     }
     return { ok: true };

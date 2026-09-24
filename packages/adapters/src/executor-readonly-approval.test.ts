@@ -234,7 +234,9 @@ function fixture({
   const execute = vi.fn(async function* (call: ConnectorCall): AsyncGenerator<ConnectorEvent> {
     yield { type: "result" as const, data: { item: call.args.id } };
   });
-  let calls = [{ args: { id: "item-1" }, executionId: "call-1" }];
+  let calls: Array<{ args: Record<string, unknown>; executionId: string }> = [
+    { args: name === "shell" ? { command: "pnpm test" } : { id: "item-1" }, executionId: "call-1" },
+  ];
   const runtimeRun = vi.fn(async function* (request: AgentRunRequest) {
     for (const call of calls) {
       const result = await request.executeTool!(

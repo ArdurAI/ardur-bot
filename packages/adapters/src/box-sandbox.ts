@@ -241,6 +241,14 @@ export class BoxSandboxProvider implements SandboxProvider {
     return preparation;
   }
 
+  async resolveCommandCwd(
+    _computer: ComputerRef,
+    cwd: string | undefined,
+    _context: AdapterContext,
+  ): Promise<string | null> {
+    return boxCwd(cwd);
+  }
+
   async *execute(
     computer: ComputerRef,
     request: CommandRequest,

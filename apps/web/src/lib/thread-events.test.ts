@@ -1,5 +1,7 @@
 import type {
   ComputerStatus,
+  CommandBlock as FixtureCommandBlock,
+  ProductEvent as FixtureProductEvent,
   ProductEvent,
   ThreadMessage,
   ThreadSnapshot,
@@ -1607,5 +1609,57 @@ function event(overrides: Partial<ProductEvent>): ProductEvent {
     createdAt: "2026-08-16T00:00:01.000Z",
     payload: {},
     ...overrides,
+  };
+}
+
+describe("web command projection", () => {
+  it("projects command events into folded thread rows with idempotent delivery", () => {
+    const event = commandEvent();
+    expect(isThreadSnapshotEvent(event)).toBe(true);
+    const next = reduceThreadSnapshot(snapshot([]), event);
+    expect(next?.messages).toMatchSnapshot();
+    expect(reduceThreadSnapshot(next, event)?.messages).toEqual(next?.messages);
+  });
+});
+
+function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureCommandBlock {
+  return {
+    commandId: "command-1",
+    runId: "run-1",
+    attemptId: "attempt-1",
+    executionId: "execution-1",
+    command: "pnpm test",
+    cwd: "/workspace",
+    computerId: "computer-1",
+    computer: "docker:container-1",
+    startedAt: "2026-09-23T12:00:00.000Z",
+    durationMs: 12000,
+    exitCode: 0,
+    outcome: "completed",
+    stdout: "Tests passed.\n",
+    stderr: "",
+    error: null,
+    redacted: false,
+    truncated: false,
+    replayOf: null,
+    rerunDisabledReason: null,
+    ...overrides,
+  };
+}
+
+function commandEvent(
+  type: FixtureProductEvent["type"] = "command.finished",
+  overrides: Partial<FixtureCommandBlock> = {},
+): FixtureProductEvent {
+  return {
+    id: type,
+    seq: type === "command.intent" ? 1 : type === "command.started" ? 2 : 3,
+    spaceId: "space-1",
+    threadId: "thread-1",
+    botId: "bot-1",
+    runId: "run-1",
+    createdAt: "2026-09-23T12:00:00.000Z",
+    type,
+    payload: { block: commandBlock(overrides) },
   };
 }

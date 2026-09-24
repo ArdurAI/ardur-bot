@@ -561,6 +561,7 @@ model Run {
   remoteRootTaskId String?
   cancelRequestedAt DateTime?
   cancelConfirmedAt DateTime?
+  commandReplayId      String?
   id                   String           @id @default(cuid())
   spaceId              String
   space                Space            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -846,11 +847,18 @@ model MemoryDocument {
   path      String
   content   String
   revision  Int              @default(1)
+  scopeKey  String?
+  deletedAt DateTime?
+  deliveryStatus String @default("delivered")
+  deliveryGeneration Int @default(0)
+  deliveryProvider String?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   revisions MemoryRevision[]
 
   @@unique([spaceId, scope, botId, path])
+  @@unique([spaceId, scopeKey, path])
+  @@index([deliveryStatus])
   @@index([spaceId, userId])
   @@map("memory_documents")
 }
@@ -863,6 +871,14 @@ model MemoryRevision {
   content        String
   sourceRunId    String?
   sourceThreadId String?
+  authorKind     String @default("runtime")
+  authorUserId   String?
+  authorBotId    String?
+  modelProvider  String?
+  modelId        String?
+  modelEffort    String?
+  references     Json @default("[]")
+  deletedAt      DateTime?
   createdAt      DateTime       @default(now())
 
   @@unique([documentId, revision])
@@ -1033,8 +1049,11 @@ model SpaceMemoryConfig {
   userId             String
   provider           String
   settings           Json
-  secretId           String   @unique
-  secret             Secret   @relation(fields: [secretId], references: [id], onDelete: Cascade)
+  secretId           String?   @unique
+  secret             Secret?   @relation(fields: [secretId], references: [id], onDelete: SetNull)
+  generation         Int      @default(1)
+  documentStore      String   @default("postgres")
+  documentSettings   Json     @default("{}")
   defaultMemoryScope String   @default("isolated")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

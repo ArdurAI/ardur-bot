@@ -1,0 +1,60 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`command projection > snapshots the shared thread projection and export 1`] = `
+[
+  {
+    "blocks": [
+      {
+        "command": {
+          "attemptId": "attempt-1",
+          "command": "pnpm test",
+          "commandId": "command-1",
+          "computer": "docker:container-1",
+          "computerId": "computer-1",
+          "cwd": "/workspace",
+          "durationMs": 12000,
+          "error": null,
+          "executionId": "execution-1",
+          "exitCode": 0,
+          "outcome": "completed",
+          "redacted": false,
+          "replayOf": null,
+          "rerunDisabledReason": null,
+          "runId": "run-1",
+          "startedAt": "2026-09-23T12:00:00.000Z",
+          "stderr": "",
+          "stdout": "Tests passed.
+",
+          "truncated": false,
+        },
+        "kind": "command",
+      },
+    ],
+    "botId": "bot-1",
+    "createdAt": "2026-09-23T12:00:00.000Z",
+    "id": "command:command-1",
+    "role": "bot",
+    "runId": "run-1",
+    "seq": 3,
+    "threadId": "thread-1",
+  },
+]
+`;
+
+exports[`command projection > snapshots the shared thread projection and export 2`] = `
+"Run: run-1
+[Redacted export: known secrets masked; sensitive output suppressed]
+
+[2026-09-23T12:00:00.000Z] Ran \`pnpm test\` in /workspace · 12 s · exit 0
+Command: command-1 · Attempt: attempt-1 · Execution: execution-1
+Computer: docker:container-1 (computer-1)
+Outcome: completed
+[Redacted]
+[Output truncated]
+stdout:
+[redacted]
+[Output truncated]
+stderr:
+
+"
+`;

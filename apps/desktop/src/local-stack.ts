@@ -11,6 +11,7 @@ import {
   type RunDockerResult,
   resolveDockerBinary,
 } from "./docker-cli.js";
+import { MEMORY_COMPOSE_OVERRIDE } from "./memory-folders.js";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export const STACK_DIR_NAME = "stack";
@@ -333,6 +334,18 @@ export class LocalStackController {
     return this.current;
   }
 
+  async applyMemoryFolders(): Promise<void> {
+    if (!(await this.matchesDesiredStack())) throw new Error("The local stack is unavailable.");
+    const binary = resolveDockerBinary(this.deps.platform, this.deps.env, this.deps.exists);
+    if (!binary) throw new Error("Docker is unavailable.");
+    const result = await this.compose(
+      binary,
+      ["up", "-d", "--no-deps", "--wait", "api", "worker"],
+      UP_TIMEOUT_MS,
+    );
+    if (result.code !== 0) throw new Error("Could not attach the memory folder.");
+  }
+
   /** Fast path for launch: only a stack with our private token and desired image may be reused. */
   async matchesDesiredStack(url = this.currentWebUrl): Promise<boolean> {
     const token = await readStackToken(this.deps.stackDir);
@@ -568,6 +581,9 @@ export class LocalStackController {
         STACK_ENV_FILE,
         "-f",
         STACK_COMPOSE_FILE,
+        ...(this.deps.exists(path.join(this.deps.stackDir, MEMORY_COMPOSE_OVERRIDE))
+          ? ["-f", MEMORY_COMPOSE_OVERRIDE]
+          : []),
         "--project-name",
         STACK_PROJECT_NAME,
         ...args,

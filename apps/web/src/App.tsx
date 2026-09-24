@@ -5,6 +5,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "re
 import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import { LoadingState } from "./components/ai/primitives";
 import { authClient } from "./lib/auth";
+import { authReturnPath } from "./lib/auth-return-path";
 import { markAfterPaint, markOnce } from "./lib/performance";
 import {
   holdUnreachableGate,
@@ -15,6 +16,7 @@ import {
 import { IntegrationSetupPage } from "./pages/IntegrationSetup";
 import { LocalSettingsPage } from "./pages/LocalSettings";
 import { McpOAuthCallbackPage } from "./pages/McpOAuthCallback";
+import { SharedCommandPage, SharedCommandSignIn } from "./pages/SharedCommand";
 import { ShellPage } from "./pages/Shell";
 
 const AuthPage = lazy(() =>
@@ -37,8 +39,7 @@ export function App() {
 
 function SessionApp() {
   const [searchParams] = useSearchParams();
-  const signInDestination =
-    searchParams.get("next") === "/integrations/setup" ? "/integrations/setup" : "/app";
+  const signInDestination = authReturnPath(searchParams.get("next"));
   const session = authClient.useSession();
   const gate = sessionGate(session);
   const [holdingUnreachable, setHoldingUnreachable] = useState(false);
@@ -72,6 +73,10 @@ function SessionApp() {
     <div className="h-full" data-ardurbot-app-state="ready">
       <Suspense fallback={<div className="h-full bg-background" />}>
         <Routes>
+          <Route
+            path="/commands/:runId/:commandId"
+            element={user ? <SharedCommandPage /> : <SharedCommandSignIn />}
+          />
           <Route path="/" element={user ? <Navigate to="/app" replace /> : <WelcomePage />} />
           <Route
             path="/sign-in"

@@ -7,6 +7,6 @@ export function selectMemoryTools(
   semanticMemoryConfigured: boolean,
 ): ConnectorTool[] {
   return semanticMemoryConfigured
-    ? tools.filter((tool) => tool.name !== "remember")
+    ? tools
     : tools.filter((tool) => !SEMANTIC_MEMORY_TOOL_NAMES.has(tool.name));
 }

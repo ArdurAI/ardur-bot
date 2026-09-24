@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
     state: () => ipcRenderer.invoke("desktop.devices.state"),
     setEnabled: (enabled) => ipcRenderer.invoke("desktop.devices.setEnabled", enabled),
   },
+  memoryFolders: {
+    available: () => ipcRenderer.invoke("desktop.memoryFolders.available"),
+    select: (spaceId) => ipcRenderer.invoke("desktop.memoryFolders.select", spaceId),
+  },
   localSettings: {
     request: (pathname, body) =>
       ipcRenderer.invoke("desktop.localSettings.request", pathname, body),

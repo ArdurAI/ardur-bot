@@ -31,6 +31,11 @@ import {
   stackDir,
   stackResourceDir,
 } from "./local-stack.js";
+import {
+  memoryFolderBridgeAllowed,
+  nativeMemoryFolderDependencies,
+  registerMemoryFolder,
+} from "./memory-folders.js";
 import { oauthCallbackFrom } from "./oauth-callback.js";
 import { RemoteListener } from "./remote-listener.js";
 import {
@@ -1165,6 +1170,49 @@ app.whenReady().then(async () => {
     return remoteListener.start({ target, ...material });
   });
   ipcMain.handle("desktop.platform", () => process.platform);
+  ipcMain.handle("desktop.memoryFolders.available", (event) =>
+    memoryFolderBridgeAllowed({
+      mainWindow: fromMainWindow(event),
+      mainFrame: event.senderFrame === event.sender.mainFrame,
+      mode: currentSetup?.mode,
+      frameUrl: event.senderFrame?.url ?? "",
+      localUrl: localStack.webUrl(),
+    }),
+  );
+  let selectingMemoryFolder = false;
+  ipcMain.handle("desktop.memoryFolders.select", async (event, spaceId: unknown) => {
+    if (
+      !memoryFolderBridgeAllowed({
+        mainWindow: fromMainWindow(event),
+        mainFrame: event.senderFrame === event.sender.mainFrame,
+        mode: currentSetup?.mode,
+        frameUrl: event.senderFrame?.url ?? "",
+        localUrl: localStack.webUrl(),
+      }) ||
+      typeof spaceId !== "string" ||
+      selectingMemoryFolder
+    )
+      throw new Error("Memory folders require the local desktop stack.");
+    selectingMemoryFolder = true;
+    try {
+      return await registerMemoryFolder(
+        spaceId,
+        nativeMemoryFolderDependencies(
+          stackDir(userDataDir),
+          async () => {
+            const selected = await dialog.showOpenDialog({
+              title: "Choose an empty memory folder",
+              properties: ["openDirectory", "createDirectory"],
+            });
+            return selected.canceled ? null : (selected.filePaths[0] ?? null);
+          },
+          () => localStack.applyMemoryFolders(),
+        ),
+      );
+    } finally {
+      selectingMemoryFolder = false;
+    }
+  });
   ipcMain.handle("desktop.window.close", (event) => {
     windowFrom(event)?.close();
   });

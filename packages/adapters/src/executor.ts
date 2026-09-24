@@ -69,7 +69,6 @@ import {
   redactSecrets,
   renderBotDirectory,
   resolveActionApprovalDetail,
-  sandboxCommandTimeoutMs,
   type ToolCallStreak,
   toolRequiresApproval,
   toolRequiresExplicitApproval,
@@ -102,17 +101,14 @@ import {
   type ThreadEvents,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
 import { parse as parseShellCommand } from "shell-quote";
 import {
   connectAgent,
   messageConnectedAgent,
   respondAgentConnection,
 } from "./agent-connections.js";
-import {
-  decryptAgentEnvironment,
-  formatAgentEnvironmentInstruction,
-  redactAgentCommandResult,
-} from "./agent-environment.js";
+import { decryptAgentEnvironment, formatAgentEnvironmentInstruction } from "./agent-environment.js";
 import { buildApprovalAskBlock } from "./approval-ask.js";
 import {
   approvalPausedToolResult,
@@ -172,6 +168,12 @@ import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-fac
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
 import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
+import { createCommandRecording } from "./command-recording.js";
+import {
+  CommandReplayUnavailableError,
+  commandReplayEvents,
+  loadRunCommandReplay,
+} from "./command-replay.js";
 import {
   collectLogIds,
   mergeConnectedPlugins,
@@ -225,6 +227,7 @@ import {
   needsOAuthProbe,
   parseMcpServerToolArgs,
 } from "./mcp-server-tool.js";
+import { forgetRunMemory, recallRunMemory, saveRunMemory } from "./memory/run-memory.js";
 import { loadAgentMemoryContext } from "./memory-context.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { selectMemoryTools } from "./memory-tools.js";
@@ -552,6 +555,7 @@ export interface ExecutorDeps {
   runtime: AgentRuntime;
   sandbox: SandboxProvider;
   memory: MemoryStore;
+  memoryDocuments?: MemoryService;
   memoryProviders: MemoryProviderResolver;
   home: AgentHomeStore;
   artifacts?: ArtifactStore;
@@ -1292,7 +1296,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
           storedConnections,
           connectedComposio.map((connection) => connection.provider),
         );
-        const context = {
+        const context: MemoryOperationContext & { botId: string; runId: string } = {
+          memoryGeneration:
+            configuredMemory?.generation ??
+            (deps.memoryDocuments
+              ? await deps.memoryDocuments.generation({
+                  operationId: runId,
+                  traceId: runId,
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  signal: runAbortController.signal,
+                })
+              : undefined),
+          memoryModel: {
+            provider: selected.provider,
+            modelId: selected.id,
+            effort: selected.pin.effort,
+          },
+          threadId: thread.id,
+          knownSecrets: runSecrets,
           operationId: runId,
           traceId: runId,
           spaceId: run.spaceId,
@@ -1384,7 +1406,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           semanticMemory &&
           memoryScope &&
           thread.historyCompactedUpToSeq != null
-            ? semanticMemory.recall(
+            ? recallRunMemory(
+                deps.memoryDocuments,
+                semanticMemory,
                 {
                   query: task.prompt,
                   scope: memoryScope,
@@ -1440,6 +1464,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const workspaceCheckpoint = createRunWorkspaceCheckpoint(() =>
           checkpointRunComputerWorkspace(deps, storedComputer, computer, context),
         );
+        const commandReplay = await loadRunCommandReplay({
+          prisma: deps.prisma,
+          run,
+          storedComputer,
+          computer,
+          sandbox: deps.sandbox,
+          context,
+        });
+        const commandRecording = createCommandRecording({
+          events: deps.events,
+          sandbox: deps.sandbox,
+          computer,
+          storedComputer,
+          context,
+          threadId: thread.id,
+          attemptId: attempt.id,
+          secrets: runSecrets,
+          replayOf: commandReplay?.commandId,
+        });
         let currentTurnFiles: Awaited<ReturnType<typeof materializeCurrentTurnFiles>>;
         try {
           currentTurnFiles = deps.artifacts
@@ -1625,7 +1668,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let handedOff = false;
         let progressRedactor = createStreamingRedactor(runSecrets);
         const scripted = deps.runtime.describe().capabilities.scripted;
-        const script = scripted ? inferScript(task.prompt, takeoverResume?.checkpoint) : undefined;
+        const script =
+          scripted && !commandReplay
+            ? inferScript(task.prompt, takeoverResume?.checkpoint)
+            : undefined;
         const flushProgress = async () => {
           if (scripted || !pendingProgress) return;
           await deps.events.append({
@@ -1913,6 +1959,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               }
             }
+          }
+          if (name === "shell" && !commandRecording.matchesRequest(executionId, args)) {
+            return { error: "This command changed during approval; request it again." };
           }
           const enforceCeiling = () => checkCeiling(name);
           if (!(await enforceCeiling())) return pauseForApproval();
@@ -2556,9 +2605,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               args.cwd ? String(args.cwd) : undefined,
             );
             workspaceCheckpoint.markDirty();
-            const result = await runSandboxCommand(
-              deps.sandbox,
-              computer,
+            const result = await commandRecording.execute(
+              executionId,
               [
                 "bash",
                 "-c",
@@ -2573,9 +2621,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               ],
               cwd,
               agentEnvironment,
-              context,
             );
-            return finish(redactAgentCommandResult(result, runSecrets));
+            return finish(result);
           }
           if (name === "open_path") {
             if (heldForTakeover) {
@@ -2938,7 +2985,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             });
           }
           if (name === "recall_memory") {
-            return semanticMemory!.recall(
+            return recallRunMemory(
+              deps.memoryDocuments,
+              semanticMemory!,
               {
                 query: String(args.query ?? ""),
                 scope: memoryScope!,
@@ -2953,36 +3002,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "save_memory") {
             return finish(
-              await semanticMemory!.save(
-                {
-                  content: String(args.content ?? ""),
-                  scope: memoryScope!,
-                  botId: bot.id,
-                  source: { kind: "durable" },
-                },
+              await saveRunMemory(
+                deps,
+                { content: String(args.content ?? ""), shared: memoryScope === "shared" },
                 context,
               ),
             );
           }
           if (name === "forget_memory") {
-            if (!semanticMemory?.forget) {
-              return finish({
-                error: "This memory provider does not support forgetting individual facts.",
-              });
-            }
             return finish(
-              await semanticMemory.forget(
-                {
-                  id: String(args.id ?? ""),
-                  ...(typeof args.entity === "string" && args.entity.trim()
-                    ? { entity: args.entity.trim() }
-                    : {}),
-                  ...(typeof args.reason === "string" && args.reason.trim()
-                    ? { reason: args.reason.trim() }
-                    : {}),
-                },
-                context,
-              ),
+              await forgetRunMemory(deps.memoryDocuments, String(args.id ?? ""), context),
             );
           }
           if (name === "list_secrets") return listBotSecrets(deps.prisma, run);
@@ -3653,7 +3682,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
 
         try {
-          const runtimeEvents = deps.runtime.run(
+          const recordedApplyTool = (
+            name: string,
+            args: Record<string, unknown>,
+            executionId: string,
+          ) => commandRecording.invoke(name, args, executionId, applyTool);
+          const runRuntime: AgentRuntime["run"] = commandReplay
+            ? () => commandReplayEvents(commandReplay, runId, recordedApplyTool)
+            : deps.runtime.run.bind(deps.runtime);
+          const runtimeEvents = runRuntime(
             {
               botId: bot.id,
               threadId: thread.id,
@@ -3702,7 +3739,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               authorizeTool: scripted
                 ? undefined
                 : async (name) => ((await checkCeiling(name)) ? undefined : pauseForApproval()),
-              executeTool: scripted ? undefined : applyTool,
+              executeTool: scripted ? undefined : recordedApplyTool,
               resolveModel: scripted
                 ? undefined
                 : (provider, modelId) =>
@@ -4000,7 +4037,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (scripted) {
                 const startedAt = Date.now();
                 try {
-                  const result = await applyTool(event.name, event.args, event.executionId);
+                  const result = await recordedApplyTool(event.name, event.args, event.executionId);
                   await appendToolCompletionAudit(
                     deps,
                     {
@@ -4307,7 +4344,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       } catch (setupError) {
-        if (setupError instanceof RuntimePinError) {
+        if (
+          setupError instanceof RuntimePinError ||
+          setupError instanceof CommandReplayUnavailableError
+        ) {
           await deps.events.finalizeRun({
             spaceId: run.spaceId,
             threadId: run.threadId,
@@ -4319,7 +4359,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             leaseFence: fence,
             outcome: "failed",
             error: setupError.message,
-            runtimeProblem: setupError.problem,
+            runtimeProblem: setupError instanceof RuntimePinError ? setupError.problem : undefined,
           });
           return;
         }
@@ -4992,42 +5032,6 @@ function uncertainEffectError(toolName: string): Error {
   return new Error(
     `tool ${toolName} has an earlier execution with an uncertain outcome; it may already have completed, so verify the destination before retrying`,
   );
-}
-
-async function runSandboxCommand(
-  sandbox: SandboxProvider,
-  computer: ComputerRef,
-  argv: string[],
-  cwd: string | undefined,
-  env: Record<string, string>,
-  context: {
-    operationId: string;
-    traceId: string;
-    spaceId: string;
-    userId: string;
-    botId?: string;
-    runId?: string;
-    signal: AbortSignal;
-  },
-) {
-  let stdout = "";
-  let stderr = "";
-  let code = 0;
-  for await (const event of sandbox.execute(
-    computer,
-    {
-      argv,
-      cwd,
-      env: Object.keys(env).length > 0 ? env : undefined,
-      timeoutMs: sandboxCommandTimeoutMs(),
-    },
-    context,
-  )) {
-    if (event.type === "stdout") stdout += event.data;
-    if (event.type === "stderr") stderr += event.data;
-    if (event.type === "exit") code = event.code;
-  }
-  return { stdout, stderr, code };
 }
 
 /**

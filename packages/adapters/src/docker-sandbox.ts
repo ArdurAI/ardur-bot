@@ -175,6 +175,14 @@ export class DockerSandboxProvider implements SandboxProvider {
 
   async prepare(_computer: ComputerRef, _context: AdapterContext): Promise<void> {}
 
+  async resolveCommandCwd(
+    _computer: ComputerRef,
+    cwd: string | undefined,
+    _context: AdapterContext,
+  ): Promise<string | null> {
+    return dockerCwd(cwd);
+  }
+
   async *execute(
     computer: ComputerRef,
     request: CommandRequest,

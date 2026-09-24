@@ -61,6 +61,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppConnectCard } from "../components/AppConnectCard";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
+import { NativeCommandBlock } from "../components/command-block";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -2352,6 +2353,17 @@ const MessageBubble = memo(function MessageBubble({
     (block): block is Extract<MessageBlock, { kind: "ask" }> =>
       block.kind === "ask" && !isApprovalAskBlock(block) && !block.actions?.length,
   );
+  if (message.blocks.some((block) => block.kind === "command")) {
+    return (
+      <View style={{ width: "100%", gap: 8 }}>
+        {message.blocks.map((block) =>
+          block.kind === "command" ? (
+            <NativeCommandBlock key={block.command.commandId} block={block.command} />
+          ) : null,
+        )}
+      </View>
+    );
+  }
   if (ask) {
     return (
       <View style={{ gap: 8, width: "100%" }}>

@@ -305,6 +305,8 @@ export type SemanticMemoryResponse<T = void> =
   | { ok: false; error: string };
 
 export interface SemanticMemoryRecallRequest {
+  /** Supplied only by the authorized document gateway, not tool input. */
+  documentIds?: string[];
   query: string;
   scope: DurableMemoryScope;
   botId: string;
@@ -317,7 +319,9 @@ export interface SemanticMemorySaveRequest {
   content: string;
   scope: DurableMemoryScope;
   botId: string;
-  source: { kind: "durable" } | { kind: "history"; generation: number };
+  source:
+    | { kind: "durable"; documentId?: string; revision?: number }
+    | { kind: "history"; generation: number };
 }
 
 export interface SemanticMemoryPurgeHistoryRequest {
@@ -490,6 +494,13 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "memory.deliver": {
+    spaceId: string;
+    userId: string;
+    documentId: string;
+    revision: number;
+    generation: number;
+  };
   "run.continue": { runId: string };
   "routine.wakeup": { routineId: string; scheduledFor: string };
   "computer.sleep": { computerId: string };

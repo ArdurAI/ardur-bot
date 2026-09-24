@@ -58,8 +58,15 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await expect(settings.getByRole("heading", { name: "Memory", exact: true })).toBeVisible();
   await expect(settings.getByTestId("memory-settings")).toBeVisible();
   const memory = settings.getByTestId("memory-settings");
-  await expect(memory.getByLabel("Provider")).toBeVisible();
-  await memory.getByLabel("Provider").selectOption("serenity");
+  await expect(memory.getByLabel("Memory location")).toHaveValue("postgres");
+  await expect(memory.getByRole("tab", { name: "Documents", exact: true })).toBeVisible();
+  await expect(memory.getByRole("tab", { name: "Skills", exact: true })).toBeVisible();
+  await captureScreenshot(page, testInfo, "settings-memory-documents");
+  await memory.getByLabel("Memory location").selectOption("obsidian");
+  await expect(memory.getByLabel("Memory folder on your server")).toBeVisible();
+  await captureScreenshot(page, testInfo, "settings-memory-obsidian");
+  await memory.getByLabel("Memory location").selectOption("service");
+  await memory.getByLabel("Memory service").selectOption("serenity");
   await expect(memory.getByLabel("MCP endpoint")).toBeVisible();
   await expect(memory.getByLabel("Bearer token")).toBeVisible();
   await expect(memory.getByRole("button", { name: "Recall only" })).toBeVisible();

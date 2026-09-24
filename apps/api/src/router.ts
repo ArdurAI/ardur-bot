@@ -138,6 +138,7 @@ import {
   touchGroupUpdatedAt,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import type { MemoryService } from "@ardurbot/memory";
 import { implement, ORPCError } from "@orpc/server";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
@@ -145,6 +146,7 @@ import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
+import { createCommandRoutes } from "./command-routes.js";
 import {
   executionBlocksUserTakeover,
   resolveBusyBotName,
@@ -153,12 +155,14 @@ import {
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
+import { changeMemoryLocation } from "./memory-location.js";
 import {
   disconnectMemoryProvider,
   persistMemoryProviderConfig,
   serializeSpaceMemoryConfig,
   updateMemoryProviderDefaultScope,
 } from "./memory-provider-config.js";
+import { memoryContext, memoryRpc } from "./memory-routes.js";
 import {
   chooseFocus,
   dismissFocus,
@@ -433,6 +437,7 @@ export interface RouterDeps {
   jobs: JobPublisher;
   sandbox: SandboxProvider;
   memory: MemoryStore;
+  memoryDocuments?: MemoryService;
   memoryProviders: MemoryProviderResolver;
   home: AgentHomeStore;
   secrets: EncryptedSecretStore;
@@ -515,6 +520,7 @@ export function createRouter(deps: RouterDeps) {
     return next({ context: { ...context, actor: context.actor } });
   });
 
+  const commands = createCommandRoutes(deps);
   return os.router({
     devices: {
       list: authed.devices.list.handler(({ context }) => remoteDevices.list(context.actor)),
@@ -531,6 +537,23 @@ export function createRouter(deps: RouterDeps) {
       ),
       confirm: authed.pairing.confirm.handler(({ context, input }) =>
         remoteDevices.confirm(context.actor, input),
+      ),
+    },
+    commands: {
+      list: authed.commands.list.handler(({ context, input }) =>
+        commands.list(context.actor, input),
+      ),
+      open: authed.commands.open.handler(({ context, input }) =>
+        commands.open(context.actor, input),
+      ),
+      export: authed.commands.export.handler(({ context, input }) =>
+        commands.export(context.actor, input),
+      ),
+      share: authed.commands.share.handler(({ context, input }) =>
+        commands.share(context.actor, input),
+      ),
+      rerun: authed.commands.rerun.handler(({ context, input }) =>
+        commands.rerun(context.actor, input),
       ),
     },
     aiConsent: {
@@ -2218,69 +2241,72 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     memory: {
-      list: authed.memory.list.handler(async ({ context, input }) => {
-        const docs = await deps.prisma.memoryDocument.findMany({
-          where: {
-            spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
-            ...(input.botId ? { botId: input.botId } : {}),
-            ...(input.scope ? { scope: input.scope } : {}),
-          },
-        });
-        return docs.map((doc) => ({
-          id: doc.id,
-          scope: doc.scope as "bot" | "user",
-          botId: doc.botId,
-          path: doc.path,
-          content: doc.content,
-          revision: doc.revision,
-          updatedAt: doc.updatedAt.toISOString(),
-        }));
-      }),
-      update: authed.memory.update.handler(async ({ context, input }) => {
-        const doc = await deps.prisma.memoryDocument.findFirst({
-          where: {
-            id: input.documentId,
-            spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
-          },
-        });
-        if (!doc) throw new IsolationError();
-        const updated = await deps.memory.commit(
-          {
-            scope: doc.scope as "bot" | "user",
-            botId: doc.botId ?? undefined,
-            path: doc.path,
-            content: input.content,
-          },
-          {
-            operationId: "mem",
-            traceId: "mem",
-            spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
-            signal: new AbortController().signal,
-          },
-        );
-        return {
-          id: updated.id,
-          scope: doc.scope as "bot" | "user",
-          botId: doc.botId,
-          path: updated.path,
-          content: updated.content,
-          revision: updated.revision,
-          updatedAt: new Date().toISOString(),
-        };
-      }),
-      exportMarkdown: authed.memory.exportMarkdown.handler(async ({ context, input }) => {
-        const docs = await deps.prisma.memoryDocument.findMany({
-          where: {
-            spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
-            ...(input.botId ? { botId: input.botId } : {}),
-          },
-        });
-        return docs.map((d) => `# ${d.path}\n\n${d.content}`).join("\n\n");
-      }),
+      list: authed.memory.list.handler(({ context, input }) =>
+        memoryRpc(() => deps.memoryDocuments!.list(input, memoryContext(context.actor))),
+      ),
+      update: authed.memory.update.handler(({ context, input }) =>
+        memoryRpc(() =>
+          deps.memoryDocuments!.update(
+            input.documentId,
+            input.content,
+            input.expectedRevision,
+            memoryContext(context.actor),
+          ),
+        ),
+      ),
+      history: authed.memory.history.handler(({ context, input }) =>
+        memoryRpc(() =>
+          deps.memoryDocuments!.history(input.documentId, input, memoryContext(context.actor)),
+        ),
+      ),
+      restore: authed.memory.restore.handler(({ context, input }) =>
+        memoryRpc(() =>
+          deps.memoryDocuments!.restore(
+            input.documentId,
+            input.revision,
+            input.expectedRevision,
+            memoryContext(context.actor),
+          ),
+        ),
+      ),
+      delete: authed.memory.delete.handler(({ context, input }) =>
+        memoryRpc(() =>
+          deps.memoryDocuments!.delete(
+            input.documentId,
+            input.expectedRevision,
+            memoryContext(context.actor),
+          ),
+        ),
+      ),
+      retry: authed.memory.retry.handler(({ context, input }) =>
+        memoryRpc(() =>
+          deps.memoryDocuments!.retry(input.documentId, memoryContext(context.actor)),
+        ),
+      ),
+      export: authed.memory.export.handler(({ context }) =>
+        memoryRpc(() => deps.memoryDocuments!.exportBundle(memoryContext(context.actor))),
+      ),
+      import: authed.memory.import.handler(({ context, input }) =>
+        memoryRpc(() => deps.memoryDocuments!.importBundle(input, memoryContext(context.actor))),
+      ),
+      location: authed.memory.location.handler(({ context, input }) =>
+        memoryRpc(() => changeMemoryLocation(deps, context.actor, input)),
+      ),
+      exportMarkdown: authed.memory.exportMarkdown.handler(({ context, input }) =>
+        memoryRpc(async () => {
+          const bundle = await deps.memoryDocuments!.exportBundle(memoryContext(context.actor));
+          return bundle.documents
+            .map((doc) => doc.revisions.at(-1)!)
+            .filter(
+              (doc) =>
+                !doc.deletedAt &&
+                (!input.botId ||
+                  (doc.scopeKey.kind === "bot" && doc.scopeKey.botId === input.botId)),
+            )
+            .map((doc) => `# ${doc.path}\n\n${doc.content}`)
+            .join("\n\n");
+        }),
+      ),
       providerConfig: authed.memory.providerConfig.handler(async ({ context }) => {
         const config = await findSpaceMemoryConfig(deps.prisma, context.actor.spaceId);
         return config ? serializeSpaceMemoryConfig(config) : null;
@@ -4572,9 +4598,7 @@ export function createRouter(deps: RouterDeps) {
           signal: new AbortController().signal,
         };
         const [memory, routines, files, history] = await Promise.all([
-          deps.prisma.memoryDocument.findMany({
-            where: { botId: input.botId, spaceId: context.actor.spaceId },
-          }),
+          deps.memory.read({ scope: "bot", botId: input.botId }, exportContext),
           deps.prisma.routine.findMany({
             where: { botId: input.botId, spaceId: context.actor.spaceId },
           }),
@@ -4599,7 +4623,7 @@ export function createRouter(deps: RouterDeps) {
             description: bot.description,
             instructions: bot.instructions,
           },
-          memory: memory.map((m) => ({ path: m.path, content: m.content })),
+          memory: memory.documents.map((m) => ({ path: m.path, content: m.content })),
           routines: routines.map((r) => ({
             name: r.name,
             prompt: r.prompt,
