@@ -975,6 +975,7 @@ describe("model credential persistence", () => {
   function persistDeps(options?: { envDefaultModel?: string }) {
     const upsert = vi.fn().mockResolvedValue({ id: "preference" });
     const finish = vi.fn();
+    const begin = vi.fn();
     const tx = {
       userModelCredential: {
         findFirst: vi.fn().mockResolvedValue(null),
@@ -996,11 +997,16 @@ describe("model credential persistence", () => {
       },
     };
     const deps = {
-      prisma: { $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)) },
+      prisma: {
+        $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
+        userModelCredential: { findFirst: vi.fn().mockResolvedValue(null) },
+        spaceModelPreference: { findFirst: vi.fn().mockResolvedValue(null) },
+      },
       secrets: {
         put: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "cipher" }),
       },
       oauthLogins: {
+        begin,
         finish,
       },
       env: {
@@ -1012,7 +1018,7 @@ describe("model credential persistence", () => {
         agentRuntime: "pi",
       },
     } as unknown as RouterDeps;
-    return { upsert, finish, deps, tx, handler: new RPCHandler(createRouter(deps)) };
+    return { upsert, begin, finish, deps, tx, handler: new RPCHandler(createRouter(deps)) };
   }
 
   async function call(handler: RPCHandler<never>, path: string, body: unknown): Promise<Response> {
@@ -1109,15 +1115,123 @@ describe("model credential persistence", () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
+  it("rejects Anthropic OAuth begin before invoking the login service", async () => {
+    const { begin, handler } = persistDeps();
+    const response = await call(handler, "models/beginOAuth", { provider: "anthropic" });
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("Reconnect with an API key.");
+    expect(begin).not.toHaveBeenCalled();
+  });
+
+  it("rejects Anthropic OAuth finish before storing or encrypting credentials", async () => {
+    const { finish, handler, deps, upsert } = persistDeps();
+    finish.mockImplementation(async (_loginId, _actor, persist) => ({
+      status: "connected",
+      value: await persist({
+        provider: "anthropic",
+        credential: { type: "oauth", access: "test-access", refresh: "test-refresh", expires: 1 },
+        signal: new AbortController().signal,
+      }),
+    }));
+    const response = await call(handler, "models/finishOAuth", { loginId: "legacy-login" });
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("Reconnect with an API key.");
+    expect(deps.secrets.put).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it.each(["anthropic", "openai-codex", "openai-compatible"])(
+    "rejects serialized credentials at the %s API-key route without persistence",
+    async (provider) => {
+      const { deps, handler, upsert } = persistDeps();
+      for (const apiKey of [
+        JSON.stringify({
+          type: "oauth",
+          access: "test-access",
+          refresh: "test-refresh",
+          expires: 1,
+        }),
+        JSON.stringify({ access: "test-access", refresh: "test-refresh", expires: 1 }),
+        JSON.stringify({ claudeAiOauth: { accessToken: "test-access" } }),
+        '{"type":"oauth",',
+      ]) {
+        const response = await call(handler, "models/connect", {
+          provider,
+          apiKey,
+          baseUrl: "http://localhost:8000/v1",
+          modelId: "test-model",
+        });
+        expect(response.status).toBe(400);
+        const body = await response.text();
+        expect(body).toContain("API key");
+        expect(body).not.toContain("test-access");
+      }
+      expect(deps.secrets.put).not.toHaveBeenCalled();
+      expect(upsert).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still connects Anthropic API keys", async () => {
+    const { handler, deps } = persistDeps();
+    const response = await call(handler, "models/connect", {
+      provider: "anthropic",
+      apiKey: "fake-api-key",
+      modelId: "claude-opus-5",
+    });
+    expect(response.status).toBe(200);
+    expect(deps.secrets.put).toHaveBeenCalled();
+    expect(await response.json()).toMatchObject({ json: { provider: "anthropic", hasKey: true } });
+  });
+
+  it.each([true, false])(
+    "reports stored Anthropic OAuth for reconnection (legacy: %s)",
+    async (legacy) => {
+      const { deps } = persistDeps();
+      const findMany = vi.fn().mockResolvedValue([{ id: "secret-1", ciphertext: "encrypted" }]);
+      deps.prisma.userModelCredential = {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "credential-1",
+            provider: "anthropic",
+            label: "Anthropic",
+            secretId: "secret-1",
+            preferences: [],
+          },
+        ]),
+      } as never;
+      deps.prisma.secret = { findMany } as never;
+      deps.secrets.load = vi.fn().mockReturnValue(
+        JSON.stringify({
+          ...(legacy ? {} : { type: "oauth" }),
+          access: "test-access",
+          refresh: "test-refresh",
+          expires: 1,
+        }),
+      );
+      const response = await call(new RPCHandler(createRouter(deps)), "models/credentials", {});
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        json: [{ provider: "anthropic", hasKey: false, connectionIssue: "api-key-required" }],
+      });
+      expect(JSON.stringify(body)).not.toContain("test-access");
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: { in: ["secret-1"] }, userId: actor.userId, spaceId: null },
+        }),
+      );
+    },
+  );
+
   it("does not persist a stringified null model id from subscription sign-in", async () => {
     const { upsert, finish, handler } = persistDeps();
     finish.mockImplementation(async (_loginId, _actor, persist) => ({
       status: "connected" as const,
       value: await persist({
         status: "connected",
-        provider: "anthropic",
+        provider: "github-copilot",
         modelId: "null",
-        label: "Anthropic",
+        label: "Copilot",
         credential: {
           type: "oauth",
           access: "access-token",
@@ -1139,7 +1253,7 @@ describe("model credential persistence", () => {
     expect(persisted.update.modelId).toBe(persisted.create.modelId);
     await expect(response.json()).resolves.toEqual({
       json: expect.objectContaining({
-        provider: "anthropic",
+        provider: "github-copilot",
         modelId: persisted.create.modelId,
       }),
     });

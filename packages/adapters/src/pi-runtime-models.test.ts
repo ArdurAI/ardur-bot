@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildModelConnectPlaintext, modelCredentialDto } from "./model-connect.js";
 import { modelAcceptsImageInput } from "./model-vision.js";
 import { listPiCatalog } from "./pi-models.js";
-import { resolveModelAuth } from "./pi-oauth.js";
+import { AnthropicOAuthUnavailableError, resolveModelAuth } from "./pi-oauth.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
 import { modelsForRequest, resolveRuntimeModel } from "./pi-runtime.js";
 
@@ -13,6 +13,36 @@ function requestModel(id: string, baseUrl: string): Pick<AgentRunRequest, "model
 }
 
 describe("request model catalogs", () => {
+  it("rejects a serialized OAuth credential disguised as an Anthropic runtime API key", () => {
+    expect(() =>
+      resolveRuntimeModel({
+        provider: "anthropic",
+        id: "claude-opus-5",
+        apiKey: JSON.stringify({ access: "test-access", refresh: "test-refresh", expires: 1 }),
+      }),
+    ).toThrow(AnthropicOAuthUnavailableError);
+  });
+  it("rejects directly supplied Anthropic OAuth before creating a provider catalog", () => {
+    expect(() =>
+      modelsForRequest(
+        {
+          model: {
+            provider: "anthropic",
+            id: "claude-opus-5",
+            oauth: {
+              credential: {
+                type: "oauth",
+                access: "test-access",
+                refresh: "test-refresh",
+                expires: 1,
+              },
+            },
+          },
+        },
+        "anthropic",
+      ),
+    ).toThrow(AnthropicOAuthUnavailableError);
+  });
   it.each([
     ["openrouter", "openai/gpt-5.6-luna"],
     ["openai-codex", "gpt-6-astra"],
@@ -33,7 +63,8 @@ describe("request model catalogs", () => {
       expect(entry?.thinkingLevels).toContain("max");
     }
     if (provider === "anthropic") {
-      expect(entry?.signIn).toBe("auth-url");
+      expect(entry?.signIn).toBeUndefined();
+      expect(entry?.auth).toBe("api-key");
       expect(entry?.thinkingLevels).toContain("max");
     }
   });

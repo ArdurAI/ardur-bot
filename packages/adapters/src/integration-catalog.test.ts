@@ -10,24 +10,42 @@ import { captureIntegrationManifest, inputSchemaDigest } from "./integration-man
 import { assertSafeRemoteUrl } from "./remote-mcp.js";
 
 describe("trusted integration registry", () => {
-  it("has eight unique valid entries, three empty opt-in grants, and no embedded credentials", () => {
-    expect(integrationCatalog).toHaveLength(8);
-    expect(new Set(integrationCatalog.map((entry) => entry.id)).size).toBe(8);
+  it("has nine unique valid entries, four empty opt-in grants, and no embedded credentials", () => {
+    expect(integrationCatalog).toHaveLength(9);
+    expect(new Set(integrationCatalog.map((entry) => entry.id)).size).toBe(9);
     expect(integrationCatalog.filter((entry) => entry.available).map((entry) => entry.id)).toEqual([
       "github",
       "gitlab",
       "atlassian",
+      "notion",
     ]);
     for (const descriptor of integrationCatalog) {
       expect(validateIntegrationDescriptor(descriptor)).toEqual(descriptor);
       expect(descriptor.defaultAllowedTools).toEqual([]);
       expect(descriptor.toolPolicies).toEqual({});
       expect(JSON.stringify(descriptor)).not.toMatch(
-        /Bearer |client_secret|access_token|password/i,
+        /Bearer |"client_secret"\s*:|access_token|password/i,
       );
       if (!descriptor.available)
         expect(() => connectableIntegration(descriptor.id)).toThrow("not available");
     }
+  });
+  it("keeps Notion API metadata separate and defaults GitHub to a token", () => {
+    expect(connectableIntegration("notion")).toMatchObject({
+      endpoint: "https://mcp.notion.com/mcp",
+      transport: "remote-http",
+      authKind: "oauth",
+      apiVersion: "2026-03-11",
+      serverVersion: null,
+    });
+    expect(connectableIntegration("github")).toMatchObject({
+      authKind: "token",
+      tokenUrl: "https://github.com/settings/personal-access-tokens/new",
+      oauthApp: {
+        clientIdEnv: "GITHUB_MCP_CLIENT_ID",
+        clientSecretEnv: "GITHUB_MCP_CLIENT_SECRET",
+      },
+    });
   });
   it("rejects credentials and invalid transports instead of silently stripping fields", () => {
     const descriptor = connectableIntegration("github");

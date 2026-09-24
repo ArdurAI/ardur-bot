@@ -1,5 +1,6 @@
 import { listPiCatalog } from "@ardurbot/adapters";
 import type { PrismaClient } from "@ardurbot/db";
+import { redactBindings } from "@ardurbot/logging";
 import { describe, expect, it, vi } from "vitest";
 import { resolveRunModelPin } from "../../../packages/adapters/src/run-model-pin.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
@@ -107,8 +108,8 @@ describe("legacy runtime pin backfill", () => {
     const f = fixture();
     expect(await backfillRuntimePins(f)).toEqual({
       bound: 1,
-      noCredential: 0,
-      multipleCredentials: 0,
+      withoutConnection: 0,
+      severalConnections: 0,
       skipped: 0,
     });
     expect(f.bot).toMatchObject({
@@ -223,17 +224,18 @@ describe("legacy runtime pin backfill", () => {
     else f.credentials.push({ ...f.credentials[0]!, id: "second" });
     const before = { ...f.bot };
     const result = await backfillRuntimePins(f);
-    expect(result[count ? "multipleCredentials" : "noCredential"]).toBe(1);
+    expect(result[count ? "severalConnections" : "withoutConnection"]).toBe(1);
     expect(f.bot).toEqual(before);
     expect(f.tx.bot.updateMany).not.toHaveBeenCalled();
     expect(f.events).toEqual([]);
     expect(f.logger.info).toHaveBeenCalledExactlyOnceWith("runtime pin backfill", result);
+    expect(redactBindings(result)).toEqual(result);
   });
 
   it("does not borrow another user's connection or another space's thread", async () => {
     const f = fixture();
     f.credentials[0]!.userId = "other-owner";
-    expect((await backfillRuntimePins(f)).noCredential).toBe(1);
+    expect((await backfillRuntimePins(f)).withoutConnection).toBe(1);
     f.credentials.push({ ...f.credentials[0]!, id: "owned", userId: "owner" });
     f.thread.spaceId = "other-space";
     expect((await backfillRuntimePins(f)).skipped).toBe(1);

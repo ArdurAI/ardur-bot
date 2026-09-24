@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
   cancel: vi.fn(),
   bots: vi.fn(),
   consent: vi.fn(),
+  resourceTools: vi.fn(),
+  searchResources: vi.fn(),
 }));
 vi.mock("../../../lib/rpc", () => ({ rpc: { integrations: api, bots: { list: api.bots } } }));
 vi.mock("../../../lib/mcp-connect", () => ({
@@ -148,6 +150,8 @@ beforeEach(() => {
   api.list.mockImplementation(async () => ({ catalog, connections }));
   api.bots.mockResolvedValue([{ id: "bot", name: "Helper", archivedAt: null }]);
   api.grants.mockResolvedValue([]);
+  api.resourceTools.mockResolvedValue([]);
+  api.searchResources.mockResolvedValue([]);
   api.assign.mockImplementation(async (input) =>
     input.botIds.map((botId: string) => ({ botId, toolIds: input.toolIds, needsReview: false })),
   );
@@ -303,5 +307,146 @@ describe("Settings integration catalog", () => {
     );
     expect(container.textContent).not.toContain("fake-sensitive");
     expect(button("Try again")).toBeDefined();
+  });
+});
+
+async function fill(label: string, value: string) {
+  const input = container.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+describe("token and destination controls", () => {
+  it("submits a token through a password field, without an OAuth popup, then clears it", async () => {
+    const github = {
+      ...catalog[0]!,
+      authKind: "token" as const,
+      tokenUrl: "https://github.com/settings/personal-access-tokens/new",
+    };
+    api.list.mockImplementation(async () => ({ catalog: [github], connections }));
+    api.connect.mockImplementation(async () => {
+      connections = [connected];
+      return { connection: connected, authorizationUrl: null, sessionId: null };
+    });
+    await mount();
+    expect(container.textContent).toContain(
+      "Sign-in needs a pre-registered app; use a fine-grained token instead.",
+    );
+    await click(button("Use a token"));
+    expect(container.querySelector('[aria-label="Fine-grained token"]')?.getAttribute("type")).toBe(
+      "password",
+    );
+    await fill("Fine-grained token", "synthetic-test-value");
+    await click(button("Connect"));
+    expect(api.connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catalogId: "github",
+        authKind: "token",
+        token: "synthetic-test-value",
+      }),
+    );
+    expect(window.open).not.toHaveBeenCalled();
+    expect(api.consent).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("synthetic-test-value");
+    expect(container.querySelector('input[type="password"]')).toBeNull();
+  });
+  it("shows optional GitHub sign-in only when configured and never sends app secrets", async () => {
+    api.list.mockResolvedValue({
+      catalog: [{ ...catalog[0]!, authKind: "token", oauthAvailable: true }],
+      connections: [],
+    });
+    await mount();
+    expect(button("Use a token")).toBeDefined();
+    await click(button("Sign in with GitHub"));
+    expect(api.connect).toHaveBeenCalledWith({
+      catalogId: "github",
+      connectionId: undefined,
+      host: undefined,
+      authKind: "oauth",
+    });
+    expect(api.consent).toHaveBeenCalled();
+  });
+  it.each([
+    [
+      "needs-client-registration",
+      "This service needs client registration before you can connect.",
+      "Open documentation",
+    ],
+    ["awaiting-consent", "Finish signing in in your browser.", "Cancel"],
+    ["connected", "Your account is connected.", "Manage"],
+    ["discovery-failed", "Could not load this account’s tools.", "Try again"],
+    ["cancelled", "The connection was cancelled.", "Connect"],
+  ] as const)(
+    "renders Notion %s as one sentence and one action",
+    async (state, sentence, action) => {
+      api.list.mockResolvedValue({
+        catalog: [{ ...catalog[0]!, id: "notion", name: "Notion", vendor: "notion" }],
+        connections: [{ ...connected, catalogId: "notion", state }],
+      });
+      await mount();
+      const card = container.querySelector('[data-testid="integration-notion"]')!;
+      expect(card.querySelectorAll("p")).toHaveLength(1);
+      expect(card.textContent).toContain(sentence);
+      expect(card.textContent).toContain(action);
+      expect(card.querySelectorAll("button, a")).toHaveLength(1);
+    },
+  );
+  it("normalizes a pasted Notion URL and saves its constraint", async () => {
+    api.list.mockResolvedValue({
+      catalog: [{ ...catalog[0]!, id: "notion", name: "Notion" }],
+      connections: [{ ...connected, catalogId: "notion" }],
+    });
+    await mount();
+    await click(button("Manage"));
+    await fill("Notion page URL or ID", "https://www.notion.so/Notes-" + "a".repeat(32));
+    await click(button("Save"));
+    expect(api.assign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceConstraints: { notion: { parentId: "a".repeat(32), kind: "page" } },
+      }),
+    );
+  });
+  it("validates typed keys and uses only captured search identifiers in the picker", async () => {
+    api.list.mockResolvedValue({
+      catalog: [{ ...catalog[2]!, name: "Atlassian" }],
+      connections: [{ ...connected, catalogId: "atlassian" }],
+    });
+    api.resourceTools.mockImplementation(async ({ kind }) =>
+      kind === "jira"
+        ? [
+            {
+              id: "synthetic_search_projects",
+              description: "Search projects",
+              fields: [{ name: "query", required: true }],
+            },
+          ]
+        : [],
+    );
+    api.searchResources.mockResolvedValue([{ id: "DEMO", label: "Demo project", kind: "jira" }]);
+    await mount();
+    await click(button("Manage"));
+    await fill("Jira project keys", "bad key");
+    await click(button("Save"));
+    expect(api.assign).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Enter a valid destination");
+    await fill("Jira project keys", "");
+    await fill("query", "Demo");
+    await click(button("Search"));
+    await click(button("Demo project"));
+    expect(api.searchResources).toHaveBeenCalledWith({
+      connectionId: "connection",
+      kind: "jira",
+      toolId: "synthetic_search_projects",
+      args: { query: "Demo" },
+    });
+    await fill("Confluence space keys or IDs", "DOCS");
+    await click(button("Save"));
+    expect(api.assign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceConstraints: { jiraProjects: ["DEMO"], confluenceSpaces: ["DOCS"] },
+      }),
+    );
   });
 });

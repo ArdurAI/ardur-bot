@@ -109,10 +109,10 @@ describe("attempt correlation", () => {
   }
 
   it("reads the attempt state out of the authorize URL", () => {
-    expect(oauthStateOf("https://claude.ai/oauth/authorize?code=true&state=verifier_456")).toBe(
+    expect(oauthStateOf("https://example.com/authorize?code=true&state=verifier_456")).toBe(
       "verifier_456",
     );
-    expect(oauthStateOf("https://claude.ai/oauth/authorize?code=true")).toBeUndefined();
+    expect(oauthStateOf("https://example.com/authorize?code=true")).toBeUndefined();
     expect(oauthStateOf("not a url")).toBeUndefined();
   });
 

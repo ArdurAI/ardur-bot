@@ -22,8 +22,13 @@ describe("buildApprovalAskBlock", () => {
       },
     );
     expect(block).toMatchObject({
-      text: "GitHub · create a pull request comment on ardurai/ardur-bot#12",
-      detail: "synthetic_write · mcp__synthetic__synthetic_write",
+      text: "Save this to GitHub?",
+      detail:
+        "synthetic_write · mcp__synthetic__synthetic_write\nGitHub\nCreate a pull request comment.\nDestination: ardurai/ardur-bot#12",
+      actions: [
+        { id: "allow", label: "Save" },
+        { id: "deny", label: "Cancel", outcome: "cancelled" },
+      ],
     });
   });
   it("redacts and bounds integration descriptions and targets without rendering manifest Markdown", () => {
@@ -42,11 +47,12 @@ describe("buildApprovalAskBlock", () => {
     );
     expect(block.kind).toBe("ask");
     if (block.kind !== "ask") throw new Error("expected ask");
-    expect(block.text).toContain("Synthetic · create a comment");
+    expect(block.text).toBe("Save this to Synthetic?");
+    expect(block.detail).toContain("Create a comment");
     expect(block.text.length).toBeLessThanOrEqual(501);
     expect(JSON.stringify(block)).not.toContain("secret-description");
     expect(JSON.stringify(block)).not.toContain("secret-repo");
-    expect(block.detail).toBe("synthetic_write");
+    expect(block.detail).toContain("synthetic_write");
   });
   it("handles empty descriptions and non-repository targets without inventing a vendor action", () => {
     expect(
@@ -54,8 +60,8 @@ describe("buildApprovalAskBlock", () => {
         integration: { vendorName: "Synthetic", toolId: "synthetic_write", description: "" },
       }),
     ).toMatchObject({
-      text: "Synthetic · synthetic write on An item",
-      detail: "synthetic_write\ntitle: An item",
+      text: "Save this to Synthetic?",
+      detail: "synthetic_write\nSynthetic\nWrite content\nAn item",
     });
   });
   it("binds the approval to its effect and redacts secrets", () => {
@@ -131,4 +137,63 @@ describe("buildApprovalAskBlock", () => {
 it("omits permanent allow for a mandatory catalog approval", () => {
   const block = buildApprovalAskBlock("effect", "synthetic_write", {}, [], { allowAlways: false });
   expect(block).toMatchObject({ actions: [{ id: "allow" }, { id: "deny" }] });
+});
+
+it("previews nested Notion content and its destination without credential values", () => {
+  const block = buildApprovalAskBlock(
+    "effect",
+    "mcp__demo__synthetic_write",
+    {
+      parent: { page_id: "a".repeat(32) },
+      title: "Weekly notes",
+      content: "First line\nSecond line\n" + "x".repeat(5000),
+      api_key: "synthetic-sensitive-value",
+      body: "synthetic-sensitive-value",
+    },
+    [],
+    {
+      integration: {
+        vendorName: "Notion",
+        toolId: "synthetic_write",
+        description: "Create a page.",
+      },
+    },
+  );
+  expect(block).toMatchObject({
+    text: "Save this to Notion?",
+    actions: [
+      { id: "allow", label: "Save" },
+      { id: "deny", label: "Cancel" },
+    ],
+  });
+  if (block.kind !== "ask") throw new Error("expected ask");
+  expect(block.detail).toContain("Weekly notes");
+  expect(block.detail).toContain("First line\nSecond line");
+  expect(block.detail).toContain("a".repeat(32));
+  expect(block.detail!.length).toBeLessThanOrEqual(4001);
+  expect(JSON.stringify(block)).not.toContain("synthetic-sensitive-value");
+});
+it("redacts a secret before truncating content and uses channel-specific Post copy", () => {
+  const secret = "z".repeat(2000);
+  const block = buildApprovalAskBlock(
+    "effect",
+    "synthetic_post",
+    { channel: "#releases", text: secret },
+    [secret],
+    {
+      integration: {
+        vendorName: "Example",
+        toolId: "synthetic_post",
+        description: "Post a message.",
+      },
+    },
+  );
+  expect(block).toMatchObject({
+    text: "Post to #releases?",
+    actions: [
+      { id: "allow", label: "Post" },
+      { id: "deny", label: "Cancel" },
+    ],
+  });
+  expect(JSON.stringify(block)).not.toContain("zzz");
 });

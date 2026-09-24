@@ -5,14 +5,17 @@ import type {
   ConnectorProvider,
   ConnectorTool,
 } from "@ardurbot/adapter-kit";
+import type { IntegrationResourceKind } from "@ardurbot/contracts";
 import { IntegrationManifestSchema, isLocalMcpHost } from "@ardurbot/contracts";
+import { integrationToolKind } from "@ardurbot/core";
 import type { McpServer, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { catalogToolPrefix } from "./approval-effect.js";
 import { redactConnectorPayload, sanitizeConnectorError } from "./connector-safety.js";
 import { appendToolCompletionAudit } from "./executor.js";
-import { grantedMcpTools } from "./integration-access.js";
+import { grantedMcpTools, integrationResourceDenial } from "./integration-access.js";
 import { captureIntegrationManifest, inputSchemaDigest } from "./integration-manifest.js";
+import { resourceChoices, resourceSearchTools } from "./integration-resources.js";
 import {
   CATALOG_EXECUTE,
   catalogEntries,
@@ -308,6 +311,7 @@ export class McpConnector implements ConnectorProvider {
     // drop this call's OAuth secrets from model-visible redaction. Recompute via
     // oauthMaterialSecrets(material) so in-place token refresh stays covered.
     let material: OAuthMaterial | undefined;
+    let sentWrite = false;
     const sessionKey = this.sessionKey(assignment.server, context);
     try {
       const session = await this.sessionFor(assignment.server, context);
@@ -324,6 +328,8 @@ export class McpConnector implements ConnectorProvider {
         ) {
           throw new Error("The tool changed. Review tools before continuing.");
         }
+        const denial = integrationResourceDenial(assignment.server, captured, call.args);
+        if (denial) throw new Error(denial);
         // Recheck after discovery: revocation must also fence an already-open session.
         const current = await this.prisma.botMcpServer.findFirst({
           where: {
@@ -337,6 +343,19 @@ export class McpConnector implements ConnectorProvider {
         if (!current || !grantedMcpTools(current, [call.route.toolName]).length)
           throw new Error("MCP tool is not assigned to this bot");
       }
+      const captured = IntegrationManifestSchema.safeParse(
+        assignment.server.manifest,
+      ).data?.tools.find((tool) => tool.id === call.route?.toolName);
+      sentWrite = Boolean(
+        assignment.server.catalogId &&
+          (!captured ||
+            integrationToolKind(captured.id, captured.description) !== "read" ||
+            Object.entries(call.args).some(
+              ([key, value]) =>
+                /^(action|operation|method|command)$/i.test(key) &&
+                (typeof value !== "string" || !/^(get|list|search|find|read|fetch)$/i.test(value)),
+            )),
+      );
       const result = await session.callTool(call.route.toolName, call.args, {
         signal: context.signal,
       });
@@ -346,7 +365,13 @@ export class McpConnector implements ConnectorProvider {
       // A thrown call means the transport or auth broke; drop the session so the next call reconnects.
       const secrets = material ? oauthMaterialSecrets(material) : [];
       await this.evict(sessionKey);
-      yield { type: "error", message: sanitizeConnectorError(error, secrets) };
+      yield {
+        type: "error",
+        message: sentWrite
+          ? "Delivery could not be confirmed"
+          : sanitizeConnectorError(error, secrets),
+        ...(sentWrite ? { uncertain: true } : {}),
+      };
     }
   }
 
@@ -359,6 +384,53 @@ export class McpConnector implements ConnectorProvider {
       listed.tools,
       session.serverVersion(),
       material ? oauthMaterialSecrets(material) : [],
+    );
+  }
+
+  async resourceTools(server: McpServer, kind: IntegrationResourceKind, context: AdapterContext) {
+    const session = await this.sessionFor(server, context);
+    const listed = await session.listTools({ signal: context.signal });
+    const manifest = IntegrationManifestSchema.parse(server.manifest);
+    const material = this.sessions.get(this.sessionKey(server, context))?.material;
+    const secrets = material ? oauthMaterialSecrets(material) : [];
+    return resourceSearchTools(server.catalogId, kind, manifest, listed.tools).filter((tool) =>
+      tool.fields.every((field) => !secrets.some((secret) => field.name.includes(secret))),
+    );
+  }
+
+  async searchResources(
+    server: McpServer,
+    kind: IntegrationResourceKind,
+    toolId: string,
+    args: Record<string, string>,
+    context: AdapterContext,
+  ) {
+    const offered = await this.resourceTools(server, kind, context);
+    const tool = offered.find((tool) => tool.id === toolId);
+    if (
+      !tool ||
+      tool.fields.some((field) => field.required && !args[field.name]?.trim()) ||
+      Object.keys(args).some((key) => !tool.fields.some((field) => field.name === key))
+    )
+      throw new Error("Review the search fields and try again.");
+    const current = await this.prisma.mcpServer.findFirst({
+      where: {
+        id: server.id,
+        spaceId: context.spaceId,
+        userId: context.userId,
+        enabled: true,
+        revision: server.revision,
+      },
+    });
+    if (current?.connectionState !== "connected")
+      throw new Error("Connect this integration first.");
+    const session = await this.sessionFor(server, context);
+    const result = await session.callTool(toolId, args, { signal: context.signal });
+    if (result.isError) throw new Error("Could not load destinations.");
+    const material = this.sessions.get(this.sessionKey(server, context))?.material;
+    return resourceChoices(
+      kind,
+      redactConnectorPayload(result, material ? oauthMaterialSecrets(material) : []),
     );
   }
 

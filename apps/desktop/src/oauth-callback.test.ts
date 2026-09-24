@@ -24,7 +24,7 @@ describe("loopback OAuth callbacks", () => {
   });
 
   it("ignores the authorize page and other steps of the flow", () => {
-    expect(oauthCallbackFrom("https://claude.ai/oauth/authorize?code=true")).toBeUndefined();
+    expect(oauthCallbackFrom("https://example.com/authorize?code=true")).toBeUndefined();
     expect(oauthCallbackFrom("http://localhost:53692/callback")).toBeUndefined();
     expect(oauthCallbackFrom("http://localhost:5173/")).toBeUndefined();
   });

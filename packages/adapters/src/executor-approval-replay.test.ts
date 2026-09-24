@@ -440,3 +440,30 @@ describe("executor approval replay", () => {
     ).toEqual(approvedRequest);
   });
 });
+
+it("binds an integration approval to every content argument and replays only the approved snapshot", () => {
+  const marker = "__ardurbotCatalogTool";
+  const route = {
+    connectorId: "mcp",
+    resourceId: "connection",
+    toolName: "synthetic_write",
+    resourceRevision: 2,
+  };
+  const approved = {
+    parent: { page_id: "a".repeat(32) },
+    title: "Notes",
+    content: "Approved content",
+  };
+  const edited = { ...approved, content: "Edited content" };
+  const request = boundDirectApprovalRequest(route, approved, marker);
+  expect(approvedReplayArgs(request, edited, marker)).toEqual(approved);
+  expect(approvalEffectKey("run", "mcp__demo__synthetic_write", edited)).not.toBe(
+    approvalEffectKey("run", "mcp__demo__synthetic_write", approved),
+  );
+  expect(
+    approvalEffectKey("run", "mcp__demo__synthetic_write", {
+      ...approved,
+      parent: { page_id: "b".repeat(32) },
+    }),
+  ).not.toBe(approvalEffectKey("run", "mcp__demo__synthetic_write", approved));
+});

@@ -6,6 +6,7 @@ import type {
   CredentialStore,
   OAuthCredential,
 } from "@earendil-works/pi-ai";
+import { assertProviderOAuthAllowed } from "./pi-oauth.js";
 
 export function toOAuthCredential(value: AgentModelOAuthCredential): OAuthCredential {
   return { ...value, type: "oauth" };
@@ -25,6 +26,7 @@ export class PiRuntimeCredentialStore implements CredentialStore {
     credential?: Credential,
     private readonly persistOAuth?: (credential: OAuthCredential) => Promise<void>,
   ) {
+    if (credential?.type === "oauth") assertProviderOAuthAllowed(providerId);
     this.credential = credential;
   }
 
@@ -51,6 +53,7 @@ export class PiRuntimeCredentialStore implements CredentialStore {
       const next = await fn(current);
       options?.signal?.throwIfAborted();
       if (next !== undefined) {
+        if (next.type === "oauth") assertProviderOAuthAllowed(providerId);
         if (next.type === "oauth" && next !== current) {
           await this.persistOAuth?.(next);
         }

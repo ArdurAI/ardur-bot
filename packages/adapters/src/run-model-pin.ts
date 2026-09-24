@@ -5,6 +5,7 @@ import { spaceDefaultEffort } from "@ardurbot/core";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
 import { listPiCatalog } from "./pi-models.js";
+import { AnthropicOAuthUnavailableError } from "./pi-oauth.js";
 import type { BotPinFields } from "./pin-resolution.js";
 import {
   credentialForPin,
@@ -97,6 +98,9 @@ export async function resolveRunModelPin(input: {
     const problem = validateRuntimePin(resolved, pin);
     return problem ?? { ...resolved, kind: "resolved", pin };
   } catch (error) {
+    if (error instanceof AnthropicOAuthUnavailableError) {
+      return runtimePinProblem(pin, "pin-credential-missing", error.message);
+    }
     if (error instanceof RuntimePinError) return error.problem;
     throw error;
   }

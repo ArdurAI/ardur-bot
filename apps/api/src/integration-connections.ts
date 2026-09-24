@@ -15,10 +15,13 @@ import type {
   Actor,
   IntegrationConnection,
   IntegrationManifest,
+  IntegrationResourceConstraints,
+  IntegrationResourceKind,
   SpaceToolPolicies,
 } from "@ardurbot/contracts";
 import {
   IntegrationManifestSchema,
+  IntegrationResourceConstraintsSchema,
   IntegrationStateSchema,
   SpaceToolPoliciesSchema,
 } from "@ardurbot/contracts";
@@ -37,6 +40,8 @@ export function connectionDto(server: McpServer, needsReview = false): Integrati
     state: IntegrationStateSchema.parse(server.connectionState),
     manifest: manifest.success ? manifest.data : null,
     needsReview,
+    resourceConstraints:
+      IntegrationResourceConstraintsSchema.safeParse(server.resourceConstraints).data ?? {},
     spaceToolPolicies: SpaceToolPoliciesSchema.safeParse(server.spaceToolPolicies).data ?? {},
   };
 }
@@ -68,7 +73,11 @@ export class IntegrationConnections {
       orderBy: { createdAt: "desc" },
     });
     return {
-      catalog: [...integrationCatalog],
+      webUrl: new URL("/", this.webOrigin).toString(),
+      catalog: integrationCatalog.map((descriptor) => ({
+        ...descriptor,
+        oauthAvailable: Boolean(this.oauthApp(descriptor.id)),
+      })),
       connections: servers.map((row) =>
         connectionDto(
           row,
@@ -108,8 +117,44 @@ export class IntegrationConnections {
     }
   }
 
-  async connect(actor: Owner, input: { catalogId: string; connectionId?: string; host?: string }) {
+  private oauthApp(catalogId: string) {
+    const app = integrationById(catalogId)?.oauthApp;
+    const clientId = app && process.env[app.clientIdEnv]?.trim();
+    const clientSecret = app && process.env[app.clientSecretEnv]?.trim();
+    return clientId && clientSecret
+      ? {
+          client_id: clientId,
+          client_secret: clientSecret,
+          token_endpoint_auth_method: "client_secret_post" as const,
+        }
+      : undefined;
+  }
+
+  async connect(
+    actor: Owner,
+    input: {
+      catalogId: string;
+      connectionId?: string;
+      host?: string;
+      token?: string;
+      authKind?: "oauth" | "token";
+    },
+  ) {
     const descriptor = connectableIntegration(input.catalogId, input.host);
+    const authKind = input.authKind ?? descriptor.authKind;
+    const oauthApp = this.oauthApp(descriptor.id);
+    if (
+      authKind === "token" &&
+      (descriptor.authKind !== "token" ||
+        !input.token ||
+        input.token.length > 16_384 ||
+        /\s/.test(input.token))
+    )
+      throw new ORPCError("BAD_REQUEST", { message: "Enter a valid token." });
+    if (authKind === "oauth" && (input.token || (descriptor.authKind === "token" && !oauthApp)))
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Sign-in is not configured for this integration.",
+      });
     // Uses the existing DNS/IP checks, without a vendor exemption.
     await assertSafeRemoteUrl(descriptor.endpoint!, this.network.resolveHostname);
     let server: McpServer;
@@ -142,11 +187,35 @@ export class IntegrationConnections {
       });
     }
     try {
+      if (authKind === "token") {
+        const stored = await this.secrets.put(JSON.stringify({ secret: input.token }), {
+          operationId: "integrations.connect",
+          traceId: "integrations.connect",
+          ...actor,
+          signal: AbortSignal.timeout(30_000),
+        });
+        await this.prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${server.id}))`;
+          const current = await tx.mcpServer.findFirst({
+            where: { id: server.id, ...actor, enabled: true, revision: server.revision },
+          });
+          if (!current) throw new IsolationError();
+          await tx.secret.create({ data: { ...stored, ...actor, kind: "mcp" } });
+          await tx.mcpServer.update({ where: { id: server.id }, data: { secretId: stored.id } });
+        });
+        await this.capture(actor, server.id);
+        return {
+          connection: connectionDto(await this.owned(actor, server.id)),
+          authorizationUrl: null,
+          sessionId: null,
+        };
+      }
       const started = await this.oauth.begin({
         serverId: server.id,
         spaceId: actor.spaceId,
         userId: actor.userId,
         redirectUri: new URL("/mcp/oauth/callback", this.webOrigin).toString(),
+        ...(oauthApp ? { clientInformation: oauthApp } : {}),
       });
       if (started.status === "already_connected") {
         await this.capture(actor, server.id);
@@ -245,6 +314,7 @@ export class IntegrationConnections {
       botIds: string[];
       toolIds: string[];
       spaceToolPolicies?: SpaceToolPolicies;
+      resourceConstraints?: IntegrationResourceConstraints;
     },
   ) {
     await this.prisma.$transaction(async (tx) => {
@@ -263,6 +333,19 @@ export class IntegrationConnections {
       if (server.connectionState !== "connected" || !manifest.success)
         throw new Error("Connect this integration before choosing tools.");
       const descriptor = integrationById(server.catalogId)!;
+      const constraints =
+        input.resourceConstraints === undefined
+          ? undefined
+          : IntegrationResourceConstraintsSchema.parse(input.resourceConstraints);
+      if (
+        constraints &&
+        ((constraints.notion && server.catalogId !== "notion") ||
+          ((constraints.jiraProjects || constraints.confluenceSpaces) &&
+            server.catalogId !== "atlassian"))
+      )
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Choose destinations for this integration.",
+        });
       const names = new Set(
         manifest.data.tools
           .filter((tool) => descriptor.toolPolicies[tool.id]?.approval !== "disabled")
@@ -329,6 +412,7 @@ export class IntegrationConnections {
         where: { id: server.id },
         data: {
           spaceAllowedTools: toolIds,
+          ...(constraints === undefined ? {} : { resourceConstraints: constraints }),
           ...(spaceToolPolicies === undefined ? {} : { spaceToolPolicies }),
           revision: { increment: 1 },
         },
@@ -343,17 +427,25 @@ export class IntegrationConnections {
     if (!server.catalogId) throw new IsolationError();
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${id}))`;
+      const current = await tx.mcpServer.findFirst({ where: { id, ...actor } });
+      if (!current) throw new IsolationError();
       await tx.mcpServer.update({
         where: { id },
         data: {
           enabled: false,
           connectionState: state,
+          secretId: null,
+          resourceConstraints: {},
           manifest: Prisma.DbNull,
           spaceAllowedTools: [],
           spaceToolPolicies: {},
           revision: { increment: 1 },
         },
       });
+      if (current.secretId)
+        await tx.secret.deleteMany({
+          where: { id: current.secretId, ...actor },
+        });
       await tx.botMcpServer.deleteMany({
         where: { serverId: id, spaceId: actor.spaceId, userId: actor.userId },
       });
@@ -365,6 +457,66 @@ export class IntegrationConnections {
     await McpConnector.invalidateConnection(id, actor);
     await this.oauth.disconnect({ serverId: id, spaceId: actor.spaceId, userId: actor.userId });
     return { ok: true as const };
+  }
+
+  async resourceTools(actor: Owner, id: string, kind: IntegrationResourceKind) {
+    return this.withResourceConnector(actor, id, (connector, server) =>
+      connector.resourceTools(server, kind, this.resourceContext(actor)),
+    );
+  }
+
+  async searchResources(
+    actor: Owner,
+    input: {
+      connectionId: string;
+      kind: IntegrationResourceKind;
+      toolId: string;
+      args: Record<string, string>;
+    },
+  ) {
+    return this.withResourceConnector(actor, input.connectionId, (connector, server) =>
+      connector.searchResources(
+        server,
+        input.kind,
+        input.toolId,
+        input.args,
+        this.resourceContext(actor),
+      ),
+    );
+  }
+
+  private resourceContext(actor: Owner) {
+    return {
+      ...actor,
+      operationId: "integrations.resources",
+      traceId: "integrations.resources",
+      signal: AbortSignal.timeout(30_000),
+    };
+  }
+
+  private async withResourceConnector<T>(
+    actor: Owner,
+    id: string,
+    read: (connector: McpConnector, server: McpServer) => Promise<T>,
+  ): Promise<T> {
+    const server = await this.owned(actor, id);
+    if (!server.enabled || server.connectionState !== "connected")
+      throw new ORPCError("BAD_REQUEST", { message: "Connect this integration first." });
+    const connector = new McpConnector(
+      this.prisma,
+      this.secrets,
+      { network: this.network },
+      this.oauth,
+    );
+    try {
+      return await read(connector, server);
+    } catch {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Could not load destinations; check the search fields and try again.",
+      });
+    } finally {
+      await connector.close();
+    }
   }
 
   private async invalidateApprovals(tx: Prisma.TransactionClient, actor: Owner, server: McpServer) {

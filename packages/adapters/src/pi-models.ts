@@ -37,13 +37,14 @@ function buildPiCatalog(): PiCatalogEntry[] {
   const models = registerOpenAiCompatibleCatalog(registerLocalProvider(builtinModels()));
   const entries: PiCatalogEntry[] = [];
   for (const provider of models.getProviders()) {
-    const apiKey = Boolean(provider.auth.apiKey);
-    const oauth = Boolean(provider.auth.oauth);
+    const apiKey = provider.id === "anthropic" || Boolean(provider.auth.apiKey);
+    const oauth = provider.id !== "anthropic" && Boolean(provider.auth.oauth);
     const auth: PiCatalogAuth = apiKey && oauth ? "both" : oauth ? "oauth" : "api-key";
     const signInMeta = SUBSCRIPTION_SIGN_IN_PROVIDERS[provider.id];
-    const oauthLabel =
-      signInMeta?.loginLabel ?? provider.auth.oauth?.loginLabel ?? provider.auth.oauth?.name;
-    const subscription = Boolean(provider.auth.oauth?.isSubscription);
+    const oauthLabel = oauth
+      ? (signInMeta?.loginLabel ?? provider.auth.oauth?.loginLabel ?? provider.auth.oauth?.name)
+      : undefined;
+    const subscription = oauth && Boolean(provider.auth.oauth?.isSubscription);
     const billing = catalogBilling(provider.id, provider.name, {
       apiKey,
       oauth,

@@ -36,6 +36,7 @@ import {
 } from "./openai-tool-parameters.js";
 import { PiRuntimeCredentialStore, toOAuthCredential } from "./pi-credentials.js";
 import { registerLocalProvider } from "./pi-local-provider.js";
+import { assertAnthropicApiKey, assertProviderOAuthAllowed } from "./pi-oauth.js";
 import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   registerOpenAiCompatibleCatalog,
@@ -616,8 +617,10 @@ export function modelsForRequest(
   request: Pick<AgentRunRequest, "model">,
   provider: string,
 ): Models {
+  if (request.model.apiKey !== undefined) assertAnthropicApiKey(provider, request.model.apiKey);
   const oauth = request.model.oauth;
   if (oauth) {
+    assertProviderOAuthAllowed(provider);
     const persist = oauth.persist;
     return registerOpenAiCompatibleCatalog(
       registerLocalProvider(

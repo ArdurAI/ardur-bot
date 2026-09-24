@@ -1895,10 +1895,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
             connectorCall.route,
             context,
             args,
+            deps.secretStore,
           );
+          if (integrationDetails?.secrets) runSecrets.push(...integrationDetails.secrets);
           const integrationApproval = integrationDetails?.approval;
           if (integrationApproval === "disabled")
-            return { error: "This tool is no longer granted. Review tools in Settings." };
+            return {
+              error:
+                integrationDetails?.denial ??
+                "This tool is no longer granted. Review tools in Settings.",
+            };
           const viaConnector = !BUILTIN_AGENT_TOOL_NAMES.has(name);
           const requiresUnattendedApproval =
             integrationApproval !== "allow" &&
@@ -3501,7 +3507,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   });
                 }
               }
-              if (event.type === "error") result = { error: event.message };
+              if (event.type === "error") {
+                if (event.uncertain && applied?.effect)
+                  return settleUncertainEffect(deps.prisma, applied.effect.id, name);
+                result = { error: event.message, ...(event.uncertain ? { uncertain: true } : {}) };
+              }
             }
             return finish(result);
           }

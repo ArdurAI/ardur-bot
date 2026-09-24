@@ -381,6 +381,14 @@ msgstr "Permitir acciones de compra sin preguntar"
 msgid "Allow writing"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Allowed destination"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Allowed destinations"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "Permitido una vez"
@@ -792,6 +800,10 @@ msgstr "Elegir archivo"
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Elige qué modelo conectado usa Ardur Bot."
 
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Claude subscriptions are not supported here yet; use an API key."
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
 msgstr "Borrar"
@@ -968,6 +980,10 @@ msgstr "Confirmar eliminación"
 #: src/pages/Auth.tsx
 msgid "Confirm password"
 msgstr "Confirmar contraseña"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Confluence space keys or IDs"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1247,6 +1263,10 @@ msgstr "No se pudieron cargar las reglas de aprobación"
 msgid "Could not load bots. Reload to try again."
 msgstr ""
 
+#: src/components/integrations/catalog/ResourcePicker.tsx
+msgid "Could not load destinations."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not load integrations"
@@ -1463,6 +1483,10 @@ msgstr "Crear"
 msgid "Create a section and move {0} into it."
 msgstr "Crea una sección y mueve {0} a ella."
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Create a token"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Create account"
 msgstr "Crear cuenta"
@@ -1543,6 +1567,10 @@ msgstr "Personalizar avatar del bot"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Dark"
 msgstr "Oscuro"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Database"
+msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
 msgid "day"
@@ -1764,6 +1792,10 @@ msgstr "Correo"
 msgid "Engage when... Ignore..."
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Enter a valid destination and save again."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -1877,6 +1909,10 @@ msgstr "Falló."
 msgid "Failure handling"
 msgstr "Manejo de fallos"
 
+#: src/components/integrations/catalog/ResourcePicker.tsx
+msgid "Find a destination"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Find models"
@@ -1886,6 +1922,10 @@ msgstr "Buscar modelos"
 #: src/pages/Onboarding.tsx
 msgid "Finding…"
 msgstr "Buscando…"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Fine-grained token"
+msgstr ""
 
 #. placeholder {0}: new URL(oauth.verificationUri).hostname
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1948,6 +1988,10 @@ msgstr "Evento de Git"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Grant only the repositories and permissions this bot needs."
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2108,6 +2152,10 @@ msgstr "Aislado"
 #: src/pages/shell/dialogs.tsx
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
 msgstr "Su conversación, archivos y rutinas se eliminarán de forma permanente. Los bots que creó permanecerán en tu lista."
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Jira project keys"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Jump to latest"
@@ -2545,6 +2593,10 @@ msgstr ""
 msgid "No chat apps linked yet."
 msgstr "Aún no hay apps de chat vinculadas."
 
+#: src/components/integrations/catalog/ResourcePicker.tsx
+msgid "No destinations found."
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "No exceptions. Actions run automatically."
 msgstr "Sin excepciones. Las acciones se ejecutan automáticamente."
@@ -2649,6 +2701,10 @@ msgstr "Aún no hay recuerdos"
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "Notificaciones"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Notion page URL or ID"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Now"
@@ -2768,6 +2824,10 @@ msgstr "Otro modelo…"
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
 msgstr "Incidente de PagerDuty"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Parent page"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
@@ -2908,6 +2968,10 @@ msgstr "Recientes"
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
 msgstr "Reconectar OAuth"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Reconnect with an API key"
+msgstr ""
 
 #: src/App.tsx
 #: src/components/ComputerUpdateProgress.tsx
@@ -3269,6 +3333,7 @@ msgstr "Di algo. El silencio lo envía."
 msgid "Say yes or no, or answer in a sentence."
 msgstr "Di sí o no, o responde en una frase."
 
+#: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -3441,10 +3506,18 @@ msgstr "Iniciar sesión"
 msgid "Sign in to Ardur Bot"
 msgstr "Inicia sesión en Ardur Bot"
 
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Sign in with GitHub"
+msgstr ""
+
 #: src/pages/Auth.tsx
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "Registrarse"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
+msgstr ""
 
 #. placeholder {0}: skill.name
 #: src/pages/Shell.tsx
@@ -3742,6 +3815,7 @@ msgstr "Token de Treg"
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "Intentarlo de nuevo"
@@ -3845,6 +3919,10 @@ msgstr "Usar {hostLabel}"
 #: src/pages/Onboarding.tsx
 msgid "Use a found model"
 msgstr "Usar un modelo encontrado"
+
+#: src/components/integrations/catalog/IntegrationCatalog.tsx
+msgid "Use a token"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"

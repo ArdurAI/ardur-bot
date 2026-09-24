@@ -380,7 +380,9 @@ export type UncertainEffectResult = { error: string; uncertain: true };
 
 export function uncertainEffectResult(toolName: string): UncertainEffectResult {
   return {
-    error: `The earlier ${toolName} execution was interrupted, so its outcome is unknown. It was not replayed to avoid a duplicate side effect. Verify the destination before proposing another action.`,
+    error: toolName.startsWith("mcp__")
+      ? "Delivery could not be confirmed"
+      : `The earlier ${toolName} execution was interrupted, so its outcome is unknown. It was not replayed to avoid a duplicate side effect. Verify the destination before proposing another action.`,
     uncertain: true,
   };
 }

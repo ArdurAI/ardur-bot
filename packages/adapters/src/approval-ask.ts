@@ -1,5 +1,5 @@
 import type { MessageBlock } from "@ardurbot/contracts";
-import { redactSecrets } from "@ardurbot/core";
+import { integrationToolKind, redactSecrets } from "@ardurbot/core";
 
 const MAX_APPROVAL_SUMMARY_LENGTH = 500;
 const MAX_APPROVAL_DETAIL_LENGTH = 4_000;
@@ -21,18 +21,45 @@ export function buildApprovalAskBlock(
     integration?: IntegrationApprovalAction;
   },
 ): MessageBlock {
-  const summary = options?.integration
-    ? describeIntegrationAction(options.integration, args)
-    : describeApprovalAction(toolName, args);
+  const hidden = [...secrets];
+  function collect(value: unknown, depth = 0) {
+    if (!value || typeof value !== "object" || depth > 12) return;
+    for (const [key, item] of Object.entries(value)) {
+      if (
+        /secret|password|credential|authorization|(?:^|_)(?:api_?key|token)(?:$|_)/i.test(key) &&
+        typeof item === "string" &&
+        item
+      )
+        hidden.push(item);
+      else if (typeof item === "object") collect(item, depth + 1);
+    }
+  }
+  collect(args);
+  const integrationWrite =
+    options?.integration &&
+    (integrationToolKind(options.integration.toolId, options.integration.description) === "write" ||
+      Object.entries(args).some(
+        ([key, value]) =>
+          /^(action|operation|method|command)$/i.test(key) &&
+          (typeof value !== "string" || !/^(get|list|search|find|read|fetch)$/i.test(value)),
+      ));
+  const preview = integrationWrite
+    ? integrationWritePreview(options!.integration!, args, hidden)
+    : undefined;
+  const summary =
+    preview?.question ??
+    (options?.integration
+      ? describeIntegrationAction(options.integration, args)
+      : describeApprovalAction(toolName, args));
   const detail = [
     options?.integration
       ? [...new Set([options.integration.toolId, toolName])].join(" · ")
       : undefined,
-    formatApprovalDetail(toolName, args, options?.reviewReason),
+    preview ? preview.detail : formatApprovalDetail(toolName, args, options?.reviewReason),
   ]
     .filter(Boolean)
     .join("\n");
-  const safeDetail = detail ? redactSecrets(detail, secrets) : undefined;
+  const safeDetail = detail ? redactSecrets(detail, hidden) : undefined;
   return {
     kind: "ask",
     approvalEffectId: effectId,
@@ -43,14 +70,18 @@ export function buildApprovalAskBlock(
           : toolName === "create_space"
             ? `${summary}?`
             : `Review before ${summary}`,
-        secrets,
+        hidden,
       ),
       MAX_APPROVAL_SUMMARY_LENGTH,
     ),
     detail: safeDetail ? truncate(safeDetail, MAX_APPROVAL_DETAIL_LENGTH) : undefined,
     status: "pending",
-    actions:
-      toolName === "create_space"
+    actions: preview
+      ? [
+          { id: "allow", label: preview.action },
+          { id: "deny", label: "Cancel", outcome: "cancelled" },
+        ]
+      : toolName === "create_space"
         ? [
             { id: "allow", label: "Create space", outcome: "created" },
             { id: "deny", label: "Cancel", outcome: "cancelled" },
@@ -62,6 +93,91 @@ export function buildApprovalAskBlock(
               : [{ id: "always", label: "Always allow this tool" }]),
             { id: "deny", label: "Deny" },
           ],
+  };
+}
+
+function integrationWritePreview(
+  integration: IntegrationApprovalAction,
+  args: Record<string, unknown>,
+  secrets: string[],
+) {
+  const plain = (value: string) =>
+    redactSecrets(value, secrets)
+      .replace(/Bearer\s+\S+/gi, "[redacted]")
+      .replace(/(?:github_pat_|gh[pousr]_)[A-Za-z0-9_]+/g, "[redacted]")
+      .replace(/<[^>]*>/g, "")
+      .replace(/[\\`*_[\]]/g, "")
+      .trim();
+  const description = plain(integration.description).split(/\n|(?<=[.!?])\s/)[0] || "Write content";
+  const action = /^(post|send)\b/i.test(description)
+    ? "Post"
+    : /^(delete|remove|archive)\b/i.test(description)
+      ? "Delete"
+      : /^merge\b/i.test(description)
+        ? "Merge"
+        : "Save";
+  const destinations: string[] = [];
+  const titles: string[] = [];
+  const content: string[] = [];
+  let visited = 0;
+  function walk(value: unknown, depth = 0, parent = "") {
+    if (!value || typeof value !== "object" || depth > 10 || ++visited > 500) return;
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item, depth + 1, parent);
+      return;
+    }
+    for (const [key, item] of Object.entries(value)) {
+      if (/secret|token|password|credential|authorization|api.?key/i.test(key)) continue;
+      if (typeof item === "string" && item) {
+        if (
+          /^(parent|parent_id|page_id|pageId|database_id|databaseId|project|projectKey|project_key|space|spaceKey|space_key|channel|channel_id|channelId|to)$/.test(
+            key,
+          ) ||
+          (/^(id|key)$/.test(key) && /parent|project|space|channel/.test(parent))
+        )
+          destinations.push(plain(item).slice(0, 200));
+        if (/^(title|subject|summary)$/.test(key)) titles.push(plain(item).slice(0, 240));
+        else if (/^(body|content|text|markdown|new_str)$/.test(key))
+          content.push(plain(item).split("\n").slice(0, 6).join("\n").slice(0, 1200));
+      } else if (typeof item === "object") walk(item, depth + 1, key);
+    }
+  }
+  walk(args);
+  const repo =
+    typeof args.owner === "string" && typeof args.repo === "string"
+      ? `${args.owner}/${args.repo}`
+      : typeof args.repository === "string"
+        ? args.repository
+        : undefined;
+  const number = args.pull_number ?? args.issue_number;
+  const reference =
+    (typeof number === "number" && Number.isSafeInteger(number) && number > 0) ||
+    (typeof number === "string" && /^[1-9][0-9]*$/.test(number))
+      ? `#${number}`
+      : "";
+  if (repo) destinations.unshift(`${repo}${reference}`);
+  const target = [...new Set(destinations)].join(", ");
+  const channel =
+    typeof args.channel === "string" && args.channel.startsWith("#") ? args.channel : undefined;
+  return {
+    action,
+    question:
+      action === "Post" && channel
+        ? `Post to ${channel}?`
+        : action === "Delete"
+          ? `Delete this from ${integration.vendorName}?`
+          : action === "Merge"
+            ? `Merge this on ${integration.vendorName}?`
+            : `${action} this to ${integration.vendorName}?`,
+    detail: [
+      integration.vendorName,
+      description,
+      target ? `Destination: ${target}` : undefined,
+      ...titles.slice(0, 2),
+      ...content.slice(0, 3),
+    ]
+      .filter(Boolean)
+      .join("\n"),
   };
 }
 

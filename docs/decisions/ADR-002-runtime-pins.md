@@ -49,9 +49,10 @@ The full design, with file references and open verification gates, is the hub pa
    tools of the CLI are disabled; the bot's computer, memory and connectors are exposed
    through Ardur's MCP server. Host computers first; container computers keep their
    filesystem separate from the host process.
-4. **The inherited Claude.ai OAuth implementation is deleted**, not flagged: Anthropic is
-   API-key-only in the catalog, OAuth begin/finish routes reject it, stored OAuth secrets for
-   it are rejected before refresh, and built artifacts are scanned so the code cannot ship.
+4. **Implemented (2026-09-23): the inherited Claude.ai OAuth implementation is deleted**,
+   not flagged: Anthropic is API-key-only in the catalog, OAuth begin/finish routes reject it,
+   stored OAuth secrets for it are rejected before refresh, and built artifacts are scanned
+   so the code cannot ship.
 5. **New ChatGPT connections use `codex app-server`** over stdio (`initialize` with
    `clientInfo.name: "ardur-bot"`, `account/login/start` with type `chatgpt`,
    `thread/start`, `turn/start` with the exact model and effort). A rerouted model ends the

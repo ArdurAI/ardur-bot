@@ -16,6 +16,8 @@ export function IntegrationCatalog() {
   const [error, setError] = useState(false);
   const [host, setHost] = useState("");
   const [customHost, setCustomHost] = useState(false);
+  const [tokenFor, setTokenFor] = useState<string | null>(null);
+  const [token, setToken] = useState("");
   const refresh = async () => {
     const result = await rpc.integrations.list();
     setCatalog(result.catalog);
@@ -31,15 +33,27 @@ export function IntegrationCatalog() {
     return () => channel.close();
   }, []);
 
-  async function connect(descriptor: IntegrationDescriptor, connection?: IntegrationConnection) {
+  async function connect(
+    descriptor: IntegrationDescriptor,
+    connection?: IntegrationConnection,
+    authKind = descriptor.authKind,
+  ) {
     setBusy(descriptor.id);
     setError(false);
     // Open during the click gesture, before awaiting network discovery.
-    const popup = window.open("about:blank", MCP_OAUTH_CHANNEL, "popup,width=560,height=720");
+    const popup =
+      authKind === "oauth"
+        ? window.open("about:blank", MCP_OAUTH_CHANNEL, "popup,width=560,height=720")
+        : null;
     consentPopup.current = popup;
     try {
       const started = await rpc.integrations.connect({
         catalogId: descriptor.id,
+        ...(authKind === "token"
+          ? { token, authKind }
+          : descriptor.authKind === "token"
+            ? { authKind }
+            : {}),
         connectionId: connection?.id,
         host: descriptor.id === "gitlab" && customHost ? host : undefined,
       });
@@ -60,6 +74,8 @@ export function IntegrationCatalog() {
       popup?.close();
       setError(true);
     } finally {
+      setToken("");
+      setTokenFor(null);
       consentPopup.current = null;
       setBusy(null);
     }
@@ -91,7 +107,13 @@ export function IntegrationCatalog() {
       />
     );
 
-  function sentence(connection?: IntegrationConnection) {
+  function sentence(descriptor: IntegrationDescriptor, connection?: IntegrationConnection) {
+    if (
+      descriptor.id === "github" &&
+      descriptor.authKind === "token" &&
+      (!connection || ["not-connected", "needs-client-registration"].includes(connection.state))
+    )
+      return t`Sign-in needs a pre-registered app; use a fine-grained token instead.`;
     switch (connection?.state) {
       case "awaiting-consent":
         return t`Finish signing in in your browser.`;
@@ -130,10 +152,75 @@ export function IntegrationCatalog() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {descriptor.available ? sentence(connection) : t`Coming soon`}
+                  {descriptor.available ? sentence(descriptor, connection) : t`Coming soon`}
                 </p>
-                {!descriptor.available ? null : connection?.state ===
-                  "needs-client-registration" ? (
+                {!descriptor.available ? null : descriptor.authKind === "token" &&
+                  connection?.state !== "connected" &&
+                  connection?.state !== "awaiting-consent" ? (
+                  <div className="space-y-3">
+                    {tokenFor === descriptor.id ? (
+                      <form
+                        className="space-y-2"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void connect(descriptor, connection, "token");
+                        }}
+                      >
+                        <Input
+                          type="password"
+                          aria-label={t`Fine-grained token`}
+                          autoComplete="off"
+                          spellCheck={false}
+                          value={token}
+                          onChange={(event) => setToken(event.target.value)}
+                        />
+                        <p className="text-sm text-muted-foreground">{t`Grant only the repositories and permissions this bot needs.`}</p>
+                        <a
+                          className="text-sm underline"
+                          href={descriptor.tokenUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >{t`Create a token`}</a>
+                        <div className="flex gap-2">
+                          <Button
+                            type="submit"
+                            disabled={busy !== null || !token.trim()}
+                          >{t`Connect`}</Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={busy !== null}
+                            onClick={() => {
+                              setToken("");
+                              setTokenFor(null);
+                            }}
+                          >{t`Cancel`}</Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setToken("");
+                            setTokenFor(descriptor.id);
+                          }}
+                        >{t`Use a token`}</Button>
+                        <Button
+                          variant="outline"
+                          render={<a href={descriptor.docsUrl} target="_blank" rel="noreferrer" />}
+                        >{t`Open documentation`}</Button>
+                        {descriptor.oauthAvailable ? (
+                          <Button
+                            variant="outline"
+                            disabled={busy !== null}
+                            onClick={() => void connect(descriptor, connection, "oauth")}
+                          >{t`Sign in with GitHub`}</Button>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                ) : connection?.state === "needs-client-registration" ? (
                   <Button
                     variant="outline"
                     render={<a href={descriptor.docsUrl} target="_blank" rel="noreferrer" />}

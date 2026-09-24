@@ -6,6 +6,47 @@ import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } 
 const LOCAL_MODEL_ID = "ardurbot-e2e-local";
 const LOCAL_MODEL_REPLY = "OpenAI-compatible endpoint verified end to end.";
 
+test("Anthropic offers API keys and asks old subscription connections to reconnect", async ({
+  page,
+}, testInfo) => {
+  const stamp = Date.now();
+  await signup(page, `anthropic-key-${stamp}@ardurbot.test`, "password12", "API key connection");
+  await completeOnboarding(page);
+  await page.route("**/rpc/models/credentials", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: [
+          {
+            id: "legacy-connection",
+            provider: "anthropic",
+            label: "Old subscription",
+            hasKey: false,
+            isDefault: false,
+            connectionIssue: "api-key-required",
+          },
+        ],
+      }),
+    }),
+  );
+  await openUserSettings(page, "models");
+  await page.getByPlaceholder("Search providers").fill("anthropic");
+  await page.getByRole("button", { name: /Anthropic/ }).click();
+  await expect(
+    page.getByText("Claude subscriptions are not supported here yet; use an API key."),
+  ).toBeVisible();
+  await expect(page.getByText("Reconnect with an API key", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sign in/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Use this model", exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "anthropic-api-key-reconnect");
+  await page.unroute("**/rpc/models/credentials");
+  await page.getByLabel("API key", { exact: true }).fill("fake-anthropic-api-key");
+  await page.getByRole("button", { name: "Connect API key", exact: true }).click();
+  await expect(page.getByLabel("Replace API key", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reconnect with an API key", { exact: true })).toBeHidden();
+  await captureScreenshot(page, testInfo, "anthropic-api-key-connected");
+});
+
 test("custom connections persist reasoning support and bot thinking", async ({
   page,
 }, testInfo) => {

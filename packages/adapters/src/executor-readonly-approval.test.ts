@@ -2,6 +2,7 @@ import type {
   AgentRunRequest,
   AutoReviewProvider,
   ConnectorCall,
+  ConnectorEvent,
   ConnectorTool,
 } from "@ardurbot/adapter-kit";
 import type { SpaceToolPolicies } from "@ardurbot/contracts";
@@ -228,7 +229,7 @@ function fixture({
     return true;
   });
   const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
-  const execute = vi.fn(async function* (call: ConnectorCall) {
+  const execute = vi.fn(async function* (call: ConnectorCall): AsyncGenerator<ConnectorEvent> {
     yield { type: "result" as const, data: { item: call.args.id } };
   });
   let calls: Array<{ args: Record<string, unknown>; executionId: string }> = [
@@ -578,11 +579,11 @@ describe("catalog policy at the executor gate", () => {
         expect.objectContaining({
           blocks: [
             expect.objectContaining({
-              text: "GitHub · create a pull request comment",
-              detail: name,
+              text: "Save this to GitHub?",
+              detail: `${name}\nGitHub\nCreate a pull request comment.`,
               actions: [
-                { id: "allow", label: "Allow once" },
-                { id: "deny", label: "Deny" },
+                { id: "allow", label: "Save" },
+                { id: "deny", label: "Cancel", outcome: "cancelled" },
               ],
             }),
           ],
@@ -624,4 +625,23 @@ describe("catalog policy at the executor gate", () => {
       });
     },
   );
+});
+
+it("persists an uncertain integration delivery and never dispatches its approved replay twice", async () => {
+  const f = fixture({ integration: true, name: "mcp__demo__synthetic_write" });
+  await f.run();
+  expect(f.effects).toHaveLength(1);
+  f.effects[0]!.status = "approved";
+  f.execute.mockImplementation(async function* () {
+    yield { type: "error" as const, message: "Delivery could not be confirmed", uncertain: true };
+  });
+  await f.run();
+  expect(f.effects[0]!.status).toBe("uncertain");
+  expect(f.effects[0]!.result).toEqual({
+    error: "Delivery could not be confirmed",
+    uncertain: true,
+  });
+  expect(f.execute).toHaveBeenCalledTimes(1);
+  await f.run();
+  expect(f.execute).toHaveBeenCalledTimes(1);
 });
