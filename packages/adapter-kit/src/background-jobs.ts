@@ -7,6 +7,11 @@ import type {
 } from "./types.js";
 
 const payloadSchemas = {
+  "memory.git-push": z.object({
+    spaceId: z.string().min(1),
+    userId: z.string().min(1),
+    generation: z.number().int().nonnegative().optional(),
+  }),
   "memory.deliver": z.object({
     spaceId: z.string().min(1),
     userId: z.string().min(1),
@@ -26,6 +31,12 @@ const payloadSchemas = {
     leaseId: z.string().min(1),
   }),
   "skill.teaching-expire": z.object({ skillId: z.string().min(1) }),
+  "learning.review": z.object({
+    runId: z.string().min(1),
+    historyGeneration: z.number().int().nonnegative(),
+    evidenceWatermark: z.string().min(1),
+    policyVersion: z.string().min(1),
+  }),
   "history.compact": z.object({ threadId: z.string().min(1) }),
   "messaging.deliver": z.object({ runId: z.string().min(1).optional() }),
   "cloud_agent.poll": z.object({ agentId: z.string().min(1) }),

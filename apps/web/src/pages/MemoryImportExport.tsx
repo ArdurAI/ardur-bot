@@ -107,7 +107,7 @@ export function MemoryImportExport({ onImported }: { onImported: () => void }) {
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Button variant="outline" disabled={busy} onClick={() => void download()}>
-          <Trans>Export</Trans>
+          <Trans>Export with history</Trans>
         </Button>
         <label className="text-sm" htmlFor={importId}>
           <Trans>Import</Trans>

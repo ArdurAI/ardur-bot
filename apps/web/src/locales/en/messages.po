@@ -65,6 +65,7 @@ msgstr "{0} default"
 
 #. placeholder {0}: preview.documents
 #. placeholder {1}: preview.revisions
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "{0} documents, {1} revisions"
@@ -631,6 +632,10 @@ msgstr "Avatars"
 msgid "Back"
 msgstr "Back"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Back to screen"
+msgstr "Back to screen"
+
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "Back to sign in"
@@ -714,6 +719,10 @@ msgstr "Bots are working"
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr "Brain label"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Branch"
+msgstr "Branch"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
@@ -1006,6 +1015,7 @@ msgstr "Completion not recorded"
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Computer"
 msgstr "Computer"
 
@@ -1056,6 +1066,7 @@ msgid "Confirm the phone fingerprint here before allowing it."
 msgstr "Confirm the phone fingerprint here before allowing it."
 
 #. placeholder {0}: conflict.path
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Conflict: {0}"
@@ -1146,6 +1157,10 @@ msgstr "Connected. Review tools in MCP settings."
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connecting…"
 msgstr "Connecting…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Connection lost — reconnecting"
+msgstr "Connection lost — reconnecting"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -1266,6 +1281,10 @@ msgstr "Could not connect the memory service. Check the connection and retry."
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Could not connect the memory service. Preview again and retry."
 msgstr "Could not connect the memory service. Preview again and retry."
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not connect the repository. Check its URL and access, then retry."
+msgstr "Could not connect the repository. Check its URL and access, then retry."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not connect this provider"
@@ -1401,6 +1420,10 @@ msgstr "Could not load or save tools."
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Could not load skill"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Could not load sync status. Retry."
+msgstr "Could not load sync status. Retry."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
@@ -1783,6 +1806,10 @@ msgstr "Denied"
 msgid "Deny"
 msgstr "Deny"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Deploy private key"
+msgstr "Deploy private key"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Deployment default"
@@ -2032,7 +2059,6 @@ msgstr "Expand {0}"
 msgid "Expires in five minutes."
 msgstr "Expires in five minutes."
 
-#: src/pages/MemoryImportExport.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Export"
@@ -2048,6 +2074,10 @@ msgstr "Export run"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "Export this week's list from the CRM and drop it in the shared folder"
+
+#: src/pages/MemoryImportExport.tsx
+msgid "Export with history"
+msgstr "Export with history"
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2082,6 +2112,10 @@ msgstr "Failure handling"
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
 msgstr "Find a destination"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Find in terminal"
+msgstr "Find in terminal"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -2163,10 +2197,6 @@ msgstr "Git event"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Git repository"
 msgstr "Git repository"
-
-#: src/pages/MemorySettingsOverlay.tsx
-msgid "Git repository: Coming next."
-msgstr "Git repository: Coming next."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
@@ -2815,6 +2845,10 @@ msgstr "New skill"
 msgid "New space"
 msgstr "New space"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Next"
+msgstr "Next"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr "No agent connections yet."
@@ -3014,6 +3048,10 @@ msgstr "On your server"
 msgid "Only empty spaces can be deleted. Delete its bots and groups first."
 msgstr "Only empty spaces can be deleted. Delete its bots and groups first."
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Only space-shared documents go to this repository."
+msgstr "Only space-shared documents go to this repository."
+
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -3023,6 +3061,10 @@ msgstr "Open"
 #: src/pages/Shell.tsx
 msgid "Open {0}"
 msgstr "Open {0}"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Open a new terminal"
+msgstr "Open a new terminal"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Open documentation"
@@ -3035,6 +3077,10 @@ msgstr "Open in full window"
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "Open navigation"
+
+#: src/pages/shell/command-palette.tsx
+msgid "Open terminal"
+msgstr "Open terminal"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -3052,6 +3098,10 @@ msgstr "Opened its thread."
 #: src/pages/Onboarding.tsx
 msgid "Opening chat…"
 msgstr "Opening chat…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Opening terminal"
+msgstr "Opening terminal"
 
 #: src/App.tsx
 msgid "Opening your Space…"
@@ -3180,6 +3230,10 @@ msgstr "Preview import"
 msgid "Preview migration"
 msgstr "Preview migration"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Previous"
+msgstr "Previous"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "Private"
@@ -3196,6 +3250,14 @@ msgstr "Private workspace with its own bots and groups."
 msgid "Project ID"
 msgstr "Project ID"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Proposal branch"
+msgstr "Proposal branch"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Propose on a branch"
+msgstr "Propose on a branch"
+
 #: src/pages/Onboarding.tsx
 msgid "Provider"
 msgstr "Provider"
@@ -3205,9 +3267,21 @@ msgstr "Provider"
 msgid "Providers"
 msgstr "Providers"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Publication mode"
+msgstr "Publication mode"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Publish directly"
+msgstr "Publish directly"
+
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "Pull request"
+
+#: src/pages/MemoryHistory.tsx
+msgid "Pushed"
+msgstr "Pushed"
 
 #: src/pages/ActivityList.tsx
 msgid "Queued"
@@ -3257,6 +3331,10 @@ msgstr "Recall only"
 #: src/pages/ActivityList.tsx
 msgid "Recent"
 msgstr "Recent"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Reconnect"
+msgstr "Reconnect"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
@@ -3353,6 +3431,10 @@ msgstr "Remove"
 msgid "Remove {0}"
 msgstr "Remove {0}"
 
+#: src/components/MessageFeedback.tsx
+msgid "Remove feedback"
+msgstr "Remove feedback"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
 msgstr "Remove Git event"
@@ -3429,6 +3511,22 @@ msgstr "Replying to {replyName}: “{replyQuote}”"
 msgid "Report an issue"
 msgstr "Report an issue"
 
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository authentication"
+msgstr "Repository authentication"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository history changed. Review the saved copy before continuing."
+msgstr "Repository history changed. Review the saved copy before continuing."
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository token"
+msgstr "Repository token"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Repository URL"
+msgstr "Repository URL"
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Rerun"
 msgstr "Rerun"
@@ -3487,6 +3585,7 @@ msgstr "Restore the last saved workspace. Unsaved work on the computer is lost."
 msgid "Restoring your workspace"
 msgstr "Restoring your workspace"
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Retry"
 msgstr "Retry"
@@ -3508,6 +3607,10 @@ msgstr "Return to Ardur Bot"
 #: src/pages/KnowledgeSection.tsx
 msgid "rev {0}"
 msgstr "rev {0}"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Review saved copy"
+msgstr "Review saved copy"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -3599,6 +3702,7 @@ msgstr "Runs when this bot receives a verified message from this provider."
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/MessageFeedback.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
@@ -3618,6 +3722,12 @@ msgstr "Save"
 msgid "Saved"
 msgstr "Saved"
 
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. GitHub sync failed."
+msgstr "Saved locally. GitHub sync failed."
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing failed."
 msgstr "Saved locally. Indexing failed."
@@ -3625,6 +3735,12 @@ msgstr "Saved locally. Indexing failed."
 #: src/pages/KnowledgeSection.tsx
 msgid "Saved locally. Indexing pending."
 msgstr "Saved locally. Indexing pending."
+
+#: src/pages/GitMemorySettings.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Saved locally. Sync pending."
+msgstr "Saved locally. Sync pending."
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
@@ -3662,6 +3778,10 @@ msgstr "Say something. Silence sends it."
 #: src/pages/CallView.tsx
 msgid "Say yes or no, or answer in a sentence."
 msgstr "Say yes or no, or answer in a sentence."
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Screen"
+msgstr "Screen"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
@@ -3768,6 +3888,10 @@ msgstr "Server name"
 msgid "Server URL"
 msgstr "Server URL"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Session ended — open a new terminal"
+msgstr "Session ended — open a new terminal"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -3799,6 +3923,14 @@ msgstr "Shared"
 #: src/pages/shell/dialogs.tsx
 msgid "Shared chat with 2-6 bots. They all reply in the same thread."
 msgstr "Shared chat with 2-6 bots. They all reply in the same thread."
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared documents will be published directly."
+msgstr "Shared documents will be published directly."
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Shared recall will use proposed facts after merge."
+msgstr "Shared recall will use proposed facts after merge."
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -3939,6 +4071,7 @@ msgid "Steps"
 msgstr "Steps"
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
 msgstr "Stop"
 
@@ -3990,9 +4123,22 @@ msgstr "Switch bot"
 msgid "Switching…"
 msgstr "Switching…"
 
+#. placeholder {0}: config?.documentSettings.host ?? ""
+#: src/pages/MemorySettingsOverlay.tsx
+msgid "Syncs to {0}"
+msgstr "Syncs to {0}"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "System"
 msgstr "System"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control"
+msgstr "Take control"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control to open a terminal"
+msgstr "Take control to open a terminal"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Teach a task"
@@ -4022,9 +4168,25 @@ msgstr "Teams message"
 msgid "Teams not enabled"
 msgstr "Teams not enabled"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal"
+msgstr "Terminal"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal could not open; try again"
+msgstr "Terminal could not open; try again"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal is not available on this computer"
+msgstr "Terminal is not available on this computer"
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "Test"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Test connection and preview"
+msgstr "Test connection and preview"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
@@ -4033,6 +4195,10 @@ msgstr "Test run"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "The API did not come back. Refresh this page."
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "The bot is working — wait or stop it"
+msgstr "The bot is working — wait or stop it"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "The connection was cancelled."
@@ -4270,6 +4436,7 @@ msgstr "Use a token"
 msgid "Use default guidance"
 msgstr "Use default guidance"
 
+#: src/pages/GitMemorySettings.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Use this location"
 msgstr "Use this location"
@@ -4352,6 +4519,14 @@ msgstr "What this bot is for"
 msgid "What to return"
 msgstr "What to return"
 
+#: src/components/MessageFeedback.tsx
+msgid "What was good?"
+msgstr "What was good?"
+
+#: src/components/MessageFeedback.tsx
+msgid "What was wrong?"
+msgstr "What was wrong?"
+
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"
 msgstr "When a webhook fires"
@@ -4367,6 +4542,10 @@ msgstr "When to use"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Where should bots run?"
+
+#: src/pages/GitMemorySettings.tsx
+msgid "Working from the last copy"
+msgstr "Working from the last copy"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

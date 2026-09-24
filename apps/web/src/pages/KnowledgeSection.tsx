@@ -147,6 +147,53 @@ function MemoryDocumentList({
     };
   }, [t]);
 
+  useEffect(() => {
+    if (!docs.some((doc) => doc.gitSync && doc.gitSync.status !== "pushed")) return;
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        const pending = new Map(
+          docs
+            .filter((doc) => doc.gitSync && doc.gitSync.status !== "pushed")
+            .map((doc) => [doc.id, doc]),
+        );
+        const statuses = new Map<string, MemoryDocumentHead["gitSync"]>();
+        let next: string | undefined;
+        do {
+          const page = await loadRef.current(next);
+          for (const current of page.items) {
+            const displayed = pending.get(current.id);
+            if (!displayed) continue;
+            if (displayed.revision === current.revision) statuses.set(current.id, current.gitSync);
+            else {
+              const history = await rpc.memory.history({
+                documentId: current.id,
+                cursor: displayed.revision + 1,
+                limit: 1,
+              });
+              statuses.set(current.id, history.items[0]?.gitSync);
+            }
+            pending.delete(current.id);
+          }
+          next = page.nextCursor ?? undefined;
+        } while (next && pending.size && active);
+        // Refresh delivery only. An open editor keeps its original optimistic revision.
+        if (active)
+          setDocs((current) =>
+            current.map((doc) =>
+              statuses.has(doc.id) ? { ...doc, gitSync: statuses.get(doc.id) } : doc,
+            ),
+          );
+      } catch {
+        /* Keep the committed document visible while status is unavailable. */
+      }
+    }, 3000);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [docs]);
+
   function openDoc(doc: MemoryDocumentHead) {
     setOpenId(doc.id);
     setHistoryOpen(Boolean(doc.deletedAt));
@@ -260,6 +307,22 @@ function MemoryDocumentList({
               </span>
             </span>
           </Button>
+          {doc.gitSync && doc.gitSync.status !== "pushed" ? (
+            <div className="flex items-center gap-2 px-2.5 text-xs text-muted-foreground">
+              <span>
+                {doc.gitSync.status === "failed"
+                  ? t`Saved locally. GitHub sync failed.`
+                  : t`Saved locally. Sync pending.`}
+              </span>
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void changeDocument(() => rpc.memory.retry({ documentId: doc.id }))}
+              >
+                <Trans>Retry</Trans>
+              </Button>
+            </div>
+          ) : null}
           {doc.delivery.status !== "delivered" ? (
             <div className="flex items-center gap-2 px-2.5 text-xs text-muted-foreground">
               <span>
@@ -454,7 +517,11 @@ function AgentSkills({
       if (creating) {
         await rpc.agentSkills.create({ content: draft });
       } else if (open) {
-        await rpc.agentSkills.update({ skillId: open.id, content: draft });
+        await rpc.agentSkills.update({
+          skillId: open.id,
+          expectedRevision: open.activeRevision ?? 1,
+          content: draft,
+        });
       }
       setOpen(null);
       setCreating(false);

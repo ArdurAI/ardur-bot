@@ -171,6 +171,7 @@ export interface SnapshotRef {
 export interface SandboxCapabilities {
   graphical: boolean;
   pty: boolean;
+  interactiveTerminal?: boolean;
   snapshots: boolean;
   takeover: boolean;
   persistentHome: boolean;
@@ -384,7 +385,8 @@ export interface AgentRunRequest {
   instructions: string;
   history: Array<{ id?: string; role: "user" | "assistant" | "system"; content: string }>;
   currentTurnImages?: AgentInputImage[];
-  tools: ConnectorTool[];
+  /** Explicit model-only mode; an empty array retains legacy built-in tools. */
+  tools: ConnectorTool[] | "none";
   model: AgentRunModel;
   /** Resolve an explicitly requested helper model within the active user and space scope. */
   resolveModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
@@ -494,6 +496,13 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "learning.review": {
+    runId: string;
+    historyGeneration: number;
+    evidenceWatermark: string;
+    policyVersion: string;
+  };
+  "memory.git-push": { spaceId: string; userId: string; generation?: number };
   "memory.deliver": {
     spaceId: string;
     userId: string;

@@ -8,7 +8,7 @@ import { SpaceMemoryProviderResolver, selectDocumentStore } from "../memory-prov
 import type { EncryptedSecretStore } from "../secrets.js";
 
 export async function lockMemorySpace(tx: Prisma.TransactionClient, spaceId: string) {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`memory:${spaceId}`}, 0))`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`memory:${spaceId}`}, 0))`;
 }
 export async function authenticatedMemoryAccess(
   tx: Prisma.TransactionClient,
@@ -28,6 +28,7 @@ export async function authenticatedMemoryAccess(
     botIds: bots.map((bot) => bot.id),
     model: context.memoryModel,
     generation: context.memoryGeneration,
+    recall: context.memoryRecall,
   };
 }
 export interface MemoryLifecycleDependencies {
@@ -42,17 +43,42 @@ export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
       withTransactionRetry(() =>
         deps.prisma.$transaction(
           async (tx) => {
+            if (context.memorySessionStart) await tx.$executeRaw`SET LOCAL lock_timeout = '500ms'`;
             await lockMemorySpace(tx, context.spaceId);
             const access = await authenticatedMemoryAccess(tx, context);
             const config = await tx.spaceMemoryConfig.findUnique({
               where: { spaceId: context.spaceId },
             });
+            if (config?.documentStore === "git") {
+              const user = await tx.user.findUnique({
+                where: { id: context.userId },
+                select: { name: true },
+              });
+              access.displayName = user?.name ?? "Space member";
+            }
             const semantic = await new SpaceMemoryProviderResolver(tx, deps.secrets).resolve(
               context.spaceId,
             );
             return action({
               access,
-              store: await selectDocumentStore(tx, config, deps.dataDir),
+              beforeWrite: async (documentId) => {
+                const store = await selectDocumentStore(tx, config, deps.dataDir, deps.secrets);
+                const document = await store.read(documentId, access);
+                if (document?.path.startsWith("skills/builtin-")) throw new MemoryAccessError();
+                if (!context.runId) return;
+                const skill = await tx.agentSkill.findFirst({
+                  where: { documentId, spaceId: context.spaceId },
+                });
+                if (
+                  skill &&
+                  (skill.protected ||
+                    !["user", "learned"].includes(skill.origin) ||
+                    !["user", "learned"].includes(skill.source) ||
+                    (skill.origin === "learned" && skill.botId !== context.botId))
+                )
+                  throw new MemoryAccessError();
+              },
+              store: await selectDocumentStore(tx, config, deps.dataDir, deps.secrets),
               generation: config?.generation ?? 0,
               semantic: semantic?.provider ?? null,
             });
@@ -60,6 +86,16 @@ export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
           { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 60_000 },
         ),
       ),
+    enqueueGit: (context) =>
+      deps.jobs.enqueue({
+        name: "memory.git-push",
+        payload: {
+          spaceId: context.spaceId,
+          userId: context.userId,
+          generation: context.memoryGeneration,
+        },
+        replaceKey: `memory.git-push:${context.spaceId}`,
+      }),
     enqueue: (context, document) =>
       deps.jobs.enqueue({
         name: "memory.deliver",
@@ -90,6 +126,12 @@ export async function reconcileMemoryDelivery(
       traceId: "memory-reconcile",
       signal: new AbortController().signal,
     };
+    const sync = await service.syncState(context);
+    if (sync && ["pending", "failed", "last-copy"].includes(sync.status))
+      await service.dependencies.enqueueGit?.({
+        ...context,
+        memoryGeneration: await service.generation(context),
+      });
     let cursor: string | undefined;
     do {
       const page = await service.list({ cursor, limit: 100, includeDeleted: true }, context);

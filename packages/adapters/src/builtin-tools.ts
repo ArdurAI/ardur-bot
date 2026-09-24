@@ -687,6 +687,11 @@ export const builtinAgentTools: ConnectorTool[] = [
     inputSchema: {
       type: "object",
       properties: {
+        expectedRevision: {
+          type: "integer",
+          minimum: 1,
+          description: "Active revision returned by skill_read.",
+        },
         name: { type: "string", description: "Current exact skill name." },
         skillId: { type: "string" },
         newName: { type: "string" },
@@ -694,6 +699,7 @@ export const builtinAgentTools: ConnectorTool[] = [
         body: { type: "string" },
         content: { type: "string", description: "Optional full replacement SKILL.md." },
       },
+      required: ["expectedRevision"],
     },
   },
   {

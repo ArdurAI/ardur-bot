@@ -1,5 +1,6 @@
 import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
+import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import {
   authenticatedMemoryAccess,
   lockMemorySpace,
@@ -8,7 +9,13 @@ import {
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
-import { assertMemorySafe, bundleHash, previewImport, requireImportReady } from "@ardurbot/memory";
+import {
+  assertMemorySafe,
+  bundleHash,
+  previewImport,
+  requireImportReady,
+  samePortableRevision,
+} from "@ardurbot/memory";
 import { ORPCError } from "@orpc/server";
 import { requireSpaceOwner, serializeSpaceMemoryConfig } from "./memory-provider-config.js";
 
@@ -19,7 +26,7 @@ export interface MemoryLocationInput {
   expectedHash?: string;
 }
 export async function changeMemoryLocation(
-  deps: { prisma: PrismaClient; dataDir: string },
+  deps: { prisma: PrismaClient; dataDir: string; secrets?: EncryptedSecretStore },
   actor: Actor,
   input: MemoryLocationInput,
 ) {
@@ -53,7 +60,7 @@ export async function changeMemoryLocation(
           throw new ORPCError("BAD_REQUEST", {
             message: "Choose an empty dedicated memory folder.",
           });
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`memory-folder:${folder}`}, 0))`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`memory-folder:${folder}`}, 0))`;
         const registered = await tx.spaceMemoryConfig.findFirst({
           where: {
             spaceId: { not: actor.spaceId },
@@ -74,7 +81,7 @@ export async function changeMemoryLocation(
         signal: new AbortController().signal,
       };
       const access = await authenticatedMemoryAccess(tx, context);
-      const source = await selectDocumentStore(tx, existing, deps.dataDir);
+      const source = await selectDocumentStore(tx, existing, deps.dataDir, deps.secrets);
       const documentSettings =
         input.location === "obsidian"
           ? { folder: folder!, ownerUserId: actor.userId, spaceId: actor.spaceId }
@@ -108,7 +115,17 @@ export async function changeMemoryLocation(
         ...bundle,
         documents: [...bundle.documents].sort((a, b) => a.id.localeCompare(b.id)),
       };
-      if (bundleHash(verified) !== bundleHash(expected))
+      if (
+        verified.documents.length !== expected.documents.length ||
+        !expected.documents.every(
+          (doc, index) =>
+            doc.id === verified.documents[index]?.id &&
+            doc.revisions.length === verified.documents[index]?.revisions.length &&
+            doc.revisions.every((r, revision) =>
+              samePortableRevision(r, verified.documents[index]!.revisions[revision]!),
+            ),
+        )
+      )
         throw new ORPCError("CONFLICT", {
           message: "Memory verification failed. The previous location is still active.",
         });

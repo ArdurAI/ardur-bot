@@ -17,6 +17,7 @@ import {
   expireTaughtSkillTeaching,
   extendActiveComputerControl,
   getActiveTeachingSession,
+  hydrateTaughtSkills,
   mapTaughtSkill,
   observeStopSnapshot,
   parsePlaybook,
@@ -27,6 +28,7 @@ import {
   releaseTeachingComputerControlForBot,
   scheduleComputerControlExpiry,
   screenLeaseIdForRun,
+  skillDocumentContext,
   type TeachComputerInput,
   teachingControlLeaseExpiresAt,
 } from "@ardurbot/adapters";
@@ -34,7 +36,6 @@ import type { Actor, MessageBlock, TaughtSkill } from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   buildPlaybookFromRecording,
-  formatSkillRunPrompt,
   type SkillPlaybook,
   type TeachRecordingEvent,
   teachRecordingTtlMs,
@@ -46,10 +47,13 @@ import {
   type PrismaClient,
   type ThreadEvents,
 } from "@ardurbot/db";
+import type { MemoryService } from "@ardurbot/memory";
 import { ORPCError } from "@orpc/server";
 
 type TaughtSkillRow = {
   id: string;
+  documentId?: string | null;
+  activeRevision?: number | null;
   spaceId: string;
   botId: string;
   userId: string;
@@ -66,6 +70,7 @@ type TaughtSkillRow = {
 };
 
 export interface TaughtSkillsDeps {
+  memoryDocuments?: MemoryService;
   prisma: PrismaClient;
   events: ThreadEvents;
   jobs: JobPublisher;
@@ -96,7 +101,9 @@ async function getOwnedSkill(
 ): Promise<TaughtSkillRow> {
   const skill = await deps.prisma.taughtSkill.findFirst({ where: ownedSkillWhere(actor, skillId) });
   if (!skill) throw new IsolationError();
-  return skill;
+  const hydrated = await hydrateTaughtSkills(deps.prisma, deps.memoryDocuments, actor, [skill]);
+  if (!hydrated[0]) throw new IsolationError();
+  return hydrated[0];
 }
 
 export async function assertTeachingSendAllowed(
@@ -268,6 +275,7 @@ async function updateSkillDraftMessage(
     const nextBlocks: MessageBlock[] = [...parsed];
     nextBlocks[index] = {
       kind: "skill_draft",
+      activeRevision: skill.activeRevision ?? undefined,
       skillId: skill.id,
       name: input.name ?? existing.name,
       goal: skill.goal,
@@ -308,7 +316,7 @@ export async function stopTeachingSession(
       current.botId,
       parseRecording(current.recording).controlLeaseId,
     );
-    return mapTaughtSkill(current);
+    return mapTaughtSkill(await getOwnedSkill(deps, actor, current.id));
   }
   if (current.status !== "recording" && current.status !== "drafting") {
     throw new ORPCError("BAD_REQUEST", { message: "Teaching session is not active" });
@@ -324,7 +332,7 @@ export async function stopTeachingSession(
       : undefined;
   const finalized = await completeTeachingSession(deps, actor, skillId, "stopped", stopSnapshot);
   await deps.jobs.cancel(skillTeachingExpireJobKey(current.id));
-  return mapTaughtSkill(finalized);
+  return mapTaughtSkill(await getOwnedSkill(deps, actor, finalized.id));
 }
 
 export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
@@ -334,14 +342,16 @@ export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
         where: { spaceId: actor.spaceId, botId, userId: actor.userId },
         orderBy: { updatedAt: "desc" },
       });
-      return rows.map(mapTaughtSkill);
+      return (await hydrateTaughtSkills(deps.prisma, deps.memoryDocuments, actor, rows)).map(
+        mapTaughtSkill,
+      );
     },
 
     async get(actor: Actor, skillId: string): Promise<TaughtSkill> {
       const row = await getOwnedSkill(deps, actor, skillId);
       await expireTeachingSessionIfNeeded(deps, row.id);
       const current = await deps.prisma.taughtSkill.findUniqueOrThrow({ where: { id: skillId } });
-      return mapTaughtSkill(current);
+      return mapTaughtSkill(await getOwnedSkill(deps, actor, current.id));
     },
 
     async start(actor: Actor, botId: string, goal: string): Promise<TaughtSkill> {
@@ -450,26 +460,35 @@ export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
     async updateDraft(
       actor: Actor,
       skillId: string,
-      input: { name?: string; playbook: SkillPlaybook },
+      input: { name?: string; playbook: SkillPlaybook; expectedRevision: number },
     ): Promise<TaughtSkill> {
       const skill = await getOwnedSkill(deps, actor, skillId);
       if (skill.status !== "draft" && skill.status !== "saved") {
         throw new ORPCError("BAD_REQUEST", { message: "Skill is not editable yet" });
       }
+      if (!deps.memoryDocuments || !skill.documentId || !skill.activeRevision)
+        throw new IsolationError();
+      const head = await deps.memoryDocuments.update(
+        skill.documentId,
+        JSON.stringify(input.playbook),
+        input.expectedRevision,
+        skillDocumentContext(actor),
+      );
       const row = await deps.prisma.taughtSkill.update({
         where: { id: skill.id },
         data: {
           name: input.name ?? skill.name,
-          playbook: input.playbook as never,
+          activeRevision: head.revision,
+          playbook: {},
           status: skill.status === "saved" ? "saved" : "draft",
         },
       });
       await updateSkillDraftMessage(deps, actor, row, {
         name: row.name,
-        playbook: parsePlaybook(row.playbook),
+        playbook: parsePlaybook((await getOwnedSkill(deps, actor, row.id)).playbook),
         status: row.status === "saved" ? "saved" : "draft",
       });
-      return mapTaughtSkill(row);
+      return mapTaughtSkill(await getOwnedSkill(deps, actor, row.id));
     },
 
     async save(actor: Actor, skillId: string, name?: string): Promise<TaughtSkill> {
@@ -490,7 +509,7 @@ export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
       });
       await updateSkillDraftMessage(deps, actor, row, {
         name: row.name,
-        playbook: parsePlaybook(row.playbook),
+        playbook: parsePlaybook((await getOwnedSkill(deps, actor, row.id)).playbook),
         status: "saved",
       });
       if (bot?.thread) {
@@ -502,7 +521,7 @@ export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
           payload: { skillId: row.id, name: row.name },
         });
       }
-      return mapTaughtSkill(row);
+      return mapTaughtSkill(await getOwnedSkill(deps, actor, row.id));
     },
 
     async testRun(actor: Actor, skillId: string, prompt?: string): Promise<{ runId: string }> {
@@ -515,9 +534,7 @@ export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
         include: { thread: true },
       });
       if (!bot?.thread) throw new IsolationError();
-      const playbook = parsePlaybook(skill.playbook);
-      const taskPrompt =
-        prompt ?? formatSkillRunPrompt(skill.name || skill.goal.slice(0, 80), playbook, true);
+      const taskPrompt = `Run ${skill.name || skill.goal.slice(0, 80)}.\n${prompt ?? "This is a safe test run. Do not send, spend, delete, or publish anything."}`;
       const task = await deps.prisma.task.create({
         data: {
           spaceId: actor.spaceId,
@@ -554,7 +571,15 @@ export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
           parseRecording(skill.recording).controlLeaseId,
         );
       }
-      await deps.prisma.taughtSkill.delete({ where: { id: skill.id } });
+      if (skill.documentId && skill.activeRevision && deps.memoryDocuments) {
+        await deps.memoryDocuments.delete(
+          skill.documentId,
+          skill.activeRevision,
+          skillDocumentContext(actor),
+        );
+      } else {
+        await deps.prisma.taughtSkill.delete({ where: { id: skill.id } });
+      }
       return { ok: true as const };
     },
 

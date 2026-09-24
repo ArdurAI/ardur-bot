@@ -90,6 +90,7 @@ export async function recallDocuments(
   context: MemoryOperationContext,
 ): Promise<SemanticMemoryResponse<SemanticMemoryResult[]>> {
   assertMemorySafe(request.query, context.knownSecrets);
+  context = { ...context, memoryRecall: true };
   const selected = await service.open(context, async (s) => {
     if (
       !s.access.botIds.includes(request.botId) ||

@@ -10,6 +10,7 @@ export * from "./events.js";
 export * from "./ids.js";
 export * from "./integration-catalog.js";
 export * from "./integration-settings.js";
+export * from "./learning.js";
 export * from "./local-settings.js";
 export * from "./mcp.js";
 export * from "./memory-documents.js";
@@ -21,3 +22,5 @@ export * from "./rpc.js";
 export * from "./runs.js";
 export * from "./runtime-pins.js";
 export * from "./search.js";
+
+export * from "./terminal.js";

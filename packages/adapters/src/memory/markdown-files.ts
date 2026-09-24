@@ -16,6 +16,11 @@ export function contentHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+export function historyNotePath(revision: DocumentRevision, writer = ""): string {
+  const stamp = revision.createdAt.replace(/[:.]/gu, "-");
+  return `history/${revision.documentId}/${writer ? `${writer}-` : ""}${String(revision.revision).padStart(8, "0")}-${stamp}.md`;
+}
+
 /** JSON values are YAML flow values: no YAML tags, aliases, executable types, or parser dependency. */
 export function revisionMarkdown(revision: DocumentRevision): string {
   const { content } = revision;
@@ -33,6 +38,7 @@ export function revisionMarkdown(revision: DocumentRevision): string {
     updatedAt: revision.createdAt,
     path: revision.path,
     deletedAt: revision.deletedAt,
+    ...(revision.commitId ? { commitId: revision.commitId } : {}),
   };
   return `---\n${Object.entries(metadata)
     .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)

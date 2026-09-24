@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@ardurbot/contracts";
+import type { Feedback, MessageBlock } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import { messageReaction, projectMessageReactions } from "./message-reactions.js";
 
@@ -35,4 +35,18 @@ describe("reaction conversation presentation", () => {
     expect(messageReaction(message("two", "❤️ thank you", "parent"))).toBeNull();
     expect(messageReaction({ ...message("three", "❤️", "parent"), role: "bot" })).toBeNull();
   });
+});
+
+it("renders durable thumbs without hiding or creating conversation messages", () => {
+  const parent = {
+    ...message("reply", "Done"),
+    role: "bot",
+    feedback: [
+      { rating: "positive", retractedAt: null },
+      { rating: "negative", retractedAt: "2026-01-01T00:00:00Z" },
+    ] as Feedback[],
+  };
+  const result = projectMessageReactions([parent]);
+  expect(result.visibleMessages).toEqual([parent]);
+  expect([...result.reactions.get(parent.id)!]).toEqual([["👍", 1]]);
 });

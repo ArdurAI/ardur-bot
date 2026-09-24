@@ -1,5 +1,4 @@
 import type { SkillPlaybook } from "@ardurbot/contracts";
-import { formatSkillRunPrompt } from "@ardurbot/core";
 import { Button, Input, Label, Textarea } from "@ardurbot/ui-web";
 import { Trans } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
@@ -8,6 +7,7 @@ import { rpc } from "../../lib/rpc";
 type SkillDraftBlock = {
   kind: "skill_draft";
   skillId: string;
+  activeRevision?: number;
   name: string;
   goal: string;
   playbook: SkillPlaybook;
@@ -34,9 +34,11 @@ export function SkillDraftCard({
   const [name, setName] = useState(block.name);
   const [playbook, setPlaybook] = useState(block.playbook);
   const [saved, setSaved] = useState(block.status === "saved");
+  const [revision, setRevision] = useState(block.activeRevision ?? 1);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    setRevision(block.activeRevision ?? 1);
     setName(block.name);
     setPlaybook(block.playbook);
     setSaved(block.status === "saved");
@@ -45,7 +47,13 @@ export function SkillDraftCard({
   async function saveDraft() {
     setBusy(true);
     try {
-      await rpc.skills.updateDraft({ skillId: block.skillId, name, playbook });
+      const updated = await rpc.skills.updateDraft({
+        skillId: block.skillId,
+        name,
+        playbook,
+        expectedRevision: revision,
+      });
+      setRevision(updated.activeRevision ?? revision);
       await rpc.skills.save({ skillId: block.skillId, name });
       setSaved(true);
       await onRefresh();
@@ -57,7 +65,13 @@ export function SkillDraftCard({
   async function testDraft() {
     setBusy(true);
     try {
-      await rpc.skills.updateDraft({ skillId: block.skillId, name, playbook });
+      const updated = await rpc.skills.updateDraft({
+        skillId: block.skillId,
+        name,
+        playbook,
+        expectedRevision: revision,
+      });
+      setRevision(updated.activeRevision ?? revision);
       await rpc.skills.testRun({ skillId: block.skillId });
       await onRefresh();
     } finally {
@@ -147,7 +161,7 @@ export function SkillDraftCard({
         <Button
           variant="outline"
           disabled={busy}
-          onClick={() => onAddRoutine(skillName, formatSkillRunPrompt(skillName, playbook))}
+          onClick={() => onAddRoutine(skillName, `Run ${skillName}.`)}
         >
           <Trans>Add to routine</Trans>
         </Button>

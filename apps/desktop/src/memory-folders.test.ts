@@ -47,12 +47,16 @@ describe("desktop memory folder registration", () => {
     expect(first?.path).not.toBe(second?.path);
     const override = JSON.parse(f.files.get("/fixture/stack/docker-compose.memory.json")!);
     expect(Object.keys(override.services)).toEqual(["api", "worker"]);
-    expect(override.services.api.volumes).toHaveLength(2);
+    expect(override.services.api.volumes).toHaveLength(3);
     expect(override.services.worker.volumes).toEqual(override.services.api.volumes);
     expect(override.services.api.volumes[0]).toMatchObject({
       type: "bind",
       source: "/fixture/empty-folder",
       bind: { create_host_path: false },
+    });
+    expect(override.services.api.volumes[2]).toMatchObject({
+      source: "/fixture/stack/memory-git",
+      target: "/data/memory-git",
     });
     expect(f.deps.apply).toHaveBeenCalledTimes(2);
   });
@@ -68,7 +72,7 @@ describe("desktop memory folder registration", () => {
     expect(f.files.has("/fixture/stack/memory-folders.json")).toBe(false);
     expect(
       JSON.parse(f.files.get("/fixture/stack/docker-compose.memory.json")!).services.api.volumes,
-    ).toEqual([]);
+    ).toEqual([expect.objectContaining({ target: "/data/memory-git" })]);
     const result = await registerMemoryFolder("space-a", { ...f.deps, pick: async () => null });
     expect(result).toBeNull();
   });

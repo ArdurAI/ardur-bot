@@ -8,6 +8,7 @@ import {
 import { Id } from "./ids.js";
 import { McpTransportSchema } from "./mcp.js";
 import { RunFailurePayloadSchema } from "./provider-errors.js";
+import { FeedbackSchema } from "./reactions.js";
 
 export const ProductEventType = z.enum([
   "thread.message.created",
@@ -201,6 +202,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("skill_draft"),
+    activeRevision: z.number().int().positive().optional(),
     skillId: Id,
     name: z.string(),
     goal: z.string(),
@@ -319,6 +321,7 @@ export const ProductEventSchema = z
 export type ProductEvent = z.infer<typeof ProductEventSchema>;
 
 export const ThreadMessageSchema = z.object({
+  feedback: z.array(FeedbackSchema).optional(),
   id: Id,
   threadId: Id,
   seq: z.number().int().nonnegative(),

@@ -51,6 +51,51 @@ describe("agent memory context", () => {
     expect(result?.endsWith("</durable_memory>")).toBe(true);
   });
 
+  it("records only delivered bytes and identifies a truncated revision", async () => {
+    const exposure = vi.fn(async (_input: { content: string }) => undefined);
+    const read = vi.fn(async ({ scope }: { scope: "bot" | "user" }) =>
+      snapshot(
+        scope === "bot"
+          ? [
+              document(
+                "doc",
+                "facts.md",
+                "bounded memory ".repeat(100),
+                3,
+                "2026-09-23T00:00:00.000Z",
+              ),
+              document(
+                "skill",
+                "skills/recipe.md",
+                "Catalog-only body",
+                1,
+                "2026-09-22T00:00:00.000Z",
+              ),
+            ]
+          : [],
+      ),
+    );
+    const contextText = await loadAgentMemoryContext(
+      storeWith(read),
+      "bot-1",
+      context,
+      320,
+      exposure,
+    );
+    expect(exposure).toHaveBeenCalledOnce();
+    const delivered = exposure.mock.calls[0]?.[0] as unknown as { content: string };
+    expect(exposure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: "doc",
+        activeRevision: 3,
+        truncated: true,
+        kind: "injected",
+      }),
+    );
+    expect(contextText).toContain(delivered.content);
+    expect(contextText).not.toContain("Catalog-only body");
+  });
+
   it("omits the memory block when neither scope has documents", async () => {
     const read = vi.fn(async () => snapshot([]));
 

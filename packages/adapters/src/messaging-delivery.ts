@@ -237,6 +237,8 @@ async function mirrorChannelRun(
         const created = await createThreadMessageInTransaction(tx, {
           threadId: peerThread.id,
           role: "user",
+          origin: "peer-bot",
+          actorId: run.botId,
           blocks: [block],
           clientNonce,
         });

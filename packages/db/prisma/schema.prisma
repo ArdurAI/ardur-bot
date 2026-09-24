@@ -161,6 +161,7 @@ model Member {
 }
 
 model Space {
+  learningConfig SpaceLearningConfig?
   aiDataConsents AiDataConsent[]
   id                          String                       @id
   organizationId              String
@@ -485,6 +486,12 @@ model Thread {
   tasks                       Task[]
   runs                        Run[]
   routines                    Routine[]
+  feedback                    Feedback[]
+  steeringSummaries           SteeringSummary[]
+  knowledgeExposures          RunKnowledgeExposure[]
+  learningProposals           LearningProposal[]
+  proposalEvidence            ProposalEvidence[]
+  reviewExecutions            ReviewExecution[]
 
   @@index([spaceId])
   @@map("threads")
@@ -496,6 +503,9 @@ model Message {
   thread           Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
   seq              Int
   role             String
+  origin           String    @default("system")
+  actorId          String?
+  feedback         Feedback[]
   blocks           Json
   botId            String?
   replyToMessageId String?
@@ -764,6 +774,8 @@ model TaughtSkill {
   goal      String
   status    String
   playbook  Json      @default("{}")
+  documentId String?
+  activeRevision Int?
   recording Json      @default("{\"events\":[],\"snapshots\":[]}")
   startedAt DateTime?
   expiresAt DateTime?
@@ -788,7 +800,12 @@ model AgentSkill {
   userId      String
   name        String
   description String
-  content     String
+  content     String   @default("")
+  documentId  String?
+  activeRevision Int?
+  origin      String   @default("user")
+  botId       String?
+  protected   Boolean  @default(false)
   /// user | builtin | plugin — only user skills are writable via API/tools.
   source      String   @default("user")
   createdAt   DateTime @default(now())
@@ -871,6 +888,7 @@ model MemoryRevision {
   content        String
   sourceRunId    String?
   sourceThreadId String?
+  commitId       String?
   authorKind     String @default("runtime")
   authorUserId   String?
   authorBotId    String?
@@ -1352,6 +1370,161 @@ model IntegrationProviderConfig {
   updatedAt  DateTime @updatedAt
 
   @@map("integration_provider_configs")
+}
+
+/// Only authenticated reaction intake writes these records; edits preserve identity.
+model Feedback {
+  id String @id @default(cuid())
+  spaceId String
+  threadId String
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  messageId String
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  runId String
+  actorId String
+  rating String
+  reason String?
+  retractedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([messageId, actorId])
+  @@index([spaceId, runId, updatedAt])
+  @@map("feedback")
+}
+
+model SteeringSummary {
+  id String @id @default(cuid())
+  spaceId String
+  threadId String
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  runId String
+  messageId String
+  origin String
+  actorId String?
+  kind String
+  createdAt DateTime @default(now())
+  @@unique([runId, messageId])
+  @@index([spaceId, runId])
+  @@map("steering_summaries")
+}
+
+model RunKnowledgeExposure {
+  id String @id @default(cuid())
+  runId String
+  threadId String
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  attempt Int
+  documentId String
+  revisionId String
+  contentHash String
+  kind String
+  truncated Boolean
+  createdAt DateTime @default(now())
+  @@unique([runId, attempt, documentId, revisionId, contentHash, kind])
+  @@map("run_knowledge_exposures")
+}
+
+model SpaceLearningConfig {
+  spaceId String @id
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  enabled Boolean @default(false)
+  reviewerPin Json?
+  configuredBy String
+  botDailyTokens Int @default(30000)
+  spaceDailyTokens Int @default(150000)
+  maxProposals Int @default(3)
+  timeoutMs Int @default(30000)
+  maxOutputTokens Int @default(2000)
+  maxOutputChars Int @default(12000)
+  updatedAt DateTime @updatedAt
+  @@map("space_learning_config")
+}
+
+model LearningProposal {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  botId String
+  runId String
+  threadId String
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  historyGeneration Int
+  fingerprint String
+  status String @default("pending")
+  body Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([spaceId, userId, botId, status])
+  @@index([runId, fingerprint])
+  @@map("learning_proposals")
+}
+
+model ProposalEvidence {
+  id String @id
+  spaceId String
+  userId String
+  runId String
+  threadId String
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  historyGeneration Int
+  body Json
+  @@index([spaceId, runId])
+  @@map("proposal_evidence")
+}
+
+/// Content-free audit survives deletion of its source thread.
+model ReviewExecution {
+  idempotencyKey String @id
+  spaceId String
+  botId String
+  userId String
+  runId String
+  threadId String?
+  thread Thread? @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  historyGeneration Int
+  evidenceWatermark String
+  policyVersion String
+  status String
+  reason String?
+  reviewerPin Json
+  proposalIds Json @default("[]")
+  tokens Int?
+  reservedTokens Int @default(0)
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  @@index([spaceId, createdAt])
+  @@index([runId, historyGeneration])
+  @@map("review_executions")
+}
+
+// Human terminal lifecycle metadata only. No input or output is stored here.
+model TerminalAudit {
+  sequence BigInt @unique @default(autoincrement())
+  id String @id @default(cuid())
+  actorUserId String
+  spaceId String
+  computerId String
+  botId String
+  sessionRef String
+  leaseFence Int
+  type String
+  reason String
+  createdAt DateTime @default(now())
+
+  @@index([spaceId, createdAt])
+  @@index([sessionRef, createdAt])
+  @@map("terminal_audit")
+}
+
+// Short-lived command/control reservations survive API/worker process boundaries.
+model ComputerAdmission {
+  id String @id
+  computerId String
+  kind String
+  expiresAt DateTime
+
+  @@index([computerId, expiresAt])
+  @@map("computer_admission")
 }
 
 // Device identity is deployment-local; private material uses the encrypted secret store format.

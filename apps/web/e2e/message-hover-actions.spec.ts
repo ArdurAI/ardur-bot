@@ -98,6 +98,20 @@ test("message hover shows beside-bubble actions; reply links to parent", async (
     })
     .toEqual({ beside: true, flush: true, centered: true, notBelow: true });
   await captureScreenshot(page, testInfo, "message-bot-actions-desktop");
+  const messageCount = await transcript.locator("[data-message-id]").count();
+  await botToolbar.getByRole("button", { name: "👎", exact: true }).click();
+  const reason = page.getByRole("textbox", { name: "What was wrong?", exact: true });
+  await reason.fill("Use numbered steps for procedures.");
+  await captureScreenshot(page, testInfo, "message-feedback-reason");
+  const feedbackSaved = page.waitForResponse(
+    (response) =>
+      response.url().includes("/threads/react") &&
+      response.request().postData()?.includes("Use numbered steps") === true,
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect((await feedbackSaved).ok()).toBe(true);
+  await expect(reason).toBeHidden();
+  await expect(transcript.locator("[data-message-id]")).toHaveCount(messageCount);
   await expectRailAtRest(page, botRow);
 
   const parentText = `hover-parent-${stamp}`;

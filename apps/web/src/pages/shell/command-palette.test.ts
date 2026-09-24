@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { isCommandPaletteHotkey } from "./command-palette-hotkey";
 
 function keyEvent(partial: Partial<KeyboardEvent> & Pick<KeyboardEvent, "key">): KeyboardEvent {
@@ -26,5 +26,22 @@ describe("isCommandPaletteHotkey", () => {
     expect(isCommandPaletteHotkey(keyEvent({ key: "k", metaKey: true, altKey: true }))).toBe(false);
     expect(isCommandPaletteHotkey(keyEvent({ key: "k", metaKey: true, repeat: true }))).toBe(false);
     expect(isCommandPaletteHotkey(keyEvent({ key: "j", metaKey: true }))).toBe(false);
+  });
+  it("leaves shell shortcuts with the focused terminal", () => {
+    class Element {
+      closest() {
+        return this;
+      }
+    }
+    vi.stubGlobal("Element", Element);
+    try {
+      expect(
+        isCommandPaletteHotkey(
+          keyEvent({ key: "k", ctrlKey: true, target: new Element() as unknown as EventTarget }),
+        ),
+      ).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

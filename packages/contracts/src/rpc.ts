@@ -93,6 +93,12 @@ import {
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
 import {
+  LearningProposalSchema,
+  ReviewExecutionSchema,
+  SpaceLearningConfigInput,
+  SpaceLearningConfigSchema,
+} from "./learning.js";
+import {
   MemoryBundleSchema,
   MemoryDocumentHeadSchema,
   MemoryDocumentPageSchema,
@@ -100,9 +106,10 @@ import {
   MemoryImportPreviewSchema,
   MemoryPageInput,
   MemoryScopeRemapSchema,
+  MemorySyncStateSchema,
 } from "./memory-documents.js";
 import { channelPairingContract } from "./messaging-actions.js";
-import { MessageReactionSchema } from "./reactions.js";
+import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { SearchQueryOutputSchema } from "./search.js";
 
@@ -352,6 +359,8 @@ export const appContract = {
         threadTarget.safeExtend({
           messageId: Id,
           reaction: MessageReactionSchema,
+          reason: FeedbackReasonSchema.optional(),
+          retract: z.boolean().optional(),
           clientNonce: z.string().min(1).max(200),
         }),
       )
@@ -372,6 +381,17 @@ export const appContract = {
       .output(z.object({ ok: z.literal(true) })),
     markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
     markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+  },
+  terminal: {
+    close: oc
+      .input(z.object({ botId: Id, computerId: Id, sessionId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
+    available: oc
+      .input(z.object({ botId: Id, computerId: Id }))
+      .output(z.object({ available: z.boolean() })),
+    ticket: oc
+      .input(z.object({ botId: Id, computerId: Id, sessionId: Id.optional() }))
+      .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
   },
   computer: {
     status: oc.input(botId).output(ComputerStatusSchema),
@@ -457,6 +477,29 @@ export const appContract = {
         }),
       )
       .output(MemoryImportPreviewSchema),
+    gitLocation: oc
+      .input(
+        z.object({
+          url: z.string().min(1).max(1000),
+          branch: z.string().min(1).max(180),
+          mode: z.enum(["publish", "propose"]),
+          credential: z
+            .object({ kind: z.enum(["token", "ssh"]), value: z.string().min(1).max(20000) })
+            .optional(),
+          connectionId: z.string().optional(),
+          expectedGeneration: z.number().int().nonnegative(),
+          expectedHash: z.string().optional(),
+        }),
+      )
+      .output(
+        MemoryImportPreviewSchema.extend({
+          connectionId: z.string(),
+          generation: z.number(),
+          config: SpaceMemoryConfigSchema.nullable(),
+        }),
+      ),
+    syncState: oc.output(MemorySyncStateSchema.nullable()),
+    retrySync: oc.output(z.object({ ok: z.literal(true) })),
     location: oc
       .input(
         z.object({
@@ -584,6 +627,7 @@ export const appContract = {
           skillId: Id,
           name: z.string().optional(),
           playbook: SkillPlaybookSchema,
+          expectedRevision: z.number().int().positive(),
         }),
       )
       .output(TaughtSkillSchema),
@@ -594,6 +638,17 @@ export const appContract = {
       .input(z.object({ skillId: Id, prompt: z.string().optional() }))
       .output(z.object({ runId: Id })),
     remove: oc.input(z.object({ skillId: Id })).output(z.object({ ok: z.literal(true) })),
+  },
+  learning: {
+    settings: oc.output(SpaceLearningConfigSchema),
+    configure: oc.input(SpaceLearningConfigInput).output(SpaceLearningConfigSchema),
+    list: oc.input(z.object({ botId: Id.optional() })).output(
+      z.object({
+        reviews: z.array(ReviewExecutionSchema),
+        proposals: z.array(LearningProposalSchema),
+      }),
+    ),
+    review: oc.input(z.object({ runId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   /** Claude Agent Skills (SKILL.md recipes) shared across assistants (not taught/demo skills). Pi already understands this format; we persist and inject them. */
   agentSkills: {

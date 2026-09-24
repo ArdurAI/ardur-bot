@@ -1,20 +1,30 @@
-import type { DocumentRevision, MemoryDocumentHead } from "@ardurbot/contracts";
+import type {
+  MemoryDocumentHead,
+  MemoryHistoryRevision,
+  MemorySyncState,
+} from "@ardurbot/contracts";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
-import { loadMemoryDocuments, loadMemoryHistory, memoryAttribution } from "../lib/memory";
+import {
+  loadMemoryDocuments,
+  loadMemoryHistory,
+  loadMemorySyncState,
+  memoryAttribution,
+} from "../lib/memory";
 import { native, useThemedStyles } from "../lib/native";
 
 export default function Memory() {
   const { t } = useI18n();
   const styles = useThemedStyles(createStyles);
+  const [sync, setSync] = useState<MemorySyncState | null>(null);
   const [documents, setDocuments] = useState<MemoryDocumentHead[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [open, setOpen] = useState<MemoryDocumentHead | null>(null);
-  const [history, setHistory] = useState<DocumentRevision[]>([]);
+  const [history, setHistory] = useState<MemoryHistoryRevision[]>([]);
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -26,6 +36,11 @@ export default function Memory() {
       setOpen(null);
       setHistory([]);
       setBusy(true);
+      void loadMemorySyncState()
+        .then((value) => {
+          if (current === ticket.current) setSync(value);
+        })
+        .catch(() => undefined);
       void loadMemoryDocuments()
         .then((page) => {
           if (current === ticket.current) {
@@ -93,6 +108,19 @@ export default function Memory() {
         <Text style={styles.secondary}>
           {t("Memory is read-only here. Edit it in Settings on desktop or web.")}
         </Text>
+        {sync ? (
+          <Text style={styles.secondary}>
+            {t("Syncs to")} {sync.host}
+          </Text>
+        ) : null}
+        {sync?.status === "last-copy" ? (
+          <Text style={styles.secondary}>{t("Working from the last copy")}</Text>
+        ) : null}
+        {sync?.status === "quarantined" ? (
+          <Text style={styles.error}>
+            {t("Repository history changed. Review the saved copy on desktop or web.")}
+          </Text>
+        ) : null}
         {error ? (
           <View>
             <Text accessibilityRole="alert" style={styles.error}>
@@ -153,6 +181,15 @@ export default function Memory() {
                 {t("Revision")} {doc.revision}
                 {doc.deletedAt ? ` · ${t("Deleted")}` : ""}
               </Text>
+              {doc.gitSync ? (
+                <Text style={styles.secondary}>
+                  {doc.gitSync.status === "pushed"
+                    ? t("Pushed")
+                    : doc.gitSync.status === "failed"
+                      ? t("Saved locally. GitHub sync failed.")
+                      : t("Saved locally. Sync pending.")}
+                </Text>
+              ) : null}
               {doc.delivery.status !== "delivered" ? (
                 <Text style={styles.secondary}>
                   {doc.delivery.status === "pending"

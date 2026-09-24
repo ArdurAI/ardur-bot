@@ -1,4 +1,5 @@
 import {
+  type Feedback,
   type MessageBlock,
   type MessageReaction,
   MessageReactionSchema,
@@ -6,6 +7,7 @@ import {
 
 type ReactionMessage = {
   id: string;
+  feedback?: Feedback[];
   role: string;
   blocks: MessageBlock[];
   replyToMessageId?: string | null;
@@ -26,6 +28,15 @@ export function projectMessageReactions<Message extends ReactionMessage>(
 ) {
   const parents = new Map(messages.map((message) => [message.id, message]));
   const reactions = new Map<string, Map<MessageReaction, number>>();
+  for (const message of messages) {
+    for (const feedback of message.feedback ?? []) {
+      if (feedback.retractedAt) continue;
+      const emoji = feedback.rating === "positive" ? "👍" : "👎";
+      const counts = reactions.get(message.id) ?? new Map<MessageReaction, number>();
+      counts.set(emoji, (counts.get(emoji) ?? 0) + 1);
+      reactions.set(message.id, counts);
+    }
+  }
   const visibleMessages = messages.filter((message) => {
     const emoji = messageReaction(message);
     const parentId = message.replyToMessageId;

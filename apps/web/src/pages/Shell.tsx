@@ -137,6 +137,8 @@ import {
   computersAreUnavailable,
 } from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
+import type { FeedbackEdit } from "../components/MessageFeedback";
+import { MessageFeedback } from "../components/MessageFeedback";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { ThreadCommandBlock } from "../components/ThreadCommandBlock";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
@@ -221,6 +223,7 @@ import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { BotCreatePicker } from "./shell/bot-picker";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
+import { useComputerTerminal } from "./shell/computer-terminal";
 import {
   ClearConversationDialog,
   DeleteBotDialog,
@@ -1906,7 +1909,7 @@ export function ShellPage() {
     }
   }, []);
   const reactToMessage = useCallback(
-    async (message: ThreadMessage, reaction: MessageReaction) => {
+    async (message: ThreadMessage, reaction: MessageReaction, edit?: FeedbackEdit) => {
       const botId = activeBotId.current;
       const groupId = activeGroupId.current;
       if (!botId && !groupId) return;
@@ -1915,6 +1918,7 @@ export function ShellPage() {
           ...(groupId ? { groupId } : { botId: botId! }),
           messageId: message.id,
           reaction,
+          ...edit,
           clientNonce: newClientNonce(),
         });
       } catch (error) {
@@ -2459,6 +2463,7 @@ export function ShellPage() {
   useEffect(() => {
     if (!computerOpen) return;
     function onKey(event: KeyboardEvent) {
+      if (event.target instanceof Element && event.target.closest("[data-terminal-root]")) return;
       if (event.key === "Escape") setComputerOpen(false);
     }
     window.addEventListener("keydown", onKey);
@@ -2556,6 +2561,20 @@ export function ShellPage() {
 
   const embeddedScreenUrl = embeddableScreenUrl(screenUrl);
   const hasControl = userHoldsComputerControl(computer, computerBot?.id);
+  const terminalSurface = useComputerTerminal({
+    computer,
+    botId: computerBot?.id,
+    hasControl,
+    working: composerRunning,
+    onTakeControl: async () => {
+      if (computerBot) {
+        await rpc.computer.takeover({ botId: computerBot.id });
+        await refreshComputerFor(computerBot.id);
+      }
+    },
+    onStop: stopRun,
+    onOpen: () => setComputerOpen(true),
+  });
   const hideScreenLoadError = computerErrorFromScreen && Boolean(embeddedScreenUrl);
   const computerScreenError =
     computerError && !hideScreenLoadError ? (
@@ -4098,6 +4117,7 @@ export function ShellPage() {
           open={commandPaletteOpen}
           onOpenChange={setCommandPaletteOpen}
           bots={bots}
+          onOpenTerminal={terminalSurface.open}
           onSelectBot={(id) => {
             setMobileSidebarOpen(false);
             navigate(`/app/${id}`);
@@ -4364,39 +4384,41 @@ export function ShellPage() {
                 {sendError}
               </div>
             ) : null}
+            {terminalSurface.tabs}
             <div className="relative min-h-0 flex-1 bg-background">
-              {computer?.kind === "desktop" ? (
-                <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
-              ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
-                <>
-                  <iframe
-                    title={t`Bot screen`}
-                    src={embeddedScreenUrl}
-                    sandbox={screenIframeSandbox(embeddedScreenUrl)}
-                    className="h-full w-full border-0 bg-black"
-                    allow="clipboard-read; clipboard-write; fullscreen"
-                    style={{
-                      pointerEvents: recordingSkill || !hasControl ? "none" : "auto",
-                    }}
-                  />
-                  {computerBot ? (
-                    <TeachCaptureOverlay
-                      botId={computerBot.id}
-                      skill={recordingSkill}
-                      enabled={Boolean(recordingSkill)}
-                      screenWidth={computer?.screenWidth}
-                      screenHeight={computer?.screenHeight}
+              {terminalSurface.content ??
+                (computer?.kind === "desktop" ? (
+                  <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
+                ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
+                  <>
+                    <iframe
+                      title={t`Bot screen`}
+                      src={embeddedScreenUrl}
+                      sandbox={screenIframeSandbox(embeddedScreenUrl)}
+                      className="h-full w-full border-0 bg-black"
+                      allow="clipboard-read; clipboard-write; fullscreen"
+                      style={{
+                        pointerEvents: recordingSkill || !hasControl ? "none" : "auto",
+                      }}
                     />
-                  ) : null}
-                </>
-              ) : (
-                <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
-                  {computerScreenError ??
-                    (computer?.state === "suspended"
-                      ? t`Computer is asleep`
-                      : computerLabel(computer?.mode, computerBot.name))}
-                </div>
-              )}
+                    {computerBot ? (
+                      <TeachCaptureOverlay
+                        botId={computerBot.id}
+                        skill={recordingSkill}
+                        enabled={Boolean(recordingSkill)}
+                        screenWidth={computer?.screenWidth}
+                        screenHeight={computer?.screenHeight}
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
+                    {computerScreenError ??
+                      (computer?.state === "suspended"
+                        ? t`Computer is asleep`
+                        : computerLabel(computer?.mode, computerBot.name))}
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -4449,7 +4471,11 @@ const Transcript = memo(function Transcript({
   onAnswer: (message: ThreadMessage, text: string) => Promise<void>;
   onReply: (message: ThreadMessage) => void;
   onQuote: (message: ThreadMessage, quote: string) => void;
-  onReact: (message: ThreadMessage, reaction: MessageReaction) => Promise<void>;
+  onReact: (
+    message: ThreadMessage,
+    reaction: MessageReaction,
+    edit?: FeedbackEdit,
+  ) => Promise<void>;
   onJumpToMessage: (messageId: string) => void;
   onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
   memberName?: (botId: string | undefined) => string | undefined;
@@ -5663,7 +5689,11 @@ function MessageHoverActions({
   message: ThreadMessage;
   side: "start" | "end";
   onReply: (message: ThreadMessage) => void;
-  onReact: (message: ThreadMessage, reaction: MessageReaction) => Promise<void>;
+  onReact: (
+    message: ThreadMessage,
+    reaction: MessageReaction,
+    edit?: FeedbackEdit,
+  ) => Promise<void>;
 }) {
   const { t } = useLingui();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -5684,6 +5714,9 @@ function MessageHoverActions({
   return (
     <MessageHoverMetadata pinned={moreOpen || reactionsOpen} side={side}>
       <div data-testid="message-hover-actions" className="flex items-center gap-0.5">
+        {message.role === "bot" && message.runId && canReactToThreadMessage(message) ? (
+          <MessageFeedback onFeedback={(reaction, edit) => onReact(message, reaction, edit)} />
+        ) : null}
         {canReactToThreadMessage(message) ? (
           <Popover open={reactionsOpen} onOpenChange={setReactionsOpen}>
             <PopoverTrigger
@@ -5700,7 +5733,10 @@ function MessageHoverActions({
               className="w-auto flex-row gap-0 rounded-2xl p-1.5"
               aria-label={t`Reactions`}
             >
-              {MESSAGE_REACTIONS.map((emoji) => (
+              {MESSAGE_REACTIONS.filter(
+                (emoji) =>
+                  !(message.role === "bot" && message.runId && (emoji === "👍" || emoji === "👎")),
+              ).map((emoji) => (
                 <button
                   key={emoji}
                   type="button"

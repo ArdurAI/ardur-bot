@@ -6,7 +6,7 @@
 
 const FRONTMATTER_FENCE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
-export type SkillSource = "user" | "builtin" | "plugin";
+export type SkillSource = "user" | "builtin" | "plugin" | "learned" | "imported" | "unknown";
 
 export type ParsedSkillMd = {
   name: string;
@@ -29,6 +29,11 @@ export type SkillCatalogEntry = {
 
 export type SkillRecord = SkillCatalogEntry & {
   id?: string;
+  documentId?: string | null;
+  activeRevision?: number | null;
+  origin?: string;
+  botId?: string | null;
+  protected?: boolean;
   content: string;
 };
 
@@ -54,7 +59,7 @@ const ROUTINE_SKILL_MENTION =
   /(?:^|[\s(,])@([A-Za-z][\w-]*(?:[ ]+[A-Za-z][\w-]*){0,5})(?=[\s,.)]|$)/g;
 
 export function isSkillReadOnly(source: SkillSource): boolean {
-  return source === "builtin" || source === "plugin";
+  return source !== "user" && source !== "learned";
 }
 
 /**

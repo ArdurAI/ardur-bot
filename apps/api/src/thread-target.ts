@@ -44,6 +44,7 @@ import {
 import { resolveBusyBotName, toComputerStatus } from "./computer-status.js";
 import { storedRunFailure } from "./run-failure-kind.js";
 import { withSerializableRetry } from "./serializable-retry.js";
+import { recordThreadFeedback } from "./thread-feedback.js";
 import { loadMessagePage } from "./thread-message-pages.js";
 
 export type ThreadTarget =
@@ -675,6 +676,8 @@ export async function sendThreadMessage(
         const message = await createThreadMessageInTransaction(tx, {
           threadId: target.threadId,
           role: "user",
+          origin: "human-typed",
+          actorId: actor.userId,
           blocks,
           replyToMessageId: input.replyToMessageId,
           replyQuote,
@@ -723,6 +726,8 @@ export async function sendThreadMessage(
             payload: {
               messageId: message.id,
               role: "user",
+              origin: "human-typed",
+              actorId: actor.userId,
               blocks,
               runIds: answered.map((run) => run.id),
               replyToMessageId: input.replyToMessageId,
@@ -756,6 +761,8 @@ export async function sendThreadMessage(
             payload: {
               messageId: message.id,
               role: "user",
+              origin: "human-typed",
+              actorId: actor.userId,
               blocks,
               replyToMessageId: input.replyToMessageId,
               replyQuote,
@@ -801,6 +808,8 @@ export async function sendThreadMessage(
           payload: {
             messageId: message.id,
             role: "user",
+            origin: "human-typed",
+            actorId: actor.userId,
             blocks,
             runIds: [run.id],
             replyToMessageId: input.replyToMessageId,
@@ -834,6 +843,8 @@ export async function sendThreadMessage(
       const message = await createThreadMessageInTransaction(tx, {
         threadId: target.threadId,
         role: "user",
+        origin: "human-typed",
+        actorId: actor.userId,
         blocks,
         replyToMessageId: input.replyToMessageId,
         replyQuote,
@@ -948,6 +959,8 @@ export async function sendThreadMessage(
         payload: {
           messageId: message.id,
           role: "user",
+          origin: "human-typed",
+          actorId: actor.userId,
           blocks,
           runIds: runs.map((run) => run.id),
           replyToMessageId: input.replyToMessageId,
@@ -982,6 +995,8 @@ export async function reactToThreadMessage(
   input: {
     messageId: string;
     reaction: MessageReaction;
+    reason?: string;
+    retract?: boolean;
     clientNonce: string;
   },
 ) {
@@ -989,9 +1004,12 @@ export async function reactToThreadMessage(
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
     const parent = await tx.message.findFirst({
       where: { id: input.messageId, threadId: target.threadId },
-      select: { id: true },
+      select: { id: true, role: true },
     });
     if (!parent) throw new IsolationError();
+    if (parent.role === "bot" && (input.reaction === "👍" || input.reaction === "👎")) {
+      return recordThreadFeedback(tx, actor, target.threadId, input);
+    }
     const existing = await tx.message.findUnique({
       where: {
         threadId_clientNonce: { threadId: target.threadId, clientNonce: input.clientNonce },
@@ -1005,6 +1023,8 @@ export async function reactToThreadMessage(
     const message = await createThreadMessageInTransaction(tx, {
       threadId: target.threadId,
       role: "user",
+      origin: "human-typed",
+      actorId: actor.userId,
       blocks,
       replyToMessageId: parent.id,
       clientNonce: input.clientNonce,
@@ -1037,8 +1057,21 @@ export async function stopThreadRuns(
         status: { in: [...ACTIVE_RUN_STATUSES] },
       },
       data: { status: "cancelled", completedAt: new Date() },
-      select: { id: true },
+      select: { id: true, botId: true },
     });
+    for (const run of cancelled) {
+      await appendEventInTransaction(
+        tx,
+        {
+          spaceId: actor.spaceId,
+          threadId: target.threadId,
+          botId: run.botId,
+          type: "run.cancelled",
+          payload: { runId: run.id, source: "human", reason: "stop", actorId: actor.userId },
+        },
+        { cancelledRunId: run.id },
+      );
+    }
     const ids = cancelled.map((run) => run.id);
     await tx.steeringMessage.deleteMany({
       where: {
@@ -1153,6 +1186,7 @@ export async function stopThreadRuns(
       runId: { in: runIds },
     },
   });
+  return runIds;
 }
 
 export async function setThreadUnreadState(

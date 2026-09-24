@@ -1,3 +1,16 @@
+export {
+  decodeTerminalFrame,
+  encodeTerminalFrame,
+  parseTerminalControl,
+  TERMINAL_ENDED,
+  TERMINAL_FRAME_BYTES,
+  TERMINAL_GRACE_MS,
+  TERMINAL_HEADER_BYTES,
+  TERMINAL_REPLAY_BYTES,
+  TERMINAL_UNAVAILABLE,
+  TERMINAL_WINDOW_BYTES,
+  validateTerminalSize,
+} from "@ardurbot/contracts";
 export * from "./action-approval.js";
 export * from "./agent-skill.js";
 export * from "./ai-consent.js";
@@ -23,6 +36,7 @@ export * from "./featured-connectors.js";
 export * from "./group-mentions.js";
 export * from "./http-response.js";
 export * from "./integration-policy.js";
+export * from "./learning-signals.js";
 export * from "./markdown-plain.js";
 export * from "./mcp.js";
 export * from "./message-pages.js";

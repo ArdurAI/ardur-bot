@@ -102,6 +102,19 @@ describe("Pi runtime cancellation", () => {
     await microtasks();
   });
 
+  it("gives model-only requests no built-in or host tools", async () => {
+    const executeTool = vi.fn();
+    const runtime = new PiAgentRuntime();
+    const stream = runtime.run({ ...request, tools: "none", executeTool })[Symbol.asyncIterator]();
+    await stream.next();
+    const agent = fake.state.agents[0]!;
+    expect(agent.tools).toEqual([]);
+    expect(agent.tools.find((tool) => tool.name === "shell")).toBeUndefined();
+    expect(executeTool).not.toHaveBeenCalled();
+    agent.release.resolve();
+    await stream.return!();
+  });
+
   it.each([false, true])(
     "aborts and settles stream closure with external signal=%s",
     async (external) => {

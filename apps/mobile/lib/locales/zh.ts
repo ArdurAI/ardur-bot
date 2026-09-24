@@ -1,4 +1,8 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "What was wrong?": "哪里做得不好？",
+  "What was good?": "哪里做得好？",
+  "Remove feedback": "移除反馈",
+
   "Claude subscriptions are not supported here yet; use an API key.":
     "此处暂不支持 Claude 订阅，请使用 API 密钥。",
   "Could not load integrations.": "无法加载集成。",

@@ -225,6 +225,8 @@ export async function messageBot(
         const inbound = await createThreadMessageInTransaction(tx, {
           threadId: targetThreadId,
           role: "user",
+          origin: "peer-bot",
+          actorId: sender.id,
           blocks: [inboundBlock],
           replyToMessageId:
             sourceContext?.fromBotId === target.id && intent !== "fyi"
