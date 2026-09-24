@@ -21,6 +21,16 @@ export const IntegrationDescriptorSchema = z
       .strict()
       .optional(),
     authKind: z.enum(["oauth", "token"]),
+    tokenUrl: PublicUrl.optional(),
+    oauthApp: z
+      .object({
+        clientIdEnv: z.string().regex(/^[A-Z][A-Z0-9_]+$/),
+        clientSecretEnv: z.string().regex(/^[A-Z][A-Z0-9_]+$/),
+      })
+      .strict()
+      .optional(),
+    oauthAvailable: z.boolean().optional(),
+    apiVersion: z.string().optional(),
     // Definitions only: credential values belong in the encrypted secret store.
     requiredInputs: z.array(
       z
@@ -89,6 +99,74 @@ export const SpaceToolPoliciesSchema = z
   .refine((policies) => Object.keys(policies).length <= 2000, "Too many tool policies");
 export type SpaceToolPolicies = z.infer<typeof SpaceToolPoliciesSchema>;
 
+export const IntegrationResourceConstraintsSchema = z
+  .object({
+    notion: z
+      .object({
+        parentId: z.string().regex(/^[a-f0-9]{32}$/),
+        kind: z.enum(["page", "database"]),
+      })
+      .strict()
+      .optional(),
+    jiraProjects: z
+      .array(z.string().regex(/^[A-Z][A-Z0-9_]{0,254}$/))
+      .max(100)
+      .optional(),
+    confluenceSpaces: z
+      .array(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_~-]{0,254}$/))
+      .max(100)
+      .optional(),
+  })
+  .strict();
+export type IntegrationResourceConstraints = z.infer<typeof IntegrationResourceConstraintsSchema>;
+
+export const IntegrationResourceKindSchema = z.enum(["notion", "jira", "confluence"]);
+export type IntegrationResourceKind = z.infer<typeof IntegrationResourceKindSchema>;
+export const IntegrationResourceToolSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  fields: z.array(z.object({ name: z.string(), required: z.boolean() })),
+});
+export type IntegrationResourceTool = z.infer<typeof IntegrationResourceToolSchema>;
+export const IntegrationResourceChoiceSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  kind: z.enum(["page", "database", "jira", "confluence"]),
+});
+export type IntegrationResourceChoice = z.infer<typeof IntegrationResourceChoiceSchema>;
+
+/** Accept only Notion identifiers or canonical Notion page URLs, never arbitrary hosts. */
+export function notionResourceId(value: string): string | undefined {
+  let candidate = value.trim();
+  if (/^https?:/i.test(candidate)) {
+    try {
+      const url = new URL(candidate);
+      if (
+        url.protocol !== "https:" ||
+        url.username ||
+        url.password ||
+        (!["notion.so", "www.notion.so", "notion.site"].includes(url.hostname) &&
+          !url.hostname.endsWith(".notion.site"))
+      )
+        return undefined;
+      candidate = url.pathname.split("/").filter(Boolean).pop() ?? "";
+      candidate =
+        candidate.match(
+          /([a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i,
+        )?.[0] ?? "";
+    } catch {
+      return undefined;
+    }
+  }
+  if (
+    !/^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(
+      candidate,
+    )
+  )
+    return undefined;
+  return candidate.replaceAll("-", "").toLowerCase();
+}
+
 export const IntegrationStateSchema = z.enum([
   "not-connected",
   "awaiting-consent",
@@ -103,6 +181,7 @@ export const IntegrationConnectionSchema = z.object({
   state: IntegrationStateSchema,
   manifest: IntegrationManifestSchema.nullable(),
   needsReview: z.boolean(),
+  resourceConstraints: IntegrationResourceConstraintsSchema.optional(),
   spaceToolPolicies: SpaceToolPoliciesSchema.default({}),
 });
 export type IntegrationConnection = z.infer<typeof IntegrationConnectionSchema>;
@@ -112,3 +191,10 @@ export const IntegrationGrantSchema = z.object({
   needsReview: z.boolean(),
 });
 export type IntegrationGrant = z.infer<typeof IntegrationGrantSchema>;
+
+export const IntegrationCatalogListSchema = z.object({
+  catalog: z.array(IntegrationDescriptorSchema),
+  connections: z.array(IntegrationConnectionSchema),
+  webUrl: z.string().url().optional(),
+});
+export type IntegrationCatalogList = z.infer<typeof IntegrationCatalogListSchema>;

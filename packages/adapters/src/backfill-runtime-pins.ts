@@ -28,7 +28,7 @@ export async function backfillRuntimePins({
   secrets: Pick<EncryptedSecretStore, "load">;
   logger: Pick<Logger, "info">;
 }) {
-  const counts = { bound: 0, noCredential: 0, multipleCredentials: 0, skipped: 0 };
+  const counts = { bound: 0, withoutConnection: 0, severalConnections: 0, skipped: 0 };
   const candidates = await prisma.bot.findMany({ where: legacyPin, select: { id: true } });
   const catalog = listPiCatalog();
   for (const candidate of candidates) {
@@ -38,8 +38,8 @@ export async function backfillRuntimePins({
           const bot = await tx.bot.findFirst({ where: { id: candidate.id, ...legacyPin } });
           if (!bot?.modelProvider) return "skipped";
           const credentials = await findUserModelCredentials(tx, bot.userId, bot.modelProvider);
-          if (!credentials.length) return "noCredential";
-          if (credentials.length !== 1) return "multipleCredentials";
+          if (!credentials.length) return "withoutConnection";
+          if (credentials.length !== 1) return "severalConnections";
           const credential = credentials[0]!;
           // Never attach the audit record to another owner's or space's conversation.
           const thread = await tx.thread.findFirst({

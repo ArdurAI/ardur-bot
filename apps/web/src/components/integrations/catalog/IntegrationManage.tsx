@@ -3,12 +3,15 @@ import type {
   IntegrationConnection,
   IntegrationDescriptor,
   IntegrationGrant,
+  IntegrationResourceConstraints,
   SpaceToolPolicies,
 } from "@ardurbot/contracts";
-import { Button, Checkbox } from "@ardurbot/ui-web";
+import { IntegrationResourceConstraintsSchema, notionResourceId } from "@ardurbot/contracts";
+import { Button, Checkbox, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../../../lib/rpc";
+import { ResourcePicker } from "./ResourcePicker";
 import { ToolPicker } from "./ToolPicker";
 
 export function IntegrationManage({
@@ -31,6 +34,17 @@ export function IntegrationManage({
   const [spaceToolPolicies, setSpaceToolPolicies] = useState<SpaceToolPolicies>(
     connection.spaceToolPolicies,
   );
+  const [parent, setParent] = useState(connection.resourceConstraints?.notion?.parentId ?? "");
+  const [parentKind, setParentKind] = useState<"page" | "database">(
+    connection.resourceConstraints?.notion?.kind ?? "page",
+  );
+  const [projects, setProjects] = useState(
+    connection.resourceConstraints?.jiraProjects?.join(", ") ?? "",
+  );
+  const [spaces, setSpaces] = useState(
+    connection.resourceConstraints?.confluenceSpaces?.join(", ") ?? "",
+  );
+  const [scopeError, setScopeError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -66,10 +80,30 @@ export function IntegrationManage({
     setBusy(true);
     setError(false);
     try {
+      const resourceConstraints: IntegrationResourceConstraints = {};
+      if (descriptor.id === "notion" && parent.trim()) {
+        const parentId = notionResourceId(parent);
+        if (!parentId) {
+          setScopeError(true);
+          return;
+        }
+        resourceConstraints.notion = { parentId, kind: parentKind };
+      }
+      const keys = (text: string) => [...new Set(text.split(/[\s,]+/).filter(Boolean))];
+      if (descriptor.id === "atlassian") {
+        resourceConstraints.jiraProjects = keys(projects);
+        resourceConstraints.confluenceSpaces = keys(spaces);
+      }
+      if (!IntegrationResourceConstraintsSchema.safeParse(resourceConstraints).success) {
+        setScopeError(true);
+        return;
+      }
+      setScopeError(false);
       const updated = await rpc.integrations.assign({
         connectionId: connection.id,
         botIds,
         toolIds,
+        ...(["notion", "atlassian"].includes(descriptor.id) ? { resourceConstraints } : {}),
         ...(JSON.stringify(spaceToolPolicies) === JSON.stringify(connection.spaceToolPolicies)
           ? {}
           : { spaceToolPolicies }),
@@ -152,6 +186,91 @@ export function IntegrationManage({
               </label>
             ))}
           </fieldset>
+          {descriptor.id === "notion" ? (
+            <fieldset disabled={busy} className="space-y-2">
+              <legend className="text-sm font-medium">{t`Allowed destination`}</legend>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  aria-pressed={parentKind === "page"}
+                  onClick={() => setParentKind("page")}
+                >{t`Parent page`}</Button>
+                <Button
+                  variant="outline"
+                  aria-pressed={parentKind === "database"}
+                  onClick={() => setParentKind("database")}
+                >{t`Database`}</Button>
+              </div>
+              <Input
+                aria-label={t`Notion page URL or ID`}
+                value={parent}
+                onChange={(event) => {
+                  setParent(event.target.value);
+                  setSaved(false);
+                }}
+              />
+              <ResourcePicker
+                connectionId={connection.id}
+                kind="notion"
+                onSelect={(choice) => {
+                  setParent(choice.id);
+                  setParentKind(choice.kind === "database" ? "database" : "page");
+                  setSaved(false);
+                }}
+              />
+            </fieldset>
+          ) : null}
+          {descriptor.id === "atlassian" ? (
+            <fieldset disabled={busy} className="space-y-2">
+              <legend className="text-sm font-medium">{t`Allowed destinations`}</legend>
+              <label htmlFor={`${controlId}-projects`} className="block text-sm">
+                {t`Jira project keys`}
+                <Input
+                  id={`${controlId}-projects`}
+                  aria-label={t`Jira project keys`}
+                  value={projects}
+                  onChange={(event) => {
+                    setProjects(event.target.value);
+                    setSaved(false);
+                  }}
+                />
+              </label>
+              <ResourcePicker
+                connectionId={connection.id}
+                kind="jira"
+                onSelect={(choice) => {
+                  setProjects((current) => [current, choice.id].filter(Boolean).join(", "));
+                  setSaved(false);
+                }}
+              />
+              <label htmlFor={`${controlId}-spaces`} className="block text-sm">
+                {t`Confluence space keys or IDs`}
+                <Input
+                  id={`${controlId}-spaces`}
+                  aria-label={t`Confluence space keys or IDs`}
+                  value={spaces}
+                  onChange={(event) => {
+                    setSpaces(event.target.value);
+                    setSaved(false);
+                  }}
+                />
+              </label>
+              <ResourcePicker
+                connectionId={connection.id}
+                kind="confluence"
+                onSelect={(choice) => {
+                  setSpaces((current) => [current, choice.id].filter(Boolean).join(", "));
+                  setSaved(false);
+                }}
+              />
+            </fieldset>
+          ) : null}
+          {scopeError ? (
+            <p
+              role="alert"
+              className="text-sm text-destructive"
+            >{t`Enter a valid destination and save again.`}</p>
+          ) : null}
           {connection.manifest ? (
             <ToolPicker
               descriptor={descriptor}

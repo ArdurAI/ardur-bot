@@ -1,18 +1,27 @@
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
+import type { CommandBlock as FixtureCommandBlock } from "@ardurbot/contracts";
+import type { ActionApprovalRule } from "@ardurbot/core";
 import {
   legacyScopedToolEffectIdempotencyKey,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
 import { describe, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "./auto-review.js";
+import { commandComputerFingerprint } from "./command-replay.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
+import { acquireComputerExecutionLease, provisionComputer } from "./computer-lifecycle.js";
+import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
 import { createRunExecutor } from "./executor.js";
 import { ProviderError } from "./provider-error.js";
 
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
-  acquireComputerExecutionLease: async () => null,
-  provisionComputer: async () => ({ id: "computer-1", kind: "desktop" }),
+  acquireComputerExecutionLease: vi.fn(async () => null),
+  provisionComputer: vi.fn(async () => ({
+    id: "computer-1",
+    kind: "desktop",
+    providerRef: "/workspace",
+  })),
 }));
 
 vi.mock("./auto-review.js", async (importOriginal) => ({
@@ -20,6 +29,10 @@ vi.mock("./auto-review.js", async (importOriginal) => ({
   resolveAutoReviewChecker: () => ({ provider: "scripted", model: "checker" }),
   isAutoReviewCheckerConfigured: () => true,
   runAutoReviewJudge: vi.fn(),
+}));
+
+vi.mock("./computer-workspace.js", () => ({
+  checkpointRunComputerWorkspace: vi.fn(async () => undefined),
 }));
 
 type Effect = {
@@ -63,6 +76,7 @@ function fixture(runId = "run-1") {
     status: "queued",
     trigger: "user",
     leaseFence: 0,
+    commandReplayId: null as string | null,
   };
   const memoryCommit = vi.fn(async () => ({ revision: "rev-1" }));
   const externalEffect = {
@@ -114,8 +128,29 @@ function fixture(runId = "run-1") {
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };
+  const computer = {
+    id: "computer-1",
+    scope: "dedicated",
+    kind: "desktop",
+    homeKey: "home-1",
+    providerRef: "/workspace",
+  };
+  const replayRequest = { command: "pnpm test", cwd: "/workspace" };
   const prisma = {
+    event: {
+      findFirst: vi.fn(async () => ({
+        runId: "source-run",
+        payload: {
+          block: commandBlock(),
+          replay: {
+            request: replayRequest,
+            computerFingerprint: commandComputerFingerprint(computer, "/workspace", "/workspace"),
+          },
+        },
+      })),
+    },
     run: {
+      findFirst: vi.fn(async () => run),
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
       updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -130,7 +165,7 @@ function fixture(runId = "run-1") {
         title: "Assistant",
         description: "Test assistant",
         computerId: "computer-1",
-        computer: { id: "computer-1", scope: "dedicated" },
+        computer,
       })),
       findMany: vi.fn(async () => []),
     },
@@ -190,7 +225,7 @@ function fixture(runId = "run-1") {
         },
       ),
     },
-    actionApprovalRule: { findMany: vi.fn(async () => []) },
+    actionApprovalRule: { findMany: vi.fn(async (): Promise<ActionApprovalRule[]> => []) },
     actionAutoReviewPreference: { findUnique: vi.fn(async () => ({ enabled: false })) },
     externalEffect,
   };
@@ -209,6 +244,13 @@ function fixture(runId = "run-1") {
     }
     yield { type: "done" as const, text: "Done" };
   });
+  const sandboxExecute = vi.fn(async function* () {
+    yield { type: "stdout" as const, data: "Tests passed." };
+    yield { type: "exit" as const, code: 0 };
+  });
+  const resolveCommandCwd = vi.fn(async () => "/workspace");
+  const sandboxDescription = { capabilities: { graphical: false } };
+  const events = { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun };
   const executor = createRunExecutor({
     prisma,
     secretStore: { load: () => "test-key" },
@@ -218,7 +260,11 @@ function fixture(runId = "run-1") {
       resolveCall: async () => undefined,
       execute: async function* () {},
     },
-    sandbox: { describe: () => ({ capabilities: { graphical: false } }) },
+    sandbox: {
+      describe: () => sandboxDescription,
+      resolveCommandCwd,
+      execute: sandboxExecute,
+    },
     memory: {
       describe: () => ({ capabilities: {} }),
       read: async () => ({ documents: [] }),
@@ -227,7 +273,7 @@ function fixture(runId = "run-1") {
       exportMarkdown: async function* () {},
     },
     memoryProviders: { resolve: async () => null },
-    events: { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun },
+    events,
     jobs: { enqueue: vi.fn(async () => undefined) },
     secrets: [],
   } as unknown as Parameters<typeof createRunExecutor>[0]);
@@ -235,6 +281,12 @@ function fixture(runId = "run-1") {
   return {
     executor,
     prisma,
+    sandboxExecute,
+    resolveCommandCwd,
+    sandboxDescription,
+    replayRequest,
+    computer,
+    events,
     runRecord: run,
     runtimeRun,
     finalizeRun,
@@ -662,3 +714,134 @@ it("keeps a malformed snapshot failed across retries instead of binding the curr
   expect(f.runtimeRun).not.toHaveBeenCalled();
   expect(f.effects).toEqual([]);
 });
+
+describe("command rerun through the authoritative executor", () => {
+  it("rechecks current explicit approval rules; denial executes nothing", async () => {
+    const f = fixture("rerun-1");
+    f.runRecord.commandReplayId = "command-1";
+    f.prisma.actionApprovalRule.findMany.mockResolvedValue([
+      { effect: "require_approval", matchKind: "tool", matchValue: "shell" },
+    ]);
+    await f.executor.continueRun("rerun-1", "worker-1");
+    expect(f.events.pauseRunForInput).toHaveBeenCalledOnce();
+    expect(f.sandboxExecute).not.toHaveBeenCalled();
+    expect(f.effects[0]?.status).toBe("intended");
+    f.effects[0]!.status = "denied";
+    f.runRecord.status = "queued";
+    await f.executor.continueRun("rerun-1", "worker-1");
+    expect(f.sandboxExecute).not.toHaveBeenCalled();
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+  });
+  it("retains webhook mandatory approval even when a rule allows shell", async () => {
+    const f = fixture("rerun-webhook");
+    f.runRecord.commandReplayId = "command-1";
+    f.runRecord.trigger = "webhook";
+    f.prisma.actionApprovalRule.findMany.mockResolvedValue([
+      { effect: "always_allow", matchKind: "tool", matchValue: "shell" },
+    ]);
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.events.pauseRunForInput).toHaveBeenCalledOnce();
+    expect(f.sandboxExecute).not.toHaveBeenCalled();
+  });
+  it("keeps shell exempt by default, records execution, and uses a fresh effect identity", async () => {
+    const f = fixture("rerun-allowed");
+    f.runRecord.commandReplayId = "command-1";
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+    expect(acquireComputerExecutionLease).toHaveBeenCalled();
+    expect(checkpointRunComputerWorkspace).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "computer-1" }),
+      expect.anything(),
+      expect.objectContaining({ runId: "rerun-allowed" }),
+    );
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    expect(f.effects[0]?.idempotencyKey).toContain("rerun-allowed");
+    expect(f.events.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "command.finished",
+        payload: expect.objectContaining({
+          block: expect.objectContaining({ replayOf: "command-1", exitCode: 0 }),
+        }),
+      }),
+    );
+    expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "completed" }));
+  });
+  it("rechecks the workspace in the worker after the rerun was queued", async () => {
+    const f = fixture("rerun-moved-root");
+    f.runRecord.commandReplayId = "command-1";
+    f.resolveCommandCwd.mockResolvedValue("/replacement-root");
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.sandboxExecute).not.toHaveBeenCalled();
+    expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+    expect(f.effects).toEqual([]);
+  });
+  it("keeps the desktop protection guard in the rerun path", async () => {
+    const f = fixture("rerun-protected");
+    f.runRecord.commandReplayId = "command-1";
+    f.sandboxDescription.capabilities.graphical = true;
+    f.computer.kind = "docker";
+    vi.mocked(provisionComputer).mockResolvedValueOnce({
+      id: "computer-1",
+      botId: "bot-1",
+      kind: "docker",
+      providerRef: "/workspace",
+    });
+    f.replayRequest.command = "pkill chromium";
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.sandboxExecute).not.toHaveBeenCalled();
+    expect(f.events.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "command.finished",
+        payload: expect.objectContaining({
+          block: expect.objectContaining({
+            outcome: "cancelled",
+            error: expect.stringContaining("desktop-protection"),
+          }),
+        }),
+      }),
+    );
+  });
+  it("records delegated shell calls through the same callback", async () => {
+    const f = fixture();
+    f.setCalls([{ name: "shell", args: { command: "pnpm test" }, executionId: "subagent:call-1" }]);
+    await f.run();
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+    expect(f.events.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "command.intent",
+        payload: expect.objectContaining({
+          block: expect.objectContaining({
+            executionId: "subagent:call-1",
+            attemptId: "attempt-1",
+          }),
+        }),
+      }),
+    );
+  });
+});
+
+function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureCommandBlock {
+  return {
+    commandId: "command-1",
+    runId: "run-1",
+    attemptId: "attempt-1",
+    executionId: "execution-1",
+    command: "pnpm test",
+    cwd: "/workspace",
+    computerId: "computer-1",
+    computer: "docker:container-1",
+    startedAt: "2026-09-23T12:00:00.000Z",
+    durationMs: 12000,
+    exitCode: 0,
+    outcome: "completed",
+    stdout: "Tests passed.\n",
+    stderr: "",
+    error: null,
+    redacted: false,
+    truncated: false,
+    replayOf: null,
+    rerunDisabledReason: null,
+    ...overrides,
+  };
+}

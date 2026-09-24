@@ -2,6 +2,7 @@ import type { RealtimeFanout } from "@ardurbot/adapter-kit";
 import type { RunFailurePayload } from "@ardurbot/contracts";
 import {
   type BotSecretDestination,
+  CommandEventPayloadSchema,
   type MessageBlock,
   MessageBlock as MessageBlockSchema,
   type ProductEvent,
@@ -9,6 +10,7 @@ import {
 import {
   blocksToAgentHistoryText,
   isApprovalAskBlock,
+  isCommandEvent,
   isSecretAskBlock,
   messagingChannelId,
   resolveAskChoice,
@@ -17,6 +19,7 @@ import {
 import { getLogger } from "@ardurbot/logging";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
+import { materializeCommandEvent } from "./command-blocks.js";
 import { expireComputerExecutionLeases } from "./computers.js";
 import {
   assertRunCanWriteHistory,
@@ -1222,10 +1225,24 @@ export async function appendEventInTransaction(
     data: { nextEventSeq: { increment: 1 } },
     select: { nextEventSeq: true },
   });
+  if (isCommandEvent(input.type)) {
+    const payload = CommandEventPayloadSchema.parse(input.payload);
+    if (payload.block.runId !== input.runId)
+      throw new Error("Command run does not match event run");
+    const existing = await tx.event.findFirst({
+      where: {
+        threadId: input.threadId,
+        runId: input.runId,
+        type: input.type,
+        payload: { path: ["block", "commandId"], equals: payload.block.commandId },
+      },
+    });
+    if (existing) return existing;
+  }
   await assertRunCanWriteHistory(tx, input.runId);
   // Unpaired UTF-16 surrogates (e.g. a split emoji high half) are invalid JSON for Postgres.
   const payload = sanitizeJsonValue(input.payload);
-  return tx.event.create({
+  const event = await tx.event.create({
     data: {
       spaceId: input.spaceId,
       threadId: input.threadId,
@@ -1236,6 +1253,8 @@ export async function appendEventInTransaction(
       runId: input.runId,
     },
   });
+  await materializeCommandEvent(tx, event);
+  return event;
 }
 
 async function notifyRealtime(

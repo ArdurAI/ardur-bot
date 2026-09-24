@@ -193,6 +193,14 @@ export class E2BSandboxProvider implements SandboxProvider {
       throw new Error(result.stderr || "could not prepare computer desktop tools");
   }
 
+  async resolveCommandCwd(
+    _computer: ComputerRef,
+    cwd: string | undefined,
+    _context: AdapterContext,
+  ): Promise<string | null> {
+    return e2bCwd(cwd);
+  }
+
   async *execute(
     computer: ComputerRef,
     request: CommandRequest,

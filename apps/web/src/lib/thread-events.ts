@@ -10,10 +10,12 @@ import type {
 import { ProviderErrorKindSchema, RuntimeProblemSchema } from "@ardurbot/contracts";
 import {
   isActive,
+  isCommandEvent,
   isRunTerminalEvent,
   mergeThreadHistory,
   prependThreadHistoryPage,
   progressMessageId,
+  reduceCommandMessages,
   reduceLiveMessageBlocks,
   runFailureError,
   subagentBlockFromPayload,
@@ -243,6 +245,7 @@ export function prependThreadMessagePage(
 
 export function isThreadSnapshotEvent(event: ProductEvent): boolean {
   return (
+    isCommandEvent(event.type) ||
     event.type === "thread.cleared" ||
     event.type === "thread.progress" ||
     event.type === "thread.subagent" ||
@@ -264,6 +267,11 @@ export function reduceThreadSnapshot(
   event: ProductEvent,
 ): ThreadSnapshot | null {
   if (!prev) return prev;
+  if (isCommandEvent(event.type) && event.seq <= (prev.cursor ?? -1)) return prev;
+  if (isCommandEvent(event.type))
+    return { ...prev, cursor: event.seq, messages: reduceCommandMessages(prev.messages, event) };
+  if (isRunTerminalEvent(event))
+    prev = { ...prev, messages: reduceCommandMessages(prev.messages, event) };
   if (event.type === "thread.cleared") {
     return {
       ...prev,

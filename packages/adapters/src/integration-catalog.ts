@@ -22,10 +22,17 @@ export const integrationCatalog: readonly IntegrationDescriptor[] = [
     id: "github",
     name: "GitHub",
     vendor: "github",
+    authKind: "token",
+    tokenUrl: "https://github.com/settings/personal-access-tokens/new",
+    oauthApp: {
+      clientIdEnv: "GITHUB_MCP_CLIENT_ID",
+      clientSecretEnv: "GITHUB_MCP_CLIENT_SECRET",
+    },
     available: true,
     riskClass: "collaboration",
     endpoint: "https://api.githubcopilot.com/mcp/",
-    docsUrl: "https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md",
+    docsUrl:
+      "https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp-in-your-ide/set-up-the-github-mcp-server",
   },
   {
     ...common,
@@ -48,6 +55,17 @@ export const integrationCatalog: readonly IntegrationDescriptor[] = [
     endpoint: "https://mcp.atlassian.com/v2/mcp",
     docsUrl:
       "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/",
+  },
+  {
+    ...common,
+    id: "notion",
+    name: "Notion",
+    vendor: "notion",
+    available: true,
+    riskClass: "collaboration",
+    endpoint: "https://mcp.notion.com/mcp",
+    apiVersion: "2026-03-11",
+    docsUrl: "https://developers.notion.com/guides/mcp/get-started-with-mcp",
   },
   ...[
     ["jenkins", "Jenkins", "https://www.jenkins.io/doc/"],

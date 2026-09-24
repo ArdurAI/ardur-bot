@@ -2,6 +2,7 @@ import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
+import { CommandBlockSchema } from "./command-blocks.js";
 import {
   ActionApprovalRuleSchema,
   ActionAutoReviewSettingsSchema,
@@ -76,10 +77,14 @@ import {
 import { ProductEventSchema } from "./events.js";
 import { Id, IsoDate } from "./ids.js";
 import {
+  IntegrationCatalogListSchema,
   IntegrationConnectionSchema,
-  IntegrationDescriptorSchema,
   IntegrationGrantSchema,
   IntegrationManifestSchema,
+  IntegrationResourceChoiceSchema,
+  IntegrationResourceConstraintsSchema,
+  IntegrationResourceKindSchema,
+  IntegrationResourceToolSchema,
   SpaceToolPoliciesSchema,
 } from "./integration-catalog.js";
 import {
@@ -158,7 +163,19 @@ const threadSendInput = threadTarget
     }
   });
 
+const CommandReference = z.object({ runId: Id, commandId: Id });
 export const appContract = {
+  commands: {
+    list: oc
+      .input(z.object({ runId: Id, query: z.string().max(256).optional() }))
+      .output(z.object({ blocks: z.array(CommandBlockSchema) })),
+    open: oc.input(CommandReference).output(CommandBlockSchema),
+    export: oc
+      .input(z.object({ runId: Id, commandId: Id.optional() }))
+      .output(z.object({ text: z.string(), filename: z.string() })),
+    share: oc.input(CommandReference).output(z.object({ path: z.string() })),
+    rerun: oc.input(CommandReference).output(z.object({ runId: Id })),
+  },
   aiConsent: {
     status: oc.input(AiConsentQuerySchema).output(AiConsentStatusSchema),
     allow: oc
@@ -623,15 +640,22 @@ export const appContract = {
     remove: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
   },
   integrations: {
-    list: oc.output(
-      z.object({
-        catalog: z.array(IntegrationDescriptorSchema),
-        connections: z.array(IntegrationConnectionSchema),
-      }),
-    ),
+    list: oc.output(IntegrationCatalogListSchema),
     connect: oc
       .input(
-        z.object({ catalogId: Id, connectionId: Id.optional(), host: z.string().url().optional() }),
+        z.object({
+          catalogId: Id,
+          connectionId: Id.optional(),
+          host: z.string().url().optional(),
+          token: z
+            .string()
+            .trim()
+            .min(1)
+            .max(16_384)
+            .regex(/^[^\s]+$/)
+            .optional(),
+          authKind: z.enum(["oauth", "token"]).optional(),
+        }),
       )
       .output(
         z.object({
@@ -647,9 +671,23 @@ export const appContract = {
           botIds: z.array(Id).max(500),
           toolIds: z.array(z.string().min(1).max(200)).max(2000),
           spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
+          resourceConstraints: IntegrationResourceConstraintsSchema.optional(),
         }),
       )
       .output(z.array(IntegrationGrantSchema)),
+    resourceTools: oc
+      .input(z.object({ connectionId: Id, kind: IntegrationResourceKindSchema }))
+      .output(z.array(IntegrationResourceToolSchema)),
+    searchResources: oc
+      .input(
+        z.object({
+          connectionId: Id,
+          kind: IntegrationResourceKindSchema,
+          toolId: z.string().min(1).max(200),
+          args: z.record(z.string(), z.string().max(1000)),
+        }),
+      )
+      .output(z.array(IntegrationResourceChoiceSchema)),
     grants: oc.input(z.object({ connectionId: Id })).output(z.array(IntegrationGrantSchema)),
     revoke: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     cancel: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),

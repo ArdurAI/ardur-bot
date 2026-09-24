@@ -22,6 +22,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { IntegrationCatalog } from "../components/integration-catalog";
 import { rpc } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
@@ -79,6 +80,7 @@ export default function Integrations() {
   const { t } = useI18n();
   const { width } = useWindowDimensions();
   const catalogColumns = width >= 480 ? 2 : 1;
+  const [otherOpen, setOtherOpen] = useState(false);
   const [catalog, setCatalog] = useState<ConnectionCatalogItem[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [query, setQuery] = useState("");
@@ -150,13 +152,14 @@ export default function Integrations() {
   }
 
   useEffect(() => {
+    if (!otherOpen) return;
     void refresh().catch((reason) => {
       setCatalogReady(false);
       setCatalogError(reason instanceof Error ? reason.message : t("Could not load integrations"));
     });
     void loadLastBotId().then(setLastBotId);
     return () => connectionAttempt.current?.abort();
-  }, []);
+  }, [otherOpen]);
 
   useEffect(() => {
     if (!detailKey) {
@@ -569,241 +572,259 @@ export default function Integrations() {
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-        {!detailItem ? (
-          <TextInput
-            value={query}
-            onChangeText={(value) => {
-              setQuery(value);
-              setVisibleCount(CONNECTION_CATALOG_PAGE_SIZE);
-            }}
-            accessibilityLabel={t("Search apps")}
-            placeholder={t("Search apps")}
-            placeholderTextColor={native.tertiaryLabel}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-            style={styles.input}
-          />
-        ) : null}
-
-        {catalogError ? <Text style={styles.error}>{catalogError}</Text> : null}
-
-        {detailItem ? (
-          renderDetail(detailItem)
-        ) : (
+        <IntegrationCatalog />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: otherOpen }}
+          onPress={() => setOtherOpen(!otherOpen)}
+          style={styles.smallButton}
+        >
+          <Text style={styles.buttonLabel}>{t("Other integrations")}</Text>
+        </Pressable>
+        {otherOpen ? (
           <>
-            {!catalogReady ? <ActivityIndicator color={native.fillPressed} /> : null}
-
-            {catalogReady && catalog.length === 0 ? (
-              <Text style={styles.secondary}>{t(EMPTY_PLUGIN_CATALOG_MESSAGE)}</Text>
+            {!detailItem ? (
+              <TextInput
+                value={query}
+                onChangeText={(value) => {
+                  setQuery(value);
+                  setVisibleCount(CONNECTION_CATALOG_PAGE_SIZE);
+                }}
+                accessibilityLabel={t("Search apps")}
+                placeholder={t("Search apps")}
+                placeholderTextColor={native.tertiaryLabel}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                style={styles.input}
+              />
             ) : null}
 
-            {catalogReady && catalog.length > 0 ? (
-              <View style={catalogColumns === 2 ? styles.catalogGrid : styles.catalogStack}>
-                {showFeatured
-                  ? featuredTiles.map((tile) => {
-                      const item = tile.item;
-                      const key = item ? itemKey(item) : tile.id;
-                      const disabled = tile.missing || !item;
-                      if (item && !tile.missing) {
-                        return renderCatalogTile(item, tile.label);
-                      }
-                      return (
-                        <View
-                          key={key}
-                          style={[
-                            styles.row,
-                            catalogColumns === 2 ? styles.catalogCell : null,
-                            disabled ? { opacity: 0.7 } : null,
-                          ]}
-                        >
-                          <ConnectorLogo label={tile.label} styles={styles} />
-                          <View style={styles.grow}>
-                            <Text numberOfLines={1} style={styles.title}>
-                              {tile.label}
-                            </Text>
-                            {disabled ? (
-                              <Text style={styles.secondary}>{t("Not in the plugin catalog")}</Text>
-                            ) : null}
-                          </View>
-                        </View>
-                      );
-                    })
-                  : null}
-                {renderedApps.map((item) => renderCatalogTile(item, item.name))}
-              </View>
-            ) : null}
+            {catalogError ? <Text style={styles.error}>{catalogError}</Text> : null}
 
-            {catalogReady && catalog.length > 0 && catalogApps.length === 0 && !showFeatured ? (
-              <Text style={styles.secondary}>{t("No apps match your search.")}</Text>
-            ) : null}
+            {detailItem ? (
+              renderDetail(detailItem)
+            ) : (
+              <>
+                {!catalogReady ? <ActivityIndicator color={native.fillPressed} /> : null}
 
-            {renderedApps.length < catalogApps.length ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setVisibleCount((count) => count + CONNECTION_CATALOG_PAGE_SIZE)}
-                style={styles.smallButton}
-              >
-                <Text style={styles.buttonLabel}>{t("Show more")}</Text>
-              </Pressable>
-            ) : null}
+                {catalogReady && catalog.length === 0 ? (
+                  <Text style={styles.secondary}>{t(EMPTY_PLUGIN_CATALOG_MESSAGE)}</Text>
+                ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ expanded: advancedOpen }}
-              testID="integrations-advanced"
-              onPress={() => {
-                if (advancedOpen) closeAdvanced();
-                else setAdvancedOpen(true);
-              }}
-              style={styles.advancedToggle}
-            >
-              <Text style={styles.advancedLabel}>{t("Advanced")}</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
+                {catalogReady && catalog.length > 0 ? (
+                  <View style={catalogColumns === 2 ? styles.catalogGrid : styles.catalogStack}>
+                    {showFeatured
+                      ? featuredTiles.map((tile) => {
+                          const item = tile.item;
+                          const key = item ? itemKey(item) : tile.id;
+                          const disabled = tile.missing || !item;
+                          if (item && !tile.missing) {
+                            return renderCatalogTile(item, tile.label);
+                          }
+                          return (
+                            <View
+                              key={key}
+                              style={[
+                                styles.row,
+                                catalogColumns === 2 ? styles.catalogCell : null,
+                                disabled ? { opacity: 0.7 } : null,
+                              ]}
+                            >
+                              <ConnectorLogo label={tile.label} styles={styles} />
+                              <View style={styles.grow}>
+                                <Text numberOfLines={1} style={styles.title}>
+                                  {tile.label}
+                                </Text>
+                                {disabled ? (
+                                  <Text style={styles.secondary}>
+                                    {t("Not in the plugin catalog")}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            </View>
+                          );
+                        })
+                      : null}
+                    {renderedApps.map((item) => renderCatalogTile(item, item.name))}
+                  </View>
+                ) : null}
 
-            {advancedOpen ? (
-              <View style={styles.advancedBody}>
-                <View style={styles.accountActions}>
-                  {(["mcp", "api", "graphql", "executor", "treg"] as const).map((kind) => (
-                    <Pressable
-                      key={kind}
-                      accessibilityRole="button"
-                      onPress={() => beginSource(kind)}
-                      style={styles.smallButton}
-                    >
-                      <Text style={styles.buttonLabel}>
-                        {kind === "treg"
-                          ? t("Add Treg")
-                          : kind === "executor"
-                            ? t("Add Executor")
-                            : kind === "mcp"
-                              ? t("Add MCP server")
-                              : kind === "graphql"
-                                ? t("Add GraphQL")
-                                : t("Add OpenAPI")}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                {catalogReady && catalog.length > 0 && catalogApps.length === 0 && !showFeatured ? (
+                  <Text style={styles.secondary}>{t("No apps match your search.")}</Text>
+                ) : null}
 
-                {sourceError ? <Text style={styles.error}>{sourceError}</Text> : null}
+                {renderedApps.length < catalogApps.length ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setVisibleCount((count) => count + CONNECTION_CATALOG_PAGE_SIZE)}
+                    style={styles.smallButton}
+                  >
+                    <Text style={styles.buttonLabel}>{t("Show more")}</Text>
+                  </Pressable>
+                ) : null}
 
-                {sourceKind ? (
-                  <View style={styles.card}>
-                    <Text style={styles.title}>
-                      {sourceKind === "treg"
-                        ? t("Connect Treg")
-                        : sourceKind === "executor"
-                          ? t("Connect Executor")
-                          : sourceKind === "mcp"
-                            ? t("Remote MCP server")
-                            : sourceKind === "graphql"
-                              ? t("GraphQL endpoint")
-                              : t("OpenAPI JSON")}
-                    </Text>
-                    <TextInput
-                      value={name}
-                      onChangeText={setName}
-                      placeholder={t("Display name")}
-                      placeholderTextColor={native.tertiaryLabel}
-                      style={styles.input}
-                    />
-                    {sourceKind !== "treg" ? (
-                      <TextInput
-                        value={url}
-                        onChangeText={setUrl}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        placeholder={
-                          sourceKind === "mcp"
-                            ? t("https://example.com/mcp")
-                            : sourceKind === "executor"
-                              ? t("https://executor.example/mcp")
-                              : sourceKind === "graphql"
-                                ? t("https://example.com/graphql")
-                                : t("https://example.com/openapi.json")
-                        }
-                        placeholderTextColor={native.tertiaryLabel}
-                        style={styles.input}
-                      />
-                    ) : null}
-                    {sourceKind !== "treg" && sourceKind !== "executor" ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => setRequiresAuth((value) => !value)}
-                        style={styles.authToggle}
-                      >
-                        <Text style={styles.secondary}>
-                          {requiresAuth ? t("Bearer authentication") : t("No authentication")}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                    {sourceKind === "treg" || sourceKind === "executor" || requiresAuth ? (
-                      <TextInput
-                        value={credential}
-                        onChangeText={setCredential}
-                        secureTextEntry
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        placeholder={
-                          sourceKind === "treg"
-                            ? t("Treg token")
-                            : sourceKind === "executor"
-                              ? t("Executor token")
-                              : t("Bearer token")
-                        }
-                        placeholderTextColor={native.tertiaryLabel}
-                        style={styles.input}
-                      />
-                    ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: advancedOpen }}
+                  testID="integrations-advanced"
+                  onPress={() => {
+                    if (advancedOpen) closeAdvanced();
+                    else setAdvancedOpen(true);
+                  }}
+                  style={styles.advancedToggle}
+                >
+                  <Text style={styles.advancedLabel}>{t("Advanced")}</Text>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
+
+                {advancedOpen ? (
+                  <View style={styles.advancedBody}>
                     <View style={styles.accountActions}>
-                      <Pressable
-                        accessibilityRole="button"
-                        disabled={pending === "source"}
-                        onPress={() => void addSource()}
-                        style={styles.smallButton}
-                      >
-                        {pending === "source" ? (
-                          <ActivityIndicator color={native.label} />
-                        ) : (
-                          <Text style={styles.buttonLabel}>{t("Verify and add")}</Text>
-                        )}
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => setSourceKind(null)}
-                        style={styles.smallButton}
-                      >
-                        <Text style={styles.buttonLabel}>{t("Cancel")}</Text>
-                      </Pressable>
+                      {(["mcp", "api", "graphql", "executor", "treg"] as const).map((kind) => (
+                        <Pressable
+                          key={kind}
+                          accessibilityRole="button"
+                          onPress={() => beginSource(kind)}
+                          style={styles.smallButton}
+                        >
+                          <Text style={styles.buttonLabel}>
+                            {kind === "treg"
+                              ? t("Add Treg")
+                              : kind === "executor"
+                                ? t("Add Executor")
+                                : kind === "mcp"
+                                  ? t("Add MCP server")
+                                  : kind === "graphql"
+                                    ? t("Add GraphQL")
+                                    : t("Add OpenAPI")}
+                          </Text>
+                        </Pressable>
+                      ))}
                     </View>
-                  </View>
-                ) : null}
 
-                <Text style={styles.section}>{t("Tool sources")}</Text>
-                {sources.length === 0 ? (
-                  <Text style={styles.secondary}>{t("No custom sources installed.")}</Text>
-                ) : null}
-                {sources.map((source) => (
-                  <View key={source.id} style={styles.row}>
-                    <View style={styles.grow}>
-                      <Text style={styles.title}>{source.name}</Text>
-                      <Text numberOfLines={1} style={styles.secondary}>
-                        {source.kind.toUpperCase()} · {source.source}
-                      </Text>
-                    </View>
-                    <Pressable accessibilityRole="button" onPress={() => void removeSource(source)}>
-                      <Text style={styles.remove}>
-                        {pending === source.id ? t("Removing…") : t("Remove")}
-                      </Text>
-                    </Pressable>
+                    {sourceError ? <Text style={styles.error}>{sourceError}</Text> : null}
+
+                    {sourceKind ? (
+                      <View style={styles.card}>
+                        <Text style={styles.title}>
+                          {sourceKind === "treg"
+                            ? t("Connect Treg")
+                            : sourceKind === "executor"
+                              ? t("Connect Executor")
+                              : sourceKind === "mcp"
+                                ? t("Remote MCP server")
+                                : sourceKind === "graphql"
+                                  ? t("GraphQL endpoint")
+                                  : t("OpenAPI JSON")}
+                        </Text>
+                        <TextInput
+                          value={name}
+                          onChangeText={setName}
+                          placeholder={t("Display name")}
+                          placeholderTextColor={native.tertiaryLabel}
+                          style={styles.input}
+                        />
+                        {sourceKind !== "treg" ? (
+                          <TextInput
+                            value={url}
+                            onChangeText={setUrl}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            placeholder={
+                              sourceKind === "mcp"
+                                ? t("https://example.com/mcp")
+                                : sourceKind === "executor"
+                                  ? t("https://executor.example/mcp")
+                                  : sourceKind === "graphql"
+                                    ? t("https://example.com/graphql")
+                                    : t("https://example.com/openapi.json")
+                            }
+                            placeholderTextColor={native.tertiaryLabel}
+                            style={styles.input}
+                          />
+                        ) : null}
+                        {sourceKind !== "treg" && sourceKind !== "executor" ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => setRequiresAuth((value) => !value)}
+                            style={styles.authToggle}
+                          >
+                            <Text style={styles.secondary}>
+                              {requiresAuth ? t("Bearer authentication") : t("No authentication")}
+                            </Text>
+                          </Pressable>
+                        ) : null}
+                        {sourceKind === "treg" || sourceKind === "executor" || requiresAuth ? (
+                          <TextInput
+                            value={credential}
+                            onChangeText={setCredential}
+                            secureTextEntry
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            placeholder={
+                              sourceKind === "treg"
+                                ? t("Treg token")
+                                : sourceKind === "executor"
+                                  ? t("Executor token")
+                                  : t("Bearer token")
+                            }
+                            placeholderTextColor={native.tertiaryLabel}
+                            style={styles.input}
+                          />
+                        ) : null}
+                        <View style={styles.accountActions}>
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={pending === "source"}
+                            onPress={() => void addSource()}
+                            style={styles.smallButton}
+                          >
+                            {pending === "source" ? (
+                              <ActivityIndicator color={native.label} />
+                            ) : (
+                              <Text style={styles.buttonLabel}>{t("Verify and add")}</Text>
+                            )}
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => setSourceKind(null)}
+                            style={styles.smallButton}
+                          >
+                            <Text style={styles.buttonLabel}>{t("Cancel")}</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : null}
+
+                    <Text style={styles.section}>{t("Tool sources")}</Text>
+                    {sources.length === 0 ? (
+                      <Text style={styles.secondary}>{t("No custom sources installed.")}</Text>
+                    ) : null}
+                    {sources.map((source) => (
+                      <View key={source.id} style={styles.row}>
+                        <View style={styles.grow}>
+                          <Text style={styles.title}>{source.name}</Text>
+                          <Text numberOfLines={1} style={styles.secondary}>
+                            {source.kind.toUpperCase()} · {source.source}
+                          </Text>
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => void removeSource(source)}
+                        >
+                          <Text style={styles.remove}>
+                            {pending === source.id ? t("Removing…") : t("Remove")}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
-            ) : null}
+                ) : null}
+              </>
+            )}
           </>
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

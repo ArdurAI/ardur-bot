@@ -556,6 +556,7 @@ model Task {
 }
 
 model Run {
+  commandReplayId      String?
   id                   String           @id @default(cuid())
   spaceId              String
   space                Space            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -1098,6 +1099,7 @@ model McpServer {
   manifest      Json?
   spaceAllowedTools Json          @default("[]")
   spaceToolPolicies Json          @default("{}")
+  resourceConstraints Json        @default("{}")
 
   @@unique([spaceId, userId, slug])
   @@index([spaceId, userId])

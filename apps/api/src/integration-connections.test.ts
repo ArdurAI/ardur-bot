@@ -1,10 +1,14 @@
-import { captureIntegrationManifest, McpConnector } from "@ardurbot/adapters";
+import { randomBytes } from "node:crypto";
+import { captureIntegrationManifest, EncryptedSecretStore, McpConnector } from "@ardurbot/adapters";
 import type { McpServer } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpSession } from "../../../packages/adapters/src/mcp-transport.js";
 import { IntegrationConnections, needsClientRegistration } from "./integration-connections.js";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 const actor = { spaceId: "space", userId: "owner" };
 const manifest = captureIntegrationManifest(
   [
@@ -71,7 +75,20 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
       },
     ),
   };
+  const secretRows = new Map<string, { id: string; ciphertext: string }>();
+  const secretStore = new EncryptedSecretStore(randomBytes(32).toString("hex"));
   const db = {
+    secret: {
+      create: vi.fn(async ({ data }) => {
+        secretRows.set(data.id, data);
+        return data;
+      }),
+      findFirst: vi.fn(async ({ where }) => secretRows.get(where.id) ?? null),
+      deleteMany: vi.fn(async ({ where }) => {
+        secretRows.delete(where.id);
+        return { count: 1 };
+      }),
+    },
     mcpServer,
     spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
     bot: {
@@ -111,13 +128,15 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
   const service = new IntegrationConnections(
     db as never,
     oauth as never,
-    {} as never,
+    secretStore,
     "https://app.example.test",
     { resolveHostname: async () => [{ address: "203.0.113.10", family: 4 }] },
     stdio,
   );
   return {
     service,
+    secretStore,
+    secretRows,
     db,
     oauth,
     row: () => row,
@@ -161,14 +180,103 @@ describe("catalog connection lifecycle", () => {
     f.oauth.begin.mockRejectedValueOnce(
       new Error("Incompatible auth server: does not support dynamic client registration"),
     );
-    expect((await f.service.connect(actor, { catalogId: "github" })).connection.state).toBe(
+    expect((await f.service.connect(actor, { catalogId: "notion" })).connection.state).toBe(
       "needs-client-registration",
     );
     f.oauth.begin.mockRejectedValueOnce(new Error("Bearer fake-secret"));
-    const failed = await f.service.connect(actor, { catalogId: "github" });
+    const failed = await f.service.connect(actor, { catalogId: "notion" });
     expect(failed.connection.state).toBe("discovery-failed");
     expect(JSON.stringify(failed)).not.toContain("fake-secret");
     expect(needsClientRegistration(new Error("network failed"))).toBe(false);
+  });
+  it("stores encrypted token material, discovers before Connected, and revokes it with grants", async () => {
+    const f = fixture();
+    const token = randomBytes(24).toString("hex");
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockImplementation(async (server) => {
+      const stored = f.secretRows.get(server.secretId!)!;
+      expect(stored.ciphertext).not.toContain(token);
+      expect(JSON.parse(f.secretStore.load(stored.ciphertext, stored.id))).toEqual({
+        secret: token,
+      });
+      return manifest;
+    });
+    const result = await f.service.connect(actor, { catalogId: "github", token });
+    expect(result.connection.state).toBe("connected");
+    expect(f.oauth.begin).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain(token);
+    expect(JSON.stringify(await f.service.list(actor))).not.toContain(token);
+    await f.service.assign(actor, {
+      connectionId: result.connection.id,
+      botIds: ["bot"],
+      toolIds: ["synthetic_read"],
+    });
+    await f.service.revoke(actor, result.connection.id);
+    expect(f.row().secretId).toBeNull();
+    expect(f.secretRows.size).toBe(0);
+    expect(await f.service.grants(actor, result.connection.id)).toEqual([]);
+  });
+  it("reports a bad token only as discovery-failed", async () => {
+    const f = fixture();
+    const token = randomBytes(24).toString("hex");
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockRejectedValue(new Error(token));
+    const result = await f.service.connect(actor, { catalogId: "github", token });
+    expect(result.connection.state).toBe("discovery-failed");
+    expect(JSON.stringify(result)).not.toContain(token);
+    expect(result.connection.manifest).toBeNull();
+  });
+  it("advertises configured OAuth without returning client values and rejects missing app configuration", async () => {
+    vi.stubEnv("GITHUB_MCP_CLIENT_ID", "");
+    vi.stubEnv("GITHUB_MCP_CLIENT_SECRET", "");
+    const f = fixture();
+    expect(
+      (await f.service.list(actor)).catalog.find((d) => d.id === "github")?.oauthAvailable,
+    ).toBe(false);
+    await expect(
+      f.service.connect(actor, { catalogId: "github", authKind: "oauth" }),
+    ).rejects.toThrow("not configured");
+    const client = randomBytes(12).toString("hex");
+    const secret = randomBytes(24).toString("hex");
+    vi.stubEnv("GITHUB_MCP_CLIENT_ID", client);
+    vi.stubEnv("GITHUB_MCP_CLIENT_SECRET", secret);
+    const listed = await f.service.list(actor);
+    expect(listed.catalog.find((d) => d.id === "github")?.oauthAvailable).toBe(true);
+    expect(JSON.stringify(listed)).not.toContain(secret);
+    expect(JSON.stringify(listed)).not.toContain(client);
+    await f.service.connect(actor, { catalogId: "github", authKind: "oauth" });
+    expect(f.oauth.begin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientInformation: {
+          client_id: client,
+          client_secret: secret,
+          token_endpoint_auth_method: "client_secret_post",
+        },
+      }),
+    );
+  });
+  it("persists resource constraints with a new revision and invalidates earlier approvals", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: "atlassian" });
+    const resourceConstraints = { jiraProjects: ["DEMO"], confluenceSpaces: ["DOCS"] };
+    await f.service.assign(actor, {
+      connectionId: "connection",
+      botIds: [],
+      toolIds: [],
+      resourceConstraints,
+    });
+    expect(f.row().resourceConstraints).toEqual(resourceConstraints);
+    expect((await f.service.list(actor)).connections[0]?.resourceConstraints).toEqual(
+      resourceConstraints,
+    );
+    expect(f.row().revision).toBe(2);
+    expect(f.db.externalEffect.updateMany).toHaveBeenCalled();
+    await expect(
+      f.service.assign(actor, {
+        connectionId: "connection",
+        botIds: [],
+        toolIds: [],
+        resourceConstraints: { jiraProjects: ["bad key"] },
+      }),
+    ).rejects.toThrow();
   });
   it("keeps custom stdio discovery behind the configured executable allowlist", async () => {
     const connect = vi.spyOn(McpSession.prototype, "connectStdio").mockResolvedValue();
@@ -331,10 +439,23 @@ describe("catalog connection lifecycle", () => {
       { ...actor, userId: "other" },
       { ...actor, spaceId: "other" },
     ]) {
+      await expect(f.service.resourceTools(other, "connection", "notion")).rejects.toThrow();
+      await expect(
+        f.service.searchResources(other, {
+          connectionId: "connection",
+          kind: "notion",
+          toolId: "synthetic_search",
+          args: {},
+        }),
+      ).rejects.toThrow();
       await expect(f.service.grants(other, "connection")).rejects.toThrow();
       await expect(f.service.revoke(other, "connection")).rejects.toThrow();
       await expect(
-        f.service.connect(other, { catalogId: "github", connectionId: "connection" }),
+        f.service.connect(other, {
+          catalogId: "github",
+          connectionId: "connection",
+          token: "synthetic-test-value",
+        }),
       ).rejects.toThrow();
       await expect(
         f.service.assign(other, { connectionId: "connection", botIds: ["bot"], toolIds: [] }),

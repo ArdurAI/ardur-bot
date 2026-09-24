@@ -1,7 +1,11 @@
 import type { AdapterContext, ConnectorCall } from "@ardurbot/adapter-kit";
 import type { SpaceToolPolicies } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { grantedMcpTools, integrationApprovalForCall } from "./integration-access.js";
+import {
+  grantedMcpTools,
+  integrationApprovalForCall,
+  integrationResourceDenial,
+} from "./integration-access.js";
 import { captureIntegrationManifest } from "./integration-manifest.js";
 import { McpConnector } from "./mcp-connector.js";
 
@@ -41,6 +45,7 @@ function fixture() {
       secretId: null,
       spaceAllowedTools: tools.map((tool) => tool.name),
       spaceToolPolicies: {} as SpaceToolPolicies,
+      resourceConstraints: {} as unknown,
     },
   };
   const calls: string[] = [];
@@ -238,6 +243,101 @@ describe("MCP integration authorization", () => {
       include: { server: true },
     });
     expect(f.calls).toEqual([]);
+    await f.connector.close();
+  });
+});
+
+describe("resource boundaries", () => {
+  const write = { id: "synthetic_write", description: "Write an item." };
+  const notion = {
+    catalogId: "notion",
+    resourceConstraints: { notion: { parentId: "a".repeat(32), kind: "page" } },
+  };
+  const atlassian = {
+    catalogId: "atlassian",
+    resourceConstraints: { jiraProjects: ["DEMO"], confluenceSpaces: ["DOCS"] },
+  };
+  it("permits the chosen Notion parent and denies missing, other, mixed and opaque targets", () => {
+    expect(
+      integrationResourceDenial(notion, write, {
+        parent: { page_id: "a".repeat(32) },
+        content: "Notes",
+      }),
+    ).toBeUndefined();
+    for (const args of [
+      {},
+      { page_id: "b".repeat(32) },
+      { parent: { page_id: "a".repeat(32) }, page_id: "b".repeat(32) },
+      { parent: "unknown" },
+      { parent: { page_id: "a".repeat(32) }, target_id: "b".repeat(32) },
+    ])
+      expect(integrationResourceDenial(notion, write, args)).toBe(
+        "Choose the allowed Notion destination before writing here.",
+      );
+    expect(
+      integrationResourceDenial({ catalogId: "notion" }, write, { page_id: "a".repeat(32) }),
+    ).toBeDefined();
+    expect(
+      integrationResourceDenial(
+        notion,
+        { id: "synthetic_search", description: "Search pages" },
+        {},
+      ),
+    ).toBeUndefined();
+    expect(
+      integrationResourceDenial(
+        notion,
+        { id: "synthetic_search", description: "Search pages" },
+        { action: "delete" },
+      ),
+    ).toBeDefined();
+  });
+  it("enforces every Jira project and Confluence space, including nested and query targets", () => {
+    for (const args of [
+      { projectKey: "DEMO" },
+      { fields: { project: { key: "DEMO" } } },
+      { issueIdOrKey: "DEMO-12" },
+      { spaceKey: "DOCS" },
+      { jql: 'project = "DEMO"' },
+      { cql: 'space = "DOCS"' },
+    ])
+      expect(integrationResourceDenial(atlassian, write, args)).toBeUndefined();
+    for (const args of [
+      { projectKey: "OTHER" },
+      { spaceKey: "OTHER" },
+      { projectKey: "DEMO", issueIdOrKey: "OTHER-2" },
+      { issueId: "123", projectKey: "DEMO" },
+      { pageId: "123", spaceKey: "DOCS" },
+      { jql: "project = DEMO OR project = OTHER" },
+      {},
+      { projectKey: ["DEMO", "OTHER"] },
+      { projectKey: "DEMO", query: "outside scope" },
+    ])
+      expect(integrationResourceDenial(atlassian, write, args)).toBe(
+        "This project or space is outside the allowed destinations.",
+      );
+  });
+  it("denies outside the constraint before dispatch for direct calls and approved replay", async () => {
+    const f = fixture();
+    const name = tools[0]!.name;
+    f.assignment.server.catalogId = "notion";
+    f.assignment.server.resourceConstraints = notion.resourceConstraints;
+    f.assignment.server.manifest = {
+      ...manifest,
+      tools: manifest.tools.map((tool) => ({ ...tool, description: "Write an item." })),
+    };
+    const call = { ...direct(name), args: { page_id: "b".repeat(32) } };
+    expect(await integrationApprovalForCall(f.db as never, call.route, context, call.args)).toBe(
+      "disabled",
+    );
+    expect(await collect(f.connector, call)).toMatchObject([
+      { type: "error", message: "Choose the allowed Notion destination before writing here." },
+    ]);
+    expect(f.calls).toEqual([]);
+    expect(
+      await collect(f.connector, { ...call, args: { page_id: "a".repeat(32) } }),
+    ).toMatchObject([{ type: "result" }]);
+    expect(f.calls).toEqual([name]);
     await f.connector.close();
   });
 });

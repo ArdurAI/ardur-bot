@@ -146,6 +146,7 @@ import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
+import { createCommandRoutes } from "./command-routes.js";
 import {
   executionBlocksUserTakeover,
   resolveBusyBotName,
@@ -517,7 +518,25 @@ export function createRouter(deps: RouterDeps) {
     return next({ context: { ...context, actor: context.actor } });
   });
 
+  const commands = createCommandRoutes(deps);
   return os.router({
+    commands: {
+      list: authed.commands.list.handler(({ context, input }) =>
+        commands.list(context.actor, input),
+      ),
+      open: authed.commands.open.handler(({ context, input }) =>
+        commands.open(context.actor, input),
+      ),
+      export: authed.commands.export.handler(({ context, input }) =>
+        commands.export(context.actor, input),
+      ),
+      share: authed.commands.share.handler(({ context, input }) =>
+        commands.share(context.actor, input),
+      ),
+      rerun: authed.commands.rerun.handler(({ context, input }) =>
+        commands.rerun(context.actor, input),
+      ),
+    },
     aiConsent: {
       status: authed.aiConsent.status.handler(({ context, input }) =>
         aiConsentStatus(deps, context.actor, input),
@@ -2834,6 +2853,12 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     integrations: {
+      resourceTools: authed.integrations.resourceTools.handler(({ context, input }) =>
+        integrations.resourceTools(context.actor, input.connectionId, input.kind),
+      ),
+      searchResources: authed.integrations.searchResources.handler(({ context, input }) =>
+        integrations.searchResources(context.actor, input),
+      ),
       list: authed.integrations.list.handler(({ context }) => integrations.list(context.actor)),
       connect: authed.integrations.connect.handler(({ context, input }) =>
         integrations.connect(context.actor, input),
