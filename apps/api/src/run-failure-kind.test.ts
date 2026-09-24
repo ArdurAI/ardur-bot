@@ -27,6 +27,8 @@ it("restores a typed pin problem after reload", async () => {
     kind: "problem",
     code: "pin-credential-missing",
     pin: {
+      // Stored pin problems now include the parsed runtime kind.
+      runtimeKind: "pi",
       provider: "xai",
       modelId: "grok-4.6",
       effort: "high",
