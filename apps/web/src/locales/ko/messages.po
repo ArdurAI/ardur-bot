@@ -122,6 +122,10 @@ msgstr ""
 msgid "{botName}’s computer"
 msgstr "{botName}의 컴퓨터"
 
+#: src/pages/dashboard/ComputersPanel.tsx
+msgid "{count} folders"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "{days}d ago"
 msgstr "{days}일 전"
@@ -161,6 +165,14 @@ msgstr ""
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "남은 시간 {remaining} · Bot은 화면만 보고 직접 조작하지 않습니다"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{requests} requests"
+msgstr ""
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{seconds}s"
+msgstr ""
+
 #: src/components/ArtifactFileCard.tsx
 msgid "{size} B"
 msgstr "{size} B"
@@ -168,6 +180,10 @@ msgstr "{size} B"
 #: src/pages/ActivityList.tsx
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{tokens} tokens"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
@@ -676,6 +692,10 @@ msgstr ""
 msgid "asks first"
 msgstr ""
 
+#: src/pages/dashboard/ComputersPanel.tsx
+msgid "Asleep"
+msgstr ""
+
 #. placeholder {0}: preset.time
 #: src/pages/RoutineSchedule.tsx
 msgid "at {0}"
@@ -781,6 +801,14 @@ msgstr ""
 msgid "Blocked — {0}"
 msgstr ""
 
+#: src/pages/shell/board-nav.ts
+msgid "Board"
+msgstr ""
+
+#: src/pages/dashboard/ComputersPanel.tsx
+msgid "Booting"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "라이브 데스크톱 시작 중…"
@@ -836,6 +864,8 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/shell/OpenToSetting.tsx
+#: src/pages/shell/top-nav.ts
 msgid "Bots"
 msgstr ""
 
@@ -913,6 +943,7 @@ msgstr "취소됨"
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "취소됨"
@@ -1212,6 +1243,7 @@ msgid "Complete"
 msgstr "완료"
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Completed"
 msgstr ""
@@ -1245,6 +1277,7 @@ msgid "Computer is stopped"
 msgstr "컴퓨터가 중지됨"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/panels.ts
 #: src/pages/SettingsOverlay.tsx
 msgid "Computers"
 msgstr "컴퓨터"
@@ -1338,6 +1371,8 @@ msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1392,6 +1427,10 @@ msgstr ""
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} 연결이 아직 진행 중입니다. 이 창을 닫고 나중에 다시 확인할 수 있습니다."
 
+#: src/pages/dashboard/panels.ts
+msgid "Connections"
+msgstr ""
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "Connectors"
 msgstr ""
@@ -1444,6 +1483,7 @@ msgid "Copy pairing details"
 msgstr ""
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/UsagePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr ""
@@ -1644,6 +1684,7 @@ msgstr ""
 msgid "Could not install connector"
 msgstr "도구 연결을 추가하지 못했습니다."
 
+#: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load"
 msgstr "불러올 수 없음"
@@ -2078,6 +2119,12 @@ msgstr "봇 아바타 맞춤설정"
 msgid "Dark"
 msgstr "다크"
 
+#: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/shell/OpenToSetting.tsx
+#: src/pages/shell/top-nav.ts
+msgid "Dashboard"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Database"
 msgstr ""
@@ -2425,6 +2472,11 @@ msgstr "이미지 한도는 1에서 1000 사이의 정수로 입력하세요."
 msgid "Enter this code at <0>{0}</0>"
 msgstr "<0>{0}</0>에서 이 코드를 입력하세요"
 
+#: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
+msgid "Error"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every"
@@ -2529,6 +2581,7 @@ msgid "failed"
 msgstr "실패"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "실패"
@@ -2654,6 +2707,15 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
+msgstr ""
+
+#: src/pages/dashboard/panels.ts
+msgid "Governance"
+msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Governance and encryption are not part of this build yet."
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
@@ -2809,6 +2871,10 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Inbox"
+msgstr ""
+
+#: src/pages/dashboard/LearningPanel.tsx
+msgid "Inbox ({count})"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -2972,6 +3038,8 @@ msgstr ""
 msgid "learned {0} things this week"
 msgstr ""
 
+#: src/pages/dashboard/LearningDialog.tsx
+#: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Learning"
@@ -3426,12 +3494,20 @@ msgstr "이 루틴의 이름을 정하세요"
 msgid "Namespace"
 msgstr ""
 
+#: src/pages/shell/TopNav.tsx
+msgid "Navigation"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "입력 필요"
 
 #: src/components/composer/ComposerMenu.tsx
 msgid "Needs reconnection"
+msgstr ""
+
+#: src/pages/dashboard/ConnectionsPanel.tsx
+msgid "Needs sign-in"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
@@ -3476,6 +3552,7 @@ msgstr "새 스킬"
 msgid "New space"
 msgstr "새 스페이스"
 
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Next"
 msgstr ""
@@ -3510,6 +3587,14 @@ msgstr "아직 연결된 채팅 앱이 없습니다."
 
 #: src/pages/LearningCurator.tsx
 msgid "No checks yet."
+msgstr ""
+
+#: src/pages/dashboard/panels.ts
+msgid "No computers"
+msgstr ""
+
+#: src/pages/dashboard/panels.ts
+msgid "No connections"
 msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -3564,6 +3649,11 @@ msgstr "사용 가능한 모델 목록이 없습니다."
 msgid "No models installed. Pull one to start."
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "No proposals"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "검색된 AI 서비스가 없습니다."
@@ -3572,6 +3662,7 @@ msgstr "검색된 AI 서비스가 없습니다."
 msgid "No remote MCP servers found"
 msgstr ""
 
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "No results"
@@ -3580,6 +3671,11 @@ msgstr "검색 결과가 없습니다"
 #: src/pages/RoutineEditor.tsx
 msgid "No runs yet"
 msgstr "아직 실행 기록이 없습니다"
+
+#: src/pages/dashboard/panels.ts
+#: src/pages/dashboard/RoutinesPanel.tsx
+msgid "No scheduled runs"
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -3597,6 +3693,10 @@ msgstr ""
 msgid "No trigger"
 msgstr "트리거 없음"
 
+#: src/pages/dashboard/panels.ts
+msgid "No usage"
+msgstr ""
+
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
 msgstr ""
@@ -3613,6 +3713,8 @@ msgstr ""
 msgid "Not available on this computer"
 msgstr ""
 
+#: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
 msgstr "연결되지 않음"
@@ -3655,6 +3757,11 @@ msgstr "실행 중인 작업 없음"
 msgid "Nothing remembered yet"
 msgstr "아직 기억한 내용이 없습니다"
 
+#: src/pages/dashboard/NowPanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Nothing running"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
 msgstr ""
@@ -3668,6 +3775,7 @@ msgid "Notion page URL or ID"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
+#: src/pages/dashboard/panels.ts
 msgid "Now"
 msgstr "지금"
 
@@ -3777,6 +3885,10 @@ msgstr ""
 
 #: src/pages/shell/command-palette.tsx
 msgid "Open terminal"
+msgstr ""
+
+#: src/pages/shell/OpenToSetting.tsx
+msgid "Open to"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -4048,6 +4160,7 @@ msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
@@ -4095,6 +4208,7 @@ msgid "Recall only"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
+#: src/pages/dashboard/RoutinesPanel.tsx
 msgid "Recent"
 msgstr "최근"
 
@@ -4394,6 +4508,7 @@ msgstr "마지막으로 저장된 작업 공간을 복원합니다. 컴퓨터에
 msgid "Restoring your workspace"
 msgstr ""
 
+#: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -4492,6 +4607,7 @@ msgstr "key 교체"
 msgid "Routine"
 msgstr "자동 실행"
 
+#: src/pages/dashboard/panels.ts
 #: src/pages/RoutineEditor.tsx
 msgid "Routines"
 msgstr "자동 실행"
@@ -4526,6 +4642,7 @@ msgstr "실행 중"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "실행 중"
@@ -5025,11 +5142,16 @@ msgstr "가르치기 종료"
 msgid "Stop the current run"
 msgstr ""
 
+#: src/pages/dashboard/ComputersPanel.tsx
+msgid "Stopped"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "중지되었습니다."
 
+#: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
 msgstr ""
@@ -5231,6 +5353,7 @@ msgstr ""
 msgid "this computer"
 msgstr "이 컴퓨터"
 
+#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "This computer"
 msgstr ""
@@ -5287,6 +5410,10 @@ msgstr ""
 msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
 msgstr "이 구독 로그인 방식은 아직 Ardur Bot에서 지원되지 않습니다. 서버에 설정된 인증 정보를 사용하거나 다른 서비스를 선택하세요."
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "This week (UTC)"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
 msgstr "실행 시각"
@@ -5304,6 +5431,10 @@ msgstr "역할"
 msgid "To:"
 msgstr "받는 사람:"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Today (UTC)"
+msgstr ""
+
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
 msgstr ""
@@ -5315,6 +5446,10 @@ msgstr ""
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Tokens"
+msgstr ""
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Tokens over seven days"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5455,6 +5590,7 @@ msgid "Upload"
 msgstr "업로드"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/panels.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 msgid "Usage"
@@ -5519,6 +5655,10 @@ msgstr "로그인 완료를 기다리는 중…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr "API가 다시 작동하기를 기다리는 중…"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "Waiting for your approval"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Waiting…"
@@ -5598,6 +5738,7 @@ msgstr "Bot을 어디에서 실행할까요?"
 msgid "Window"
 msgstr ""
 
+#: src/pages/dashboard/NowPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Working"
 msgstr ""

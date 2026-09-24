@@ -164,6 +164,7 @@ model Member {
 }
 
 model Space {
+  features SpaceFeature[]
   comparisons Comparison[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
@@ -1965,4 +1966,15 @@ model ComparisonExecution {
   selectedRunIds String[] @default([])
   @@unique([comparisonId, position])
   @@map("comparison_executions")
+}
+
+model SpaceFeature {
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  feature String
+  state String @default("disabled")
+  updatedAt DateTime @updatedAt
+
+  @@id([spaceId, feature])
+  @@map("space_features")
 }

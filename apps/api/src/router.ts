@@ -103,6 +103,7 @@ import {
 import {
   ACTIVE_RUN_STATUSES,
   AttachmentValidationError,
+  connectionOverview,
   containsSecret,
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
@@ -171,7 +172,9 @@ import {
   resolveBusyBotName,
   toComputerStatus,
 } from "./computer-status.js";
+import { routineOverview, usageSummary } from "./dashboard.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
+import { listSpaceFeatures, setSpaceFeature } from "./features.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
@@ -2625,6 +2628,9 @@ export function createRouter(deps: RouterDeps) {
       ),
     },
     routines: {
+      overview: authed.routines.overview.handler(({ context }) =>
+        routineOverview(deps.prisma, context.actor),
+      ),
       list: authed.routines.list.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
         return listRoutinesDto(deps, context.actor, input.botId);
@@ -4944,18 +4950,9 @@ export function createRouter(deps: RouterDeps) {
           createdAt: row.createdAt.toISOString(),
         }));
       }),
-      summary: authed.usage.summary.handler(async ({ context }) => {
-        const result = await deps.prisma.usageRecord.aggregate({
-          where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
-          _sum: { inputTokens: true, outputTokens: true },
-          _count: { _all: true },
-        });
-        return {
-          inputTokens: result._sum.inputTokens ?? 0,
-          outputTokens: result._sum.outputTokens ?? 0,
-          runs: result._count._all,
-        };
-      }),
+      summary: authed.usage.summary.handler(({ context }) =>
+        usageSummary(deps.prisma, context.actor),
+      ),
     },
     export: {
       comparison: authed.export.comparison.handler(({ context, input }) =>
@@ -5042,6 +5039,53 @@ export function createRouter(deps: RouterDeps) {
       list: authed.comparisons.list.handler(({ context }) => comparisons.list(context.actor)),
       merge: authed.comparisons.merge.handler(({ context, input }) =>
         comparisons.merge(context.actor, input),
+      ),
+    },
+    dashboard: {
+      connections: authed.dashboard.connections.handler(async ({ context }) => {
+        const actor = context.actor;
+        const scope = { userId: actor.userId, spaceId: actor.spaceId };
+        const [catalog, servers, devices, identities] = await Promise.all([
+          integrations.list(actor),
+          deps.prisma.mcpServer.findMany({ where: scope, orderBy: { name: "asc" } }),
+          deps.prisma.deviceGrant.findMany({
+            where: scope,
+            select: { id: true, deviceName: true, kind: true, revokedAt: true },
+          }),
+          deps.prisma.messagingIdentity.findMany({ where: scope, select: { id: true } }),
+        ]);
+        const channels = identities.length
+          ? await deps.prisma.messagingChannelMember.findMany({
+              where: { identityId: { in: identities.map((identity) => identity.id) } },
+              include: { channel: { include: { members: ACTIVE_CHANNEL_MEMBERS } } },
+              orderBy: { updatedAt: "desc" },
+            })
+          : [];
+        return connectionOverview({
+          integrations: catalog,
+          servers: await Promise.all(
+            servers.map(async (server) => ({
+              id: server.id,
+              name: server.name,
+              enabled: server.enabled,
+              oauthStatus: await mcpOAuth.statusFor(server, actor),
+            })),
+          ),
+          devices: devices.map((device) => ({
+            ...device,
+            kind: device.kind === "channel" ? ("channel" as const) : ("device" as const),
+            revokedAt: device.revokedAt?.toISOString() ?? null,
+          })),
+          channels: channels.map((channel) => messagingChannelDto(channel)),
+        });
+      }),
+    },
+    features: {
+      list: authed.features.list.handler(({ context }) =>
+        listSpaceFeatures(deps.prisma, context.actor),
+      ),
+      set: authed.features.set.handler(({ context, input }) =>
+        setSpaceFeature(deps.prisma, context.actor, input),
       ),
     },
     team: {

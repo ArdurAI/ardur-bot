@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { IntegrationSetup } from "../components/integrations/IntegrationSetup";
 import { rpc } from "../lib/rpc";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
+import { OpenToSetting } from "./shell/OpenToSetting";
 
 export function LocalSettingsPage() {
   const [section, setSection] = useState<"models" | "integrations" | null>(null);
@@ -21,6 +22,7 @@ export function LocalSettingsPage() {
         <h1 className="text-2xl font-medium">
           <Trans>Local Server Settings</Trans>
         </h1>
+        <OpenToSetting />
         {error ? (
           <p role="alert">
             <Trans>

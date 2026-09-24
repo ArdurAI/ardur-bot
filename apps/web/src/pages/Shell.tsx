@@ -248,8 +248,15 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { SidebarSettings } from "./shell/sidebar-settings";
-import { TeamBoard } from "./TeamBoard";
+import "./shell/board-nav";
 import { WindowChrome } from "./WindowChrome";
+
+const TeamBoard = lazy(() =>
+  import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
+);
+const DashboardPage = lazy(() =>
+  import("./dashboard/DashboardPage").then((module) => ({ default: module.DashboardPage })),
+);
 
 const BotContextMenu = lazy(() =>
   import("./BotContextMenu").then((module) => ({ default: module.BotContextMenu })),
@@ -333,10 +340,16 @@ function readCollapsedSidebarSections(userId: string | null | undefined): Set<st
   }
 }
 
-export function ShellPage({ team = false }: { team?: boolean }) {
+export function ShellPage({
+  team = false,
+  dashboard = false,
+}: {
+  team?: boolean;
+  dashboard?: boolean;
+}) {
   const { t } = useLingui();
   const teamView = useRef(team);
-  teamView.current = team;
+  teamView.current = team || dashboard;
   const { botId, groupId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -491,6 +504,10 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const [pickerInfoTopic, setPickerInfoTopic] = useState<"group" | "space" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    if (dashboard) setMobileSidebarOpen(false);
+  }, [dashboard]);
 
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 768px)");
@@ -661,7 +678,8 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   const autoSpokenBotId = useRef<string | null>(null);
 
   const inGroup = Boolean(groupId);
-  const active = team || inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
+  const active =
+    team || dashboard || inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
   computerOpenRef.current = computerOpen;
@@ -834,6 +852,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         setInitialBotsLoaded(true);
         botsRefreshApplied.current = request;
         if (
+          !teamView.current &&
           includeArchived &&
           list.length === 0 &&
           archived?.length === 0 &&
@@ -1766,9 +1785,11 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   );
   const shellReady =
     initialBotsLoaded &&
-    (inGroup
-      ? Boolean(activeGroup && activeSnapshot)
-      : bots.length === 0 || Boolean(active && activeSnapshot));
+    (dashboard ||
+      team ||
+      (inGroup
+        ? Boolean(activeGroup && activeSnapshot)
+        : bots.length === 0 || Boolean(active && activeSnapshot)));
   const refreshThreadRef = useRef(refreshThread);
   refreshThreadRef.current = refreshThread;
   const refreshGroupThreadRef = useRef(refreshGroupThread);
@@ -2603,9 +2624,10 @@ export function ShellPage({ team = false }: { team?: boolean }) {
     <div
       data-testid="shell-root"
       data-ready={shellReady}
-      className="relative flex h-full min-w-0 overflow-hidden bg-background text-foreground/90"
+      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background text-foreground/90"
       onTouchStartCapture={(event) => {
         if (
+          dashboard ||
           mobileSidebarOpen ||
           event.touches.length !== 1 ||
           window.matchMedia("(min-width: 768px)").matches
@@ -2662,7 +2684,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
           className="absolute inset-y-0 end-0 start-[min(calc(100%-48px),316px)] z-30 bg-overlay md:hidden"
         />
       ) : null}
-      {!mobileSidebarOpen ? (
+      {!mobileSidebarOpen && !dashboard ? (
         <div
           data-testid="mobile-sidebar-swipe-edge"
           aria-hidden="true"
@@ -2673,7 +2695,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         data-testid="bots-sidebar"
         data-collapsed={botsSidebarCollapsed ? "true" : "false"}
         inert={botsSidebarCollapsed && !mobileSidebarOpen ? true : undefined}
-        className={`absolute inset-y-0 start-0 z-40 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,opacity] motion-reduce:transition-none md:static md:z-auto md:translate-x-0 ${
+        className={`${dashboard ? "hidden" : "flex"} absolute inset-y-0 start-0 z-40 w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,opacity] motion-reduce:transition-none md:static md:z-auto md:translate-x-0 ${
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
         } ${
           botsSidebarCollapsed
@@ -2779,6 +2801,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             </Popover>
           </div>
         </div>
+
         <InputGroup
           data-testid="sidebar-search"
           className="mx-2.5 mb-3 w-auto rounded-xl bg-card dark:bg-input border border-border text-muted-foreground focus-within:border-ring"
@@ -3267,35 +3290,67 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         }}
       />
 
+      {dashboard ? (
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {bootstrapMe ? (
+            <Suspense
+              fallback={
+                <div className="m-6 h-24 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+              }
+            >
+              <DashboardPage
+                key={bootstrapMe.spaceId}
+                scope={`${userId}:${bootstrapMe.spaceId}`}
+                spaceId={bootstrapMe.spaceId}
+                openSettings={(section) =>
+                  section === "messaging"
+                    ? setMessagingSettingsOpen(true)
+                    : section === "mcp"
+                      ? setMcpOpen(true)
+                      : openSettings(section)
+                }
+              />
+            </Suspense>
+          ) : (
+            <div className="m-6 h-24 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+          )}
+        </main>
+      ) : null}
       {team ? (
         <main
           aria-hidden={mobileSidebarOpen || undefined}
           inert={mobileSidebarOpen}
           className="flex min-w-0 flex-1 flex-col bg-background"
         >
-          <TeamBoard
-            key={bootstrapMe?.spaceId}
-            navigation={
-              <Button
-                variant="ghost"
-                size="icon"
-                className={botsSidebarCollapsed ? "" : "md:hidden"}
-                aria-label={t`Open navigation`}
-                onClick={() => {
-                  setMobileSidebarOpen(window.matchMedia("(max-width: 767px)").matches);
-                  setBotsSidebarCollapsedPref(false);
-                }}
-              >
-                <Menu size={19} />
-              </Button>
+          <Suspense
+            fallback={
+              <div className="m-4 h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
             }
-          />
+          >
+            <TeamBoard
+              key={bootstrapMe?.spaceId}
+              navigation={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={botsSidebarCollapsed ? "" : "md:hidden"}
+                  aria-label={t`Open navigation`}
+                  onClick={() => {
+                    setMobileSidebarOpen(window.matchMedia("(max-width: 767px)").matches);
+                    setBotsSidebarCollapsedPref(false);
+                  }}
+                >
+                  <Menu size={19} />
+                </Button>
+              }
+            />
+          </Suspense>
         </main>
       ) : null}
       <main
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
-        className={`${team ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
+        className={`${team || dashboard ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
           <div className="flex min-w-0 items-center gap-2">
@@ -4505,7 +4560,32 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   );
 
   return (
-    <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "robot"}>{shell}</AvatarStyleProvider>
+    <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "robot"}>
+      <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+        <header className="app-drag relative z-20 flex h-12 shrink-0 items-center gap-3 border-b border-border px-3">
+          <WindowChrome navigation />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="app-no-drag"
+            aria-label={t`Search`}
+            onClick={() => setCommandPaletteOpen(true)}
+          >
+            <Search size={17} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="app-no-drag ms-auto shrink-0"
+            aria-label={t`Settings`}
+            onClick={() => openSettings("general")}
+          >
+            <Settings size={17} />
+          </Button>
+        </header>
+        {shell}
+      </div>
+    </AvatarStyleProvider>
   );
 }
 

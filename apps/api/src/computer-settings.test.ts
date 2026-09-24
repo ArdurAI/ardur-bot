@@ -2,7 +2,11 @@ import { EncryptedSecretStore } from "@ardurbot/adapters";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
-import { saveComputerConnection, validateComputerConfiguration } from "./computer-settings.js";
+import {
+  listComputerConnections,
+  saveComputerConnection,
+  validateComputerConfiguration,
+} from "./computer-settings.js";
 
 const context = {
   operationId: "settings",
@@ -12,6 +16,21 @@ const context = {
   signal: new AbortController().signal,
 };
 describe("computer connection settings", () => {
+  it("returns the saved connection state without an owner-only engine probe", async () => {
+    const findMany = vi.fn(async () => [
+      {
+        id: "engine",
+        displayName: "Local engine",
+        status: "error",
+        metadata: { engine: "docker" },
+      },
+    ]);
+    const prisma = { connection: { findMany } } as unknown as PrismaClient;
+    expect(await listComputerConnections(prisma, "space")).toMatchObject([
+      { id: "engine", name: "Local engine", status: "error" },
+    ]);
+    expect(findMany).toHaveBeenCalledWith({ where: { spaceId: "space", connectorId: "computer" } });
+  });
   it("validates confirmation and workspace ownership before any mutation", async () => {
     const findFirst = vi.fn(async () => null);
     const prisma = { connection: { findFirst } } as unknown as PrismaClient;

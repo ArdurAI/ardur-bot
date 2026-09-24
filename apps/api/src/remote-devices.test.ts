@@ -125,3 +125,22 @@ it("exposes read-only comparison views to signed readers", async () => {
     expect(f.read).not.toHaveBeenCalled();
   }
 });
+
+it.each(["runs/list", "team/board", "dashboard/connections", "usage/summary"])(
+  "allows the read-only Overview procedure %s through a signed read grant",
+  async (procedure) => {
+    const f = fixture();
+    expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).toBe(200);
+    expect(f.read).toHaveBeenCalledWith(
+      expect.objectContaining({ spaceId: "space", userId: "owner" }),
+      procedure,
+      {},
+    );
+  },
+);
+it("does not expose feature mutation or device management through Overview grants", async () => {
+  for (const procedure of ["features/set", "devices/list", "mcp/servers/create"]) {
+    const f = fixture();
+    expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).toBe(403);
+  }
+});

@@ -122,6 +122,10 @@ msgstr "{after} corrections in {0} exposed runs; before: {before} in {1} compara
 msgid "{botName}’s computer"
 msgstr "{botName}’s computer"
 
+#: src/pages/dashboard/ComputersPanel.tsx
+msgid "{count} folders"
+msgstr "{count} folders"
+
 #: src/pages/ActivityList.tsx
 msgid "{days}d ago"
 msgstr "{days}d ago"
@@ -161,6 +165,14 @@ msgstr "{reconnectCount} need reconnection"
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} left · bot is watching, not acting"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{requests} requests"
+msgstr "{requests} requests"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{seconds}s"
+msgstr "{seconds}s"
+
 #: src/components/ArtifactFileCard.tsx
 msgid "{size} B"
 msgstr "{size} B"
@@ -168,6 +180,10 @@ msgstr "{size} B"
 #: src/pages/ActivityList.tsx
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{tokens} tokens"
+msgstr "{tokens} tokens"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
@@ -676,6 +692,10 @@ msgstr "Ask the server owner to configure this provider."
 msgid "asks first"
 msgstr "asks first"
 
+#: src/pages/dashboard/ComputersPanel.tsx
+msgid "Asleep"
+msgstr "Asleep"
+
 #. placeholder {0}: preset.time
 #: src/pages/RoutineSchedule.tsx
 msgid "at {0}"
@@ -781,6 +801,14 @@ msgstr "Block link copied."
 msgid "Blocked — {0}"
 msgstr "Blocked — {0}"
 
+#: src/pages/shell/board-nav.ts
+msgid "Board"
+msgstr "Board"
+
+#: src/pages/dashboard/ComputersPanel.tsx
+msgid "Booting"
+msgstr "Booting"
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Booting live desktop…"
@@ -836,6 +864,8 @@ msgstr "Bot: {0}"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/shell/OpenToSetting.tsx
+#: src/pages/shell/top-nav.ts
 msgid "Bots"
 msgstr "Bots"
 
@@ -913,6 +943,7 @@ msgstr "cancelled"
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Cancelled"
@@ -1212,6 +1243,7 @@ msgid "Complete"
 msgstr "Complete"
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Completed"
 msgstr "Completed"
@@ -1245,6 +1277,7 @@ msgid "Computer is stopped"
 msgstr "Computer is stopped"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/panels.ts
 #: src/pages/SettingsOverlay.tsx
 msgid "Computers"
 msgstr "Computers"
@@ -1338,6 +1371,8 @@ msgstr "Connect your account."
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1392,6 +1427,10 @@ msgstr "Connection name"
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Connection to {0} is still pending. You can close this and check again."
 
+#: src/pages/dashboard/panels.ts
+msgid "Connections"
+msgstr "Connections"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "Connectors"
 msgstr "Connectors"
@@ -1444,6 +1483,7 @@ msgid "Copy pairing details"
 msgstr "Copy pairing details"
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/UsagePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr "Cost"
@@ -1644,6 +1684,7 @@ msgstr "Could not import these documents. Check scopes and conflicts, then previ
 msgid "Could not install connector"
 msgstr "Could not install connector"
 
+#: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load"
 msgstr "Could not load"
@@ -2078,6 +2119,12 @@ msgstr "Customize bot avatar"
 msgid "Dark"
 msgstr "Dark"
 
+#: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/shell/OpenToSetting.tsx
+#: src/pages/shell/top-nav.ts
+msgid "Dashboard"
+msgstr "Dashboard"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Database"
 msgstr "Database"
@@ -2425,6 +2472,11 @@ msgstr "Enter a whole number from 1 to 1000 for the image limit."
 msgid "Enter this code at <0>{0}</0>"
 msgstr "Enter this code at <0>{0}</0>"
 
+#: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
+msgid "Error"
+msgstr "Error"
+
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every"
@@ -2529,6 +2581,7 @@ msgid "failed"
 msgstr "failed"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "Failed"
@@ -2655,6 +2708,15 @@ msgstr "Git repository"
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
 msgstr "GitLab host"
+
+#: src/pages/dashboard/panels.ts
+msgid "Governance"
+msgstr "Governance"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Governance and encryption are not part of this build yet."
+msgstr "Governance and encryption are not part of this build yet."
 
 #: src/pages/LearningTimeline.tsx
 msgid "Grant"
@@ -2810,6 +2872,10 @@ msgstr "inappropriate"
 #: src/pages/LearningInbox.tsx
 msgid "Inbox"
 msgstr "Inbox"
+
+#: src/pages/dashboard/LearningPanel.tsx
+msgid "Inbox ({count})"
+msgstr "Inbox ({count})"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
@@ -2972,6 +3038,8 @@ msgstr "Later edits overlap this change. Review both versions in History."
 msgid "learned {0} things this week"
 msgstr "learned {0} things this week"
 
+#: src/pages/dashboard/LearningDialog.tsx
+#: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Learning"
@@ -3426,6 +3494,10 @@ msgstr "Name this routine"
 msgid "Namespace"
 msgstr "Namespace"
 
+#: src/pages/shell/TopNav.tsx
+msgid "Navigation"
+msgstr "Navigation"
+
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "Needs input"
@@ -3433,6 +3505,10 @@ msgstr "Needs input"
 #: src/components/composer/ComposerMenu.tsx
 msgid "Needs reconnection"
 msgstr "Needs reconnection"
+
+#: src/pages/dashboard/ConnectionsPanel.tsx
+msgid "Needs sign-in"
+msgstr "Needs sign-in"
 
 #: src/pages/ActivityList.tsx
 msgid "Needs takeover"
@@ -3476,6 +3552,7 @@ msgstr "New skill"
 msgid "New space"
 msgstr "New space"
 
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Next"
 msgstr "Next"
@@ -3511,6 +3588,14 @@ msgstr "No chat apps linked yet."
 #: src/pages/LearningCurator.tsx
 msgid "No checks yet."
 msgstr "No checks yet."
+
+#: src/pages/dashboard/panels.ts
+msgid "No computers"
+msgstr "No computers"
+
+#: src/pages/dashboard/panels.ts
+msgid "No connections"
+msgstr "No connections"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "No destinations found."
@@ -3564,6 +3649,11 @@ msgstr "No model catalog is available."
 msgid "No models installed. Pull one to start."
 msgstr "No models installed. Pull one to start."
 
+#: src/pages/dashboard/LearningPanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "No proposals"
+msgstr "No proposals"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "No providers found."
@@ -3572,6 +3662,7 @@ msgstr "No providers found."
 msgid "No remote MCP servers found"
 msgstr "No remote MCP servers found"
 
+#: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "No results"
@@ -3580,6 +3671,11 @@ msgstr "No results"
 #: src/pages/RoutineEditor.tsx
 msgid "No runs yet"
 msgstr "No runs yet"
+
+#: src/pages/dashboard/panels.ts
+#: src/pages/dashboard/RoutinesPanel.tsx
+msgid "No scheduled runs"
+msgstr "No scheduled runs"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -3597,6 +3693,10 @@ msgstr "No tools available."
 msgid "No trigger"
 msgstr "No trigger"
 
+#: src/pages/dashboard/panels.ts
+msgid "No usage"
+msgstr "No usage"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
 msgstr "None detected"
@@ -3613,6 +3713,8 @@ msgstr "not available"
 msgid "Not available on this computer"
 msgstr "Not available on this computer"
 
+#: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
 msgstr "Not connected"
@@ -3655,6 +3757,11 @@ msgstr "Nothing is still running"
 msgid "Nothing remembered yet"
 msgstr "Nothing remembered yet"
 
+#: src/pages/dashboard/NowPanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Nothing running"
+msgstr "Nothing running"
+
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
 msgstr "Nothing to review."
@@ -3668,6 +3775,7 @@ msgid "Notion page URL or ID"
 msgstr "Notion page URL or ID"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/dashboard/panels.ts
 msgid "Now"
 msgstr "Now"
 
@@ -3778,6 +3886,10 @@ msgstr "Open Settings"
 #: src/pages/shell/command-palette.tsx
 msgid "Open terminal"
 msgstr "Open terminal"
+
+#: src/pages/shell/OpenToSetting.tsx
+msgid "Open to"
+msgstr "Open to"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -4048,6 +4160,7 @@ msgstr "Pushed"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
@@ -4095,6 +4208,7 @@ msgid "Recall only"
 msgstr "Recall only"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/dashboard/RoutinesPanel.tsx
 msgid "Recent"
 msgstr "Recent"
 
@@ -4394,6 +4508,7 @@ msgstr "Restore the last saved workspace. Unsaved work on the computer is lost."
 msgid "Restoring your workspace"
 msgstr "Restoring your workspace"
 
+#: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -4492,6 +4607,7 @@ msgstr "Rotate key"
 msgid "Routine"
 msgstr "Routine"
 
+#: src/pages/dashboard/panels.ts
 #: src/pages/RoutineEditor.tsx
 msgid "Routines"
 msgstr "Routines"
@@ -4526,6 +4642,7 @@ msgstr "running"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
+#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "Running"
@@ -5025,11 +5142,16 @@ msgstr "Stop teaching"
 msgid "Stop the current run"
 msgstr "Stop the current run"
 
+#: src/pages/dashboard/ComputersPanel.tsx
+msgid "Stopped"
+msgstr "Stopped"
+
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "Stopped."
 
+#: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
 msgstr "Stopping"
@@ -5231,6 +5353,7 @@ msgstr "This command is not available to this account."
 msgid "this computer"
 msgstr "this computer"
 
+#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "This computer"
 msgstr "This computer"
@@ -5287,6 +5410,10 @@ msgstr "This service needs client registration before you can connect."
 msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
 msgstr "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "This week (UTC)"
+msgstr "This week (UTC)"
+
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
 msgstr "Time of day"
@@ -5304,6 +5431,10 @@ msgstr "Title"
 msgid "To:"
 msgstr "To:"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Today (UTC)"
+msgstr "Today (UTC)"
+
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
 msgstr "Token reservation"
@@ -5316,6 +5447,10 @@ msgstr "tokens"
 #: src/pages/TeamBoard.tsx
 msgid "Tokens"
 msgstr "Tokens"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Tokens over seven days"
+msgstr "Tokens over seven days"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -5455,6 +5590,7 @@ msgid "Upload"
 msgstr "Upload"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/panels.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 msgid "Usage"
@@ -5519,6 +5655,10 @@ msgstr "Waiting for sign-in…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr "Waiting for the API to come back…"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "Waiting for your approval"
+msgstr "Waiting for your approval"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Waiting…"
@@ -5598,6 +5738,7 @@ msgstr "Where should bots run?"
 msgid "Window"
 msgstr "Window"
 
+#: src/pages/dashboard/NowPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Working"
 msgstr "Working"

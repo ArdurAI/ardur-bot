@@ -26,6 +26,7 @@ import { UI_LOCALE_LABELS, UI_LOCALES, type UiLocale } from "../lib/ui-locale";
 import { ComputerProfilesSettings } from "./ComputerProfilesSettings";
 import { HostComputerSettings } from "./HostComputerSettings";
 import { SettingsSupportLinks } from "./settings-support-links";
+import { OpenToSetting } from "./shell/OpenToSetting";
 
 export type SettingsGeneralProps = {
   email?: string | null;
@@ -80,6 +81,7 @@ export function GeneralSettingsPanels({
 
   return (
     <div className="space-y-5">
+      <OpenToSetting />
       <section className="rounded-xl border border-border px-4 py-4">
         <h3 className="text-[15px] font-medium text-foreground">
           <Trans>Account</Trans>

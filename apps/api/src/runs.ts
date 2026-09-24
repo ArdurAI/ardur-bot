@@ -74,6 +74,46 @@ export async function listSpaceRuns(
     where: { rootTaskId: { in: roots }, spaceId: actor.spaceId, userId: actor.userId },
     orderBy: { createdAt: "asc" },
   });
+  const waitingRoots = rows
+    .filter((row) => row.status === "waiting_input" && row.delegationId)
+    .map((row) => row.delegationRootTaskId ?? row.taskId);
+  const approvalRoots = waitingRoots.length
+    ? await prisma.delegationRoot.findMany({
+        where: {
+          rootTaskId: { in: [...new Set(waitingRoots)] },
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+        },
+        select: { rootTaskId: true, coordinatorBotId: true, coordinatorThreadId: true },
+      })
+    : [];
+  const approvalThreads = approvalRoots.length
+    ? await prisma.thread.findMany({
+        where: {
+          id: { in: approvalRoots.map((root) => root.coordinatorThreadId) },
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+        },
+        select: { id: true, groupId: true },
+      })
+    : [];
+  const approvalTargets = new Map(
+    approvalRoots.flatMap((root) => {
+      const thread = approvalThreads.find((entry) => entry.id === root.coordinatorThreadId);
+      return thread
+        ? [
+            [
+              root.rootTaskId,
+              {
+                botId: root.coordinatorBotId,
+                threadId: thread.id,
+                groupId: thread.groupId,
+              },
+            ] as const,
+          ]
+        : [];
+    }),
+  );
   const representative = new Map(
     roots.map((root) => [
       root,
@@ -82,6 +122,8 @@ export async function listSpaceRuns(
     ]),
   );
   return rows.map((row) => ({
+    startedAt: row.startedAt?.toISOString() ?? null,
+    createdAt: row.createdAt?.toISOString(),
     rootTaskId: row.delegationRootTaskId ?? row.taskId,
     delegations:
       representative.get(row.delegationRootTaskId ?? row.taskId) === row.id
@@ -95,6 +137,9 @@ export async function listSpaceRuns(
     groupId: row.thread.groupId,
     groupName: row.thread.group?.name ?? null,
     threadId: row.threadId,
+    approvalTarget: row.delegationId
+      ? (approvalTargets.get(row.delegationRootTaskId ?? row.taskId) ?? null)
+      : null,
     externalThread: Boolean(row.thread.externalConversationId),
     status: row.status as RunActivityRow["status"],
     trigger: row.trigger as RunActivityRow["trigger"],

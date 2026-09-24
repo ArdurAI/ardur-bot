@@ -19,6 +19,7 @@ import { LocalSettingsPage } from "./pages/LocalSettings";
 import { McpOAuthCallbackPage } from "./pages/McpOAuthCallback";
 import { SharedCommandPage, SharedCommandSignIn } from "./pages/SharedCommand";
 import { ShellPage } from "./pages/Shell";
+import { useOpenTo } from "./pages/shell/open-to";
 
 const AuthPage = lazy(() =>
   import("./pages/Auth").then((module) => ({ default: module.AuthPage })),
@@ -116,16 +117,23 @@ function SessionApp() {
           />
           <Route
             path="/app/team"
-            element={user ? <ShellPage team /> : <Navigate to="/sign-in" replace />}
+            element={user ? <StartPage team /> : <Navigate to="/sign-in" replace />}
           />
-          <Route path="/app" element={user ? <ShellPage /> : <Navigate to="/sign-in" replace />} />
+          <Route
+            path="/app"
+            element={user ? <StartPage dashboard /> : <Navigate to="/sign-in" replace />}
+          />
+          <Route
+            path="/app/bots"
+            element={user ? <StartPage /> : <Navigate to="/sign-in" replace />}
+          />
           <Route
             path="/app/g/:groupId"
-            element={user ? <ShellPage /> : <Navigate to="/sign-in" replace />}
+            element={user ? <StartPage /> : <Navigate to="/sign-in" replace />}
           />
           <Route
             path="/app/:botId"
-            element={user ? <ShellPage /> : <Navigate to="/sign-in" replace />}
+            element={user ? <StartPage /> : <Navigate to="/sign-in" replace />}
           />
         </Routes>
       </Suspense>
@@ -183,5 +191,15 @@ function SessionUnavailable({ refetch }: { refetch: () => Promise<void> }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function StartPage({ dashboard = false, team = false }: { dashboard?: boolean; team?: boolean }) {
+  const openTo = useOpenTo();
+  const [params] = useSearchParams();
+  return dashboard && openTo === "bots" && params.get("view") !== "dashboard" ? (
+    <Navigate to="/app/bots" replace />
+  ) : (
+    <ShellPage dashboard={dashboard} team={team} />
   );
 }

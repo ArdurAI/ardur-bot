@@ -14,6 +14,7 @@ export async function listComputerConnections(prisma: PrismaClient, spaceId: str
   return rows.map((row) => ({
     id: row.id,
     name: row.displayName,
+    status: row.status,
     settings: ComputerConnectionSettingsSchema.parse(row.metadata),
   }));
 }
