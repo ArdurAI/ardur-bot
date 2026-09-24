@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ReactNode } from "react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -25,16 +26,15 @@ afterEach(() => {
 });
 
 it("exposes the host status and folders on mobile without mutation controls", () => {
-  const source = readFileSync(
-    path.resolve("apps/mobile/components/host-computer-status.tsx"),
-    "utf8",
-  );
+  // Resolve fixtures from this test so package and repository runs use the same files.
+  const mobileRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const source = readFileSync(path.join(mobileRoot, "components/host-computer-status.tsx"), "utf8");
   expect(source).toContain('"host/status"');
   expect(source).toContain("status.roots.map");
   expect(source).not.toMatch(
     /host\/disconnect|\.setup\(|\.removeRoot\(|\.addRoot\(|Pressable|Button/,
   );
-  expect(readFileSync(path.resolve("apps/mobile/app/account.tsx"), "utf8")).toContain(
+  expect(readFileSync(path.join(mobileRoot, "app/account.tsx"), "utf8")).toContain(
     "<HostComputerStatus />",
   );
 });

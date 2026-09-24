@@ -743,4 +743,15 @@ export const ZH_MESSAGES: Record<string, string> = {
   Tokens: "token 数",
   "Tools:": "工具：",
   bots: "个 Bot",
+
+  "Add files or photos": "添加文件或照片",
+  Close: "关闭",
+  Connectors: "连接器",
+  "Could not run routine": "无法运行例行任务",
+  "Could not save memory": "无法保存记忆",
+  "Could not start a new chat": "无法开始新对话",
+  "Needs reconnection": "需要重新连接",
+  Routines: "例行任务",
+  "Slash commands": "斜杠命令",
+  "Up to 4 files, 10 MB each": "最多 4 个文件，每个不超过 10 MB",
 };

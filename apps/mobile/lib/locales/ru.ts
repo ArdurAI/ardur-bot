@@ -768,4 +768,15 @@ export const RU_MESSAGES: Record<string, string> = {
   Tokens: "Токены",
   "Tools:": "Инструменты:",
   bots: "бота",
+
+  "Add files or photos": "Добавить файлы или фото",
+  Close: "Закрыть",
+  Connectors: "Коннекторы",
+  "Could not run routine": "Не удалось запустить задачу",
+  "Could not save memory": "Не удалось сохранить память",
+  "Could not start a new chat": "Не удалось начать новый чат",
+  "Needs reconnection": "Требуется повторное подключение",
+  Routines: "Задачи",
+  "Slash commands": "Слеш-команды",
+  "Up to 4 files, 10 MB each": "До 4 файлов, каждый до 10 МБ",
 };
