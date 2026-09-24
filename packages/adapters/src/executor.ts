@@ -302,6 +302,7 @@ import {
   takeoverContinuePlan,
 } from "./takeover-resume.js";
 import { getActiveTeachingSession, parsePlaybook } from "./teaching-session.js";
+import { ComputerAdmissionError, withComputerAdmission } from "./terminal-ownership.js";
 import {
   attachWorkspaceFileToThread,
   currentTurnFilesInstruction,
@@ -2525,23 +2526,28 @@ export function createRunExecutor(deps: ExecutorDeps) {
               args.cwd ? String(args.cwd) : undefined,
             );
             workspaceCheckpoint.markDirty();
-            const result = await commandRecording.execute(
-              executionId,
-              [
-                "bash",
-                "-c",
-                BACKGROUND_WORK_LAUNCH,
-                "ardurbot-background-launch",
-                // Marker id must match sleepComputerIfIdle's probe (DB id), not ComputerRef.id
-                // (providerRef via toComputerRef). Scope launches to this run for cancel teardown.
-                storedComputer.id,
-                runId,
-                randomUUID(),
-                command,
-              ],
-              cwd,
-              agentEnvironment,
-            );
+            const result = await withComputerAdmission(deps.prisma, storedComputer.id, () =>
+              commandRecording.execute(
+                executionId,
+                [
+                  "bash",
+                  "-c",
+                  BACKGROUND_WORK_LAUNCH,
+                  "ardurbot-background-launch",
+                  // Marker id must match sleepComputerIfIdle's probe (DB id), not ComputerRef.id
+                  // (providerRef via toComputerRef). Scope launches to this run for cancel teardown.
+                  storedComputer.id,
+                  runId,
+                  randomUUID(),
+                  command,
+                ],
+                cwd,
+                agentEnvironment,
+              ),
+            ).catch((error) => {
+              if (error instanceof ComputerAdmissionError) return { error: error.message };
+              throw error;
+            });
             return finish(result);
           }
           if (name === "open_path") {

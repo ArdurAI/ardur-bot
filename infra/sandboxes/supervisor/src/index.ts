@@ -82,6 +82,8 @@ import {
   withKeyedLock,
   workspaceTarget,
 } from "./supervisor-logic.js";
+import { mountTerminalRoutes, TerminalRegistry } from "./terminal.js";
+import { assertNoDockerTerminals } from "./terminal-process.js";
 
 loadRootEnv();
 
@@ -100,6 +102,7 @@ const teamScreenLimit = resolveTeamScreenLimit();
 // Host-run supervisors on Docker Desktop (macOS/Windows) cannot reach container
 // IPs, so computer control must use a published loopback port instead.
 const controlViaLoopback = process.env.SANDBOX_CONTROL_VIA_LOOPBACK === "true";
+const terminals = new TerminalRegistry();
 const computerScreens = new Map<string, Map<string, ScreenAssignment>>();
 
 export const MAX_SUPERVISOR_REQUEST_BYTES = 1024 * 1024;
@@ -107,6 +110,8 @@ export const MAX_SUPERVISOR_FILE_REQUEST_BYTES = 16 * 1024 * 1024 + 64 * 1024;
 
 /** Keep normal control requests small while allowing the existing 16 MiB file payload. */
 export function supervisorRequestBodyLimit(method: string, pathname: string): number {
+  if (method === "POST" && /\/terminal\/[^/]+\/write$/.test(pathname)) return 64 * 1024;
+  if (method === "POST" && pathname.includes("/terminal/")) return 2048;
   return method === "POST" && /^\/computers\/[^/]+\/files\/?$/.test(pathname)
     ? MAX_SUPERVISOR_FILE_REQUEST_BYTES
     : MAX_SUPERVISOR_REQUEST_BYTES;
@@ -151,6 +156,8 @@ app.use("/computers/*", async (c, next) => {
 });
 app.use("/computers", limitSupervisorRequestBody);
 app.use("/computers/*", limitSupervisorRequestBody);
+
+mountTerminalRoutes(app, terminals, managedContainer);
 
 app.post("/computers", async (c) => {
   const body = z
@@ -321,10 +328,9 @@ app.post("/computers/:id/exec", async (c) => {
       c.req.header("x-ardurbot-screen-id") || c.req.header("x-ardurbot-bot-id") || id;
     const screenIndex = computerScreens.get(id)?.get(screenId)?.index ?? 0;
     const layout = screenPorts(screenIndex);
-    const result = await runContainerCommand(
-      container,
-      body.argv.length ? body.argv : ["/bin/echo", "ready"],
-      {
+    const result = await terminals.command(id, async () => {
+      await assertNoDockerTerminals(container);
+      return runContainerCommand(container, body.argv.length ? body.argv : ["/bin/echo", "ready"], {
         workingDir: body.cwd ?? "/home/ardurbot",
         env: [
           `DISPLAY=${layout.display}`,
@@ -336,8 +342,8 @@ app.post("/computers/:id/exec", async (c) => {
         ],
         timeoutMs: boundedSandboxCommandTimeoutMs(body.timeoutMs),
         outputLimit: COMMAND_OUTPUT_LIMIT,
-      },
-    );
+      });
+    });
     return c.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -632,6 +638,11 @@ app.post("/computers/:id/screen-mode", async (c) => {
     const screenId = c.req.header("x-ardurbot-screen-id");
     const screenLeaseId = c.req.header("x-ardurbot-screen-lease-id");
     const { container, info } = await managedContainer(id, botId, spaceId);
+    if (!body.interactive && body.controlToken) {
+      await terminals.revoke(id, body.controlToken);
+      if (![...terminals.sessions.values()].some((session) => session.computer === id))
+        await assertNoDockerTerminals(container, true);
+    }
     const { layout, viewToken } = await withComputerScreenLock(id, async () => {
       const screen = await ensureManagedScreen(id, container, info, botId, screenId, screenLeaseId);
       if (body.interactive || body.revokeControl !== false) {

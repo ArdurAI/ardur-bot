@@ -171,6 +171,7 @@ export interface SnapshotRef {
 export interface SandboxCapabilities {
   graphical: boolean;
   pty: boolean;
+  interactiveTerminal?: boolean;
   snapshots: boolean;
   takeover: boolean;
   persistentHome: boolean;

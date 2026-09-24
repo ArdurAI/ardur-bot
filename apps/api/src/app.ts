@@ -107,10 +107,13 @@ import {
   settleWithTimeout,
   TEAM_CHAT_STARTUP_SHUTDOWN_MS,
 } from "./team-chat-startup.js";
+import { createTerminalRoutes } from "./terminal-routes.js";
+import { installTerminalWebSocket } from "./terminal-websocket.js";
 import { mountVoiceHttpRoutes } from "./voice.js";
 import { mountWebhookHttpRoutes } from "./webhook.js";
 
 export interface AppHandles {
+  installTerminal: (server: Parameters<typeof installTerminalWebSocket>[0]) => void;
   app: Hono;
   prisma: PrismaClient;
   jobs: JobPublisher;
@@ -427,7 +430,13 @@ export async function createApp(
     : undefined;
   reconciler?.start();
 
+  const terminals = createTerminalRoutes({
+    prisma,
+    sandbox,
+    trustedOrigin: (origin) => isTrustedOrigin(origin, env),
+  });
   const router = createRouter({
+    terminals,
     cloudAgent,
     prisma,
     events,
@@ -508,6 +517,21 @@ export async function createApp(
     if (blockedAuthPaths.some((blocked) => path.startsWith(blocked))) {
       return c.json({ error: "Not available in version 1" }, 404);
     }
+    if (
+      [
+        "/sign-out",
+        "/revoke-session",
+        "/revoke-sessions",
+        "/revoke-other-sessions",
+        "/delete-user",
+      ].includes(path)
+    ) {
+      const origin = c.req.header("origin");
+      if (c.req.method !== "POST" || (origin && !isTrustedOrigin(origin, env)))
+        return c.json({ error: "Forbidden" }, 403);
+      const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
+      if (session?.user) await terminals.gateway?.revokeUser(session.user.id);
+    }
     return auth.handler(c.req.raw);
   });
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
@@ -522,7 +546,12 @@ export async function createApp(
     }
     const { matched, response } = await rpc.handle(c.req.raw, {
       prefix: "/rpc",
-      context: { actor, signal: c.req.raw.signal },
+      context: {
+        actor,
+        signal: c.req.raw.signal,
+        authSessionId: session?.session.id,
+        origin: c.req.header("origin"),
+      },
     });
     if (matched) return c.newResponse(response.body, response);
     await next();
@@ -825,6 +854,8 @@ export async function createApp(
   );
 
   return {
+    installTerminal: (server) =>
+      installTerminalWebSocket(server, terminals.gateway, (origin) => isTrustedOrigin(origin, env)),
     app,
     prisma,
     jobs,
@@ -839,6 +870,7 @@ export async function createApp(
     stop: async () => {
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
+      await terminals.gateway?.stop();
       shutdown.abort();
       oauthLogins.abortAll();
       messagingStopped = true;

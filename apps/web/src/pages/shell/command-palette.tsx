@@ -43,11 +43,13 @@ export function CommandPalette({
   onOpenChange,
   bots,
   onSelectBot,
+  onOpenTerminal,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bots: Bot[];
   onSelectBot: (botId: string) => void;
+  onOpenTerminal?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [modKey, setModKey] = useState("⌘");
@@ -107,6 +109,18 @@ export function CommandPalette({
             <Trans>No bots</Trans>
           </CommandEmpty>
           <CommandGroup>
+            {onOpenTerminal &&
+            t`Open terminal`.toLowerCase().includes(search.trim().toLowerCase()) ? (
+              <CommandItem
+                value="open-terminal"
+                onSelect={() => {
+                  onOpenTerminal();
+                  onOpenChange(false);
+                }}
+              >
+                <Trans>Open terminal</Trans>
+              </CommandItem>
+            ) : null}
             {filteredBots.map((bot, index) => {
               const subtitle = botSubtitle(bot);
               const titleTag = botTitleTag(bot);

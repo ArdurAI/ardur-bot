@@ -592,6 +592,10 @@ msgstr "아바타"
 msgid "Back"
 msgstr "뒤로"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Back to screen"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "로그인으로 돌아가기"
@@ -936,6 +940,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Computer"
 msgstr "컴퓨터"
 
@@ -1063,6 +1068,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connecting…"
 msgstr "연결 중…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Connection lost — reconnecting"
+msgstr ""
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -1913,6 +1922,10 @@ msgstr "실패했을 때 처리"
 msgid "Find a destination"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Find in terminal"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Find models"
@@ -2565,6 +2578,10 @@ msgstr "새 스킬"
 msgid "New space"
 msgstr "새 스페이스"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Next"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr "아직 Agent 연결이 없습니다."
@@ -2754,6 +2771,10 @@ msgstr "열기"
 msgid "Open {0}"
 msgstr "{0} 열기"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Open a new terminal"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Open documentation"
 msgstr ""
@@ -2765,6 +2786,10 @@ msgstr "전체 창으로 열기"
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "메뉴 열기"
+
+#: src/pages/shell/command-palette.tsx
+msgid "Open terminal"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -2782,6 +2807,10 @@ msgstr "대화가 만들어졌습니다."
 #: src/pages/Onboarding.tsx
 msgid "Opening chat…"
 msgstr "채팅 여는 중…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Opening terminal"
+msgstr ""
 
 #: src/App.tsx
 msgid "Opening your Space…"
@@ -2890,6 +2919,10 @@ msgstr "POST 대상"
 msgid "Preview {0}"
 msgstr "{0} 미리보기"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Previous"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "Bot 전용"
@@ -2964,6 +2997,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Recent"
 msgstr "최근"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Reconnect"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
@@ -3333,6 +3370,10 @@ msgstr "말씀하세요. 잠시 멈추면 자동으로 전송됩니다."
 msgid "Say yes or no, or answer in a sentence."
 msgstr "예 또는 아니요로 답하거나 문장으로 답해 주세요."
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Screen"
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3433,6 +3474,10 @@ msgstr "서버 이름"
 #: src/pages/Onboarding.tsx
 msgid "Server URL"
 msgstr "서버 URL"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Session ended — open a new terminal"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -3605,6 +3650,7 @@ msgid "Steps"
 msgstr "실행 단계"
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
 msgstr "중지"
 
@@ -3660,6 +3706,14 @@ msgstr "전환 중…"
 msgid "System"
 msgstr "시스템"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control to open a terminal"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Teach a task"
 msgstr "작업 가르치기"
@@ -3688,6 +3742,18 @@ msgstr "Teams 메시지"
 msgid "Teams not enabled"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal could not open; try again"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal is not available on this computer"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "시험 실행"
@@ -3699,6 +3765,10 @@ msgstr "테스트 실행"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API가 다시 작동하지 않습니다. 이 페이지를 새로 고침하세요."
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "The bot is working — wait or stop it"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "The connection was cancelled."

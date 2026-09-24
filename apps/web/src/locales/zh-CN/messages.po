@@ -592,6 +592,10 @@ msgstr "头像"
 msgid "Back"
 msgstr "返回"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Back to screen"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "返回登录"
@@ -936,6 +940,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Computer"
 msgstr "电脑"
 
@@ -1063,6 +1068,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connecting…"
 msgstr "正在连接…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Connection lost — reconnecting"
+msgstr ""
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -1913,6 +1922,10 @@ msgstr "失败处理"
 msgid "Find a destination"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Find in terminal"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Find models"
@@ -2565,6 +2578,10 @@ msgstr "新建技能"
 msgid "New space"
 msgstr "新建工作区"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Next"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr "还没有 Agent 连接。"
@@ -2754,6 +2771,10 @@ msgstr "打开"
 msgid "Open {0}"
 msgstr "打开 {0}"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Open a new terminal"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Open documentation"
 msgstr ""
@@ -2765,6 +2786,10 @@ msgstr "在完整窗口中打开"
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "打开导航"
+
+#: src/pages/shell/command-palette.tsx
+msgid "Open terminal"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -2782,6 +2807,10 @@ msgstr "已打开其对话。"
 #: src/pages/Onboarding.tsx
 msgid "Opening chat…"
 msgstr "正在打开聊天…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Opening terminal"
+msgstr ""
 
 #: src/App.tsx
 msgid "Opening your Space…"
@@ -2890,6 +2919,10 @@ msgstr "POST 到"
 msgid "Preview {0}"
 msgstr "预览 {0}"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Previous"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "私有"
@@ -2964,6 +2997,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Recent"
 msgstr "最近"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Reconnect"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
@@ -3333,6 +3370,10 @@ msgstr "说点什么。静音即发送。"
 msgid "Say yes or no, or answer in a sentence."
 msgstr "回答是或否，或一句话说明。"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Screen"
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3433,6 +3474,10 @@ msgstr "服务器名称"
 #: src/pages/Onboarding.tsx
 msgid "Server URL"
 msgstr "服务器 URL"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Session ended — open a new terminal"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -3605,6 +3650,7 @@ msgid "Steps"
 msgstr "步骤"
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
 msgstr "停止"
 
@@ -3660,6 +3706,14 @@ msgstr "正在切换…"
 msgid "System"
 msgstr "系统"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control to open a terminal"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Teach a task"
 msgstr "示范任务"
@@ -3688,6 +3742,18 @@ msgstr "Teams 消息"
 msgid "Teams not enabled"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal could not open; try again"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal is not available on this computer"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "测试"
@@ -3699,6 +3765,10 @@ msgstr "测试运行"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API 未恢复。请刷新此页面。"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "The bot is working — wait or stop it"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "The connection was cancelled."

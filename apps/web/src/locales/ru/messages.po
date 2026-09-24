@@ -592,6 +592,10 @@ msgstr "Аватары"
 msgid "Back"
 msgstr "Назад"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Back to screen"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "Вернуться ко входу"
@@ -936,6 +940,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Computer"
 msgstr "Компьютер"
 
@@ -1063,6 +1068,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connecting…"
 msgstr "Подключение…"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Connection lost — reconnecting"
+msgstr ""
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -1913,6 +1922,10 @@ msgstr "Обработка сбоев"
 msgid "Find a destination"
 msgstr ""
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Find in terminal"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Find models"
@@ -2565,6 +2578,10 @@ msgstr "Новый навык"
 msgid "New space"
 msgstr "Новое пространство"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Next"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr "Агентских подключений пока нет."
@@ -2754,6 +2771,10 @@ msgstr "Открыть"
 msgid "Open {0}"
 msgstr "Открыть {0}"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Open a new terminal"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Open documentation"
 msgstr ""
@@ -2765,6 +2786,10 @@ msgstr "Открыть в полном окне"
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "Открыть навигацию"
+
+#: src/pages/shell/command-palette.tsx
+msgid "Open terminal"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -2781,6 +2806,10 @@ msgstr "Диалог открыт."
 
 #: src/pages/Onboarding.tsx
 msgid "Opening chat…"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Opening terminal"
 msgstr ""
 
 #: src/App.tsx
@@ -2890,6 +2919,10 @@ msgstr "ОТПРАВИТЬ в"
 msgid "Preview {0}"
 msgstr "Предварительный просмотр {0}"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Previous"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "Личный"
@@ -2964,6 +2997,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Recent"
 msgstr "Недавние"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Reconnect"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
@@ -3333,6 +3370,10 @@ msgstr "Скажите что-нибудь. После паузы сообщен
 msgid "Say yes or no, or answer in a sentence."
 msgstr "Скажите «да» или «нет» или ответьте предложением."
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Screen"
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3433,6 +3474,10 @@ msgstr "Имя сервера"
 #: src/pages/Onboarding.tsx
 msgid "Server URL"
 msgstr "URL-адрес сервера"
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Session ended — open a new terminal"
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -3605,6 +3650,7 @@ msgid "Steps"
 msgstr "Шаги"
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
 msgstr "Остановить"
 
@@ -3660,6 +3706,14 @@ msgstr "Переключение…"
 msgid "System"
 msgstr "Системная"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Take control to open a terminal"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Teach a task"
 msgstr "Научить задачу"
@@ -3688,6 +3742,18 @@ msgstr "Сообщение Teams"
 msgid "Teams not enabled"
 msgstr "Teams не настроен"
 
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal could not open; try again"
+msgstr ""
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "Terminal is not available on this computer"
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "Тест"
@@ -3699,6 +3765,10 @@ msgstr "Тестовый запуск"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API не вернулся. Обновите эту страницу."
+
+#: src/pages/shell/computer-terminal.tsx
+msgid "The bot is working — wait or stop it"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "The connection was cancelled."

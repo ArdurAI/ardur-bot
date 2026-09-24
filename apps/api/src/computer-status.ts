@@ -52,6 +52,7 @@ export async function resolveBusyBotName(
 export function toComputerStatus(
   botId: string,
   computer: {
+    id?: string;
     kind: string;
     state: string;
     scope: string;
@@ -77,6 +78,7 @@ export function toComputerStatus(
   const screen = computerScreenSize(computer?.kind);
   const kind = (computer?.kind ?? "fake") as ComputerStatus["kind"];
   return {
+    ...(computer?.id ? { computerId: computer.id } : {}),
     botId,
     mode: computer?.scope === "dedicated" ? "dedicated" : "team",
     kind,

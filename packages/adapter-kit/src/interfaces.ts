@@ -1,3 +1,4 @@
+import type { TerminalProvider } from "./terminal.js";
 import type {
   AdapterContext,
   AdapterDescriptor,
@@ -80,6 +81,7 @@ import type {
 } from "./types.js";
 
 export interface SandboxProvider {
+  terminal?: TerminalProvider;
   describe(): AdapterDescriptor<SandboxCapabilities>;
   /** Optional live browser on the same leased screen as observe/act. */
   pageBrowser?(

@@ -1328,3 +1328,33 @@ model IntegrationProviderConfig {
 
   @@map("integration_provider_configs")
 }
+
+// Human terminal lifecycle metadata only. No input or output is stored here.
+model TerminalAudit {
+  sequence BigInt @unique @default(autoincrement())
+  id String @id @default(cuid())
+  actorUserId String
+  spaceId String
+  computerId String
+  botId String
+  sessionRef String
+  leaseFence Int
+  type String
+  reason String
+  createdAt DateTime @default(now())
+
+  @@index([spaceId, createdAt])
+  @@index([sessionRef, createdAt])
+  @@map("terminal_audit")
+}
+
+// Short-lived command/control reservations survive API/worker process boundaries.
+model ComputerAdmission {
+  id String @id
+  computerId String
+  kind String
+  expiresAt DateTime
+
+  @@index([computerId, expiresAt])
+  @@map("computer_admission")
+}

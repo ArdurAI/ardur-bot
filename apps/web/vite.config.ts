@@ -273,12 +273,13 @@ export default defineConfig(({ mode }) => {
         configurePreviewServer: (server) => attachNovncProxy(server, screenProxySecret(), api),
       },
     ],
+    build: { manifest: true },
     server: {
       host: "127.0.0.1",
       port: webPort,
       strictPort: true,
       proxy: {
-        "/api": { target: api, changeOrigin: true },
+        "/api": { target: api, changeOrigin: true, ws: true },
         "/rpc": { target: api, changeOrigin: true },
       },
     },
@@ -287,7 +288,7 @@ export default defineConfig(({ mode }) => {
       port: Number(process.env.WEB_PORT ?? 5173),
       allowedHosts: [previewHost],
       proxy: {
-        "/api": { target: api, changeOrigin: true },
+        "/api": { target: api, changeOrigin: true, ws: true },
         "/rpc": { target: api, changeOrigin: true },
       },
     },
