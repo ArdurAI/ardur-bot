@@ -373,3 +373,25 @@ describe("document-first service and delivery", () => {
     expect(f.enqueue).not.toHaveBeenCalled();
   });
 });
+
+it("keeps visible typed setting history out of prompt memory, search and semantic projection", async () => {
+  const f = fixture();
+  const doc = await f.service.commit(
+    {
+      scope: "bot",
+      botId: f.context.botIds[0]!,
+      path: "preferences/setting.md",
+      content: '{"key":"bot.autoSpeak","value":true}',
+      expectedRevision: 0,
+    },
+    f.context,
+  );
+  const legacy = new LifecycleMemoryStore(f.service);
+  expect(
+    (await legacy.read({ scope: "bot", botId: f.context.botIds[0]! }, f.context)).documents,
+  ).toEqual([]);
+  expect(await legacy.search({ scope: "all", query: "autoSpeak" }, f.context)).toEqual([]);
+  await deliverMemory(f.service, doc.id, doc.revision, f.context);
+  expect(f.semantic.save).not.toHaveBeenCalled();
+  expect((await f.service.history(doc.id, {}, f.context)).items).toHaveLength(1);
+});

@@ -7,11 +7,18 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({ list: vi.fn(), credentials: vi.fn(), me: vi.fn() }));
+const api = vi.hoisted(() => ({
+  list: vi.fn(),
+  credentials: vi.fn(),
+  me: vi.fn(),
+  availability: vi.fn(),
+}));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
     delegations: { policy: async () => ({ mode: "any" }), setPolicy: async () => ({ ok: true }) },
     models: api,
+    models: api,
+    runtimes: { availability: api.availability },
     me: api.me,
     voice: { voices: async () => [] },
   },
@@ -50,6 +57,7 @@ import { BotSettings } from "./bot-panel";
 import { ProviderErrorMessage } from "./provider-error-message";
 
 const bot: Bot = {
+  runtimeKind: "pi",
   id: "bot-test",
   spaceId: "space-test",
   name: "Test bot",
@@ -406,8 +414,10 @@ it("the quiet chip opens settings and refreshes the space default after settings
   const chip = (settingsOpen: boolean) => <ShellModels settingsOpen={settingsOpen} />;
   await act(async () => root.render(chip(false)));
   const button = container.querySelector("button");
-  expect(button?.textContent).toBe("Codex · GPT-6 Astra · mediumdefault");
-  expect(button?.getAttribute("aria-label")).toBe("Change model: Codex · GPT-6 Astra · medium");
+  expect(button?.textContent).toBe("Ardur · Codex · GPT-6 Astra · mediumdefault");
+  expect(button?.getAttribute("aria-label")).toBe(
+    "Change model: Ardur · Codex · GPT-6 Astra · medium",
+  );
   await act(async () => button?.click());
   expect(onClick).toHaveBeenCalledOnce();
   await act(async () =>
@@ -586,6 +596,7 @@ it("renders a typed pin failure with labels and both repair actions", async () =
             modelId: "gpt-6-astra",
             effort: "high",
             credentialId: "deleted",
+            runtimeKind: "pi" as const,
             revision: 1,
           },
           reason: "The connection was deleted.",
@@ -681,3 +692,54 @@ it("keeps unsupported effort visible and unchanged during profile saves", async 
     expect.objectContaining({ thinkingLevel: "high", modelCredentialId: "credential-test" }),
   );
 });
+
+it("shows the saved native runtime in the header and its availability sentence in settings", async () => {
+  api.availability.mockResolvedValue({
+    runtimeKind: "claude-code",
+    available: false,
+    reason: "Not signed in — run `claude` in a terminal once",
+    models: [{ id: "claude-opus-5", label: "Opus 5", efforts: ["low"] }],
+  });
+  const native = {
+    ...bot,
+    runtimeKind: "claude-code" as const,
+    modelProvider: "anthropic",
+    modelId: "claude-opus-5",
+    thinkingLevel: "low" as const,
+    modelCredentialId: "native:claude-code",
+  };
+  await act(async () =>
+    root.render(<BotModelChip bot={native} settings={null} onClick={vi.fn()} />),
+  );
+  expect(container.textContent).toBe("Claude Code · claude-opus-5 · low");
+  await act(async () => root.render(settings(native)));
+  expect(container.textContent).toContain("Not signed in — run `claude` in a terminal once");
+  const runsOn = container.querySelector<HTMLSelectElement>('select[id$="-runtime"]');
+  expect(runsOn?.value).toBe("claude-code");
+  expect(modelSelect().value).toBe("claude-opus-5");
+  expect(modelSelect().textContent).not.toContain("GPT-6 Astra");
+  expect(container.textContent).toContain("Experimental");
+});
+
+it.each([
+  ["claude-code", "claude is not installed on this computer"],
+  ["codex-app-server", "Codex app-server unavailable"],
+] as const)(
+  "shows %s availability without replacing the saved model",
+  async (runtimeKind, reason) => {
+    api.availability.mockResolvedValue({ runtimeKind, available: false, reason, models: [] });
+    await act(async () =>
+      root.render(
+        settings({
+          runtimeKind,
+          modelProvider: runtimeKind === "claude-code" ? "anthropic" : "openai-codex",
+          modelId: "saved-model",
+          thinkingLevel: "low",
+          modelCredentialId: `native:${runtimeKind}`,
+        }),
+      ),
+    );
+    expect(container.textContent).toContain(reason);
+    expect(modelSelect().value).toBe("saved-model");
+  },
+);

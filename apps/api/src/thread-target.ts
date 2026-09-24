@@ -8,6 +8,7 @@ import {
   MessageBlock as MessageBlockSchema,
   type MessageReaction,
   type RunStatus,
+  RuntimeInfoSchema,
   RuntimePinSchema,
   type ThreadSnapshot,
 } from "@ardurbot/contracts";
@@ -585,6 +586,7 @@ function mapRun(run: {
   modelProvider: string | null;
   modelId: string | null;
   runtimePin?: unknown;
+  runtimeInfo?: unknown;
   error: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -598,6 +600,7 @@ function mapRun(run: {
     status: run.status as never,
     trigger: run.trigger as never,
     routineId: run.routineId ?? null,
+    runtimeInfo: RuntimeInfoSchema.safeParse(run.runtimeInfo).data ?? null,
     runtimePin: RuntimePinSchema.safeParse(run.runtimePin).data ?? null,
     modelProvider: run.modelProvider,
     modelId: run.modelId,

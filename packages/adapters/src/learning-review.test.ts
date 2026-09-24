@@ -13,6 +13,7 @@ const pin: RuntimePin = {
   modelId: "test-model",
   effort: "medium",
   credentialId: "connection",
+  runtimeKind: "pi" as const,
   revision: 1,
 };
 const scope = { spaceId: "space-1", userId: "user-1", botId: "bot-1" };
@@ -26,6 +27,7 @@ function fixture() {
     threadId: thread.id,
     sourceMessageId: "message-1",
     status: "completed",
+    runtimePin: pin,
     startedAt: null,
     completedAt: null,
     thread,
@@ -92,6 +94,8 @@ function fixture() {
         }),
       ),
     },
+    learningSuppression: { findMany: vi.fn(async () => []), findUnique: vi.fn(async () => null) },
+    learningGrant: { findFirst: vi.fn(async () => null) },
     learningProposal: {
       findMany: vi.fn(async () => records.proposals),
       create: vi.fn(async ({ data }: { data: Row }) => {

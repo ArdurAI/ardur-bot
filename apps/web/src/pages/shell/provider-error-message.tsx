@@ -44,11 +44,20 @@ export function ProviderErrorMessage({
     return (
       <>
         <span className="min-w-0 flex-1">
-          <Trans>
-            This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin.
-          </Trans>
+          {runtimeProblem.code.startsWith("runtime-") ? (
+            runtimeProblem.reason
+          ) : (
+            <Trans>
+              This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin.
+            </Trans>
+          )}
         </span>
-        <Button variant="link" size="xs" className="text-destructive" onClick={onConnect}>
+        <Button
+          variant="link"
+          size="xs"
+          className="text-destructive"
+          onClick={pin.runtimeKind === "pi" ? onConnect : onChangeModel}
+        >
           <Trans>Connect</Trans>
         </Button>
         <Button variant="link" size="xs" className="text-destructive" onClick={onChangeModel}>

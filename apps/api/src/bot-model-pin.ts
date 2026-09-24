@@ -1,4 +1,9 @@
-import { listPiCatalog, modelCredentialDto, suggestedModelEffort } from "@ardurbot/adapters";
+import {
+  listPiCatalog,
+  modelCredentialDto,
+  nativeRuntimeAvailability,
+  suggestedModelEffort,
+} from "@ardurbot/adapters";
 import type { Actor, UpdateBotInput } from "@ardurbot/contracts";
 import type { Prisma } from "@ardurbot/db";
 import { findBoundModelCredential, findModelCredential } from "@ardurbot/db";
@@ -14,16 +19,20 @@ export async function botModelPinUpdate(
     modelId: string | null;
     thinkingLevel: string | null;
     modelCredentialId: string | null;
+    runtimeKind?: string;
   },
   input: ReturnType<typeof UpdateBotInput.parse>,
 ): Promise<Prisma.BotUpdateInput> {
   if (
+    input.runtimeKind === undefined &&
     input.modelProvider === undefined &&
+    input.modelId === undefined &&
     input.thinkingLevel === undefined &&
     input.modelCredentialId === undefined
   )
     return {};
   if (
+    (input.runtimeKind === undefined || input.runtimeKind === (existing.runtimeKind ?? "pi")) &&
     (input.modelProvider === undefined || input.modelProvider === existing.modelProvider) &&
     (input.modelId === undefined || input.modelId === existing.modelId) &&
     (input.thinkingLevel === undefined || input.thinkingLevel === existing.thinkingLevel) &&
@@ -33,8 +42,34 @@ export async function botModelPinUpdate(
     return {};
   const provider = input.modelProvider === undefined ? existing.modelProvider : input.modelProvider;
   const modelId = input.modelId === undefined ? existing.modelId : input.modelId;
+  const runtimeKind = input.runtimeKind ?? existing.runtimeKind ?? "pi";
+  if (runtimeKind !== "pi") {
+    if (runtimeKind !== "claude-code" && runtimeKind !== "codex-app-server")
+      throw new ORPCError("BAD_REQUEST", { message: "Choose a runtime." });
+    const nativeProvider = runtimeKind === "claude-code" ? "anthropic" : "openai-codex";
+    const effort = input.thinkingLevel ?? existing.thinkingLevel;
+    if (provider !== nativeProvider || !modelId || !effort)
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Choose a model and effort for this runtime.",
+      });
+    const availability = await nativeRuntimeAvailability(runtimeKind);
+    const model = availability.models.find((entry) => entry.id === modelId);
+    if (availability.available && !model?.efforts.includes(effort))
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This runtime cannot honor that model and effort.",
+      });
+    return {
+      runtimeKind,
+      modelProvider: provider,
+      modelId,
+      thinkingLevel: effort,
+      modelCredentialId: `native:${runtimeKind}`,
+      modelPinRevision: { increment: 1 },
+    };
+  }
   if (!provider && !modelId)
     return {
+      runtimeKind: "pi",
       modelProvider: null,
       modelId: null,
       modelCredentialId: null,
@@ -80,6 +115,7 @@ export async function botModelPinUpdate(
       message: `Thinking level must be one of: ${levels.join(", ")}`,
     });
   return {
+    runtimeKind: "pi",
     modelProvider: provider,
     modelId,
     modelCredentialId: credential.id,

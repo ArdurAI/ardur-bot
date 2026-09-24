@@ -71,6 +71,19 @@ describe("skill document lifecycle", () => {
       5,
     );
   });
+  it("hydrates personal learned skills without widening bot-specific skills", async () => {
+    const f = fixture();
+    const personal = { ...f.row, id: "personal", botId: null };
+    expect(() => assertSkillWritable(personal, { ...owner, runId: "run" })).not.toThrow();
+    const [skill] = await hydrateAgentSkills(f.prisma, f.service, owner, [personal]);
+    expect(skill?.content).toContain("Use numbered steps.");
+    expect(
+      (await f.service.read(skill!.documentId!, skillDocumentContext(owner)))?.scopeKey.kind,
+    ).toBe("user");
+    expect(
+      await hydrateAgentSkills(f.prisma, f.service, owner, [{ ...f.row, botId: "other" }]),
+    ).toEqual([]);
+  });
   it("protects pinned, imported, unknown and other-bot skills from loop writes", async () => {
     const f = fixture();
     const run = { ...owner, runId: "run" };

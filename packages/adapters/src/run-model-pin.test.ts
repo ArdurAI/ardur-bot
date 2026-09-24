@@ -19,6 +19,7 @@ const pin = {
   modelId: "grok-4.6",
   effort: "high",
   credentialId: "connection",
+  runtimeKind: "pi" as const,
   revision: 2,
 };
 function fixture() {
@@ -240,4 +241,27 @@ it("checks root locality against the resolved endpoint before returning an execu
       bot: { allowedModelDestinations: { mode: "local" } },
     }),
   ).toMatchObject({ kind: "resolved", runtimePin: custom });
+});
+
+it("resolves native snapshots without looking up or loading a credential", async () => {
+  const f = fixture();
+  const snapshot = {
+    ...pin,
+    runtimeKind: "claude-code" as const,
+    provider: "anthropic",
+    modelId: "claude-opus-5",
+    effort: "low",
+    credentialId: "native:claude-code",
+  };
+  const result = await resolveRunModelPin({
+    ...f,
+    snapshot,
+    bot: { runtimeKind: "pi", modelProvider: "xai" },
+  });
+  expect(result).toMatchObject({ kind: "resolved", pin: snapshot, runtimePin: snapshot });
+  expect(f.loadKey).not.toHaveBeenCalled();
+  expect(f.findCredential).not.toHaveBeenCalled();
+  expect(f.findPreference).not.toHaveBeenCalled();
+  expect(result).not.toHaveProperty("apiKey");
+  expect(result).not.toHaveProperty("oauth");
 });

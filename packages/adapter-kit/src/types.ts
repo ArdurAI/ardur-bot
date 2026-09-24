@@ -2,6 +2,7 @@ import type {
   ConnectionCatalogItem,
   DelegationProblem,
   DocumentScope,
+  RuntimeInfo,
   RuntimePin,
   RuntimeProblem,
   SandboxKind,
@@ -404,6 +405,9 @@ export interface AgentRunRequest {
   botId: string;
   threadId: string;
   runId: string;
+  nativeSession?: RuntimeInfo;
+  nativeCwd?: string;
+  onRuntimeInfo?: (info: RuntimeInfo) => Promise<void>;
   sourceMessageId?: string | null;
   prompt: string;
   instructions: string;

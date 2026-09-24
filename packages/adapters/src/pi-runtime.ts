@@ -101,7 +101,14 @@ function thinkingLevelFor(
   if (!getSupportedThinkingLevels(model).includes(effort)) {
     throw new RuntimePinError(
       runtimePinProblem(
-        { provider: model.provider, modelId: model.id, effort, credentialId: null, revision: 0 },
+        {
+          runtimeKind: "pi",
+          provider: model.provider,
+          modelId: model.id,
+          effort,
+          credentialId: null,
+          revision: 0,
+        },
         "pin-effort-unsupported",
         "The pinned model does not support this effort.",
       ),
@@ -191,6 +198,14 @@ export class PiAgentRuntime implements AgentRuntime {
       let trackedBudget: ToolCallBudget | undefined;
       let resumeHost: ToolHost | undefined;
       try {
+        if (request.model.runtimePin && request.model.runtimePin.runtimeKind !== "pi")
+          throw new RuntimePinError(
+            runtimePinProblem(
+              request.model.runtimePin,
+              "runtime-unavailable",
+              "This operation cannot use the pinned runtime yet — change the pin.",
+            ),
+          );
         const selectedModel = resolveRuntimeModel(request.model);
         if (request.model.runtimePin && !selectedModel.model) {
           throw new RuntimePinError(

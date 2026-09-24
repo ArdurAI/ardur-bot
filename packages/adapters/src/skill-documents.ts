@@ -44,7 +44,7 @@ export function assertSkillWritable(row: SkillDocumentRow, owner: SkillDocumentO
     (row.source !== "user" && row.source !== "learned") ||
     (row.origin !== undefined && row.origin !== "user" && row.origin !== "learned") ||
     (owner.runId && row.protected) ||
-    (row.origin === "learned" && owner.botId && row.botId !== owner.botId)
+    (row.origin === "learned" && row.botId && owner.botId && row.botId !== owner.botId)
   )
     throw new MemoryAccessError();
 }
@@ -110,7 +110,7 @@ export async function hydrateAgentSkills<T extends SkillDocumentRow>(
   }
   const result = [];
   for (const row of rows) {
-    if (row.origin === "learned" && owner.botId && row.botId !== owner.botId) continue;
+    if (row.origin === "learned" && row.botId && owner.botId && row.botId !== owner.botId) continue;
     const head = await readSkillDocument(service, owner, row);
     if (head.deletedAt) continue;
     if (row.documentId !== head.id || row.activeRevision !== head.revision)

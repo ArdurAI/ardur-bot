@@ -50,6 +50,11 @@ export async function deliverMemory(
   const selected = await service.open(context, async (s) => {
     const doc = await s.store.read(id, s.access);
     if (!doc || doc.revision !== revision || doc.delivery.status === "delivered") return null;
+    // Typed setting revisions are visible history, never semantic knowledge or prompt instructions.
+    if (doc.path.startsWith("preferences/")) {
+      await s.store.setDelivery(id, revision, { ...doc.delivery, status: "delivered" }, s.access);
+      return null;
+    }
     if (doc.delivery.retryAt && Date.parse(doc.delivery.retryAt) > now())
       throw new Error("Saved locally. Indexing pending.");
     if (
@@ -141,7 +146,11 @@ export async function recallDocuments(
       access: s.access,
       generation: s.generation,
       documents: bundle.documents
-        .filter((doc) => !doc.revisions.at(-1)!.deletedAt)
+        .filter(
+          (doc) =>
+            !doc.revisions.at(-1)!.deletedAt &&
+            !doc.revisions.at(-1)!.path.startsWith("preferences/"),
+        )
         .map((doc) => semanticDocument({ ...doc.revisions.at(-1)!, id: doc.id })),
     };
   });
@@ -190,6 +199,8 @@ export async function recallDocuments(
       if (
         !doc ||
         doc.deletedAt ||
+        doc.path.startsWith("preferences/") ||
+        seen.has(doc.id) ||
         doc.revision !== revision ||
         (result.source?.contentHash &&
           result.source.contentHash !== semanticDocument(doc).contentHash)

@@ -23,7 +23,12 @@ function fixture() {
     agentSkill: {
       findFirst: vi.fn(
         async () =>
-          null as { protected: boolean; origin: string; source: string; botId: string } | null,
+          null as {
+            protected: boolean;
+            origin: string;
+            source: string;
+            botId: string | null;
+          } | null,
       ),
     },
     $executeRaw: vi.fn(async () => []),
@@ -109,6 +114,24 @@ describe("document store factory and queue composition", () => {
     ).rejects.toMatchObject({ code: "MEMORY_GENERATION" });
     expect(f.database.documents.size).toBe(0);
     expect(f.enqueue).not.toHaveBeenCalled();
+  });
+  it("allows an explicitly personal learned skill while preserving its user scope", async () => {
+    const f = fixture();
+    const doc = await f.service.save(
+      { scope: "user", path: "skills/personal.md", content: "A personal procedure" },
+      context,
+    );
+    f.tx.agentSkill.findFirst.mockResolvedValue({
+      protected: false,
+      origin: "learned",
+      source: "learned",
+      botId: null,
+    });
+    const updated = await f.service.update(doc.id, "Revised personal procedure", doc.revision, {
+      ...context,
+      runId: "run",
+    });
+    expect(updated.scopeKey).toEqual({ kind: "user", spaceId: "space", userId: "user" });
   });
   it("enforces skill protection inside the common writer lock, including path-based saves", async () => {
     const f = fixture();

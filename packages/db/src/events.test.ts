@@ -134,6 +134,7 @@ describe("finalizeRun", () => {
               modelId: "grok-4.6",
               effort: "high",
               credentialId: "deleted",
+              runtimeKind: "pi",
               revision: 1,
             },
             reason: "Missing connection",

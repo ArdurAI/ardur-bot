@@ -1,7 +1,13 @@
-import type { Actor } from "@ardurbot/contracts";
+import { nativeRuntimeAvailability } from "@ardurbot/adapters";
+import type { Actor, RuntimeAvailability } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import type { RouterDeps } from "./router.js";
+
+vi.mock("@ardurbot/adapters", async (original) => ({
+  ...(await original<object>()),
+  nativeRuntimeAvailability: vi.fn(),
+}));
 
 const actor = { userId: "user", spaceId: "space" } as Actor;
 const existing = {
@@ -39,6 +45,73 @@ function fixture() {
   return { deps, findFirst, credential };
 }
 describe("bot pin editing", () => {
+  it("saves a complete native binding without looking up API credentials", async () => {
+    const { deps, findFirst } = fixture();
+    vi.mocked(nativeRuntimeAvailability).mockResolvedValue({
+      runtimeKind: "claude-code",
+      available: true,
+      models: [{ id: "claude-opus-5", label: "Opus", efforts: ["low"] }],
+    });
+    expect(
+      await botModelPinUpdate(deps, actor, existing, {
+        botId: "bot",
+        runtimeKind: "claude-code",
+        modelProvider: "anthropic",
+        modelId: "claude-opus-5",
+        thinkingLevel: "low",
+      }),
+    ).toEqual({
+      runtimeKind: "claude-code",
+      modelProvider: "anthropic",
+      modelId: "claude-opus-5",
+      thinkingLevel: "low",
+      modelCredentialId: "native:claude-code",
+      modelPinRevision: { increment: 1 },
+    });
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+  it("validates model-only edits against the runtime's model and effort capabilities", async () => {
+    const { deps } = fixture();
+    vi.mocked(nativeRuntimeAvailability).mockResolvedValue({
+      runtimeKind: "claude-code",
+      available: true,
+      models: [{ id: "claude-opus-5", label: "Opus", efforts: ["low"] }],
+    });
+    await expect(
+      botModelPinUpdate(
+        deps,
+        actor,
+        {
+          runtimeKind: "claude-code",
+          modelProvider: "anthropic",
+          modelId: "claude-opus-5",
+          thinkingLevel: "low",
+          modelCredentialId: "native:claude-code",
+        },
+        { botId: "bot", modelId: "unknown" },
+      ),
+    ).rejects.toThrow("cannot honor");
+  });
+  it("keeps a disconnected native choice explicit instead of choosing another runtime", async () => {
+    const { deps, findFirst } = fixture();
+    const unavailable: RuntimeAvailability = {
+      runtimeKind: "codex-app-server",
+      available: false,
+      models: [],
+      reason: "Codex app-server unavailable",
+    };
+    vi.mocked(nativeRuntimeAvailability).mockResolvedValue(unavailable);
+    expect(
+      await botModelPinUpdate(deps, actor, existing, {
+        botId: "bot",
+        runtimeKind: "codex-app-server",
+        modelProvider: "openai-codex",
+        modelId: "model",
+        thinkingLevel: "high",
+      }),
+    ).toMatchObject({ runtimeKind: "codex-app-server", modelId: "model", thinkingLevel: "high" });
+    expect(findFirst).not.toHaveBeenCalled();
+  });
   it("preserves an unchanged legacy pin during a profile save", async () => {
     const { deps, findFirst } = fixture();
     const legacy = { ...existing, modelProvider: "xai", modelId: "grok-4.6" };
@@ -75,6 +148,7 @@ describe("bot pin editing", () => {
         modelCredentialId: "selected",
       }),
     ).toEqual({
+      runtimeKind: "pi",
       modelProvider: "xai",
       modelId: "grok-4.6",
       modelCredentialId: "selected",

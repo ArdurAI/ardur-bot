@@ -120,6 +120,7 @@ export class JournalDocumentStore implements MemoryDocumentStore {
       path: input.path,
       content: input.deleted ? "" : input.content,
       author: input.author,
+      ...(input.learning ? { learning: input.learning } : {}),
       model: input.model ?? null,
       runId: input.runId ?? null,
       threadId: input.threadId ?? null,

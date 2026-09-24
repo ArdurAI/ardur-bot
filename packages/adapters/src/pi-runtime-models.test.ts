@@ -6,13 +6,45 @@ import { modelAcceptsImageInput } from "./model-vision.js";
 import { listPiCatalog } from "./pi-models.js";
 import { AnthropicOAuthUnavailableError, resolveModelAuth } from "./pi-oauth.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
-import { modelsForRequest, resolveRuntimeModel } from "./pi-runtime.js";
+import { modelsForRequest, PiAgentRuntime, resolveRuntimeModel } from "./pi-runtime.js";
 
 function requestModel(id: string, baseUrl: string): Pick<AgentRunRequest, "model"> {
   return { model: { provider: OPENAI_COMPATIBLE_PROVIDER_ID, id, baseUrl } };
 }
 
 describe("request model catalogs", () => {
+  it("rejects native pins before a Pi auxiliary call can choose an API provider", async () => {
+    const request: AgentRunRequest = {
+      botId: "bot",
+      threadId: "thread",
+      runId: "run",
+      instructions: "",
+      prompt: "test",
+      history: [],
+      tools: [],
+      model: {
+        provider: "anthropic",
+        id: "claude-opus-5",
+        runtimePin: {
+          runtimeKind: "claude-code",
+          provider: "anthropic",
+          modelId: "claude-opus-5",
+          effort: "low",
+          credentialId: "native:claude-code",
+          revision: 1,
+        },
+      },
+    };
+    await expect(
+      (async () => {
+        for await (const _ of new PiAgentRuntime().run(request)) {
+          /* Drain the stream. */
+        }
+      })(),
+    ).rejects.toMatchObject({
+      problem: { code: "runtime-unavailable", pin: request.model.runtimePin },
+    });
+  });
   it("rejects a serialized OAuth credential disguised as an Anthropic runtime API key", () => {
     expect(() =>
       resolveRuntimeModel({
@@ -162,6 +194,7 @@ it("does not look up a pinned model on OpenRouter under another provider", () =>
     modelId: "openai/gpt-5.6-luna",
     effort: "high",
     credentialId: "connection",
+    runtimeKind: "pi" as const,
     revision: 1,
   };
   const result = resolveRuntimeModel({
@@ -180,6 +213,7 @@ it("rejects a pinned request without its key before environment credential recov
     modelId: "openai/gpt-5.6-luna",
     effort: "high",
     credentialId: "connection",
+    runtimeKind: "pi" as const,
     revision: 1,
   };
   expect(() =>
@@ -197,6 +231,7 @@ it("requires the bound endpoint for a pinned keyless custom model", () => {
     modelId: "local-model",
     effort: "off",
     credentialId: "connection",
+    runtimeKind: "pi" as const,
     revision: 1,
   };
   expect(() =>
