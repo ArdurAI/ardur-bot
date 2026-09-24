@@ -14,6 +14,7 @@ export type RouterContext = {
   actor: Actor | null;
   signal?: AbortSignal;
   authSessionId?: string;
+  authHeaders?: Headers;
   origin?: string;
 };
 export function createCustomizationRoutes(
