@@ -175,6 +175,7 @@ import {
   resolveBusyBotName,
   toComputerStatus,
 } from "./computer-status.js";
+import { createContextService } from "./context.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
@@ -1205,6 +1206,34 @@ export function createRouter(deps: RouterDeps) {
         return { ok: true as const };
       }),
     },
+    metrics: {
+      context: authed.metrics.context.handler(({ context, input }) =>
+        createContextService(deps.prisma, deps.memoryDocuments).metrics(context.actor, input),
+      ),
+    },
+    context: {
+      settings: authed.context.settings.handler(({ context, input }) =>
+        createContextService(deps.prisma, deps.memoryDocuments).settings(
+          context.actor,
+          input.botId,
+        ),
+      ),
+      configure: authed.context.configure.handler(({ context, input }) =>
+        createContextService(deps.prisma, deps.memoryDocuments).configure(context.actor, input),
+      ),
+    },
+    briefs: {
+      list: authed.briefs.list.handler(({ context, input }) =>
+        memoryRpc(() =>
+          createContextService(deps.prisma, deps.memoryDocuments).briefs(context.actor, input),
+        ),
+      ),
+      update: authed.briefs.update.handler(({ context, input }) =>
+        memoryRpc(() =>
+          createContextService(deps.prisma, deps.memoryDocuments).saveBrief(context.actor, input),
+        ),
+      ),
+    },
     bots: {
       list: authed.bots.list.handler(async ({ context }) => repos.listBots(context.actor)),
       listArchived: authed.bots.listArchived.handler(async ({ context }) =>
@@ -1297,6 +1326,7 @@ export function createRouter(deps: RouterDeps) {
             title: input.title,
             description: input.description,
             instructions: input.instructions,
+            concurrentRuns: input.concurrentRuns,
             notifyOnFinish: input.notifyOnFinish,
             color: input.color,
             pinned: input.pinned,

@@ -181,6 +181,9 @@ model Member {
 }
 
 model Space {
+  contextBudgets Json?
+  concurrentRuns Int @default(3)
+  coordinatorBotId String?
   comparisons Comparison[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
@@ -359,6 +362,8 @@ model SpaceVoicePreference {
 }
 
 model Bot {
+  concurrentRuns Int?
+  briefs BotBrief[]
   allowedModelDestinations Json?
   screenGeneration Int @default(0)
   id                String            @id @default(cuid())
@@ -455,6 +460,7 @@ model BotDeletion {
 }
 
 model ChatGroup {
+  coordinatorBotId String?
   id         String            @id @default(cuid())
   spaceId    String
   space      Space             @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -489,6 +495,7 @@ model ChatGroupMember {
 }
 
 model Thread {
+  briefs BotBrief[]
   id                          String     @id @default(cuid())
   spaceId                     String
   space                       Space      @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -591,6 +598,9 @@ model Task {
 }
 
 model Run {
+  contextSnapshot Json?
+  routingRule String?
+  queueWaitMs Int?
   comparisonId String?
   delegationId String? @unique
   delegationRootTaskId String?
@@ -648,6 +658,7 @@ model Run {
   @@index([botOutcomeReturnedAt, status])
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
+  @@index([spaceId, userId, createdAt])
   @@index([spaceId, botId])
   @@index([originDeviceGrantId, status])
   @@index([remoteRootTaskId, status])
@@ -1984,4 +1995,29 @@ model ComparisonExecution {
   selectedRunIds String[] @default([])
   @@unique([comparisonId, position])
   @@map("comparison_executions")
+}
+
+model BotBrief {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  botId String
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  threadId String
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  groupKey String
+  pendingRunId String?
+  toolResults String @default("") @db.Text
+  lastMessageSeq Int @default(-1)
+  historyGeneration Int @default(0)
+  rewrittenAt DateTime?
+  attemptedAt DateTime?
+  leaseExpiresAt DateTime?
+  reason String?
+  @@unique([botId, threadId])
+  @@index([pendingRunId, attemptedAt])
+  @@index([botId, leaseExpiresAt])
+  @@index([threadId, leaseExpiresAt])
+  @@index([spaceId, userId, botId])
+  @@map("bot_briefs")
 }

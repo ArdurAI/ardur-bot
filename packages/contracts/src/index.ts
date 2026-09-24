@@ -6,6 +6,7 @@ export * from "./command-blocks.js";
 export * from "./comparison.js";
 export * from "./computer-connections.js";
 export * from "./computer-profiles.js";
+export * from "./context.js";
 export * from "./delegation.js";
 export * from "./desktop.js";
 export * from "./dispatch.js";

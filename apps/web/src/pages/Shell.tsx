@@ -136,6 +136,7 @@ import {
   computersAreUnavailable,
 } from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
+import { RunContext } from "../components/Context";
 import type { PendingAttachment } from "../components/composer/attachments";
 import { prepareComposerAttachments } from "../components/composer/attachments";
 import { ComposerTools } from "../components/composer/ComposerTools";
@@ -3249,6 +3250,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                 onClick={openBotModelSettings}
               />
             ) : null}
+            <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
           <div className="flex items-center gap-1">
             {!inGroup && active ? (

@@ -10,7 +10,6 @@ import {
 import type { ChatInstallation, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   acceptChatEvent,
-  admitDispatch,
   auditDevice,
   authenticateChannel,
   DeviceRequestError,
@@ -22,6 +21,7 @@ import {
   requireDispatchEnabled,
 } from "@ardurbot/db";
 import { approvalRequestRoute, validateDeviceApproval } from "../remote-execution.js";
+import { admitRoutedDispatch as admitDispatch } from "../routing/dispatch.js";
 
 export function createMessagingDispatch(deps: {
   prisma: PrismaClient;

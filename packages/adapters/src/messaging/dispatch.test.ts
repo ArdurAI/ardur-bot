@@ -157,6 +157,7 @@ describe("chat Dispatch actions", () => {
         text: expect.stringContaining("untrusted peer content"),
       }),
       expect.objectContaining({ installationId: "installation", channelId: "channel" }),
+      expect.any(Function),
     );
     expect(calls.admit.mock.calls[0]?.[2].text).toContain("&lt;/channel_message&gt;");
     expect(calls.enqueue).not.toHaveBeenCalled(); // Accepted belongs to admission's database transaction.

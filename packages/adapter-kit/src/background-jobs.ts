@@ -7,6 +7,7 @@ import type {
 } from "./types.js";
 
 const payloadSchemas = {
+  "briefs.maintain": z.object({}).strict(),
   "learning.curate": z.object({
     spaceId: z.string().min(1).optional(),
     requestedBy: z.string().min(1).optional(),

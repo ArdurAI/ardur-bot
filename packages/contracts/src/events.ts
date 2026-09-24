@@ -5,6 +5,7 @@ import {
   CommandBlockSchema,
   CommandEventPayloadSchema,
 } from "./command-blocks.js";
+import { ContextSnapshotSchema } from "./context.js";
 import { Id } from "./ids.js";
 import { McpTransportSchema } from "./mcp.js";
 import { RunFailurePayloadSchema } from "./provider-errors.js";
@@ -24,6 +25,7 @@ export const ProductEventType = z.enum([
   "thread.subagent",
   "thread.cloud_agent",
   "run.started",
+  "run.context",
   "run.checkpointed",
   "run.waiting_input",
   "run.completed",
@@ -298,6 +300,12 @@ export const ProductEventSchema = z
     payload: z.record(z.string(), z.unknown()),
   })
   .superRefine((event, ctx) => {
+    if (event.type === "run.context") {
+      const result = ContextSnapshotSchema.safeParse(event.payload);
+      if (!result.success)
+        for (const issue of result.error.issues)
+          ctx.addIssue({ ...issue, path: ["payload", ...issue.path] });
+    }
     if (event.type.startsWith("command.")) {
       const schema =
         event.type === "command.exported" || event.type === "command.shared"

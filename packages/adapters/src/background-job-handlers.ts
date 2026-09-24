@@ -10,7 +10,7 @@ import { messagingDeliverJob } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
-import { deliverMemory } from "@ardurbot/memory";
+import { deliverMemory, maintainBriefs } from "@ardurbot/memory";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { expireComputerControl } from "./computer-control.js";
@@ -58,6 +58,9 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
+    "briefs.maintain": async () => {
+      await maintainBriefs(deps.prisma, deps.executor.refreshBrief);
+    },
     "learning.curate": (payload) => curateLearningSpaces(deps, payload),
     "learning.review": (payload) =>
       reviewLearning(
@@ -153,6 +156,9 @@ export function createBackgroundJobHandlers(deps: {
           memoryProviders: deps.memoryProviders,
           deploymentModelKey: deps.deploymentModelKey,
           ...(deps.executor.resolveModel ? { resolveModel: deps.executor.resolveModel } : {}),
+          ...(deps.executor.resolveCompactionRuntime
+            ? { resolveRuntime: deps.executor.resolveCompactionRuntime }
+            : {}),
         },
         payload.threadId,
       );

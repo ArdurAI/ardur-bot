@@ -191,6 +191,10 @@ msgstr "@{0}"
 msgid "1 run at this pin; hosted providers may bill per run"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "7 days"
+msgstr "7 dias"
+
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
 msgstr ""
@@ -903,6 +907,10 @@ msgstr ""
 msgid "Branch"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Brief"
+msgstr "Resumo"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr ""
@@ -919,6 +927,10 @@ msgstr ""
 msgid "Built-in"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Cache hits"
+msgstr "Acertos de cache"
+
 #: src/pages/CallView.tsx
 msgid "Call"
 msgstr "Ligar"
@@ -930,6 +942,7 @@ msgstr "Não é possível acessar o servidor."
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -1344,6 +1357,10 @@ msgstr "Computadores estão desligados. Defina SANDBOX_PROVIDER=docker com SANDB
 msgid "Computers are unavailable; reconnect and try again."
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Concurrent runs"
+msgstr "Execuções simultâneas"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Configured by deployment"
 msgstr "Configurado por implantação"
@@ -1489,6 +1506,11 @@ msgstr "A conexão com o {0} ainda está pendente. Você pode fechar isso e veri
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
 
+#: src/components/Context.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Context"
+msgstr "Contexto"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1511,6 +1533,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Continue with email"
 msgstr "Continuar com e-mail"
+
+#: src/pages/GroupPanel.tsx
+msgid "Coordinator"
+msgstr "Coordenador"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Coordinator bot"
@@ -1769,6 +1795,10 @@ msgstr ""
 msgid "Could not load comparisons; retry."
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Could not load data"
+msgstr "Não foi possível carregar os dados"
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
 msgstr ""
@@ -1942,6 +1972,10 @@ msgstr "Não foi possível salvar"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not save Auto Review"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Could not save changes"
+msgstr "Não foi possível salvar as alterações"
 
 #: src/pages/ModelDestinations.tsx
 msgid "Could not save destinations; try again."
@@ -2528,6 +2562,7 @@ msgstr "ex.: Hivenet Agent, Presales, bot de planilhas"
 msgid "Earlier message"
 msgstr ""
 
+#: src/components/Context.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
@@ -2848,6 +2883,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Group"
 msgstr "Grupo"
+
+#: src/components/Context.tsx
+msgid "Group brief"
+msgstr "Resumo do grupo"
 
 #: src/pages/GroupPanel.tsx
 msgid "Group settings"
@@ -3186,6 +3225,10 @@ msgstr ""
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Leave"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Left unchanged: {reason}"
+msgstr "Sem alterações: {reason}"
 
 #: src/pages/system/DispatchSetting.tsx
 msgid "Let paired phones and chat accounts dispatch, steer, and approve work in this space."
@@ -3563,9 +3606,17 @@ msgstr ""
 msgid "Model options"
 msgstr "Opções do modelo"
 
+#: src/components/Context.tsx
+msgid "Model or memory unavailable"
+msgstr "Modelo ou memória indisponível"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "O modelo de gasto usa suas chaves de provedor."
+
+#: src/components/Context.tsx
+msgid "Model unavailable"
+msgstr "Modelo indisponível"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
@@ -3833,6 +3884,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "No uploaded files"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "None"
+msgstr "Nenhum"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -4121,6 +4176,10 @@ msgstr ""
 msgid "Other model…"
 msgstr "Outro modelo..."
 
+#: src/components/Context.tsx
+msgid "Owner edited recently"
+msgstr "Editado recentemente pelo proprietário"
+
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
 msgstr ""
@@ -4341,6 +4400,10 @@ msgstr ""
 #: src/pages/MemoryHistory.tsx
 msgid "Pushed"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Queue wait"
+msgstr "Espera na fila"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
@@ -4725,6 +4788,7 @@ msgstr ""
 msgid "Restricted"
 msgstr ""
 
+#: src/components/Context.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -4810,6 +4874,10 @@ msgstr ""
 msgid "Revoked"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Rewritten {time}"
+msgstr "Reescrito {time}"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Robot"
 msgstr ""
@@ -4821,6 +4889,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Rotate key"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Routed by default"
+msgstr "Encaminhado por padrão"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/Shell.tsx
@@ -4913,6 +4985,7 @@ msgid "Sans"
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
@@ -5483,6 +5556,10 @@ msgstr ""
 msgid "task"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Task budget reached"
+msgstr "Orçamento da tarefa esgotado"
+
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
 msgstr ""
@@ -5688,6 +5765,10 @@ msgstr "Este login de assinatura ainda não está disponível no Ardur Bot. Use 
 msgid "Time of day"
 msgstr "Hora do dia"
 
+#: src/components/Context.tsx
+msgid "Time to first token"
+msgstr "Tempo até o primeiro token"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Timeline"
@@ -5700,6 +5781,10 @@ msgstr "Título"
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "Para:"
+
+#: src/components/Context.tsx
+msgid "Today"
+msgstr "Hoje"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"

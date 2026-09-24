@@ -110,6 +110,10 @@ export async function admitDispatch(
   grant: DeviceGrant,
   input: DispatchInput,
   origin?: ChannelDispatchOrigin,
+  routeIncoming?: (
+    tx: Prisma.TransactionClient,
+    defaults: { defaultBotId?: string | null; groupCoordinatorId?: string | null },
+  ) => Promise<{ botId: string; rule: string } | null>,
 ): Promise<Receipt> {
   const key = {
     instanceId: grant.instanceId,
@@ -167,7 +171,18 @@ export async function admitDispatch(
           })
         : null;
       if (origin && !installation) throw new DeviceRequestError("This channel is unavailable.");
-      const botId = input.botId ?? route?.botId ?? installation?.botId ?? liveGrant.defaultBotId;
+      const routed = routeIncoming
+        ? await routeIncoming(tx, {
+            defaultBotId: installation?.botId ?? liveGrant.defaultBotId,
+            groupCoordinatorId: route?.botId,
+          })
+        : null;
+      const botId =
+        routed?.botId ??
+        input.botId ??
+        route?.botId ??
+        installation?.botId ??
+        liveGrant.defaultBotId;
       if (!botId) throw new DeviceRequestError("Choose a bot before sending this task.", 400);
       const bot = await tx.bot.findFirst({
         where: { id: botId, spaceId: grant.spaceId, userId: grant.userId, archivedAt: null },
@@ -300,6 +315,8 @@ export async function admitDispatch(
             taskId: task.id,
             trigger: "user",
             status: "queued",
+            routingRule:
+              routed?.rule ?? (input.botId ? "mention" : input.replyToTaskId ? "reply" : "default"),
             originDeviceGrantId: grant.id,
             remoteDeviceGrantIds: [grant.id],
             remoteRootTaskId: task.id,

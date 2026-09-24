@@ -29,6 +29,7 @@ import {
 import { Trans, useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import { BotContext } from "../../components/Context";
 import { ShowAllModels } from "../../components/ShowAllModels";
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
 import { availableProviderModels, unavailableSubscriptionModel } from "../../lib/model-options";
@@ -524,6 +525,7 @@ export function BotSettings({
           }}
         />
       </div>
+      <BotContext botId={bot.id} />
       <ModelDestinations botId={bot.id} />
       <RuntimeSettings
         experimental={runtimeExperimental}

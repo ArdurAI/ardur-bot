@@ -1,6 +1,7 @@
 import * as z from "zod";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
+import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "./context.js";
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
@@ -51,6 +52,7 @@ export const AgentSecretInputSchema = z.object({
 export type AgentSecretInput = z.infer<typeof AgentSecretInputSchema>;
 
 export const BotSchema = z.object({
+  concurrentRuns: ConcurrentRunsSchema.nullable().optional(),
   allowedModelDestinations: LocalityPolicySchema.optional(),
   id: Id,
   spaceId: Id,
@@ -112,6 +114,7 @@ export const GROUP_MEMBER_MIN = 2;
 export const GROUP_MEMBER_MAX = 6;
 
 export const GroupSchema = z.object({
+  coordinatorBotId: Id.nullable().optional(),
   id: Id,
   spaceId: Id,
   name: z.string(),
@@ -140,6 +143,7 @@ export const CreateGroupInput = z.object({
 export type CreateGroupInput = z.infer<typeof CreateGroupInput>;
 
 export const UpdateGroupInput = z.object({
+  coordinatorBotId: Id.nullable().optional(),
   groupId: Id,
   name: z.string().trim().min(1).max(80).optional(),
   botIds: GroupBotIds.optional(),
@@ -324,6 +328,7 @@ export function normalizeCreateBotProfile(
 export const UpdateBotInput = z
   .object({
     botId: Id,
+    concurrentRuns: ConcurrentRunsSchema.nullable().optional(),
     name: z.string().trim().min(1).max(BOT_NAME_MAX_LENGTH).optional(),
     title: z.string().trim().max(BOT_TITLE_MAX_LENGTH).optional(),
     description: z.string().trim().max(BOT_DESCRIPTION_MAX_LENGTH).optional(),
@@ -870,6 +875,8 @@ export const MessagingAgentConnectionSchema = z.object({
 export type MessagingAgentConnection = z.infer<typeof MessagingAgentConnectionSchema>;
 
 export const RunSchema = z.object({
+  contextSnapshot: ContextSnapshotSchema.nullable().optional(),
+  routingRule: RoutingRuleSchema.nullable().optional(),
   id: Id,
   botId: Id,
   threadId: Id,
@@ -919,6 +926,7 @@ export const ThreadSnapshotSchema = z.object({
   groupName: z.string().optional(),
   members: z.array(GroupMemberSchema).optional(),
   run: RunSchema.nullable(),
+  contextRun: RunSchema.nullable().optional(),
   activeRuns: z.array(RunSchema).optional(),
   computer: ComputerStatusSchema.optional(),
 });
