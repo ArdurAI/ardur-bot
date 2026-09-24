@@ -3,6 +3,7 @@ import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
 import { CommandBlockSchema } from "./command-blocks.js";
+import { ComparisonExportSchema, comparisonsContract } from "./comparison.js";
 import {
   ComputerConfigurationSchema,
   ComputerConnectionInputSchema,
@@ -1067,6 +1068,7 @@ export const appContract = {
     ),
   },
   export: {
+    comparison: oc.input(z.object({ id: Id })).output(ComparisonExportSchema),
     bot: oc.input(botId).output(ExportManifestSchema),
   },
   notifications: {
@@ -1080,6 +1082,7 @@ export const appContract = {
   },
   delegations: delegationsContract,
   team: teamContract,
+  comparisons: comparisonsContract,
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),
   },

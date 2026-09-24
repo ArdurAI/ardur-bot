@@ -3,6 +3,7 @@ export * from "./attachments.js";
 export * from "./bot-avatar.js";
 export * from "./bot-secrets.js";
 export * from "./command-blocks.js";
+export * from "./comparison.js";
 export * from "./computer-connections.js";
 export * from "./computer-profiles.js";
 export * from "./delegation.js";

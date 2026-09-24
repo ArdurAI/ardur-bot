@@ -77,6 +77,7 @@ export function claudeArguments(
       runtimePinProblem(pin, "pin-credential-missing", "Claude Code uses its own sign-in."),
     );
   return [
+    ...(request.controlledComparison ? ["--safe-mode", "--setting-sources", ""] : []),
     "-p",
     "--output-format",
     "stream-json",
@@ -105,7 +106,12 @@ export function claudeArguments(
     "--disable-slash-commands",
     "--no-chrome",
     "--settings",
-    JSON.stringify({ disableAllHooks: true, switchModelsOnFlag: false, fallbackModel: [] }),
+    JSON.stringify({
+      disableAllHooks: true,
+      switchModelsOnFlag: false,
+      fallbackModel: [],
+      ...(request.controlledComparison ? { autoMemoryEnabled: false } : {}),
+    }),
     request.nativeSession?.sessionId ? "--resume" : "--session-id",
     sessionId,
   ];
@@ -185,7 +191,32 @@ export class ClaudeStreamParser {
         );
       for (const model of Object.keys(usage)) this.model(model);
       this.finished = true;
-      return [{ type: "done" }];
+      const events: AgentRuntimeEvent[] = [];
+      for (const [model, entry] of Object.entries(usage)) {
+        const tokens = entry as {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadInputTokens?: number;
+          cacheCreationInputTokens?: number;
+        };
+        if (
+          Number.isSafeInteger(tokens.inputTokens) &&
+          Number.isSafeInteger(tokens.outputTokens) &&
+          tokens.inputTokens! >= 0 &&
+          tokens.outputTokens! >= 0
+        )
+          events.push({
+            type: "usage",
+            provider: "anthropic",
+            model,
+            inputTokens:
+              tokens.inputTokens! +
+              (tokens.cacheReadInputTokens ?? 0) +
+              (tokens.cacheCreationInputTokens ?? 0),
+            outputTokens: tokens.outputTokens!,
+          });
+      }
+      return [...events, { type: "done" }];
     }
     if (value.type === "error")
       throw new RuntimePinError(
@@ -294,6 +325,16 @@ export class ClaudeCodeRuntime implements AgentRuntime {
               await request.onRuntimeInfo?.({
                 runtimeKind: "claude-code",
                 sessionId: parser.sessionId ?? sessionId,
+              });
+            const reported =
+              value.type === "assistant"
+                ? (value.message as { model?: unknown } | undefined)?.model
+                : undefined;
+            if (typeof reported === "string")
+              await request.onRuntimeInfo?.({
+                runtimeKind: "claude-code",
+                sessionId: parser.sessionId ?? sessionId,
+                reportedModel: reported,
               });
             for (const event of events) if (event.type !== "done") queue.push(event);
           }

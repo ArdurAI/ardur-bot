@@ -102,6 +102,11 @@ msgstr "{0} rollup hours"
 msgid "{0} runs · {1} tokens"
 msgstr "{0} runs · {1} tokens"
 
+#. placeholder {0}: preview.runs
+#: src/pages/CompareStart.tsx
+msgid "{0} runs at these pins; hosted providers may bill per run"
+msgstr "{0} runs at these pins; hosted providers may bill per run"
+
 #. placeholder {0}: counts.pendingCount
 #: src/pages/LearningInbox.tsx
 msgid "{0} suggestions to review"
@@ -182,6 +187,10 @@ msgstr "{workingBotName} is working"
 #: src/pages/Shell.tsx
 msgid "@{0}"
 msgstr "@{0}"
+
+#: src/pages/ComparePanel.tsx
+msgid "1 run at this pin; hosted providers may bill per run"
+msgstr "1 run at this pin; hosted providers may bill per run"
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -906,6 +915,7 @@ msgstr "cancelled"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Cancelled"
@@ -1183,10 +1193,15 @@ msgstr "Coming soon"
 msgid "Command"
 msgstr "Command"
 
+#: src/pages/CompareStart.tsx
+msgid "Compare with…"
+msgstr "Compare with…"
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "Complete"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Completed"
 msgstr "Completed"
@@ -1413,6 +1428,7 @@ msgstr "Copy output"
 msgid "Copy pairing details"
 msgstr "Copy pairing details"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr "Cost"
@@ -1611,6 +1627,14 @@ msgstr "Could not load approval rules"
 #: src/pages/IntegrationSetup.tsx
 msgid "Could not load bots. Reload to try again."
 msgstr "Could not load bots. Reload to try again."
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not load comparison; retry."
+msgstr "Could not load comparison; retry."
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not load comparisons; retry."
+msgstr "Could not load comparisons; retry."
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
@@ -1817,6 +1841,14 @@ msgstr "Could not send reset email"
 msgid "Could not send that"
 msgstr "Could not send that"
 
+#: src/pages/CompareStart.tsx
+msgid "Could not start comparison; retry."
+msgstr "Could not start comparison; retry."
+
+#: src/pages/CompareStart.tsx
+msgid "Could not start comparison; review the pins and retry."
+msgstr "Could not start comparison; review the pins and retry."
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "Could not start OAuth"
@@ -1844,6 +1876,10 @@ msgstr "Could not update"
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not update agent access"
 msgstr "Could not update agent access"
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not update comparison; retry."
+msgstr "Could not update comparison; retry."
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Could not update computer"
@@ -2266,6 +2302,10 @@ msgstr "Drag, drop, or paste an image"
 msgid "Duplicate"
 msgstr "Duplicate"
 
+#: src/pages/ComparePanel.tsx
+msgid "Duration"
+msgstr "Duration"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "e.g. Hivenet Agent, Presales, Timesheets bot"
 msgstr "e.g. Hivenet Agent, Presales, Timesheets bot"
@@ -2414,6 +2454,10 @@ msgstr "Export"
 msgid "Export block"
 msgstr "Export block"
 
+#: src/pages/ComparePanel.tsx
+msgid "Export JSON"
+msgstr "Export JSON"
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Export run"
 msgstr "Export run"
@@ -2439,6 +2483,11 @@ msgstr "failed"
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "Failed"
+
+#. placeholder {0}: result.failure ?? "Not reported"
+#: src/pages/ComparePanel.tsx
+msgid "Failed — {0}"
+msgstr "Failed — {0}"
 
 #: src/pages/Shell.tsx
 msgid "Failed to send message"
@@ -2713,6 +2762,10 @@ msgstr "Inbox"
 msgid "Inbox & email"
 msgstr "Inbox & email"
 
+#: src/pages/ComparePanel.tsx
+msgid "Incomplete"
+msgstr "Incomplete"
+
 #: src/pages/MemoryDeliveryProgress.tsx
 msgid "Indexed {delivered} of {total}"
 msgstr "Indexed {delivered} of {total}"
@@ -2722,6 +2775,7 @@ msgid "Inherit default"
 msgstr "Inherit default"
 
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/ComparePanel.tsx
 msgid "Inputs"
 msgstr "Inputs"
 
@@ -3086,6 +3140,10 @@ msgstr "Memory"
 msgid "Memory & Skills"
 msgstr "Memory & Skills"
 
+#: src/pages/ComparePanel.tsx
+msgid "Memory differed"
+msgstr "Memory differed"
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
 msgstr "Memory folder on your server"
@@ -3121,6 +3179,18 @@ msgstr "Mentions"
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Mentions only"
 msgstr "Mentions only"
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge"
+msgstr "Merge"
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge selected"
+msgstr "Merge selected"
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge with"
+msgstr "Merge with"
 
 #: src/pages/Shell.tsx
 msgid "Message"
@@ -3213,6 +3283,10 @@ msgstr "Model spend uses your provider keys."
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
 msgstr "Model updated."
+
+#: src/pages/ComparePanel.tsx
+msgid "Model version"
+msgstr "Model version"
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3482,6 +3556,7 @@ msgstr "Not now"
 msgid "Not recorded"
 msgstr "Not recorded"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
 msgstr "Not reported"
@@ -3766,6 +3841,10 @@ msgstr "Possible regression — review undo"
 msgid "POST to"
 msgstr "POST to"
 
+#: src/pages/CompareStart.tsx
+msgid "Preview"
+msgstr "Preview"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Preview {0}"
@@ -3774,6 +3853,10 @@ msgstr "Preview {0}"
 #: src/pages/MemoryImportExport.tsx
 msgid "Preview import"
 msgstr "Preview import"
+
+#: src/pages/ComparePanel.tsx
+msgid "Preview merge"
+msgstr "Preview merge"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Preview migration"
@@ -3854,6 +3937,7 @@ msgid "Pushed"
 msgstr "Pushed"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
@@ -4100,6 +4184,10 @@ msgstr "Report an issue"
 msgid "Reported met"
 msgstr "Reported met"
 
+#: src/pages/ComparePanel.tsx
+msgid "Reported model"
+msgstr "Reported model"
+
 #: src/pages/TeamBoard.tsx
 msgid "Reported unmet"
 msgstr "Reported unmet"
@@ -4141,6 +4229,10 @@ msgstr "Rerun requested."
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr "Research & writing"
+
+#: src/pages/CompareStart.tsx
+msgid "Reserve a merge run"
+msgstr "Reserve a merge run"
 
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -4310,6 +4402,10 @@ msgstr "Run history"
 msgid "Run now"
 msgstr "Run now"
 
+#: src/pages/CompareStart.tsx
+msgid "Run on other bots"
+msgstr "Run on other bots"
+
 #: src/pages/Shell.tsx
 msgid "Run time must be in the future."
 msgstr "Run time must be in the future."
@@ -4319,6 +4415,7 @@ msgid "running"
 msgstr "running"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "Running"
@@ -4351,6 +4448,15 @@ msgstr "Runtime availability could not be checked."
 #: src/pages/LearningObservation.tsx
 msgid "safety"
 msgstr "safety"
+
+#. placeholder {0}: row.participants.length
+#: src/pages/ComparePanel.tsx
+msgid "Same task, {0} bots"
+msgstr "Same task, {0} bots"
+
+#: src/pages/ComparePanel.tsx
+msgid "Same task, {count} bots"
+msgstr "Same task, {count} bots"
 
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -4493,6 +4599,10 @@ msgstr "Searching…"
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "Select a bot"
+
+#: src/pages/ComparePanel.tsx
+msgid "Select output"
+msgstr "Select output"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Select the text to copy it."
@@ -4745,6 +4855,10 @@ msgstr "Stale"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Standard"
 msgstr "Standard"
+
+#: src/pages/CompareStart.tsx
+msgid "Start comparison"
+msgstr "Start comparison"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
@@ -5061,10 +5175,15 @@ msgstr "Title"
 msgid "To:"
 msgstr "To:"
 
+#: src/pages/CompareStart.tsx
+msgid "Token reservation"
+msgstr "Token reservation"
+
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
 msgstr "tokens"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Tokens"
 msgstr "Tokens"
@@ -5249,6 +5368,7 @@ msgstr "Verifying…"
 msgid "Voice"
 msgstr "Voice"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
 msgstr "Waiting for approval"

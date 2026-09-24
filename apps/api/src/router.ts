@@ -21,6 +21,7 @@ import type {
   ComposioProvider,
   ComputerExecutionLease,
   ConnectorRegistry,
+  DelegationResolver,
   EncryptedSecretStore,
   IntegrationProviderSettings,
   MemoryProviderResolver,
@@ -154,6 +155,7 @@ import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artif
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
 import { createCommandRoutes } from "./command-routes.js";
+import { createComparisons } from "./comparisons.js";
 import {
   computerEngineInfo,
   listComputerConnections,
@@ -452,6 +454,7 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
   terminals?: ReturnType<typeof createTerminalRoutes>;
   cloudAgent?: CloudAgentConnection | null;
@@ -517,6 +520,15 @@ function mapSpaceLifecycleError(error: unknown): unknown {
 }
 
 export function createRouter(deps: RouterDeps) {
+  const comparisons = createComparisons({
+    prisma: deps.prisma,
+    jobs: deps.jobs,
+    resolvePin:
+      deps.resolveComparisonPin ??
+      (async () => {
+        throw new ORPCError("SERVICE_UNAVAILABLE");
+      }),
+  });
   const nativeConnections = new CodexConnections();
   const os = implement(appContract).$context<{
     actor: Actor | null;
@@ -4859,6 +4871,9 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     export: {
+      comparison: authed.export.comparison.handler(({ context, input }) =>
+        comparisons.export(context.actor, input.id),
+      ),
       bot: authed.export.bot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.thread || !bot.computer) throw new IsolationError();
@@ -4923,6 +4938,24 @@ export function createRouter(deps: RouterDeps) {
       query: authed.search.query.handler(async ({ context, input }) => ({
         hits: await querySpaceSearch(deps.prisma, context.actor, input.q),
       })),
+    },
+    comparisons: {
+      previewMerge: authed.comparisons.previewMerge.handler(({ context, input }) =>
+        comparisons.previewMerge(context.actor, input),
+      ),
+      preview: authed.comparisons.preview.handler(({ context, input }) =>
+        comparisons.preview(context.actor, input),
+      ),
+      create: authed.comparisons.create.handler(({ context, input }) =>
+        comparisons.create(context.actor, input),
+      ),
+      get: authed.comparisons.get.handler(({ context, input }) =>
+        comparisons.get(context.actor, input.id),
+      ),
+      list: authed.comparisons.list.handler(({ context }) => comparisons.list(context.actor)),
+      merge: authed.comparisons.merge.handler(({ context, input }) =>
+        comparisons.merge(context.actor, input),
+      ),
     },
     team: {
       board: authed.team.board.handler(({ context }) => teamBoard(deps.prisma, context.actor)),

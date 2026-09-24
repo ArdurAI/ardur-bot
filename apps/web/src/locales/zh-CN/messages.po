@@ -102,6 +102,11 @@ msgstr ""
 msgid "{0} runs · {1} tokens"
 msgstr "{0} 次运行 · {1} tokens"
 
+#. placeholder {0}: preview.runs
+#: src/pages/CompareStart.tsx
+msgid "{0} runs at these pins; hosted providers may bill per run"
+msgstr ""
+
 #. placeholder {0}: counts.pendingCount
 #: src/pages/LearningInbox.tsx
 msgid "{0} suggestions to review"
@@ -182,6 +187,10 @@ msgstr "{workingBotName} 正在工作"
 #: src/pages/Shell.tsx
 msgid "@{0}"
 msgstr "@{0}"
+
+#: src/pages/ComparePanel.tsx
+msgid "1 run at this pin; hosted providers may bill per run"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -906,6 +915,7 @@ msgstr "已取消"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "已取消"
@@ -1183,10 +1193,15 @@ msgstr "即将推出"
 msgid "Command"
 msgstr "命令"
 
+#: src/pages/CompareStart.tsx
+msgid "Compare with…"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "完成"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Completed"
 msgstr ""
@@ -1413,6 +1428,7 @@ msgstr ""
 msgid "Copy pairing details"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr ""
@@ -1610,6 +1626,14 @@ msgstr "无法加载审批规则"
 
 #: src/pages/IntegrationSetup.tsx
 msgid "Could not load bots. Reload to try again."
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not load comparison; retry."
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not load comparisons; retry."
 msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -1817,6 +1841,14 @@ msgstr "无法发送重置邮件"
 msgid "Could not send that"
 msgstr "无法发送"
 
+#: src/pages/CompareStart.tsx
+msgid "Could not start comparison; retry."
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Could not start comparison; review the pins and retry."
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "无法开始 OAuth"
@@ -1844,6 +1876,10 @@ msgstr "无法更新"
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not update agent access"
 msgstr "无法更新 Agent 权限"
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not update comparison; retry."
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Could not update computer"
@@ -2266,6 +2302,10 @@ msgstr "拖放或粘贴图片"
 msgid "Duplicate"
 msgstr "复制"
 
+#: src/pages/ComparePanel.tsx
+msgid "Duration"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "e.g. Hivenet Agent, Presales, Timesheets bot"
 msgstr "例如 Hivenet Agent、Presales、工时表机器人"
@@ -2414,6 +2454,10 @@ msgstr "导出"
 msgid "Export block"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Export JSON"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Export run"
 msgstr ""
@@ -2439,6 +2483,11 @@ msgstr "失败"
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "失败"
+
+#. placeholder {0}: result.failure ?? "Not reported"
+#: src/pages/ComparePanel.tsx
+msgid "Failed — {0}"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Failed to send message"
@@ -2713,6 +2762,10 @@ msgstr ""
 msgid "Inbox & email"
 msgstr "收件箱和邮件"
 
+#: src/pages/ComparePanel.tsx
+msgid "Incomplete"
+msgstr ""
+
 #: src/pages/MemoryDeliveryProgress.tsx
 msgid "Indexed {delivered} of {total}"
 msgstr ""
@@ -2722,6 +2775,7 @@ msgid "Inherit default"
 msgstr "沿用默认"
 
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/ComparePanel.tsx
 msgid "Inputs"
 msgstr "输入"
 
@@ -3086,6 +3140,10 @@ msgstr "记忆"
 msgid "Memory & Skills"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Memory differed"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
 msgstr ""
@@ -3120,6 +3178,18 @@ msgstr "提及"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Mentions only"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge selected"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge with"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -3213,6 +3283,10 @@ msgstr "模型费用使用你的提供方密钥。"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
 msgstr "模型已更新。"
+
+#: src/pages/ComparePanel.tsx
+msgid "Model version"
+msgstr ""
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3482,6 +3556,7 @@ msgstr "暂不"
 msgid "Not recorded"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
 msgstr ""
@@ -3766,6 +3841,10 @@ msgstr ""
 msgid "POST to"
 msgstr "POST 到"
 
+#: src/pages/CompareStart.tsx
+msgid "Preview"
+msgstr ""
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Preview {0}"
@@ -3773,6 +3852,10 @@ msgstr "预览 {0}"
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Preview import"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Preview merge"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -3854,6 +3937,7 @@ msgid "Pushed"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
@@ -4100,6 +4184,10 @@ msgstr ""
 msgid "Reported met"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Reported model"
+msgstr ""
+
 #: src/pages/TeamBoard.tsx
 msgid "Reported unmet"
 msgstr ""
@@ -4141,6 +4229,10 @@ msgstr ""
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr "调研和写作"
+
+#: src/pages/CompareStart.tsx
+msgid "Reserve a merge run"
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -4310,6 +4402,10 @@ msgstr "运行记录"
 msgid "Run now"
 msgstr ""
 
+#: src/pages/CompareStart.tsx
+msgid "Run on other bots"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Run time must be in the future."
 msgstr "运行时间必须是将来的时间。"
@@ -4319,6 +4415,7 @@ msgid "running"
 msgstr "运行中"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "运行中"
@@ -4350,6 +4447,15 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "safety"
+msgstr ""
+
+#. placeholder {0}: row.participants.length
+#: src/pages/ComparePanel.tsx
+msgid "Same task, {0} bots"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Same task, {count} bots"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -4493,6 +4599,10 @@ msgstr "正在搜索…"
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "选择 Bot"
+
+#: src/pages/ComparePanel.tsx
+msgid "Select output"
+msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Select the text to copy it."
@@ -4744,6 +4854,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Standard"
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Start comparison"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -5061,10 +5175,15 @@ msgstr "标题"
 msgid "To:"
 msgstr "至:"
 
+#: src/pages/CompareStart.tsx
+msgid "Token reservation"
+msgstr ""
+
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Tokens"
 msgstr ""
@@ -5249,6 +5368,7 @@ msgstr "正在校验…"
 msgid "Voice"
 msgstr "语音"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
 msgstr ""

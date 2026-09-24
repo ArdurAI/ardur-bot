@@ -23,6 +23,7 @@ export async function rejectDelegation(
   const root = await tx.delegationRoot.findFirstOrThrow({
     where: { rootTaskId: row.rootTaskId, coordinatorBotId, ...scope },
   });
+  if (row.comparisonId) throw new Error("Start a new comparison to revise this frozen task.");
   if (row.status !== "completed")
     throw new Error("Only a completed task can be returned to its worker.");
   const refuse = (code: Parameters<typeof delegationProblem>[0]): never => {

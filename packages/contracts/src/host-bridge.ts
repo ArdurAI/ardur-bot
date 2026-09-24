@@ -32,6 +32,7 @@ const tool = z.strictObject({
   route: z.unknown().optional(),
 });
 export const HostTurnSchema = z.strictObject({
+  controlledComparison: z.boolean().optional(),
   botId: id,
   runId: id,
   threadId: id,

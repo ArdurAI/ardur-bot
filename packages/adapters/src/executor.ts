@@ -181,6 +181,7 @@ import {
   commandReplayEvents,
   loadRunCommandReplay,
 } from "./command-replay.js";
+import { comparisonToolAllowed, withComparisonInput } from "./comparison-execution.js";
 import {
   collectLogIds,
   mergeConnectedPlugins,
@@ -1257,6 +1258,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               )?.blocks as MessageBlock[] | undefined)
             : undefined;
         const channelId = messagingChannelId(sourceBlocks);
+        const comparisonRun = Boolean(run.comparisonId);
         const messagingChannelRun = isMessagingChannelRun(run.trigger, sourceBlocks);
         const [
           bot,
@@ -1275,7 +1277,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             include: { computer: true },
           }),
           deps.prisma.thread.findUniqueOrThrow({ where: { id: run.threadId } }),
-          loadRunHistoryMessages(deps.prisma, run, LEGACY_HISTORY_WINDOW_SIZE, channelId),
+          comparisonRun
+            ? Promise.resolve([])
+            : loadRunHistoryMessages(deps.prisma, run, LEGACY_HISTORY_WINDOW_SIZE, channelId),
           run.trigger === "bot_message"
             ? loadBotMessageContext(deps.prisma, run.sourceMessageId)
             : Promise.resolve(undefined),
@@ -1291,23 +1295,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
               status: true,
             },
           }),
-          deps.memoryProviders.resolve(run.spaceId),
-          deps.prisma.taughtSkill.findMany({
-            where: {
-              botId: run.botId,
-              spaceId: run.spaceId,
-              status: run.trigger === "skill" ? { in: ["saved", "draft"] } : "saved",
-            },
-          }),
-          listAgentSkillRecords(
-            deps.prisma,
-            {
-              spaceId: run.spaceId,
-              userId: run.userId,
-              botId: run.botId,
-            },
-            deps.memoryDocuments,
-          ),
+          comparisonRun ? Promise.resolve(null) : deps.memoryProviders.resolve(run.spaceId),
+          comparisonRun
+            ? Promise.resolve([])
+            : deps.prisma.taughtSkill.findMany({
+                where: {
+                  botId: run.botId,
+                  spaceId: run.spaceId,
+                  status: run.trigger === "skill" ? { in: ["saved", "draft"] } : "saved",
+                },
+              }),
+          comparisonRun
+            ? Promise.resolve([])
+            : listAgentSkillRecords(
+                deps.prisma,
+                {
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  botId: run.botId,
+                },
+                deps.memoryDocuments,
+              ),
           deps.prisma.agentSecret.findMany({
             where: { spaceId: run.spaceId },
             select: {
@@ -1347,7 +1355,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         if ("kind" in runtimeSelection) throw new RuntimePinError(runtimeSelection);
         const runtime = runtimeSelection.runtime;
         const native =
-          selected.pin.runtimeKind !== "pi"
+          selected.pin.runtimeKind !== "pi" && !comparisonRun
             ? await runtimeSession(deps.prisma, {
                 runId,
                 threadId: run.threadId,
@@ -1412,7 +1420,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const context: MemoryOperationContext & { botId: string; runId: string } = {
           memoryGeneration:
             configuredMemory?.generation ??
-            (deps.memoryDocuments
+            (!comparisonRun && deps.memoryDocuments
               ? await deps.memoryDocuments.generation({
                   operationId: runId,
                   traceId: runId,
@@ -1446,7 +1454,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           connectedProviders: connectedComposio.map((row) => row.provider),
         };
         const skillOwner = { ...context, attempt: fence };
-        await deps.memoryDocuments?.startSession?.(context);
+        if (!comparisonRun) await deps.memoryDocuments?.startSession?.(context);
         const memoryScope = configuredMemory
           ? effectiveMemoryScope(bot.memoryScope, configuredMemory.defaultScope)
           : null;
@@ -1539,7 +1547,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           await Promise.all([
             discoveredPromise,
             loadCurrentTurnImages(deps, turnBlocks, context),
-            messagingChannelRun
+            messagingChannelRun || comparisonRun
               ? Promise.resolve("")
               : loadAgentMemoryContext(
                   deps.memory,
@@ -1551,7 +1559,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   },
                   runSecrets,
                 ),
-            messagingChannelRun
+            messagingChannelRun || comparisonRun
               ? Promise.resolve("")
               : loadAgentScratchpadContext(deps, {
                   spaceId: run.spaceId,
@@ -1765,16 +1773,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : graphical
               ? `You have a persistent computer filesystem and shell. ${MODEL_CANNOT_SEE_MESSAGE} Desktop observe and act tools are unavailable until a vision-capable model is selected. Use the file tools and shell.`
               : "You have a persistent sandbox filesystem and shell. This backend does not provide model-visible graphical control, so use the file tools and shell.";
-        const taskDirectory = run.delegationId
-          ? await prepareDelegationWorkspace(
-              deps.prisma,
-              deps.sandbox,
-              computer,
-              context,
-              run.delegationId,
-              computerMode === "team" ? teamBotWorkspaceDirectory(bot.id) : ".",
-            )
-          : undefined;
+        const taskDirectory =
+          run.delegationId && !comparisonRun
+            ? await prepareDelegationWorkspace(
+                deps.prisma,
+                deps.sandbox,
+                computer,
+                context,
+                run.delegationId,
+                computerMode === "team" ? teamBotWorkspaceDirectory(bot.id) : ".",
+              )
+            : undefined;
         const runWorkspacePath = (value: string) =>
           taskDirectory
             ? taskWorkspacePath(taskDirectory, value)
@@ -1977,6 +1986,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 : runWorkspacePath(value);
 
           context.signal.throwIfAborted();
+          if (comparisonRun && !comparisonToolAllowed(name))
+            return { error: "This tool is unavailable in a controlled comparison." };
           if (handedOff) {
             return { error: "This stage was handed off. End the turn without more tool calls." };
           }
@@ -4015,7 +4026,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (!commandReplay)
             for (const exposure of pendingExposures)
               await recordKnowledgeExposure(deps.prisma, { ...context, attempt: fence }, exposure);
-          const runtimeEvents = runRuntime(
+          const runtimeEvents = withComparisonInput(
+            deps,
+            run,
+            runRuntime,
+            context,
+            approvalContinuation,
+          )(
             {
               botId: bot.id,
               threadId: thread.id,
@@ -4514,7 +4531,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           pendingProgress += progressRedactor.finish();
           await flushProgress();
 
-          for (const turn of script ?? []) {
+          for (const turn of comparisonRun ? [] : (script ?? [])) {
             for (const file of turn.files ?? []) {
               workspaceCheckpoint.markDirty();
               await deps.sandbox.writeFile(
@@ -5005,7 +5022,7 @@ export function threadContextForRun<T>(
   },
   messagingChannelRun: boolean,
 ) {
-  return trigger === "routine"
+  return trigger === "routine" || trigger === "comparison"
     ? {
         messages: [] as T[],
         summary: null,

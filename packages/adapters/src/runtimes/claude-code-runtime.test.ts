@@ -151,3 +151,28 @@ it("keeps the host compatibility catalog aligned with the pinned built-in catalo
     .map((model) => ({ id: model.id, label: model.label, efforts: ["low"] }));
   expect(claudeModels()).toEqual(expected);
 });
+
+it("keeps comparison sessions free of discovered instructions and mutable memory", () => {
+  const args = claudeArguments({ ...request, controlledComparison: true }, {}, "session");
+  expect(args).toContain("--safe-mode");
+  expect(args[args.indexOf("--setting-sources") + 1]).toBe("");
+  expect(JSON.parse(args[args.indexOf("--settings") + 1]!)).toMatchObject({
+    autoMemoryEnabled: false,
+    disableAllHooks: true,
+  });
+  expect(args).not.toContain("--resume");
+});
+it("retains reported token usage without inventing cost", () => {
+  const parser = new ClaudeStreamParser(pin);
+  parser.parse(init);
+  expect(
+    parser.parse({
+      type: "result",
+      subtype: "success",
+      modelUsage: { [pin.modelId!]: { inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 2 } },
+    }),
+  ).toEqual([
+    { type: "usage", provider: "anthropic", model: pin.modelId, inputTokens: 12, outputTokens: 5 },
+    { type: "done" },
+  ]);
+});

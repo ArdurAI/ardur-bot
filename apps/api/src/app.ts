@@ -447,6 +447,8 @@ export async function createApp(
     trustedOrigin: (origin) => isTrustedOrigin(origin, env),
   });
   const router = createRouter({
+    resolveComparisonPin: (bot) =>
+      executor.resolveModel({ spaceId: bot.spaceId, userId: bot.userId, botId: bot.id }),
     terminals,
     hostBridge,
     cloudAgent,
