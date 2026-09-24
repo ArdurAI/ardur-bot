@@ -187,6 +187,10 @@ msgstr "@{0}"
 msgid "A bit of everything"
 msgstr "什么都做一点"
 
+#: src/components/DesktopUpdates.tsx
+msgid "A new version is available — download"
+msgstr ""
+
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
 msgstr ""
@@ -1058,7 +1062,6 @@ msgstr ""
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
-#: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "关闭"
 
@@ -2434,10 +2437,6 @@ msgstr "忘记密码？"
 msgid "Free"
 msgstr "免费"
 
-#: src/pages/WindowChrome.tsx
-msgid "Fullscreen"
-msgstr "全屏"
-
 #: src/pages/SettingsOverlay.tsx
 msgid "General"
 msgstr "通用"
@@ -3040,10 +3039,6 @@ msgstr "麦克风失败"
 msgid "minimal — quickest, for simple tasks"
 msgstr ""
 
-#: src/pages/WindowChrome.tsx
-msgid "Minimize"
-msgstr "最小化"
-
 #: src/pages/Shell.tsx
 msgid "Minimize bots"
 msgstr ""
@@ -3487,7 +3482,7 @@ msgstr "正在打开聊天…"
 msgid "Opening terminal"
 msgstr ""
 
-#: src/App.tsx
+#: src/components/ShellSkeleton.tsx
 msgid "Opening your Space…"
 msgstr "正在打开工作区…"
 

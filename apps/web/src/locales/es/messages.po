@@ -187,6 +187,10 @@ msgstr "@{0}"
 msgid "A bit of everything"
 msgstr ""
 
+#: src/components/DesktopUpdates.tsx
+msgid "A new version is available — download"
+msgstr ""
+
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
 msgstr ""
@@ -1058,7 +1062,6 @@ msgstr ""
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
-#: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "Cerrar"
 
@@ -2434,10 +2437,6 @@ msgstr "¿Olvidaste la contraseña?"
 msgid "Free"
 msgstr "Gratis"
 
-#: src/pages/WindowChrome.tsx
-msgid "Fullscreen"
-msgstr "Pantalla completa"
-
 #: src/pages/SettingsOverlay.tsx
 msgid "General"
 msgstr "General"
@@ -3040,10 +3039,6 @@ msgstr "Falló el micrófono"
 msgid "minimal — quickest, for simple tasks"
 msgstr ""
 
-#: src/pages/WindowChrome.tsx
-msgid "Minimize"
-msgstr "Minimizar"
-
 #: src/pages/Shell.tsx
 msgid "Minimize bots"
 msgstr ""
@@ -3487,7 +3482,7 @@ msgstr "Abriendo el chat…"
 msgid "Opening terminal"
 msgstr ""
 
-#: src/App.tsx
+#: src/components/ShellSkeleton.tsx
 msgid "Opening your Space…"
 msgstr "Abriendo tu Space…"
 
