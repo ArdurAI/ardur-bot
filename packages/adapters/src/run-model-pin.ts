@@ -38,7 +38,7 @@ export async function resolveRunModelPin(input: {
 }): Promise<ResolvedRunPin | RuntimeProblem> {
   const { bot } = input;
   let pin: RuntimePin;
-  let credential: Credential;
+  let credential: Credential = null;
   let loadedModel: AgentRunModel | undefined;
   if (input.snapshot != null) {
     const parsed = RuntimePinSchema.safeParse(input.snapshot);
@@ -65,10 +65,8 @@ export async function resolveRunModelPin(input: {
       );
     }
     pin = parsed.data;
-    credential = await credentialForPin(input.prisma, input.scope, pin);
   } else if (hasBotPin(bot)) {
     pin = requestedBotPin(bot!);
-    credential = await credentialForPin(input.prisma, input.scope, pin);
   } else {
     // Compatibility for bots displaying Space default: capture that one selection once.
     // No settings, deployment, catalog-first, or other-connection fallback is allowed.
@@ -115,6 +113,12 @@ export async function resolveRunModelPin(input: {
         "The pinned runtime is unavailable — change the pin.",
       );
     const provider = pin.runtimeKind === "claude-code" ? "anthropic" : "openai-codex";
+    if (pin.credentialId && pin.credentialId !== `native:${pin.runtimeKind}`)
+      return runtimePinProblem(
+        pin,
+        "runtime-unavailable",
+        "Native runtimes use their own sign-in. Remove the pinned connection or change the runtime.",
+      );
     if (
       pin.provider !== provider ||
       !pin.modelId ||
@@ -143,6 +147,8 @@ export async function resolveRunModelPin(input: {
       thinkingLevel: effort.data,
     };
   }
+  if (input.snapshot != null || hasBotPin(bot))
+    credential = await credentialForPin(input.prisma, input.scope, pin);
   if (pin.provider === "scripted" && !input.scripted)
     return runtimePinProblem(
       pin,

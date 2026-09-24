@@ -1,5 +1,12 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
+async function addHostRoot(path) {
+  const result = await ipcRenderer.invoke("desktop.host.addRoot", path);
+  if (result && typeof result === "object" && typeof result.error === "string")
+    throw new Error(result.error);
+  return result;
+}
+
 contextBridge.exposeInMainWorld("ardurbotDesktop", {
   platform: process.platform,
   system: {
@@ -25,11 +32,11 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
   host: {
     state: () => ipcRenderer.invoke("desktop.host.state"),
     setup: () => ipcRenderer.invoke("desktop.host.setup"),
-    addRoot: () => ipcRenderer.invoke("desktop.host.addRoot"),
+    addRoot: () => addHostRoot(),
     addDroppedRoot: (file) => {
       const path = webUtils.getPathForFile(file);
       if (!path) return Promise.resolve(null);
-      return ipcRenderer.invoke("desktop.host.addRoot", path);
+      return addHostRoot(path);
     },
     removeRoot: (root) => ipcRenderer.invoke("desktop.host.removeRoot", root),
     clear: () => ipcRenderer.invoke("desktop.host.clear"),

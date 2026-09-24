@@ -1,4 +1,5 @@
 import type { ProcessEvent } from "@ardurbot/adapter-kit";
+import { ComputerEngineUnavailableError } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DockerSandboxProvider,
@@ -511,3 +512,34 @@ describe("Docker profiles and Podman engine", () => {
     });
   });
 });
+
+it.each(["docker", "podman"] as const)(
+  "preserves the supervisor's %s socket failure without exposing raw diagnostics",
+  async (engine) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { error: "engine-unavailable", engine, socket: "/fixture/engine.sock" },
+          { status: 503 },
+        ),
+      ),
+    );
+    try {
+      const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+      await expect(provider.engineInfo(context)).rejects.toBeInstanceOf(
+        ComputerEngineUnavailableError,
+      );
+      await expect(provider.engineInfo(context)).rejects.toThrow(
+        `${engine === "podman" ? "Podman" : "Docker"} is not running or not reachable at /fixture/engine.sock. Start ${engine === "podman" ? "Podman" : "Docker Desktop"} and try again.`,
+      );
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => Response.json({ error: "private diagnostic" }, { status: 500 })),
+      );
+      await expect(provider.engineInfo(context)).rejects.toThrow("Computer engine is unavailable.");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  },
+);

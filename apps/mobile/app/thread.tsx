@@ -1394,8 +1394,8 @@ function Thread() {
   const runError =
     snap?.run?.status === "failed"
       ? snap.run.runtimeProblem
-        ? snap.run.runtimeProblem.code === "locality-denied" ||
-          snap.run.runtimeProblem.code.startsWith("runtime-")
+        ? snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
+          snap.run.runtimeProblem.code !== "pin-credential-missing"
           ? snap.run.runtimeProblem.reason
           : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
@@ -1705,18 +1705,21 @@ function Thread() {
           <Text style={{ color: tokens.destructive }}>{runError}</Text>
           {snap?.run?.runtimeProblem ? (
             <View style={{ flexDirection: "row", gap: 16, marginTop: 8 }}>
-              <Text
-                accessibilityRole="button"
-                style={{ color: tokens.destructive }}
-                onPress={() =>
-                  router.push(
-                    runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
-                      .connect,
-                  )
-                }
-              >
-                {t("Connect")}
-              </Text>
+              {snap.run.runtimeProblem.pin.runtimeKind === "pi" &&
+              snap.run.runtimeProblem.code === "pin-credential-missing" ? (
+                <Text
+                  accessibilityRole="button"
+                  style={{ color: tokens.destructive }}
+                  onPress={() =>
+                    router.push(
+                      runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
+                        .connect,
+                    )
+                  }
+                >
+                  {t("Connect")}
+                </Text>
+              ) : null}
               <Text
                 accessibilityRole="button"
                 style={{ color: tokens.destructive }}

@@ -734,6 +734,10 @@ msgstr ""
 msgid "Automatically start when you log in to your computer."
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Available"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr ""
@@ -1269,6 +1273,10 @@ msgstr "कंप्यूटर"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer browsers that your bots can use."
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Computer engine is unavailable."
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -4078,6 +4086,10 @@ msgstr ""
 msgid "Personal credential"
 msgstr "व्यक्तिगत क्रेडेंशियल"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "pin"
 msgstr ""
@@ -4553,6 +4565,10 @@ msgstr ""
 msgid "Responsible human"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Restart the desktop app to update it."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Restart to update"
 msgstr ""
@@ -4574,6 +4590,7 @@ msgstr ""
 msgid "Restricted"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -5088,6 +5105,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Signed in"
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
