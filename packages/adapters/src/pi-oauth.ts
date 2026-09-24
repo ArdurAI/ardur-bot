@@ -14,12 +14,10 @@ import type {
   OAuthCredential,
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { createManualAnthropicOAuthLogin } from "./pi-anthropic-oauth.js";
 
 export const CHATGPT_OAUTH_PROVIDER = "openai-codex";
 export const COPILOT_OAUTH_PROVIDER = "github-copilot";
 export const XAI_OAUTH_PROVIDER = "xai";
-export const ANTHROPIC_OAUTH_PROVIDER = "anthropic";
 
 export const SUBSCRIPTION_SIGN_IN_PROVIDERS: Record<
   string,
@@ -45,14 +43,32 @@ export const SUBSCRIPTION_SIGN_IN_PROVIDERS: Record<
     billing:
       "Sign in with SuperGrok or X Premium, or paste an xAI API key. Ardur Bot does not pay.",
   },
-  [ANTHROPIC_OAUTH_PROVIDER]: {
-    mode: "auth-url",
-    loginLabel: "Sign in with Claude Pro/Max",
-    hint: "Claude Pro/Max / key",
-    // Button + "Or paste an API key" already explain the choices; no extra paragraph.
-    billing: "",
-  },
 };
+
+export class AnthropicOAuthUnavailableError extends Error {
+  readonly code = "anthropic-oauth-unavailable";
+
+  constructor() {
+    super("Reconnect with an API key.");
+    this.name = "AnthropicOAuthUnavailableError";
+  }
+}
+
+export function assertProviderOAuthAllowed(provider: string): void {
+  if (provider === "anthropic") throw new AnthropicOAuthUnavailableError();
+}
+
+/** API keys are opaque strings, never serialized credential objects or session tokens. */
+export function isSerializedModelCredential(value: string): boolean {
+  return /^[[{"]/.test(value.trimStart()) || /^sk-ant-o(?:at|rt)\d+-/.test(value.trim());
+}
+
+export function assertAnthropicApiKey(provider: string, plaintext: string): void {
+  // Check the raw value before parsing: older credentials may have no type discriminator.
+  if (provider === "anthropic" && isSerializedModelCredential(plaintext)) {
+    throw new AnthropicOAuthUnavailableError();
+  }
+}
 
 const MIN_OAUTH_VALIDITY_MS = 5 * 60 * 1000;
 const SIGN_IN_START_WAIT_MS = 30_000;
@@ -221,6 +237,7 @@ export function secretValuesToRedact(secret: StoredModelSecret): string[] {
 }
 
 export function loadProviderOAuth(providerId: string): OAuthAuth | undefined {
+  assertProviderOAuthAllowed(providerId);
   return providerCatalog().getProvider(providerId)?.auth.oauth;
 }
 
@@ -243,6 +260,7 @@ export async function resolveModelAuth(
   provider: string,
   opts?: ResolveModelOpts,
 ): Promise<{ secret: StoredModelSecret; apiKey: string }> {
+  assertAnthropicApiKey(provider, plaintext);
   const parsed = parseModelSecret(plaintext);
   if (parsed.kind === "api_key") return { secret: parsed, apiKey: parsed.key };
   if (parsed.kind === "openai_compatible") {
@@ -289,9 +307,10 @@ export class PiOAuthLogins {
     label?: string;
     signal?: AbortSignal;
   }): Promise<PiOAuthBegin> {
+    assertProviderOAuthAllowed(input.provider);
     if (!SUBSCRIPTION_SIGN_IN_PROVIDERS[input.provider]) {
       throw new Error(
-        "In-app subscription sign-in is only available for ChatGPT Plus/Pro, Claude Pro/Max, GitHub Copilot, and SuperGrok.",
+        "In-app subscription sign-in is only available for ChatGPT Plus/Pro, GitHub Copilot, and SuperGrok.",
       );
     }
     if (input.signal?.aborted) {
@@ -590,9 +609,6 @@ function defaultLogin(
   type: "oauth",
   interaction: AuthInteraction,
 ): Promise<Credential> {
-  if (providerId === ANTHROPIC_OAUTH_PROVIDER) {
-    return createManualAnthropicOAuthLogin()(interaction);
-  }
   return builtinModels().login(providerId, type, interaction);
 }
 

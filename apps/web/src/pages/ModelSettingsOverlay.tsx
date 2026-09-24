@@ -201,6 +201,7 @@ export function ModelSettingsOverlay({
     (entry) => entry.provider === me?.defaultProvider && entry.id === me?.defaultModel,
   );
   const isActive =
+    credential?.connectionIssue === undefined &&
     me?.defaultProvider === selected?.provider &&
     me?.defaultModel === (isOpenAiCompatible ? modelId.trim() : selected?.id);
   const acceptsKey = selected?.auth !== "oauth";
@@ -437,7 +438,9 @@ export function ModelSettingsOverlay({
           <div className="rk-scroll mt-3 max-h-[240px] overflow-y-auto rounded-xl border border-border md:min-h-0 md:max-h-none md:flex-1">
             {filteredGroups.length ? (
               filteredGroups.map((group) => {
-                const connected = credentials.some((entry) => entry.provider === group.id);
+                const connected = credentials.some(
+                  (entry) => entry.provider === group.id && entry.hasKey,
+                );
                 return (
                   <button
                     key={group.id}
@@ -642,7 +645,11 @@ export function ModelSettingsOverlay({
               </div>
               {!isOpenAiCompatible && selected.billing ? (
                 <p className="mt-2 text-[13px] leading-[1.5] text-muted-foreground">
-                  {selected.billing}
+                  {provider === "anthropic" ? (
+                    <Trans>Claude subscriptions are not supported here yet; use an API key.</Trans>
+                  ) : (
+                    selected.billing
+                  )}
                 </p>
               ) : null}
 
@@ -652,14 +659,16 @@ export function ModelSettingsOverlay({
                     <Trans>Personal credential</Trans>
                   </div>
                   <div className="mt-1 text-[15px] text-foreground">
-                    {credential ? (
+                    {credential?.connectionIssue === "api-key-required" ? (
+                      <Trans>Reconnect with an API key</Trans>
+                    ) : credential ? (
                       <Trans>Connected · {credential.label}</Trans>
                     ) : (
                       <Trans>Not connected</Trans>
                     )}
                   </div>
                   <div className="mt-1 text-[13px] text-muted-foreground">
-                    {credential ? (
+                    {credential?.connectionIssue ? null : credential ? (
                       <Trans>Stored securely. Never shown here.</Trans>
                     ) : (
                       <Trans>Connect this provider to use it as your personal model.</Trans>
@@ -776,7 +785,7 @@ export function ModelSettingsOverlay({
                       className="block text-[13.5px] text-muted-foreground"
                       htmlFor="model-api-key"
                     >
-                      {credential ? (
+                      {credential?.hasKey ? (
                         <Trans>Replace API key</Trans>
                       ) : subscriptionSignIn ? (
                         <Trans>Or connect an API key</Trans>
@@ -809,7 +818,7 @@ export function ModelSettingsOverlay({
                       <Trans>Saving…</Trans>
                     ) : isOpenAiCompatible ? (
                       <Trans>Save</Trans>
-                    ) : credential ? (
+                    ) : credential?.hasKey ? (
                       <Trans>Replace API key</Trans>
                     ) : (
                       <Trans>Connect API key</Trans>
@@ -827,7 +836,7 @@ export function ModelSettingsOverlay({
                 </p>
               ) : null}
 
-              {credential && !isActive ? (
+              {credential?.hasKey && !isActive ? (
                 <div className="mt-6">
                   <Button
                     type="button"

@@ -1,6 +1,7 @@
 import type { AgentRunModel } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
+import { resolveModelApiKey } from "./pi-oauth.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
 
 const scope = { userId: "user", spaceId: "space" };
@@ -34,6 +35,36 @@ function fixture() {
 }
 
 describe("run pin snapshots", () => {
+  it("keeps an Anthropic pin and returns a reconnect action for legacy OAuth", async () => {
+    const f = fixture();
+    f.findCredential.mockResolvedValue({ ...credential, provider: "anthropic" });
+    const snapshot = { ...pin, provider: "anthropic", modelId: "claude-opus-5" };
+    const refresh = vi.fn();
+    const toAuth = vi.fn();
+    f.loadKey.mockImplementation(async () => ({
+      provider: snapshot.provider,
+      id: snapshot.modelId,
+      apiKey: await resolveModelApiKey(
+        JSON.stringify({ access: "test-access", refresh: "test-refresh", expires: 1 }),
+        "anthropic",
+        {
+          oauth: { refresh, toAuth },
+        },
+      ),
+    }));
+    expect(await resolveRunModelPin({ ...f, snapshot, bot: {} })).toMatchObject({
+      kind: "problem",
+      code: "pin-credential-missing",
+      pin: snapshot,
+      reason: "Reconnect with an API key.",
+      actions: ["connect", "change-pin"],
+    });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(toAuth).not.toHaveBeenCalled();
+    expect(f.findPreference).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ isDefault: true }) }),
+    );
+  });
   it("resolves a null legacy snapshot from the backfilled bot pin", async () => {
     const f = fixture();
     expect(

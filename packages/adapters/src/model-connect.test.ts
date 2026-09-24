@@ -3,6 +3,37 @@ import { buildModelConnectPlaintext, modelCredentialDto } from "./model-connect.
 import { parseModelSecret, serializeModelSecret } from "./pi-oauth.js";
 
 describe("modelCredentialDto", () => {
+  it.each([
+    undefined,
+    JSON.stringify({ type: "oauth", access: "test-access", refresh: "test-refresh", expires: 1 }),
+    JSON.stringify({ access: "test-access", refresh: "test-refresh", expires: 1 }),
+  ])(
+    "marks unavailable Anthropic credentials for reconnection without returning secrets",
+    (plaintext) => {
+      const dto = modelCredentialDto(
+        { id: "cred", provider: "anthropic", label: "Anthropic", isDefault: true },
+        plaintext,
+      );
+      expect(dto).toMatchObject({ hasKey: false, connectionIssue: "api-key-required" });
+      expect(JSON.stringify(dto)).not.toContain("test-access");
+      expect(JSON.stringify(dto)).not.toContain("test-refresh");
+    },
+  );
+
+  it("keeps Anthropic API-key connections usable", () => {
+    expect(
+      modelCredentialDto(
+        { id: "cred", provider: "anthropic", label: "Anthropic", isDefault: true },
+        "fake-api-key",
+      ),
+    ).toEqual({
+      id: "cred",
+      provider: "anthropic",
+      label: "Anthropic",
+      isDefault: true,
+      hasKey: true,
+    });
+  });
   it("returns stored baseUrl and modelId for openai-compatible credentials", () => {
     const plaintext = serializeModelSecret({
       kind: "openai_compatible",
@@ -139,6 +170,29 @@ describe("modelCredentialDto", () => {
     });
   });
 });
+
+it.each(["anthropic", "openai-codex", "openai-compatible"])(
+  "rejects serialized OAuth material through the %s API-key input",
+  (provider) => {
+    for (const apiKey of [
+      JSON.stringify({ type: "oauth", access: "test-access", refresh: "test-refresh", expires: 1 }),
+      JSON.stringify({ access_token: "test-access", refresh_token: "test-refresh" }),
+      JSON.stringify({ kind: "oauth", credential: { access: "test-access" } }),
+      JSON.stringify({ claudeAiOauth: { accessToken: "test-access" } }),
+      '{"type":"oauth",',
+      "sk-ant-oat01-fake-session-token",
+    ]) {
+      expect(() =>
+        buildModelConnectPlaintext({
+          provider,
+          apiKey,
+          baseUrl: "http://localhost:8000/v1",
+          modelId: "test-model",
+        }),
+      ).toThrow();
+    }
+  },
+);
 
 it.each([true, false])(
   "persists generic reasoning capability %s with the connection",

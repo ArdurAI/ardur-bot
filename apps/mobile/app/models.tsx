@@ -200,6 +200,7 @@ export default function Models() {
     (entry) => entry.provider === me?.defaultProvider && entry.id === me?.defaultModel,
   );
   const isActive =
+    credential?.connectionIssue === undefined &&
     me?.defaultProvider === selected?.provider &&
     me?.defaultModel === (isOpenAiCompatible ? modelId.trim() : selected?.id);
   const acceptsKey = selected?.auth !== "oauth";
@@ -486,7 +487,9 @@ export default function Models() {
         <Text style={styles.sectionTitle}>{t("Providers")}</Text>
         <View style={styles.card}>
           {visibleGroups.map((group) => {
-            const connected = credentials.some((entry) => entry.provider === group.id);
+            const connected = credentials.some(
+              (entry) => entry.provider === group.id && entry.hasKey,
+            );
             return (
               <Pressable
                 key={group.id}
@@ -761,21 +764,29 @@ export default function Models() {
               </View>
             )}
             {!isOpenAiCompatible && selected.billing ? (
-              <Text style={styles.billing}>{selected.billing}</Text>
+              <Text style={styles.billing}>
+                {provider === "anthropic"
+                  ? t("Claude subscriptions are not supported here yet; use an API key.")
+                  : selected.billing}
+              </Text>
             ) : null}
 
             {!isOpenAiCompatible ? (
               <View style={styles.credentialCard}>
                 <Text style={styles.eyebrow}>{t("Personal credential")}</Text>
                 <Text style={styles.credentialTitle}>
-                  {credential
-                    ? t("Connected · {label}", { label: credential.label })
-                    : t("Not connected")}
+                  {credential?.connectionIssue === "api-key-required"
+                    ? t("Reconnect with an API key")
+                    : credential?.hasKey
+                      ? t("Connected · {label}", { label: credential.label })
+                      : t("Not connected")}
                 </Text>
                 <Text style={styles.secondary}>
-                  {credential
-                    ? t("Stored securely. Never shown here.")
-                    : t("Connect this provider to use it as your personal model.")}
+                  {credential?.connectionIssue
+                    ? null
+                    : credential?.hasKey
+                      ? t("Stored securely. Never shown here.")
+                      : t("Connect this provider to use it as your personal model.")}
                 </Text>
               </View>
             ) : null}
@@ -879,7 +890,7 @@ export default function Models() {
                 ) : (
                   <>
                     <Text style={styles.sectionTitle}>
-                      {credential
+                      {credential?.hasKey
                         ? t("Replace API key")
                         : subscriptionSignIn
                           ? t("Or connect an API key")
@@ -921,7 +932,7 @@ export default function Models() {
                       ? t("Saving…")
                       : isOpenAiCompatible
                         ? t("Save")
-                        : credential
+                        : credential?.hasKey
                           ? t("Replace API key")
                           : t("Connect API key")}
                   </Text>
@@ -937,7 +948,7 @@ export default function Models() {
               </Text>
             ) : null}
 
-            {credential && !isActive ? (
+            {credential?.hasKey && !isActive ? (
               <Pressable
                 accessibilityRole="button"
                 disabled={busy || (isOpenAiCompatible && !modelId.trim())}

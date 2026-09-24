@@ -929,6 +929,7 @@ export const ModelCredentialSchema = z.object({
   provider: z.string(),
   label: z.string(),
   hasKey: z.boolean(),
+  connectionIssue: z.literal("api-key-required").optional(),
   isDefault: z.boolean(),
   baseUrl: z.string().optional(),
   modelId: z.string().optional(),

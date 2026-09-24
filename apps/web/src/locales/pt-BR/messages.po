@@ -788,6 +788,10 @@ msgstr "Escolher arquivo"
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Escolha qual modelo conectado a Ardur Bot usa."
 
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Claude subscriptions are not supported here yet; use an API key."
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
 msgstr "Limpar"
@@ -2871,6 +2875,10 @@ msgstr "Recente"
 #: src/pages/McpServersOverlay.tsx
 msgid "Reconnect OAuth"
 msgstr "Reconectar OAuth"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Reconnect with an API key"
+msgstr ""
 
 #: src/App.tsx
 #: src/components/ComputerUpdateProgress.tsx

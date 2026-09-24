@@ -2,6 +2,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { catalogModelLabel, listPiCatalog, scriptedCatalogEntry } from "./pi-models.js";
 
 describe("Pi model catalog", () => {
+  it("overrides inherited Anthropic subscription metadata with API-key-only metadata", () => {
+    const entries = listPiCatalog().filter((entry) => entry.provider === "anthropic");
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      expect(entry.auth).toBe("api-key");
+      expect(entry.subscription).toBe(false);
+      expect(entry.signIn).toBeUndefined();
+      expect(entry.oauthLabel).toBeUndefined();
+      expect(entry.authHint).toBeUndefined();
+      expect(entry.billing).toContain("API key");
+      expect(entry.billing).not.toMatch(/subscription|sign in/i);
+    }
+  });
   it("keeps the custom catalog independent of server model IDs", () => {
     const custom = listPiCatalog().filter((entry) => entry.provider === "openai-compatible");
     expect(custom).toHaveLength(1);
@@ -31,13 +44,6 @@ describe("Pi model catalog", () => {
     expect(copilot?.signIn).toBe("device-code");
     const grok = catalog.find((entry) => entry.provider === "xai");
     expect(grok?.signIn).toBe("device-code");
-    const claude = catalog.find((entry) => entry.provider === "anthropic");
-    expect(claude).toMatchObject({
-      signIn: "auth-url",
-      authHint: "Claude Pro/Max / key",
-      oauthLabel: "Sign in with Claude Pro/Max",
-      billing: "",
-    });
     expect(scriptedCatalogEntry.provider).toBe("scripted");
   });
 

@@ -117,6 +117,50 @@ afterEach(async () => {
 });
 const render = () =>
   act(async () => root.render(<ModelSettingsOverlay embedded onClose={() => undefined} />));
+
+it.each([false, true])(
+  "offers only an API key for Anthropic (reconnect: %s)",
+  async (reconnect) => {
+    api.list.mockResolvedValue([
+      {
+        provider: "anthropic",
+        providerName: "Anthropic",
+        id: "claude-opus-5",
+        label: "Claude Opus 5",
+        auth: "api-key",
+        subscription: false,
+        billing: "Uses your Anthropic API key.",
+      },
+    ]);
+    api.me.mockResolvedValue({ defaultProvider: "anthropic", defaultModel: "claude-opus-5" });
+    api.credentials.mockResolvedValue(
+      reconnect
+        ? [
+            {
+              id: "credential",
+              provider: "anthropic",
+              label: "Old subscription",
+              hasKey: false,
+              isDefault: true,
+              connectionIssue: "api-key-required",
+            },
+          ]
+        : [],
+    );
+    await render();
+    expect(container.textContent).toContain(
+      "Claude subscriptions are not supported here yet; use an API key.",
+    );
+    expect(container.querySelector('label[for="model-api-key"]')?.textContent).toContain("API key");
+    expect(container.textContent).not.toContain("Sign in");
+    expect(container.textContent).not.toContain("Connected ·");
+    if (reconnect) {
+      expect(container.textContent).toContain("Reconnect with an API key");
+      expect(container.textContent).not.toContain("Stored securely");
+      expect(button("Connect API key")).toBeDefined();
+    }
+  },
+);
 function picker() {
   const element = container.querySelector<HTMLButtonElement>(
     'button[role="combobox"][aria-label="Model"]',

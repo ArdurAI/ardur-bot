@@ -28,6 +28,7 @@ import type {
   RemoteConnectorDependencies,
 } from "@ardurbot/adapters";
 import {
+  AnthropicOAuthUnavailableError,
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
@@ -796,7 +797,9 @@ export function createRouter(deps: RouterDeps) {
           },
           orderBy: newestModelCredentialOrder,
         });
-        const compatibleRows = rows.filter((row) => row.provider === OPENAI_COMPATIBLE_PROVIDER_ID);
+        const compatibleRows = rows.filter(
+          (row) => row.provider === OPENAI_COMPATIBLE_PROVIDER_ID || row.provider === "anthropic",
+        );
         const secrets = compatibleRows.length
           ? await deps.prisma.secret.findMany({
               where: {
@@ -884,6 +887,11 @@ export function createRouter(deps: RouterDeps) {
         },
       ),
       beginOAuth: authed.models.beginOAuth.handler(async ({ context, input }) => {
+        if (input.provider === "anthropic") {
+          throw new ORPCError("BAD_REQUEST", {
+            message: new AnthropicOAuthUnavailableError().message,
+          });
+        }
         return deps.oauthLogins.begin({
           userId: context.actor.userId,
           spaceId: context.actor.spaceId,
@@ -909,6 +917,11 @@ export function createRouter(deps: RouterDeps) {
           input.loginId,
           context.actor,
           async (login) => {
+            if (login.provider === "anthropic") {
+              throw new ORPCError("BAD_REQUEST", {
+                message: new AnthropicOAuthUnavailableError().message,
+              });
+            }
             return persistModelCredential(deps, context.actor, {
               provider: login.provider,
               plaintext: serializeModelSecret({ kind: "oauth", credential: login.credential }),
