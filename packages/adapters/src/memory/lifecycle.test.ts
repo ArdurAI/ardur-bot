@@ -19,7 +19,7 @@ function fixture() {
   };
   let inTransaction = false;
   const tx = Object.assign(database.tx, {
-    $queryRaw: vi.fn(async () => []),
+    $executeRaw: vi.fn(async () => []),
     spaceMember: {
       findUnique: vi.fn(async () => ({ role: "owner" })),
       findMany: vi.fn(async () => [{ spaceId: "space", userId: "user" }]),

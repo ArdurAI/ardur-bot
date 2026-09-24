@@ -53,7 +53,7 @@ export async function changeMemoryLocation(
           throw new ORPCError("BAD_REQUEST", {
             message: "Choose an empty dedicated memory folder.",
           });
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`memory-folder:${folder}`}, 0))`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`memory-folder:${folder}`}, 0))`;
         const registered = await tx.spaceMemoryConfig.findFirst({
           where: {
             spaceId: { not: actor.spaceId },

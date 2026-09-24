@@ -30,6 +30,7 @@ async function fixture() {
   } | null = null;
   const tx = Object.assign(database.tx, {
     $queryRaw: vi.fn(async () => []),
+    $executeRaw: vi.fn(async () => 0),
     spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
     bot: { findMany: vi.fn(async () => []) },
     spaceMemoryConfig: {
