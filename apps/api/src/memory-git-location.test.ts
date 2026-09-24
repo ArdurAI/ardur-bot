@@ -43,6 +43,7 @@ async function fixture() {
   const current: { value: Record<string, unknown> | null } = { value: null };
   const tx = {
     $queryRaw: async () => [],
+    $executeRaw: async () => 0,
     spaceMember: { findUnique: async () => ({ role: "owner" }) },
     user: { findUnique: async () => ({ name: "Fixture member" }) },
     bot: { findMany: async () => [] },

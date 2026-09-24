@@ -29,6 +29,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
         content: row.content,
         sourceRunId: null,
         sourceThreadId: null,
+        commitId: null,
         authorKind: "runtime",
         authorUserId: row.userId,
         authorBotId: row.botId,
