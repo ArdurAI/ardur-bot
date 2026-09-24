@@ -22,6 +22,7 @@ model AiDataConsent {
 }
 
 model User {
+  preferences UserPreferences?
   aiDataConsents AiDataConsent[]
   id                          String                       @id
   name                        String
@@ -48,6 +49,22 @@ model User {
 
   @@unique([email])
   @@map("user")
+}
+
+model UserPreferences {
+  userId String @id @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme String @default("system")
+  chatFont String @default("sans") @map("chat_font")
+  motion String @default("system")
+  responseCompletions Boolean @default(true) @map("response_completions")
+  routines Boolean @default(true)
+  approvalsNeeded Boolean @default(true) @map("approvals_needed")
+  dispatchMessages Boolean @default(true) @map("dispatch_messages")
+  preferredBrowser String @default("builtin") @map("preferred_browser")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_preferences")
 }
 
 model Session {
@@ -164,6 +181,9 @@ model Member {
 }
 
 model Space {
+  toolAccessMode String @default("when-needed")
+  connectorSearch Boolean @default(false)
+  inlineVisualizations Boolean @default(true)
   comparisons Comparison[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
@@ -627,6 +647,7 @@ model Run {
   @@unique([spaceId, clientNonce])
   @@index([status, leaseExpiresAt])
   @@index([status, updatedAt, id])
+  @@index([userId, updatedAt, id])
   @@index([botOutcomeReturnedAt, status])
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
@@ -874,6 +895,7 @@ model CapabilityInstall {
 }
 
 model MemoryDocument {
+  kind String @default("topic")
   id        String           @id @default(cuid())
   spaceId   String
   space     Space            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -903,6 +925,7 @@ model MemoryDocument {
 }
 
 model MemoryRevision {
+  kind String @default("topic")
   id             String         @id @default(cuid())
   documentId     String
   document       MemoryDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -972,6 +995,7 @@ model ComputerUpdate {
 }
 
 model Computer {
+  networkEgress Boolean @default(true)
   imageProfile String @default("base")
   connectionId String?
   screenGeneration Int @default(0)
@@ -1044,6 +1068,7 @@ model Artifact {
 
   @@index([spaceId, botId])
   @@index([groupId])
+  @@index([userId, runId, id])
   @@map("artifacts")
 }
 

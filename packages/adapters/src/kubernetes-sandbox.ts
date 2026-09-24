@@ -108,11 +108,20 @@ export class KubernetesSandboxProvider implements SandboxProvider {
       throw new Error("Kubernetes computer identity does not match.");
     return object;
   }
+  async supportsNetworkEgress(_computer: ComputerRef, context: AdapterContext) {
+    return this.api.supportsEgress?.(context.signal) ?? false;
+  }
   async provision(
     request: Parameters<SandboxProvider["provision"]>[0],
     context: AdapterContext,
   ): Promise<ComputerRef> {
     const name = kubernetesComputerName(context.spaceId, request.botId);
+    if (
+      request.networkEgress === false &&
+      (!this.api.setEgress || !(await this.api.supportsEgress?.(context.signal)))
+    )
+      throw new Error("Network egress control is unsupported on this computer.");
+    await this.api.setEgress?.(name, request.networkEgress ?? true, context.signal);
     const pvc = await this.owned("persistentvolumeclaims", name, context.signal);
     if (!pvc)
       await this.api.create(
@@ -155,6 +164,7 @@ export class KubernetesSandboxProvider implements SandboxProvider {
       providerRef: name,
       kind: "kubernetes",
       botId: request.botId,
+      networkEgress: request.networkEgress ?? true,
       imageProfile: request.imageProfile ?? "base",
       connectionId: request.connectionId,
       fresh: !pvc,

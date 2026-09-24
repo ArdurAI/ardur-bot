@@ -168,3 +168,26 @@ describe("profile replacement intent", () => {
     });
   });
 });
+
+it("stores only a confirmed egress change without changing the engine or image", async () => {
+  const { deps, computerUpdate } = fixture();
+  await expect(
+    queueComputerUpdate(deps, "computer-1", "bot-1", "update", {
+      networkEgress: false,
+      confirmed: false,
+    }),
+  ).rejects.toThrow("Continue?");
+  expect(computerUpdate.create).not.toHaveBeenCalled();
+  await queueComputerUpdate(deps, "computer-1", "bot-1", "update", {
+    networkEgress: false,
+    confirmed: true,
+  });
+  expect(computerUpdate.create).toHaveBeenCalledWith({
+    data: {
+      computerId: "computer-1",
+      botId: "bot-1",
+      action: "update",
+      configuration: { networkEgress: false, confirmed: true },
+    },
+  });
+});

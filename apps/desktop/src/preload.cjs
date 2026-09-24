@@ -9,6 +9,10 @@ async function addHostRoot(path) {
 
 contextBridge.exposeInMainWorld("ardurbotDesktop", {
   platform: process.platform,
+  notifications: {
+    supported: () => ipcRenderer.invoke("desktop.notifications.supported"),
+    show: (message) => ipcRenderer.invoke("desktop.notifications.show", message),
+  },
   system: {
     state: () => ipcRenderer.invoke("desktop.system.state"),
     set: (key, value) => ipcRenderer.invoke("desktop.system.set", key, value),
@@ -31,6 +35,7 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
   },
   host: {
     state: () => ipcRenderer.invoke("desktop.host.state"),
+    setKeepRunning: (enabled) => ipcRenderer.invoke("desktop.host.setKeepRunning", enabled),
     setup: () => ipcRenderer.invoke("desktop.host.setup"),
     addRoot: () => addHostRoot(),
     addDroppedRoot: (file) => {

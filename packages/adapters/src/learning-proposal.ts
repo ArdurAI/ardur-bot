@@ -2,7 +2,10 @@ import type { LearningCandidate, LearningProposal } from "@ardurbot/contracts";
 import { learningHash } from "./learning-records.js";
 export function proposalFingerprint(
   candidate: Omit<LearningCandidate, "confidence"> &
-    Pick<LearningProposal, "operation" | "revertsProposalId" | "participatingRevisions">,
+    Pick<
+      LearningProposal,
+      "operation" | "revertsProposalId" | "participatingRevisions" | "documentKind" | "memoryAction"
+    >,
 ) {
   return learningHash([
     candidate.type,
@@ -11,7 +14,13 @@ export function proposalFingerprint(
     candidate.proposedContent?.trim(),
     candidate.typedDelta ? [candidate.typedDelta.key, candidate.typedDelta.value] : null,
     ...(candidate.operation
-      ? [candidate.operation, candidate.revertsProposalId, candidate.participatingRevisions]
+      ? [
+          candidate.operation,
+          candidate.revertsProposalId,
+          candidate.participatingRevisions,
+          candidate.documentKind,
+          candidate.memoryAction,
+        ]
       : []),
   ]);
 }

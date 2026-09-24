@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type {
   AdapterContext,
   AgentHomeStore,
+  AgentRuntime,
   ArtifactStore,
   ConnectorCatalogItem,
   JobPublisher,
@@ -59,6 +60,7 @@ import {
   kubernetesContexts,
   listPiCatalog,
   listScratchpadItems,
+  loadPushToken,
   McpOAuthBroker,
   mapScratchpadItem,
   modelCredentialDto,
@@ -73,6 +75,7 @@ import {
   prepareApiInstall,
   prepareGraphqlInstall,
   probeOpenAiCompatibleModels,
+  proposeMemoryIntent,
   provisionComputer,
   pullOllamaModel,
   queueComputerUpdate,
@@ -128,6 +131,7 @@ import {
   findModelCredential,
   findSpaceMemoryConfig,
   formatMessagingLinkCode,
+  getUserPreferences,
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
@@ -148,16 +152,19 @@ import {
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
   touchGroupUpdatedAt,
+  updateUserPreferences,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { implement, ORPCError } from "@orpc/server";
+import { exportAccountData, exportBotData } from "./account-export.js";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
+import { createCapabilitySettings } from "./capability-settings.js";
 import { createCommandRoutes } from "./command-routes.js";
 import { createComparisons } from "./comparisons.js";
 import {
@@ -191,6 +198,7 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
+import { notificationActivity } from "./notification-activity.js";
 import { ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
   chooseFocus,
@@ -218,7 +226,6 @@ import type { createTerminalRoutes } from "./terminal-routes.js";
 import { guardComputerTakeover } from "./terminal-takeover.js";
 import {
   isPeerRun,
-  loadAllMessages,
   loadMessagePage,
   shouldForwardPeerThreadEvent,
 } from "./thread-message-pages.js";
@@ -231,6 +238,7 @@ import {
   threadHead,
   threadSnapshot,
 } from "./thread-target.js";
+import { deleteUploadedFile, listUploadedFiles } from "./uploaded-files.js";
 import {
   disconnectVoiceCredential,
   listVoiceCatalog,
@@ -245,7 +253,6 @@ import {
 
 const MAX_COMPUTER_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 const THREAD_MESSAGE_PAGE_SIZE = 100;
-const EXPORT_MESSAGE_PAGE_SIZE = 500;
 
 async function reconcilePendingConnections(
   prisma: PrismaClient,
@@ -463,6 +470,7 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  runtime?: AgentRuntime;
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
   terminals?: ReturnType<typeof createTerminalRoutes>;
@@ -682,12 +690,18 @@ export function createRouter(deps: RouterDeps) {
     health: os.health.handler(async () => ({ ok: true as const, version: "0.1.0" })),
     me: authed.me.handler(async ({ context }): Promise<Me> => meDto(deps, context.actor)),
     preferences: {
-      update: authed.preferences.update.handler(async ({ context, input }): Promise<Me> => {
-        await deps.prisma.user.update({
-          where: { id: context.actor.userId },
-          data: { avatarStyle: input.avatarStyle },
-        });
-        return meDto(deps, context.actor);
+      get: authed.preferences.get.handler(({ context }) =>
+        getUserPreferences(deps.prisma, context.actor.userId),
+      ),
+      update: authed.preferences.update.handler(async ({ context, input }) => {
+        const { avatarStyle, ...patch } = input;
+        if (avatarStyle !== undefined)
+          await deps.prisma.user.update({
+            where: { id: context.actor.userId },
+            data: { avatarStyle },
+          });
+        const preferences = await updateUserPreferences(deps.prisma, context.actor.userId, patch);
+        return { ...(await meDto(deps, context.actor)), preferences };
       }),
     },
     spaces: {
@@ -2520,6 +2534,9 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     memory: {
+      propose: authed.memory.propose.handler(({ context, input }) =>
+        proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+      ),
       remember: authed.memory.remember.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         await memoryRpc(() =>
@@ -3072,6 +3089,15 @@ export function createRouter(deps: RouterDeps) {
       ),
     },
     capabilities: {
+      settings: authed.capabilities.settings.handler(({ context }) =>
+        createCapabilitySettings(deps).settings(context.actor),
+      ),
+      configure: authed.capabilities.configure.handler(({ context, input }) =>
+        createCapabilitySettings(deps).configure(context.actor, input),
+      ),
+      network: authed.capabilities.network.handler(({ context, input }) =>
+        createCapabilitySettings(deps).network(context.actor, input),
+      ),
       list: authed.capabilities.list.handler(async ({ context }) => {
         const rows = await deps.prisma.capabilityInstall.findMany({
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
@@ -4886,6 +4912,12 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     artifacts: {
+      uploaded: authed.artifacts.uploaded.handler(({ context, input }) =>
+        listUploadedFiles(deps.prisma, context.actor, input.cursor),
+      ),
+      deleteUploaded: authed.artifacts.deleteUploaded.handler(({ context, input }) =>
+        deleteUploadedFile(deps, context.actor, input.artifactId),
+      ),
       list: authed.artifacts.list.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
         const rows = await deps.prisma.artifact.findMany({
@@ -4986,57 +5018,25 @@ export function createRouter(deps: RouterDeps) {
       comparison: authed.export.comparison.handler(({ context, input }) =>
         comparisons.export(context.actor, input.id),
       ),
-      bot: authed.export.bot.handler(async ({ context, input }) => {
-        const bot = await repos.getBot(context.actor, input.botId);
-        if (!bot.thread || !bot.computer) throw new IsolationError();
-        const homeKey = bot.computer.homeKey;
-        const exportContext = {
-          operationId: "export",
-          traceId: "export",
-          spaceId: context.actor.spaceId,
-          userId: context.actor.userId,
-          signal: new AbortController().signal,
-        };
-        const [memory, routines, files, history] = await Promise.all([
-          deps.memory.read({ scope: "bot", botId: input.botId }, exportContext),
-          deps.prisma.routine.findMany({
-            where: { botId: input.botId, spaceId: context.actor.spaceId },
-          }),
-          (async () => {
-            const exported: Array<{ path: string; content: string }> = [];
-            for await (const file of deps.home.exportHome(homeKey, exportContext)) {
-              exported.push({
-                path: file.path,
-                content: new TextDecoder().decode(file.content),
-              });
-            }
-            return exported;
-          })(),
-          loadAllMessages(deps.prisma, bot.thread.id, EXPORT_MESSAGE_PAGE_SIZE),
-        ]);
-        return {
-          version: 1 as const,
-          learning: await learning.exportLearning(context.actor, input.botId),
-          exportedAt: new Date().toISOString(),
-          bot: {
-            name: bot.name,
-            title: bot.title,
-            description: bot.description,
-            instructions: bot.instructions,
-          },
-          memory: memory.documents.map((m) => ({ path: m.path, content: m.content })),
-          routines: routines.map((r) => ({
-            name: r.name,
-            prompt: r.prompt,
-            crons: r.crons,
-            timezone: r.timezone,
-          })),
-          files,
-          history,
-        };
-      }),
+      bot: authed.export.bot.handler(({ context, input }) =>
+        exportBotData(
+          { ...deps, exportLearning: learning.exportLearning },
+          context.actor,
+          input.botId,
+        ),
+      ),
+      account: authed.export.account.handler(({ context }) =>
+        exportAccountData({ ...deps, exportLearning: learning.exportLearning }, context.actor),
+      ),
     },
+
     notifications: {
+      activity: authed.notifications.activity.handler(({ context }) =>
+        notificationActivity(deps.prisma, context.actor),
+      ),
+      capabilities: authed.notifications.capabilities.handler(async ({ context }) => ({
+        dispatchPush: Boolean(await loadPushToken(deps.dataDir, context.actor.userId)),
+      })),
       registerPush: authed.notifications.registerPush.handler(async ({ context, input }) => {
         await savePushToken(deps.dataDir, context.actor.userId, input.token);
         return { ok: true as const };

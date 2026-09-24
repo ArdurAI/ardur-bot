@@ -37,7 +37,10 @@ describe("native read-only memory contracts", () => {
     });
     expect(await loadMemoryHistory("document", 4)).toEqual({ items: [], nextCursor: 2 });
     expect(request.mock.calls).toEqual([
-      ["memory/list", { cursor: "document-before", limit: 50, includeDeleted: true }],
+      [
+        "memory/list",
+        { cursor: "document-before", limit: 50, scope: "user", includeDeleted: false },
+      ],
       ["memory/history", { documentId: "document", cursor: 4, limit: 50 }],
     ]);
   });

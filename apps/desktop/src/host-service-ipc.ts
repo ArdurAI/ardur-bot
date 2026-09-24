@@ -3,6 +3,7 @@ import { DESKTOP_FOLDER_ERRORS } from "@ardurbot/contracts/desktop-errors";
 import type { BrowserWindow, IpcMainInvokeEvent, Tray } from "electron";
 import { app, dialog, ipcMain, safeStorage } from "electron";
 import {
+  HostLifecyclePreferences,
   HostServiceStore,
   HostServiceSupervisor,
   hostServiceLaunch,
@@ -18,6 +19,8 @@ export function installHostService(options: {
 }) {
   const directory = path.join(app.getPath("userData"), "host-service");
   const store = new HostServiceStore(directory, safeStorage);
+  const lifecycle = new HostLifecyclePreferences(path.join(directory, "lifecycle.json"));
+  const ready = lifecycle.load();
   const supervisor = new HostServiceSupervisor(
     hostServiceLaunch({
       packaged: app.isPackaged,
@@ -46,7 +49,10 @@ export function installHostService(options: {
     action: (event: IpcMainInvokeEvent, value: unknown) => Promise<unknown>,
   ) {
     ipcMain.handle(`desktop.host.${name}`, (event, value: unknown) => {
-      const result = tail.then(() => action(event, value));
+      const result = tail.then(async () => {
+        await ready;
+        return action(event, value);
+      });
       tail = result.then(
         () => undefined,
         () => undefined,
@@ -69,7 +75,13 @@ export function installHostService(options: {
     return {
       configured: config?.apiUrl === target,
       roots: config?.apiUrl === target ? config.hostRoots : [],
+      keepRunning: lifecycle.keepRunning,
     };
+  });
+  register("setKeepRunning", async (event, value) => {
+    trusted(event);
+    if (typeof value !== "boolean") throw new Error("Choose whether to keep working.");
+    await lifecycle.setKeepRunning(value);
   });
   register("setup", async (event) => {
     const { window, target } = trusted(event);
@@ -139,7 +151,14 @@ export function installHostService(options: {
     await store.clear();
   });
   return {
+    get keepRunning() {
+      return lifecycle.keepRunning;
+    },
+    windowClosed() {
+      if (!lifecycle.keepRunning) supervisor.stop();
+    },
     async activate(target: string) {
+      await ready;
       const config = await store.read();
       if (config?.apiUrl === target) supervisor.start(config);
       else supervisor.stop();

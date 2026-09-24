@@ -38,8 +38,8 @@ export function createDesktopTray(
   }
 }
 
-export function staysRunning(platform: NodeJS.Platform, hasTray: boolean) {
-  return platform === "darwin" || hasTray;
+export function staysRunning(platform: NodeJS.Platform, hasTray: boolean, keepRunning = true) {
+  return keepRunning && (platform === "darwin" || hasTray);
 }
 
 export function updateHostTray(tray: Tray | null, connected: boolean) {

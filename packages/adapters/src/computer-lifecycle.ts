@@ -282,6 +282,7 @@ export async function provisionComputer(
     await onProgress?.("recreating");
     const ref = await deps.sandbox.provision(
       {
+        networkEgress: existing.networkEgress,
         imageProfile: (existing.imageProfile ?? "base") as ComputerRef["imageProfile"],
         connectionId: existing.connectionId,
         botId: existing.homeKey,
@@ -593,7 +594,11 @@ export async function replaceComputer(
   context: AdapterContext,
   controlHolder: "bot" | "none" = "none",
   onProgress?: ComputerUpdateProgress,
-  configuration?: { imageProfile: "base" | "developer"; connectionId: string | null },
+  configuration?: {
+    imageProfile?: "base" | "developer";
+    connectionId?: string | null;
+    networkEgress?: boolean;
+  },
 ): Promise<ComputerRef> {
   let existing = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
   if (existing.maintenanceId && existing.maintenanceId !== context.operationId)
@@ -734,7 +739,17 @@ export async function replaceComputer(
       },
       data: {
         ...(configuration
-          ? { imageProfile: configuration.imageProfile, connectionId: configuration.connectionId }
+          ? {
+              ...(configuration.imageProfile !== undefined
+                ? { imageProfile: configuration.imageProfile }
+                : {}),
+              ...(configuration.connectionId !== undefined
+                ? { connectionId: configuration.connectionId }
+                : {}),
+              ...(configuration.networkEgress !== undefined
+                ? { networkEgress: configuration.networkEgress }
+                : {}),
+            }
           : {}),
         state: "stopped",
         providerRef: null,

@@ -135,6 +135,7 @@ export class MemoryService {
   }
   async commit(
     input: {
+      kind?: "profile" | "preferences" | "topic";
       id?: string;
       scope: DocumentScope["kind"];
       botId?: string;

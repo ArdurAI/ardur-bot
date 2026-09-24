@@ -1,293 +1,162 @@
-import type { AvatarStyle, SpaceMemoryConfig } from "@ardurbot/contracts";
-import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@ardurbot/ui-web";
+import { Button, Dialog, DialogClose, DialogContent, DialogTitle, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
+import { XIcon } from "lucide-react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { LoadingState } from "../components/ai/primitives";
 import {
-  Brain,
-  CloudDownload,
-  Cpu,
-  Gauge,
-  Monitor,
-  Plug,
-  Settings,
-  Volume2,
-  XIcon,
-} from "lucide-react";
-import type { ComponentType } from "react";
-import { Fragment, useEffect, useRef, useState } from "react";
-import { IntegrationCatalog } from "../components/integrations/catalog/IntegrationCatalog";
-import {
-  ComputerSettingsPanel,
-  GeneralSettingsPanels,
-  UpdatesSettingsPanel,
-  UsageSettingsPanel,
-} from "./AccountSettingsOverlay";
-import { DevicesSettings } from "./DevicesSettings";
-import { LearningBadge } from "./LearningInbox";
-import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
-import { ModelDestinations } from "./ModelDestinations";
-import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
-import { systemBridge } from "./system/bridge";
-import SystemSettings from "./system/SystemPage";
-import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
+  matchesSetting,
+  SettingsSearchProvider,
+  useSettingsSearch,
+} from "../components/SettingsRow";
+import { desktopBridge } from "../lib/desktop";
+import { SETTINGS_GROUPS, settingsGroupLabels, settingsSections } from "./settings-sections";
+import type { SettingsPageProps, SettingsSection } from "./settings-types";
 
-export type SettingsSection =
-  | "system"
-  | "devices"
-  | "integrations"
-  | "general"
-  | "models"
-  | "memory"
-  | "voice"
-  | "usage"
-  | "computer"
-  | "updates";
+export type { SettingsSection } from "./settings-types";
 
-type NavItem = {
-  group?: string;
-  component?: ComponentType;
-  id: SettingsSection;
-  label: string;
-  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
+type Props = Omit<SettingsPageProps, "navigate" | "onBusyChange"> & {
+  initialSection?: SettingsSection;
+  onVoiceStatusMaybeChanged?: () => void | Promise<void>;
 };
 
 export function SettingsOverlay({
-  email,
-  name,
-  usage,
   initialSection = "general",
-  initialProvider,
-  initialIntegration,
-  avatarStyle,
-  onAvatarStyleChange,
-  isDeploymentOwner = false,
-  messagingEnabled = false,
-  onOpenMessaging,
-  memoryConfig,
-  onMemoryConfigChange,
-  onClose,
   onVoiceStatusMaybeChanged,
-}: {
-  email?: string | null;
-  name: string;
-  usage?: { runs: number; inputTokens: number; outputTokens: number } | null;
-  initialSection?: SettingsSection;
-  initialProvider?: string;
-  initialIntegration?: string;
-  avatarStyle: AvatarStyle;
-  onAvatarStyleChange: (style: AvatarStyle) => Promise<void>;
-  isDeploymentOwner?: boolean;
-  sandboxProvider?: string | null;
-  messagingEnabled?: boolean;
-  onOpenMessaging?: () => void;
-  memoryConfig: SpaceMemoryConfig | null | undefined;
-  onMemoryConfigChange: (config: SpaceMemoryConfig | null) => void;
-  onClose: () => void;
-  onVoiceStatusMaybeChanged?: () => void | Promise<void>;
-}) {
-  const { t } = useLingui();
+  ...props
+}: Props) {
+  const { t, i18n } = useLingui();
   const panelRef = useRef<HTMLDivElement>(null);
-  const usageRef = useRef<HTMLDivElement>(null);
   const [section, setSection] = useState<SettingsSection>(initialSection);
-  const [memoryBusy, setMemoryBusy] = useState(false);
-  const [voiceBusy, setVoiceBusy] = useState(false);
-  const showComputer = isDeploymentOwner;
-  const panelBusy = memoryBusy || voiceBusy;
-
-  useEffect(() => {
-    setSection(initialSection);
-  }, [initialSection]);
-
-  useEffect(() => {
-    if (section === "usage") {
-      usageRef.current?.focus();
-    }
-  }, [section]);
-
-  const navItems: NavItem[] = [
-    { id: "general", label: t`General`, icon: Settings },
-    { id: "devices", label: t`Devices`, icon: Monitor },
-    { id: "integrations", label: t`Integrations`, icon: Plug },
-    { id: "models", label: t`Models`, icon: Cpu },
-    { id: "memory", label: t`Memory & Skills`, icon: Brain },
-    { id: "voice", label: t`Voice`, icon: Volume2 },
-    { id: "usage", label: t`Usage`, icon: Gauge },
-    ...(showComputer ? [{ id: "computer" as const, label: t`Computers`, icon: Monitor }] : []),
-    { id: "updates", label: t`Updates`, icon: CloudDownload },
-    ...(systemBridge()
-      ? [
-          {
-            id: "system" as const,
-            group: t`Desktop app`,
-            label: t`System`,
-            icon: Monitor,
-            component: SystemSettings,
-          },
-        ]
-      : []),
-  ];
-
-  const SectionComponent = navItems.find((item) => item.id === section)?.component;
-  const sectionTitle =
-    navItems.find((item) => item.id === section)?.label ??
-    (section === "general" ? t`General` : t`Settings`);
-
+  const [busy, setBusy] = useState(false);
+  const search = useSettingsSearch();
+  const context = {
+    desktop: !!desktopBridge(),
+    isDeploymentOwner: props.isDeploymentOwner === true,
+  };
+  const available = settingsSections.filter((item) => item.available(context));
+  const active = available.find((item) => item.id === section) ?? available[0]!;
+  const title = i18n._(active.label);
+  const visible = available.filter(
+    (item) =>
+      matchesSetting(i18n._(item.label), search.query) ||
+      (item.id === active.id && search.rowMatch),
+  );
+  const Page = active.component;
+  useEffect(() => setSection(initialSection), [initialSection]);
+  function navigate(next: SettingsSection) {
+    if (busy) return;
+    search.setQuery("");
+    setSection(next);
+  }
+  function close() {
+    if (busy) return;
+    props.onClose();
+    void Promise.resolve(onVoiceStatusMaybeChanged?.()).catch(() => undefined);
+  }
   const closeLabel =
-    section === "models"
+    active.id === "models"
       ? t`Close model settings`
-      : section === "memory"
+      : active.id === "memory"
         ? t`Close memory settings`
-        : section === "voice"
+        : active.id === "voice"
           ? t`Close voice settings`
           : t`Close user settings`;
-
-  async function refreshVoiceStatus() {
-    await onVoiceStatusMaybeChanged?.();
-  }
-
-  function leaveSettings(next: () => void) {
-    if (panelBusy) return;
-    void refreshVoiceStatus().finally(next);
-  }
-
-  function requestClose() {
-    leaveSettings(onClose);
-  }
-
-  const widePane = section === "models" || section === "voice";
-
+  const fullPane = ["models", "memory", "capabilities", "voice"].includes(active.id);
   return (
     <Dialog
       open
       onOpenChange={(open, details) => {
         if (open) return;
-        if (panelBusy) {
-          details.cancel();
-          return;
-        }
-        requestClose();
+        if (busy) details.cancel();
+        else close();
       }}
     >
       <DialogContent
         ref={panelRef}
         data-testid="user-settings"
-        data-settings-section={section}
+        data-settings-section={active.id}
         showCloseButton={false}
-        initialFocus={() =>
-          section === "usage" ? (usageRef.current ?? panelRef.current) : panelRef.current
-        }
-        className={`flex max-h-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-h-[calc(100%-5rem)] ${
-          widePane
-            ? "h-[min(760px,calc(100%-2rem))] w-[min(1080px,calc(100%-2rem))] sm:max-w-[1080px]"
-            : "h-[min(720px,calc(100%-2rem))] w-[min(920px,calc(100%-2rem))] sm:max-w-[920px]"
-        }`}
+        initialFocus={() => panelRef.current}
+        className="flex h-[min(760px,calc(100%-2rem))] max-h-[calc(100%-2rem)] w-[min(1080px,calc(100%-2rem))] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[1080px]"
       >
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <nav
             data-testid="settings-nav"
             aria-label={t`Settings`}
-            className="flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-border px-3 py-3 md:w-[200px] md:flex-col md:overflow-y-auto md:border-b-0 md:border-e md:px-3 md:py-4"
+            className="flex max-h-[35vh] shrink-0 flex-col gap-3 overflow-y-auto border-b border-border p-3 md:max-h-none md:w-56 md:border-b-0 md:border-e"
           >
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = item.id === section;
+            <Input
+              type="search"
+              aria-label={t`Search settings`}
+              placeholder={t`Search settings`}
+              value={search.query}
+              onChange={(event) => search.setQuery(event.target.value)}
+            />
+            {SETTINGS_GROUPS.map((group) => {
+              const items = visible.filter((item) => item.group === group);
+              if (!items.length) return null;
               return (
-                <Fragment key={item.id}>
-                  {item.group ? (
-                    <span className="px-2.5 pt-3 text-xs text-muted-foreground">{item.group}</span>
-                  ) : null}
-                  <button
-                    type="button"
-                    data-testid={`settings-nav-${item.id}`}
-                    aria-current={active ? "page" : undefined}
-                    disabled={panelBusy}
-                    onClick={() => setSection(item.id)}
-                    className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-[13.5px] transition-colors disabled:pointer-events-none disabled:opacity-50 ${
-                      active
-                        ? "bg-muted text-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                    }`}
-                  >
-                    <Icon className="size-4 shrink-0" strokeWidth={1.75} />
-                    <span className="whitespace-nowrap">
-                      {item.label}
-                      {item.id === "memory" ? <LearningBadge /> : null}
-                    </span>
-                  </button>
-                </Fragment>
+                <fieldset
+                  key={group}
+                  className="min-w-0"
+                  aria-label={i18n._(settingsGroupLabels[group])}
+                >
+                  <div className="px-2 pb-1 text-xs text-muted-foreground">
+                    {i18n._(settingsGroupLabels[group])}
+                  </div>
+                  {items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <Button
+                        key={item.id}
+                        variant="ghost"
+                        data-testid={`settings-nav-${item.id}`}
+                        aria-current={active.id === item.id ? "page" : undefined}
+                        disabled={busy}
+                        onClick={() => navigate(item.id)}
+                        className={`w-full justify-start gap-2 text-sm ${active.id === item.id ? "bg-muted" : "text-muted-foreground"}`}
+                      >
+                        <Icon className="size-4" strokeWidth={1.75} />
+                        {i18n._(item.label)}
+                      </Button>
+                    );
+                  })}
+                </fieldset>
               );
             })}
+            {!visible.length ? (
+              <p className="px-2 text-sm text-muted-foreground">{t`No settings found.`}</p>
+            ) : null}
           </nav>
-
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex items-start justify-between gap-4 px-6 pt-6 sm:px-8 sm:pt-7">
-              <DialogTitle className="text-2xl font-medium text-foreground">
-                {sectionTitle}
-              </DialogTitle>
+            <div className="flex items-center justify-between gap-4 px-6 pt-6">
+              <DialogTitle className="text-2xl font-medium">{title}</DialogTitle>
               <DialogClose
                 aria-label={closeLabel}
-                disabled={panelBusy}
+                disabled={busy}
                 render={<Button variant="ghost" size="icon-sm" />}
               >
                 <XIcon />
               </DialogClose>
             </div>
-
             <div
-              className={`min-h-0 flex-1 ${
-                section === "models" || section === "voice" || section === "memory"
-                  ? "flex flex-col overflow-hidden"
-                  : "rk-scroll overflow-y-auto overscroll-contain px-6 pb-6 pt-5 sm:px-8 sm:pb-8"
-              }`}
+              className={`min-h-0 flex-1 ${fullPane ? "flex flex-col overflow-hidden" : "rk-scroll overflow-y-auto px-6 pb-6 pt-2"}`}
             >
-              {SectionComponent ? <SectionComponent /> : null}
-              {section === "devices" ? <DevicesSettings owner={isDeploymentOwner} /> : null}
-              {section === "integrations" ? (
-                <IntegrationCatalog reconnectId={initialIntegration} />
-              ) : null}
-              {section === "general" ? (
-                <GeneralSettingsPanels
-                  email={email}
-                  name={name}
-                  avatarStyle={avatarStyle}
-                  onAvatarStyleChange={onAvatarStyleChange}
-                  messagingEnabled={messagingEnabled}
-                  onOpenMessaging={
-                    onOpenMessaging ? () => leaveSettings(onOpenMessaging) : undefined
-                  }
-                  isDeploymentOwner={isDeploymentOwner}
-                />
-              ) : null}
-              {section === "usage" ? (
-                <UsageSettingsPanel usage={usage} panelRef={usageRef} />
-              ) : null}
-              {section === "computer" && showComputer ? <ComputerSettingsPanel /> : null}
-              {section === "updates" ? (
-                <UpdatesSettingsPanel isDeploymentOwner={isDeploymentOwner} />
-              ) : null}
-              {section === "models" ? (
-                <>
-                  <div className="px-6 pt-5 sm:px-8">
-                    <ModelDestinations />
-                  </div>
-                  <ModelSettingsOverlay
-                    initialProvider={initialProvider}
-                    embedded
-                    onClose={requestClose}
+              <SettingsSearchProvider
+                query={search.query}
+                sectionLabel={title}
+                register={search.register}
+              >
+                <Suspense fallback={<LoadingState label={t`Loading…`} />}>
+                  <Page
+                    key={active.id}
+                    {...props}
+                    onClose={close}
+                    onBusyChange={setBusy}
+                    navigate={navigate}
                   />
-                </>
-              ) : null}
-              {section === "memory" ? (
-                <MemorySettingsOverlay
-                  embedded
-                  onClose={requestClose}
-                  config={memoryConfig}
-                  onConfigChange={onMemoryConfigChange}
-                  onBusyChange={setMemoryBusy}
-                />
-              ) : null}
-              {section === "voice" ? (
-                <VoiceSettingsOverlay embedded onClose={requestClose} onBusyChange={setVoiceBusy} />
-              ) : null}
+                </Suspense>
+              </SettingsSearchProvider>
             </div>
           </div>
         </div>
