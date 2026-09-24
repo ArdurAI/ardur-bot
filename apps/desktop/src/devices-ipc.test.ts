@@ -1,5 +1,5 @@
-import { LOCAL_SETTINGS_TOKEN_HEADER } from "@ardurbot/contracts/local-settings";
 import type { DesktopInstanceMode } from "@ardurbot/contracts";
+import { LOCAL_SETTINGS_TOKEN_HEADER } from "@ardurbot/contracts/local-settings";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalStackController } from "./local-stack.js";
