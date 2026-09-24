@@ -1,5 +1,5 @@
 import type { DelegationSnapshot } from "@ardurbot/contracts";
-import { ALL_DEVICE_SCOPES, DELEGATION_LIMITS } from "@ardurbot/contracts";
+import { ALL_DEVICE_SCOPES, DELEGATION_LIMITS, TaskCardSchema } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { Prisma, PrismaClient } from "./client.js";
 import {
@@ -9,6 +9,9 @@ import {
   finishDelegation,
   requestCancel,
 } from "./delegation.js";
+import { rejectDelegation } from "./delegation-rework.js";
+import { deviceDigest } from "./device-grants.js";
+import { startDelegation, updateWorkerTask } from "./task-cards.js";
 
 const snapshot: DelegationSnapshot = {
   pin: {
@@ -80,14 +83,42 @@ function fixture() {
     usageRecord: {
       aggregate: vi.fn(async () => ({ _sum: { inputTokens: 0, outputTokens: 0 } })),
     },
+    spaceMember: { count: vi.fn(async () => 1) },
+    artifact: {
+      findFirstOrThrow: vi.fn(async ({ where }) => {
+        if (where.id !== "artifact") throw new Error("not found");
+        return { id: "artifact" };
+      }),
+    },
+    externalEffect: { findFirst: vi.fn(async () => null as unknown) },
+    task: { create: vi.fn(async ({ data }) => ({ id: "rework-task", ...data })) },
     run: {
+      findFirstOrThrow: vi.fn(async ({ where }) => state.runs.find((row) => row.id === where.id)),
+      findUnique: vi.fn(async ({ where }) => state.runs.find((row) => row.id === where.id)),
+      create: vi.fn(async ({ data }) => {
+        const row = { id: "rework-run", ...data };
+        state.runs.push(row);
+        return row;
+      }),
+      update: vi.fn(async ({ where, data }) =>
+        apply(
+          state.runs.find((row) => row.id === where.id),
+          data,
+        ),
+      ),
       findUniqueOrThrow: vi.fn(async ({ where }) => state.runs.find((row) => row.id === where.id)),
       updateMany: vi.fn(async ({ data }) => {
         for (const run of state.runs) apply(run, data);
         return { count: state.runs.length };
       }),
     },
-    bot: { findFirstOrThrow: vi.fn(async ({ where }) => ({ ...bot, id: where.id })) },
+    bot: {
+      findFirstOrThrow: vi.fn(async ({ where }) => ({
+        ...bot,
+        id: where.id,
+        thread: { id: "worker-thread" },
+      })),
+    },
     space: { findUniqueOrThrow: vi.fn(async () => ({ allowedModelDestinations: null })) },
     connection: { findMany: vi.fn(async () => []) },
     capabilityInstall: { findMany: vi.fn(async () => []) },
@@ -123,6 +154,11 @@ function fixture() {
       findUniqueOrThrow: vi.fn(async () => state.root),
     },
     delegation: {
+      findMany: vi.fn(async ({ where }) =>
+        state.rows.filter(
+          (row) => row.rootTaskId === where.rootTaskId && where.status.in.includes(row.status),
+        ),
+      ),
       findUnique: vi.fn(
         async ({ where }) =>
           state.rows.find((row) => row.admissionKey === where.admissionKey) ?? null,
@@ -169,7 +205,7 @@ function fixture() {
           { kind: "text", text: "Coordinator → Worker: completed, awaiting acceptance.\nReviewed" },
         ],
       })),
-      update: vi.fn(),
+      update: vi.fn(async ({ data }) => ({ id: "summary", ...data })),
     },
     event: { create: vi.fn(async ({ data }) => data) },
   };
@@ -198,7 +234,17 @@ function fixture() {
   const admit = (patch = {}, db = worker()) =>
     db.$transaction(async (t) => {
       const row = await admitDelegation(t, { ...input, ...patch });
-      state.runs.push({ id: `run-${row.id}`, delegationId: row.id });
+      row.runId = `run-${row.id}`;
+      state.runs.push({
+        id: row.runId,
+        delegationId: row.id,
+        spaceId: input.spaceId,
+        userId: input.userId,
+        botId: input.actingBotId,
+        threadId: "worker-thread",
+        status: "running",
+        remoteDeviceGrantIds: [],
+      });
       return row;
     });
   return { worker, admit, tx, state: () => state, policies, bot };
@@ -345,4 +391,185 @@ it("does not let an inherited worker change the parent's computer", async () => 
     }),
   ).rejects.toMatchObject({ problem: { code: "authority-exceeded" } });
   expect(f.state().rows).toHaveLength(0);
+});
+
+it("saves admission-owned fields, scoped references and optional human ownership", async () => {
+  const f = fixture();
+  f.tx.spaceMember.count.mockResolvedValue(2);
+  const row = await f.admit({
+    card: {
+      goal: "Review",
+      inputs: [{ type: "file", artifactId: "artifact" }],
+      doneWhen: ["Checklist passes"],
+      deadlineAt: null,
+    },
+  });
+  expect(row.card).toMatchObject({
+    responsibleUserId: "owner",
+    requesterBotId: "coordinator",
+    workerBotId: "worker",
+    approvalBoundaries: row.authority,
+    snapshot: row.snapshot,
+  });
+  expect(f.tx.artifact.findFirstOrThrow).toHaveBeenCalledWith({
+    where: { id: "artifact", spaceId: "space", userId: "owner" },
+  });
+  await expect(
+    f.admit({
+      admissionKey: "other",
+      card: { goal: "Review", inputs: [{ type: "file", artifactId: "foreign" }] },
+    }),
+  ).rejects.toThrow("not found");
+});
+it("updates a worker card quietly, redacts it, checks bounds and keeps acceptance separate", async () => {
+  const f = fixture();
+  const row = await f.admit({ card: { goal: "Review", doneWhen: ["Checklist passes"] } });
+  const db = f.worker();
+  await db.$transaction((tx) => startDelegation(tx, row.id));
+  const update = (tool: string, args: unknown, executionId = tool) =>
+    db.$transaction((tx) =>
+      updateWorkerTask(tx, {
+        runId: row.runId!,
+        spaceId: "space",
+        userId: "owner",
+        botId: "worker",
+        executionId,
+        tool,
+        args,
+      }),
+    );
+  await update("report_progress", { text: "token=fake-sensitive-value" });
+  await update("report_progress", { text: "token=fake-sensitive-value" });
+  expect(
+    TaskCardSchema.parse(row.card).timeline.filter((event) => event.kind === "progress"),
+  ).toHaveLength(1);
+  expect(JSON.stringify(row.card)).not.toContain("fake-sensitive-value");
+  expect(f.tx.message.create).not.toHaveBeenCalled();
+  await expect(update("report_progress", { text: "x".repeat(2001) }, "long")).rejects.toThrow();
+  await expect(update("attach_artifact", { artifactId: "foreign" })).rejects.toThrow();
+  await update("attach_artifact", { artifactId: "artifact" });
+  await expect(update("complete_task", { summary: "Done", reports: [] })).rejects.toThrow(
+    "every definition",
+  );
+  f.tx.externalEffect.findFirst.mockResolvedValue({ id: "approval" });
+  await expect(
+    update("complete_task", {
+      summary: "Done",
+      reports: [{ index: 0, met: true, report: "Passed" }],
+    }),
+  ).rejects.toThrow("waiting for approval");
+  f.tx.externalEffect.findFirst.mockResolvedValue(null);
+  await update("complete_task", {
+    summary: "Done",
+    reports: [{ index: 0, met: true, report: "Passed" }],
+  });
+  expect(f.state().rows[0].status).toBe("completed");
+  expect(f.tx.message.create).toHaveBeenCalledOnce();
+  expect(f.tx.message.create.mock.calls[0]![0].data.blocks[0].text).toContain(
+    "Checklist passes: reported met — Passed",
+  );
+  await db.$transaction((tx) =>
+    acceptDelegation(tx, { spaceId: "space", userId: "owner" }, row.id, "coordinator"),
+  );
+  expect(f.state().rows[0].status).toBe("accepted");
+});
+it("returns a completed card for rework with one more hop and a fresh bounded reservation", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "First pass"));
+  f.state().runs.find((run) => run.id === row.runId).status = "completed";
+  const result = await db.$transaction((tx) =>
+    rejectDelegation(
+      tx,
+      { spaceId: "space", userId: "owner" },
+      row.id,
+      "coordinator",
+      "Check the missing citation",
+    ),
+  );
+  expect(result.runId).toBe("rework-run");
+  expect(f.state().rows[0]).toMatchObject({ status: "queued", hop: 2, runId: "rework-run" });
+  expect(f.state().root).toMatchObject({
+    activeDescendants: 1,
+    totalDescendants: 2,
+    reservedTokens: 10000,
+  });
+  expect(f.state().rows[0].card.timeline.at(-1).text).toBe("Check the missing citation");
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Second pass"));
+  expect(f.tx.message.create).toHaveBeenCalledOnce();
+  expect(f.tx.message.update).toHaveBeenCalled();
+});
+it.each([
+  ["hops-exceeded", { maxHops: 1 }],
+  ["descendants-exceeded", { maxDescendants: 1 }],
+  ["descendants-exceeded", { maxConcurrent: 0 }],
+  ["budget-exhausted", { tokenLimit: 0 }],
+  ["deadline-passed", { cancelRequestedAt: new Date() }],
+])("refuses rework at the %s cap without reserving or queueing", async (code, patch) => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
+  Object.assign(f.state().root, patch);
+  const before = structuredClone(f.state());
+  await expect(
+    db.$transaction((tx) =>
+      rejectDelegation(tx, { spaceId: "space", userId: "owner" }, row.id, "coordinator", "Rework"),
+    ),
+  ).rejects.toMatchObject({ problem: { code } });
+  expect(f.state()).toEqual(before);
+});
+
+it("clears a saved blocker on a new executor attempt and deduplicates start retries", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  await db.$transaction((tx) => startDelegation(tx, row.id, "attempt-1"));
+  await db.$transaction((tx) =>
+    updateWorkerTask(tx, {
+      runId: row.runId!,
+      spaceId: "space",
+      userId: "owner",
+      botId: "worker",
+      executionId: "blocked",
+      tool: "report_progress",
+      args: { state: "blocked", text: "Need a source", action: "Choose a source" },
+    }),
+  );
+  await db.$transaction((tx) => startDelegation(tx, row.id, "attempt-2"));
+  await db.$transaction((tx) => startDelegation(tx, row.id, "attempt-2"));
+  const timeline = TaskCardSchema.parse(row.card).timeline;
+  expect(timeline.at(-1)?.kind).toBe("started");
+  expect(timeline.filter((event) => event.kind === "started")).toHaveLength(2);
+});
+
+it("replays a P1 admission without inventing a historical card", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  f.state().rows[0].card = null;
+  f.state().rows[0].fingerprint = deviceDigest(
+    JSON.stringify([input.actingBotId, input.kind, input.prompt]),
+  );
+  const replay = await f.worker().$transaction((tx) => admitDelegation(tx, input));
+  expect(replay.id).toBe(row.id);
+  expect(replay.card).toBeNull();
+  expect(f.state().root.totalDescendants).toBe(1);
+});
+
+it("ignores a late completion from an attempt superseded by rework", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  const oldRunId = row.runId;
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "First pass", oldRunId));
+  f.state().runs.find((run) => run.id === oldRunId).status = "completed";
+  await db.$transaction((tx) =>
+    rejectDelegation(tx, { spaceId: "space", userId: "owner" }, row.id, "coordinator", "Rework"),
+  );
+  await db.$transaction((tx) =>
+    finishDelegation(tx, row.id, "completed", "Late old result", oldRunId),
+  );
+  expect(f.state().rows[0].status).toBe("queued");
+  expect(f.state().rows[0].result).toBeNull();
 });

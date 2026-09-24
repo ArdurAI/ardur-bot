@@ -97,5 +97,47 @@ The web Activity E2E adds a `delegation-lineage` screenshot for CI.
 Operators notice one coordinator and fewer interruptions. Builders get durable
 limits and task files. Researchers can inspect the actual executing pin. Team
 leads can attribute usage and approvals. Local-first users can refuse remote or
-unknown model destinations. Task cards, Team view and compare mode remain outside
+unknown model destinations. P2 task cards and the Team view are described below; compare mode remains outside
 this change.
+
+## Task cards and Team (P2)
+
+Every new admission saves a validated card in `Delegation.card`. Request tools accept
+`card: { goal, inputs, doneWhen, deadlineAt }`; `deadlineAt: null` means no requested
+deadline, while the root's execution deadline still applies. Inputs are text, file
+artifact ids, HTTP(S) URLs, or a document id and revision. Files and document revisions
+must belong to the requesting user and space. Free-text requests produce a card with
+an empty checklist; long requests retain the remainder as bounded text inputs.
+Admission alone supplies requester, worker, effective approval boundaries, execution
+snapshot and budget. A responsible human is included only in shared spaces.
+
+Workers receive a framed envelope and a plain sentence. `report_progress` changes
+only the card and timeline; blocked updates require a reason and an action.
+`attach_artifact` accepts ids of artifacts from the worker's run. `complete_task`
+requires one report per checklist index and cannot complete over a pending approval.
+Reports are worker claims, not acceptance. `accept_delegation` is the coordinator's
+review action. `reject_delegation` returns the card with a reason and reserves another
+attempt under the existing deadline, descendant, concurrency, hop and token caps.
+The pin and authority stay fixed. Rework updates the original summary rather than
+creating another human message. References contain ids, never artifact content.
+
+The Team board is available with at least two bots. It projects run, delegation and
+approval records; message text never decides state. Expanded rows show the review
+chain, checklist, persisted timeline, executing snapshot, artifact ids and token
+usage. Money is shown only with its recorded pricing provenance. Web and Electron
+share the board; mobile presents native list controls for Stop and Accept. Thread
+events refresh the web board; foreground refresh repairs unavailable streams and
+roster changes. Signed mobile devices use their existing read, stop and consequential
+scopes for Team reads, Stop and Accept respectively. Nothing adds push notifications.
+
+Apply `20260924000200_delegation_task_cards` after the P1 migration and generate the
+Prisma client before starting updated processes. Existing rows retain a null card;
+no historical task definition is invented. Test the migration on PostgreSQL before
+rollout. This change requires no new runtime dependency or hosted service. Compare
+mode is reserved for P3.
+
+Operators see quiet, explicit work states and a separate OK step. Builders inspect
+the executing pin and approval ceiling. Researchers retain checklist reports and
+artifact references. Team leads get a review chain and attributed usage. Local-first
+users retain the admission locality boundary and can run the board without a cloud
+service.

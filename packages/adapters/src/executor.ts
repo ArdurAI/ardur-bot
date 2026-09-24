@@ -68,6 +68,7 @@ import {
   planActionGate,
   promptInvokesSkill,
   redactSecrets,
+  redactTaskValue,
   renderBotDirectory,
   resolveActionApprovalDetail,
   type ToolCallStreak,
@@ -102,6 +103,7 @@ import {
   parseComputerMode,
   requestCancel,
   SpaceLimitError,
+  startDelegation,
   type ThreadEvents,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -337,6 +339,7 @@ import {
   takeoverCheckpointOf,
   takeoverContinuePlan,
 } from "./takeover-resume.js";
+import { rejectTask, updateTaskCard } from "./task-cards.js";
 import { getActiveTeachingSession, parsePlaybook } from "./teaching-session.js";
 import { ComputerAdmissionError, withComputerAdmission } from "./terminal-ownership.js";
 import {
@@ -1358,10 +1361,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           ? await enforceDelegationDestination(deps.prisma, run.delegationId, selected)
           : undefined;
         if (run.delegationId)
-          await deps.prisma.delegation.updateMany({
-            where: { id: run.delegationId, status: "queued" },
-            data: { status: "running" },
-          });
+          await deps.prisma.$transaction((tx) =>
+            startDelegation(tx, run.delegationId!, `${run.id}:${fence}`),
+          );
         const resolved =
           delegatedTokens === undefined
             ? selected
@@ -3459,6 +3461,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return pauseForSecret();
           }
           if (name === "request_takeover") return { ok: true };
+          if (["report_progress", "attach_artifact", "complete_task"].includes(name))
+            return finish(
+              await updateTaskCard(deps, {
+                ...run,
+                runId: run.id,
+                delegationId: helperToolDelegations.get(executionId),
+                executionId,
+                tool: name,
+                args: redactTaskValue(args, runSecrets),
+              }),
+            );
+          if (name === "reject_delegation")
+            return finish(
+              await rejectTask(
+                deps,
+                run,
+                String(args.delegation_id),
+                String(args.reason ?? ""),
+                runSecrets,
+              ),
+            );
           if (name === "delegation_status")
             return finish({
               delegations: await listDelegations(
@@ -3493,6 +3516,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               executionId,
               String(args.name ?? "Helper"),
               String(args.task ?? ""),
+              redactTaskValue(args.card, runSecrets),
             );
             if ("error" in admitted) return finish(admitted);
             const result = String(args.task ?? "done.");
@@ -3538,8 +3562,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               name: String(args.name ?? ""),
               title: args.title ? String(args.title) : undefined,
               instructions: args.instructions ? String(args.instructions) : undefined,
-              prompt: args.prompt ? String(args.prompt) : undefined,
+              prompt: args.prompt ? redactSecrets(String(args.prompt), runSecrets) : undefined,
               computerMode,
+              card: redactTaskValue(args.card, runSecrets),
             });
             if ("error" in spawned) return finish(spawned);
             if (!(await persistEffectResult(spawned))) return uncertainEffectResult(name);
@@ -3653,16 +3678,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
             name === "message_user" &&
             (run.delegationId || helperToolDelegations.has(executionId))
           ) {
-            await deps.events.append({
-              spaceId: run.spaceId,
-              threadId: run.threadId,
-              botId: bot.id,
-              runId,
-              type: "delegation.progress",
-              payload: {
-                delegationId: helperToolDelegations.get(executionId) ?? run.delegationId,
-                text: redactSecrets(String(args.message ?? ""), runSecrets),
-              },
+            await updateTaskCard(deps, {
+              ...run,
+              runId: run.id,
+              delegationId: helperToolDelegations.get(executionId),
+              executionId,
+              tool: "report_progress",
+              args: { text: redactSecrets(String(args.message ?? ""), runSecrets).slice(0, 2000) },
             });
             return finish({ ok: true, note: "Progress recorded for the coordinator." });
           }
@@ -3709,6 +3731,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   | "status"
                   | "fyi"
                   | undefined,
+                card: redactTaskValue(args.card, runSecrets),
                 deliveryKey: effectKey,
               },
             );
@@ -3757,7 +3780,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               {
                 bot_id: args.bot_id ? String(args.bot_id) : undefined,
                 confirm_name: args.confirm_name ? String(args.confirm_name) : undefined,
-                message: String(args.message ?? ""),
+                message: redactSecrets(String(args.message ?? ""), runSecrets),
+                card: redactTaskValue(args.card, runSecrets),
               },
             );
             if ("ok" in result && result.ok) handedOff = true;
@@ -4027,8 +4051,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
               authorizeTool: scripted
                 ? undefined
                 : async (name) => ((await checkCeiling(name)) ? undefined : pauseForApproval()),
-              admitHelper: async (executionId, name, task) => {
-                const admitted = await admitRunHelper(deps.prisma, run, executionId, name, task);
+              admitHelper: async (executionId, name, task, card) => {
+                const admitted = await admitRunHelper(
+                  deps.prisma,
+                  run,
+                  executionId,
+                  name,
+                  redactSecrets(task, runSecrets),
+                  redactTaskValue(card, runSecrets),
+                );
                 if ("error" in admitted) return admitted;
                 try {
                   helperWorkspaces.set(
@@ -4854,9 +4885,9 @@ async function notifyRun(
 ) {
   const delegated = await deps.prisma.run.findUnique({
     where: { id: run.id },
-    select: { delegationId: true },
+    select: { delegationId: true, delegationRootTaskId: true },
   });
-  if (delegated?.delegationId) return;
+  if (delegated?.delegationId || delegated?.delegationRootTaskId) return;
   if (!deps.notifications) return;
   const enabled = await runNotificationsEnabled(deps.prisma, run).catch((error) => {
     getLogger().error("notification preference lookup", error);

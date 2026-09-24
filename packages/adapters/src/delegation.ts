@@ -23,6 +23,7 @@ export async function prepareDelegation(
     admissionKey: string;
     prompt: string;
     newChild?: boolean;
+    card?: unknown;
   },
   resolve?: DelegationResolver,
 ) {
@@ -109,6 +110,6 @@ export async function completeHelper(
   result: string,
   events?: Pick<ThreadEvents, "notify">,
 ) {
-  const event = await prisma.$transaction((tx) => finishDelegation(tx, id, status, result));
+  const event = await prisma.$transaction((tx) => finishDelegation(tx, id, status, result, null));
   if (event) await events?.notify(event.threadId, event.seq);
 }

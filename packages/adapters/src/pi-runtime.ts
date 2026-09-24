@@ -1115,7 +1115,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   }
   let admission: Awaited<ReturnType<NonNullable<AgentRunRequest["admitHelper"]>>>;
   try {
-    admission = await host.request.admitHelper(executionId, name, task);
+    admission = await host.request.admitHelper(executionId, name, task, args.card);
   } catch (error) {
     host.subagentGate.release();
     throw error;
@@ -1272,7 +1272,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     const onAbort = () => nested.abort();
     helperSignal.addEventListener("abort", onAbort);
     try {
-      await nested.prompt(task || "Complete the delegated task.");
+      await nested.prompt((admission.prompt ?? task) || "Complete the delegated task.");
     } finally {
       try {
         await nested.waitForIdle();

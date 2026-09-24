@@ -1,5 +1,6 @@
+import { taskCardPrompt } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
-import { withTransactionRetry } from "@ardurbot/db";
+import { startDelegation, withTransactionRetry } from "@ardurbot/db";
 import { delegationFailure, prepareDelegation } from "./delegation.js";
 
 export async function admitRunHelper(
@@ -8,6 +9,7 @@ export async function admitRunHelper(
   executionId: string,
   name: string,
   task: string,
+  card?: unknown,
 ) {
   const result = await withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
@@ -20,6 +22,7 @@ export async function admitRunHelper(
         kind: "helper",
         admissionKey: `helper:${run.id}:${executionId}`,
         prompt: task,
+        card,
       });
       if (!admitted.ok) return admitted;
       if (["completed", "accepted", "failed", "cancelled"].includes(admitted.record.status))
@@ -27,13 +30,11 @@ export async function admitRunHelper(
           ok: false as const,
           error: admitted.record.result ?? "This helper has already finished.",
         };
-      await tx.delegation.update({
-        where: { id: admitted.record.id },
-        data: { status: "running" },
-      });
+      await startDelegation(tx, admitted.record.id);
       return {
         ok: true as const,
         id: admitted.record.id,
+        prompt: admitted.record.card ? taskCardPrompt(admitted.record.card, name) : task,
         tokens: admitted.record.reservedTokens,
         deadlineAt: admitted.record.deadlineAt.toISOString(),
       };

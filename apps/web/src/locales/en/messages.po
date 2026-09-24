@@ -189,7 +189,12 @@ msgstr "About groups"
 msgid "About spaces"
 msgstr "About spaces"
 
+#: src/pages/TeamBoard.tsx
+msgid "Accept"
+msgstr "Accept"
+
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Accepted"
 msgstr "Accepted"
 
@@ -585,6 +590,10 @@ msgstr "Ardur (built-in)"
 msgid "Arguments"
 msgstr "Arguments"
 
+#: src/pages/TeamBoard.tsx
+msgid "Artifacts"
+msgstr "Artifacts"
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -731,6 +740,11 @@ msgstr "Before"
 msgid "Block link copied."
 msgstr "Block link copied."
 
+#. placeholder {0}: row.reason
+#: src/pages/TeamBoard.tsx
+msgid "Blocked — {0}"
+msgstr "Blocked — {0}"
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Booting live desktop…"
@@ -806,6 +820,10 @@ msgstr "Branch"
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr "Browse MCP servers"
+
+#: src/pages/TeamBoard.tsx
+msgid "Budget"
+msgstr "Budget"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Built-in"
@@ -1133,6 +1151,7 @@ msgstr "Completion not recorded"
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Computer"
 msgstr "Computer"
 
@@ -1326,6 +1345,10 @@ msgstr "Copy output"
 #: src/pages/DevicesSettings.tsx
 msgid "Copy pairing details"
 msgstr "Copy pairing details"
+
+#: src/pages/TeamBoard.tsx
+msgid "Cost"
+msgstr "Cost"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -1547,6 +1570,10 @@ msgstr "Could not load skill"
 msgid "Could not load sync status. Retry."
 msgstr "Could not load sync status. Retry."
 
+#: src/pages/TeamBoard.tsx
+msgid "Could not load Team; retry."
+msgstr "Could not load Team; retry."
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
 msgstr "Could not load this account’s tools."
@@ -1738,6 +1765,10 @@ msgstr "Could not update learning. Try again."
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "Could not update reaction"
+
+#: src/pages/TeamBoard.tsx
+msgid "Could not update this task; try again."
+msgstr "Could not update this task; try again."
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
@@ -2066,6 +2097,10 @@ msgstr "Don’t have an account?"
 msgid "Done"
 msgstr "Done"
 
+#: src/pages/TeamBoard.tsx
+msgid "Done — waiting for your OK"
+msgstr "Done — waiting for your OK"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -2114,6 +2149,10 @@ msgstr "Edit"
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Edit first"
+
+#: src/pages/TeamBoard.tsx
+msgid "Effort"
+msgstr "Effort"
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2188,6 +2227,10 @@ msgstr "Every week"
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
 msgstr "Evidence"
+
+#: src/pages/TeamBoard.tsx
+msgid "Executing"
+msgstr "Executing"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
@@ -2461,6 +2504,10 @@ msgstr "How to check"
 msgid "I’m done"
 msgstr "I’m done"
 
+#: src/pages/TeamBoard.tsx
+msgid "Idle"
+msgstr "Idle"
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
 msgstr "If you heard that, voice is ready."
@@ -2500,6 +2547,10 @@ msgstr "Inherit default"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
 msgstr "Inputs"
+
+#: src/pages/TeamBoard.tsx
+msgid "Inputs and boundaries"
+msgstr "Inputs and boundaries"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -2901,6 +2952,7 @@ msgstr "minutes"
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Model"
 msgstr "Model"
 
@@ -3184,6 +3236,10 @@ msgstr "Not now"
 #: src/components/ThreadCommandBlock.tsx
 msgid "Not recorded"
 msgstr "Not recorded"
+
+#: src/pages/TeamBoard.tsx
+msgid "Not reported"
+msgstr "Not reported"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
@@ -3483,6 +3539,7 @@ msgid "Propose on a branch"
 msgstr "Propose on a branch"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "Provider"
 
@@ -3509,6 +3566,7 @@ msgstr "Pushed"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "Queued"
 
@@ -3744,6 +3802,14 @@ msgstr "Replying to {replyName}: “{replyQuote}”"
 msgid "Report an issue"
 msgstr "Report an issue"
 
+#: src/pages/TeamBoard.tsx
+msgid "Reported met"
+msgstr "Reported met"
+
+#: src/pages/TeamBoard.tsx
+msgid "Reported unmet"
+msgstr "Reported unmet"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository authentication"
 msgstr "Repository authentication"
@@ -3759,6 +3825,12 @@ msgstr "Repository token"
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository URL"
 msgstr "Repository URL"
+
+#. placeholder {0}: row.requesterName
+#. placeholder {1}: row.botName
+#: src/pages/TeamBoard.tsx
+msgid "Requested by {0} — acting as {1}"
+msgstr "Requested by {0} — acting as {1}"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Rerun"
@@ -3801,6 +3873,10 @@ msgstr "Reset your password"
 msgid "Resetting…"
 msgstr "Resetting…"
 
+#: src/pages/TeamBoard.tsx
+msgid "Responsible human"
+msgstr "Responsible human"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Restart to update"
 msgstr "Restart to update"
@@ -3841,6 +3917,10 @@ msgstr "Return to Ardur Bot"
 #: src/pages/KnowledgeSection.tsx
 msgid "rev {0}"
 msgstr "rev {0}"
+
+#: src/pages/TeamBoard.tsx
+msgid "Review approval"
+msgstr "Review approval"
 
 #: src/pages/LearningInbox.tsx
 msgid "Review destination"
@@ -3951,6 +4031,10 @@ msgstr "Runs on"
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr "Runs when this bot receives a verified message from this provider."
+
+#: src/pages/TeamBoard.tsx
+msgid "Runtime"
+msgstr "Runtime"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runtime availability could not be checked."
@@ -4347,6 +4431,7 @@ msgstr "Steps"
 #: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Stop"
 msgstr "Stop"
 
@@ -4435,7 +4520,9 @@ msgstr "Teach a task"
 msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "Teaching in progress. Stop teaching before sending a new message."
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "Team"
 
@@ -4596,6 +4683,10 @@ msgstr "This subscription sign-in is not available in Ardur Bot yet. Use a deplo
 msgid "Time of day"
 msgstr "Time of day"
 
+#: src/pages/TeamBoard.tsx
+msgid "Timeline"
+msgstr "Timeline"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Title"
@@ -4603,6 +4694,10 @@ msgstr "Title"
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "To:"
+
+#: src/pages/TeamBoard.tsx
+msgid "Tokens"
+msgstr "Tokens"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -4776,6 +4871,10 @@ msgstr "Verifying…"
 msgid "Voice"
 msgstr "Voice"
 
+#: src/pages/TeamBoard.tsx
+msgid "Waiting for approval"
+msgstr "Waiting for approval"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Waiting for sign-in…"
@@ -4859,9 +4958,19 @@ msgstr "When to use"
 msgid "Where should bots run?"
 msgstr "Where should bots run?"
 
+#: src/pages/TeamBoard.tsx
+msgid "Working"
+msgstr "Working"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"
 msgstr "Working from the last copy"
+
+#. placeholder {0}: row.sentence
+#. placeholder {1}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {0} for {1}"
+msgstr "Working on {0} for {1}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

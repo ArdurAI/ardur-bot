@@ -194,6 +194,7 @@ import {
   UpdaterProxyError,
 } from "./server-update.js";
 import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-skills.js";
+import { acceptTeamTask, teamBoard } from "./team.js";
 import type { createTerminalRoutes } from "./terminal-routes.js";
 import { guardComputerTakeover } from "./terminal-takeover.js";
 import {
@@ -4816,7 +4817,13 @@ export function createRouter(deps: RouterDeps) {
         hits: await querySpaceSearch(deps.prisma, context.actor, input.q),
       })),
     },
+    team: {
+      board: authed.team.board.handler(({ context }) => teamBoard(deps.prisma, context.actor)),
+    },
     delegations: {
+      accept: authed.delegations.accept.handler(({ context, input }) =>
+        acceptTeamTask(deps.prisma, context.actor, input.id),
+      ),
       list: authed.delegations.list.handler(async ({ context, input }) => ({
         delegations: await listDelegations(deps.prisma, context.actor, input.rootTaskId),
       })),

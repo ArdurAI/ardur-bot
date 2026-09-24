@@ -23,6 +23,7 @@ import {
   dispatchState,
   issueDeviceNonce,
   loadRemoteAuthority,
+  requestCancel,
   requestDispatchStop,
   requestShortCodePairing,
   startDevicePairing,
@@ -31,6 +32,7 @@ import {
 import { Hono } from "hono";
 import * as z from "zod";
 import { requestBodyLimit } from "./request-body-limit.js";
+import { acceptTeamTask } from "./team.js";
 
 export interface RemoteDevicesDeps {
   prisma: PrismaClient;
@@ -178,6 +180,7 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "threads/messages",
   "threads/markRead",
   "botSections/list",
+  "team/board",
 ]);
 function publicGrant(grant: DeviceGrant) {
   return {
@@ -312,6 +315,22 @@ export function mountRemoteDevices(
         if (!DEVICE_READ_PROCEDURES.has(read.procedure))
           throw new DeviceRequestError("Change permissions or connections at home.");
         return c.json(await deps.read(grant, read.procedure, read.input));
+      }
+      case "team-stop": {
+        requireScope("stop");
+        const body = z.object({ rootTaskId: z.string() }).parse(input.body);
+        return c.json(await requestCancel(deps.prisma, grant, body.rootTaskId));
+      }
+      case "team-accept": {
+        requireScope("consequential");
+        const body = z.object({ id: z.string() }).parse(input.body);
+        return c.json(
+          await acceptTeamTask(
+            deps.prisma,
+            { userId: grant.userId, spaceId: grant.spaceId, email: "", isDeploymentOwner: false },
+            body.id,
+          ),
+        );
       }
       case "dispatch": {
         const receipt = await admitDispatch(

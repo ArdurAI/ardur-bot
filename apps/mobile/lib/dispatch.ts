@@ -66,6 +66,10 @@ export async function deviceRpc<T>(
 ): Promise<T> {
   const body = value as Record<string, unknown>;
   const botId = typeof body.botId === "string" ? body.botId : "";
+  if (procedure === "delegations/cancel")
+    return dispatchClient.request<T>("team-stop", { rootTaskId: body.rootTaskId });
+  if (procedure === "delegations/accept")
+    return dispatchClient.request<T>("team-accept", { id: body.id });
   if (procedure === "threads/send") {
     if (body.groupId || (Array.isArray(body.artifactIds) && body.artifactIds.length))
       throw new Error("Send files and group tasks from home.");

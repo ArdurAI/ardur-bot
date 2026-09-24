@@ -119,6 +119,7 @@ import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RunsListOutputSchema } from "./runs.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
+import { teamContract } from "./team.js";
 
 const botId = z.object({ botId: Id });
 const groupId = z.object({ groupId: Id });
@@ -1010,6 +1011,7 @@ export const appContract = {
     query: oc.input(z.object({ q: z.string().max(200) })).output(SearchQueryOutputSchema),
   },
   delegations: delegationsContract,
+  team: teamContract,
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),
   },
