@@ -42,7 +42,9 @@ export interface ArdurBotDesktop {
   host?: {
     state(): Promise<{ configured: boolean; roots: string[]; registrationId?: string }>;
     setup(): Promise<void>;
-    addRoot(): Promise<void>;
+    addRoot(): Promise<string | null>;
+    /** Opens the same native picker, initially showing a dropped directory. */
+    addDroppedRoot?(file: File): Promise<string | null>;
     removeRoot(root: string): Promise<void>;
     clear(): Promise<void>;
   };

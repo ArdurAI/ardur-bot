@@ -13,6 +13,7 @@ import {
 export { resolveCloudAgentProvider, resolveSandboxProvider } from "@ardurbot/adapters";
 
 export interface AppEnv {
+  deploymentKind?: "source" | "packaged";
   nodeEnv: string;
   desktopStackToken?: string;
   databaseUrl: string;
@@ -101,6 +102,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   const updaterUrl = optional(source.ARDURBOT_UPDATER_URL);
   const updaterToken = optional(source.ARDURBOT_UPDATER_TOKEN);
   return {
+    deploymentKind:
+      source.ARDURBOT_DEPLOYMENT_KIND === "packaged" || source.ARDURBOT_DESKTOP_STACK_TOKEN
+        ? "packaged"
+        : "source",
     nodeEnv: source.NODE_ENV ?? "",
     databaseUrl: required(source, "DATABASE_URL"),
     realtimeDatabaseUrl: source.REALTIME_DATABASE_URL ?? required(source, "DATABASE_URL"),

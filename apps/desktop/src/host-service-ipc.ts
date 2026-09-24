@@ -100,17 +100,21 @@ export function installHostService(options: {
     await store.write(config);
     supervisor.start(config);
   });
-  register("addRoot", async (event) => {
+  register("addRoot", async (event, value) => {
     const { window, target } = trusted(event);
     const config = await store.read();
     if (!config || config.apiUrl !== target) throw new Error("Set up this computer first.");
-    const selected = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
-    if (selected.canceled || !selected.filePaths[0]) return;
+    const selected = await dialog.showOpenDialog(window, {
+      properties: ["openDirectory"],
+      ...(typeof value === "string" && path.isAbsolute(value) ? { defaultPath: value } : {}),
+    });
+    if (selected.canceled || !selected.filePaths[0]) return null;
     const root = await selectedHostRoot(selected.filePaths[0]);
     config.hostRoots = [...new Set([...config.hostRoots, root])];
     if (config.hostRoots.length > 32) throw new Error("Remove a folder before adding another.");
     await store.write(config);
     supervisor.start(config);
+    return root;
   });
   register("removeRoot", async (event, value) => {
     const { target } = trusted(event);

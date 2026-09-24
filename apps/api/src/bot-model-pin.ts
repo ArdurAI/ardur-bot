@@ -1,10 +1,15 @@
 import {
+  listOllamaModels,
   listPiCatalog,
   modelCredentialDto,
   nativeRuntimeAvailability,
+  ollamaErrorMessage,
+  parseModelSecret,
+  showOllamaModel,
   suggestedModelEffort,
 } from "@ardurbot/adapters";
 import type { Actor, UpdateBotInput } from "@ardurbot/contracts";
+import { ollamaThink } from "@ardurbot/contracts";
 import type { Prisma } from "@ardurbot/db";
 import { findBoundModelCredential, findModelCredential } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -87,6 +92,39 @@ export async function botModelPinUpdate(
     : await findModelCredential(deps.prisma, actor, provider, modelId);
   if (!credential)
     throw new ORPCError("BAD_REQUEST", { message: "Connect that model provider first" });
+  if (provider === "ollama") {
+    const secret = await deps.prisma.secret.findFirst({
+      where: { id: credential.secretId, userId: actor.userId, spaceId: null },
+    });
+    if (!secret) throw new ORPCError("BAD_REQUEST", { message: "Connect Ollama first." });
+    const connection = parseModelSecret(deps.secrets.load(secret.ciphertext, secret.id));
+    if (connection.kind !== "openai_compatible")
+      throw new ORPCError("BAD_REQUEST", { message: "Connect Ollama again." });
+    try {
+      const models = await listOllamaModels(connection.baseUrl);
+      if (!models.some((model) => model.name === modelId))
+        throw new Error("This Ollama model is not installed. Change pin.");
+      const model = await showOllamaModel(connection.baseUrl, modelId);
+      if (!model.contextWindow)
+        throw new Error("Ollama did not report this model's context length. Change pin.");
+      const effort = model.reasoning
+        ? (input.thinkingLevel ?? (unchanged ? existing.thinkingLevel : null) ?? "medium")
+        : null;
+      ollamaThink(effort, model);
+      return {
+        runtimeKind: "pi",
+        modelProvider: provider,
+        modelId,
+        modelCredentialId: credential.id,
+        thinkingLevel: effort,
+        modelPinRevision: { increment: 1 },
+      };
+    } catch (error) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: ollamaErrorMessage(error),
+      });
+    }
+  }
   const entry = listPiCatalog().find((item) => item.provider === provider && item.id === modelId);
   if (provider === "openai-compatible" ? credential.defaultModel !== modelId : !entry) {
     throw new ORPCError("BAD_REQUEST", { message: "Unknown model for that provider" });

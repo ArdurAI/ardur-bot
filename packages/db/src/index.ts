@@ -3,6 +3,7 @@ export * from "./cancel-runs.js";
 export * from "./channel-grants.js";
 export * from "./client.js";
 export * from "./command-blocks.js";
+export * from "./comparison.js";
 export * from "./computers.js";
 export * from "./credential-secrets.js";
 export * from "./delegation.js";

@@ -5,6 +5,7 @@ import type {
   ConnectionCatalogItem,
   MessageBlock,
   Routine,
+  TaughtSkill,
 } from "@ardurbot/contracts";
 import {
   canReactToThreadMessage,
@@ -13,12 +14,15 @@ import {
   runtimeNames,
   runtimePinMessage,
 } from "@ardurbot/contracts";
+import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot/core";
 import {
   abortableDelay,
   attachmentsForThread,
   buildComposerMentionOptions,
   type ComposerMention,
   cloudAgentHttpsUrl,
+  composerCommands,
+  composerSkills,
   isApprovalAskBlock,
   isRunTerminalEvent,
   isSecretAskBlock,
@@ -26,17 +30,24 @@ import {
   mentionChipKey,
   projectMessageReactions,
   resolveComposerSendPlan,
-  SLASH_ACTIONS,
-  type SlashActionId,
   selectedAskActionLabel,
   serializeComposerPrompt,
-  truncateSlashDescription,
   userVisibleMessages,
 } from "@ardurbot/core";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -93,6 +104,8 @@ import {
 import { mobileTokens } from "../lib/appearance";
 import { type MobileArtifactTarget, openMobileArtifact } from "../lib/artifact-open";
 import { confirmDeleteBot } from "../lib/bot-lifecycle";
+import type { ComposerMenuOption } from "../lib/composer-menu";
+import { COMPOSER_MENU_OPTIONS } from "../lib/composer-menu";
 import { cancelFocusPrompt, focusPromptThreadActive } from "../lib/focus-prompt";
 import { dateLocaleForUi, t, useI18n } from "../lib/i18n";
 import { saveLastBotId } from "../lib/last-bot";
@@ -108,12 +121,7 @@ import {
   messagePresentationSegments,
 } from "../lib/message-presentation";
 import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
-import {
-  type PickedAttachment,
-  pickDocuments,
-  pickFromLibrary,
-  takePhoto,
-} from "../lib/pick-attachments";
+import { type PickedAttachment, pickDocuments, pickFromLibrary } from "../lib/pick-attachments";
 import { threadRefreshDelayMs } from "../lib/refresh";
 import { runtimePinRecovery } from "../lib/runtime-pin-recovery";
 import {
@@ -122,6 +130,10 @@ import {
   type ThreadScrollState,
 } from "../lib/thread-scroll";
 import { speakText } from "../lib/voice";
+
+const ComposerSheet = lazy(() =>
+  import("../components/composer-sheet").then((module) => ({ default: module.ComposerSheet })),
+);
 
 type PendingAttachment = PickedAttachment & { threadKey: string };
 type AskAction = NonNullable<Extract<MessageBlock, { kind: "ask" }>["actions"]>[number];
@@ -298,6 +310,11 @@ function Thread() {
   const [draft, setDraft] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  const [composerSheet, setComposerSheet] = useState<"actions" | "connectors" | "routines" | null>(
+    null,
+  );
+  const [skillsOnly, setSkillsOnly] = useState(false);
+  const [taughtSkills, setTaughtSkills] = useState<TaughtSkill[]>([]);
   const [agentSkills, setAgentSkills] = useState<AgentSkillCatalogEntry[]>([]);
   const [mentionBots, setMentionBots] = useState<MobileBot[]>([]);
   const [mentionGroups, setMentionGroups] = useState<MobileGroup[]>([]);
@@ -311,7 +328,7 @@ function Thread() {
     }>
   >([]);
   const [selectedMentions, setSelectedMentions] = useState<ComposerMention[]>([]);
-  const [selectedSkill, setSelectedSkill] = useState<AgentSkillCatalogEntry | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<ComposerSkill | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [replyTarget, setReplyTarget] = useState<MobileMessage | null>(null);
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
@@ -366,30 +383,31 @@ function Thread() {
       .filter((target) => !query || target.name.toLowerCase().startsWith(query))
       .slice(0, 10);
   }, [composerMentionTargets, mentionQuery]);
-  const slashQueryNormalized = slashQuery?.trim().toLowerCase() ?? null;
-  const slashSkillOptions =
-    slashQuery !== null && mentionQuery === null
-      ? agentSkills
-          .filter((skill) => {
-            if (!slashQueryNormalized) return true;
-            return (
-              skill.name.toLowerCase().includes(slashQueryNormalized) ||
-              skill.description.toLowerCase().includes(slashQueryNormalized)
-            );
-          })
-          .slice(0, 8)
-      : [];
-  const slashActionOptions =
-    slashQuery !== null && mentionQuery === null
-      ? SLASH_ACTIONS.filter((action) => {
-          if (!slashQueryNormalized) return true;
-          const label = t(action.label);
-          return (
-            action.label.toLowerCase().includes(slashQueryNormalized) ||
-            label.toLowerCase().includes(slashQueryNormalized)
-          );
-        })
-      : [];
+  const availableSkills = composerSkills(agentSkills, taughtSkills, botId);
+  const slashCommands = composerCommands({
+    botAvailable: !inGroup,
+    query: slashQuery ?? "",
+    skills: availableSkills,
+    routines: mentionRoutines.filter((routine) => routine.botId === botId),
+    skillsOnly,
+  });
+  useEffect(() => {
+    if (!botId) {
+      setTaughtSkills([]);
+      return;
+    }
+    let active = true;
+    void rpc<TaughtSkill[]>("skills/list", { botId })
+      .then((rows) => {
+        if (active) setTaughtSkills(rows);
+      })
+      .catch(() => {
+        if (active) setTaughtSkills([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [botId, slashQuery !== null]);
   const currentBot = botId ? mentionBots.find((bot) => bot.id === botId) : undefined;
   const displayName = currentBot?.name ?? name;
   const notificationThreadId = snap?.threadId ?? currentBot?.threadId;
@@ -1014,7 +1032,7 @@ function Thread() {
     );
   }
 
-  function insertSkill(skill: AgentSkillCatalogEntry) {
+  function insertSkill(skill: ComposerSkill) {
     setSelectedSkill(skill);
     setDraft("");
     setSlashQuery(null);
@@ -1032,9 +1050,50 @@ function Thread() {
     return serializeComposerPrompt(draft, selectedSkill, selectedMentions);
   }
 
-  function runSlashAction(action: SlashActionId) {
-    setDraft("");
+  async function runSlashAction(action: ComposerActionId, argument?: string) {
+    if (action !== "remember") setDraft("");
     setSlashQuery(null);
+    if (action === "help" || action === "skills") {
+      setSkillsOnly(action === "skills");
+      setSlashQuery("");
+      return;
+    }
+    if (action === "new" && botId && !inGroup) {
+      try {
+        await rpc("threads/restart", { botId });
+        await refresh();
+      } catch {
+        setError(t("Could not start a new chat"));
+      }
+      return;
+    }
+    if (action === "stop") {
+      await stop();
+      return;
+    }
+    if (action === "remember" && botId && !inGroup) {
+      if (!argument?.trim()) {
+        setDraft("/remember ");
+        return;
+      }
+      try {
+        await rpc("memory/remember", { botId, text: argument.trim(), nonce: newClientNonce() });
+        setDraft((current) => (current === draft ? "" : current));
+      } catch {
+        setDraft((current) => (current === draft ? `/remember ${argument.trim()}` : current));
+        setError(t("Could not save memory"));
+      }
+      return;
+    }
+    if (action === "routine" && botId) {
+      setSkillsOnly(false);
+      setComposerSheet("routines");
+      return;
+    }
+    if (action === "model" && botId) {
+      router.push({ pathname: "/bot-settings", params: { botId, focus: "model" } });
+      return;
+    }
     if (action === "chat-settings") {
       if (inGroup && groupId) {
         router.push({ pathname: "/group-settings", params: { groupId } });
@@ -1056,6 +1115,11 @@ function Thread() {
     activePendingAttachments.length > 0;
 
   async function send() {
+    const memoryNote = /^\/remember\s+([\s\S]+)$/.exec(draft);
+    if (!inGroup && memoryNote?.[1]?.trim()) {
+      await runSlashAction("remember", memoryNote[1]);
+      return;
+    }
     const initialBotTarget = botId;
     const initialGroupTarget = groupId;
     if ((!initialBotTarget && !initialGroupTarget) || sending) return;
@@ -1245,16 +1309,55 @@ function Thread() {
     [botId, snap?.members],
   );
 
+  function selectComposerAction(option: ComposerMenuOption) {
+    setComposerSheet(null);
+    if (option === "Files") void addAttachments(pickDocuments);
+    if (option === "Photos") void addAttachments(pickFromLibrary);
+    if (option === "Slash commands") {
+      setSkillsOnly(false);
+      setSlashQuery("");
+    }
+    if (option === "Connectors") setComposerSheet("connectors");
+  }
   function showAttachMenu() {
-    Alert.alert(t("Attach"), undefined, [
-      {
-        text: t("Photo library"),
-        onPress: () => void addAttachments(pickFromLibrary),
-      },
-      { text: t("Camera"), onPress: () => void addAttachments(takePhoto) },
-      { text: t("File"), onPress: () => void addAttachments(pickDocuments) },
-      { text: t("Cancel"), style: "cancel" },
-    ]);
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [...COMPOSER_MENU_OPTIONS.map((option) => t(option)), t("Cancel")],
+          cancelButtonIndex: COMPOSER_MENU_OPTIONS.length,
+          userInterfaceStyle: colorScheme,
+        },
+        (index) => {
+          const option = COMPOSER_MENU_OPTIONS[index];
+          if (option) selectComposerAction(option);
+        },
+      );
+    } else setComposerSheet("actions");
+  }
+  function selectCommand(command: ComposerCommand) {
+    if (command.kind === "skill") {
+      insertSkill(command.skill);
+      return;
+    }
+    setSlashQuery(null);
+    if (command.kind === "routine" && composerSheet === "routines") {
+      setComposerSheet(null);
+      router.push({ pathname: "/routine", params: { botId, routineId: command.routine.id } });
+      return;
+    }
+    if (command.kind === "routine") {
+      setDraft("");
+      void rpc("routines/testRun", {
+        routineId: command.routine.id,
+        clientNonce: newClientNonce(),
+      }).catch(() => setError(t("Could not run routine")));
+    } else
+      void runSlashAction(
+        command.action,
+        command.action === "remember"
+          ? (/^remember\s+([\s\S]+)$/.exec(slashQuery ?? "")?.[1] ?? "")
+          : undefined,
+      );
   }
 
   async function addAttachments(
@@ -1277,11 +1380,13 @@ function Thread() {
       ]);
     }
     setAttachmentNotice(
-      result.skipped.length
-        ? t("Skipped {items}", {
-            items: result.skipped.map((item) => formatAttachmentSkip(item)).join(", "),
-          })
-        : null,
+      result.skipped.some((item) => item.reason.startsWith("max ") || item.reason === "over 10 MiB")
+        ? t("Up to 4 files, 10 MB each")
+        : result.skipped.length
+          ? t("Skipped {items}", {
+              items: result.skipped.map((item) => formatAttachmentSkip(item)).join(", "),
+            })
+          : null,
     );
   }
 
@@ -1864,71 +1969,25 @@ function Thread() {
             ))}
           </View>
         ) : null}
-        {slashSkillOptions.length || slashActionOptions.length ? (
-          <View
-            testID="slash-picker"
-            style={{
-              marginTop: 12,
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: tokens.border,
-              backgroundColor: tokens.card,
-              overflow: "hidden",
-            }}
-          >
-            {slashSkillOptions.map((skill) => (
-              <Pressable
-                key={skill.id}
-                accessibilityLabel={t("Skill {name}", { name: skill.name })}
-                onPress={() => insertSkill(skill)}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "flex-start",
-                  gap: 10,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                }}
-              >
-                <NativeSymbol
-                  ios="cube"
-                  android="cube-outline"
-                  size={16}
-                  color={tokens.mutedForeground}
-                />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ color: tokens.foreground, fontSize: 14 }}>{skill.name}</Text>
-                  <Text
-                    numberOfLines={1}
-                    style={{ color: tokens.mutedForeground, fontSize: 12.5, marginTop: 2 }}
-                  >
-                    {truncateSlashDescription(skill.description)}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-            {slashActionOptions.map((action) => (
-              <Pressable
-                key={action.id}
-                accessibilityLabel={t(action.label)}
-                onPress={() => runSlashAction(action.id)}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 10,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                }}
-              >
-                <NativeSymbol
-                  ios="gearshape"
-                  android="settings-outline"
-                  size={16}
-                  color={tokens.mutedForeground}
-                />
-                <Text style={{ color: tokens.foreground, fontSize: 14 }}>{t(action.label)}</Text>
-              </Pressable>
-            ))}
-          </View>
+        {slashQuery !== null || composerSheet ? (
+          <Suspense fallback={null}>
+            <ComposerSheet
+              mode={slashQuery !== null ? "slash" : composerSheet!}
+              query={slashQuery ?? ""}
+              onQuery={setSlashQuery}
+              commands={slashCommands}
+              onCommand={selectCommand}
+              onAction={selectComposerAction}
+              onSettings={(connectionId) => {
+                setComposerSheet(null);
+                router.push({ pathname: "/integrations", params: { connectionId } });
+              }}
+              onClose={() => {
+                setSlashQuery(null);
+                setComposerSheet(null);
+              }}
+            />
+          </Suspense>
         ) : null}
         <View
           style={{
@@ -1939,7 +1998,7 @@ function Thread() {
           }}
         >
           <Pressable
-            accessibilityLabel={t("Attach file")}
+            accessibilityLabel={t("Add files or photos")}
             onPress={showAttachMenu}
             style={{
               width: 44,

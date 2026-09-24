@@ -38,16 +38,6 @@ msgstr " (sin leer)"
 msgid "{0, plural, one {# model} other {# models}}"
 msgstr "{0, plural, one {# modelo} other {# modelos}}"
 
-#. placeholder {0}: file.name
-#: src/pages/Shell.tsx
-msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
-msgstr "{0} (máx. {ATTACHMENT_MAX_COUNT} archivos adjuntos)"
-
-#. placeholder {0}: file.name
-#: src/pages/Shell.tsx
-msgid "{0} (over 10 MiB)"
-msgstr "{0} (más de 10 MiB)"
-
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
 msgid "{0} {unitLabel}"
@@ -101,6 +91,11 @@ msgstr ""
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "{0} runs · {1} tokens"
 msgstr "{0} ejecuciones · {1} tokens"
+
+#. placeholder {0}: preview.runs
+#: src/pages/CompareStart.tsx
+msgid "{0} runs at these pins; hosted providers may bill per run"
+msgstr ""
 
 #. placeholder {0}: counts.pendingCount
 #: src/pages/LearningInbox.tsx
@@ -158,6 +153,10 @@ msgstr "{name} terminó"
 msgid "{name} stopped"
 msgstr "{name} se detuvo"
 
+#: src/components/composer/ComposerMenu.tsx
+msgid "{reconnectCount} need reconnection"
+msgstr ""
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "Quedan {remaining} · el bot observa, no actúa"
@@ -182,6 +181,10 @@ msgstr "{workingBotName} está trabajando"
 #: src/pages/Shell.tsx
 msgid "@{0}"
 msgstr "@{0}"
+
+#: src/pages/ComparePanel.tsx
+msgid "1 run at this pin; hosted providers may bill per run"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -320,6 +323,12 @@ msgstr ""
 msgid "Add Executor"
 msgstr "Agregar Executor"
 
+#: src/components/composer/ComposerMenu.tsx
+#: src/components/composer/ComposerTools.tsx
+msgid "Add files or photos"
+msgstr ""
+
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "Add folder"
 msgstr ""
@@ -685,10 +694,6 @@ msgid "at {timeSelect}"
 msgstr "a las {timeSelect}"
 
 #: src/pages/Shell.tsx
-msgid "Attach file"
-msgstr "Adjuntar archivo"
-
-#: src/pages/Shell.tsx
 msgid "Attachment"
 msgstr "Archivo adjunto"
 
@@ -886,6 +891,7 @@ msgstr "No se puede alcanzar el servidor."
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
@@ -919,6 +925,7 @@ msgstr "cancelado"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Cancelado"
@@ -941,6 +948,10 @@ msgstr "Cambiar contraseña"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "Change pin"
+msgstr ""
+
+#: src/components/composer/command-description.ts
+msgid "Change this bot’s pin"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
@@ -975,7 +986,7 @@ msgstr ""
 msgid "Chat service"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/composer/command-description.ts
 msgid "Chat Settings"
 msgstr "Configuración del chat"
 
@@ -1005,6 +1016,7 @@ msgid "Checked"
 msgstr ""
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Checking…"
 msgstr "Comprobando…"
@@ -1028,6 +1040,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "Elige una contraseña nueva"
+
+#: src/components/composer/command-description.ts
+msgid "Choose a taught skill"
+msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Choose bots and the tools they can use."
@@ -1196,10 +1212,19 @@ msgstr "Próximamente"
 msgid "Command"
 msgstr "Comando"
 
+#: src/components/composer/command-description.ts
+msgid "Compare bots"
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Compare with…"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "Completado"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Completed"
 msgstr ""
@@ -1332,6 +1357,7 @@ msgstr "Conectar Treg"
 msgid "Connect your account."
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
@@ -1386,6 +1412,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "La conexión con {0} sigue pendiente. Puedes cerrar esto y volver a comprobar."
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Connectors"
+msgstr ""
 
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
@@ -1443,6 +1473,7 @@ msgstr ""
 msgid "Copy Space ID"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr ""
@@ -1450,6 +1481,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
 msgstr "No se pudo agregar"
+
+#: src/pages/Shell.tsx
+msgid "Could not add folder. Try again."
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not add MCP server"
@@ -1511,6 +1546,14 @@ msgstr ""
 msgid "Could not complete authorization. Try connecting again."
 msgstr ""
 
+#: src/components/composer/composer-actions.ts
+msgid "Could not complete command. Try again."
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Could not complete the request."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr ""
@@ -1520,6 +1563,7 @@ msgstr ""
 msgid "Could not connect"
 msgstr "No se pudo conectar"
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
@@ -1647,6 +1691,14 @@ msgstr "No se pudieron cargar las reglas de aprobación"
 msgid "Could not load bots. Reload to try again."
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Could not load comparison; retry."
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not load comparisons; retry."
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
 msgstr ""
@@ -1659,6 +1711,7 @@ msgstr ""
 msgid "Could not load history. Retry."
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not load integrations"
@@ -1676,8 +1729,16 @@ msgstr "No se pudo cargar la configuración de modelos"
 msgid "Could not load observations."
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
+msgid "Could not load Ollama."
+msgstr ""
+
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
+msgstr ""
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Could not load plugins"
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
@@ -1812,6 +1873,10 @@ msgstr ""
 msgid "Could not save group"
 msgstr "No se pudo guardar el grupo"
 
+#: src/components/composer/composer-actions.ts
+msgid "Could not save memory"
+msgstr ""
+
 #: src/pages/Onboarding.tsx
 msgid "Could not save model"
 msgstr "No se pudo guardar el modelo"
@@ -1860,6 +1925,18 @@ msgstr "No se pudo enviar el correo de restablecimiento"
 msgid "Could not send that"
 msgstr "No se pudo enviar eso"
 
+#: src/components/composer/composer-actions.ts
+msgid "Could not start a new chat"
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Could not start comparison; retry."
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Could not start comparison; review the pins and retry."
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "No se pudo iniciar OAuth"
@@ -1891,6 +1968,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not update agent access"
 msgstr "No se pudo actualizar el acceso del agente"
+
+#: src/pages/ComparePanel.tsx
+msgid "Could not update comparison; retry."
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Could not update computer"
@@ -2329,6 +2410,10 @@ msgstr "Arrastra, suelta o pega una imagen"
 msgid "Duplicate"
 msgstr "Duplicar"
 
+#: src/pages/ComparePanel.tsx
+msgid "Duration"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "e.g. Hivenet Agent, Presales, Timesheets bot"
 msgstr "p. ej. Hivenet Agent, Presales, bot de hojas de horas"
@@ -2351,6 +2436,10 @@ msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
+msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -2485,6 +2574,10 @@ msgstr "Exportar"
 msgid "Export block"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Export JSON"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Export run"
 msgstr ""
@@ -2510,6 +2603,11 @@ msgstr "fallido"
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "Falló"
+
+#. placeholder {0}: result.failure ?? "Not reported"
+#: src/pages/ComparePanel.tsx
+msgid "Failed — {0}"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Failed to send message"
@@ -2723,6 +2821,10 @@ msgstr ""
 msgid "Host service:"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Hosted providers"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
 msgstr "hora"
@@ -2788,6 +2890,10 @@ msgstr ""
 msgid "Inbox & email"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Incomplete"
+msgstr ""
+
 #: src/pages/MemoryDeliveryProgress.tsx
 msgid "Indexed {delivered} of {total}"
 msgstr ""
@@ -2797,11 +2903,16 @@ msgid "Inherit default"
 msgstr "Heredar predeterminado"
 
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/ComparePanel.tsx
 msgid "Inputs"
 msgstr "Entradas"
 
 #: src/pages/TeamBoard.tsx
 msgid "Inputs and boundaries"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Installed models"
 msgstr ""
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -3059,6 +3170,7 @@ msgid "Loading…"
 msgstr "Cargando…"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Local"
 msgstr "Local"
 
@@ -3111,6 +3223,10 @@ msgstr "Gestionar servidores MCP"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Manage messaging settings"
 msgstr "Administrar configuración de mensajería"
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Manage…"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
@@ -3187,6 +3303,10 @@ msgstr "Memoria"
 msgid "Memory & Skills"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Memory differed"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
 msgstr ""
@@ -3221,6 +3341,18 @@ msgstr "Menciones"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Mentions only"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge selected"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Merge with"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -3303,6 +3435,10 @@ msgstr ""
 msgid "Model id"
 msgstr "ID del modelo"
 
+#: src/components/OllamaSettings.tsx
+msgid "Model name"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model options"
 msgstr "Opciones del modelo"
@@ -3314,6 +3450,10 @@ msgstr "El gasto del modelo usa tus claves de proveedor."
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
 msgstr "Modelo actualizado."
+
+#: src/pages/ComparePanel.tsx
+msgid "Model version"
+msgstr ""
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3395,6 +3535,10 @@ msgstr ""
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "Necesita entrada"
+
+#: src/components/composer/ComposerMenu.tsx
+msgid "Needs reconnection"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Needs takeover"
@@ -3527,6 +3671,10 @@ msgstr "Aún no hay mensajes con {peerBotName}."
 msgid "No model catalog is available."
 msgstr "No hay un catálogo de modelos disponible."
 
+#: src/components/OllamaSettings.tsx
+msgid "No models installed. Pull one to start."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "No se encontraron proveedores."
@@ -3559,6 +3707,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "Sin disparador"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "None detected"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
@@ -3593,6 +3745,7 @@ msgstr "Ahora no"
 msgid "Not recorded"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
 msgstr ""
@@ -3658,8 +3811,20 @@ msgstr ""
 msgid "Obsidian vault"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Off"
+msgstr ""
+
 #: src/lib/thinking-level-options.ts
 msgid "off — no extra thinking"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Ollama server URL"
+msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+msgid "On"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -3716,6 +3881,14 @@ msgstr "Abrir en ventana completa"
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "Abrir navegación"
+
+#: src/components/composer/command-description.ts
+msgid "Open routines"
+msgstr ""
+
+#: src/components/composer/command-description.ts
+msgid "Open Settings"
+msgstr ""
 
 #: src/pages/shell/command-palette.tsx
 msgid "Open terminal"
@@ -3881,6 +4054,10 @@ msgstr ""
 msgid "Playing…"
 msgstr "Reproduciendo…"
 
+#: src/components/composer/ComposerMenu.tsx
+msgid "Plugins"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Policy version"
@@ -3894,6 +4071,10 @@ msgstr ""
 msgid "POST to"
 msgstr "POST a"
 
+#: src/pages/CompareStart.tsx
+msgid "Preview"
+msgstr ""
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Preview {0}"
@@ -3901,6 +4082,10 @@ msgstr "Vista previa de {0}"
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Preview import"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Preview merge"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -3978,6 +4163,14 @@ msgstr ""
 msgid "Publish directly"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
+msgid "Pull"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Pull model"
+msgstr ""
+
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "Solicitud de incorporación"
@@ -3987,6 +4180,7 @@ msgid "Pushed"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
@@ -4237,6 +4431,10 @@ msgstr ""
 msgid "Reported met"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
+msgid "Reported model"
+msgstr ""
+
 #: src/pages/TeamBoard.tsx
 msgid "Reported unmet"
 msgstr ""
@@ -4285,6 +4483,10 @@ msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Reserve a merge run"
 msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
@@ -4457,6 +4659,10 @@ msgstr "Historial de ejecuciones"
 msgid "Run now"
 msgstr ""
 
+#: src/pages/CompareStart.tsx
+msgid "Run on other bots"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Run time must be in the future."
 msgstr "La hora de ejecución debe ser en el futuro."
@@ -4466,6 +4672,7 @@ msgid "running"
 msgstr "en ejecución"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "En ejecución"
@@ -4499,10 +4706,20 @@ msgstr ""
 msgid "safety"
 msgstr ""
 
+#. placeholder {0}: row.participants.length
+#: src/pages/ComparePanel.tsx
+msgid "Same task, {0} bots"
+msgstr ""
+
+#: src/pages/ComparePanel.tsx
+msgid "Same task, {count} bots"
+msgstr ""
+
 #: src/components/AskCard.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/DevicesSettings.tsx
@@ -4517,6 +4734,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Save"
 msgstr "Guardar"
+
+#: src/components/composer/command-description.ts
+msgid "Save a memory note"
+msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Save connection"
@@ -4647,6 +4868,10 @@ msgstr ""
 msgid "Select a bot"
 msgstr "Selecciona un bot"
 
+#: src/pages/ComparePanel.tsx
+msgid "Select output"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Select the text to copy it."
 msgstr ""
@@ -4708,6 +4933,7 @@ msgid "Server name"
 msgstr "Nombre del servidor"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/components/OllamaSettings.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -4733,11 +4959,11 @@ msgstr ""
 msgid "Settings"
 msgstr "Configuración"
 
-#: src/pages/Shell.tsx
+#: src/components/composer/command-description.ts
 msgid "Settings: General"
 msgstr "Configuración: General"
 
-#: src/pages/Shell.tsx
+#: src/components/composer/command-description.ts
 msgid "Settings: Usage"
 msgstr "Configuración: Uso"
 
@@ -4791,6 +5017,10 @@ msgstr "Mostrar contraseña"
 msgid "Show settings"
 msgstr "Mostrar configuración"
 
+#: src/components/composer/command-description.ts
+msgid "Show slash commands"
+msgstr ""
+
 #: src/pages/account/AccountTables.tsx
 msgid "Showing {start}–{end} of {total}"
 msgstr ""
@@ -4832,11 +5062,6 @@ msgstr ""
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr ""
 
-#. placeholder {0}: skill.name
-#: src/pages/Shell.tsx
-msgid "Skill {0}"
-msgstr "Habilidad {0}"
-
 #: src/pages/KnowledgeSection.tsx
 msgid "Skills"
 msgstr "Habilidades"
@@ -4861,6 +5086,11 @@ msgstr "Mensaje de Slack"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Slack not enabled"
+msgstr ""
+
+#: src/components/composer/ComposerMenu.tsx
+#: src/components/composer/SlashPicker.tsx
+msgid "Slash commands"
 msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
@@ -4920,6 +5150,14 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/components/composer/command-description.ts
+msgid "Start a new chat"
+msgstr ""
+
+#: src/pages/CompareStart.tsx
+msgid "Start comparison"
+msgstr ""
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "Iniciar grabación"
@@ -4956,6 +5194,10 @@ msgstr "Dejar de hablar"
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Stop teaching"
 msgstr "Detener enseñanza"
+
+#: src/components/composer/command-description.ts
+msgid "Stop the current run"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts
@@ -5081,6 +5323,7 @@ msgstr ""
 msgid "Terminal is not available on this computer"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "Probar"
@@ -5240,10 +5483,15 @@ msgstr "Título"
 msgid "To:"
 msgstr "Para:"
 
+#: src/pages/CompareStart.tsx
+msgid "Token reservation"
+msgstr ""
+
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
 msgstr ""
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Tokens"
 msgstr ""
@@ -5254,6 +5502,10 @@ msgstr "Fuentes de herramientas"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tools"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "Tools:"
 msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
@@ -5324,6 +5576,10 @@ msgstr "Desfijar"
 #: src/pages/Shell.tsx
 msgid "Unsupported file type: {0}"
 msgstr "Tipo de archivo no compatible: {0}"
+
+#: src/pages/Shell.tsx
+msgid "Up to 4 files, 10 MB each"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -5410,6 +5666,7 @@ msgstr ""
 msgid "Use this location"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "Usar este modelo"
@@ -5437,6 +5694,7 @@ msgstr "Verificando…"
 msgid "Voice"
 msgstr "Voz"
 
+#: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
 msgstr ""

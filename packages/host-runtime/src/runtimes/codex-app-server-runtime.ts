@@ -7,6 +7,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
+import * as z from "zod";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import type { NativeSpawn } from "./native-process.js";
@@ -229,6 +230,8 @@ export class CodexAppServerRuntime implements AgentRuntime {
     let paused = false;
     let pinValid = false;
     let finished = false;
+    let reportedInputTokens = 0;
+    let reportedOutputTokens = 0;
     let reader: Promise<void> | undefined;
     let steering: ReturnType<typeof setInterval> | undefined;
     const interrupt = async () => {
@@ -286,6 +289,33 @@ export class CodexAppServerRuntime implements AgentRuntime {
         Object.keys(config.mcp_servers ?? {}).map((name) => [name, { enabled: false }]),
       );
       mcpServers.ardur = { ...mcp.config, enabled: true, required: true };
+      const comparisonSkills: Array<{ path: string; enabled: false }> = [];
+      if (request.controlledComparison) {
+        const inventory = z
+          .object({
+            data: z
+              .array(
+                z.object({
+                  skills: z.array(z.object({ path: z.string().min(1) })),
+                  errors: z.array(z.unknown()).max(0),
+                }),
+              )
+              .min(1),
+          })
+          .safeParse(
+            await rpc.request("skills/list", {
+              ...(request.nativeCwd ? { cwds: [request.nativeCwd] } : {}),
+              forceReload: true,
+            }),
+          );
+        if (!inventory.success)
+          throw problem(
+            "runtime-unavailable",
+            "Codex could not isolate saved skills — retry or change the pin.",
+          );
+        for (const entry of inventory.data.data)
+          for (const { path } of entry.skills) comparisonSkills.push({ path, enabled: false });
+      }
       const options = {
         model: pin.modelId,
         modelProvider: "openai",
@@ -294,6 +324,15 @@ export class CodexAppServerRuntime implements AgentRuntime {
         sandbox: "read-only",
         baseInstructions: request.instructions,
         config: {
+          ...(request.controlledComparison
+            ? {
+                project_doc_max_bytes: 0,
+                developer_instructions: "",
+                personality: "none",
+                skills: { config: comparisonSkills },
+                memories: { use_memories: false, generate_memories: false },
+              }
+            : {}),
           mcp_servers: mcpServers,
           web_search: "disabled",
           tools: { view_image: false },
@@ -329,6 +368,13 @@ export class CodexAppServerRuntime implements AgentRuntime {
         try {
           for await (const event of rpc.events) {
             const params = event.params ?? {};
+            if (request.controlledComparison && event.method === "skills/changed") {
+              queue.end(
+                problem("runtime-unavailable", "Saved skills changed; retry this comparison."),
+              );
+              void interrupt();
+              break;
+            }
             if (event.method === "model/rerouted") {
               queue.end(problem("pin-model-unknown", "Codex rerouted the pinned model."));
               void interrupt();
@@ -353,6 +399,34 @@ export class CodexAppServerRuntime implements AgentRuntime {
               continue;
             }
             if (params.threadId && params.threadId !== threadId) continue;
+            if (request.controlledComparison && event.method === "thread/tokenUsage/updated") {
+              // Comparison sessions always start fresh. `last` is context usage,
+              // whereas changes in `total` account for every model call once.
+              const usage = (
+                params.tokenUsage as
+                  | { total?: { inputTokens?: number; outputTokens?: number } }
+                  | undefined
+              )?.total;
+              if (
+                usage &&
+                Number.isSafeInteger(usage.inputTokens) &&
+                Number.isSafeInteger(usage.outputTokens) &&
+                usage.inputTokens! >= reportedInputTokens &&
+                usage.outputTokens! >= reportedOutputTokens &&
+                (usage.inputTokens! > reportedInputTokens ||
+                  usage.outputTokens! > reportedOutputTokens)
+              ) {
+                queue.push({
+                  type: "usage",
+                  provider: pin.provider!,
+                  model: pin.modelId!,
+                  inputTokens: usage.inputTokens! - reportedInputTokens,
+                  outputTokens: usage.outputTokens! - reportedOutputTokens,
+                });
+                reportedInputTokens = usage.inputTokens!;
+                reportedOutputTokens = usage.outputTokens!;
+              }
+            }
             if (event.method === "item/agentMessage/delta" && typeof params.delta === "string")
               queue.push({ type: "text", text: params.delta });
             if (event.method === "turn/completed") {

@@ -26,17 +26,17 @@ import type {
 } from "@ardurbot/contracts";
 import {
   ATTACHMENT_ALLOWED_MIME_TYPES,
-  ATTACHMENT_MAX_BYTES,
-  ATTACHMENT_MAX_COUNT,
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
   normalizeCreateBotProfile,
 } from "@ardurbot/contracts";
-import type { ComposerMention, SlashActionId } from "@ardurbot/core";
+import type { ComposerActionId, ComposerMention, ComposerSkill } from "@ardurbot/core";
 import {
   attachmentsForThread,
   buildComposerMentionOptions,
+  canAddComposerFolder,
   clampMentionHighlightIndex,
+  composerSkills,
   cronFromPreset,
   groupBotsForSidebar,
   inferAttachmentMimeType,
@@ -51,11 +51,9 @@ import {
   resolveComposerSendPlan,
   resolveMentionPickerKey,
   runThreadSubscription,
-  SLASH_ACTIONS,
   searchHitThreadTarget,
   serializeComposerPrompt,
   speechFromBlocks,
-  truncateSlashDescription,
   userVisibleMessages,
 } from "@ardurbot/core";
 import type { GroupAvatarMember } from "@ardurbot/ui-web";
@@ -138,6 +136,12 @@ import {
   computersAreUnavailable,
 } from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
+import type { PendingAttachment } from "../components/composer/attachments";
+import { prepareComposerAttachments } from "../components/composer/attachments";
+import { ComposerTools } from "../components/composer/ComposerTools";
+import { runComposerAction } from "../components/composer/composer-actions";
+import { pickComposerFolder, splitComposerDrop } from "../components/composer/folders";
+import { useComposerCommands } from "../components/composer/use-composer-commands";
 import type { FeedbackEdit } from "../components/MessageFeedback";
 import { MessageFeedback } from "../components/MessageFeedback";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
@@ -207,6 +211,7 @@ import { useModelSettings } from "../lib/use-model-settings";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
+import { CompareStart } from "./CompareStart";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
 import type { RoutineDraftState } from "./RoutineEditor";
@@ -272,17 +277,14 @@ type Panel =
   | "computer"
   | "settings"
   | "routine"
+  | "routines"
   | "create"
   | "create-group"
   | "group-settings"
   | null;
 
-type PendingAttachment = {
-  id: string;
-  threadKey: string;
-  file: File;
-  previewUrl?: string;
-};
+const RoutinesPanel = lazy(() => import("../components/composer/RoutinesPanel"));
+const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
 
 type PendingBrowserNotification = {
   event: Pick<ProductEvent, "id" | "type" | "threadId" | "botId" | "payload">;
@@ -371,6 +373,8 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   const [snapshot, setSnapshot] = useState<ThreadSnapshot | null>(null);
   const snapshotRef = useRef<ThreadSnapshot | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const pendingAttachmentsRef = useRef(pendingAttachments);
+  pendingAttachmentsRef.current = pendingAttachments;
   const [replyTarget, setReplyTarget] = useState<ThreadMessage | null>(null);
   const [replyQuote, setReplyQuote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -457,6 +461,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   }
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [integrationFocus, setIntegrationFocus] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   useSettingsShortcut(() => openSettings("general"));
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
@@ -1937,38 +1942,29 @@ export function ShellPage({ team = false }: { team?: boolean }) {
     [t],
   );
   const onAttachmentPick = useCallback(
-    async (files: FileList | null) => {
+    async (files: FileList | readonly File[] | null) => {
       const threadKey = activeGroupId.current ?? activeBotId.current;
       if (!threadKey || !files?.length) return;
-      const existing = attachmentsForThread(pendingAttachments, threadKey);
-      const next: PendingAttachment[] = [];
-      const skipped: string[] = [];
-      for (const file of Array.from(files)) {
-        if (existing.length + next.length >= ATTACHMENT_MAX_COUNT) {
-          skipped.push(t`${file.name} (max ${ATTACHMENT_MAX_COUNT} attachments)`);
-          continue;
-        }
-        if (file.size > ATTACHMENT_MAX_BYTES) {
-          skipped.push(t`${file.name} (over 10 MiB)`);
-          continue;
-        }
-        const mimeType = inferAttachmentMimeType(file.name, file.type);
-        if (!mimeType) {
-          skipped.push(file.name);
-          continue;
-        }
-        next.push({
-          id: `${file.name}-${file.size}-${file.lastModified}-${next.length}`,
-          threadKey,
-          file,
-          previewUrl: mimeType.startsWith("image/") ? URL.createObjectURL(file) : undefined,
-        });
+      const existing = attachmentsForThread(pendingAttachmentsRef.current, threadKey);
+      const {
+        attachments: next,
+        skipped,
+        limitHit,
+      } = prepareComposerAttachments(existing.length, Array.from(files), threadKey);
+      if (next.length) {
+        pendingAttachmentsRef.current = [...pendingAttachmentsRef.current, ...next];
+        setPendingAttachments(pendingAttachmentsRef.current);
       }
-      if (next.length) setPendingAttachments((current) => [...current, ...next]);
-      setAttachmentNotice(skipped.length ? t`Skipped ${skipped.join(", ")}` : null);
+      setAttachmentNotice(
+        limitHit
+          ? t`Up to 4 files, 10 MB each`
+          : skipped.length
+            ? t`Skipped ${skipped.join(", ")}`
+            : null,
+      );
       if (fileInputRef.current) fileInputRef.current.value = "";
     },
-    [pendingAttachments, t],
+    [t],
   );
   const removeAttachment = useCallback((attachment: PendingAttachment) => {
     revokePendingAttachmentPreviews([attachment]);
@@ -3438,6 +3434,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         {active || activeGroup ? (
           <Composer
             key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
+            comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
             activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
             running={composerRunning}
             disabled={Boolean(recordingSkill)}
@@ -3483,25 +3480,38 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             replyTargetName={replyTargetName}
             onClearReply={clearReply}
             mentionTargets={composerMentionTargets}
-            agentSkills={agentSkills}
-            onSlashOpen={refreshAgentSkills}
-            onSlashAction={(action) => {
-              if (action === "chat-settings") {
-                setPanel(inGroup ? "group-settings" : "settings");
-                return;
-              }
-              if (action === "settings-general") {
-                openSettings("general");
-                return;
-              }
-              if (action === "settings-usage") {
-                void rpc.usage
-                  .summary()
-                  .then(setUsage)
-                  .catch(() => undefined);
-                openSettings("usage");
-              }
+            skills={composerSkills(agentSkills, activeTaughtSkills, active?.id)}
+            routines={activeRoutines}
+            computerKind={!inGroup ? computer?.kind : undefined}
+            botAvailable={!inGroup}
+            onComposerError={setAttachmentNotice}
+            onManage={(connectionId) => {
+              setIntegrationFocus(connectionId);
+              openSettings("integrations");
             }}
+            onRoutine={(routineId) => {
+              return rpc.routines
+                .testRun({ routineId, clientNonce: newClientNonce() })
+                .then(() => true)
+                .catch(() => {
+                  setSendError(t`Could not run routine`);
+                  return false;
+                });
+            }}
+            onSlashOpen={refreshAgentSkills}
+            onSlashAction={(action, argument) =>
+              runComposerAction(action, argument, {
+                botId: !inGroup ? active?.id : undefined,
+                onRefresh: refreshThreadRef.current,
+                onStop: stopRun,
+                onRoutines: () => setPanel("routines"),
+                onModel: openBotModelSettings,
+                onChatSettings: () => setPanel(inGroup ? "group-settings" : "settings"),
+                onSettings: openSettings,
+                onUsage: setUsage,
+                onError: setSendError,
+              })
+            }
           />
         ) : null}
       </main>
@@ -3716,6 +3726,31 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                 }}
                 onClear={() => setClearTarget({ kind: "bot", chat: active })}
               />
+            ) : null}
+            {panel === "routines" && active ? (
+              <Suspense fallback={null}>
+                <RoutinesPanel
+                  routines={activeRoutines}
+                  runningId={
+                    snapshot?.run && isActive(snapshot.run.status)
+                      ? (snapshot.run.routineId ?? undefined)
+                      : undefined
+                  }
+                  onStop={() => void stopRun()}
+                  onCreate={() => {
+                    setRoutineDraft(emptyRoutineDraft());
+                    setEditingRoutine(null);
+                    setRoutineWebhookSecret(null);
+                    setPanel("routine");
+                  }}
+                  onOpen={(routine) => {
+                    setRoutineDraft(draftFromRoutine(routine));
+                    setEditingRoutine(routine);
+                    setRoutineWebhookSecret(null);
+                    setPanel("routine");
+                  }}
+                />
+              </Suspense>
             ) : null}
             {panel === "routine" && active ? (
               <RoutineEditor
@@ -4250,6 +4285,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             email={session.data?.user.email}
             usage={usage}
             initialSection={settingsSection}
+            initialIntegration={integrationFocus}
             initialProvider={settingsProvider}
             avatarStyle={bootstrapMe?.avatarStyle ?? "robot"}
             isDeploymentOwner={bootstrapMe?.isDeploymentOwner === true}
@@ -4943,7 +4979,8 @@ const QuoteSelectionButton = memo(function QuoteSelectionButton({
   );
 });
 
-const Composer = memo(function Composer({
+export const Composer = memo(function Composer({
+  comparisonBotId,
   activeName,
   running,
   disabled,
@@ -4971,10 +5008,17 @@ const Composer = memo(function Composer({
   replyTargetName,
   onClearReply,
   mentionTargets,
-  agentSkills,
+  skills = [],
+  routines = [],
+  computerKind,
+  onComposerError,
+  onManage,
+  onRoutine,
   onSlashOpen,
   onSlashAction,
+  botAvailable = true,
 }: {
+  comparisonBotId?: string;
   activeName?: string;
   running: boolean;
   disabled?: boolean;
@@ -4992,7 +5036,7 @@ const Composer = memo(function Composer({
   onChangeModel?: () => void;
   sending: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
-  onAttachmentPick: (files: FileList | null) => void | Promise<void>;
+  onAttachmentPick: (files: FileList | readonly File[] | null) => void | Promise<void>;
   onRemoveAttachment: (attachment: PendingAttachment) => void;
   onSend: (text: string, mentions?: ComposerMention[]) => Promise<void>;
   onStop: () => Promise<void>;
@@ -5002,16 +5046,24 @@ const Composer = memo(function Composer({
   replyTargetName?: string;
   onClearReply?: () => void;
   mentionTargets?: ComposerMention[];
-  agentSkills?: AgentSkillCatalogEntry[];
+  skills?: ComposerSkill[];
+  routines?: Routine[];
+  computerKind?: string;
+  onComposerError: (message: string) => void;
+  onManage: (connectionId?: string) => void;
+  onRoutine: (id: string) => void | Promise<void> | Promise<boolean>;
   onSlashOpen?: () => void;
-  onSlashAction?: (action: SlashActionId) => void;
+  botAvailable?: boolean;
+  onSlashAction: (
+    action: ComposerActionId,
+    argument?: string,
+  ) => void | boolean | Promise<void> | Promise<boolean>;
 }) {
   const { t } = useLingui();
   const [draft, setDraft] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionHighlightIndex, setMentionHighlightIndex] = useState(0);
-  const [slashQuery, setSlashQuery] = useState<string | null>(null);
-  const [selectedSkill, setSelectedSkill] = useState<AgentSkillCatalogEntry | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<ComposerSkill | null>(null);
   const [selectedMentions, setSelectedMentions] = useState<ComposerMention[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const runErrorRef = useRef<HTMLDivElement>(null);
@@ -5088,11 +5140,8 @@ const Composer = memo(function Composer({
     setDraft(value);
     const mentionMatch = /(?:^|\s)@([\w-]*)$/.exec(value);
     setMentionQuery(mentionMatch ? (mentionMatch[1] ?? "") : null);
-    // `/` only at the start of the draft so forced skills expand (`Use skill:` / `/Name` prefix).
-    const slashMatch = selectedSkill === null ? /^\/([^\n]*)$/.exec(value) : null;
-    const nextSlash = slashMatch ? (slashMatch[1] ?? "") : null;
-    if (nextSlash !== null && slashQuery === null) onSlashOpen?.();
-    setSlashQuery(nextSlash);
+    commands.update(value);
+    if (value.startsWith("/") && !commands.isOpen) onSlashOpen?.();
   }
 
   function focusComposer() {
@@ -5111,16 +5160,33 @@ const Composer = memo(function Composer({
     focusComposer();
   }
 
-  function insertSkill(skill: AgentSkillCatalogEntry) {
+  function insertSkill(skill: ComposerSkill) {
     setSelectedSkill(skill);
-    setDraft("");
-    setSlashQuery(null);
+    if (draft.startsWith("/")) setDraft("");
+    commands.close();
+    focusComposer();
   }
-
-  function runSlashAction(action: SlashActionId) {
-    setDraft("");
-    setSlashQuery(null);
-    onSlashAction?.(action);
+  const commands = useComposerCommands({
+    botAvailable,
+    skills,
+    routines,
+    draft,
+    setDraft,
+    onSkill: insertSkill,
+    onAction: onSlashAction,
+    onRoutine,
+    focus: focusComposer,
+  });
+  const desktop = desktopBridge();
+  const folderAvailable = canAddComposerFolder(Boolean(desktop?.host), computerKind);
+  async function addFolder(dropped?: File) {
+    if (!folderAvailable || !desktop?.host) return;
+    try {
+      const folder = await pickComposerFolder(desktop.host, dropped);
+      if (folder) insertMention(folder);
+    } catch {
+      onComposerError(t`Could not add folder. Try again.`);
+    }
   }
 
   function removeLastChip() {
@@ -5152,39 +5218,14 @@ const Composer = memo(function Composer({
     ? `${mentionListboxId}-option-${activeMentionIndex}`
     : undefined;
 
-  const slashSkillOptions = useMemo(() => {
-    if (slashQuery === null) return [];
-    const query = slashQuery.trim().toLowerCase();
-    const skills = agentSkills ?? [];
-    return skills
-      .filter((skill) => {
-        if (!query) return true;
-        return (
-          skill.name.toLowerCase().includes(query) ||
-          skill.description.toLowerCase().includes(query)
-        );
-      })
-      .slice(0, 8);
-  }, [agentSkills, slashQuery]);
-
-  const slashActionOptions = useMemo(() => {
-    if (slashQuery === null) return [];
-    const query = slashQuery.trim().toLowerCase();
-    return SLASH_ACTIONS.filter((action) => !query || action.label.toLowerCase().includes(query));
-  }, [slashQuery]);
-
-  const showSlashPicker =
-    slashQuery !== null &&
-    mentionQuery === null &&
-    (slashSkillOptions.length > 0 || slashActionOptions.length > 0);
-
   function send() {
     if (!canSend || sending || disabled) return;
+    if (commands.submitCommand()) return;
     const text = serializeComposerPrompt(draft, selectedSkill, selectedMentions);
     setDraft("");
     setMentionQuery(null);
     setMentionHighlightIndex(0);
-    setSlashQuery(null);
+    commands.close();
     setSelectedSkill(null);
     const mentions = selectedMentions;
     setSelectedMentions([]);
@@ -5234,7 +5275,10 @@ const Composer = memo(function Composer({
     event.preventDefault();
     dragDepth.current = 0;
     setDraggingFiles(false);
-    if (!disabled) void onAttachmentPick(dataTransfer.files);
+    if (disabled) return;
+    const dropped = splitComposerDrop(dataTransfer);
+    void onAttachmentPick(dropped.files);
+    if (folderAvailable) for (const folder of dropped.folders) void addFolder(folder);
   }
 
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
@@ -5267,9 +5311,7 @@ const Composer = memo(function Composer({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative z-30 m-0 min-w-0 border-0 px-3 pb-4 pt-3 md:px-6 md:pb-6 ${
-        draggingFiles ? "rounded-[14px] ring-2 ring-inset ring-ring" : ""
-      }`}
+      className="composer-drop-target relative z-30 m-0 min-w-0 border-0 px-3 pb-4 pt-3 md:px-6 md:pb-6"
     >
       {sendError || runError ? (
         <div
@@ -5398,70 +5440,34 @@ const Composer = memo(function Composer({
           })}
         </div>
       ) : null}
-      {showSlashPicker ? (
-        <div
-          data-testid="slash-picker"
-          className="mb-2 overflow-hidden rounded-[14px] border border-border bg-muted"
-        >
-          {slashSkillOptions.map((skill) => (
-            <button
-              key={skill.id}
-              type="button"
-              aria-label={t`Skill ${skill.name}`}
-              onClick={() => insertSkill(skill)}
-              className="flex w-full items-start gap-3 px-4 py-2.5 text-start hover:bg-accent"
-            >
-              <Box size={16} strokeWidth={1.7} className="mt-0.5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0">
-                <span dir="auto" className="block text-[14px] text-foreground">
-                  {skill.name}
-                </span>
-                <span dir="auto" className="block truncate text-[12.5px] text-muted-foreground">
-                  {truncateSlashDescription(skill.description)}
-                </span>
-              </span>
-            </button>
-          ))}
-          {slashActionOptions.map((action) => {
-            const label = slashActionLabel(action.id);
-            return (
-              <button
-                key={action.id}
-                type="button"
-                aria-label={label}
-                onClick={() => runSlashAction(action.id)}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-start hover:bg-accent"
-              >
-                <Settings size={16} strokeWidth={1.7} className="shrink-0 text-muted-foreground" />
-                <span className="text-[14px] text-foreground">{label}</span>
-              </button>
-            );
-          })}
-        </div>
+      {commands.loaded ? (
+        <Suspense fallback={null}>
+          <SlashPicker
+            open={commands.isOpen}
+            onAria={commands.syncAria}
+            rows={commands.rows}
+            activeId={commands.activeId}
+            onActive={commands.setActive}
+            onSelect={commands.select}
+          />
+        </Suspense>
       ) : null}
-      <div
-        data-testid="composer-bar"
-        className="flex items-center gap-3.5 rounded-full border border-border bg-background py-[9px] pe-2.5 ps-3 transition-colors focus-within:border-ring"
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept={ATTACHMENT_ACCEPT}
-          className="hidden"
-          onChange={(event) => void onAttachmentPick(event.target.files)}
+      {comparisonBotId ? (
+        <CompareStart
+          botId={comparisonBotId}
+          text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
+          files={pendingAttachments.map((item) => item.file)}
+          disabled={disabled || sending}
+          onCreated={() => {
+            setDraft("");
+            setSelectedSkill(null);
+            setSelectedMentions([]);
+            for (const item of pendingAttachments) onRemoveAttachment(item);
+          }}
         />
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t`Attach file`}
-          disabled={disabled}
-          onClick={() => fileInputRef.current?.click()}
-          className="size-8 shrink-0 rounded-full border border-border bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Plus size={16} strokeWidth={2} />
-        </Button>
-        <div className="flex min-w-0 flex-1 flex-wrap items-end gap-1.5">
+      ) : null}
+      <div className="relative h-8">
+        <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
           {selectedSkill ? (
             <span
               data-testid="skill-chip"
@@ -5508,12 +5514,42 @@ const Composer = memo(function Composer({
               </button>
             </span>
           ))}
+        </div>
+      </div>
+      <div
+        data-testid="composer-bar"
+        className="flex items-center gap-3.5 rounded-full border border-border bg-background py-[9px] pe-2.5 ps-3 transition-colors focus-within:border-ring"
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={ATTACHMENT_ACCEPT}
+          className="hidden"
+          onChange={(event) => void onAttachmentPick(event.target.files)}
+        />
+        <ComposerTools
+          disabled={disabled}
+          fileInputRef={fileInputRef}
+          composerRef={textareaRef}
+          skills={skills}
+          canAddFolder={folderAvailable}
+          onFolder={() => void addFolder()}
+          onSlash={() => commands.open()}
+          onSkill={insertSkill}
+          onMention={insertMention}
+          onManage={onManage}
+          onError={onComposerError}
+          onOpen={onSlashOpen}
+        />
+        <div className="relative flex min-w-0 flex-1 items-end gap-1.5">
           <textarea
             ref={textareaRef}
             value={draft}
             onChange={(event) => updateDraft(event.target.value)}
             onPaste={handlePaste}
             onKeyDown={(event) => {
+              if (commands.keyDown(event)) return;
               if (
                 event.key === "Backspace" &&
                 draft.length === 0 &&
@@ -5565,9 +5601,17 @@ const Composer = memo(function Composer({
             role="combobox"
             aria-autocomplete="list"
             aria-haspopup="listbox"
-            aria-expanded={mentionPickerOpen}
-            aria-controls={mentionPickerOpen ? mentionListboxId : undefined}
-            aria-activedescendant={activeMentionOptionId}
+            aria-expanded={mentionPickerOpen || commands.isOpen}
+            aria-controls={
+              mentionPickerOpen
+                ? mentionListboxId
+                : commands.isOpen
+                  ? commands.aria.listId
+                  : undefined
+            }
+            aria-activedescendant={
+              activeMentionOptionId ?? (commands.isOpen ? commands.aria.optionId : undefined)
+            }
             name="chat-message"
             autoComplete="off"
             dir="auto"
@@ -5626,22 +5670,11 @@ const Composer = memo(function Composer({
   );
 });
 
-function slashActionLabel(id: SlashActionId) {
-  switch (id) {
-    case "chat-settings":
-      return t`Chat Settings`;
-    case "settings-general":
-      return t`Settings: General`;
-    case "settings-usage":
-      return t`Settings: Usage`;
-  }
-}
-
 function MentionOptionIcon({ mention }: { mention: ComposerMention }) {
   if (mention.kind === "routine") {
     return <Clock size={16} strokeWidth={1.7} className="mt-0.5 shrink-0 text-muted-foreground" />;
   }
-  if (mention.kind === "connector") {
+  if (mention.kind === "connector" || mention.kind === "mcp" || mention.kind === "folder") {
     return <Puzzle size={16} strokeWidth={1.7} className="mt-0.5 shrink-0 text-muted-foreground" />;
   }
   if (mention.kind === "group") {
@@ -5665,7 +5698,7 @@ function MentionChipIcon({ mention }: { mention: ComposerMention }) {
   if (mention.kind === "routine") {
     return <Clock size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />;
   }
-  if (mention.kind === "connector") {
+  if (mention.kind === "connector" || mention.kind === "mcp" || mention.kind === "folder") {
     return <Puzzle size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />;
   }
   if (mention.kind === "group" || mention.kind === "everyone") {

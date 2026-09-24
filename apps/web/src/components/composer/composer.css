@@ -1,0 +1,46 @@
+.composer-popup {
+  transition-property: opacity, transform;
+  transition-duration: var(--default-transition-duration);
+  transition-timing-function: var(--default-transition-timing-function);
+}
+
+.composer-slash-popup[data-closed] {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+@starting-style {
+  .composer-slash-popup[data-open] {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.composer-drop-target {
+  position: relative;
+}
+
+.composer-drop-target::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px dashed var(--border);
+  border-radius: 1.5rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--default-transition-duration);
+}
+
+.composer-drop-target[data-dragging="files"]::after {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-popup[data-slot],
+  .composer-popup,
+  .composer-drop-target::after {
+    animation: none;
+    transition: none;
+  }
+}

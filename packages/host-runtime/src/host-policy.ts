@@ -1,9 +1,7 @@
-import { constants } from "node:fs";
-import { access, realpath, stat } from "node:fs/promises";
-import path from "node:path";
+import { realpath, stat } from "node:fs/promises";
 import type { CommandRequest } from "@ardurbot/adapter-kit";
 import { isAllowedDesktopPath } from "./desktop-sandbox-paths.js";
-import { nativeEnvironment } from "./runtimes/native-process.js";
+import { getHostEnvironment, resolveHostBinary } from "./host-environment.js";
 
 export async function confinedHostCwd(candidate: string, roots: string[]) {
   if (candidate.includes("\0") || candidate.split(/[/\\]/u).includes(".."))
@@ -15,32 +13,19 @@ export async function confinedHostCwd(candidate: string, roots: string[]) {
   return resolved;
 }
 
-/** Small effect-free command grammar. File access uses the confined file operations. */
-export async function hostCommand(request: CommandRequest, env = nativeEnvironment()) {
+/** The executor owns approvals. The host owns executable and environment selection. */
+export async function hostCommand(request: CommandRequest, env?: NodeJS.ProcessEnv) {
   if (request.env !== undefined || request.pty || !request.argv.length)
     throw new Error(
-      "This computer runs only echo, pwd and whoami as bot commands; use the file tools, or a Claude Code or Codex runtime, for other work.",
+      "Command did not run: host environment and terminal overrides are not allowed.",
     );
   const [name, ...args] = request.argv;
-  if (
-    !name ||
-    !["echo", "pwd", "whoami"].includes(name) ||
-    args.some((arg) => /[\0\r\n;&|`$<>]/u.test(arg)) ||
-    (name !== "echo" && args.length)
-  )
+  if (!name || /[/\\:\0\r\n]/u.test(name) || args.some((arg) => arg.includes("\0")))
     throw new Error(
-      "This computer runs only echo, pwd and whoami as bot commands; use the file tools, or a Claude Code or Codex runtime, for other work.",
+      "Command did not run: use a tool name from this computer's PATH, not an executable path.",
     );
-  for (const directory of (env.PATH ?? "").split(path.delimiter)) {
-    if (!path.isAbsolute(directory)) continue;
-    const candidate = path.join(directory, process.platform === "win32" ? `${name}.exe` : name);
-    try {
-      await access(candidate, constants.X_OK);
-      const binary = await realpath(candidate);
-      return [binary, ...args];
-    } catch {
-      /* Try the next registered OS search directory. */
-    }
-  }
-  throw new Error("Approved host command is unavailable.");
+  const binary = await resolveHostBinary(name, env ?? (await getHostEnvironment()).env);
+  if (!binary)
+    throw new Error("Command did not run: executable was not found on this computer's PATH.");
+  return [binary, ...args];
 }

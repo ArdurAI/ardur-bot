@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("ardurbotDesktop", {
   platform: process.platform,
@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
     state: () => ipcRenderer.invoke("desktop.host.state"),
     setup: () => ipcRenderer.invoke("desktop.host.setup"),
     addRoot: () => ipcRenderer.invoke("desktop.host.addRoot"),
+    addDroppedRoot: (file) => {
+      const path = webUtils.getPathForFile(file);
+      if (!path) return Promise.resolve(null);
+      return ipcRenderer.invoke("desktop.host.addRoot", path);
+    },
     removeRoot: (root) => ipcRenderer.invoke("desktop.host.removeRoot", root),
     clear: () => ipcRenderer.invoke("desktop.host.clear"),
   },

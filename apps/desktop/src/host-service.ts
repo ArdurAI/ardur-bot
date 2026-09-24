@@ -3,7 +3,11 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
+<<<<<<< HEAD
 import { hostRegistrationIdentityText } from "@ardurbot/contracts/host-bridge";
+=======
+import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
+>>>>>>> dev
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface HostServiceConfig {
@@ -89,22 +93,10 @@ export function hostServiceLaunch(options: {
   };
 }
 export function hostServiceEnvironment(source: NodeJS.ProcessEnv, platform = process.platform) {
-  const env: NodeJS.ProcessEnv = { ELECTRON_RUN_AS_NODE: "1" };
-  for (const key of [
-    "PATH",
-    "HOME",
-    "USERPROFILE",
-    "SystemRoot",
-    "WINDIR",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "TMPDIR",
-    "TEMP",
-    "TMP",
-    "LANG",
-    "LC_ALL",
-  ])
-    if (source[key]) env[key] = source[key];
+  const env: NodeJS.ProcessEnv = {
+    ...filterHostEnvironment(source, platform),
+    ELECTRON_RUN_AS_NODE: "1",
+  };
   if (platform === "win32") env.ELECTRON_NO_ATTACH_CONSOLE = "1";
   return env;
 }
@@ -115,7 +107,12 @@ export function stopHostProcess(child: ChildProcess, platform = process.platform
       const killer = start(
         path.win32.join(system, "System32", "taskkill.exe"),
         ["/pid", String(child.pid), "/t", "/f"],
-        { shell: false, windowsHide: true, stdio: "ignore" },
+        {
+          shell: false,
+          windowsHide: true,
+          stdio: "ignore",
+          env: filterHostEnvironment(process.env, platform),
+        },
       );
       killer.on("error", () => child.kill("SIGKILL"));
       killer.unref();

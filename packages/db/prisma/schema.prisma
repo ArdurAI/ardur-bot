@@ -170,6 +170,7 @@ model Space {
   botInstructionsAuthorId String?
   botInstructionsRevision Int @default(0)
   requireTrustedDevices Boolean @default(false)
+  comparisons Comparison[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
   aiDataConsents AiDataConsent[]
@@ -580,6 +581,7 @@ model Task {
 
 model Run {
   accountInstructionContext Json?
+  comparisonId String?
   delegationId String? @unique
   delegationRootTaskId String?
   originDeviceGrantId String?
@@ -1888,6 +1890,7 @@ model DelegationRoot {
   @@map("delegation_roots")
 }
 model Delegation {
+  comparisonId String?
   card Json?
   id String @id @default(cuid())
   rootTaskId String
@@ -1939,4 +1942,40 @@ model HostRegistration {
   generation String
   createdAt DateTime @default(now())
   @@map("host_registrations")
+}
+
+model Comparison {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId String
+  coordinatorBotId String
+  rootTaskId String @unique
+  parentRunId String @unique
+  clientNonce String
+  requestHash String
+  snapshot Json
+  participants Json
+  budgetTokens Int
+  mergeReserved Boolean
+  createdAt DateTime @default(now())
+  executions ComparisonExecution[]
+  @@unique([spaceId, userId, clientNonce])
+  @@index([spaceId, userId, createdAt])
+  @@map("comparisons")
+}
+
+model ComparisonExecution {
+  id String @id @default(cuid())
+  comparisonId String
+  comparison Comparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  position Int
+  botId String
+  runId String @unique
+  delegationId String @unique
+  participant Json
+  input Json
+  selectedRunIds String[] @default([])
+  @@unique([comparisonId, position])
+  @@map("comparison_executions")
 }
