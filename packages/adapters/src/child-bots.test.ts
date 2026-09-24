@@ -51,7 +51,7 @@ describe("spawned bot creation", () => {
         findUnique,
       },
       deploymentSettings: { findUnique: vi.fn().mockResolvedValue(null) },
-      run: { findUnique: vi.fn().mockResolvedValue({ id: "child-run-1" }) },
+      run: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: "child-run-1" }) },
       $transaction: vi.fn().mockRejectedValue(new Error("unique spawn key")),
     } as unknown as PrismaClient;
 

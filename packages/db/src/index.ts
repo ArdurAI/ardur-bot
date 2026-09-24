@@ -5,6 +5,7 @@ export * from "./client.js";
 export * from "./command-blocks.js";
 export * from "./computers.js";
 export * from "./credential-secrets.js";
+export * from "./delegation.js";
 export * from "./device-grants.js";
 export * from "./dispatch.js";
 export * from "./events.js";

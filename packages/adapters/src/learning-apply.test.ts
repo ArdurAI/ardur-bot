@@ -15,6 +15,7 @@ import { parseRevisionMarkdown, revisionMarkdown } from "./memory/markdown-files
 const actor = { spaceId: "space", userId: "user" };
 const scope = { ...actor, botId: "bot" };
 const pin: RuntimePin = {
+  runtimeKind: "pi",
   provider: "openai-compatible",
   modelId: "fixture",
   effort: "medium",

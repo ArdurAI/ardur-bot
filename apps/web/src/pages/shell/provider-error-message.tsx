@@ -19,6 +19,17 @@ export function ProviderErrorMessage({
   onConnect?: () => void;
 }) {
   if (runtimeProblem) {
+    if (runtimeProblem.code === "locality-denied")
+      return (
+        <>
+          <span className="min-w-0 flex-1">
+            <Trans>This bot may only run locally — change the pin or the space policy</Trans>
+          </span>
+          <Button variant="link" size="xs" onClick={onChangeModel}>
+            <Trans>Change pin</Trans>
+          </Button>
+        </>
+      );
     const { pin } = runtimeProblem;
     const entry = catalog?.find(
       (item) => item.provider === pin.provider && item.id === pin.modelId,
@@ -33,11 +44,20 @@ export function ProviderErrorMessage({
     return (
       <>
         <span className="min-w-0 flex-1">
-          <Trans>
-            This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin.
-          </Trans>
+          {runtimeProblem.code.startsWith("runtime-") ? (
+            runtimeProblem.reason
+          ) : (
+            <Trans>
+              This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin.
+            </Trans>
+          )}
         </span>
-        <Button variant="link" size="xs" className="text-destructive" onClick={onConnect}>
+        <Button
+          variant="link"
+          size="xs"
+          className="text-destructive"
+          onClick={pin.runtimeKind === "pi" ? onConnect : onChangeModel}
+        >
           <Trans>Connect</Trans>
         </Button>
         <Button variant="link" size="xs" className="text-destructive" onClick={onChangeModel}>

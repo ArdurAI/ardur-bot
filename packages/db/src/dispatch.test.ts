@@ -37,6 +37,11 @@ function fixture() {
   };
   const bot = { id: "bot-a", spaceId: "space", userId: "owner", thread: { id: "thread-a" } };
   const tx = {
+    delegationRoot: { updateMany: vi.fn(async () => ({ count: 0 })) },
+    delegation: {
+      updateMany: vi.fn(async () => ({ count: 0 })),
+      findMany: vi.fn(async () => []),
+    },
     $queryRaw: vi.fn(async () => []),
     deviceGrant: { findFirst: vi.fn(async () => grant) },
     dispatchReceipt: {

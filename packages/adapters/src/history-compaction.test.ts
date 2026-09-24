@@ -906,6 +906,7 @@ describe("compactHistory", () => {
           modelId: "grok-4.6",
           effort: "high",
           credentialId: "deleted",
+          runtimeKind: "pi" as const,
           revision: 1,
         },
         reason: "Missing connection",

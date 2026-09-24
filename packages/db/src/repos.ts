@@ -4,15 +4,17 @@ import {
   type Bot,
   type BotSection,
   type MessageBlock,
+  RuntimeKindSchema,
   type SpaceBot,
 } from "@ardurbot/contracts";
 import { userVisibleMessages } from "@ardurbot/core";
-import type { PrismaClient } from "./client.js";
+import type { Prisma, PrismaClient } from "./client.js";
 import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import { activeRunSelection, previewFromBlocks } from "./thread-listing.js";
+import { withTransactionRetry } from "./transaction-retry.js";
 
 /** Newest messages loaded for sidebar preview; enough to skip a short peer-run tail. */
 const SIDEBAR_PREVIEW_MESSAGE_WINDOW = 16;
@@ -52,6 +54,8 @@ function mapBot(
     autoSpeak?: boolean;
     modelCredentialId?: string | null;
     modelPinRevision?: number;
+    runtimeKind?: string;
+    runtimeExperimental?: boolean;
     modelProvider?: string | null;
     modelId?: string | null;
     thinkingLevel?: string | null;
@@ -94,6 +98,8 @@ function mapBot(
     thinkingLevel: (bot.thinkingLevel as Bot["thinkingLevel"]) ?? null,
     modelCredentialId: bot.modelCredentialId ?? null,
     modelPinRevision: bot.modelPinRevision ?? 0,
+    runtimeKind: RuntimeKindSchema.parse(bot.runtimeKind ?? "pi"),
+    runtimeExperimental: bot.runtimeExperimental ?? false,
     teamChatAmbientEnabled: bot.teamChatAmbientEnabled ?? false,
     teamChatRules: bot.teamChatRules ?? "",
     webhookConfigured: Boolean(bot.webhookSecretId),
@@ -388,11 +394,18 @@ export function createRepos(prisma: PrismaClient) {
         parentBotId?: string | null;
         computerMode?: ComputerMode;
         spawnKey?: string;
+        onCreated?: (
+          tx: Prisma.TransactionClient,
+          botId: string,
+          threadId: string,
+        ) => Promise<void>;
         modelProvider?: string | null;
         modelId?: string | null;
         thinkingLevel?: string | null;
         modelCredentialId?: string | null;
         modelPinRevision?: number;
+        runtimeKind?: string;
+        runtimeExperimental?: boolean;
         initialMessage?: {
           role: "user" | "bot" | "system";
           blocks: MessageBlock[];
@@ -412,6 +425,8 @@ export function createRepos(prisma: PrismaClient) {
       let thinkingLevel = input.thinkingLevel ?? null;
       let modelCredentialId = input.modelCredentialId ?? null;
       let modelPinRevision = input.modelPinRevision ?? 0;
+      let runtimeKind = input.runtimeKind ?? "pi";
+      let runtimeExperimental = input.runtimeExperimental ?? false;
       if (input.parentBotId) {
         const parent = await prisma.bot.findFirst({
           where: {
@@ -422,6 +437,8 @@ export function createRepos(prisma: PrismaClient) {
         });
         if (!parent) throw new IsolationError();
         if (!modelId) {
+          runtimeKind = parent.runtimeKind ?? "pi";
+          runtimeExperimental = parent.runtimeExperimental ?? false;
           modelProvider = parent.modelProvider ?? null;
           modelCredentialId = parent.modelCredentialId ?? null;
           modelPinRevision = parent.modelPinRevision ?? 0;
@@ -468,6 +485,8 @@ export function createRepos(prisma: PrismaClient) {
               thinkingLevel,
               modelCredentialId,
               modelPinRevision,
+              runtimeKind,
+              runtimeExperimental,
             },
           });
           const thread = await tx.thread.create({
@@ -493,6 +512,7 @@ export function createRepos(prisma: PrismaClient) {
             });
             await tx.bot.update({ where: { id: created.id }, data: { computerId: dedicated.id } });
           }
+          await input.onCreated?.(tx, created.id, thread.id);
           await tx.browserProfile.create({
             data: {
               spaceId: actor.spaceId,
@@ -531,7 +551,7 @@ export function createRepos(prisma: PrismaClient) {
 
       let bot: Awaited<ReturnType<typeof insertBot>>;
       try {
-        bot = await insertBot();
+        bot = await withTransactionRetry(insertBot);
       } catch (error) {
         if (!input.spawnKey || !isSpawnKeyConflict(error)) throw error;
         const existing = await findBySpawnKey();
@@ -546,7 +566,7 @@ export function createRepos(prisma: PrismaClient) {
             data: { spawnKey: null },
           });
           try {
-            bot = await insertBot();
+            bot = await withTransactionRetry(insertBot);
           } catch (retryError) {
             if (!isSpawnKeyConflict(retryError)) throw retryError;
             const winner = await findBySpawnKey();

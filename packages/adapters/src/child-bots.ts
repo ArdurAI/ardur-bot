@@ -7,22 +7,24 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import { routineJobKey, runContinueJob, runJobKey } from "@ardurbot/adapter-kit";
-import { type Actor, type Bot, type ComputerMode, GROUP_MEMBER_MIN } from "@ardurbot/contracts";
+import type { Actor, Bot, ComputerMode, DelegationSnapshot } from "@ardurbot/contracts";
+import { delegationProblem, GROUP_MEMBER_MIN } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   cancelRunsInTransaction,
   computerScopeKey,
   createRepos,
   createThreadMessageInTransaction,
+  DelegationAdmissionError,
   expireComputerExecutionLeases,
-  inheritedRemoteOrigin,
-  type Prisma,
-  type PrismaClient,
+  finishDelegation,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { toComputerRef } from "./computer-support.js";
 import { checkpointAndRecordComputerWorkspace } from "./computer-workspace.js";
+import { delegationFailure, prepareDelegation } from "./delegation.js";
 import { resolveAgentHomePath } from "./home.js";
 import { removePiBotSessions } from "./pi-session.js";
 
@@ -78,6 +80,63 @@ export async function spawnBot(
       parentBotId: input.spawnedBy.id,
       spawnKey: input.spawnKey,
       computerMode: input.computerMode,
+      onCreated: async (tx, botId, threadId) => {
+        const admission = await prepareDelegation(tx, {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          parentRunId: input.runId,
+          actingBotId: botId,
+          actingName: name,
+          kind: "child",
+          newChild: true,
+          admissionKey: `child:${input.spawnKey}`,
+          prompt: input.prompt ?? "",
+        });
+        if (!admission.ok) throw new Error(admission.error);
+        const snapshot = admission.record.snapshot as unknown as DelegationSnapshot;
+        if (input.computerMode && input.computerMode !== snapshot.computer.mode)
+          throw new DelegationAdmissionError(delegationProblem("authority-exceeded"));
+        await tx.bot.update({
+          where: { id: botId },
+          data: {
+            modelProvider: snapshot.pin.provider,
+            modelId: snapshot.pin.modelId,
+            thinkingLevel: snapshot.pin.effort,
+            modelCredentialId: snapshot.pin.credentialId,
+            modelPinRevision: snapshot.pin.revision,
+            computerId: snapshot.computer.id,
+          },
+        });
+        if (input.prompt?.trim()) {
+          const task = await tx.task.create({
+            data: {
+              spaceId: actor.spaceId,
+              userId: actor.userId,
+              botId,
+              threadId,
+              prompt: input.prompt.trim(),
+              status: "queued",
+            },
+          });
+          const run = await tx.run.create({
+            data: {
+              ...admission.runData,
+              spaceId: actor.spaceId,
+              userId: actor.userId,
+              botId,
+              threadId,
+              taskId: task.id,
+              status: "queued",
+              trigger: "spawn",
+              clientNonce: `spawn:${input.spawnKey}`,
+            },
+          });
+          await tx.delegation.update({
+            where: { id: admission.record.id },
+            data: { runId: run.id },
+          });
+        } else await finishDelegation(tx, admission.record.id, "completed", `Created ${name}.`);
+      },
       initialMessage: {
         role: "system",
         blocks: [{ kind: "meta", text: `Created by ${input.spawnedBy.name}` }],
@@ -94,7 +153,7 @@ export async function spawnBot(
       },
       include: { thread: true },
     });
-    if (!existing) throw error;
+    if (!existing) return delegationFailure(error);
     if (!existing.thread) throw new Error(`Spawned bot ${existing.id} is missing its thread`);
     duplicate = true;
     created = {
@@ -107,14 +166,10 @@ export async function spawnBot(
 
   const prompt = (input.prompt ?? "").trim();
   if (prompt) {
-    const run = await ensureSpawnRun(deps.prisma, {
-      spaceId: input.spawnedBy.spaceId,
-      userId: input.spawnedBy.userId,
-      botId: created.id,
-      threadId: created.threadId,
-      sourceRunId: input.runId,
-      spawnKey: input.spawnKey,
-      prompt,
+    const run = await deps.prisma.run.findUniqueOrThrow({
+      where: {
+        spaceId_clientNonce: { spaceId: actor.spaceId, clientNonce: `spawn:${input.spawnKey}` },
+      },
     });
     await deps.jobs
       .enqueue(runContinueJob(run.id))
@@ -129,68 +184,6 @@ export async function spawnBot(
     title: created.title,
     threadId: created.threadId,
   };
-}
-
-async function ensureSpawnRun(
-  prisma: PrismaClient,
-  input: {
-    spaceId: string;
-    userId: string;
-    botId: string;
-    threadId: string;
-    sourceRunId: string;
-    spawnKey: string;
-    prompt: string;
-  },
-) {
-  const clientNonce = `spawn:${input.spawnKey}`;
-  const where = {
-    spaceId_clientNonce: {
-      spaceId: input.spaceId,
-      clientNonce,
-    },
-  } as const;
-  const existing = await prisma.run.findUnique({ where });
-  if (existing) return existing;
-
-  try {
-    return await prisma.$transaction(async (tx) => {
-      await createThreadMessageInTransaction(tx, {
-        threadId: input.threadId,
-        role: "user",
-        blocks: [{ kind: "text", text: input.prompt }],
-        runId: input.sourceRunId,
-      });
-      const task = await tx.task.create({
-        data: {
-          spaceId: input.spaceId,
-          botId: input.botId,
-          threadId: input.threadId,
-          userId: input.userId,
-          prompt: input.prompt,
-          status: "queued",
-        },
-      });
-      return tx.run.create({
-        data: {
-          ...(await inheritedRemoteOrigin(tx, input.sourceRunId)),
-
-          spaceId: input.spaceId,
-          botId: input.botId,
-          threadId: input.threadId,
-          taskId: task.id,
-          userId: input.userId,
-          status: "queued",
-          trigger: "spawn",
-          clientNonce,
-        },
-      });
-    });
-  } catch (error) {
-    const winner = await prisma.run.findUnique({ where });
-    if (winner) return winner;
-    throw error;
-  }
 }
 
 type BotLifecycleDeps = {

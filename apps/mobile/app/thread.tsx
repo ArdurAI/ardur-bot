@@ -10,6 +10,7 @@ import {
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
   type MessageReaction,
+  runtimeNames,
   runtimePinMessage,
 } from "@ardurbot/contracts";
 import {
@@ -548,12 +549,19 @@ function Thread() {
               muted={!currentBot.notifyOnFinish}
             />
           ) : null}
-          <Text
-            numberOfLines={1}
-            style={{ color: tokens.foreground, fontSize: 18, fontWeight: "600" }}
-          >
-            {displayName || t("Thread")}
-          </Text>
+          <View style={{ flexShrink: 1 }}>
+            <Text
+              numberOfLines={1}
+              style={{ color: tokens.foreground, fontSize: 18, fontWeight: "600" }}
+            >
+              {displayName || t("Thread")}
+            </Text>
+            {!inGroup && currentBot ? (
+              <Text numberOfLines={1} style={{ color: tokens.mutedForeground, fontSize: 12 }}>
+                {runtimeNames[currentBot.runtimeKind ?? "pi"]}
+              </Text>
+            ) : null}
+          </View>
         </Pressable>
       ),
       headerRight: () =>
@@ -1281,7 +1289,10 @@ function Thread() {
   const runError =
     snap?.run?.status === "failed"
       ? snap.run.runtimeProblem
-        ? runtimePinMessage(snap.run.runtimeProblem.pin)
+        ? snap.run.runtimeProblem.code === "locality-denied" ||
+          snap.run.runtimeProblem.code.startsWith("runtime-")
+          ? snap.run.runtimeProblem.reason
+          : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
       : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);

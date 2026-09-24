@@ -1,7 +1,10 @@
 import * as z from "zod";
+import { DelegationRecordSchema } from "./delegation.js";
 import { Id, RunStatus } from "./ids.js";
 
 export const RunActivityRowSchema = z.object({
+  rootTaskId: Id.optional(),
+  delegations: z.array(DelegationRecordSchema).optional(),
   runId: Id,
   botId: Id,
   botName: z.string(),

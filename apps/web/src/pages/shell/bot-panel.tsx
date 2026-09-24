@@ -3,6 +3,7 @@ import type {
   Bot,
   ComputerMode,
   ModelCatalogEntry,
+  RuntimeKind,
   ThinkingLevel,
   VoiceInfo,
 } from "@ardurbot/contracts";
@@ -35,7 +36,9 @@ import { rpc } from "../../lib/rpc";
 import { thinkingLevelDescription } from "../../lib/thinking-level-options";
 import type { ModelSettings } from "../../lib/use-model-settings";
 import { useModelSettings } from "../../lib/use-model-settings";
+import { ModelDestinations } from "../ModelDestinations";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
+import { RuntimeSettings } from "./runtime-settings";
 
 const ScratchpadSection = lazy(() =>
   import("../ScratchpadSection").then((module) => ({ default: module.ScratchpadSection })),
@@ -223,6 +226,8 @@ export function BotSettings({
     modelProvider?: string | null;
     modelId?: string | null;
     modelCredentialId?: string | null;
+    runtimeKind?: RuntimeKind;
+    runtimeExperimental?: boolean;
     thinkingLevel?: ThinkingLevel | null;
   }) => Promise<void>;
   onExport: () => Promise<void>;
@@ -247,6 +252,8 @@ export function BotSettings({
   const [autoSpeak, setAutoSpeak] = useState(bot.autoSpeak);
   const [voiceId, setVoiceId] = useState(bot.voiceId ?? "");
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
+  const [runtimeExperimental, setRuntimeExperimental] = useState(bot.runtimeExperimental ?? false);
+  const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>(bot.runtimeKind ?? "pi");
   const [modelKey, setModelKey] = useState(
     bot.modelProvider && bot.modelId
       ? modelOptionKey(bot.modelProvider, bot.modelId, bot.modelCredentialId)
@@ -399,12 +406,14 @@ export function BotSettings({
         memoryScope,
         autoSpeak,
         voiceId: voiceId || null,
+        runtimeKind,
+        runtimeExperimental,
         modelProvider: selected?.provider ?? null,
         modelId: selected?.modelId ?? null,
         modelCredentialId: selected
           ? (selected.credentialId ?? bot.modelCredentialId ?? null)
           : null,
-        ...(modelMetaReady
+        ...(runtimeKind !== "pi" || modelMetaReady
           ? {
               thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
             }
@@ -506,90 +515,105 @@ export function BotSettings({
           }}
         />
       </div>
-      <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
-        <Trans>Model</Trans>
-        <NativeSelect
-          ref={modelRef}
-          id={`${ids}-model`}
-          className="mt-2 w-full"
-          value={modelKey}
-          onChange={(event) => {
-            setModelKey(event.target.value);
-            setThinkingLevel("");
-          }}
-        >
-          <NativeSelectOption value="">
-            {t`Space default`}
-            {me?.defaultModel
-              ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel}${
-                  unavailableDefault ? t` — not available on your account` : ""
-                })`
-              : ""}
-          </NativeSelectOption>
-          {modelKey && !connectedOptions.some((option) => option.key === modelKey) ? (
-            <NativeSelectOption
+      <ModelDestinations botId={bot.id} />
+      <RuntimeSettings
+        experimental={runtimeExperimental}
+        onExperimental={setRuntimeExperimental}
+        kind={runtimeKind}
+        onKind={setRuntimeKind}
+        modelKey={modelKey}
+        onModel={setModelKey}
+        effort={thinkingLevel}
+        onEffort={setThinkingLevel}
+      />
+      {runtimeKind === "pi" ? (
+        <>
+          <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
+            <Trans>Model</Trans>
+            <NativeSelect
+              ref={modelRef}
+              id={`${ids}-model`}
+              className="mt-2 w-full"
               value={modelKey}
-              className={unavailableSelection ? "text-muted-foreground" : undefined}
+              onChange={(event) => {
+                setModelKey(event.target.value);
+                setThinkingLevel("");
+              }}
             >
-              {needsConnection ? `${selectedModel?.provider} · ` : ""}
-              {parseModelOptionKey(modelKey)?.modelId ?? modelKey}
-              {unavailableSelection ? t` (not available on your account)` : ""}
-            </NativeSelectOption>
+              <NativeSelectOption value="">
+                {t`Space default`}
+                {me?.defaultModel
+                  ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel}${
+                      unavailableDefault ? t` — not available on your account` : ""
+                    })`
+                  : ""}
+              </NativeSelectOption>
+              {modelKey && !connectedOptions.some((option) => option.key === modelKey) ? (
+                <NativeSelectOption
+                  value={modelKey}
+                  className={unavailableSelection ? "text-muted-foreground" : undefined}
+                >
+                  {needsConnection ? `${selectedModel?.provider} · ` : ""}
+                  {parseModelOptionKey(modelKey)?.modelId ?? modelKey}
+                  {unavailableSelection ? t` (not available on your account)` : ""}
+                </NativeSelectOption>
+              ) : null}
+              {connectedOptions.map((option) => (
+                <NativeSelectOption
+                  key={option.key}
+                  value={option.key}
+                  className={
+                    unavailableSubscriptionModel(catalog, option.provider, option.modelId)
+                      ? "text-muted-foreground"
+                      : undefined
+                  }
+                >
+                  {option.label}
+                  {unavailableSubscriptionModel(catalog, option.provider, option.modelId)
+                    ? t` — May not be available on your plan`
+                    : ""}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </label>
+          {catalog.some(
+            (entry) =>
+              credentials.some((credential) => credential.provider === entry.provider) &&
+              unavailableSubscriptionModel(catalog, entry.provider, entry.id),
+          ) ? (
+            <ShowAllModels checked={showAllModels} onChange={setShowAllModels} />
           ) : null}
-          {connectedOptions.map((option) => (
-            <NativeSelectOption
-              key={option.key}
-              value={option.key}
-              className={
-                unavailableSubscriptionModel(catalog, option.provider, option.modelId)
-                  ? "text-muted-foreground"
-                  : undefined
-              }
-            >
-              {option.label}
-              {unavailableSubscriptionModel(catalog, option.provider, option.modelId)
-                ? t` — May not be available on your plan`
-                : ""}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </label>
-      {catalog.some(
-        (entry) =>
-          credentials.some((credential) => credential.provider === entry.provider) &&
-          unavailableSubscriptionModel(catalog, entry.provider, entry.id),
-      ) ? (
-        <ShowAllModels checked={showAllModels} onChange={setShowAllModels} />
-      ) : null}
-      {!needsConnection && (modelKey ? unavailableSelection : unavailableDefault) ? (
-        <p className="mt-2 text-[12px] text-muted-foreground">
-          <Trans>This model is not available on your account. Choose another model.</Trans>
-        </p>
-      ) : null}
-      {thinkingOptions.length || thinkingLevel ? (
-        <label htmlFor={`${ids}-thinking`} className={fieldLabelClass}>
-          <Trans>Thinking</Trans>
-          <NativeSelect
-            id={`${ids}-thinking`}
-            className="mt-2 w-full"
-            value={thinkingLevel}
-            onChange={(event) => setThinkingLevel(event.target.value)}
-          >
-            <NativeSelectOption value="">
-              {t`Default (${thinkingLevelDescription(defaultThinkingLevel)})`}
-            </NativeSelectOption>
-            {thinkingLevel && !thinkingOptions.includes(thinkingLevel as ThinkingLevel) ? (
-              <NativeSelectOption value={thinkingLevel}>
-                {thinkingLevelDescription(thinkingLevel as ThinkingLevel)}
-              </NativeSelectOption>
-            ) : null}
-            {thinkingOptions.map((level) => (
-              <NativeSelectOption key={level} value={level}>
-                {thinkingLevelDescription(level)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </label>
+          {!needsConnection && (modelKey ? unavailableSelection : unavailableDefault) ? (
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              <Trans>This model is not available on your account. Choose another model.</Trans>
+            </p>
+          ) : null}
+          {thinkingOptions.length || thinkingLevel ? (
+            <label htmlFor={`${ids}-thinking`} className={fieldLabelClass}>
+              <Trans>Thinking</Trans>
+              <NativeSelect
+                id={`${ids}-thinking`}
+                className="mt-2 w-full"
+                value={thinkingLevel}
+                onChange={(event) => setThinkingLevel(event.target.value)}
+              >
+                <NativeSelectOption value="">
+                  {t`Default (${thinkingLevelDescription(defaultThinkingLevel)})`}
+                </NativeSelectOption>
+                {thinkingLevel && !thinkingOptions.includes(thinkingLevel as ThinkingLevel) ? (
+                  <NativeSelectOption value={thinkingLevel}>
+                    {thinkingLevelDescription(thinkingLevel as ThinkingLevel)}
+                  </NativeSelectOption>
+                ) : null}
+                {thinkingOptions.map((level) => (
+                  <NativeSelectOption key={level} value={level}>
+                    {thinkingLevelDescription(level)}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </label>
+          ) : null}
+        </>
       ) : null}
       <details
         data-testid="bot-settings-advanced"

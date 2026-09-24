@@ -739,6 +739,8 @@ export type MobileBot = Pick<
   | "updatedAt"
   | "computerMode"
   | "modelCredentialId"
+  | "runtimeKind"
+  | "runtimeExperimental"
   | "modelProvider"
   | "modelId"
   | "thinkingLevel"

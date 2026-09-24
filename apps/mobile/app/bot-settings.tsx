@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@ardurbot/contracts";
 import {
   BOT_COLORS,
   BOT_DESCRIPTION_MAX_LENGTH,
@@ -17,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { BotAvatar } from "../components/bot-avatar";
 import { ComputerModePicker } from "../components/computer-mode-picker";
+import { RuntimeSettings } from "../components/runtime-settings";
 import {
   type MobileBot,
   type MobileMe,
@@ -59,6 +61,8 @@ export default function BotSettingsScreen() {
   const [color, setColor] = useState<string>(BOT_COLORS[0]);
   const [computerMode, setComputerMode] = useState<ComputerMode>("team");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [runtimeExperimental, setRuntimeExperimental] = useState(false);
+  const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>("pi");
   const [modelKey, setModelKey] = useState("");
   const [thinkingLevel, setThinkingLevel] = useState("");
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
@@ -87,6 +91,8 @@ export default function BotSettingsScreen() {
     void rpc<BotSettingsRecord>("bots/get", { botId })
       .then((next) => {
         setBot(next);
+        setRuntimeKind(next.runtimeKind ?? "pi");
+        setRuntimeExperimental(next.runtimeExperimental ?? false);
         setName(next.name);
         setTitle(next.title);
         setDescription(next.description ?? "");
@@ -266,6 +272,8 @@ export default function BotSettingsScreen() {
         modelProvider?: string | null;
         modelId?: string | null;
         modelCredentialId?: string | null;
+        runtimeKind?: RuntimeKind;
+        runtimeExperimental?: boolean;
         thinkingLevel?: ThinkingLevel | null;
       } = { botId };
       if (profile.name !== bot.name) input.name = profile.name;
@@ -276,6 +284,9 @@ export default function BotSettingsScreen() {
         input.instructions = profile.instructions;
       }
       if (color !== bot.color) input.color = color;
+      if (runtimeExperimental !== (bot.runtimeExperimental ?? false))
+        input.runtimeExperimental = runtimeExperimental;
+      if (runtimeKind !== (bot.runtimeKind ?? "pi")) input.runtimeKind = runtimeKind;
       const modelChanged =
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||
         (selected?.modelId ?? null) !== (bot.modelId ?? null) ||
@@ -286,7 +297,7 @@ export default function BotSettingsScreen() {
         input.modelId = selected?.modelId ?? null;
         input.modelCredentialId = selected?.credentialId ?? null;
       }
-      if (modelMetaReady && (modelChanged || thinkingChanged)) {
+      if ((runtimeKind !== "pi" || modelMetaReady) && (modelChanged || thinkingChanged)) {
         input.thinkingLevel = (thinkingLevel || null) as ThinkingLevel | null;
       }
       if (computerMode !== bot.computerMode) {
@@ -419,6 +430,16 @@ export default function BotSettingsScreen() {
           ))}
         </ScrollView>
         <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        <RuntimeSettings
+          experimental={runtimeExperimental}
+          onExperimental={setRuntimeExperimental}
+          kind={runtimeKind}
+          onKind={setRuntimeKind}
+          modelKey={modelKey}
+          onModel={setModelKey}
+          effort={thinkingLevel}
+          onEffort={setThinkingLevel}
+        />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("Advanced")}
@@ -437,7 +458,7 @@ export default function BotSettingsScreen() {
             {advancedOpen ? "⌃" : "⌄"}
           </Text>
         </Pressable>
-        {advancedOpen ? (
+        {advancedOpen && runtimeKind === "pi" ? (
           <View>
             <Text
               style={{

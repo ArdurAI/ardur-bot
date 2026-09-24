@@ -1,11 +1,17 @@
 import * as z from "zod";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
+import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
-import { RuntimePinSchema, RuntimeProblemSchema } from "./runtime-pins.js";
+import {
+  RuntimeInfoSchema,
+  RuntimeKindSchema,
+  RuntimePinSchema,
+  RuntimeProblemSchema,
+} from "./runtime-pins.js";
 
 export const ComputerModeSchema = z.enum(["team", "dedicated"]);
 export type ComputerMode = z.infer<typeof ComputerModeSchema>;
@@ -44,6 +50,7 @@ export const AgentSecretInputSchema = z.object({
 export type AgentSecretInput = z.infer<typeof AgentSecretInputSchema>;
 
 export const BotSchema = z.object({
+  allowedModelDestinations: LocalityPolicySchema.optional(),
   id: Id,
   spaceId: Id,
   name: z.string(),
@@ -70,6 +77,8 @@ export const BotSchema = z.object({
   modelId: z.string().nullable(),
   thinkingLevel: ThinkingLevelSchema.nullable(),
   modelCredentialId: z.string().nullable().optional(),
+  runtimeKind: RuntimeKindSchema.default("pi"),
+  runtimeExperimental: z.boolean().optional(),
   modelPinRevision: z.number().int().nonnegative().optional(),
   teamChatAmbientEnabled: z.boolean(),
   teamChatRules: z.string(),
@@ -329,6 +338,8 @@ export const UpdateBotInput = z
     modelId: z.string().trim().min(1).max(200).nullable().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
     modelCredentialId: z.string().min(1).nullable().optional(),
+    runtimeKind: RuntimeKindSchema.optional(),
+    runtimeExperimental: z.boolean().optional(),
     teamChatAmbientEnabled: z.boolean().optional(),
     teamChatRules: z.string().max(TEAM_CHAT_RULES_MAX_LENGTH).optional(),
   })
@@ -754,6 +765,13 @@ export const ArtifactWithContentSchema = ArtifactSchema.extend({
 export type ArtifactWithContent = z.infer<typeof ArtifactWithContentSchema>;
 
 export const UsageRecordSchema = z.object({
+  delegationId: z.string().nullable().optional(),
+  rootTaskId: z.string().nullable().optional(),
+  requesterBotId: z.string().nullable().optional(),
+  actingBotId: z.string().nullable().optional(),
+  depth: z.number().int().optional(),
+  cost: z.number().nullable().optional(),
+  pricingProvenance: z.unknown().nullable().optional(),
   id: Id,
   botId: Id.nullable(),
   runId: Id.nullable(),
@@ -872,6 +890,7 @@ export const RunSchema = z.object({
   error: z.string().nullable(),
   providerErrorKind: ProviderErrorKindSchema.optional(),
   runtimeProblem: RuntimeProblemSchema.optional(),
+  runtimeInfo: RuntimeInfoSchema.nullable().optional(),
   runtimePin: RuntimePinSchema.nullable().optional(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),

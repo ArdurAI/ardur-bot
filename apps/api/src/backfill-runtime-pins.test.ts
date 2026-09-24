@@ -141,6 +141,7 @@ describe("legacy runtime pin backfill", () => {
         spaceId: "space",
         payload: {
           pin: {
+            runtimeKind: "pi",
             provider: "xai",
             modelId: "grok-4.6",
             credentialId: "connection",

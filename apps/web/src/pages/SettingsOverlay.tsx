@@ -25,6 +25,7 @@ import {
 import { DevicesSettings } from "./DevicesSettings";
 import { LearningBadge } from "./LearningInbox";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
+import { ModelDestinations } from "./ModelDestinations";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
 
@@ -240,11 +241,16 @@ export function SettingsOverlay({
                 <UpdatesSettingsPanel isDeploymentOwner={isDeploymentOwner} />
               ) : null}
               {section === "models" ? (
-                <ModelSettingsOverlay
-                  initialProvider={initialProvider}
-                  embedded
-                  onClose={requestClose}
-                />
+                <>
+                  <div className="px-6 pt-5 sm:px-8">
+                    <ModelDestinations />
+                  </div>
+                  <ModelSettingsOverlay
+                    initialProvider={initialProvider}
+                    embedded
+                    onClose={requestClose}
+                  />
+                </>
               ) : null}
               {section === "memory" ? (
                 <MemorySettingsOverlay

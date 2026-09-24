@@ -199,6 +199,10 @@ msgstr ""
 msgid "Acceptance"
 msgstr ""
 
+#: src/pages/DelegationLines.tsx
+msgid "Accepted"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr ""
@@ -445,6 +449,14 @@ msgstr ""
 msgid "Allowed destinations"
 msgstr ""
 
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed hosts"
+msgstr ""
+
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed model destinations"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "已允许一次"
@@ -485,6 +497,10 @@ msgstr "已回答：{0}"
 #: src/components/AskCard.tsx
 msgid "Answered: {answer}"
 msgstr "已回答：{answer}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Any"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
@@ -574,6 +590,10 @@ msgstr "已归档"
 #: src/pages/Shell.tsx
 msgid "Archived. Chat, memory, and files kept."
 msgstr "已归档。对话、记忆和文件保留。"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ardur (built-in)"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
@@ -851,6 +871,7 @@ msgstr "已取消"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "已取消"
 
@@ -906,6 +927,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "聊天设置"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Check again"
+msgstr ""
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "检查失败"
@@ -944,12 +969,20 @@ msgstr "选择机器人形状和颜色，或上传图片"
 msgid "Choose a bot…"
 msgstr "选择 Bot…"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Choose a model"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "设置新密码"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Choose bots and the tools they can use."
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Choose effort"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -963,6 +996,14 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "选择 Ardur Bot 使用的已连接模型。"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Claude Code (your claude sign-in)"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Claude subscriptions are not supported here yet; use an API key."
@@ -1066,6 +1107,18 @@ msgstr "云端"
 msgid "Code"
 msgstr "代码"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex (your ChatGPT sign-in)"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex app-server unavailable"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex runs on host computers for now — change the bot's computer or its runtime."
+msgstr ""
+
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
 msgid "Collapse {0}"
@@ -1091,6 +1144,10 @@ msgstr "命令"
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "完成"
+
+#: src/pages/DelegationLines.tsx
+msgid "Completed"
+msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Completion not recorded"
@@ -1166,6 +1223,7 @@ msgstr ""
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "连接"
@@ -1268,6 +1326,10 @@ msgstr "继续"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Continue in Background"
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Continue with ChatGPT"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -1626,6 +1688,10 @@ msgstr "无法保存"
 msgid "Could not save Auto Review"
 msgstr "无法保存自动审核"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Could not save destinations; try again."
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "Could not save group"
 msgstr "无法保存群组"
@@ -1680,6 +1746,10 @@ msgstr "无法开始 OAuth"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
+msgstr ""
+
+#: src/pages/DelegationLines.tsx
+msgid "Could not stop this task; try again."
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -2189,6 +2259,10 @@ msgstr "展开"
 msgid "Expand {0}"
 msgstr "展开 {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Expired"
 msgstr ""
@@ -2227,6 +2301,7 @@ msgid "failed"
 msgstr "失败"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "失败"
 
@@ -2652,6 +2727,10 @@ msgstr "Linear 工单"
 msgid "Link a chat app"
 msgstr "关联聊天应用"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Listed hosts"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Listen"
 msgstr ""
@@ -2724,6 +2803,10 @@ msgstr "本地"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "本地访问权限允许 Bot 无需询问就执行命令。请勿在共享或公开服务器上启用。"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Local only"
+msgstr ""
 
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
@@ -2926,6 +3009,7 @@ msgstr "分钟"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Model"
 msgstr "模型"
 
@@ -3188,6 +3272,10 @@ msgstr "无触发器"
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "暂无"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "not available"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
@@ -3565,6 +3653,7 @@ msgid "Pushed"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Queued"
 msgstr "排队中"
 
@@ -4001,6 +4090,7 @@ msgid "running"
 msgstr "运行中"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "运行中"
 
@@ -4013,11 +4103,16 @@ msgid "Running…"
 msgstr "正在运行…"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Runtime availability could not be checked."
 msgstr ""
 
 #: src/pages/LearningObservation.tsx
@@ -4034,6 +4129,7 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/ModelDestinations.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4313,6 +4409,10 @@ msgstr ""
 msgid "Sign up"
 msgstr "注册"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in expired. Connect Codex again."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr ""
@@ -4419,6 +4519,7 @@ msgstr ""
 msgid "Steps"
 msgstr "步骤"
 
+#: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
@@ -4436,6 +4537,10 @@ msgstr "停止示范"
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "已停止。"
+
+#: src/pages/DelegationLines.tsx
+msgid "Stopping"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Stored encrypted"
@@ -4582,6 +4687,7 @@ msgid "The service may use its own embedding providers. Check its settings befor
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "思考"
 
@@ -4591,6 +4697,10 @@ msgstr ""
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
+msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "This bot may only run locally — change the pin or the space policy"
 msgstr ""
 
 #: src/pages/Shell.tsx

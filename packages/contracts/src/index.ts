@@ -3,6 +3,7 @@ export * from "./attachments.js";
 export * from "./bot-avatar.js";
 export * from "./bot-secrets.js";
 export * from "./command-blocks.js";
+export * from "./delegation.js";
 export * from "./desktop.js";
 export * from "./dispatch.js";
 export * from "./domain.js";

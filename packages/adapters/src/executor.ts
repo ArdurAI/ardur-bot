@@ -35,6 +35,7 @@ import {
   BOT_TITLE_MAX_LENGTH,
   BotSecretName,
   BotSecretSubmission,
+  DelegationSnapshotSchema,
   isAttachmentImageMimeType,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   RuntimePinError,
@@ -84,6 +85,7 @@ import {
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
 import {
+  acceptDelegation,
   appendEventInTransaction,
   confirmDispatchStop,
   createSpaceForMember,
@@ -92,11 +94,13 @@ import {
   findModelCredential,
   InvalidSpaceNameError,
   isTooManyDatabaseConnections,
+  listDelegations,
   loadRunHistoryMessages,
   type McpServer,
   type Prisma,
   type PrismaClient,
   parseComputerMode,
+  requestCancel,
   SpaceLimitError,
   type ThreadEvents,
 } from "@ardurbot/db";
@@ -203,6 +207,11 @@ import { observationToolResult, parseComputerActions } from "./computer-tools.js
 import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
+import { completeHelper } from "./delegation.js";
+import { checkDelegationExecution } from "./delegation-execution.js";
+import { admitRunHelper } from "./delegation-helpers.js";
+import { stoppedRunComputer } from "./delegation-stop.js";
+import { prepareDelegationWorkspace, taskWorkspacePath } from "./delegation-workspace.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import {
@@ -236,6 +245,7 @@ import {
 import { loadAgentMemoryContext } from "./memory-context.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { selectMemoryTools } from "./memory-tools.js";
+import { destinationForModel, enforceDelegationDestination } from "./model-locality.js";
 import { isCatalogModelChoice, validateConnectedModelChoice } from "./model-selection.js";
 import {
   filterImageReturningComputerTools,
@@ -283,7 +293,11 @@ import {
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
 import { recordRunUsage } from "./run-usage.js";
+import type { RuntimeRegistry } from "./runtime-registry.js";
+import { createRuntimeRegistry } from "./runtime-registry.js";
 import { withRuntimeCleanup } from "./runtime-stream.js";
+import { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "./runtimes/native-host.js";
+import { runtimeSession } from "./runtimes/runtime-session.js";
 import {
   cancelScheduleFromTool,
   createScheduleFromTool,
@@ -566,6 +580,7 @@ export interface ExecutorDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
   runtime: AgentRuntime;
+  runtimeRegistry?: RuntimeRegistry;
   sandbox: SandboxProvider;
   memory: MemoryStore;
   memoryDocuments?: MemoryService;
@@ -864,6 +879,7 @@ export function buildApprovalContinuation(
 }
 
 export function createRunExecutor(deps: ExecutorDeps) {
+  const runtimeRegistry = deps.runtimeRegistry ?? createRuntimeRegistry(deps.runtime);
   const web = deps.web ?? createWebProvider();
   const browser = deps.browser ?? createBrowserProvider(undefined, { sandbox: deps.sandbox });
   const cloudAgent = deps.cloudAgent;
@@ -1148,6 +1164,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         where: { id: run.botId },
         select: { computerId: true, computerSwitching: true },
       });
+      if (run.runtimeComputer)
+        leaseTarget.computerId = DelegationSnapshotSchema.shape.computer.parse(
+          run.runtimeComputer,
+        ).id;
       if (!leaseTarget.computerId) throw new Error("Bot has no computer");
       if (leaseTarget.computerSwitching) {
         await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
@@ -1182,6 +1202,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
       let runAbortController: AbortController | null = null;
       let detachShutdown: (() => void) | undefined;
       const stopPoll = setInterval(() => {
+        void checkDelegationExecution(deps.prisma, runId)
+          .then((reason) => {
+            if (reason) runAbortController?.abort(new DispatchStopRequested());
+          })
+          .catch(() => runAbortController?.abort());
         void deps.prisma.run
           .findUnique({ where: { id: runId }, select: { cancelRequestedAt: true } })
           .then((current) => {
@@ -1210,6 +1235,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
 
       const runSecrets = [...deps.secrets];
       try {
+        if (current.cancelRequestedAt || (await checkDelegationExecution(deps.prisma, runId))) {
+          if (!run.startedAt) await confirmDispatchStop(deps.prisma, runId);
+          else screenRelease = await stoppedRunComputer(deps.prisma, run, leaseTarget.computerId);
+          return;
+        }
         const sourceBlocks =
           run.trigger === "messaging" && run.sourceMessageId
             ? ((
@@ -1289,13 +1319,64 @@ export function createRunExecutor(deps: ExecutorDeps) {
           where: { id: runId, status: "running", leaseOwner: workerId, leaseFence: fence },
           data: {
             runtimePin: run.runtimePin ?? selected.pin,
+            ...(selected.kind === "resolved"
+              ? { runtimeDestination: destinationForModel(selected) }
+              : {}),
             modelProvider: selected.pin.provider,
             modelId: selected.pin.modelId,
           },
         });
         if (captured.count !== 1) return;
         if (selected.kind === "problem") throw new RuntimePinError(selected);
-        const resolved = selected;
+        if (selected.pin.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, run.userId)))
+          throw new RuntimePinError(
+            runtimePinProblem(selected.pin, "runtime-unavailable", NATIVE_HOST_OWNER_MESSAGE),
+          );
+        const runtimeSelection = await runtimeRegistry.resolve(
+          selected.pin,
+          bot.computer?.kind,
+          bot.runtimeExperimental,
+        );
+        if ("kind" in runtimeSelection) throw new RuntimePinError(runtimeSelection);
+        const runtime = runtimeSelection.runtime;
+        const native =
+          selected.pin.runtimeKind !== "pi"
+            ? await runtimeSession(deps.prisma, {
+                runId,
+                threadId: run.threadId,
+                userId: run.userId,
+                spaceId: run.spaceId,
+                botId: bot.id,
+                computerId: bot.computerId,
+                instructions: bot.instructions,
+                pin: selected.pin,
+              })
+            : undefined;
+        const runtimeInfo = {
+          ...native?.previous,
+          runtimeKind: selected.pin.runtimeKind,
+          version: runtimeSelection.availability.version,
+          binding: native?.binding,
+        };
+        await deps.prisma.run.updateMany({
+          where: { id: runId, leaseOwner: workerId, leaseFence: fence },
+          data: { runtimeInfo },
+        });
+        const delegatedTokens = run.delegationId
+          ? await enforceDelegationDestination(deps.prisma, run.delegationId, selected)
+          : undefined;
+        if (run.delegationId)
+          await deps.prisma.delegation.updateMany({
+            where: { id: run.delegationId, status: "queued" },
+            data: { status: "running" },
+          });
+        const resolved =
+          delegatedTokens === undefined
+            ? selected
+            : {
+                ...selected,
+                maxTokens: Math.min(selected.maxTokens ?? delegatedTokens, delegatedTokens),
+              };
         const runModelProvider = selected.provider;
         const runModelId = selected.id;
         runAbortController = new AbortController();
@@ -1500,8 +1581,37 @@ export function createRunExecutor(deps: ExecutorDeps) {
           );
         }
         if (!bot.computer) throw new Error("Bot has no computer");
-        const storedComputer = bot.computer;
+        const delegationRecord = run.delegationId
+          ? await deps.prisma.delegation.findUniqueOrThrow({ where: { id: run.delegationId } })
+          : null;
+        const computerSnapshot = delegationRecord
+          ? DelegationSnapshotSchema.parse(delegationRecord.snapshot).computer
+          : run.runtimeComputer
+            ? DelegationSnapshotSchema.shape.computer.parse(run.runtimeComputer)
+            : null;
+        const storedComputer = computerSnapshot?.id
+          ? await deps.prisma.computer.findFirstOrThrow({
+              where: { id: computerSnapshot.id, spaceId: run.spaceId, userId: run.userId },
+            })
+          : bot.computer;
+        if (
+          computerSnapshot &&
+          (storedComputer.kind !== computerSnapshot.kind ||
+            storedComputer.scope !== computerSnapshot.mode)
+        )
+          throw new Error("The pinned computer policy changed; restart the task.");
         const computerMode = parseComputerMode(storedComputer.scope);
+        if (!run.runtimeComputer)
+          await deps.prisma.run.updateMany({
+            where: { id: runId, leaseOwner: workerId, leaseFence: fence },
+            data: {
+              runtimeComputer: {
+                id: storedComputer.id,
+                mode: computerMode,
+                kind: storedComputer.kind,
+              },
+            },
+          });
         const computer = await provisionComputer(deps, storedComputer.id, context, "bot");
         screenRelease = { computer, context };
         if (run.cancelRequestedAt) throw new DispatchStopRequested();
@@ -1527,6 +1637,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           attemptId: attempt.id,
           secrets: runSecrets,
           replayOf: commandReplay?.commandId,
+          resolveCwd: (requested, executionId) => shellCwd(requested, executionId),
         });
         let currentTurnFiles: Awaited<ReturnType<typeof materializeCurrentTurnFiles>>;
         try {
@@ -1553,7 +1664,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         // above. Deriving it a second time here dropped the deployment fallback, so a
         // vision-capable default was gated as "scripted" and lost its screenshot tools.
         const acceptsImages =
-          deps.runtime.describe().capabilities.scripted ||
+          runtime.describe().capabilities.scripted ||
           modelAcceptsImageInput(runModelProvider, runModelId, resolved.acceptsImages);
         const groupContext = thread.groupId
           ? await loadGroupContext(deps.prisma, thread.groupId, { id: bot.id, name: bot.name })
@@ -1645,8 +1756,23 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : graphical
               ? `You have a persistent computer filesystem and shell. ${MODEL_CANNOT_SEE_MESSAGE} Desktop observe and act tools are unavailable until a vision-capable model is selected. Use the file tools and shell.`
               : "You have a persistent sandbox filesystem and shell. This backend does not provide model-visible graphical control, so use the file tools and shell.";
-        const workspaceInstruction =
-          computerMode === "team"
+        const taskDirectory = run.delegationId
+          ? await prepareDelegationWorkspace(
+              deps.prisma,
+              deps.sandbox,
+              computer,
+              context,
+              run.delegationId,
+              computerMode === "team" ? teamBotWorkspaceDirectory(bot.id) : ".",
+            )
+          : undefined;
+        const runWorkspacePath = (value: string) =>
+          taskDirectory
+            ? taskWorkspacePath(taskDirectory, value)
+            : resolveBotWorkspacePath(computerMode, bot.id, value);
+        const workspaceInstruction = taskDirectory
+          ? `This task owns ${taskDirectory}. Relative file paths and shell working directories start there. This directory is not a security boundary.`
+          : computerMode === "team"
             ? `Your Team Computer home is ${teamBotWorkspaceDirectory(bot.id)}. Relative file paths and shell working directories start there. Put intentionally shared work under shared/. Other bots' folders are visible under bots/; treat them as their working areas.`
             : "This entire computer workspace is your private home. Relative file paths and shell working directories start at its root.";
 
@@ -1656,7 +1782,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         // Terminal subagent rows are published as their own messages (not appended to
         // messageSegments). Treat that like tool/step durable activity so we do not invent
         // an empty-run "done." completion afterward.
-        let publishedTerminalSubagent = false;
+        const publishedTerminalSubagent = false;
         // Durable chat messages posted mid-turn (message_user / promoted narration).
         // Rehydrate from this run's prior progress rows so a resume after ask/takeover
         // still knows progress was already published (skip hollow finals; status outcome).
@@ -1712,7 +1838,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let approvalPausePending = false;
         let handedOff = false;
         let progressRedactor = createStreamingRedactor(runSecrets);
-        const scripted = deps.runtime.describe().capabilities.scripted;
+        const scripted = runtime.describe().capabilities.scripted;
         const script =
           scripted && !commandReplay
             ? inferScript(task.prompt, takeoverResume?.checkpoint)
@@ -1723,7 +1849,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             spaceId: run.spaceId,
             threadId: thread.id,
             botId: bot.id,
-            type: "thread.progress",
+            type: run.delegationId ? "delegation.progress" : "thread.progress",
             runId,
             // The first flush replaces the "working…" placeholder outright — a delta here
             // would otherwise get appended straight onto it with no separator.
@@ -1778,6 +1904,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
           return secretPausedToolResult();
         };
 
+        const helperToolDelegations = new Map<string, string>();
+        const helperWorkspaces = new Map<string, string>();
+        const shellCwd = (requested: string | undefined, executionId: string) => {
+          const directory =
+            helperWorkspaces.get(helperToolDelegations.get(executionId) ?? "") ?? taskDirectory;
+          return directory
+            ? taskWorkspacePath(directory, requested ?? ".")
+            : resolveBotWorkspaceCwd(computerMode, bot.id, requested);
+        };
         const mutatingEffectOccurrences = new Map<string, number>();
         const consumedEffectIds = new Set<string>();
         const nextMutatingEffectOccurrence = (toolName: string, args: Record<string, unknown>) => {
@@ -1787,8 +1922,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           return occurrence;
         };
 
-        const checkCeiling = (name: string) =>
-          enforceRemoteExecution({
+        const checkCeiling = async (name: string) => {
+          const denied = await checkDelegationExecution(deps.prisma, runId, name);
+          if (denied) throw new Error(denied);
+          return enforceRemoteExecution({
             prisma: deps.prisma,
             runId,
             tool: name,
@@ -1814,12 +1951,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (!paused) throw new Error("This task could not pause; try again at home.");
             },
           });
+        };
 
         const applyTool = async (
           name: string,
           args: Record<string, unknown>,
           executionId: string,
         ) => {
+          const toolDirectory =
+            helperWorkspaces.get(helperToolDelegations.get(executionId) ?? "") ?? taskDirectory;
+          const toolWorkspacePath = (value: string) =>
+            toolDirectory ? taskWorkspacePath(toolDirectory, value) : runWorkspacePath(value);
+
           context.signal.throwIfAborted();
           if (handedOff) {
             return { error: "This stage was handed off. End the turn without more tool calls." };
@@ -1915,6 +2058,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
               CATALOG_APPROVAL_TOOL,
             );
           }
+          const delegationDenied = await checkDelegationExecution(
+            deps.prisma,
+            runId,
+            name,
+            directApprovalRoute ?? connectorCall.route,
+            helperToolDelegations.get(executionId),
+          );
+          if (delegationDenied) return { error: delegationDenied };
           // Approval applies to the exact persisted request, never to a payload the model
           // reconstructs after the worker resumes. This also makes a changed reconstruction
           // hit the already-approved effect instead of creating a second approval card.
@@ -2174,7 +2325,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       );
                   provider = createAutoReviewProvider("llm", {
                     llm: {
-                      runtime: deps.runtime,
+                      runtime,
                       checker: checker!,
                       model: reviewUsesRunPin ? resolved : undefined,
                       apiKey: judgeKey?.oauth ? undefined : judgeKey?.apiKey,
@@ -2296,6 +2447,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             await workspaceCheckpoint.flush();
             await bindDeviceApproval(deps.prisma, run, applied!.effect);
             const paused = await deps.events.pauseRunForInput({
+              helperDelegationId: helperToolDelegations.get(executionId),
               spaceId: run.spaceId,
               threadId: run.threadId,
               botId: run.botId,
@@ -2306,7 +2458,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
               blocks: [
                 buildApprovalAskBlock(applied!.effect.id, name, args, runSecrets, {
                   reviewReason,
-                  allowAlways: !requiresMandatoryApproval && !run.originDeviceGrantId,
+                  allowAlways:
+                    !requiresMandatoryApproval &&
+                    !run.originDeviceGrantId &&
+                    !run.delegationId &&
+                    !helperToolDelegations.has(executionId),
                   integration: integrationDetails?.integration,
                 }),
               ],
@@ -2446,7 +2602,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const requestedPath = String(args.path ?? "");
             const entries = await deps.sandbox.listFiles(
               computer,
-              resolveBotWorkspacePath(computerMode, bot.id, requestedPath),
+              toolWorkspacePath(requestedPath),
               context,
             );
             return {
@@ -2459,7 +2615,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "read_file") {
             const filePath = String(args.path ?? "");
-            const storedPath = resolveBotWorkspacePath(computerMode, bot.id, filePath);
+            const storedPath = toolWorkspacePath(filePath);
             let bytes: Uint8Array;
             try {
               bytes = await deps.sandbox.readFile(computer, storedPath, context, {
@@ -2503,7 +2659,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             await deps.sandbox.writeFile(
               computer,
               {
-                path: resolveBotWorkspacePath(computerMode, bot.id, filePath),
+                path: toolWorkspacePath(filePath),
                 content: new TextEncoder().encode(content),
               },
               context,
@@ -2528,7 +2684,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (!rows && dataPath) {
                 const bytes = await deps.sandbox.readFile(
                   computer,
-                  resolveBotWorkspacePath(computerMode, bot.id, dataPath),
+                  toolWorkspacePath(dataPath),
                   context,
                   { maxBytes: ATTACHMENT_MAX_BYTES },
                 );
@@ -2550,7 +2706,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               workspaceCheckpoint.markDirty();
               await deps.sandbox.writeFile(
                 computer,
-                { path: resolveBotWorkspacePath(computerMode, bot.id, outPath), content: png },
+                { path: toolWorkspacePath(outPath), content: png },
                 context,
               );
               let attached = false;
@@ -2604,7 +2760,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (!deps.artifacts) {
               return finish({ error: "artifact storage unavailable", path: filePath });
             }
-            const storedPath = resolveBotWorkspacePath(computerMode, bot.id, filePath);
+            const storedPath = toolWorkspacePath(filePath);
             let bytes: Uint8Array;
             try {
               bytes = await deps.sandbox.readFile(computer, storedPath, context, {
@@ -2648,11 +2804,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   "This command was not run: the desktop-protection guard detected a protected command or shell syntax it cannot inspect. Shell access is still available. For ordinary repository work, use direct commands with explicit paths, without sourcing or command substitution. Do not stop or restart browser/desktop processes.",
               });
             }
-            const cwd = resolveBotWorkspaceCwd(
-              computerMode,
-              bot.id,
-              args.cwd ? String(args.cwd) : undefined,
-            );
+            const cwd = shellCwd(args.cwd ? String(args.cwd) : undefined, executionId);
             workspaceCheckpoint.markDirty();
             const result = await withComputerAdmission(deps.prisma, storedComputer.id, () =>
               commandRecording.execute(
@@ -2693,7 +2845,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       kind: "open",
                       path: /^https?:\/\//i.test(requestedPath)
                         ? requestedPath
-                        : resolveBotWorkspacePath(computerMode, bot.id, requestedPath),
+                        : toolWorkspacePath(requestedPath),
                     },
                   ],
                   observe: true,
@@ -3316,11 +3468,45 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return pauseForSecret();
           }
           if (name === "request_takeover") return { ok: true };
+          if (name === "delegation_status")
+            return finish({
+              delegations: await listDelegations(
+                deps.prisma,
+                run,
+                String(args.root_task_id ?? run.delegationRootTaskId ?? run.taskId),
+              ),
+            });
+          if (name === "stop_delegation")
+            return finish(
+              await requestCancel(
+                deps.prisma,
+                { spaceId: run.spaceId, userId: run.userId },
+                String(args.root_task_id ?? run.delegationRootTaskId ?? run.taskId),
+              ),
+            );
+          if (name === "accept_delegation")
+            return finish(
+              await deps.prisma.$transaction((tx) =>
+                acceptDelegation(
+                  tx,
+                  { spaceId: run.spaceId, userId: run.userId },
+                  String(args.delegation_id),
+                  bot.id,
+                ),
+              ),
+            );
           if (name === "run_subagent") {
-            return {
-              ok: true,
-              result: String(args.task ?? "done."),
-            };
+            const admitted = await admitRunHelper(
+              deps.prisma,
+              run,
+              executionId,
+              String(args.name ?? "Helper"),
+              String(args.task ?? ""),
+            );
+            if ("error" in admitted) return finish(admitted);
+            const result = String(args.task ?? "done.");
+            await completeHelper(deps.prisma, admitted.id, "completed", result, deps.events);
+            return finish({ ok: true, delegationId: admitted.id, result });
           }
           if (name === "create_space") {
             try {
@@ -3472,6 +3658,23 @@ export function createRunExecutor(deps: ExecutorDeps) {
               notifyOnFinish: updated.notifyOnFinish,
             });
           }
+          if (
+            name === "message_user" &&
+            (run.delegationId || helperToolDelegations.has(executionId))
+          ) {
+            await deps.events.append({
+              spaceId: run.spaceId,
+              threadId: run.threadId,
+              botId: bot.id,
+              runId,
+              type: "delegation.progress",
+              payload: {
+                delegationId: helperToolDelegations.get(executionId) ?? run.delegationId,
+                text: redactSecrets(String(args.message ?? ""), runSecrets),
+              },
+            });
+            return finish({ ok: true, note: "Progress recorded for the coordinator." });
+          }
           if (name === "message_user") {
             const rawMessage = redactSecrets(String(args.message ?? ""), runSecrets);
             const text = clampUserProgressMessage(rawMessage);
@@ -3501,7 +3704,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "message_bot") {
             const sent = await messageBot(
-              deps,
+              { ...deps, resolveDelegationPin: (target) => resolvePin(run, target) },
               { ...run, sourceMessageId: run.sourceMessageId },
               { id: bot.id, name: bot.name },
               {
@@ -3518,8 +3721,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 deliveryKey: effectKey,
               },
             );
-            if (!sent.ok) return finish({ error: sent.error });
-            return finish({ ok: true, botId: sent.botId, name: sent.name, note: sent.note });
+            return finish(sent);
           }
           if (name === "connect_agent") {
             const result = await connectAgent(
@@ -3557,11 +3759,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "handoff_to_bot") {
             if (!thread.groupId) return finish({ error: "handoff_to_bot is only for group chats" });
-            const result = await handoffToGroupBot(deps, run, thread.groupId, {
-              bot_id: args.bot_id ? String(args.bot_id) : undefined,
-              confirm_name: args.confirm_name ? String(args.confirm_name) : undefined,
-              message: String(args.message ?? ""),
-            });
+            const result = await handoffToGroupBot(
+              { ...deps, resolveDelegationPin: (target) => resolvePin(run, target) },
+              run,
+              thread.groupId,
+              {
+                bot_id: args.bot_id ? String(args.bot_id) : undefined,
+                confirm_name: args.confirm_name ? String(args.confirm_name) : undefined,
+                message: String(args.message ?? ""),
+              },
+            );
             if ("ok" in result && result.ok) handedOff = true;
             return finish(result);
           }
@@ -3767,7 +3974,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           ) => commandRecording.invoke(name, args, executionId, applyTool);
           const runRuntime: AgentRuntime["run"] = commandReplay
             ? () => commandReplayEvents(commandReplay, runId, recordedApplyTool)
-            : deps.runtime.run.bind(deps.runtime);
+            : runtime.run.bind(runtime);
           if (!commandReplay)
             for (const exposure of pendingExposures)
               await recordKnowledgeExposure(deps.prisma, { ...context, attempt: fence }, exposure);
@@ -3814,12 +4021,62 @@ export function createRunExecutor(deps: ExecutorDeps) {
               tools,
               model: resolved,
               resumeFromCheckpoint: takeoverResume?.checkpoint,
+              nativeSession: native?.previous,
+              nativeCwd: computer.kind === "desktop" ? computer.providerRef : undefined,
+              onRuntimeInfo: async (info) => {
+                const saved = await deps.prisma.run.updateMany({
+                  where: { id: runId, leaseOwner: workerId, leaseFence: fence },
+                  data: { runtimeInfo: { ...runtimeInfo, ...info } },
+                });
+                if (saved.count !== 1) throw new Error("Runtime session ownership was lost.");
+              },
               script,
               allowSilentEmpty: allowSilentEmptyRun,
               emptyResponseText,
               authorizeTool: scripted
                 ? undefined
                 : async (name) => ((await checkCeiling(name)) ? undefined : pauseForApproval()),
+              admitHelper: async (executionId, name, task) => {
+                const admitted = await admitRunHelper(deps.prisma, run, executionId, name, task);
+                if ("error" in admitted) return admitted;
+                try {
+                  helperWorkspaces.set(
+                    admitted.id,
+                    await prepareDelegationWorkspace(
+                      deps.prisma,
+                      deps.sandbox,
+                      computer,
+                      context,
+                      admitted.id,
+                      taskDirectory ??
+                        (computerMode === "team" ? teamBotWorkspaceDirectory(bot.id) : "."),
+                    ),
+                  );
+                } catch (error) {
+                  await completeHelper(
+                    deps.prisma,
+                    admitted.id,
+                    "failed",
+                    "The helper workspace could not be prepared.",
+                  );
+                  throw error;
+                }
+                return admitted;
+              },
+              executeHelperTool: async (id, name, args, executionId) => {
+                helperToolDelegations.set(executionId, id);
+                return recordedApplyTool(name, args, executionId);
+              },
+              recordHelperUsage: (id, usage) =>
+                recordRunUsage(deps, { ...run, delegationId: id }, usage),
+              finishHelper: (id, status, result) =>
+                completeHelper(
+                  deps.prisma,
+                  id,
+                  status,
+                  redactSecrets(result, runSecrets),
+                  deps.events,
+                ),
               executeTool: scripted ? undefined : recordedApplyTool,
               resolveModel: scripted
                 ? undefined
@@ -3943,7 +4200,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   spaceId: run.spaceId,
                   threadId: thread.id,
                   botId: bot.id,
-                  type: "thread.progress",
+                  type: run.delegationId ? "delegation.progress" : "thread.progress",
                   runId,
                   payload: { delta: pendingProgress, streaming: true },
                 });
@@ -3954,7 +4211,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 spaceId: run.spaceId,
                 threadId: thread.id,
                 botId: bot.id,
-                type: "thread.progress",
+                type: run.delegationId ? "delegation.progress" : "thread.progress",
                 runId,
                 payload: {
                   text: redactSecrets(event.text, runSecrets),
@@ -4171,6 +4428,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 type: "thread.subagent",
                 runId,
                 payload: {
+                  delegationId: event.agentId,
                   agentId: event.agentId,
                   name: event.name,
                   task: safeTask,
@@ -4179,33 +4437,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   result: safeResult,
                 },
               });
-              if (event.status === "completed" || event.status === "failed") {
-                publishedTerminalSubagent ||= !subagentMarksUnread(run.trigger, event.status);
-                await publishMessage(
-                  deps,
-                  run,
-                  "bot",
-                  [
-                    {
-                      kind: "subagent",
-                      agentId: event.agentId,
-                      name: event.name,
-                      task: safeTask,
-                      status: event.status,
-                      progress: safeProgress,
-                      result: safeResult,
-                    },
-                  ],
-                  subagentMarksUnread(run.trigger, event.status),
-                );
-              }
             } else if (event.type === "usage") {
-              await recordRunUsage(deps, run, {
-                provider: event.provider,
-                model: event.model,
-                inputTokens: event.inputTokens,
-                outputTokens: event.outputTokens,
-              });
+              await recordRunUsage(
+                deps,
+                { ...run, delegationId: event.delegationId ?? run.delegationId },
+                {
+                  provider: event.provider,
+                  model: event.model,
+                  inputTokens: event.inputTokens,
+                  outputTokens: event.outputTokens,
+                },
+              );
             } else if (event.type === "done") {
               if (!assembled && event.text) {
                 if (publishedMidTurnUserMessage || discardedMidTurnNarration) {
@@ -4231,7 +4473,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               await deps.sandbox.writeFile(
                 computer,
                 {
-                  path: resolveBotWorkspacePath(computerMode, bot.id, file.path),
+                  path: runWorkspacePath(file.path),
                   content: new TextEncoder().encode(file.content),
                 },
                 context,
@@ -4311,7 +4553,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             leaseFence: fence,
             outcome: "completed",
             blocks,
-            markUnread: completionMarksUnread(run.trigger, text),
+            markUnread: !run.delegationId && completionMarksUnread(run.trigger, text),
           });
           if (!completed) return;
           if (completed.continuationRunId) {
@@ -4616,9 +4858,14 @@ export async function runNotificationsEnabled(
 
 async function notifyRun(
   deps: ExecutorDeps,
-  run: { spaceId: string; userId: string; botId: string; threadId: string },
+  run: { id: string; spaceId: string; userId: string; botId: string; threadId: string },
   message: NotificationMessage,
 ) {
+  const delegated = await deps.prisma.run.findUnique({
+    where: { id: run.id },
+    select: { delegationId: true },
+  });
+  if (delegated?.delegationId) return;
   if (!deps.notifications) return;
   const enabled = await runNotificationsEnabled(deps.prisma, run).catch((error) => {
     getLogger().error("notification preference lookup", error);
@@ -4928,12 +5175,29 @@ function redactBlocks(blocks: MessageBlock[], secrets: string[]): MessageBlock[]
 
 async function publishMessage(
   deps: ExecutorDeps,
-  run: { id: string; spaceId: string; threadId: string; botId: string },
+  run: {
+    id: string;
+    spaceId: string;
+    threadId: string;
+    botId: string;
+    delegationId?: string | null;
+  },
   role: "user" | "bot" | "system",
   blocks: MessageBlock[],
   markUnread?: boolean,
   clientNonce?: string,
 ) {
+  if (run.delegationId && role === "bot") {
+    await deps.events.append({
+      spaceId: run.spaceId,
+      threadId: run.threadId,
+      botId: run.botId,
+      runId: run.id,
+      type: "delegation.progress",
+      payload: { delegationId: run.delegationId, blocks },
+    });
+    return;
+  }
   const committed = await deps.prisma.$transaction((tx) =>
     persistMessageInTransaction(tx, run, role, blocks, markUnread, clientNonce),
   );
@@ -5157,7 +5421,14 @@ export async function resolveModelKey(
       if (!row)
         throw new RuntimePinError(
           runtimePinProblem(
-            pin ?? { provider, modelId, effort: null, credentialId: null, revision: 0 },
+            pin ?? {
+              runtimeKind: "pi",
+              provider,
+              modelId,
+              effort: null,
+              credentialId: null,
+              revision: 0,
+            },
             "pin-credential-missing",
             "The pinned connection secret is missing.",
           ),

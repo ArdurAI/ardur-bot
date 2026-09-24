@@ -19,6 +19,7 @@ const pin = {
   modelId: "grok-4.6",
   effort: "high",
   credentialId: "connection",
+  runtimeKind: "pi" as const,
   revision: 2,
 };
 function fixture() {
@@ -28,6 +29,7 @@ function fixture() {
     async (): Promise<AgentRunModel> => ({ provider: "xai", id: "grok-4.6", apiKey: "test-key" }),
   );
   const prisma = {
+    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
     userModelCredential: { findFirst: findCredential },
     spaceModelPreference: { findFirst: findPreference },
   } as unknown as PrismaClient;
@@ -213,4 +215,53 @@ describe("run pin snapshots", () => {
       code: "pin-credential-missing",
     });
   });
+});
+
+it("checks root locality against the resolved endpoint before returning an executable pin", async () => {
+  const f = fixture();
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: pin,
+      bot: { allowedModelDestinations: { mode: "local" } },
+    }),
+  ).toMatchObject({ kind: "problem", code: "locality-denied" });
+  f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
+  f.loadKey.mockResolvedValue({
+    provider: "openai-compatible",
+    id: "local-model",
+    baseUrl: "http://localhost:8080/v1",
+    reasoning: false,
+  });
+  const custom = { ...pin, provider: "openai-compatible", modelId: "local-model", effort: "off" };
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: custom,
+      bot: { allowedModelDestinations: { mode: "local" } },
+    }),
+  ).toMatchObject({ kind: "resolved", runtimePin: custom });
+});
+
+it("resolves native snapshots without looking up or loading a credential", async () => {
+  const f = fixture();
+  const snapshot = {
+    ...pin,
+    runtimeKind: "claude-code" as const,
+    provider: "anthropic",
+    modelId: "claude-opus-5",
+    effort: "low",
+    credentialId: "native:claude-code",
+  };
+  const result = await resolveRunModelPin({
+    ...f,
+    snapshot,
+    bot: { runtimeKind: "pi", modelProvider: "xai" },
+  });
+  expect(result).toMatchObject({ kind: "resolved", pin: snapshot, runtimePin: snapshot });
+  expect(f.loadKey).not.toHaveBeenCalled();
+  expect(f.findCredential).not.toHaveBeenCalled();
+  expect(f.findPreference).not.toHaveBeenCalled();
+  expect(result).not.toHaveProperty("apiKey");
+  expect(result).not.toHaveProperty("oauth");
 });

@@ -164,6 +164,7 @@ model Member {
 }
 
 model Space {
+  allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
   aiDataConsents AiDataConsent[]
   id                          String                       @id
@@ -340,6 +341,7 @@ model SpaceVoicePreference {
 }
 
 model Bot {
+  allowedModelDestinations Json?
   screenGeneration Int @default(0)
   id                String            @id @default(cuid())
   spaceId           String
@@ -374,6 +376,8 @@ model Bot {
   thinkingLevel     String?
   modelCredentialId String?
   modelPinRevision  Int @default(0)
+  runtimeKind       String @default("pi")
+  runtimeExperimental Boolean @default(false)
   webhookSecretId   String?
   teamChatAmbientEnabled Boolean @default(false)
   teamChatRules          String  @default("")
@@ -569,6 +573,8 @@ model Task {
 }
 
 model Run {
+  delegationId String? @unique
+  delegationRootTaskId String?
   originDeviceGrantId String?
   remoteDeviceGrantIds String[] @default([])
   remoteRootTaskId String?
@@ -588,6 +594,9 @@ model Run {
   status               String
   trigger              String
   runtimePin           Json?
+  runtimeDestination   Json?
+  runtimeComputer      Json?
+  runtimeInfo          Json?
   modelProvider        String?
   modelId              String?
   error                String?
@@ -622,6 +631,7 @@ model Run {
   @@index([spaceId, botId])
   @@index([originDeviceGrantId, status])
   @@index([remoteRootTaskId, status])
+  @@index([delegationRootTaskId, status])
   @@index([sourceMessageId])
   @@index([threadId, status, createdAt])
   @@index([routineId])
@@ -1033,6 +1043,13 @@ model Artifact {
 }
 
 model UsageRecord {
+  delegationId String?
+  rootTaskId String?
+  requesterBotId String?
+  actingBotId String?
+  depth Int @default(0)
+  cost Float?
+  pricingProvenance Json?
   id           String   @id @default(cuid())
   spaceId      String
   space        Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -1055,6 +1072,8 @@ model UsageRecord {
   createdAt    DateTime @default(now())
 
   @@index([spaceId, userId, createdAt])
+  @@index([rootTaskId])
+  @@index([delegationId])
   @@map("usage_records")
 }
 
@@ -1834,4 +1853,61 @@ model LearningCuratorRun {
   completedAt DateTime?
   @@index([spaceId, userId, startedAt])
   @@map("learning_curator_runs")
+}
+model DelegationRoot {
+  rootTaskId String @id
+  spaceId String
+  userId String
+  coordinatorBotId String
+  coordinatorThreadId String
+  totalDescendants Int @default(0)
+  activeDescendants Int @default(0)
+  reservedTokens Int @default(0)
+  usedTokens Int @default(0)
+  maxDepth Int @default(1)
+  maxConcurrent Int @default(4)
+  maxHops Int @default(6)
+  maxDescendants Int @default(12)
+  tokenLimit Int @default(120000)
+  deadlineAt DateTime
+  cancelRequestedAt DateTime?
+  createdAt DateTime @default(now())
+  @@map("delegation_roots")
+}
+model Delegation {
+  id String @id @default(cuid())
+  rootTaskId String
+  parentRunId String
+  runId String? @unique
+  spaceId String
+  userId String
+  requesterBotId String
+  actingBotId String
+  requesterName String
+  actingName String
+  kind String
+  depth Int
+  hop Int
+  status String @default("queued")
+  snapshot Json
+  authority Json
+  differences String[] @default([])
+  ancestorBotIds String[]
+  reservedTokens Int
+  usedTokens Int @default(0)
+  deadlineAt DateTime
+  admissionKey String @unique
+  fingerprint String
+  summaryMessageId String? @unique
+  result String?
+  workspacePath String?
+  workspaceKind String?
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  acceptedAt DateTime?
+  cancelRequestedAt DateTime?
+  cancelConfirmedAt DateTime?
+  @@index([rootTaskId, status])
+  @@index([parentRunId])
+  @@map("delegations")
 }

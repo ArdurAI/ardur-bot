@@ -51,6 +51,7 @@ export const ProductEventType = z.enum([
   "agent.tool.completed",
   "effect.reconciled",
   "usage.recorded",
+  "delegation.progress",
   "bot.spawned",
   "bot.updated",
   "bot.pinBackfilled",

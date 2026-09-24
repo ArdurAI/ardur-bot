@@ -8,6 +8,7 @@ const pin = {
   modelId: "model",
   effort: "high",
   credentialId: "connection",
+  runtimeKind: "pi" as const,
   revision: 2,
 };
 describe("runtime pin contracts", () => {
@@ -37,5 +38,10 @@ describe("runtime pin contracts", () => {
       true,
     );
     expect(ProductEventSchema.safeParse({ ...event, payload: { error: null } }).success).toBe(true);
+  });
+  it("includes the native runtime in the preserved pin sentence", () => {
+    expect(runtimePinMessage({ ...pin, runtimeKind: "claude-code" })).toContain(
+      "pinned to Claude Code · local · model · high",
+    );
   });
 });

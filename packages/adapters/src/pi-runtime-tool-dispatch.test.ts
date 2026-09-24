@@ -529,6 +529,11 @@ describe("Pi connector tool dispatch", () => {
           history: [],
           tools: [shellTool],
           model: { provider: "test", id: "dispatch-test-model" },
+          admitHelper: async (id: string) => ({
+            id,
+            tokens: 1000000,
+            deadlineAt: new Date(Date.now() + 60000).toISOString(),
+          }),
           executeTool,
         },
         { signal: new AbortController().signal },
@@ -560,6 +565,11 @@ describe("Pi connector tool dispatch", () => {
         history: [],
         tools: [shellTool],
         model: { provider: "test", id: "dispatch-test-model" },
+        admitHelper: async (id: string) => ({
+          id,
+          tokens: 1000000,
+          deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        }),
         executeTool,
         authorizeTool,
       },
@@ -584,6 +594,11 @@ describe("Pi connector tool dispatch", () => {
         history: [],
         tools: [destinationTool],
         model: { provider: "test", id: "dispatch-test-model" },
+        admitHelper: async (id: string) => ({
+          id,
+          tokens: 1000000,
+          deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        }),
         executeTool,
       },
       {
@@ -1010,6 +1025,11 @@ describe("Pi connector tool dispatch", () => {
         history: [],
         tools: [shellTool],
         model: { provider: "test", id: "dispatch-test-model" },
+        admitHelper: async (id: string) => ({
+          id,
+          tokens: 1000000,
+          deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        }),
         executeTool,
       },
       {
@@ -1050,6 +1070,11 @@ describe("Pi connector tool dispatch", () => {
         history: [],
         tools: [shellTool],
         model: { provider: "test", id: "dispatch-test-model" },
+        admitHelper: async (id: string) => ({
+          id,
+          tokens: 1000000,
+          deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        }),
         executeTool,
       },
       {
@@ -1103,6 +1128,11 @@ describe("Pi connector tool dispatch", () => {
           shellTool,
         ],
         model: { provider: "test", id: "dispatch-test-model" },
+        admitHelper: async (id: string) => ({
+          id,
+          tokens: 1000000,
+          deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        }),
         executeTool,
       },
       {
@@ -1175,6 +1205,11 @@ describe("Pi connector tool dispatch", () => {
         history: [],
         tools: [shellTool],
         model: { provider: "test", id: "dispatch-test-model" },
+        admitHelper: async (id: string) => ({
+          id,
+          tokens: 1000000,
+          deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        }),
         executeTool,
       },
       {
@@ -1220,6 +1255,11 @@ describe("Pi connector tool dispatch", () => {
           history: [],
           tools: [shellTool],
           model: { provider: "test", id: "dispatch-test-model" },
+          admitHelper: async (id: string) => ({
+            id,
+            tokens: 1000000,
+            deadlineAt: new Date(Date.now() + 60000).toISOString(),
+          }),
           executeTool,
         },
         {
@@ -1246,6 +1286,11 @@ describe("Pi connector tool dispatch", () => {
         history: [],
         tools: [shellTool],
         model: { provider: "test", id: "dispatch-test-model" },
+        admitHelper: async (id: string) => ({
+          id,
+          tokens: 1000000,
+          deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        }),
         executeTool,
       },
       {
@@ -1288,6 +1333,11 @@ describe("Pi connector tool dispatch", () => {
         },
       ],
       model: { provider: "test", id: "dispatch-test-model" },
+      admitHelper: async (id: string) => ({
+        id,
+        tokens: 1000000,
+        deadlineAt: new Date(Date.now() + 60000).toISOString(),
+      }),
       executeTool,
     };
 
@@ -1361,6 +1411,11 @@ describe("Pi connector tool dispatch", () => {
         },
       ],
       model: { provider: "test", id: "dispatch-test-model" },
+      admitHelper: async (id: string) => ({
+        id,
+        tokens: 1000000,
+        deadlineAt: new Date(Date.now() + 60000).toISOString(),
+      }),
       executeTool,
     };
 
@@ -1436,6 +1491,11 @@ describe("Pi connector tool dispatch", () => {
         history: [],
         tools: [destinationTool],
         model: { provider: "test", id: "dispatch-test-model" },
+        admitHelper: async (id: string) => ({
+          id,
+          tokens: 1000000,
+          deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        }),
         executeTool,
       },
       {
@@ -1476,6 +1536,11 @@ describe("Pi connector tool dispatch", () => {
         history: [],
         tools: [writeFileTool],
         model: { provider: "test", id: "dispatch-test-model" },
+        admitHelper: async (id: string) => ({
+          id,
+          tokens: 1000000,
+          deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        }),
         executeTool,
       },
       {
@@ -1586,6 +1651,11 @@ describe("nested integration access", () => {
             },
           ],
           model: { provider: "test", id: "dispatch-test-model" },
+          admitHelper: async (id: string) => ({
+            id,
+            tokens: 1000000,
+            deadlineAt: new Date(Date.now() + 60000).toISOString(),
+          }),
           executeTool,
         },
         context,

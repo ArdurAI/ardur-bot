@@ -199,6 +199,10 @@ msgstr "About spaces"
 msgid "Acceptance"
 msgstr "Acceptance"
 
+#: src/pages/DelegationLines.tsx
+msgid "Accepted"
+msgstr "Accepted"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr "Access token"
@@ -445,6 +449,14 @@ msgstr "Allowed destination"
 msgid "Allowed destinations"
 msgstr "Allowed destinations"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed hosts"
+msgstr "Allowed hosts"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed model destinations"
+msgstr "Allowed model destinations"
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "Allowed once"
@@ -485,6 +497,10 @@ msgstr "Answered: {0}"
 #: src/components/AskCard.tsx
 msgid "Answered: {answer}"
 msgstr "Answered: {answer}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Any"
+msgstr "Any"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
@@ -574,6 +590,10 @@ msgstr "Archived"
 #: src/pages/Shell.tsx
 msgid "Archived. Chat, memory, and files kept."
 msgstr "Archived. Chat, memory, and files kept."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ardur (built-in)"
+msgstr "Ardur (built-in)"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
@@ -851,6 +871,7 @@ msgstr "cancelled"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Cancelled"
 
@@ -906,6 +927,10 @@ msgstr "Chat service"
 msgid "Chat Settings"
 msgstr "Chat Settings"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Check again"
+msgstr "Check again"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "Check failed"
@@ -944,6 +969,10 @@ msgstr "Choose a bot shape, color, or upload an image"
 msgid "Choose a bot…"
 msgstr "Choose a bot…"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Choose a model"
+msgstr "Choose a model"
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "Choose a new password"
@@ -951,6 +980,10 @@ msgstr "Choose a new password"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Choose bots and the tools they can use."
 msgstr "Choose bots and the tools they can use."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Choose effort"
+msgstr "Choose effort"
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose file"
@@ -963,6 +996,14 @@ msgstr "Choose folder"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Choose which connected model Ardur Bot uses."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Claude Code (your claude sign-in)"
+msgstr "Claude Code (your claude sign-in)"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
+msgstr "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Claude subscriptions are not supported here yet; use an API key."
@@ -1066,6 +1107,18 @@ msgstr "Cloud"
 msgid "Code"
 msgstr "Code"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex (your ChatGPT sign-in)"
+msgstr "Codex (your ChatGPT sign-in)"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex app-server unavailable"
+msgstr "Codex app-server unavailable"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Codex runs on host computers for now — change the bot's computer or its runtime."
+msgstr "Codex runs on host computers for now — change the bot's computer or its runtime."
+
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
 msgid "Collapse {0}"
@@ -1091,6 +1144,10 @@ msgstr "Command"
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "Complete"
+
+#: src/pages/DelegationLines.tsx
+msgid "Completed"
+msgstr "Completed"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Completion not recorded"
@@ -1166,6 +1223,7 @@ msgstr "Confluence space keys or IDs"
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "Connect"
@@ -1269,6 +1327,10 @@ msgstr "Continue"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Continue in Background"
 msgstr "Continue in Background"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Continue with ChatGPT"
+msgstr "Continue with ChatGPT"
 
 #: src/pages/Auth.tsx
 msgid "Continue with email"
@@ -1626,6 +1688,10 @@ msgstr "Could not save"
 msgid "Could not save Auto Review"
 msgstr "Could not save Auto Review"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Could not save destinations; try again."
+msgstr "Could not save destinations; try again."
+
 #: src/pages/GroupPanel.tsx
 msgid "Could not save group"
 msgstr "Could not save group"
@@ -1681,6 +1747,10 @@ msgstr "Could not start OAuth"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
 msgstr "Could not start teaching"
+
+#: src/pages/DelegationLines.tsx
+msgid "Could not stop this task; try again."
+msgstr "Could not stop this task; try again."
 
 #: src/components/AskCard.tsx
 msgid "Could not submit this answer"
@@ -2189,6 +2259,10 @@ msgstr "Expand"
 msgid "Expand {0}"
 msgstr "Expand {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental"
+msgstr "Experimental"
+
 #: src/pages/LearningInbox.tsx
 msgid "Expired"
 msgstr "Expired"
@@ -2227,6 +2301,7 @@ msgid "failed"
 msgstr "failed"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "Failed"
 
@@ -2652,6 +2727,10 @@ msgstr "Linear issue"
 msgid "Link a chat app"
 msgstr "Link a chat app"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Listed hosts"
+msgstr "Listed hosts"
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Listen"
 msgstr "Listen"
@@ -2724,6 +2803,10 @@ msgstr "Local"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "Local access lets bots run commands without asking. Avoid it on shared or public servers."
+
+#: src/pages/ModelDestinations.tsx
+msgid "Local only"
+msgstr "Local only"
 
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
@@ -2926,6 +3009,7 @@ msgstr "minutes"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Model"
 msgstr "Model"
 
@@ -3188,6 +3272,10 @@ msgstr "No trigger"
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "None yet"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "not available"
+msgstr "not available"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
@@ -3565,6 +3653,7 @@ msgid "Pushed"
 msgstr "Pushed"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Queued"
 msgstr "Queued"
 
@@ -4001,6 +4090,7 @@ msgid "running"
 msgstr "running"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "Running"
 
@@ -4013,12 +4103,17 @@ msgid "Running…"
 msgstr "Running…"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr "Runs on"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr "Runs when this bot receives a verified message from this provider."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Runtime availability could not be checked."
+msgstr "Runtime availability could not be checked."
 
 #: src/pages/LearningObservation.tsx
 msgid "safety"
@@ -4034,6 +4129,7 @@ msgstr "safety"
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/ModelDestinations.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4313,6 +4409,10 @@ msgstr "Sign in with GitHub"
 msgid "Sign up"
 msgstr "Sign up"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in expired. Connect Codex again."
+msgstr "Sign-in expired. Connect Codex again."
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr "Sign-in needs a pre-registered app; use a fine-grained token instead."
@@ -4419,6 +4519,7 @@ msgstr "Steering corrections"
 msgid "Steps"
 msgstr "Steps"
 
+#: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
@@ -4436,6 +4537,10 @@ msgstr "Stop teaching"
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "Stopped."
+
+#: src/pages/DelegationLines.tsx
+msgid "Stopping"
+msgstr "Stopping"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Stored encrypted"
@@ -4582,6 +4687,7 @@ msgid "The service may use its own embedding providers. Check its settings befor
 msgstr "The service may use its own embedding providers. Check its settings before saving private documents."
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "Thinking"
 
@@ -4592,6 +4698,10 @@ msgstr "This action could not finish; try again."
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "This bot may only run locally — change the pin or the space policy"
+msgstr "This bot may only run locally — change the pin or the space policy"
 
 #: src/pages/Shell.tsx
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."

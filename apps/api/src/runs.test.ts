@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { activityNotificationsEnabled, activityPromptSnippet } from "./runs.js";
+import type { Actor } from "@ardurbot/contracts";
+import type { PrismaClient } from "@ardurbot/db";
+import { describe, expect, it, vi } from "vitest";
+import { activityNotificationsEnabled, activityPromptSnippet, listSpaceRuns } from "./runs.js";
 
 describe("run activity copy", () => {
   it("presents structured agent messages instead of their internal wake prompt", () => {
@@ -37,3 +39,72 @@ describe("run activity notification preference", () => {
     expect(activityNotificationsEnabled("group-1", false)).toBe(true);
   });
 });
+
+it.each([false, true])(
+  "keeps one tree stop target when the coordinator is visible: %s",
+  async (includeCoordinator) => {
+    const base = {
+      botId: "worker",
+      bot: { name: "Worker", notifyOnFinish: true },
+      task: { prompt: "Review" },
+      sourceMessage: null,
+      threadId: "thread",
+      thread: { groupId: null, externalConversationId: null, group: null },
+      status: "running",
+      trigger: "bot_message",
+      updatedAt: new Date(),
+      completedAt: null,
+    };
+    const worker = {
+      ...base,
+      id: "worker-run",
+      taskId: "worker-task",
+      delegationRootTaskId: "root",
+      delegationId: "handoff",
+    };
+    const coordinator = {
+      ...base,
+      id: "coordinator-run",
+      taskId: "root",
+      delegationRootTaskId: null,
+      delegationId: null,
+    };
+    const lineage = {
+      id: "handoff",
+      rootTaskId: "root",
+      kind: "message",
+      status: "running",
+      reservedTokens: 10000,
+      deadlineAt: new Date(Date.now() + 10000),
+      createdAt: new Date(),
+      snapshot: {
+        pin: {
+          provider: "scripted",
+          modelId: "scripted",
+          effort: "off",
+          credentialId: "scripted",
+          revision: 1,
+        },
+        computer: { id: "computer", mode: "team", kind: "test" },
+        destination: { host: "localhost", local: true },
+      },
+      authority: { scopes: [], connectors: [] },
+    };
+    const prisma = {
+      run: { findMany: vi.fn(async () => (includeCoordinator ? [worker, coordinator] : [worker])) },
+      delegation: { findMany: vi.fn(async () => [lineage]) },
+    } as unknown as PrismaClient;
+    const rows = await listSpaceRuns(
+      prisma,
+      { userId: "owner", spaceId: "space" } as Actor,
+      "active",
+    );
+    const trees = rows.filter((row) => row.delegations?.length);
+    expect(trees).toHaveLength(1);
+    expect(trees[0]).toMatchObject({
+      runId: includeCoordinator ? "coordinator-run" : "worker-run",
+      rootTaskId: "root",
+      delegations: [{ id: "handoff" }],
+    });
+  },
+);

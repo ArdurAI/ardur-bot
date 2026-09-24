@@ -7,7 +7,11 @@ import { describe, expect, it, vi } from "vitest";
 import { approvalPausedToolResult } from "./approval-effect.js";
 import { createCommandRecording } from "./command-recording.js";
 
-function fixture(output: ProcessEvent[] = [{ type: "exit", code: 7 }], secrets: string[] = []) {
+function fixture(
+  output: ProcessEvent[] = [{ type: "exit", code: 7 }],
+  secrets: string[] = [],
+  resolveCwd?: (requested: string | undefined, executionId: string) => string | undefined,
+) {
   const events: AppendEventInput[] = [];
   const order: string[] = [];
   const abort = new AbortController();
@@ -16,7 +20,7 @@ function fixture(output: ProcessEvent[] = [{ type: "exit", code: 7 }], secrets: 
     order.push(event.type);
   });
   const sandbox = {
-    resolveCommandCwd: async () => "/workspace/project",
+    resolveCommandCwd: vi.fn(async () => "/workspace/project"),
     execute: vi.fn(async function* () {
       order.push("execute");
       yield* output;
@@ -45,6 +49,7 @@ function fixture(output: ProcessEvent[] = [{ type: "exit", code: 7 }], secrets: 
     threadId: "thread-1",
     attemptId: "attempt-1",
     secrets,
+    resolveCwd,
   });
   const execute = () =>
     recording.execute("execution-1", ["bash", "-c", "pnpm test"], "project", {});
@@ -184,4 +189,16 @@ describe("command recording boundary", () => {
     expect(cancelled.blocks()[0]?.outcome).toBe("cancelled");
     expect(cancelled.sandbox.execute).not.toHaveBeenCalled();
   });
+});
+
+it("records the task-owned working directory selected for a helper execution", async () => {
+  const resolveCwd = vi.fn(() => "tasks/root/helper/project");
+  const f = fixture(undefined, [], resolveCwd);
+  await f.invoke();
+  expect(resolveCwd).toHaveBeenCalledWith("project", "execution-1");
+  expect(f.sandbox.resolveCommandCwd).toHaveBeenCalledWith(
+    expect.anything(),
+    "tasks/root/helper/project",
+    expect.anything(),
+  );
 });

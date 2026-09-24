@@ -8,6 +8,7 @@ it("shows the pin and directs recovery to its provider and failed bot", () => {
     modelId: "grok-4.6",
     effort: "high",
     credentialId: "deleted",
+    runtimeKind: "pi" as const,
     revision: 1,
   };
   const problem = runtimePinProblem(pin, "pin-credential-missing", "Missing connection");
@@ -17,5 +18,24 @@ it("shows the pin and directs recovery to its provider and failed bot", () => {
   expect(runtimePinRecovery(problem, "failed-group-member")).toEqual({
     connect: { pathname: "/models", params: { provider: "xai" } },
     changePin: { pathname: "/bot-settings", params: { botId: "failed-group-member" } },
+  });
+});
+
+it("routes native sign-in recovery to the failed bot runtime settings", () => {
+  const problem = runtimePinProblem(
+    {
+      runtimeKind: "codex-app-server",
+      provider: "openai-codex",
+      modelId: "model",
+      effort: "high",
+      credentialId: "native:codex-app-server",
+      revision: 1,
+    },
+    "runtime-unavailable",
+    "Codex app-server unavailable",
+  );
+  expect(runtimePinRecovery(problem, "bot").connect).toEqual({
+    pathname: "/bot-settings",
+    params: { botId: "bot" },
   });
 });
