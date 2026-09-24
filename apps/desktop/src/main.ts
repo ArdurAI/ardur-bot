@@ -22,6 +22,7 @@ import {
 } from "./auto-update.js";
 import { openBrowserAuth } from "./browser-auth.js";
 import { cliVersion } from "./cli.js";
+import { installDevices } from "./devices-ipc.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
 import { installHostService } from "./host-service-ipc.js";
 import { requestLocalSettings } from "./local-settings.js";
@@ -1160,37 +1161,12 @@ app.whenReady().then(async () => {
       );
     },
   );
-  const devicesWindowAllowed = (event: Electron.IpcMainInvokeEvent) =>
-    mainWindow !== null &&
-    windowFrom(event) === mainWindow &&
-    event.senderFrame === event.sender.mainFrame &&
-    currentSetup?.mode === "new" &&
-    currentTargetUrl !== null &&
-    new URL(event.senderFrame.url).origin === new URL(currentTargetUrl).origin;
-  ipcMain.handle("desktop.devices.state", (event) =>
-    devicesWindowAllowed(event) ? remoteListener.state() : { enabled: false, hints: [] },
-  );
-  ipcMain.handle("desktop.devices.setEnabled", async (event, enabled: unknown) => {
-    if (!devicesWindowAllowed(event) || typeof enabled !== "boolean")
-      throw new Error("Open Devices on your Mac.");
-    if (!enabled) return remoteListener.stop();
-    const target = new URL(localStack.webUrl()).origin;
-    const token = await readStackToken(stackDir(app.getPath("userData")));
-    if (!token || !(await localStack.matchesDesiredStack()))
-      throw new Error("Start your home before pairing a phone.");
-    const response = await net.fetch(`${target}/local/device-listener`, {
-      method: "POST",
-      headers: { "x-ardurbot-desktop-stack-token": token },
-      redirect: "error",
-      bypassCustomProtocolHandlers: true,
-    });
-    if (!response.ok) throw new Error("Update your home before pairing a phone.");
-    const material = (await response.json()) as {
-      certificate: string;
-      privateKey: string;
-      certificateFingerprint: string;
-    };
-    return remoteListener.start({ target, ...material });
+  installDevices({
+    window: () => mainWindow,
+    target: () => currentTargetUrl,
+    mode: () => currentSetup?.mode,
+    stack: localStack,
+    listener: remoteListener,
   });
   ipcMain.handle("desktop.platform", () => process.platform);
   ipcMain.handle("desktop.memoryFolders.available", (event) =>

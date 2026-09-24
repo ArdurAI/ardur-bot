@@ -105,7 +105,7 @@ describe("Ollama run pins", () => {
       kind: "problem",
       code: "pin-model-unknown",
       pin: f.pin,
-      actions: ["connect", "change-pin"],
+      actions: ["change-pin"],
     });
     expect(
       http.fetch.mock.calls.every(([url]) => new URL(String(url)).hostname === "127.0.0.1"),

@@ -694,6 +694,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Revision and observations": "修订版本与观察记录",
   "Run now": "立即运行",
   "Runs on": "运行于",
+  Available: "可用",
+  "Signed in": "已登录",
   "Runtime availability could not be checked.": "无法检查运行时是否可用。",
   "Saved locally. GitHub sync failed.": "已保存在本地。GitHub 同步失败。",
   "Saved locally. Indexing failed.": "已保存在本地。索引失败。",

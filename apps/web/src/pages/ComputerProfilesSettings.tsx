@@ -41,7 +41,7 @@ export function ComputerProfilesSettings() {
   }
   useEffect(() => {
     void refresh().catch(() => setError(t`Computers are unavailable; reconnect and try again.`));
-  }, [t]);
+  }, []);
   return (
     <div className="space-y-4" data-testid="computer-profiles-settings">
       {error ? (
@@ -82,22 +82,35 @@ export function ComputerProfile({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const connection = connections.find((entry) => entry.id === connectionId);
+  const [engineError, setEngineError] = useState("");
+  const [engineRefresh, setEngineRefresh] = useState(0);
   const [detectedEngine, setDetectedEngine] = useState<{
     connectionId: string;
     name: string;
   } | null>(null);
   useEffect(() => {
     let active = true;
+    setEngineError("");
     void rpc.computer
       .engine({ connectionId: connectionId || null })
       .then((engine) => {
         if (active) setDetectedEngine({ connectionId, name: engine.name });
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (active)
+          setEngineError(
+            error instanceof Error &&
+              /^(Docker|Podman) is not running or not reachable at [^\r\n]+\. Start (Docker Desktop|Podman) and try again\.$/.test(
+                error.message,
+              )
+              ? error.message
+              : t`Computer engine is unavailable.`,
+          );
+      });
     return () => {
       active = false;
     };
-  }, [connectionId]);
+  }, [connectionId, engineRefresh]);
   const engine =
     detectedEngine?.connectionId === connectionId
       ? detectedEngine.name
@@ -136,6 +149,14 @@ export function ComputerProfile({
                 : engine}
         </Trans>
       </p>
+      {engineError ? (
+        <div role="alert" className="text-sm text-destructive">
+          <p>{engineError}</p>
+          <Button variant="outline" onClick={() => setEngineRefresh((value) => value + 1)}>
+            <Trans>Retry</Trans>
+          </Button>
+        </div>
+      ) : null}
       <label htmlFor={`connection-${botId}`} className="block space-y-1">
         <span>
           <Trans>Connection</Trans>

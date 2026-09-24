@@ -8,6 +8,8 @@ vi.mock("dockerode", () => ({
       created.push(options.socketPath);
     }
     async version() {
+      if (this.options.socketPath?.includes("stopped"))
+        throw Object.assign(new Error("connect failed"), { code: "ECONNREFUSED" });
       await Promise.resolve();
       return {
         Components: [
@@ -54,3 +56,22 @@ describe("engine connection routing", () => {
     expect(created.length).toBe(before);
   });
 });
+
+it.each(["docker", "podman"])(
+  "reports a stopped %s socket as a bounded, typed failure",
+  async (engine) => {
+    const response = await supervisorApp.request("/computers/engine", {
+      headers: {
+        authorization: `Bearer ${resolveSupervisorToken(process.env)}`,
+        "x-ardurbot-engine-socket": "/fixture/stopped.sock",
+        "x-ardurbot-engine": engine,
+      },
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "engine-unavailable",
+      engine,
+      socket: "/fixture/stopped.sock",
+    });
+  },
+);

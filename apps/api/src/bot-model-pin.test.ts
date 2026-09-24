@@ -209,3 +209,18 @@ describe("bot pin editing", () => {
     ).toMatchObject({ modelProvider: null, modelId: null, modelCredentialId: null });
   });
 });
+
+it("refuses an explicitly selected hosted credential for a native pin", async () => {
+  const f = fixture();
+  await expect(
+    botModelPinUpdate(f.deps, actor, existing, {
+      botId: "bot",
+      runtimeKind: "codex-app-server",
+      modelProvider: "openai-codex",
+      modelId: "gpt-6-astra",
+      thinkingLevel: "xhigh",
+      modelCredentialId: "hosted-connection",
+    }),
+  ).rejects.toThrow("Native runtimes use their own sign-in.");
+  expect(f.findFirst).not.toHaveBeenCalled();
+});

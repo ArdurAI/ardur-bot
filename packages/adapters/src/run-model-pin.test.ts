@@ -268,3 +268,69 @@ it.each(["low", "medium", "high", "xhigh", "max"])(
     expect(result).not.toHaveProperty("oauth");
   },
 );
+
+it.each(["claude-code", "codex-app-server"] as const)(
+  "never loads an inherited hosted credential for a %s pin",
+  async (runtimeKind) => {
+    const f = fixture();
+    const provider = runtimeKind === "codex-app-server" ? "openai-codex" : "anthropic";
+    const native = {
+      ...pin,
+      runtimeKind,
+      provider,
+      modelId: "gpt-6-astra",
+      effort: "xhigh",
+      credentialId: `native:${runtimeKind}`,
+    };
+    f.findPreference.mockResolvedValue({
+      credential: { ...credential, provider },
+      modelId: native.modelId,
+      isDefault: true,
+    });
+    f.loadKey.mockResolvedValue({
+      provider,
+      id: native.modelId,
+      apiKey: "test-inherited-key",
+      oauth: {
+        credential: { type: "oauth", access: "test-access", refresh: "test-refresh", expires: 0 },
+      },
+    });
+    for (const snapshot of [native, undefined]) {
+      const result = await resolveRunModelPin({
+        ...f,
+        snapshot,
+        bot: {
+          runtimeKind,
+          modelProvider: provider,
+          modelId: native.modelId,
+          thinkingLevel: "xhigh",
+          modelCredentialId: native.credentialId,
+          modelPinRevision: native.revision,
+        },
+      });
+      expect(result).toEqual({
+        kind: "resolved",
+        pin: native,
+        runtimePin: native,
+        provider,
+        id: native.modelId,
+        thinkingLevel: "xhigh",
+      });
+    }
+    expect(f.findPreference).not.toHaveBeenCalled();
+    expect(f.findCredential).not.toHaveBeenCalled();
+    expect(f.loadKey).not.toHaveBeenCalled();
+    expect(
+      await resolveRunModelPin({
+        ...f,
+        snapshot: { ...native, credentialId: "explicit-hosted-connection" },
+        bot: {},
+      }),
+    ).toMatchObject({
+      kind: "problem",
+      code: "runtime-unavailable",
+      reason:
+        "Native runtimes use their own sign-in. Remove the pinned connection or change the runtime.",
+    });
+  },
+);

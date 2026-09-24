@@ -16,7 +16,11 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
-import { profileCommandError } from "@ardurbot/contracts";
+import {
+  ComputerEngineUnavailableError,
+  ComputerEngineUnavailableSchema,
+  profileCommandError,
+} from "@ardurbot/contracts";
 import { boundedSandboxCommandTimeoutMs, resolveSupervisorToken } from "@ardurbot/core";
 import { outgoingCorrelationHeaders } from "@ardurbot/logging";
 import {
@@ -155,7 +159,18 @@ export class DockerSandboxProvider implements SandboxProvider {
       headers: this.headers(context),
       signal: context.signal,
     });
-    if (!res.ok) throw new Error("Computer engine is unavailable.");
+    if (!res.ok) {
+      const body = await safeBody(res, context.signal);
+      let failure: unknown;
+      try {
+        failure = JSON.parse(body);
+      } catch {
+        /* Only structured engine failures are safe to show. */
+      }
+      const parsed = ComputerEngineUnavailableSchema.safeParse(failure);
+      if (parsed.success) throw new ComputerEngineUnavailableError(parsed.data);
+      throw new Error("Computer engine is unavailable.");
+    }
     return readSandboxJson<{ name: "docker" | "podman"; rootless: boolean }>(res, context.signal);
   }
 

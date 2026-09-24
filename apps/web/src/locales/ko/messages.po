@@ -722,6 +722,10 @@ msgstr ""
 msgid "Automated senders will appear after they post here."
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Available"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr "루틴을 저장한 후 사용할 수 있습니다"
@@ -1227,6 +1231,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Computer"
 msgstr "컴퓨터"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Computer engine is unavailable."
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Computer failed to boot"
@@ -3914,6 +3922,10 @@ msgstr ""
 msgid "Personal credential"
 msgstr "내 인증 정보"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "pin"
 msgstr ""
@@ -4383,6 +4395,10 @@ msgstr ""
 msgid "Responsible human"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Restart the desktop app to update it."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Restart to update"
 msgstr ""
@@ -4400,6 +4416,7 @@ msgstr "마지막으로 저장된 작업 공간을 복원합니다. 컴퓨터에
 msgid "Restoring your workspace"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -4896,6 +4913,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
+msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Signed in"
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx

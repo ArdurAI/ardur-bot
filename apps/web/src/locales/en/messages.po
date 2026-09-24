@@ -722,6 +722,10 @@ msgstr "Automated senders"
 msgid "Automated senders will appear after they post here."
 msgstr "Automated senders will appear after they post here."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Available"
+msgstr "Available"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr "Available after the routine is saved"
@@ -1227,6 +1231,10 @@ msgstr "Completion not recorded"
 #: src/pages/TeamBoard.tsx
 msgid "Computer"
 msgstr "Computer"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Computer engine is unavailable."
+msgstr "Computer engine is unavailable."
 
 #: src/pages/Shell.tsx
 msgid "Computer failed to boot"
@@ -3914,6 +3922,10 @@ msgstr "Personal"
 msgid "Personal credential"
 msgstr "Personal credential"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
+msgstr "Phone pairing needs a home run by this app. Set up This computer to use it."
+
 #: src/pages/LearningObservation.tsx
 msgid "pin"
 msgstr "pin"
@@ -4383,6 +4395,10 @@ msgstr "Resources"
 msgid "Responsible human"
 msgstr "Responsible human"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Restart the desktop app to update it."
+msgstr "Restart the desktop app to update it."
+
 #: src/components/DesktopUpdates.tsx
 msgid "Restart to update"
 msgstr "Restart to update"
@@ -4400,6 +4416,7 @@ msgstr "Restore the last saved workspace. Unsaved work on the computer is lost."
 msgid "Restoring your workspace"
 msgstr "Restoring your workspace"
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -4897,6 +4914,10 @@ msgstr "Sign-in expired. Connect Codex again."
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr "Sign-in needs a pre-registered app; use a fine-grained token instead."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Signed in"
+msgstr "Signed in"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Skills"
