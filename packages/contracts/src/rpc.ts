@@ -225,6 +225,12 @@ export const appContract = {
   preferences: {
     update: oc.input(z.object({ avatarStyle: AvatarStyleSchema })).output(MeSchema),
   },
+  system: {
+    dispatch: oc.output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+    setDispatch: oc
+      .input(z.object({ enabled: z.boolean() }))
+      .output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+  },
   spaces: {
     list: oc.output(SpaceNavigationSchema),
     create: oc.input(z.object({ name: z.string().trim().min(1).max(60) })).output(SpaceSchema),

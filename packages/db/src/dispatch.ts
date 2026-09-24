@@ -16,6 +16,23 @@ import type { ChannelDispatchOrigin } from "./messaging-routes.js";
 import { answerChannelQuestion, enqueueChat } from "./messaging-routes.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
+export const DISPATCH_POLICY_LAYER = "desktop-dispatch";
+export const DISPATCH_OFF_MESSAGE = "Dispatch is off on this computer";
+
+/** A separate policy preserves every independent space, user and device restriction. */
+export async function dispatchEnabled(tx: Prisma.TransactionClient, spaceId: string) {
+  const policies = await tx.remoteAuthorityPolicy.findMany({
+    where: { layer: DISPATCH_POLICY_LAYER, subjectId: spaceId },
+  });
+  return !policies.some(
+    (policy) => policy.layer === DISPATCH_POLICY_LAYER && !policy.scopes.includes("dispatch"),
+  );
+}
+
+export async function requireDispatchEnabled(tx: Prisma.TransactionClient, spaceId: string) {
+  if (!(await dispatchEnabled(tx, spaceId))) throw new DeviceRequestError(DISPATCH_OFF_MESSAGE);
+}
+
 const ACTIVE = ["running", "queued", "leased", "waiting_input", "waiting_takeover"];
 export function dispatchState(run: {
   status: string;
@@ -46,6 +63,7 @@ export async function loadRemoteAuthority(
       where: {
         OR: [
           { layer: "space", subjectId: grant.spaceId },
+          { layer: DISPATCH_POLICY_LAYER, subjectId: grant.spaceId },
           { layer: "bot", subjectId: botId },
           { layer: "user", subjectId: grant.userId },
         ],
@@ -56,7 +74,15 @@ export async function loadRemoteAuthority(
     policies.find((policy) => policy.layer === name)?.scopes ?? [...ALL_DEVICE_SCOPES];
   return {
     home: home?.instanceId === grant.instanceId ? home.scopes : [],
-    space: member ? layer("space") : [],
+    space: member
+      ? layer("space").filter(
+          (scope) =>
+            !policies.some(
+              (policy) =>
+                policy.layer === DISPATCH_POLICY_LAYER && !policy.scopes.includes("dispatch"),
+            ) || !["dispatch", "steer", "approve", "consequential"].includes(scope),
+        )
+      : [],
     bot: bot ? layer("bot") : [],
     user: member ? layer("user") : [],
     device: grant.revokedAt
@@ -96,6 +122,7 @@ export async function admitDispatch(
   );
   return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
+      await requireDispatchEnabled(tx, grant.spaceId);
       // Serializes admission and revocation, including a retry whose routing default has changed.
       await tx.$queryRaw`SELECT id FROM device_grants WHERE id = ${grant.id} FOR UPDATE`;
       const liveGrant = await tx.deviceGrant.findFirst({

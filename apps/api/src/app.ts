@@ -106,6 +106,7 @@ import { mountRemoteDevices } from "./remote-devices.js";
 import { mountApiRequestBodyLimits } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
 import { mountScreenTarget } from "./screen-proxy.js";
+import { mountSystemRoutines } from "./system/routines.js";
 import { isDeferredReservationLost, TeamChatBridge } from "./team-chat-bridge.js";
 import { ModelTeamChatEngagementJudge } from "./team-chat-judge.js";
 import {
@@ -549,6 +550,7 @@ export async function createApp(
     }
     return auth.handler(c.req.raw);
   });
+  mountSystemRoutines(app, prisma, env.desktopStackToken);
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
   app.post("/local/device-listener", async (c) => {
     c.header("cache-control", "no-store");

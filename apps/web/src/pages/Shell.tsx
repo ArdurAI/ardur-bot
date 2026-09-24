@@ -243,6 +243,7 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { SidebarSettings } from "./shell/sidebar-settings";
+import { SystemDictation } from "./system/SystemDictation";
 import { TeamBoard } from "./TeamBoard";
 import { WindowChrome } from "./WindowChrome";
 
@@ -5271,6 +5272,7 @@ const Composer = memo(function Composer({
         draggingFiles ? "rounded-[14px] ring-2 ring-inset ring-ring" : ""
       }`}
     >
+      <SystemDictation textarea={textareaRef} setDraft={setDraft} />
       {sendError || runError ? (
         <div
           ref={runErrorRef}

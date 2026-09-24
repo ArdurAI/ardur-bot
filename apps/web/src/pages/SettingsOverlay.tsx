@@ -13,7 +13,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { IntegrationCatalog } from "../components/integrations/catalog/IntegrationCatalog";
 import {
   ComputerSettingsPanel,
@@ -26,9 +26,12 @@ import { LearningBadge } from "./LearningInbox";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
 import { ModelDestinations } from "./ModelDestinations";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
+import { systemBridge } from "./system/bridge";
+import SystemSettings from "./system/SystemPage";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
 
 export type SettingsSection =
+  | "system"
   | "devices"
   | "integrations"
   | "general"
@@ -40,6 +43,8 @@ export type SettingsSection =
   | "updates";
 
 type NavItem = {
+  group?: string;
+  component?: ComponentType;
   id: SettingsSection;
   label: string;
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -106,8 +111,20 @@ export function SettingsOverlay({
     { id: "usage", label: t`Usage`, icon: Gauge },
     ...(showComputer ? [{ id: "computer" as const, label: t`Computers`, icon: Monitor }] : []),
     { id: "updates", label: t`Updates`, icon: CloudDownload },
+    ...(systemBridge()
+      ? [
+          {
+            id: "system" as const,
+            group: t`Desktop app`,
+            label: t`System`,
+            icon: Monitor,
+            component: SystemSettings,
+          },
+        ]
+      : []),
   ];
 
+  const SectionComponent = navItems.find((item) => item.id === section)?.component;
   const sectionTitle =
     navItems.find((item) => item.id === section)?.label ??
     (section === "general" ? t`General` : t`Settings`);
@@ -172,25 +189,29 @@ export function SettingsOverlay({
               const Icon = item.icon;
               const active = item.id === section;
               return (
-                <button
-                  key={item.id}
-                  type="button"
-                  data-testid={`settings-nav-${item.id}`}
-                  aria-current={active ? "page" : undefined}
-                  disabled={panelBusy}
-                  onClick={() => setSection(item.id)}
-                  className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-[13.5px] transition-colors disabled:pointer-events-none disabled:opacity-50 ${
-                    active
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="size-4 shrink-0" strokeWidth={1.75} />
-                  <span className="whitespace-nowrap">
-                    {item.label}
-                    {item.id === "memory" ? <LearningBadge /> : null}
-                  </span>
-                </button>
+                <Fragment key={item.id}>
+                  {item.group ? (
+                    <span className="px-2.5 pt-3 text-xs text-muted-foreground">{item.group}</span>
+                  ) : null}
+                  <button
+                    type="button"
+                    data-testid={`settings-nav-${item.id}`}
+                    aria-current={active ? "page" : undefined}
+                    disabled={panelBusy}
+                    onClick={() => setSection(item.id)}
+                    className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-[13.5px] transition-colors disabled:pointer-events-none disabled:opacity-50 ${
+                      active
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+                    <span className="whitespace-nowrap">
+                      {item.label}
+                      {item.id === "memory" ? <LearningBadge /> : null}
+                    </span>
+                  </button>
+                </Fragment>
               );
             })}
           </nav>
@@ -216,6 +237,7 @@ export function SettingsOverlay({
                   : "rk-scroll overflow-y-auto overscroll-contain px-6 pb-6 pt-5 sm:px-8 sm:pb-8"
               }`}
             >
+              {SectionComponent ? <SectionComponent /> : null}
               {section === "devices" ? <DevicesSettings owner={isDeploymentOwner} /> : null}
               {section === "integrations" ? <IntegrationCatalog /> : null}
               {section === "general" ? (

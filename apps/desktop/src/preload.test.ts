@@ -38,6 +38,7 @@ describe("desktop preload bridge", () => {
       "memoryFolders",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
@@ -95,6 +96,7 @@ describe("desktop preload bridge", () => {
       "memoryFolders",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
