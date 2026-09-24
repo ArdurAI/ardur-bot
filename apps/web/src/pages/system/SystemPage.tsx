@@ -110,7 +110,10 @@ export function SystemPage({ bridge = systemBridge() }: { bridge?: SystemBridge 
       setBusy(false);
     }
   }
-  if (!bridge) return null;
+  if (!bridge)
+    return (
+      <p className="text-sm text-muted-foreground">{t`Restart the desktop app to update it.`}</p>
+    );
   if (!state) return <div role="status">{error ?? t`Loading system settings…`}</div>;
   const toggle = (key: keyof SystemPreferences, label: string, description: string) => (
     <Row id={`system-${key}`} label={label} description={description} key={key}>

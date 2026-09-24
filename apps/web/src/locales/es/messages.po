@@ -4694,6 +4694,7 @@ msgid "Responsible human"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
+#: src/pages/system/SystemPage.tsx
 msgid "Restart the desktop app to update it."
 msgstr ""
 
