@@ -101,6 +101,8 @@ services:
 
   api:
     image: ${ARDURBOT_IMAGE:-ghcr.io/ardurai/ardur-bot/app}:${ARDURBOT_IMAGE_TAG:-edge}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     command:
       - bash
@@ -116,6 +118,7 @@ services:
     env_file:
       - .env
     environment:
+      ARDURBOT_DEPLOYMENT_KIND: packaged
       NODE_ENV: production
       API_HOST: "0.0.0.0"
       ARDURBOT_HOST_BRIDGE: api
@@ -168,6 +171,8 @@ services:
 
   worker:
     image: ${ARDURBOT_IMAGE:-ghcr.io/ardurai/ardur-bot/app}:${ARDURBOT_IMAGE_TAG:-edge}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     command: ["pnpm", "--filter", "@ardurbot/worker", "start"]
     init: true
@@ -180,6 +185,7 @@ services:
     env_file:
       - .env
     environment:
+      ARDURBOT_DEPLOYMENT_KIND: packaged
       ARDURBOT_HOST_BRIDGE: api
       API_INTERNAL_URL: http://api:3100
       BETTER_AUTH_SECRET: ""

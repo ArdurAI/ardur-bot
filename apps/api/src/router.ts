@@ -64,12 +64,16 @@ import {
   NATIVE_HOST_OWNER_MESSAGE,
   nativeHostOwner,
   nativeRuntimeAvailability,
+  ollamaCatalog,
+  ollamaCatalogPlaceholder,
+  ollamaErrorMessage,
   pickReusableConnection,
   planLiveConnectionSync,
   prepareApiInstall,
   prepareGraphqlInstall,
   probeOpenAiCompatibleModels,
   provisionComputer,
+  pullOllamaModel,
   queueComputerUpdate,
   releaseComputerExecutionLease,
   replaceComputer,
@@ -183,6 +187,7 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
+import { ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
   chooseFocus,
   dismissFocus,
@@ -477,6 +482,8 @@ export interface RouterDeps {
   /** Present when the external messaging surface is enabled. */
   messaging?: { enabled: boolean; providers: string[]; openSignup: boolean };
   env: {
+    deploymentKind?: "source" | "packaged";
+    desktopStackToken?: string;
     agentRuntime: string;
     teamChatJudgeProvider?: string;
     teamChatJudgeModel?: string;
@@ -938,7 +945,34 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     models: {
-      list: authed.models.list.handler(async () => [...listPiCatalog(), scriptedCatalogEntry]),
+      list: authed.models.list.handler(async ({ context }) => {
+        const state = await ollamaStatus(deps, context.actor, context.signal);
+        return [
+          ...listPiCatalog(),
+          scriptedCatalogEntry,
+          ollamaCatalogPlaceholder,
+          ...ollamaCatalog(state.models, state.credentialId ?? ""),
+        ];
+      }),
+      ollama: authed.models.ollama.handler(({ context }) =>
+        ollamaStatus(deps, context.actor, context.signal),
+      ),
+      testOllama: authed.models.testOllama.handler(({ context, input }) =>
+        ollamaStatus(deps, context.actor, context.signal, input.baseUrl),
+      ),
+      pullOllama: authed.models.pullOllama.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        const connection = await ollamaConnection(deps, context.actor);
+        if (!connection) throw new ORPCError("BAD_REQUEST", { message: "Connect Ollama first." });
+        return (async function* () {
+          try {
+            yield* pullOllamaModel(connection.baseUrl, input.model, context.signal);
+          } catch (error) {
+            if (context.signal?.aborted) return;
+            throw new ORPCError("BAD_REQUEST", { message: ollamaErrorMessage(error) });
+          }
+        })();
+      }),
       credentials: authed.models.credentials.handler(async ({ context }) => {
         const rows = await deps.prisma.userModelCredential.findMany({
           where: { userId: context.actor.userId },
@@ -950,7 +984,10 @@ export function createRouter(deps: RouterDeps) {
           orderBy: newestModelCredentialOrder,
         });
         const compatibleRows = rows.filter(
-          (row) => row.provider === OPENAI_COMPATIBLE_PROVIDER_ID || row.provider === "anthropic",
+          (row) =>
+            row.provider === OPENAI_COMPATIBLE_PROVIDER_ID ||
+            row.provider === "anthropic" ||
+            row.provider === "ollama",
         );
         const secrets = compatibleRows.length
           ? await deps.prisma.secret.findMany({
@@ -1016,6 +1053,15 @@ export function createRouter(deps: RouterDeps) {
           throw new ORPCError("BAD_REQUEST", {
             message: error instanceof Error ? error.message : "Invalid model connection",
           });
+        }
+        if (input.provider === "ollama") {
+          const result = await ollamaStatus(deps, context.actor, context.signal, input.baseUrl);
+          if (result.issue) throw new ORPCError("BAD_REQUEST", { message: result.issue });
+          if (input.modelId && !result.models.some((model) => model.id === input.modelId))
+            throw new ORPCError("BAD_REQUEST", {
+              message: "This Ollama model is not installed. Change pin.",
+            });
+          input.modelId = input.modelId ?? result.models[0]?.id;
         }
         return persistModelCredential(deps, context.actor, {
           provider: input.provider,
@@ -1097,6 +1143,13 @@ export function createRouter(deps: RouterDeps) {
         return { ok: true as const };
       }),
       setDefault: authed.models.setDefault.handler(async ({ context, input }) => {
+        if (input.provider === "ollama") {
+          const state = await ollamaStatus(deps, context.actor, context.signal);
+          if (state.issue || !state.models.some((model) => model.id === input.modelId))
+            throw new ORPCError("BAD_REQUEST", {
+              message: state.issue ?? "This Ollama model is not installed. Change pin.",
+            });
+        }
         await withSerializableRetry(() =>
           deps.prisma.$transaction(
             async (tx) => {
@@ -5246,8 +5299,9 @@ async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
       setup.credential?.provider ??
       setup.settings?.defaultModelProvider ??
       deps.env.defaultProvider,
-    defaultModel:
-      setup.credential?.defaultModel ?? setup.settings?.defaultModelId ?? deps.env.defaultModel,
+    defaultModel: setup.credential
+      ? setup.credential.defaultModel
+      : (setup.settings?.defaultModelId ?? deps.env.defaultModel),
     computerHost: computerHostFor(setup.settings?.computerHost, deps.env.sandboxProvider),
     canChooseHostComputer: actor.isDeploymentOwner && deps.env.sandboxProvider === "docker",
     sandboxProvider: deps.env.sandboxProvider,
@@ -5264,7 +5318,11 @@ async function modelSetup(deps: RouterDeps, actor: Actor) {
   return {
     credential,
     settings,
-    needsModel: deps.env.agentRuntime !== "scripted" && !credential && !hasDeployment,
+    needsModel:
+      deps.env.agentRuntime !== "scripted" &&
+      (credential?.provider === "ollama"
+        ? !credential.defaultModel
+        : !credential && !hasDeployment),
   };
 }
 
@@ -5520,11 +5578,23 @@ async function persistModelCredential(
             });
         throwIfAborted(input.signal);
         const requestedModel = usableModelId(input.modelId);
-        const defaultModel =
-          requestedModel ??
-          defaultCatalogModelId(input.provider) ??
-          usableModelId(deps.env.defaultModel);
-        await selectSpaceModelPreference(tx, actor, credential.id, defaultModel);
+        let defaultModel =
+          input.provider === "ollama"
+            ? requestedModel
+            : (requestedModel ??
+              defaultCatalogModelId(input.provider) ??
+              usableModelId(deps.env.defaultModel));
+        let isDefault = true;
+        if (input.provider === "ollama" && !requestedModel) {
+          // A pull-ready connection must not replace a working space selection.
+          const preference = await tx.spaceModelPreference.findFirst({
+            where: { spaceId: actor.spaceId, userId: actor.userId, credentialId: credential.id },
+          });
+          defaultModel = preference?.modelId ?? null;
+          isDefault = preference?.isDefault ?? false;
+        } else {
+          await selectSpaceModelPreference(tx, actor, credential.id, defaultModel);
+        }
         throwIfAborted(input.signal);
         if (existing) {
           await deleteUnreferencedCredentialSecret(tx, {
@@ -5534,7 +5604,7 @@ async function persistModelCredential(
           });
           throwIfAborted(input.signal);
         }
-        return { ...credential, isDefault: true, defaultModel };
+        return { ...credential, isDefault, defaultModel };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     ),

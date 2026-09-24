@@ -203,7 +203,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
         throw new Error(
           "Command did not run: directory preparation requires mkdir -p without environment or terminal overrides.",
         );
-      if (process.platform === "win32")
+      if (process.platform === "win32" && !win32NtRelativeAvailable())
         throw new Error("Host file writes require native directory handles on Windows.");
       for (const directory of request.argv.slice(2)) {
         const relative = normalizeDesktopWorkspacePath(directory);
@@ -327,7 +327,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
   }
 
   async writeFile(computer: ComputerRef, file: PortableFile) {
-    if (this.opts.restricted && process.platform === "win32")
+    if (this.opts.restricted && process.platform === "win32" && !win32NtRelativeAvailable())
       throw new Error("Host file writes require native directory handles on Windows.");
     const box = this.requiredBox(computer);
     const target = await localWorkspaceTarget(box.home, file.path, false);

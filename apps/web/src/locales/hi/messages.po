@@ -874,6 +874,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -992,6 +993,7 @@ msgid "Checked"
 msgstr ""
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Checking…"
 msgstr ""
@@ -1481,6 +1483,10 @@ msgstr ""
 msgid "Could not complete authorization. Try connecting again."
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
+msgid "Could not complete the request."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr ""
@@ -1635,6 +1641,10 @@ msgstr "मॉडल सेटिंग्स लोड नहीं हो स�
 
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Could not load Ollama."
 msgstr ""
 
 #: src/components/integrations/catalog/McpToolReview.tsx
@@ -2286,6 +2296,10 @@ msgstr "पहले संपादित करें"
 msgid "Effort"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Effort: not applicable"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Email"
 msgstr "ईमेल"
@@ -2648,6 +2662,10 @@ msgstr ""
 msgid "Host service:"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Hosted providers"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
 msgstr "घंटा"
@@ -2727,6 +2745,10 @@ msgstr "इनपुट"
 
 #: src/pages/TeamBoard.tsx
 msgid "Inputs and boundaries"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Installed models"
 msgstr ""
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -2968,6 +2990,7 @@ msgid "Loading…"
 msgstr "लोड हो रहा है…"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Local"
 msgstr "लोकल"
 
@@ -3202,6 +3225,10 @@ msgstr ""
 msgid "Model id"
 msgstr "मॉडल आईडी"
 
+#: src/components/OllamaSettings.tsx
+msgid "Model name"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model options"
 msgstr "मॉडल विकल्प"
@@ -3416,6 +3443,10 @@ msgstr "{peerBotName} के साथ अभी कोई संदेश न�
 msgid "No model catalog is available."
 msgstr "कोई मॉडल कैटलॉग उपलब्ध नहीं है।"
 
+#: src/components/OllamaSettings.tsx
+msgid "No models installed. Pull one to start."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "कोई प्रोवाइडर नहीं मिला।"
@@ -3551,8 +3582,20 @@ msgstr ""
 msgid "Obsidian vault"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Off"
+msgstr ""
+
 #: src/lib/thinking-level-options.ts
 msgid "off — no extra thinking"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Ollama server URL"
+msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+msgid "On"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -3847,6 +3890,14 @@ msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Publish directly"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Pull"
+msgstr ""
+
+#: src/components/OllamaSettings.tsx
+msgid "Pull model"
 msgstr ""
 
 #: src/components/CloudAgentCard.tsx
@@ -4360,6 +4411,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
@@ -4559,6 +4611,7 @@ msgid "Server name"
 msgstr "सर्वर का नाम"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/components/OllamaSettings.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -4911,6 +4964,7 @@ msgstr ""
 msgid "Terminal is not available on this computer"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
 msgstr "टेस्ट करें"
@@ -5234,6 +5288,7 @@ msgstr ""
 msgid "Use this location"
 msgstr ""
 
+#: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "यह मॉडल उपयोग करें"
