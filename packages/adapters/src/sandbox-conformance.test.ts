@@ -2,7 +2,9 @@ import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ComputerRef, ProcessEvent, SandboxProvider } from "@ardurbot/adapter-kit";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema, SshSettingsSchema } from "@ardurbot/contracts";
+import { SshSandboxProvider } from "@ardurbot/host-runtime/fleet/ssh-sandbox";
+import { fakeSshTransport } from "@ardurbot/host-runtime/fleet/test-process";
 import { describe, expect, it, vi } from "vitest";
 import { BoxSandboxEmulator } from "./box-emulator.js";
 import { DaytonaSandboxEmulator } from "./daytona-emulator.js";
@@ -63,8 +65,17 @@ describe("sandbox conformance", () => {
   });
 
   it("offers the same observation, action, and workspace contract across providers", async () => {
+    const ssh = await fakeSshTransport();
     const kubernetesApi = new FakeKubernetesApi();
     const providers: SandboxProvider[] = [
+      new SshSandboxProvider(
+        SshSettingsSchema.parse({
+          host: "computer.invalid",
+          user: "runner",
+          baseDirectory: ssh.root,
+        }),
+        ssh.processes,
+      ),
       new KubernetesSandboxProvider(
         kubernetesApi,
         ComputerConnectionSettingsSchema.parse({ engine: "kubernetes" }),
@@ -127,6 +138,7 @@ describe("sandbox conformance", () => {
       await provider.destroy(computer, ctx);
     }
     kubernetesApi.dispose();
+    await ssh.close();
   });
 
   it("desktop executor refuses paths outside the computer home", async () => {

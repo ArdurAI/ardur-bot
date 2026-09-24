@@ -1,3 +1,4 @@
+import type { CapacitySnapshot } from "@ardurbot/contracts";
 import type { TerminalProvider } from "./terminal.js";
 import type {
   AdapterContext,
@@ -82,6 +83,8 @@ import type {
 } from "./types.js";
 
 export interface SandboxProvider {
+  /** Target capacity; older hosted providers may explicitly leave it unreported. */
+  capacity(context: AdapterContext): Promise<CapacitySnapshot>;
   terminal?: TerminalProvider;
   describe(): AdapterDescriptor<SandboxCapabilities>;
   /** Optional live browser on the same leased screen as observe/act. */

@@ -7,6 +7,7 @@ import {
   type MessageBlock,
   MessageBlock as MessageBlockSchema,
   type MessageReaction,
+  RunPlacementSchema,
   type RunStatus,
   RuntimeInfoSchema,
   RuntimePinSchema,
@@ -589,6 +590,7 @@ function mapRun(run: {
   modelProvider: string | null;
   modelId: string | null;
   runtimePin?: unknown;
+  placement?: unknown;
   runtimeInfo?: unknown;
   error: string | null;
   startedAt: Date | null;
@@ -605,6 +607,9 @@ function mapRun(run: {
     routineId: run.routineId ?? null,
     runtimeInfo: RuntimeInfoSchema.safeParse(run.runtimeInfo).data ?? null,
     runtimePin: RuntimePinSchema.safeParse(run.runtimePin).data ?? null,
+    ...(RunPlacementSchema.safeParse(run.placement).success
+      ? { placement: RunPlacementSchema.parse(run.placement) }
+      : {}),
     modelProvider: run.modelProvider,
     modelId: run.modelId,
     // Same display clamp as live run.failed events so a huge stored error cannot bypass it.

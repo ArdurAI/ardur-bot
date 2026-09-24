@@ -1,4 +1,11 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Could not load computers.": "无法加载计算机。",
+  "Memory not reported": "未报告内存",
+  "{amount} GB free": "可用 {amount} GB",
+  "Free memory": "可用内存",
+  Available: "可用",
+  Unavailable: "不可用",
+  Computers: "计算机",
   "What was wrong?": "哪里做得不好？",
   "What was good?": "哪里做得好？",
   "Remove feedback": "移除反馈",

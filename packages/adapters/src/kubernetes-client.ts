@@ -1,3 +1,7 @@
+import type { KubernetesObject } from "@ardurbot/host-runtime/fleet/kubernetes-spec";
+
+export type { KubernetesObject } from "@ardurbot/host-runtime/fleet/kubernetes-spec";
+
 import { readFile } from "node:fs/promises";
 import type { ProcessEvent } from "@ardurbot/adapter-kit";
 import type {
@@ -6,21 +10,12 @@ import type {
   V1PersistentVolumeClaim,
   V1Pod,
 } from "@kubernetes/client-node";
+import type { CapacityMetric, CapacityNode, CapacityPod } from "./fleet/kubernetes-capacity.js";
 import { streamKubernetesExec } from "./kubernetes-exec.js";
 
-export type KubernetesObject = {
-  apiVersion?: string;
-  kind?: string;
-  metadata?: {
-    name?: string;
-    labels?: Record<string, string>;
-    deletionTimestamp?: string;
-    uid?: string;
-  };
-  spec?: Record<string, unknown>;
-  status?: { phase?: string; conditions?: { type?: string; status?: string }[] };
-};
 export interface KubernetesApi {
+  capacity?(): Promise<{ nodes: CapacityNode[]; pods: CapacityPod[]; metrics?: CapacityMetric[] }>;
+  namespaces?(): Promise<string[]>;
   read(
     resource: "pods" | "persistentvolumeclaims",
     name: string,
@@ -123,7 +118,9 @@ export async function createKubernetesApi(
   namespace: string,
   context: string,
 ): Promise<KubernetesApi> {
-  const { CoreV1Api, Exec, createConfiguration } = await import("@kubernetes/client-node");
+  const { CoreV1Api, CustomObjectsApi, Exec, createConfiguration } = await import(
+    "@kubernetes/client-node"
+  );
   const config = await loadConfig(source);
   if (!config.getContexts().some((entry: { name: string }) => entry.name === context))
     throw new Error("The selected Kubernetes context is unavailable.");
@@ -156,6 +153,30 @@ export async function createKubernetesApi(
     }
   }
   return {
+    async capacity() {
+      const signal = AbortSignal.timeout(8000);
+      const [nodes, pods, metrics] = await Promise.all([
+        client.listNode({}, options(signal)),
+        client.listPodForAllNamespaces({}, options(signal)),
+        config
+          .makeApiClient(CustomObjectsApi)
+          .listClusterCustomObject(
+            { group: "metrics.k8s.io", version: "v1beta1", plural: "nodes" },
+            options(signal),
+          )
+          .catch(() => null),
+      ]);
+      return {
+        nodes: nodes.items as CapacityNode[],
+        pods: pods.items as CapacityPod[],
+        metrics: metrics ? (metrics as { items: CapacityMetric[] }).items : undefined,
+      };
+    },
+    async namespaces() {
+      return (await client.listNamespace({}, options(AbortSignal.timeout(8000)))).items.flatMap(
+        (item) => (item.metadata?.name ? [item.metadata.name] : []),
+      );
+    },
     async read(resource, name, signal) {
       try {
         return (await apiCall(signal, async () =>

@@ -16,8 +16,9 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
-import { profileCommandError } from "@ardurbot/contracts";
+import { CapacitySnapshotSchema, profileCommandError, unknownCapacity } from "@ardurbot/contracts";
 import { boundedSandboxCommandTimeoutMs, resolveSupervisorToken } from "@ardurbot/core";
+import { cachedCapacity } from "@ardurbot/host-runtime/fleet/capacity";
 import { outgoingCorrelationHeaders } from "@ardurbot/logging";
 import {
   boundedComputerActions,
@@ -115,6 +116,17 @@ export class DockerSandboxProvider implements SandboxProvider {
     );
   }
 
+  readonly capacity = cachedCapacity(async () => {
+    const result = await this.engineInfo({
+      operationId: "capacity",
+      traceId: "capacity",
+      userId: "capacity",
+      spaceId: "capacity",
+      signal: AbortSignal.timeout(8000),
+    });
+    return result.capacity ? CapacitySnapshotSchema.parse(result.capacity) : unknownCapacity();
+  });
+
   describe() {
     return {
       id: "docker",
@@ -156,7 +168,13 @@ export class DockerSandboxProvider implements SandboxProvider {
       signal: context.signal,
     });
     if (!res.ok) throw new Error("Computer engine is unavailable.");
-    return readSandboxJson<{ name: "docker" | "podman"; rootless: boolean }>(res, context.signal);
+    return readSandboxJson<{
+      name: "docker" | "podman";
+      rootless: boolean;
+      version?: string;
+      os?: string;
+      capacity?: unknown;
+    }>(res, context.signal);
   }
 
   async provision(

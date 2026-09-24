@@ -13,6 +13,7 @@ export const TeamStateSchema = z.enum([
 export const TeamRowSchema = z.object({
   botId: z.string(),
   botName: z.string(),
+  computerName: z.string().nullable().optional(),
   threadId: z.string().nullable(),
   groupId: z.string().nullable().optional(),
   cursor: z.number().int(),

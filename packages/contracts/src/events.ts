@@ -31,6 +31,7 @@ export const ProductEventType = z.enum([
   "run.cancelled",
   "computer.status",
   "computer.takeover.requested",
+  "computer.placement.requested",
   "computer.takeover.granted",
   "computer.takeover.released",
   "memory.revised",

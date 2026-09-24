@@ -212,6 +212,7 @@ import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { CompareStart } from "./CompareStart";
+import { PlacementNotice } from "./fleet/PlacementNotice";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
 import type { RoutineDraftState } from "./RoutineEditor";
@@ -1282,6 +1283,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         if (
           isRunTerminalEvent(event) ||
           event.type === "run.waiting_input" ||
+          event.type === "computer.placement.requested" ||
           event.type === "skill.teaching.stopped"
         ) {
           // waiting_input: reconcile ask cards if a stale post-send refresh raced SSE.
@@ -1376,7 +1378,11 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         ) {
           void refreshBots().catch(() => undefined);
         }
-        if (isRunTerminalEvent(event) || event.type === "run.waiting_input") {
+        if (
+          isRunTerminalEvent(event) ||
+          event.type === "run.waiting_input" ||
+          event.type === "computer.placement.requested"
+        ) {
           // waiting_input: reconcile ask cards if a stale post-send refresh raced SSE.
           void refreshGroupThread(groupId).catch(() => undefined);
         }
@@ -3381,6 +3387,11 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             ) : null}
           </div>
         </div>
+        {bootstrapMe?.isDeploymentOwner
+          ? currentRuns.map((run) => (
+              <PlacementNotice key={run.id} run={run} onOpen={() => openSettings("computer")} />
+            ))
+          : null}
         {!active && !activeGroup && initialBotsLoaded ? (
           <div className="grid flex-1 place-items-center">
             <Button onClick={() => setPanel("create")}>

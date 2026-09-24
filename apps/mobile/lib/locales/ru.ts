@@ -1,4 +1,11 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Could not load computers.": "Не удалось загрузить компьютеры.",
+  "Memory not reported": "Память не указана",
+  "{amount} GB free": "Свободно {amount} ГБ",
+  "Free memory": "Свободная память",
+  Available: "Доступен",
+  Unavailable: "Недоступен",
+  Computers: "Компьютеры",
   "What was wrong?": "Что было не так?",
   "What was good?": "Что было хорошо?",
   "Remove feedback": "Удалить отзыв",

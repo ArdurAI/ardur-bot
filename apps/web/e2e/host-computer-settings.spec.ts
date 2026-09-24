@@ -40,6 +40,7 @@ test("Computers shows host tools, a failed login profile and registered folders"
   await completeOnboarding(page);
   await openUserSettings(page);
   await page.getByRole("button", { name: "Computers", exact: true }).click();
+  await page.getByText("This computer", { exact: true }).click();
   await expect(page.getByTestId("host-computer-settings")).toContainText(
     "Connected · claude 2.1.259 · codex 0.156.1",
   );

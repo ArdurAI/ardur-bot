@@ -3,6 +3,7 @@ import { BotAvatarValueSchema } from "./bot-avatar.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
+import { RunPlacementSchema } from "./fleet.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
@@ -896,6 +897,7 @@ export const RunSchema = z.object({
   runtimeProblem: RuntimeProblemSchema.optional(),
   runtimeInfo: RuntimeInfoSchema.nullable().optional(),
   runtimePin: RuntimePinSchema.nullable().optional(),
+  placement: RunPlacementSchema.nullable().optional(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),
   createdAt: z.string(),

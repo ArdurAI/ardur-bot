@@ -83,6 +83,7 @@ import {
   VoiceStatusSchema,
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
+import { FleetSchema, FleetTargetSchema, PlacementSettingsSchema } from "./fleet.js";
 import { HostStatusSchema } from "./host-bridge.js";
 import { Id, IsoDate } from "./ids.js";
 import {
@@ -442,12 +443,28 @@ export const appContract = {
       .input(z.object({ botId: Id, computerId: Id, sessionId: Id.optional() }))
       .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
   },
+  fleet: {
+    list: oc.output(FleetSchema),
+    discover: oc.output(FleetTargetSchema.array()),
+    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTargetSchema.array()),
+    placement: oc.input(PlacementSettingsSchema).output(PlacementSettingsSchema),
+    bot: oc
+      .input(
+        z.object({
+          botId: Id,
+          moveAutomatically: z.boolean().optional(),
+          decision: z.enum(["accept", "decline"]).optional(),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+  },
   computer: {
-    engine: oc
-      .input(z.object({ connectionId: Id.nullable() }))
-      .output(
-        z.object({ name: z.enum(["docker", "podman", "kubernetes"]), rootless: z.boolean() }),
-      ),
+    engine: oc.input(z.object({ connectionId: Id.nullable() })).output(
+      z.object({
+        name: z.enum(["docker", "podman", "kubernetes", "ssh"]),
+        rootless: z.boolean(),
+      }),
+    ),
     list: oc.output(
       z.array(z.object({ botId: Id, name: z.string(), status: ComputerStatusSchema })),
     ),

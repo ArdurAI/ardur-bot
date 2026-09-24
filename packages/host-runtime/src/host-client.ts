@@ -39,6 +39,13 @@ export class HostClient {
     context: Partial<AdapterContext>,
     callback?: (frame: CallbackFrame) => Promise<unknown>,
   ): AsyncIterable<HostStreamFrame> {
+    if (
+      !context.runId &&
+      "homeKey" in operation &&
+      operation.op.startsWith("computer.") &&
+      !operation.op.startsWith("computer.remote.")
+    )
+      operation = { ...operation, maintenanceId: context.operationId } as HostOperation;
     const request: HostRequest = {
       v: 1,
       type: "request",
@@ -46,8 +53,12 @@ export class HostClient {
       scope: HostScopeSchema.parse({
         userId: context.userId,
         spaceId: context.spaceId,
-        botId: context.botId,
-        runId: context.runId,
+        botId: context.botId ?? (operation.op.startsWith("computer.remote.") ? "fleet" : undefined),
+        runId:
+          context.runId ??
+          (operation.op.startsWith("computer.")
+            ? `maintenance-${context.operationId ?? randomUUID()}`
+            : undefined),
       }),
       operation,
     };

@@ -35,6 +35,7 @@ import {
   EmailEmulator,
   EncryptedSecretStore,
   ExpoPushProvider,
+  FleetCatalog,
   GraphileJobPublisher,
   InMemoryJobQueue,
   InMemoryRealtimeFanout,
@@ -54,6 +55,7 @@ import {
   PostgresRealtimeFanout,
   pipedreamConfigFromEnv,
   piSessionsRoot,
+  placeRunComputer,
   pushTokenPath,
   reconcileCloudAgents,
   reconcileComputerUpdates,
@@ -230,9 +232,15 @@ export async function createApp(
             throw new Error("Graphile job publisher requires a PostgreSQL pool");
           })(),
       );
+  const hostBridge = new HostBridge(prisma, env.encryptionKey);
   const sandbox: SandboxProvider =
     sandboxOverride ??
     createRunSandbox(env.sandboxProvider, {
+      hostClient: {
+        request: (operation, context) => hostBridge.fleetRequest(operation, context),
+        result: (operation, context) => hostBridge.fleetResult(operation, context),
+        health: async () => hostBridge.hub.health,
+      },
       supervisorUrl: env.sandboxSupervisorUrl,
       supervisorToken: env.sandboxSupervisorToken,
       e2bApiKey: env.e2bApiKey,
@@ -249,6 +257,10 @@ export async function createApp(
   const memoryProviders = new SpaceMemoryProviderResolver(prisma, secrets);
   const oauthLogins = new PiOAuthLogins();
   const home = new LocalAgentHomeStore(env.dataDir);
+  const fleetPlacementCatalog = new FleetCatalog(prisma, secrets, {
+    supervisorUrl: env.sandboxSupervisorUrl,
+    supervisorToken: env.sandboxSupervisorToken,
+  });
   const artifacts = new LocalArtifactStore(env.dataDir);
   const memoryLifecycleDeps = { prisma, secrets, jobs, dataDir: env.dataDir };
   const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
@@ -397,6 +409,13 @@ export async function createApp(
       env.cursorApiKey ?? "",
       process.env.TYPESAFE_API_KEY ?? "",
     ].filter(Boolean),
+    placement: (runId, signal) =>
+      placeRunComputer(
+        { prisma, sandbox, home, jobs, events, dataDir: env.dataDir },
+        fleetPlacementCatalog,
+        runId,
+        signal,
+      ),
     secretStore: secrets,
     secretHttp: remoteConnectors,
     deploymentModelKey: env.deploymentModelKey,
@@ -440,7 +459,6 @@ export async function createApp(
     : undefined;
   reconciler?.start();
 
-  const hostBridge = new HostBridge(prisma, env.encryptionKey);
   const terminals = createTerminalRoutes({
     prisma,
     sandbox,

@@ -1,5 +1,10 @@
 import type { JobPublisher, JobWorkerHost } from "@ardurbot/adapter-kit";
-import { ComposioConnector, IntegrationProviderSettings } from "@ardurbot/adapters";
+import {
+  ComposioConnector,
+  FleetCatalog,
+  IntegrationProviderSettings,
+  placeRunComputer,
+} from "@ardurbot/adapters";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { createMessagingReceivers } from "./messaging-receivers.js";
 
@@ -156,6 +161,10 @@ async function main() {
   integrationSettings.warmDirectories();
   const memoryProviders = new SpaceMemoryProviderResolver(prisma, secrets);
   const home = new LocalAgentHomeStore(dataDir);
+  const fleetPlacementCatalog = new FleetCatalog(prisma, secrets, {
+    supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL,
+    supervisorToken: process.env.SANDBOX_SUPERVISOR_TOKEN,
+  });
   const artifacts = new LocalArtifactStore(dataDir);
   const inMemoryJobs = process.env.WAKEUP_DRIVER === "memory" ? new InMemoryJobQueue() : undefined;
   const jobs: JobPublisher = inMemoryJobs ?? new GraphileJobPublisher(pool);
@@ -196,6 +205,13 @@ async function main() {
       process.env.CURSOR_API_KEY ?? "",
       process.env.TYPESAFE_API_KEY ?? "",
     ].filter(Boolean),
+    placement: (runId, signal) =>
+      placeRunComputer(
+        { prisma, sandbox, home, jobs, events, dataDir },
+        fleetPlacementCatalog,
+        runId,
+        signal,
+      ),
     secretStore: secrets,
     deploymentModelKey,
     dataDir,

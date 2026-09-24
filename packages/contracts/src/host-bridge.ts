@@ -1,4 +1,11 @@
 import * as z from "zod";
+import { CapacitySnapshotSchema } from "./fleet.js";
+import {
+  RemoteComputerCallSchema,
+  RemoteDiscoverySchema,
+  RemoteKubeconfigSchema,
+  RemoteSecretSchema,
+} from "./fleet-bridge.js";
 import {
   RuntimeAvailabilitySchema,
   RuntimeInfoSchema,
@@ -125,10 +132,24 @@ export const HostTurnSchema = z.strictObject({
 });
 export type HostTurn = z.infer<typeof HostTurnSchema>;
 export const HostOperationSchema = z.discriminatedUnion("op", [
-  z.strictObject({ op: z.literal("computer.environment"), homeKey: id }),
+  RemoteComputerCallSchema,
+  RemoteDiscoverySchema,
+  RemoteSecretSchema,
+  RemoteKubeconfigSchema,
+  z.strictObject({
+    op: z.literal("computer.files.export"),
+    homeKey: id,
+    maintenanceId: id.optional(),
+  }),
+  z.strictObject({
+    op: z.literal("computer.environment"),
+    homeKey: id,
+    maintenanceId: id.optional(),
+  }),
   z.strictObject({
     op: z.literal("computer.exec"),
     homeKey: id,
+    maintenanceId: id.optional(),
     argv: z.array(z.string().max(4096)).min(1).max(64),
     cwd: path.optional(),
     timeoutMs: z.number().int().min(1).max(300_000).optional(),
@@ -136,12 +157,14 @@ export const HostOperationSchema = z.discriminatedUnion("op", [
   z.strictObject({
     op: z.literal("computer.files.read"),
     homeKey: id,
+    maintenanceId: id.optional(),
     path,
     maxBytes: z.number().int().min(1).max(HOST_FILE_BYTES).optional(),
   }),
   z.strictObject({
     op: z.literal("computer.files.write"),
     homeKey: id,
+    maintenanceId: id.optional(),
     path,
     content: z
       .string()
@@ -149,10 +172,16 @@ export const HostOperationSchema = z.discriminatedUnion("op", [
       .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
     executable: z.boolean().optional(),
   }),
-  z.strictObject({ op: z.literal("computer.files.list"), homeKey: id, path }),
+  z.strictObject({
+    op: z.literal("computer.files.list"),
+    homeKey: id,
+    maintenanceId: id.optional(),
+    path,
+  }),
   z.strictObject({
     op: z.literal("computer.lifecycle"),
     homeKey: id,
+    maintenanceId: id.optional(),
     action: z.enum(["create", "prepare", "sleep", "wake", "destroy", "cwd", "snapshot"]),
     cwd: path.optional(),
   }),
@@ -169,6 +198,7 @@ export const HostRequestSchema = z.strictObject({
 });
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 export const HostHealthSchema = z.strictObject({
+  capacity: CapacitySnapshotSchema.optional(),
   platform: z.enum(["darwin", "linux", "win32"]),
   roots: z.array(path).max(32),
   load: z.number().int().min(0).max(HOST_IN_FLIGHT),

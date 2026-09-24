@@ -17,10 +17,12 @@ import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
 import { catalogEntries, resolveCatalogCall } from "./lazy-tool-catalog.js";
 
+const fleetComputer = vi.hoisted(() => ({ kind: "desktop" }));
+
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
   acquireComputerExecutionLease: async () => null,
-  provisionComputer: async () => ({ id: "computer-1", kind: "desktop" }),
+  provisionComputer: async () => ({ id: "computer-1", kind: fleetComputer.kind }),
 }));
 
 const reviewMock = vi.fn();
@@ -179,7 +181,7 @@ function fixture({
       findFirstOrThrow: vi.fn(async () => ({
         id: "computer-1",
         scope: "dedicated",
-        kind: "desktop",
+        kind: fleetComputer.kind,
       })),
     },
     instanceIdentity: { findUnique: vi.fn(async () => null) },
@@ -200,7 +202,7 @@ function fixture({
         title: bot.title,
         description: bot.description,
         computerId: "computer-1",
-        computer: { id: "computer-1", scope: "dedicated", kind: "desktop" },
+        computer: { id: "computer-1", scope: "dedicated", kind: fleetComputer.kind },
       })),
       findMany: vi.fn(async () => []),
     },
@@ -310,7 +312,24 @@ function fixture({
 describe("connector read-only metadata and approval enforcement", () => {
   beforeEach(() => {
     reviewMock.mockReset();
+    fleetComputer.kind = "desktop";
   });
+
+  it.each(["ssh", "remote-docker", "kubernetes"])(
+    "retains Ask-first approval on a %s computer",
+    async (kind) => {
+      fleetComputer.kind = kind;
+      const f = fixture({
+        name: "shell",
+        trigger: "webhook",
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "shell" }],
+      });
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      expect(isApprovalPausedResult(f.results[0])).toBe(true);
+      expect(f.execute).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(["shell", "write_file"])(
     "forces owner approval for webhook-triggered %s despite an allow rule",

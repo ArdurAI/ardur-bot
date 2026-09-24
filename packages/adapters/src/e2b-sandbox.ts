@@ -13,6 +13,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
+import { unknownCapacity } from "@ardurbot/contracts";
 import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
 import { type CommandResult, Sandbox, TimeoutError } from "@e2b/desktop";
 import { sandboxIdleMs } from "./computer-idle.js";
@@ -65,6 +66,9 @@ function errorMessage(error: unknown): string {
 }
 
 export class E2BSandboxProvider implements SandboxProvider {
+  async capacity() {
+    return unknownCapacity();
+  }
   private readonly desktops = new LinuxDesktop({
     environment: async () => ({
       homeDir: "/home/user",

@@ -40,8 +40,16 @@ describe("engine connection routing", () => {
       inspect("unix:///tmp/podman-route.sock"),
       inspect("/tmp/docker-route.sock"),
     ]);
-    expect(podman).toEqual({ name: "podman", rootless: true });
-    expect(docker).toEqual({ name: "docker", rootless: false });
+    expect(podman).toMatchObject({
+      name: "podman",
+      rootless: true,
+      capacity: { source: "docker" },
+    });
+    expect(docker).toMatchObject({
+      name: "docker",
+      rootless: false,
+      capacity: { source: "docker" },
+    });
     expect(created).toContain("/tmp/podman-route.sock");
   });
 

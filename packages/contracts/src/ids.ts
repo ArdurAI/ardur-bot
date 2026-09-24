@@ -40,6 +40,8 @@ export const MemoryScope = z.enum(["bot", "user"]);
 export type MemoryScope = z.infer<typeof MemoryScope>;
 
 export const SandboxKind = z.enum([
+  "ssh",
+  "remote-docker",
   "docker",
   "kubernetes",
   "e2b",

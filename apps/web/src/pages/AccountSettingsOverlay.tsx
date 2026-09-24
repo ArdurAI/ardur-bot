@@ -24,6 +24,7 @@ import {
 } from "../lib/ui-appearance";
 import { UI_LOCALE_LABELS, UI_LOCALES, type UiLocale } from "../lib/ui-locale";
 import { ComputerProfilesSettings } from "./ComputerProfilesSettings";
+import { FleetSettings } from "./fleet/FleetSettings";
 import { HostComputerSettings } from "./HostComputerSettings";
 import { SettingsSupportLinks } from "./settings-support-links";
 
@@ -226,10 +227,13 @@ export function ComputerSettingsPanel() {
       data-testid="computers-setup-settings"
       className="rounded-xl border border-border px-4 py-4"
     >
-      <h3 className="text-[15px] font-medium text-foreground">
-        <Trans>Computers</Trans>
-      </h3>
-      <HostComputerSettings />
+      <FleetSettings />
+      <details>
+        <summary>
+          <Trans>This computer</Trans>
+        </summary>
+        <HostComputerSettings />
+      </details>
       <ComputerProfilesSettings />
     </div>
   );

@@ -2752,78 +2752,91 @@ describe("computer replacement", () => {
 });
 
 describe("profile replacement workspace", () => {
-  it("saves with the old binding, then replaces with the chosen profile and retains the checkpoint", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "profile-replacement-"));
-    const home = new LocalAgentHomeStore(root);
-    const sandbox = new FakeSandboxProvider();
-    const ref = await sandbox.provision({ botId: "bot-1", homePath: "/unused" }, context);
-    await sandbox.writeFile(
-      ref,
-      { path: "keep.txt", content: new TextEncoder().encode("durable") },
-      context,
-    );
-    const row = {
-      id: "computer-1",
-      homeKey: "bot-1",
-      kind: "fake",
-      scope: "dedicated",
-      state: "running",
-      providerRef: ref.providerRef as string | null,
-      imageProfile: "base",
-      connectionId: "old-connection",
-      homeRevision: "old-revision",
-      maintenanceId: null,
-      controlHolder: "none",
-      controlLeaseId: null,
-      updatedAt: new Date(0),
-    };
-    const prisma = {
-      computer: {
-        findUniqueOrThrow: vi.fn(async () => ({ ...row })),
-        updateMany: vi.fn(async ({ data }) => {
-          Object.assign(row, data);
-          return { count: 1 };
-        }),
-      },
-      run: { findFirst: vi.fn(async () => null) },
-    } as unknown as PrismaClient;
-    const provision = vi.spyOn(sandbox, "provision");
-    const destroy = vi.spyOn(sandbox, "destroy");
-    const configuration = {
-      imageProfile: "developer" as const,
-      connectionId: "new-connection",
-      confirmed: true,
-    };
-    try {
-      const replaced = await replaceComputer(
-        { prisma, home, sandbox, jobs: {} as JobPublisher, events: {} as ThreadEvents },
-        row.id,
-        "update",
+  it.each([false, true])(
+    "saves the old binding and retains the checkpoint (placement: %s)",
+    async (placement) => {
+      const root = await mkdtemp(path.join(tmpdir(), "profile-replacement-"));
+      const home = new LocalAgentHomeStore(root);
+      const sandbox = new FakeSandboxProvider();
+      const ref = await sandbox.provision({ botId: "bot-1", homePath: "/unused" }, context);
+      await sandbox.writeFile(
+        ref,
+        { path: "keep.txt", content: new TextEncoder().encode("durable") },
         context,
-        "none",
-        undefined,
-        configuration,
       );
-      expect(destroy.mock.calls[0]![0]).toMatchObject({
+      const row = {
+        id: "computer-1",
+        homeKey: "bot-1",
+        kind: "fake",
+        scope: "dedicated",
+        state: "running",
+        providerRef: ref.providerRef as string | null,
         imageProfile: "base",
         connectionId: "old-connection",
-      });
-      expect(provision.mock.calls[0]![0]).toMatchObject({
-        imageProfile: "developer",
+        homeRevision: "old-revision",
+        maintenanceId: null,
+        controlHolder: "none",
+        controlLeaseId: null,
+        updatedAt: new Date(0),
+      };
+      const prisma = {
+        computer: {
+          findUniqueOrThrow: vi.fn(async () => ({ ...row })),
+          updateMany: vi.fn(async ({ data }) => {
+            Object.assign(row, data);
+            return { count: 1 };
+          }),
+        },
+        run: {
+          findFirst: vi
+            .fn()
+            .mockResolvedValueOnce(
+              placement
+                ? { id: "placement-run", runtimeComputer: null, placement: { status: "moving" } }
+                : null,
+            )
+            .mockResolvedValue(null),
+        },
+      } as unknown as PrismaClient;
+      const provision = vi.spyOn(sandbox, "provision");
+      const destroy = vi.spyOn(sandbox, "destroy");
+      const configuration = {
+        imageProfile: "developer" as const,
         connectionId: "new-connection",
-      });
-      expect(new TextDecoder().decode(await sandbox.readFile(replaced, "keep.txt", context))).toBe(
-        "durable",
-      );
-      const checkpoint = [];
-      for await (const file of home.exportHome("bot-1", context)) checkpoint.push(file);
-      expect(checkpoint.find((file) => file.path === "keep.txt")?.content).toEqual(
-        new TextEncoder().encode("durable"),
-      );
-      expect(row.homeRevision).not.toBe("old-revision");
-      expect(row).not.toHaveProperty("confirmed");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+        confirmed: true,
+        ...(placement ? { placementRunId: "placement-run" } : {}),
+      };
+      try {
+        const replaced = await replaceComputer(
+          { prisma, home, sandbox, jobs: {} as JobPublisher, events: {} as ThreadEvents },
+          row.id,
+          "update",
+          { ...context, ...(placement ? { runId: "placement-run" } : {}) },
+          "none",
+          undefined,
+          configuration,
+        );
+        expect(destroy.mock.calls[0]![0]).toMatchObject({
+          imageProfile: "base",
+          connectionId: "old-connection",
+        });
+        expect(provision.mock.calls[0]![0]).toMatchObject({
+          imageProfile: "developer",
+          connectionId: "new-connection",
+        });
+        expect(
+          new TextDecoder().decode(await sandbox.readFile(replaced, "keep.txt", context)),
+        ).toBe("durable");
+        const checkpoint = [];
+        for await (const file of home.exportHome("bot-1", context)) checkpoint.push(file);
+        expect(checkpoint.find((file) => file.path === "keep.txt")?.content).toEqual(
+          new TextEncoder().encode("durable"),
+        );
+        expect(row.homeRevision).not.toBe("old-revision");
+        expect(row).not.toHaveProperty("confirmed");
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 });

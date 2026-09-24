@@ -595,6 +595,7 @@ export function isProtectedComputerLifecycleCommand(command: string): boolean {
 /** Cap the roster so a large Space cannot flood the prompt. */
 const BOT_DIRECTORY_LIMIT = 40;
 export interface ExecutorDeps {
+  placement?: (runId: string, signal: AbortSignal) => Promise<boolean>;
   prisma: PrismaClient;
   events: ThreadEvents;
   runtime: AgentRuntime;
@@ -1182,6 +1183,44 @@ export function createRunExecutor(deps: ExecutorDeps) {
         data: { status: "running", startedAt: current.startedAt ?? new Date() },
       });
       if (started.count !== 1) return;
+      if (!current.startedAt && !run.runtimeComputer && deps.placement) {
+        try {
+          if (!(await deps.placement(runId, deps.shutdownSignal ?? new AbortController().signal)))
+            return;
+        } catch {
+          const placementAttempt = await deps.prisma.$transaction(async (tx) => {
+            const active = await tx.run.updateMany({
+              where: {
+                id: runId,
+                status: "running",
+                cancelRequestedAt: null,
+                leaseOwner: workerId,
+                leaseFence: fence,
+              },
+              data: { leaseExpiresAt: new Date(Date.now() + 5 * 60_000) },
+            });
+            if (active.count !== 1) return null;
+            return tx.attempt.create({ data: { runId, fence, status: "running" } });
+          });
+          if (placementAttempt) {
+            const failed = await deps.events.finalizeRun({
+              spaceId: run.spaceId,
+              threadId: run.threadId,
+              botId: run.botId,
+              runId,
+              taskId: run.taskId,
+              attemptId: placementAttempt.id,
+              leaseOwner: workerId,
+              leaseFence: fence,
+              outcome: "failed",
+              error: "The computer could not move. Check Computers and retry.",
+            });
+            if (failed && failed.continuationRunId)
+              await deps.jobs.enqueue(runContinueJob(failed.continuationRunId));
+          }
+          return;
+        }
+      }
       const leaseTarget = await deps.prisma.bot.findUniqueOrThrow({
         where: { id: run.botId },
         select: { computerId: true, computerSwitching: true },
@@ -4082,7 +4121,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 workspaceInstruction,
                 computer.kind === "desktop" ? undefined : agentEnvironmentInstruction,
                 hostEnvironmentInstruction,
-                ["docker", "kubernetes"].includes(computer.kind)
+                ["docker", "remote-docker", "kubernetes"].includes(computer.kind)
                   ? computerProfileNote(computer.imageProfile ?? "base")
                   : undefined,
                 "A bot and a subagent are different. Never use both for the same request.",

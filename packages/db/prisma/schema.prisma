@@ -164,6 +164,7 @@ model Member {
 }
 
 model Space {
+  placement Json?
   comparisons Comparison[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
@@ -342,6 +343,9 @@ model SpaceVoicePreference {
 }
 
 model Bot {
+  moveAutomatically Boolean @default(false)
+  placementConsent Boolean @default(false)
+  pendingPlacement Json?
   allowedModelDestinations Json?
   screenGeneration Int @default(0)
   id                String            @id @default(cuid())
@@ -574,6 +578,7 @@ model Task {
 }
 
 model Run {
+  placement Json?
   comparisonId String?
   delegationId String? @unique
   delegationRootTaskId String?

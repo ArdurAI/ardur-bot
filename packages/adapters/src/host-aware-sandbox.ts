@@ -11,6 +11,7 @@ import type {
   SandboxProvider,
   ScreenRequest,
 } from "@ardurbot/adapter-kit";
+import { unknownCapacity } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerSecretLoader } from "./computer-connections.js";
 import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
@@ -32,14 +33,12 @@ export function createRunSandbox(
   kind: string,
   opts: SandboxProviderOptions & { prisma?: PrismaClient; secrets?: ComputerSecretLoader },
 ): SandboxProvider {
-  if (kind === "desktop") {
-    if (usesHostBridge()) return new RemoteHostSandboxProvider(createHostClient());
-    return new DesktopSandboxProvider({
-      root: opts.dataDir,
-      hostRoots: [homedir()],
-    });
-  }
-  const selected = createSandboxProvider(kind, opts);
+  const selected =
+    kind === "desktop"
+      ? usesHostBridge()
+        ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
+        : new DesktopSandboxProvider({ root: opts.dataDir, hostRoots: [homedir()] })
+      : createSandboxProvider(kind, opts);
   const primary =
     opts.prisma && opts.secrets
       ? new ConnectedSandboxProvider(
@@ -51,7 +50,7 @@ export function createRunSandbox(
   return new HostAwareSandbox(
     primary,
     usesHostBridge()
-      ? new RemoteHostSandboxProvider(createHostClient())
+      ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
       : new DesktopSandboxProvider({
           root: opts.dataDir,
           hostRoots: [homedir()],
@@ -90,6 +89,13 @@ export class HostAwareSandbox implements SandboxProvider {
             });
       };
     }
+  }
+
+  async capacity(context: AdapterContext) {
+    return (
+      ((await this.hostEnabled()) ? this.host : this.isolated).capacity?.(context) ??
+      unknownCapacity()
+    );
   }
 
   describe() {

@@ -172,6 +172,13 @@ import {
   toComputerStatus,
 } from "./computer-status.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
+import {
+  fleetBotPreference,
+  fleetDiscover,
+  fleetList,
+  savePlacement,
+  testFleetTarget,
+} from "./fleet.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
@@ -1845,6 +1852,39 @@ export function createRouter(deps: RouterDeps) {
         return { ok: true as const };
       }),
     },
+    fleet: {
+      list: authed.fleet.list.handler(({ context }) =>
+        fleetList(deps, computerContext(context.actor, "fleet", "fleet-list")),
+      ),
+      discover: authed.fleet.discover.handler(({ context }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return fleetDiscover(deps, computerContext(context.actor, "fleet", "fleet-discover"));
+      }),
+      test: authed.fleet.test.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return testFleetTarget(
+          deps,
+          computerContext(context.actor, "fleet", "fleet-test"),
+          input.connectionId,
+        );
+      }),
+      placement: authed.fleet.placement.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return savePlacement(
+          deps,
+          computerContext(context.actor, "fleet", "fleet-placement"),
+          input,
+        );
+      }),
+      bot: authed.fleet.bot.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return fleetBotPreference(
+          deps,
+          computerContext(context.actor, input.botId, "fleet-bot"),
+          input,
+        );
+      }),
+    },
     computer: {
       engine: authed.computer.engine.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
@@ -1892,8 +1932,6 @@ export function createRouter(deps: RouterDeps) {
           context.actor.spaceId,
           input,
         );
-        if (!configuration.connectionId && !["docker", "kubernetes"].includes(bot.computer.kind))
-          throw new ORPCError("BAD_REQUEST", { message: "Choose a computer connection first." });
         return queueComputerUpdate(deps, bot.computer.id, bot.id, "update", configuration);
       }),
       status: authed.computer.status.handler(async ({ context, input }) =>
