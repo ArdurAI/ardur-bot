@@ -54,6 +54,7 @@ export interface DocumentCommit {
   references?: string[];
   author: RevisionAuthor;
   learning?: DocumentRevision["learning"];
+  imported?: DocumentRevision["imported"];
   model?: MemoryModel | null;
   runId?: string | null;
   threadId?: string | null;

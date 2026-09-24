@@ -22,6 +22,8 @@ import { hostLostProblem } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
 import { confinedHostCwd } from "./host-policy.js";
+import type { LocalImportScanner } from "./import/scanner.js";
+import { createLocalImportScanner } from "./import/scanner.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
@@ -40,6 +42,7 @@ export class HostAgent {
   private seen = new Set<string>();
   private sandbox: DesktopSandboxProvider;
   private roots: string[] = [];
+  private importer?: LocalImportScanner;
   constructor(
     private readonly config: { root: string; hostRoots: string[] },
     private readonly wire: HostWire,
@@ -175,6 +178,16 @@ export class HostAgent {
       const op = request.operation;
       if (op.op === "host.health") {
         await send("result", await this.health());
+      } else if (op.op === "import.scan" || op.op === "import.read") {
+        this.importer ??= await createLocalImportScanner(this.roots);
+        const result =
+          op.op === "import.scan"
+            ? await this.importer.scan(op.roots)
+            : this.importer.read(op.scanId, op.itemId);
+        // Manifests can span frames; each frame and the complete request retain bridge bounds.
+        const json = JSON.stringify(result);
+        for (let offset = 0; offset < json.length; offset += 24 * 1024)
+          await send("result", json.slice(offset, offset + 24 * 1024));
       } else {
         // Never accept providerRef or a computer home from the wire. The service owns this mapping.
         const computerKey = createHash("sha256")

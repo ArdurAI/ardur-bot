@@ -165,6 +165,7 @@ type ServerRef = {
   endpoint: string | null;
   secretId: string | null;
   catalogId?: string | null;
+  imported?: unknown;
   revision?: number;
 };
 type ActorRef = { spaceId: string; userId: string };
@@ -438,7 +439,7 @@ export class McpOAuthBroker {
     const sessionId = randomUUID();
     const context = { spaceId: input.spaceId, userId: input.userId };
     const loaded = await this.loadMaterial(server, context);
-    if (server.catalogId)
+    if (server.catalogId || server.imported)
       loaded.material.oauth = { ...loaded.material.oauth, authorizationRevision: server.revision };
     if (input.clientInformation)
       loaded.material.oauth = {
@@ -564,7 +565,10 @@ export class McpOAuthBroker {
         material: this.read(session.oauthCiphertext, session.id),
         ...(server.secretId ? { secretId: server.secretId } : {}),
       };
-      if (server.catalogId && loaded.material.oauth?.authorizationRevision !== server.revision)
+      if (
+        (server.catalogId || server.imported) &&
+        loaded.material.oauth?.authorizationRevision !== server.revision
+      )
         throw new Error("MCP OAuth session is invalid or expired");
       pending = {
         serverId: server.id,
@@ -683,7 +687,7 @@ export class McpOAuthBroker {
           context,
           false,
           server.endpoint,
-          server.catalogId ? server.revision : undefined,
+          server.catalogId || server.imported ? server.revision : undefined,
         );
       },
       options,

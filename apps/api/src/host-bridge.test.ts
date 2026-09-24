@@ -26,6 +26,7 @@ function fixture() {
       }),
     },
     run: { findFirst: vi.fn(async () => null) },
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
   };
   return {
     prisma,
@@ -33,6 +34,41 @@ function fixture() {
   };
 }
 describe("host pairing and grants", () => {
+  it("allows owner import jobs without a bot run and rejects members, run scopes and revoked hosts", async () => {
+    const { bridge, prisma } = fixture();
+    await bridge.pair("owner");
+    const registration = await prisma.hostRegistration.findUnique();
+    const host = { send: vi.fn(async (_frame: HostFrame) => undefined), close: vi.fn() };
+    const worker = { send: vi.fn(async (_frame: HostFrame) => undefined), close: vi.fn() };
+    bridge.hub.attach(host, "owner", registration!.generation);
+    const request: HostRequest = {
+      v: 1,
+      type: "request",
+      id: "import-request",
+      scope: { userId: "owner", spaceId: "space", botId: "owner-import", runId: "import-fixture" },
+      operation: { op: "import.scan" },
+    };
+    await bridge.hub.request(request, worker);
+    expect(host.send).toHaveBeenCalledWith(request);
+    expect(prisma.run.findFirst).not.toHaveBeenCalled();
+    await bridge.hub.fromHost(host, { v: 1, type: "end", id: request.id });
+    await bridge.hub.request(
+      { ...request, id: "bot-request", scope: { ...request.scope, botId: "bot", runId: "run" } },
+      worker,
+    );
+    await bridge.hub.request(
+      { ...request, id: "other-owner", scope: { ...request.scope, userId: "member" } },
+      worker,
+    );
+    prisma.spaceMember.findUnique.mockResolvedValue({ role: "member" });
+    await bridge.hub.request({ ...request, id: "space-member" }, worker);
+    prisma.spaceMember.findUnique.mockResolvedValue({ role: "owner" });
+    bridge.hub.detach();
+    bridge.hub.attach(host, "owner", "revoked");
+    await bridge.hub.request({ ...request, id: "revoked" }, worker);
+    expect(host.send).toHaveBeenCalledTimes(1);
+    bridge.hub.detach();
+  });
   it("mints once for the owner, stores only a digest, and revokes", async () => {
     const { bridge, prisma } = fixture();
     await expect(bridge.pair("member")).rejects.toThrow("owner");

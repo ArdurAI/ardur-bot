@@ -1,3 +1,4 @@
+import { LocalImportJobSchema } from "@ardurbot/contracts/local-import";
 import { z } from "zod";
 import type {
   BackgroundJob,
@@ -7,6 +8,8 @@ import type {
 } from "./types.js";
 
 const payloadSchemas = {
+  "local-import.run": LocalImportJobSchema,
+  "local-import.refresh": z.strictObject({}),
   "learning.curate": z.object({
     spaceId: z.string().min(1).optional(),
     requestedBy: z.string().min(1).optional(),

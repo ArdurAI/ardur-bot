@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LocalImportToolSchema } from "./local-import.js";
 import { RuntimePinSchema } from "./runtime-pins.js";
 
 export const MessageOriginSchema = z.enum([
@@ -118,6 +119,7 @@ export const LearningJourneyEntrySchema = z.object({
   revisionId: z.string().optional(),
   documentId: z.string().optional(),
   grantId: z.string().optional(),
+  importedFrom: LocalImportToolSchema.optional(),
 });
 export type LearningJourneyEntry = z.infer<typeof LearningJourneyEntrySchema>;
 export const CuratorReportSchema = z.object({

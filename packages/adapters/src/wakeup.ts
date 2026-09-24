@@ -124,15 +124,23 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
       ]),
     );
     if (handlers["learning.curate"]) taskList.learning_curate = taskList["learning.curate"]!;
+    if (handlers["local-import.refresh"])
+      taskList.local_import_refresh = taskList["local-import.refresh"]!;
     const runner = await run({
       pgPool: this.pgPool,
       concurrency: this.options.concurrency ?? 4,
       pollInterval: this.options.pollInterval ?? 500,
       noHandleSignals: this.options.noHandleSignals,
       taskList,
-      crontab: handlers["learning.curate"]
-        ? "0 3 * * 1 learning_curate ?id=learningCurator&fill=1w"
-        : undefined,
+      crontab:
+        [
+          ...(handlers["learning.curate"]
+            ? ["0 3 * * 1 learning_curate ?id=learningCurator&fill=1w"]
+            : []),
+          ...(handlers["local-import.refresh"]
+            ? ["0 * * * * local_import_refresh ?id=localImport&fill=1h"]
+            : []),
+        ].join("\n") || undefined,
     });
     if (this.stopping) {
       await runner.stop().catch(() => undefined);

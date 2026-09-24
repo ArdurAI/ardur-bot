@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
@@ -7,6 +7,7 @@ import { decodeHostFrame, encodeHostFrame, HOST_WINDOW } from "@ardurbot/contrac
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostAgent } from "./host-agent.js";
+import { createLocalImportScanner, LocalImportScanner } from "./import/scanner.js";
 import { nativeEnvironment } from "./runtimes/native-process.js";
 
 vi.mock("./runtimes/claude-code-runtime.js", async (original) => ({
@@ -37,6 +38,10 @@ vi.mock("./host-environment.js", async (original) => ({
   }),
 }));
 const roots: string[] = [];
+vi.mock("./import/scanner.js", async (original) => ({
+  ...(await original<object>()),
+  createLocalImportScanner: vi.fn(),
+}));
 const agents: HostAgent[] = [];
 afterEach(async () => {
   for (const agent of agents.splice(0)) agent.close();
@@ -109,6 +114,40 @@ function fakeRuntime(events: number): AgentRuntime {
   };
 }
 describe("host process operations", () => {
+  it("streams a metadata manifest in bounded frames and reads a scanned item without provisioning a computer", async () => {
+    const { agent, frames } = await fixture();
+    const home = roots.at(-1)!;
+    const folder = path.join(home, ".claude/projects/fixture/memory");
+    await mkdir(folder, { recursive: true });
+    await Promise.all(
+      Array.from({ length: 100 }, (_, index) =>
+        writeFile(path.join(folder, `fact-${index}.md`), "A fixture note."),
+      ),
+    );
+    const scanner = new LocalImportScanner({ home, platform: "darwin" });
+    vi.mocked(createLocalImportScanner).mockResolvedValueOnce(scanner);
+    const provision = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
+    await agent.receive(request({ op: "import.scan" }));
+    await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
+    const chunks = frames.flatMap((frame) => (frame.type === "stream" ? [String(frame.data)] : []));
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.length <= 24 * 1024)).toBe(true);
+    const manifest = JSON.parse(chunks.join(""));
+    expect(manifest.items).toHaveLength(100);
+    expect(chunks.join("")).not.toContain("A fixture note.");
+    expect(provision).not.toHaveBeenCalled();
+    frames.splice(0);
+    await agent.receive({
+      ...request({ op: "import.read", scanId: manifest.scanId, itemId: manifest.items[0].id }),
+      id: "read-request",
+    });
+    await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
+    const body = JSON.parse(
+      frames.flatMap((frame) => (frame.type === "stream" ? [String(frame.data)] : [])).join(""),
+    );
+    expect(body.content).toBe("A fixture note.");
+    expect(provision).not.toHaveBeenCalled();
+  });
   it("streams exec stdout, stderr, and exit through the existing provider", async () => {
     vi.spyOn(DesktopSandboxProvider.prototype, "execute").mockImplementation(async function* () {
       yield { type: "stdout", data: "ok" };

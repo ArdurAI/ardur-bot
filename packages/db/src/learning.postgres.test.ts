@@ -30,7 +30,12 @@ describePostgres("learning deletion protection (PostgreSQL)", () => {
     async (operation) => {
       const threadId = `${id}-${operation}`;
       const prisma = db.prisma;
-      await prisma.thread.create({ data: { id: threadId, spaceId: id, userId: "fixture-user" } });
+      await prisma.chatGroup.create({
+        data: { id: threadId, spaceId: id, userId: "fixture-user", name: "Learning fixture" },
+      });
+      await prisma.thread.create({
+        data: { id: threadId, spaceId: id, userId: "fixture-user", groupId: threadId },
+      });
       const common = {
         spaceId: id,
         userId: "fixture-user",

@@ -500,6 +500,36 @@ export class McpConnector implements ConnectorProvider {
       material = secret
         ? (JSON.parse(this.secrets.load(secret.ciphertext, secret.id)) as OAuthMaterial)
         : {};
+      if (server.imported) {
+        const names = (value: unknown) =>
+          value && typeof value === "object" && !Array.isArray(value) ? Object.keys(value) : [];
+        const requiredHeaders =
+          server.headers && typeof server.headers === "object" && !Array.isArray(server.headers)
+            ? server.headers
+            : {};
+        for (const [header, binding] of Object.entries(requiredHeaders)) {
+          if (
+            !binding ||
+            typeof binding !== "object" ||
+            Array.isArray(binding) ||
+            typeof binding.name !== "string"
+          )
+            continue;
+          const value = material.env?.[binding.name];
+          if (value)
+            material.headers = {
+              ...material.headers,
+              [header]: `${binding.bearer ? "Bearer " : ""}${value}`,
+            };
+        }
+        if (
+          names(server.env).some((name) => !material?.env?.[name]) ||
+          names(server.headers).some((name) => !material?.headers?.[name])
+        )
+          throw new Error(
+            "Add this imported server's environment and header values in MCP server settings before connecting.",
+          );
+      }
       const loaded = { material, ...(secret ? { secretId: secret.id } : {}) };
       const args = Array.isArray(server.args) ? server.args.map(String) : [];
       const env = { ...(material.env ?? {}) };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ImportedProvenanceSchema } from "./local-import.js";
 import { RuntimePinSchema } from "./runtime-pins.js";
 
 export const MemoryIdentity = z
@@ -54,6 +55,7 @@ export const DocumentRevisionSchema = z
     content: z.string().max(1_000_000),
     author: RevisionAuthorSchema,
     learning: LearningProvenanceSchema.optional(),
+    imported: ImportedProvenanceSchema.optional(),
     model: MemoryModelSchema.nullable(),
     runId: MemoryIdentity.nullable(),
     threadId: MemoryIdentity.nullable(),

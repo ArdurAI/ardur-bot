@@ -33,6 +33,7 @@ import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
+  assertLocalImportOwner,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
   CodexConnections,
@@ -57,6 +58,7 @@ import {
   isSandboxGoneError,
   isScratchpadStatus,
   kubernetesContexts,
+  LocalImportService,
   listPiCatalog,
   listScratchpadItems,
   McpOAuthBroker,
@@ -100,6 +102,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@ardurbot/contracts";
+import { ImportedProvenanceSchema } from "@ardurbot/contracts/local-import";
 import {
   ACTIVE_RUN_STATUSES,
   AttachmentValidationError,
@@ -177,6 +180,8 @@ import { sourceHostStatus } from "./host-status.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
+import { saveImportedServerCredentials } from "./local-import-credentials.js";
+import type { LocalImportRequests } from "./local-import-requests.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
 import { changeGitMemoryLocation } from "./memory-git-location.js";
 import { changeMemoryLocation } from "./memory-location.js";
@@ -371,6 +376,7 @@ function computerContext(actor: Actor, botId: string, operationId: string): Adap
 
 function mcpServerDto(
   row: {
+    imported?: unknown;
     id: string;
     spaceId: string;
     slug: string;
@@ -397,7 +403,9 @@ function mcpServerDto(
     row.env && typeof row.env === "object" && !Array.isArray(row.env) ? Object.keys(row.env) : [];
   const headerKeys =
     row.headers && typeof row.headers === "object" && !Array.isArray(row.headers)
-      ? Object.keys(row.headers)
+      ? Object.entries(row.headers)
+          .filter(([, value]) => !row.imported || !value || typeof value !== "object")
+          .map(([key]) => key)
       : [];
   return {
     id: row.id,
@@ -412,6 +420,7 @@ function mcpServerDto(
     envKeys,
     headerKeys,
     hasSecret: row.secretId !== null,
+    ...(row.imported ? { imported: ImportedProvenanceSchema.parse(row.imported) } : {}),
     oauthStatus,
     enabled: row.enabled,
     revision: row.revision,
@@ -462,6 +471,7 @@ function mcpAssignmentDto(row: {
 export interface RouterDeps {
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
+  localImportRequests?: LocalImportRequests;
   terminals?: ReturnType<typeof createTerminalRoutes>;
   cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
@@ -569,6 +579,10 @@ export function createRouter(deps: RouterDeps) {
   });
   const learning = createLearningService(deps);
   const agentSkills = createAgentSkillsService(deps.prisma, deps.memoryDocuments);
+  const localImport = new LocalImportService({
+    prisma: deps.prisma,
+    documents: deps.memoryDocuments!,
+  });
 
   const authed = os.use(async ({ context, next }) => {
     if (!context.actor) throw new ORPCError("UNAUTHORIZED");
@@ -2492,6 +2506,24 @@ export function createRouter(deps: RouterDeps) {
           ).catch(() => undefined);
         }
         return { ok: true as const };
+      }),
+    },
+    localImport: {
+      credentials: authed.localImport.credentials.handler(async ({ context, input }) => {
+        await assertLocalImportOwner(deps.prisma, context.actor);
+        return saveImportedServerCredentials(deps.prisma, deps.secrets, context.actor, input);
+      }),
+      status: authed.localImport.status.handler(({ context }) => localImport.status(context.actor)),
+      configure: authed.localImport.configure.handler(({ context, input }) =>
+        localImport.configure(context.actor, input),
+      ),
+      run: authed.localImport.run.handler(async ({ context, input }) => {
+        await assertLocalImportOwner(deps.prisma, context.actor);
+        if (!deps.localImportRequests)
+          throw new ORPCError("SERVICE_UNAVAILABLE", {
+            message: "The import worker is unavailable.",
+          });
+        return deps.localImportRequests.run(context.actor, input);
       }),
     },
     memory: {

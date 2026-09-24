@@ -22,6 +22,7 @@ import {
   UsageSettingsPanel,
 } from "./AccountSettingsOverlay";
 import { DevicesSettings } from "./DevicesSettings";
+import { LocalImportPage } from "./import/LocalImportPage";
 import { LearningBadge } from "./LearningInbox";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
 import { ModelDestinations } from "./ModelDestinations";
@@ -34,6 +35,7 @@ export type SettingsSection =
   | "general"
   | "models"
   | "memory"
+  | "import"
   | "voice"
   | "usage"
   | "computer"
@@ -104,6 +106,9 @@ export function SettingsOverlay({
     { id: "integrations", label: t`Integrations`, icon: Plug },
     { id: "models", label: t`Models`, icon: Cpu },
     { id: "memory", label: t`Memory & Skills`, icon: Brain },
+    ...(isDeploymentOwner
+      ? [{ id: "import" as const, label: t`Import`, icon: CloudDownload }]
+      : []),
     { id: "voice", label: t`Voice`, icon: Volume2 },
     { id: "usage", label: t`Usage`, icon: Gauge },
     ...(showComputer ? [{ id: "computer" as const, label: t`Computers`, icon: Monitor }] : []),
@@ -254,6 +259,7 @@ export function SettingsOverlay({
                   />
                 </>
               ) : null}
+              {section === "import" && isDeploymentOwner ? <LocalImportPage /> : null}
               {section === "memory" ? (
                 <MemorySettingsOverlay
                   embedded

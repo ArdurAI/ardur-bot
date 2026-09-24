@@ -13,6 +13,8 @@
     "./local-settings": "./src/local-settings.js",
     "./runtime-pins": "./src/runtime-pins.ts",
     "./host-bridge": "./src/host-bridge.ts",
+    "./local-import": "./src/local-import.ts",
+    "./mcp": "./src/mcp.ts",
     "./host-environment": "./src/host-environment.js"
   },
   "scripts": {

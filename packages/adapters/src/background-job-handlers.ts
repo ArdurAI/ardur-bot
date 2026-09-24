@@ -21,6 +21,8 @@ import { compactHistory } from "./history-compaction.js";
 import { curateLearningSpaces } from "./learning-curator.js";
 import { enqueueLearningReview } from "./learning-queue.js";
 import { reviewLearning } from "./learning-review.js";
+import type { LocalImportJobOptions } from "./local-import-jobs.js";
+import { createLocalImportJobs } from "./local-import-jobs.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -38,6 +40,7 @@ export function createBackgroundJobHandlers(deps: {
   secretStore: EncryptedSecretStore;
   memoryProviders: MemoryProviderResolver;
   memoryDocuments?: MemoryService;
+  localImport?: LocalImportJobOptions;
   deploymentModelKey?: string;
   messaging?: MessagingSurface;
   cloudAgent?: CloudAgentConnection | null;
@@ -58,6 +61,9 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
+    ...(deps.localImport && deps.memoryDocuments
+      ? createLocalImportJobs(deps.prisma, deps.memoryDocuments, deps.localImport)
+      : {}),
     "learning.curate": (payload) => curateLearningSpaces(deps, payload),
     "learning.review": (payload) =>
       reviewLearning(

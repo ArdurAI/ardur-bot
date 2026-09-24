@@ -5,6 +5,7 @@ import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
+import { ImportedProvenanceSchema } from "./local-import.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
 import {
@@ -517,6 +518,7 @@ export const AgentSkillSourceSchema = z.enum([
 export type AgentSkillSource = z.infer<typeof AgentSkillSourceSchema>;
 
 export const AgentSkillSchema = z.object({
+  imported: ImportedProvenanceSchema.optional(),
   documentId: Id.nullable().optional(),
   activeRevision: z.number().int().nullable().optional(),
   origin: z.enum(["user", "learned", "imported", "unknown"]).optional(),
@@ -717,6 +719,7 @@ export const McpServerConfigInput = z.discriminatedUnion("transport", [
 export type McpServerConfigInput = z.infer<typeof McpServerConfigInput>;
 
 export const McpServerSchema = z.object({
+  imported: ImportedProvenanceSchema.optional(),
   id: Id,
   spaceId: Id,
   slug: z.string(),

@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { LocalImportRootsSchema } from "./local-import.js";
 import {
   RuntimeAvailabilitySchema,
   RuntimeInfoSchema,
@@ -125,6 +126,12 @@ export const HostTurnSchema = z.strictObject({
 });
 export type HostTurn = z.infer<typeof HostTurnSchema>;
 export const HostOperationSchema = z.discriminatedUnion("op", [
+  z.strictObject({ op: z.literal("import.scan"), roots: LocalImportRootsSchema.optional() }),
+  z.strictObject({
+    op: z.literal("import.read"),
+    scanId: z.string().uuid(),
+    itemId: z.string().uuid(),
+  }),
   z.strictObject({ op: z.literal("computer.environment"), homeKey: id }),
   z.strictObject({
     op: z.literal("computer.exec"),
