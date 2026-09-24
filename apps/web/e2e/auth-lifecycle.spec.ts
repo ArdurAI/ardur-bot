@@ -51,7 +51,9 @@ test("logout protects bot deep links and sign-in restores the session", async ({
   await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
 
   await page.getByRole("button", { name: new RegExp(userName, "i") }).click();
-  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+  await expect(
+    page.getByTestId("bots-sidebar").getByRole("button", { name: "Settings", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Usage", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
   await expect(
@@ -153,8 +155,12 @@ test("changes and recovers an email password", async ({ page }, testInfo) => {
   await page.waitForURL(/\/app\/[^/]+$/);
 
   await page.getByTestId("user-menu-trigger").click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page
+    .locator('[data-slot="popover-content"]')
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
   const settings = page.getByTestId("user-settings");
+  await settings.getByTestId("settings-nav-account").click();
   await expect(settings).toBeVisible();
   await expect(page.getByTestId("sidebar-search").locator("input")).toHaveAttribute(
     "autocomplete",

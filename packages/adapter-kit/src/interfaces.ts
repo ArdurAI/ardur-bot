@@ -106,6 +106,8 @@ export interface SandboxProvider {
   ): Promise<ComputerRef>;
   /** Perform idempotent provider setup after the lifecycle has captured the reference. */
   prepare(computer: ComputerRef, context: AdapterContext): Promise<void>;
+  /** Describe the executing host once per run, without exposing its environment or credentials. */
+  environmentNote?(computer: ComputerRef, context: AdapterContext): Promise<string | undefined>;
   /** Resolve the same cwd used by execute, before a command launch is recorded. */
   resolveCommandCwd?(
     computer: ComputerRef,

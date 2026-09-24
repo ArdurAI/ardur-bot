@@ -1,59 +1,25 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
-import { constants } from "node:fs";
-import { access, realpath } from "node:fs/promises";
-import { homedir } from "node:os";
-import path, { isAbsolute, join } from "node:path";
+import { isAbsolute, join } from "node:path";
+import {
+  getHostEnvironment,
+  hostBinaryCandidates,
+  nativeEnvironment,
+  resolveHostBinary,
+} from "../host-environment.js";
 
-/** Deliberately copy only OS discovery variables. Never inherit provider or agent secrets. */
-export function nativeEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const key of [
-    "PATH",
-    "HOME",
-    "USER",
-    "LOGNAME",
-    "TMPDIR",
-    "TEMP",
-    "TMP",
-    "SystemRoot",
-    "WINDIR",
-    "LOCALAPPDATA",
-    "APPDATA",
-    "USERPROFILE",
-    "LANG",
-    "LC_ALL",
-  ]) {
-    if (source[key]) env[key] = source[key];
-  }
-  return env;
-}
+export { nativeEnvironment } from "../host-environment.js";
 
 export function nativeBinaryCandidates(
   name: "claude" | "codex",
   env: NodeJS.ProcessEnv,
   platform = process.platform,
 ) {
-  const paths = platform === "win32" ? path.win32 : path.posix;
-  const home = platform === "win32" ? env.USERPROFILE : env.HOME;
-  return [
-    ...(env.PATH ?? "").split(paths.delimiter),
-    ...(home ? [paths.join(home, ".local", "bin")] : []),
-    ...(platform === "darwin" ? ["/opt/homebrew/bin", "/usr/local/bin"] : []),
-  ]
-    .filter((directory) => paths.isAbsolute(directory))
-    .map((directory) => paths.join(directory, platform === "win32" ? `${name}.exe` : name));
+  return hostBinaryCandidates(name, env, platform);
 }
-export async function findNativeBinary(name: "claude" | "codex", env = nativeEnvironment()) {
-  for (const candidate of nativeBinaryCandidates(name, { HOME: homedir(), ...env })) {
-    try {
-      await access(candidate, constants.X_OK);
-      return await realpath(candidate);
-    } catch {
-      /* Try the next host-owned absolute search path. */
-    }
-  }
-  return undefined;
+export async function findNativeBinary(name: "claude" | "codex", env?: NodeJS.ProcessEnv) {
+  env ??= (await getHostEnvironment()).env;
+  return resolveHostBinary(name, env);
 }
 
 export type NativeSpawn = (

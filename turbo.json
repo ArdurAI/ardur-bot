@@ -26,6 +26,7 @@
     },
     "dev": {
       "cache": false,
+      "passThroughEnv": ["ARDURBOT_DESKTOP_STACK_TOKEN"],
       "env": ["PUBLIC_POSTHOG_HOST", "PUBLIC_POSTHOG_KEY"],
       "persistent": true
     }

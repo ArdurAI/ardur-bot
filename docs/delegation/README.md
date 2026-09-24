@@ -97,8 +97,7 @@ The web Activity E2E adds a `delegation-lineage` screenshot for CI.
 Operators notice one coordinator and fewer interruptions. Builders get durable
 limits and task files. Researchers can inspect the actual executing pin. Team
 leads can attribute usage and approvals. Local-first users can refuse remote or
-unknown model destinations. P2 task cards and the Team view are described below; compare mode remains outside
-this change.
+unknown model destinations. P2 task cards and P3 comparisons are described below.
 
 ## Task cards and Team (P2)
 
@@ -130,14 +129,112 @@ events refresh the web board; foreground refresh repairs unavailable streams and
 roster changes. Signed mobile devices use their existing read, stop and consequential
 scopes for Team reads, Stop and Accept respectively. Nothing adds push notifications.
 
-Apply `20260924000200_delegation_task_cards` after the P1 migration and generate the
+Apply `20260924020000_delegation_task_cards` after the P1 migration and generate the
 Prisma client before starting updated processes. Existing rows retain a null card;
 no historical task definition is invented. Test the migration on PostgreSQL before
-rollout. This change requires no new runtime dependency or hosted service. Compare
-mode is reserved for P3.
+rollout. This change requires no new runtime dependency or hosted service.
 
 Operators see quiet, explicit work states and a separate OK step. Builders inspect
 the executing pin and approval ceiling. Researchers retain checklist reports and
 artifact references. Team leads get a review chain and attributed usage. Local-first
 users retain the admission locality boundary and can run the board without a cloud
 service.
+
+## Compare mode (P3)
+
+The composer offers **Compare with…** when the space has at least two bots. A Team
+task card offers **Run on other bots**. Both select two through four existing bots,
+including the current bot. Preview resolves their pins before the owner starts the
+run and displays the aggregate token reservation. The optional merge reserves one
+additional run. Hosted providers may bill separately for each run; neither the
+preview nor the results invent prices.
+
+`packages/contracts/src/comparison.ts` defines the frozen input, participants,
+results, merge and JSON export. `packages/adapters/src/comparison.ts` orchestrates
+ordinary P2 `prepareDelegation` admissions in one transaction. The root coordinator
+record is an orchestration receipt, with no model call. Only that comparison's
+validated parent may admit its own coordinator as a participant. Normal delegation
+cycle checks are unchanged. A failure at any admission rolls back every child and
+the merge hold. Retries with the same nonce reuse the existing comparison; changing
+the request with that nonce is refused. Pins or computers that changed since the
+preview require another preview.
+
+The snapshot captures text, the coordinator's environment note (its saved
+instructions, or its name/title/description), artifact identities and hashes, the
+original task card, and explicit document revision contents. Each participant gets
+the same snapshot. Artifact reads validate ownership and the captured SHA-256 hash.
+The result remains reproducible only to the extent that the provider discloses its
+model revision and external sources stay available.
+
+`packages/adapters/src/comparison-execution.ts` replaces the runtime input and
+exposes only web lookup, task progress, questions and reads of attached artifacts.
+It removes ambient history, persona memory, scratchpads, saved skills, steering,
+native conversation reuse, helpers, peer messages, connectors, shell and shared
+filesystem tools. The executor also refuses hidden tool calls and skips memory
+session creation and scripted memory/file writes. No mutable memory is read, so
+the memory provenance flags are false. Explicit frozen document revisions are
+task inputs. Text artifacts are paged and binary artifacts are returned as base64;
+supported images are passed as image input. A model/runtime that cannot interpret
+an attached format must report that limitation; no conversion service is added.
+
+Native comparison requests carry the same restriction across the host bridge.
+Claude Code uses its documented safe mode and disables automatic memory; Codex
+disables project document discovery, additional developer instructions, discovered
+skills, personality overrides and memory use/generation for that session. An
+unreadable skill inventory or a skill change stops the participant. Both retain the
+existing native tool restrictions and pin checks.
+An unsupported runtime flag fails that participant rather than changing its pin.
+The native CLI launch controls still need a live host check when upgrading a CLI.
+
+The web/desktop panel keeps columns in participant order. It shows separate
+outputs, source links, selected pins, reported model/version, duration, tokens,
+cost only with pricing provenance, and partial or failed outcomes. A configured
+model id or a CLI version is not substituted for an unreported model revision.
+Provider adapters that do not expose the actual model leave it unknown. The
+existing `AskCard` answers a particular run using its original approval record;
+the other participants continue. Mobile exposes authenticated read-only lists and
+horizontally paged results, including existing merge results.
+
+**Merge selected** first previews the selected merge bot's resolved pin. Confirmation
+creates one separate P2 run. Its input contains only the selected completed outputs,
+their source message/artifact ids, citations and provenance, plus the instruction
+to preserve disagreements. It gets no original task, ambient history or unselected
+outputs. The merge consumes the held reservation, or confirmation explicitly
+authorizes another reservation under the original root caps and deadline. A
+comparison has at most one merge. Rework of a comparison task is refused; a new
+comparison freezes a new task instead of silently revising this experiment.
+
+`export.comparison` is the existing export router's versioned JSON path. It contains
+the frozen inputs, participants, output message/artifact ids and text, usage,
+timestamps and any separate merge. Reads and exports require current space
+membership and requesting-user ownership. Device access permits comparison reads
+but no start or merge operations. Comparisons cascade when their space is deleted.
+
+Apply `20260924050000_comparisons` after `20260924040000_host_bridge`, then run
+`pnpm db:generate`. The migration adds `comparisons`, `comparison_executions`, and
+nullable comparison lineage on existing runs and delegations; no old data is
+rewritten. Stop old workers before starting comparison runs: they do not enforce
+the controlled-input boundary. PostgreSQL migration application and real hosted
+provider/CLI execution remain deployment verification steps.
+
+Offline tests exercise real P2 admission and rollback, shared caps and reservations,
+frozen input equality, hidden-tool refusal, local approval state, participant order,
+separate pinned merges, export schemas, cross-space rejection, web interactions,
+native launch controls and mobile paging. The web E2E opens the composer flow and
+captures `delegation-comparison` for CI. The desktop Playwright suite is not part of
+local verification.
+
+The researcher gets separate sourced outputs and inspectable provenance. The
+builder can inspect fixed pins, budgets and failures. The operator sees one task
+and can answer each approval in place. The team lead retains the existing task
+cards, authority and audit trail. The local-first user keeps local providers and
+locality policy; compare adds no hosted dependency.
+
+Visible copy is limited to the entry/actions (**Compare with…**, **Run on other
+bots**, **Merge selected**), orientation (**Same task, N bots**), necessary budget
+disclosure (**N runs at these pins; hosted providers may bill per run**), and
+existing status/provenance labels such as **Not reported**, **Waiting for approval**
+and **Failed — reason**. Detailed inputs, environment and computer information are
+collapsed. The budget disclosure is shown before execution because each extra run
+may incur a charge; the status labels remain visible because missing or paused
+results must be distinguishable from successful output.

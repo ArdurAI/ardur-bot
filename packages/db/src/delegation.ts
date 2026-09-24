@@ -53,6 +53,7 @@ export async function lockDelegationRootForRun(tx: Prisma.TransactionClient, run
 export async function admitDelegation(
   tx: Prisma.TransactionClient,
   input: Scope & {
+    comparisonId?: string;
     parentRunId: string;
     actingBotId: string;
     actingName: string;
@@ -81,7 +82,23 @@ export async function admitDelegation(
     return replay;
   }
   await validateTaskReferences(tx, { spaceId: input.spaceId, userId: input.userId }, request);
-  if (parent.cancelRequestedAt || parent.status !== "running") refuse("deadline-passed");
+  const comparison = input.comparisonId
+    ? await tx.comparison.findFirstOrThrow({
+        where: {
+          id: input.comparisonId,
+          parentRunId: parent.id,
+          rootTaskId,
+          spaceId: input.spaceId,
+          userId: input.userId,
+        },
+      })
+    : null;
+  if (
+    parent.cancelRequestedAt ||
+    (parent.status !== "running" &&
+      !(comparison && parent.trigger === "comparison-coordinator" && parent.status === "completed"))
+  )
+    refuse("deadline-passed");
   const ancestor = parent.delegationId
     ? await tx.delegation.findUniqueOrThrow({ where: { id: parent.delegationId } })
     : null;
@@ -120,7 +137,8 @@ export async function admitDelegation(
   });
   if (root.cancelRequestedAt || root.deadlineAt <= now) refuse("deadline-passed");
   const ancestorBotIds = ancestor ? [...ancestor.ancestorBotIds, parent.botId] : [parent.botId];
-  if (input.kind !== "helper" && ancestorBotIds.includes(input.actingBotId)) refuse("cycle");
+  if (input.kind !== "helper" && ancestorBotIds.includes(input.actingBotId) && !comparison)
+    refuse("cycle");
   const depth = (ancestor?.depth ?? 0) + 1;
   const hop = (ancestor?.hop ?? 0) + 1;
   if (depth > root.maxDepth) refuse("depth-exceeded");
@@ -258,6 +276,7 @@ export async function admitDelegation(
   const row = await tx.delegation.create({
     data: {
       card,
+      comparisonId: comparison?.id,
       rootTaskId,
       parentRunId: parent.id,
       spaceId: input.spaceId,

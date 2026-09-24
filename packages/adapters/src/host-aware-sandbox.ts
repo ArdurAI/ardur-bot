@@ -131,6 +131,10 @@ export class HostAwareSandbox implements SandboxProvider {
     return this.route(computer).prepare(computer, context);
   }
 
+  async environmentNote(computer: ComputerRef, context: AdapterContext) {
+    return this.route(computer).environmentNote?.(computer, context);
+  }
+
   async resolveCommandCwd(
     computer: ComputerRef,
     cwd: string | undefined,

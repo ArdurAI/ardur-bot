@@ -16,7 +16,11 @@ function runPreload(file: string, ipc: { invoke?: unknown; on?: unknown; off?: u
     process: { platform: "linux" },
     require(moduleName: string) {
       if (moduleName !== "electron") throw new Error(`Unexpected preload import: ${moduleName}`);
-      return { contextBridge: { exposeInMainWorld }, ipcRenderer: { invoke, on, off } };
+      return {
+        contextBridge: { exposeInMainWorld },
+        ipcRenderer: { invoke, on, off },
+        webUtils: { getPathForFile: (file: { path?: string }) => file.path ?? "" },
+      };
     },
   });
 
@@ -36,8 +40,10 @@ describe("desktop preload bridge", () => {
       "host",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
@@ -50,9 +56,11 @@ describe("desktop preload bridge", () => {
     expect(Object.keys(bridge.update).sort()).toEqual(["check", "download", "install", "state"]);
 
     expect(Object.keys(bridge.host!).sort()).toEqual([
+      "addDroppedRoot",
       "addRoot",
       "clear",
       "removeRoot",
+      "setKeepRunning",
       "setup",
       "state",
     ]);
@@ -93,8 +101,10 @@ describe("desktop preload bridge", () => {
       "host",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
@@ -165,4 +175,11 @@ describe("setup preload bridge", () => {
     handler({}, { phase: "pulling" });
     expect(listener).toHaveBeenCalledWith({ phase: "pulling" });
   });
+});
+
+it("turns a safe folder reply into a renderer error without logging it again", async () => {
+  const invoke = vi.fn(async () => ({ error: "Set up this computer first." }));
+  const { exposeInMainWorld } = runPreload("preload.cjs", { invoke });
+  const bridge = exposeInMainWorld.mock.calls[0]![1] as ArdurBotDesktop;
+  await expect(bridge.host!.addRoot()).rejects.toThrow("Set up this computer first.");
 });

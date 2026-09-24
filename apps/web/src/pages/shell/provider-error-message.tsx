@@ -44,7 +44,7 @@ export function ProviderErrorMessage({
     return (
       <>
         <span className="min-w-0 flex-1">
-          {runtimeProblem.code.startsWith("runtime-") ? (
+          {pin.runtimeKind !== "pi" || runtimeProblem.code !== "pin-credential-missing" ? (
             runtimeProblem.reason
           ) : (
             <Trans>
@@ -52,14 +52,11 @@ export function ProviderErrorMessage({
             </Trans>
           )}
         </span>
-        <Button
-          variant="link"
-          size="xs"
-          className="text-destructive"
-          onClick={pin.runtimeKind === "pi" ? onConnect : onChangeModel}
-        >
-          <Trans>Connect</Trans>
-        </Button>
+        {pin.runtimeKind === "pi" && runtimeProblem.code === "pin-credential-missing" ? (
+          <Button variant="link" size="xs" className="text-destructive" onClick={onConnect}>
+            <Trans>Connect</Trans>
+          </Button>
+        ) : null}
         <Button variant="link" size="xs" className="text-destructive" onClick={onChangeModel}>
           <Trans>Change pin</Trans>
         </Button>

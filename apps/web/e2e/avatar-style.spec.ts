@@ -8,7 +8,7 @@ test("account settings avatar style previews differ for robot and organic", asyn
   await signup(page, `avatar-style-${stamp}@ardurbot.test`, "password12", "Avatar style QA");
   await completeOnboarding(page);
 
-  const settings = await openUserSettings(page);
+  const settings = await openUserSettings(page, "account");
   await expect(settings.getByRole("heading", { name: "Avatars", exact: true })).toBeVisible();
 
   const robot = settings.getByTestId("avatar-style-robot");

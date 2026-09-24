@@ -1,7 +1,7 @@
 import type { IntegrationConnection } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { integrationCatalog } from "../../../packages/adapters/src/integration-catalog.js";
-import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
 test("Settings catalog connects and grants only selected tools", async ({ page }, testInfo) => {
   await signup(page, `catalog-${Date.now()}@ardurbot.test`, "password12", "Catalog test");
@@ -70,8 +70,28 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
       },
     });
   });
-  const settings = await openUserSettings(page);
-  await settings.getByTestId("settings-nav-integrations").click();
+  await page
+    .locator("aside")
+    .first()
+    .getByRole("button", { name: "Integrations", exact: true })
+    .click();
+  const settings = page.getByTestId("user-settings");
+  await expect(settings).toHaveAttribute("data-settings-section", "integrations");
+  for (const name of [
+    "GitHub",
+    "GitLab",
+    "Notion",
+    "Atlassian",
+    "Jenkins",
+    "Kubernetes",
+    "AWS",
+    "Google Cloud",
+    "Azure",
+  ])
+    await expect(settings.getByText(name, { exact: true })).toBeVisible();
+  for (const copy of ["Browse MCP servers", "Configure a plugin catalog", "Advanced tool sources"])
+    await expect(page.getByText(copy, { exact: true })).toHaveCount(0);
+  await expect(page.getByPlaceholder("Search apps")).toHaveCount(0);
   await expect(settings.getByRole("button", { name: "Connect", exact: true })).toHaveCount(3);
   await expect(settings.getByText("Coming soon", { exact: true })).toHaveCount(5);
   await captureScreenshot(page, testInfo, "settings-integration-catalog");

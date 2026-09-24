@@ -4,6 +4,7 @@ import { RuntimePinSchema } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { requestedBotPin } from "./pin-resolution.js";
 import { RuntimeRegistry } from "./runtime-registry.js";
+import { claudeModels } from "./runtimes/claude-code-runtime.js";
 
 const pin: RuntimePin = {
   runtimeKind: "claude-code",
@@ -14,6 +15,35 @@ const pin: RuntimePin = {
   revision: 1,
 };
 describe("runtime pin selection", () => {
+  it.each(["2.1.259", "2.1.281", "2.1.282"])(
+    "resolves only offered Claude efforts for version %s",
+    async (version) => {
+      const runtime = {} as AgentRuntime;
+      const registry = new RuntimeRegistry({
+        "claude-code": {
+          factory: () => runtime,
+          probe: async () => ({
+            runtimeKind: "claude-code",
+            available: true,
+            version,
+            models: claudeModels(version),
+          }),
+        },
+      });
+      for (const modelId of ["claude-opus-4-6", "claude-opus-5"]) {
+        for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
+          const result = await registry.resolve({ ...pin, modelId, effort }, "desktop", true);
+          const offered =
+            version === "2.1.282"
+              ? effort === "low"
+              : modelId !== "claude-opus-4-6" || effort !== "xhigh";
+          expect(result).toMatchObject(
+            offered ? { runtime } : { code: "pin-effort-unsupported", pin: { modelId, effort } },
+          );
+        }
+      }
+    },
+  );
   it("defaults only absent legacy runtime kinds to pi", () => {
     expect(requestedBotPin({}).runtimeKind).toBe("pi");
     const { runtimeKind: _, ...legacy } = pin;

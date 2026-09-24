@@ -12,7 +12,59 @@ body,
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--chat-font-sans);
+}
+
+[data-chat-font="sans"] [data-chat-transcript] {
+  font-family: var(--chat-font-sans);
+}
+[data-chat-font="serif"] [data-chat-transcript] {
+  font-family: var(--chat-font-serif);
+}
+[data-chat-font="system"] [data-chat-transcript] {
+  font-family: var(--chat-font-system);
+}
+
+/* Search removes a group's chrome when all of its registered rows are hidden. */
+[data-settings-group]:not(:has([data-settings-row]:not([hidden]))) {
+  display: none;
+}
+
+/* The explicit preference and OS setting share the same reduction. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override animation utility classes. */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override animation utility classes. */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override transition utility classes. */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override smooth scrolling. */
+    scroll-behavior: auto !important;
+  }
+}
+[data-motion="reduced"] *,
+[data-motion="reduced"] *::before,
+[data-motion="reduced"] *::after {
+  /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override animation utility classes. */
+  animation-duration: 0.01ms !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override animation utility classes. */
+  animation-iteration-count: 1 !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override transition utility classes. */
+  transition-duration: 0.01ms !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override smooth scrolling. */
+  scroll-behavior: auto !important;
+}
+[data-motion="reduced"] .shimmer {
+  animation: none;
+  background-image: none;
+  -webkit-text-fill-color: currentColor;
+}
+[data-motion="reduced"] .ardurbot-organic-avatar[data-shape-family] .ardurbot-organic-avatar-body {
+  animation: none;
+  d: var(--ardurbot-organic-path);
 }
 
 .rk-scroll::-webkit-scrollbar {

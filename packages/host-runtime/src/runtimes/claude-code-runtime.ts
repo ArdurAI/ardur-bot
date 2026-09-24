@@ -20,7 +20,15 @@ import {
   stopNative,
 } from "./native-process.js";
 
-export function claudeModels(): RuntimeAvailability["models"] {
+function claudePatch(version?: string): number | undefined {
+  const match = version?.match(/^2\.1\.(\d+)$/);
+  return match ? Number(match[1]) : undefined;
+}
+
+export function claudeModels(version?: string): RuntimeAvailability["models"] {
+  // CLI/model documentation checked through 2.1.281; unknown versions retain low only.
+  const patch = claudePatch(version);
+  const documented = patch !== undefined && patch >= 259 && patch <= 281;
   // Native compatibility is explicit; importing the Pi provider registry here pulls
   // unrelated SDKs into the packaged host. Keep the catalog conformance test in sync.
   return [
@@ -33,7 +41,15 @@ export function claudeModels(): RuntimeAvailability["models"] {
     ["claude-opus-5-5", "Claude Opus 5.5"],
     ["claude-sonnet-4-6", "Claude Sonnet 4.6"],
     ["claude-sonnet-5", "Claude Sonnet 5"],
-  ].map(([id, label]) => ({ id: id!, label: label!, efforts: ["low"] }));
+  ].map(([id, label]) => ({
+    id: id!,
+    label: label!,
+    efforts: !documented
+      ? ["low"]
+      : id === "claude-opus-4-6" || id === "claude-sonnet-4-6"
+        ? ["low", "medium", "high", "max"]
+        : ["low", "medium", "high", "xhigh", "max"],
+  }));
 }
 
 export async function probeClaude(start = spawnNative): Promise<RuntimeAvailability> {
@@ -45,8 +61,8 @@ export async function probeClaude(start = spawnNative): Promise<RuntimeAvailabil
     const { code, version } = await probeCommand(binary, ["--version"], true, start);
     if (code !== 0 || !version)
       return { ...base, available: false, reason: "Claude Code is unavailable on this computer." };
-    const parts = version.split(".").map(Number);
-    if (parts[0] !== 2 || parts[1] !== 1 || parts[2]! < 259)
+    const patch = claudePatch(version);
+    if (patch === undefined || patch < 259)
       return {
         ...base,
         version,
@@ -58,6 +74,7 @@ export async function probeClaude(start = spawnNative): Promise<RuntimeAvailabil
     return {
       ...base,
       version,
+      models: claudeModels(version),
       available: auth.code === 0,
       ...(auth.code === 0 ? {} : { reason: "Not signed in — run `claude` in a terminal once" }),
     };
@@ -77,6 +94,7 @@ export function claudeArguments(
       runtimePinProblem(pin, "pin-credential-missing", "Claude Code uses its own sign-in."),
     );
   return [
+    ...(request.controlledComparison ? ["--safe-mode", "--setting-sources", ""] : []),
     "-p",
     "--output-format",
     "stream-json",
@@ -105,7 +123,12 @@ export function claudeArguments(
     "--disable-slash-commands",
     "--no-chrome",
     "--settings",
-    JSON.stringify({ disableAllHooks: true, switchModelsOnFlag: false, fallbackModel: [] }),
+    JSON.stringify({
+      disableAllHooks: true,
+      switchModelsOnFlag: false,
+      fallbackModel: [],
+      ...(request.controlledComparison ? { autoMemoryEnabled: false } : {}),
+    }),
     request.nativeSession?.sessionId ? "--resume" : "--session-id",
     sessionId,
   ];
@@ -134,6 +157,8 @@ export function assertClaudeTools(tools: unknown, pin: RuntimePin) {
 export class ClaudeStreamParser {
   initialized = false;
   finished = false;
+  effortAttested = false;
+  effortAttestationReason: string | null = "Claude Code does not report the applied effort";
   sessionId?: string;
   constructor(private readonly pin: RuntimePin) {}
   private model(model: unknown) {
@@ -144,10 +169,30 @@ export class ClaudeStreamParser {
       );
     }
   }
+  private effort(value: Record<string, unknown>) {
+    // The documented init effort is currently Remote-Control-only. Honor explicit
+    // evidence if emitted here; never infer it from arguments, usage or settings.
+    if (!Object.hasOwn(value, "effort")) return;
+    if (value.effort !== this.pin.effort) {
+      this.initialized = false;
+      this.effortAttested = false;
+      this.effortAttestationReason = "This runtime cannot attest the pinned effort.";
+      throw new RuntimePinError(
+        runtimePinProblem(
+          this.pin,
+          "pin-effort-unsupported",
+          "This runtime cannot attest the pinned effort.",
+        ),
+      );
+    }
+    this.effortAttested = true;
+    this.effortAttestationReason = null;
+  }
   parse(value: Record<string, unknown>): AgentRuntimeEvent[] {
     if (value.type === "system" && value.subtype === "init") {
       this.model(value.model);
       assertClaudeTools(value.tools, this.pin);
+      this.effort(value);
       this.sessionId = typeof value.session_id === "string" ? value.session_id : undefined;
       this.initialized = true;
     }
@@ -166,6 +211,7 @@ export class ClaudeStreamParser {
     if (value.type === "assistant")
       this.model((value.message as { model?: string } | undefined)?.model);
     if (value.type === "result") {
+      this.effort(value);
       if (value.is_error || value.subtype !== "success" || !this.initialized)
         throw new RuntimePinError(
           runtimePinProblem(
@@ -185,7 +231,32 @@ export class ClaudeStreamParser {
         );
       for (const model of Object.keys(usage)) this.model(model);
       this.finished = true;
-      return [{ type: "done" }];
+      const events: AgentRuntimeEvent[] = [];
+      for (const [model, entry] of Object.entries(usage)) {
+        const tokens = entry as {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadInputTokens?: number;
+          cacheCreationInputTokens?: number;
+        };
+        if (
+          Number.isSafeInteger(tokens.inputTokens) &&
+          Number.isSafeInteger(tokens.outputTokens) &&
+          tokens.inputTokens! >= 0 &&
+          tokens.outputTokens! >= 0
+        )
+          events.push({
+            type: "usage",
+            provider: "anthropic",
+            model,
+            inputTokens:
+              tokens.inputTokens! +
+              (tokens.cacheReadInputTokens ?? 0) +
+              (tokens.cacheCreationInputTokens ?? 0),
+            outputTokens: tokens.outputTokens!,
+          });
+      }
+      return [...events, { type: "done" }];
     }
     if (value.type === "error")
       throw new RuntimePinError(
@@ -219,18 +290,37 @@ export class ClaudeCodeRuntime implements AgentRuntime {
     context?: Partial<AdapterContext>,
   ): AsyncIterable<AgentRuntimeEvent> {
     const pin = request.model.runtimePin!;
-    if (pin?.runtimeKind !== "claude-code" || pin.effort !== "low")
+    if (pin?.runtimeKind !== "claude-code")
       throw new RuntimePinError(
         runtimePinProblem(
           pin,
-          "pin-effort-unsupported",
-          "Claude Code cannot attest higher effort in stream-json; change the pin.",
+          "runtime-unavailable",
+          "The pinned runtime is unavailable — connect it or change the pin.",
         ),
       );
     const binary = await findNativeBinary("claude");
     if (!binary)
       throw new RuntimePinError(
         runtimePinProblem(pin, "runtime-unavailable", "claude is not installed on this computer"),
+      );
+    const { code, version } = await probeCommand(binary, ["--version"], true, this.start).catch(
+      () => ({ code: -1, version: undefined }),
+    );
+    const patch = claudePatch(version);
+    if (code !== 0 || patch === undefined || patch < 259)
+      throw new RuntimePinError(
+        runtimePinProblem(pin, "runtime-unavailable", "Update Claude Code to use this runtime."),
+      );
+    const model = claudeModels(version).find((entry) => entry.id === pin.modelId);
+    if (!model || !model.efforts.includes(pin.effort ?? ""))
+      throw new RuntimePinError(
+        runtimePinProblem(
+          pin,
+          model ? "pin-effort-unsupported" : "pin-model-unknown",
+          model
+            ? "This runtime cannot attest the pinned effort."
+            : "The pinned model is unavailable in this runtime.",
+        ),
       );
     const queue = new RuntimeQueue<AgentRuntimeEvent>();
     const parser = new ClaudeStreamParser(pin);
@@ -256,12 +346,21 @@ export class ClaudeCodeRuntime implements AgentRuntime {
       );
     });
     const sessionId = request.nativeSession?.sessionId ?? randomUUID();
+    const reportInfo = () =>
+      request.onRuntimeInfo?.({
+        runtimeKind: "claude-code",
+        version,
+        sessionId: parser.sessionId ?? sessionId,
+        effortAttested: parser.effortAttested,
+        effortAttestationReason: parser.effortAttestationReason,
+      });
     const abort = () => {
       queue.end();
       child?.kill("SIGTERM");
     };
     let reader: Promise<void> | undefined;
     try {
+      await reportInfo();
       child = this.start(
         binary,
         claudeArguments(request, mcp.config, sessionId),
@@ -290,10 +389,20 @@ export class ClaudeCodeRuntime implements AgentRuntime {
         try {
           for await (const value of jsonLines(child!)) {
             const events = parser.parse(value);
-            if (value.type === "system" && parser.initialized)
+            if (
+              (value.type === "system" && value.subtype === "init" && parser.initialized) ||
+              value.type === "result"
+            )
+              await reportInfo();
+            const reported =
+              value.type === "assistant"
+                ? (value.message as { model?: unknown } | undefined)?.model
+                : undefined;
+            if (typeof reported === "string")
               await request.onRuntimeInfo?.({
                 runtimeKind: "claude-code",
                 sessionId: parser.sessionId ?? sessionId,
+                reportedModel: reported,
               });
             for (const event of events) if (event.type !== "done") queue.push(event);
           }
@@ -310,9 +419,16 @@ export class ClaudeCodeRuntime implements AgentRuntime {
           queue.end();
         } catch (error) {
           parser.initialized = false;
+          let failure = error;
+          if (error instanceof RuntimePinError && error.problem.code === "pin-effort-unsupported")
+            try {
+              await reportInfo();
+            } catch (persistError) {
+              failure = persistError;
+            }
           queue.end(
-            error instanceof RuntimePinError
-              ? error
+            failure instanceof RuntimePinError
+              ? failure
               : new RuntimePinError(
                   runtimePinProblem(
                     pin,

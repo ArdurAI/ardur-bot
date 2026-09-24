@@ -1,7 +1,9 @@
 import path from "node:path";
+import { DESKTOP_FOLDER_ERRORS } from "@ardurbot/contracts/desktop-errors";
 import type { BrowserWindow, IpcMainInvokeEvent, Tray } from "electron";
 import { app, dialog, ipcMain, safeStorage } from "electron";
 import {
+  HostLifecyclePreferences,
   HostServiceStore,
   HostServiceSupervisor,
   hostServiceLaunch,
@@ -17,6 +19,8 @@ export function installHostService(options: {
 }) {
   const directory = path.join(app.getPath("userData"), "host-service");
   const store = new HostServiceStore(directory, safeStorage);
+  const lifecycle = new HostLifecyclePreferences(path.join(directory, "lifecycle.json"));
+  const ready = lifecycle.load();
   const supervisor = new HostServiceSupervisor(
     hostServiceLaunch({
       packaged: app.isPackaged,
@@ -45,12 +49,24 @@ export function installHostService(options: {
     action: (event: IpcMainInvokeEvent, value: unknown) => Promise<unknown>,
   ) {
     ipcMain.handle(`desktop.host.${name}`, (event, value: unknown) => {
-      const result = tail.then(() => action(event, value));
+      const result = tail.then(async () => {
+        await ready;
+        return action(event, value);
+      });
       tail = result.then(
         () => undefined,
         () => undefined,
       );
-      return result;
+      if (name !== "addRoot") return result;
+      return result.catch((error: unknown) => {
+        console.error("Could not add folder.", error);
+        const message = error instanceof Error ? error.message : "";
+        return {
+          error: DESKTOP_FOLDER_ERRORS.some((known) => known === message)
+            ? message
+            : "Could not add folder. Try again.",
+        };
+      });
     });
   }
   register("state", async (event) => {
@@ -59,7 +75,13 @@ export function installHostService(options: {
     return {
       configured: config?.apiUrl === target,
       roots: config?.apiUrl === target ? config.hostRoots : [],
+      keepRunning: lifecycle.keepRunning,
     };
+  });
+  register("setKeepRunning", async (event, value) => {
+    trusted(event);
+    if (typeof value !== "boolean") throw new Error("Choose whether to keep working.");
+    await lifecycle.setKeepRunning(value);
   });
   register("setup", async (event) => {
     const { window, target } = trusted(event);
@@ -98,17 +120,21 @@ export function installHostService(options: {
     await store.write(config);
     supervisor.start(config);
   });
-  register("addRoot", async (event) => {
+  register("addRoot", async (event, value) => {
     const { window, target } = trusted(event);
     const config = await store.read();
     if (!config || config.apiUrl !== target) throw new Error("Set up this computer first.");
-    const selected = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
-    if (selected.canceled || !selected.filePaths[0]) return;
+    const selected = await dialog.showOpenDialog(window, {
+      properties: ["openDirectory"],
+      ...(typeof value === "string" && path.isAbsolute(value) ? { defaultPath: value } : {}),
+    });
+    if (selected.canceled || !selected.filePaths[0]) return null;
     const root = await selectedHostRoot(selected.filePaths[0]);
     config.hostRoots = [...new Set([...config.hostRoots, root])];
     if (config.hostRoots.length > 32) throw new Error("Remove a folder before adding another.");
     await store.write(config);
     supervisor.start(config);
+    return root;
   });
   register("removeRoot", async (event, value) => {
     const { target } = trusted(event);
@@ -125,7 +151,14 @@ export function installHostService(options: {
     await store.clear();
   });
   return {
+    get keepRunning() {
+      return lifecycle.keepRunning;
+    },
+    windowClosed() {
+      if (!lifecycle.keepRunning) supervisor.stop();
+    },
     async activate(target: string) {
+      await ready;
       const config = await store.read();
       if (config?.apiUrl === target) supervisor.start(config);
       else supervisor.stop();

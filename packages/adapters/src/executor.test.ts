@@ -1792,3 +1792,37 @@ description: Prepare standup notes
     });
   });
 });
+
+it("resolves a native Codex bot without the space's inherited hosted OAuth credential", async () => {
+  const lookup = vi.fn(async () => ({ provider: "openai-codex", secretId: "hosted-secret" }));
+  const load = vi.fn();
+  const prisma = {
+    bot: {
+      findFirst: vi.fn(async () => ({
+        runtimeKind: "codex-app-server",
+        modelProvider: "openai-codex",
+        modelId: "gpt-6-astra",
+        thinkingLevel: "xhigh",
+        modelCredentialId: "native:codex-app-server",
+        modelPinRevision: 1,
+      })),
+    },
+    userModelCredential: { findFirst: lookup },
+    spaceModelPreference: { findFirst: lookup },
+    secret: { findFirst: load },
+  } as unknown as PrismaClient;
+  const executor = createRunExecutor({ prisma, secretStore: { load } } as unknown as Parameters<
+    typeof createRunExecutor
+  >[0]);
+  const model = await executor.resolveModel({ userId: "user", spaceId: "space", botId: "bot" });
+  expect(model).toMatchObject({
+    kind: "resolved",
+    provider: "openai-codex",
+    id: "gpt-6-astra",
+    thinkingLevel: "xhigh",
+  });
+  expect(model).not.toHaveProperty("oauth");
+  expect(model).not.toHaveProperty("apiKey");
+  expect(lookup).not.toHaveBeenCalled();
+  expect(load).not.toHaveBeenCalled();
+});

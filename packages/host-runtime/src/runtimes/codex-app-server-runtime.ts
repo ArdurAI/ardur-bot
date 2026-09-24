@@ -7,6 +7,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
+import * as z from "zod";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import type { NativeSpawn } from "./native-process.js";
@@ -27,7 +28,11 @@ type RpcMessage = {
   error?: unknown;
 };
 
-class CodexRequestRejected extends Error {}
+class CodexRequestRejected extends Error {
+  constructor(readonly code?: number) {
+    super("Codex app-server rejected the request.");
+  }
+}
 
 /** Bounded stdio RPC. No server output or account details are logged. */
 export class CodexRpc {
@@ -57,7 +62,7 @@ export class CodexRpc {
             clearTimeout(pending.timer);
             this.pending.delete(item.id as number);
             if (item.error)
-              pending.reject(new CodexRequestRejected("Codex app-server rejected the request."));
+              pending.reject(new CodexRequestRejected((item.error as { code?: number }).code));
             else pending.resolve(item.result);
           } else this.events.push(item);
         }
@@ -167,24 +172,41 @@ export async function codexModels(rpc: CodexRpc): Promise<RuntimeAvailability["m
 export async function probeCodex(start: NativeSpawn = spawnNative): Promise<RuntimeAvailability> {
   const base = { runtimeKind: "codex-app-server" as const, models: [] };
   let rpc: CodexRpc | undefined;
+  let version: string | undefined;
+  let signedIn: boolean | undefined;
   try {
     const binary = await findNativeBinary("codex");
-    if (!binary) throw new Error("missing");
-    const { version } = await probeCommand(binary, ["--version"], true, start);
+    if (!binary) return { ...base, available: false, reason: "Codex is not installed." };
+    const result = await probeCommand(binary, ["--version"], true, start);
+    version = result.version;
+    if (result.code !== 0) throw new Error("version probe failed");
     rpc = await openCodex(start);
     const { account } = await rpc.request<{ account: { type: string } | null }>("account/read", {
       refreshToken: false,
     });
-    if (account?.type !== "chatgpt")
+    signedIn = account?.type === "chatgpt";
+    if (!signedIn)
       return {
         ...base,
         version,
+        signedIn,
         available: false,
-        reason: "Not signed in — connect Codex with ChatGPT.",
+        reason: "Not signed in — run codex login.",
       };
-    return { ...base, version, available: true, models: await codexModels(rpc) };
-  } catch {
-    return { ...base, available: false, reason: "Codex app-server unavailable" };
+    return { ...base, version, signedIn, available: true, models: await codexModels(rpc) };
+  } catch (error) {
+    return {
+      ...base,
+      version,
+      signedIn,
+      available: false,
+      reason:
+        version &&
+        error instanceof CodexRequestRejected &&
+        [-32601, -32602].includes(error.code ?? 0)
+          ? `Codex version ${version} is not supported yet.`
+          : "Codex could not be reached. Check again or restart the desktop app.",
+    };
   } finally {
     await rpc?.close();
   }
@@ -213,10 +235,14 @@ export class CodexAppServerRuntime implements AgentRuntime {
       code: "runtime-unavailable" | "pin-model-unknown" | "pin-effort-unsupported",
       reason: string,
     ) => new RuntimePinError(runtimePinProblem(pin, code, reason));
-    if (request.model.apiKey || request.model.oauth)
+    if (
+      request.model.apiKey ||
+      request.model.oauth ||
+      (pin.credentialId && pin.credentialId !== "native:codex-app-server")
+    )
       throw problem(
         "runtime-unavailable",
-        "Codex uses its own ChatGPT sign-in — connect it or change the pin.",
+        "Codex uses its own ChatGPT sign-in. Remove the pinned connection or change the runtime.",
       );
     const rpc = await openCodex((binary, args) =>
       this.start(binary, args, request.nativeCwd),
@@ -229,6 +255,8 @@ export class CodexAppServerRuntime implements AgentRuntime {
     let paused = false;
     let pinValid = false;
     let finished = false;
+    let reportedInputTokens = 0;
+    let reportedOutputTokens = 0;
     let reader: Promise<void> | undefined;
     let steering: ReturnType<typeof setInterval> | undefined;
     const interrupt = async () => {
@@ -266,7 +294,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
         refreshToken: false,
       });
       if (account?.type !== "chatgpt")
-        throw problem("runtime-unavailable", "Not signed in — connect Codex with ChatGPT.");
+        throw problem("runtime-unavailable", "Not signed in — run codex login.");
       const model = (await codexModels(rpc)).find((entry) => entry.id === pin.modelId);
       if (!model) throw problem("pin-model-unknown", "The pinned model is unavailable in Codex.");
       if (!model.efforts.includes(pin.effort!))
@@ -286,6 +314,33 @@ export class CodexAppServerRuntime implements AgentRuntime {
         Object.keys(config.mcp_servers ?? {}).map((name) => [name, { enabled: false }]),
       );
       mcpServers.ardur = { ...mcp.config, enabled: true, required: true };
+      const comparisonSkills: Array<{ path: string; enabled: false }> = [];
+      if (request.controlledComparison) {
+        const inventory = z
+          .object({
+            data: z
+              .array(
+                z.object({
+                  skills: z.array(z.object({ path: z.string().min(1) })),
+                  errors: z.array(z.unknown()).max(0),
+                }),
+              )
+              .min(1),
+          })
+          .safeParse(
+            await rpc.request("skills/list", {
+              ...(request.nativeCwd ? { cwds: [request.nativeCwd] } : {}),
+              forceReload: true,
+            }),
+          );
+        if (!inventory.success)
+          throw problem(
+            "runtime-unavailable",
+            "Codex could not isolate saved skills — retry or change the pin.",
+          );
+        for (const entry of inventory.data.data)
+          for (const { path } of entry.skills) comparisonSkills.push({ path, enabled: false });
+      }
       const options = {
         model: pin.modelId,
         modelProvider: "openai",
@@ -294,6 +349,15 @@ export class CodexAppServerRuntime implements AgentRuntime {
         sandbox: "read-only",
         baseInstructions: request.instructions,
         config: {
+          ...(request.controlledComparison
+            ? {
+                project_doc_max_bytes: 0,
+                developer_instructions: "",
+                personality: "none",
+                skills: { config: comparisonSkills },
+                memories: { use_memories: false, generate_memories: false },
+              }
+            : {}),
           mcp_servers: mcpServers,
           web_search: "disabled",
           tools: { view_image: false },
@@ -329,6 +393,13 @@ export class CodexAppServerRuntime implements AgentRuntime {
         try {
           for await (const event of rpc.events) {
             const params = event.params ?? {};
+            if (request.controlledComparison && event.method === "skills/changed") {
+              queue.end(
+                problem("runtime-unavailable", "Saved skills changed; retry this comparison."),
+              );
+              void interrupt();
+              break;
+            }
             if (event.method === "model/rerouted") {
               queue.end(problem("pin-model-unknown", "Codex rerouted the pinned model."));
               void interrupt();
@@ -353,6 +424,34 @@ export class CodexAppServerRuntime implements AgentRuntime {
               continue;
             }
             if (params.threadId && params.threadId !== threadId) continue;
+            if (request.controlledComparison && event.method === "thread/tokenUsage/updated") {
+              // Comparison sessions always start fresh. `last` is context usage,
+              // whereas changes in `total` account for every model call once.
+              const usage = (
+                params.tokenUsage as
+                  | { total?: { inputTokens?: number; outputTokens?: number } }
+                  | undefined
+              )?.total;
+              if (
+                usage &&
+                Number.isSafeInteger(usage.inputTokens) &&
+                Number.isSafeInteger(usage.outputTokens) &&
+                usage.inputTokens! >= reportedInputTokens &&
+                usage.outputTokens! >= reportedOutputTokens &&
+                (usage.inputTokens! > reportedInputTokens ||
+                  usage.outputTokens! > reportedOutputTokens)
+              ) {
+                queue.push({
+                  type: "usage",
+                  provider: pin.provider!,
+                  model: pin.modelId!,
+                  inputTokens: usage.inputTokens! - reportedInputTokens,
+                  outputTokens: usage.outputTokens! - reportedOutputTokens,
+                });
+                reportedInputTokens = usage.inputTokens!;
+                reportedOutputTokens = usage.outputTokens!;
+              }
+            }
             if (event.method === "item/agentMessage/delta" && typeof params.delta === "string")
               queue.push({ type: "text", text: params.delta });
             if (event.method === "turn/completed") {

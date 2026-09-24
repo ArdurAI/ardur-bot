@@ -30,11 +30,15 @@ export async function resolveRunModelPin(input: {
   bot: BotPinFields | null;
   snapshot?: unknown;
   scripted: boolean;
-  loadKey: (credential: Credential, pin: RuntimePin) => Promise<AgentRunModel>;
+  loadKey: (
+    credential: Credential,
+    pin: RuntimePin,
+    selectDefaultEffort?: boolean,
+  ) => Promise<AgentRunModel>;
 }): Promise<ResolvedRunPin | RuntimeProblem> {
   const { bot } = input;
   let pin: RuntimePin;
-  let credential: Credential;
+  let credential: Credential = null;
   let loadedModel: AgentRunModel | undefined;
   if (input.snapshot != null) {
     const parsed = RuntimePinSchema.safeParse(input.snapshot);
@@ -61,10 +65,8 @@ export async function resolveRunModelPin(input: {
       );
     }
     pin = parsed.data;
-    credential = await credentialForPin(input.prisma, input.scope, pin);
   } else if (hasBotPin(bot)) {
     pin = requestedBotPin(bot!);
-    credential = await credentialForPin(input.prisma, input.scope, pin);
   } else {
     // Compatibility for bots displaying Space default: capture that one selection once.
     // No settings, deployment, catalog-first, or other-connection fallback is allowed.
@@ -77,15 +79,26 @@ export async function resolveRunModelPin(input: {
       provider: credential?.provider ?? (input.scripted ? "scripted" : null),
       modelId: credential?.defaultModel ?? (input.scripted ? "scripted" : null),
       effort:
-        bot?.thinkingLevel ?? spaceDefaultEffort(entry?.reasoning ?? false, entry?.thinkingLevels),
+        credential?.provider === "ollama" && bot?.thinkingLevel === "off"
+          ? "none"
+          : (bot?.thinkingLevel ??
+            spaceDefaultEffort(entry?.reasoning ?? false, entry?.thinkingLevels)),
       credentialId: credential?.id ?? (input.scripted ? "scripted" : null),
       revision: bot?.modelPinRevision ?? 0,
     };
     // A custom space default displays the effort stored with its connection.
-    if (credential?.provider === "openai-compatible" && !bot?.thinkingLevel) {
+    if (
+      (credential?.provider === "openai-compatible" || credential?.provider === "ollama") &&
+      !bot?.thinkingLevel
+    ) {
       try {
-        loadedModel = await input.loadKey(credential, pin);
-        pin.effort = loadedModel.thinkingLevel ?? (loadedModel.reasoning ? "medium" : "off");
+        loadedModel = await input.loadKey(credential, pin, credential.provider === "ollama");
+        pin.effort =
+          credential.provider === "ollama"
+            ? loadedModel.reasoning
+              ? "medium"
+              : null
+            : (loadedModel.thinkingLevel ?? (loadedModel.reasoning ? "medium" : "off"));
       } catch (error) {
         if (error instanceof RuntimePinError) return error.problem;
         throw error;
@@ -100,6 +113,12 @@ export async function resolveRunModelPin(input: {
         "The pinned runtime is unavailable — change the pin.",
       );
     const provider = pin.runtimeKind === "claude-code" ? "anthropic" : "openai-codex";
+    if (pin.credentialId && pin.credentialId !== `native:${pin.runtimeKind}`)
+      return runtimePinProblem(
+        pin,
+        "runtime-unavailable",
+        "Native runtimes use their own sign-in. Remove the pinned connection or change the runtime.",
+      );
     if (
       pin.provider !== provider ||
       !pin.modelId ||
@@ -128,6 +147,8 @@ export async function resolveRunModelPin(input: {
       thinkingLevel: effort.data,
     };
   }
+  if (input.snapshot != null || hasBotPin(bot))
+    credential = await credentialForPin(input.prisma, input.scope, pin);
   if (pin.provider === "scripted" && !input.scripted)
     return runtimePinProblem(
       pin,

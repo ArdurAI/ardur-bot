@@ -2119,6 +2119,8 @@ describe("mobile thread event reduction", () => {
       kind: "problem",
       code: "pin-credential-missing",
       pin: {
+        // Runtime pins now include the runtime kind when parsed.
+        runtimeKind: "pi",
         provider: "xai",
         modelId: "grok-4.6",
         effort: "high",

@@ -63,6 +63,20 @@ async function collect(source: ReturnType<RemoteHostRuntime["run"]>) {
   return events;
 }
 describe("worker-owned remote runtime callbacks", () => {
+  it("retains effort evidence across the host callback schema", async () => {
+    const onRuntimeInfo = vi.fn();
+    const info = {
+      runtimeKind: "claude-code",
+      sessionId: "session",
+      effortAttested: false,
+      effortAttestationReason: "Claude Code does not report the applied effort",
+    };
+    const remote = runtime(async (callback) => {
+      await callback(frame("onRuntimeInfo", [info]));
+    });
+    await collect(remote.run({ ...request(), onRuntimeInfo }));
+    expect(onRuntimeInfo).toHaveBeenCalledWith(info);
+  });
   it("keeps routes private, records the local result, and refuses a replay after completion", async () => {
     const executeTool = vi.fn(async () => ({ ok: true })),
       onToolCompleted = vi.fn();

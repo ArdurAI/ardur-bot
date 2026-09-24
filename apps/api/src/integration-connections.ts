@@ -140,6 +140,7 @@ export class IntegrationConnections {
       authKind?: "oauth" | "token";
     },
   ) {
+    actor = { spaceId: actor.spaceId, userId: actor.userId };
     const descriptor = connectableIntegration(input.catalogId, input.host);
     const authKind = input.authKind ?? descriptor.authKind;
     const oauthApp = this.oauthApp(descriptor.id);
@@ -423,6 +424,7 @@ export class IntegrationConnections {
   }
 
   async revoke(actor: Owner, id: string, state: "not-connected" | "cancelled" = "not-connected") {
+    actor = { spaceId: actor.spaceId, userId: actor.userId };
     const server = await this.owned(actor, id);
     if (!server.catalogId) throw new IsolationError();
     await this.prisma.$transaction(async (tx) => {

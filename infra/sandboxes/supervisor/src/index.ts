@@ -96,9 +96,8 @@ import { assertNoDockerTerminals } from "./terminal-process.js";
 loadRootEnv();
 
 // Preserve Dockerode's existing DOCKER_HOST/TLS configuration for the default engine.
-const defaultDocker = new Docker(
-  process.env.DOCKER_HOST ? {} : { socketPath: discoverEngineSocket() },
-);
+const defaultEngineSocket = process.env.DOCKER_HOST ? undefined : discoverEngineSocket();
+const defaultDocker = new Docker(defaultEngineSocket ? { socketPath: defaultEngineSocket } : {});
 const engineScope = new AsyncLocalStorage<Docker>();
 const engines = new Map<string, Docker>();
 const docker = new Proxy(defaultDocker, {
@@ -183,8 +182,28 @@ app.use("/computers*", async (c, next) => {
   return engineScope.run(engine, next);
 });
 app.get("/computers/engine", async (c) => {
-  const [version, info] = await Promise.all([docker.version(), docker.info()]);
-  return c.json(engineFromResponses(version, info));
+  try {
+    const [version, info] = await Promise.all([docker.version(), docker.info()]);
+    return c.json(engineFromResponses(version, info));
+  } catch (error) {
+    const socket =
+      c.req.header("x-ardurbot-engine-socket") ??
+      defaultEngineSocket ??
+      (process.env.DOCKER_HOST?.startsWith("unix://")
+        ? process.env.DOCKER_HOST.slice(7)
+        : undefined);
+    if (
+      socket &&
+      ["ECONNREFUSED", "ENOENT", "EACCES", "ETIMEDOUT"].includes(
+        (error as NodeJS.ErrnoException).code ?? "",
+      )
+    ) {
+      const engine =
+        c.req.header("x-ardurbot-engine") ?? (socket.includes("podman") ? "podman" : "docker");
+      return c.json({ error: "engine-unavailable", engine, socket: socketPath(socket) }, 503);
+    }
+    throw error;
+  }
 });
 app.use("/computers", limitSupervisorRequestBody);
 app.use("/computers/*", limitSupervisorRequestBody);

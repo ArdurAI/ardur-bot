@@ -10,6 +10,10 @@ import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
 import { createRunSandbox, HostAwareSandbox, sandboxKindForBot } from "./host-aware-sandbox.js";
 
+vi.mock("@ardurbot/host-runtime/host-environment", async (original) => ({
+  ...(await original<object>()),
+  getHostEnvironment: async () => ({ env: { PATH: process.env.PATH } }),
+}));
 const ctx = {
   operationId: "1",
   traceId: "1",
@@ -177,4 +181,19 @@ it("selects the remote provider only for the packaged bridge setting", async () 
   }
   expect(createRunSandbox("desktop", {})).toBeInstanceOf(DesktopSandboxProvider);
   expect(createRunSandbox("desktop", {})).not.toBeInstanceOf(RemoteHostSandboxProvider);
+});
+
+it("routes the run environment note to the host, leaving container notes alone", async () => {
+  const host: SandboxProvider = new FakeSandboxProvider();
+  host.environmentNote = vi.fn(async () => "Tools on this computer: gh (signed in).");
+  const sandbox = new HostAwareSandbox(new FakeSandboxProvider(), host, async () => true);
+  const computer: ComputerRef = {
+    id: "host",
+    botId: "bot",
+    kind: "desktop",
+    providerRef: "/fixture/workspace",
+  };
+  expect(await sandbox.environmentNote(computer, ctx)).toContain("gh (signed in)");
+  expect(host.environmentNote).toHaveBeenCalledOnce();
+  expect(await sandbox.environmentNote({ ...computer, kind: "docker" }, ctx)).toBeUndefined();
 });

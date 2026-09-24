@@ -20,6 +20,7 @@ import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
 import type { HostWire } from "./bridge-wire.js";
 import { hostLostProblem } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
 import { confinedHostCwd } from "./host-policy.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
@@ -54,19 +55,25 @@ export class HostAgent {
     });
   }
   async initialize() {
+    await getHostEnvironment();
     await mkdir(this.config.root, { recursive: true, mode: 0o700 });
     this.roots = await Promise.all(this.config.hostRoots.map((root) => realpath(root)));
   }
   async health(): Promise<HostHealth> {
     const cwd = await confinedHostCwd(this.config.root, [this.config.root]);
     const start: NativeSpawn = (binary, args) => spawnNative(binary, args, cwd);
-    const [claude, codex] = await Promise.all([probeClaude(start), probeCodex(start)]);
+    const [claude, codex, environment] = await Promise.all([
+      probeClaude(start),
+      probeCodex(start),
+      inspectHostEnvironment(getHostEnvironment(), false),
+    ]);
     return {
       platform: process.platform as HostHealth["platform"],
       roots: this.roots,
       load: this.active.size,
       claude,
       codex,
+      environment,
     };
   }
   async receive(frame: HostFrame) {
@@ -180,7 +187,9 @@ export class HostAgent {
           context,
         );
         await confinedHostCwd(computer.providerRef, [this.config.root]);
-        if (op.op === "computer.exec") {
+        if (op.op === "computer.environment") {
+          await send("result", await inspectHostEnvironment());
+        } else if (op.op === "computer.exec") {
           if (op.cwd?.split(/[/\\]/u).includes(".."))
             throw new Error("Path escapes registered folders.");
           for await (const event of this.sandbox.execute(computer, op, context))

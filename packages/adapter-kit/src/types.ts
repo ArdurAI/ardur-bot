@@ -406,6 +406,7 @@ export interface AgentRunModel {
 }
 
 export interface AgentRunRequest {
+  controlledComparison?: boolean;
   botId: string;
   threadId: string;
   runId: string;
