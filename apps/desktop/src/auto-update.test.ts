@@ -495,3 +495,31 @@ describe("DesktopUpdateController", () => {
     expect(controller.state()).toMatchObject({ phase: "idle", message: null });
   });
 });
+
+describe("unsigned preview updates", () => {
+  it("checks pre-releases and opens an official download without downloading or installing", async () => {
+    const fake = fakeUpdater();
+    const open = vi.fn(async () => {});
+    const controller = new DesktopUpdateController(
+      { ...packaged, downloadOnly: true, previewChannel: true },
+      async () => fake.updater,
+      clock,
+      undefined,
+      open,
+    );
+    await controller.check(true);
+    fake.emit("update-available", { version: "0.2.0-alpha.1" });
+    expect(controller.state()).toMatchObject({ phase: "available", downloadOnly: true });
+    expect(fake.updater.autoInstallOnAppQuit).toBe(false);
+    expect(fake.updater.allowPrerelease).toBe(true);
+    expect(fake.updater.downloadUpdate).not.toHaveBeenCalled();
+    await controller.download();
+    expect(open).toHaveBeenCalledWith(
+      "https://github.com/ArdurAI/ardur-bot/releases/tag/v0.2.0-alpha.1",
+    );
+    fake.emit("update-downloaded", { version: "0.2.0-alpha.1" });
+    await controller.install();
+    expect(controller.state().phase).toBe("available");
+    expect(fake.updater.quitAndInstall).not.toHaveBeenCalled();
+  });
+});

@@ -1878,6 +1878,7 @@ model DelegationRoot {
   @@map("delegation_roots")
 }
 model Delegation {
+  card Json?
   id String @id @default(cuid())
   rootTaskId String
   parentRunId String
@@ -1912,5 +1913,6 @@ model Delegation {
   cancelConfirmedAt DateTime?
   @@index([rootTaskId, status])
   @@index([parentRunId])
+  @@index([spaceId, actingBotId, status])
   @@map("delegations")
 }

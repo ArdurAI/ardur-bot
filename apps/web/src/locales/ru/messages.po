@@ -187,6 +187,10 @@ msgstr "@{0}"
 msgid "A bit of everything"
 msgstr ""
 
+#: src/components/DesktopUpdates.tsx
+msgid "A new version is available — download"
+msgstr ""
+
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
 msgstr "О группах"
@@ -195,11 +199,16 @@ msgstr "О группах"
 msgid "About spaces"
 msgstr "О пространствах"
 
+#: src/pages/TeamBoard.tsx
+msgid "Accept"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
 msgstr ""
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Accepted"
 msgstr ""
 
@@ -607,6 +616,10 @@ msgstr ""
 msgid "Arguments"
 msgstr "Аргументы"
 
+#: src/pages/TeamBoard.tsx
+msgid "Artifacts"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -754,6 +767,11 @@ msgstr ""
 msgid "Block link copied."
 msgstr ""
 
+#. placeholder {0}: row.reason
+#: src/pages/TeamBoard.tsx
+msgid "Blocked — {0}"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Загрузка рабочего стола…"
@@ -831,6 +849,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr "Просмотреть MCP-серверы"
+
+#: src/pages/TeamBoard.tsx
+msgid "Budget"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Built-in"
@@ -1057,7 +1079,6 @@ msgstr "Секрет клиента"
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
-#: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "Закрыть"
 
@@ -1174,6 +1195,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Computer"
 msgstr "Компьютер"
 
@@ -1384,6 +1406,10 @@ msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Copy pairing details"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Cost"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -1614,6 +1640,10 @@ msgstr "Не удалось загрузить навык"
 msgid "Could not load sync status. Retry."
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Could not load Team; retry."
+msgstr ""
+
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
 msgstr ""
@@ -1817,6 +1847,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "Не удалось обновить реакцию"
+
+#: src/pages/TeamBoard.tsx
+msgid "Could not update this task; try again."
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
@@ -2178,6 +2212,10 @@ msgstr "У вас нет учетной записи?"
 msgid "Done"
 msgstr "Готово"
 
+#: src/pages/TeamBoard.tsx
+msgid "Done — waiting for your OK"
+msgstr ""
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -2226,6 +2264,10 @@ msgstr ""
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Сначала отредактируйте"
+
+#: src/pages/TeamBoard.tsx
+msgid "Effort"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2312,6 +2354,10 @@ msgstr "Каждую неделю"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Executing"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -2463,10 +2509,6 @@ msgstr "Забыли пароль?"
 msgid "Free"
 msgstr "Бесплатно"
 
-#: src/pages/WindowChrome.tsx
-msgid "Fullscreen"
-msgstr "Полноэкранный"
-
 #: src/pages/SettingsOverlay.tsx
 msgid "General"
 msgstr "Общие"
@@ -2606,6 +2648,10 @@ msgstr "Как проверить"
 msgid "I’m done"
 msgstr "Готово"
 
+#: src/pages/TeamBoard.tsx
+msgid "Idle"
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
 msgstr "Если вы это услышали, голос готов."
@@ -2657,6 +2703,10 @@ msgstr "Наследовать значение по умолчанию"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
 msgstr "Входы"
+
+#: src/pages/TeamBoard.tsx
+msgid "Inputs and boundaries"
+msgstr ""
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -3097,10 +3147,6 @@ msgstr "Ошибка микрофона"
 msgid "minimal — quickest, for simple tasks"
 msgstr ""
 
-#: src/pages/WindowChrome.tsx
-msgid "Minimize"
-msgstr "Свернуть"
-
 #: src/pages/Shell.tsx
 msgid "Minimize bots"
 msgstr "Свернуть ботов"
@@ -3118,6 +3164,7 @@ msgstr "минуты"
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Model"
 msgstr "Модель"
 
@@ -3414,6 +3461,10 @@ msgstr "Не сейчас"
 msgid "Not recorded"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Not reported"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr ""
@@ -3547,7 +3598,7 @@ msgstr ""
 msgid "Opening terminal"
 msgstr ""
 
-#: src/App.tsx
+#: src/components/ShellSkeleton.tsx
 msgid "Opening your Space…"
 msgstr "Открытие вашего пространства…"
 
@@ -3748,6 +3799,7 @@ msgid "provider"
 msgstr ""
 
 #: src/pages/Onboarding.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "Поставщик"
 
@@ -3774,6 +3826,7 @@ msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "В очереди"
 
@@ -4013,6 +4066,14 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Reported met"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Reported unmet"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository authentication"
 msgstr ""
@@ -4027,6 +4088,12 @@ msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository URL"
+msgstr ""
+
+#. placeholder {0}: row.requesterName
+#. placeholder {1}: row.botName
+#: src/pages/TeamBoard.tsx
+msgid "Requested by {0} — acting as {1}"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
@@ -4074,6 +4141,10 @@ msgstr "Сброс…"
 msgid "Resources"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Responsible human"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Restart to update"
 msgstr "Перезапустить для обновления"
@@ -4116,6 +4187,10 @@ msgstr "Вернуться в Ardur Bot"
 #: src/pages/KnowledgeSection.tsx
 msgid "rev {0}"
 msgstr "версия {0}"
+
+#: src/pages/TeamBoard.tsx
+msgid "Review approval"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Review destination"
@@ -4234,6 +4309,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr "Запускается, когда этот бот получает проверенное сообщение от этого провайдера."
+
+#: src/pages/TeamBoard.tsx
+msgid "Runtime"
+msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runtime availability could not be checked."
@@ -4658,6 +4737,7 @@ msgstr "Шаги"
 #: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Stop"
 msgstr "Остановить"
 
@@ -4758,7 +4838,9 @@ msgstr "Научить задачу"
 msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "Обучение в процессе. Прекратите обучение, прежде чем отправлять новое сообщение."
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "Команда"
 
@@ -4925,6 +5007,7 @@ msgid "Time of day"
 msgstr "Время суток"
 
 #: src/pages/LearningInbox.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Timeline"
 msgstr ""
 
@@ -4938,6 +5021,10 @@ msgstr "К:"
 
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Tokens"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5120,6 +5207,10 @@ msgstr "Проверка…"
 msgid "Voice"
 msgstr "Голос"
 
+#: src/pages/TeamBoard.tsx
+msgid "Waiting for approval"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Waiting for sign-in…"
@@ -5207,8 +5298,18 @@ msgstr "Где должны работать боты?"
 msgid "Window"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Working"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"
+msgstr ""
+
+#. placeholder {0}: row.sentence
+#. placeholder {1}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {0} for {1}"
 msgstr ""
 
 #: src/pages/Auth.tsx

@@ -680,3 +680,25 @@ it("returns the shared admission problem without creating a run", async () => {
   ).toMatchObject({ error: problem.message, problem });
   expect(f.tx.run.create).not.toHaveBeenCalled();
 });
+
+it("passes the optional task card to the existing admission transaction", async () => {
+  const f = deps();
+  const card = { goal: "Review sources", doneWhen: ["Citations agree"], deadlineAt: null };
+  await messageBot(f.deps, run, sender, { bot_id: "bot-target", message: "Review sources", card });
+  expect(prepareDelegation).toHaveBeenLastCalledWith(
+    f.tx,
+    expect.objectContaining({ card, prompt: "Review sources", kind: "message" }),
+    undefined,
+  );
+});
+
+it("keeps a superseded rework attempt quiet after its run pointer has moved", async () => {
+  const f = deps();
+  vi.mocked(f.deps.prisma.run.findUnique).mockResolvedValue({
+    delegationId: null,
+    delegationRootTaskId: "root",
+  } as never);
+  expect(await returnBotMessageOutcome(f.deps, run, sender, "Old result")).toBe(true);
+  expect(f.deps.jobs.enqueue).not.toHaveBeenCalled();
+  expect(f.tx.message.create).not.toHaveBeenCalled();
+});

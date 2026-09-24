@@ -9,7 +9,7 @@ import type {
 import { routineJobKey, runContinueJob, runJobKey } from "@ardurbot/adapter-kit";
 import type { Actor, Bot, ComputerMode, DelegationSnapshot } from "@ardurbot/contracts";
 import { delegationProblem, GROUP_MEMBER_MIN } from "@ardurbot/contracts";
-import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
+import { ACTIVE_RUN_STATUSES, redactTaskValue, taskCardPrompt } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   cancelRunsInTransaction,
@@ -56,6 +56,7 @@ export async function spawnBot(
     title?: string;
     instructions?: string;
     prompt?: string;
+    card?: unknown;
     computerMode?: ComputerMode;
   },
 ) {
@@ -90,7 +91,8 @@ export async function spawnBot(
           kind: "child",
           newChild: true,
           admissionKey: `child:${input.spawnKey}`,
-          prompt: input.prompt ?? "",
+          prompt: redactTaskValue(input.prompt ?? ""),
+          card: input.card,
         });
         if (!admission.ok) throw new Error(admission.error);
         const snapshot = admission.record.snapshot as unknown as DelegationSnapshot;
@@ -114,7 +116,9 @@ export async function spawnBot(
               userId: actor.userId,
               botId,
               threadId,
-              prompt: input.prompt.trim(),
+              prompt: admission.record.card
+                ? taskCardPrompt(admission.record.card, name)
+                : redactTaskValue(input.prompt.trim()),
               status: "queued",
             },
           });

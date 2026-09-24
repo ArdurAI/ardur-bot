@@ -45,7 +45,7 @@ function useDesktopUpdates() {
     };
   }, [bridge]);
 
-  async function act(action: "check" | "install") {
+  async function act(action: "check" | "install" | "download") {
     if (!bridge || pending.current) return;
     pending.current = true;
     revision.current++;
@@ -88,7 +88,9 @@ export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
     <UpdatesContext.Provider value={updates}>
       {children}
       {state &&
-      (state.phase === "ready" || (error && state.availableVersion)) &&
+      (state.phase === "ready" ||
+        (state.phase === "available" && state.downloadOnly) ||
+        (error && state.availableVersion)) &&
       dismissed !== state.availableVersion ? (
         <aside
           aria-label={t`Desktop update`}
@@ -98,9 +100,19 @@ export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2">
             <Button
               disabled={busy}
-              onClick={() => void act(state.phase === "ready" ? "install" : "check")}
+              onClick={() =>
+                void act(
+                  state.downloadOnly && state.phase === "available"
+                    ? "download"
+                    : state.phase === "ready"
+                      ? "install"
+                      : "check",
+                )
+              }
             >
-              {state.phase === "ready" ? (
+              {state.downloadOnly && state.phase === "available" ? (
+                <Trans>A new version is available — download</Trans>
+              ) : state.phase === "ready" ? (
                 <Trans>Restart to update</Trans>
               ) : (
                 <Trans>Check for updates</Trans>
@@ -130,7 +142,9 @@ export function DesktopUpdateSection() {
   if (!updates?.state) return null;
   const { state, busy, error, act, confirmedCheck } = updates;
   const ready = state.phase === "ready";
-  const downloading = state.phase === "available" || state.phase === "downloading";
+  const manualDownload = state.downloadOnly && state.phase === "available";
+  const downloading =
+    (!state.downloadOnly && state.phase === "available") || state.phase === "downloading";
   return (
     <section
       data-testid="desktop-update-settings"
@@ -144,9 +158,11 @@ export function DesktopUpdateSection() {
         <Button
           variant="outline"
           disabled={busy || downloading || state.phase === "checking"}
-          onClick={() => void act(ready ? "install" : "check")}
+          onClick={() => void act(manualDownload ? "download" : ready ? "install" : "check")}
         >
-          {ready ? (
+          {manualDownload ? (
+            <Trans>A new version is available — download</Trans>
+          ) : ready ? (
             <Trans>Restart to update</Trans>
           ) : downloading ? (
             <Trans>Downloading…</Trans>

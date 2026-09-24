@@ -76,6 +76,7 @@ import {
   PopoverContent,
   PopoverTrigger,
   resolvePersonaColorDef,
+  SlidingPanel,
 } from "@ardurbot/ui-web";
 import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
@@ -242,6 +243,7 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { SidebarSettings } from "./shell/sidebar-settings";
+import { TeamBoard } from "./TeamBoard";
 import { WindowChrome } from "./WindowChrome";
 
 const BotContextMenu = lazy(() =>
@@ -329,8 +331,10 @@ function readCollapsedSidebarSections(userId: string | null | undefined): Set<st
   }
 }
 
-export function ShellPage() {
+export function ShellPage({ team = false }: { team?: boolean }) {
   const { t } = useLingui();
+  const teamView = useRef(team);
+  teamView.current = team;
   const { botId, groupId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -652,7 +656,7 @@ export function ShellPage() {
   const autoSpokenBotId = useRef<string | null>(null);
 
   const inGroup = Boolean(groupId);
-  const active = inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
+  const active = team || inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
   computerOpenRef.current = computerOpen;
@@ -838,6 +842,7 @@ export function ShellPage() {
           navigate("/onboarding", { replace: true });
           return;
         }
+        if (teamView.current) return;
         const currentGroupId = routeGroupId.current;
         if (currentGroupId) {
           if (!groupList.some((group) => group.id === currentGroupId)) {
@@ -1056,7 +1061,7 @@ export function ShellPage() {
           markOnce("rk:renderer:bots-response");
           markOnce("rk:renderer:thread-response");
         }
-        if (!applyBotLists) return;
+        if (!applyBotLists || teamView.current) return;
         if (
           bootstrap.bots.length === 0 &&
           bootstrap.archivedBots.length === 0 &&
@@ -2680,6 +2685,19 @@ export function ShellPage() {
             : "md:w-[316px]"
         }`}
       >
+        {bots.length >= 2 ? (
+          <Button
+            variant="ghost"
+            className="m-2"
+            aria-pressed={team}
+            onClick={() => {
+              navigate("/app/team");
+              setMobileSidebarOpen(false);
+            }}
+          >
+            <Trans>Team</Trans>
+          </Button>
+        ) : null}
         <div className="app-drag flex items-center justify-between px-[18px] pb-3 pt-4">
           <WindowChrome />
           <div className="relative flex items-center gap-2.5">
@@ -3253,10 +3271,35 @@ export function ShellPage() {
         }}
       />
 
+      {team ? (
+        <main
+          aria-hidden={mobileSidebarOpen || undefined}
+          inert={mobileSidebarOpen}
+          className="flex min-w-0 flex-1 flex-col bg-background"
+        >
+          <TeamBoard
+            key={bootstrapMe?.spaceId}
+            navigation={
+              <Button
+                variant="ghost"
+                size="icon"
+                className={botsSidebarCollapsed ? "" : "md:hidden"}
+                aria-label={t`Open navigation`}
+                onClick={() => {
+                  setMobileSidebarOpen(window.matchMedia("(max-width: 767px)").matches);
+                  setBotsSidebarCollapsedPref(false);
+                }}
+              >
+                <Menu size={19} />
+              </Button>
+            }
+          />
+        </main>
+      ) : null}
       <main
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
-        className="flex min-w-0 flex-1 flex-col bg-background"
+        className={`${team ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
           <div className="flex min-w-0 items-center gap-2">
@@ -3463,14 +3506,9 @@ export function ShellPage() {
         ) : null}
       </main>
 
-      <aside
-        data-testid="side-panel"
-        data-panel={panel ?? "closed"}
-        className={`absolute inset-y-0 end-0 z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-background md:relative ${
-          panel && (active || activeGroup || panel === "create")
-            ? "w-full max-w-[384px] border-s border-sidebar-border md:w-[384px] md:max-w-none"
-            : "pointer-events-none w-0"
-        }`}
+      <SlidingPanel
+        open={Boolean(panel && (active || activeGroup || panel === "create"))}
+        panel={panel ?? "closed"}
       >
         {panel && (active || activeGroup || panel === "create") ? (
           <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]">
@@ -3838,7 +3876,7 @@ export function ShellPage() {
             ) : null}
           </div>
         ) : null}
-      </aside>
+      </SlidingPanel>
 
       <Suspense fallback={null}>
         {contextChat && botMenu ? (

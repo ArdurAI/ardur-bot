@@ -29,6 +29,7 @@ import {
   createThreadMessageInTransaction,
   RunHistoryWriteError,
 } from "./messages.js";
+import { appendTaskEvent } from "./task-cards.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 const EVENT_BATCH_SIZE = 200;
@@ -886,6 +887,19 @@ export async function pauseRunForInput(
       runId: input.runId,
       payload: { messageId: message.id, role: "bot", blocks: target.blocks },
     });
+    const waitingRun = await tx.run.findUnique({ where: { id: input.runId } });
+    const waitingDelegationId = input.helperDelegationId ?? waitingRun?.delegationId;
+    if (waitingDelegationId) {
+      const row = await tx.delegation.findUniqueOrThrow({ where: { id: waitingDelegationId } });
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${row.rootTaskId} FOR UPDATE`;
+      await appendTaskEvent(
+        tx,
+        row,
+        input.blocks.some(isApprovalAskBlock) ? "waiting-approval" : "blocked",
+        "Waiting for a response",
+        { action: "Open conversation" },
+      );
+    }
     const waitingEvent = await appendEventInTransaction(tx, {
       spaceId: input.spaceId,
       threadId: target.threadId,
@@ -1238,6 +1252,7 @@ async function finalizeRunOnce(
           input.outcome === "completed"
             ? input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n")
             : input.error,
+          input.runId,
         )
       : undefined;
     await persistDispatchSummary(

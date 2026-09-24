@@ -187,6 +187,10 @@ msgstr "@{0}"
 msgid "A bit of everything"
 msgstr ""
 
+#: src/components/DesktopUpdates.tsx
+msgid "A new version is available — download"
+msgstr ""
+
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
 msgstr ""
@@ -195,11 +199,16 @@ msgstr ""
 msgid "About spaces"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Accept"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
 msgstr ""
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Accepted"
 msgstr ""
 
@@ -607,6 +616,10 @@ msgstr ""
 msgid "Arguments"
 msgstr "आर्ग्युमेंट"
 
+#: src/pages/TeamBoard.tsx
+msgid "Artifacts"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -754,6 +767,11 @@ msgstr ""
 msgid "Block link copied."
 msgstr ""
 
+#. placeholder {0}: row.reason
+#: src/pages/TeamBoard.tsx
+msgid "Blocked — {0}"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "लाइव डेस्कटॉप शुरू हो रहा है…"
@@ -830,6 +848,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Budget"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -1057,7 +1079,6 @@ msgstr ""
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
-#: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "बंद करें"
 
@@ -1174,6 +1195,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Computer"
 msgstr "कंप्यूटर"
 
@@ -1384,6 +1406,10 @@ msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Copy pairing details"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Cost"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -1614,6 +1640,10 @@ msgstr "स्किल लोड नहीं हो सकी"
 msgid "Could not load sync status. Retry."
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Could not load Team; retry."
+msgstr ""
+
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
 msgstr ""
@@ -1816,6 +1846,10 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Could not update this task; try again."
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2178,6 +2212,10 @@ msgstr "खाता नहीं है?"
 msgid "Done"
 msgstr "पूर्ण"
 
+#: src/pages/TeamBoard.tsx
+msgid "Done — waiting for your OK"
+msgstr ""
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -2226,6 +2264,10 @@ msgstr ""
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "पहले संपादित करें"
+
+#: src/pages/TeamBoard.tsx
+msgid "Effort"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2312,6 +2354,10 @@ msgstr "हर सप्ताह"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Executing"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -2463,10 +2509,6 @@ msgstr "पासवर्ड भूल गए?"
 msgid "Free"
 msgstr ""
 
-#: src/pages/WindowChrome.tsx
-msgid "Fullscreen"
-msgstr "फ़ुलस्क्रीन"
-
 #: src/pages/SettingsOverlay.tsx
 msgid "General"
 msgstr "सामान्य"
@@ -2606,6 +2648,10 @@ msgstr "जांच कैसे करें"
 msgid "I’m done"
 msgstr "मेरा काम हो गया"
 
+#: src/pages/TeamBoard.tsx
+msgid "Idle"
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
 msgstr "अगर आपने वह सुना, तो आवाज़ तैयार है।"
@@ -2657,6 +2703,10 @@ msgstr "डिफ़ॉल्ट का पालन करें"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
 msgstr "इनपुट"
+
+#: src/pages/TeamBoard.tsx
+msgid "Inputs and boundaries"
+msgstr ""
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -3097,10 +3147,6 @@ msgstr "माइक्रोफ़ोन विफल"
 msgid "minimal — quickest, for simple tasks"
 msgstr ""
 
-#: src/pages/WindowChrome.tsx
-msgid "Minimize"
-msgstr "छोटा करें"
-
 #: src/pages/Shell.tsx
 msgid "Minimize bots"
 msgstr ""
@@ -3118,6 +3164,7 @@ msgstr "मिनट"
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Model"
 msgstr "मॉडल"
 
@@ -3414,6 +3461,10 @@ msgstr "अभी नहीं"
 msgid "Not recorded"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Not reported"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "कुछ भी नहीं चल रहा"
@@ -3547,7 +3598,7 @@ msgstr "चैट खुल रही है…"
 msgid "Opening terminal"
 msgstr ""
 
-#: src/App.tsx
+#: src/components/ShellSkeleton.tsx
 msgid "Opening your Space…"
 msgstr "आपका वर्कस्पेस खुल रहा है…"
 
@@ -3748,6 +3799,7 @@ msgid "provider"
 msgstr ""
 
 #: src/pages/Onboarding.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "प्रोवाइडर"
 
@@ -3774,6 +3826,7 @@ msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "कतार में"
 
@@ -4013,6 +4066,14 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Reported met"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Reported unmet"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository authentication"
 msgstr ""
@@ -4027,6 +4088,12 @@ msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository URL"
+msgstr ""
+
+#. placeholder {0}: row.requesterName
+#. placeholder {1}: row.botName
+#: src/pages/TeamBoard.tsx
+msgid "Requested by {0} — acting as {1}"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
@@ -4074,6 +4141,10 @@ msgstr "रीसेट हो रहा है…"
 msgid "Resources"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Responsible human"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Restart to update"
 msgstr ""
@@ -4116,6 +4187,10 @@ msgstr "Ardur Bot पर लौटें"
 #: src/pages/KnowledgeSection.tsx
 msgid "rev {0}"
 msgstr "रिवीज़न {0}"
+
+#: src/pages/TeamBoard.tsx
+msgid "Review approval"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Review destination"
@@ -4233,6 +4308,10 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Runtime"
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -4658,6 +4737,7 @@ msgstr "चरण"
 #: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Stop"
 msgstr "रोकें"
 
@@ -4758,7 +4838,9 @@ msgstr "कोई कार्य सिखाएं"
 msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "सिखाना जारी है। नया संदेश भेजने से पहले सिखाना रोकें।"
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "टीम"
 
@@ -4925,6 +5007,7 @@ msgid "Time of day"
 msgstr "दिन का समय"
 
 #: src/pages/LearningInbox.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Timeline"
 msgstr ""
 
@@ -4938,6 +5021,10 @@ msgstr "प्रति:"
 
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Tokens"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5120,6 +5207,10 @@ msgstr "पुष्टि की जा रही है…"
 msgid "Voice"
 msgstr "आवाज़"
 
+#: src/pages/TeamBoard.tsx
+msgid "Waiting for approval"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Waiting for sign-in…"
@@ -5207,8 +5298,18 @@ msgstr "बॉट कहां चलने चाहिए?"
 msgid "Window"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Working"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"
+msgstr ""
+
+#. placeholder {0}: row.sentence
+#. placeholder {1}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {0} for {1}"
 msgstr ""
 
 #: src/pages/Auth.tsx

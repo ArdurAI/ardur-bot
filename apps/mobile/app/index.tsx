@@ -449,6 +449,11 @@ export default function Home() {
           <Text style={styles.profileInitials}>{initials}</Text>
         </CircleButton>
         <View style={styles.headerActions}>
+          {bots.length >= 2 ? (
+            <CircleButton accessibilityLabel={t("Team")} onPress={() => router.push("/team")}>
+              <NativeSymbol ios="person.3" android="people-outline" size={17} />
+            </CircleButton>
+          ) : null}
           <CircleButton
             accessibilityLabel={t("Activity")}
             active={activityMode}

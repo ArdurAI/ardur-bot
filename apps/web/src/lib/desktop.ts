@@ -51,8 +51,8 @@ export function onDesktopOAuthCallback(
   });
 }
 
-export function windowChromeKind(desktop?: ArdurBotDesktop): "spacer" | "darwin" | "controls" {
+export function windowChromeKind(desktop?: ArdurBotDesktop): "spacer" | "darwin" | "native" {
   if (!desktop) return "spacer";
   if (desktop.platform === "darwin") return "darwin";
-  return "controls";
+  return "native";
 }

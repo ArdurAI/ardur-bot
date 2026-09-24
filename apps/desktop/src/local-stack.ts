@@ -74,11 +74,14 @@ export function stackResourceDir(input: {
   return path.resolve(input.appPath, "..", "..", "infra", "compose");
 }
 
-const STABLE_VERSION = /^\d+\.\d+\.\d+$/;
+// Same shape as the release workflow's tag rule: stable or prerelease semver.
+const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/;
 
 /**
  * Installed builds pin images to their own version so the DMG and the multi-arch
- * images move together; development builds follow `edge`.
+ * images move together. That includes prereleases: the same tag push that packages
+ * the installer publishes the `v<version>` images, while `edge` only exists when
+ * someone publishes it from main by hand. Development builds follow `edge`.
  */
 export function resolveImageTag(input: {
   version: string;
@@ -87,7 +90,7 @@ export function resolveImageTag(input: {
 }): string {
   const override = input.override?.trim();
   if (override) return override;
-  if (input.packaged && STABLE_VERSION.test(input.version)) return `v${input.version}`;
+  if (input.packaged && RELEASE_VERSION.test(input.version)) return `v${input.version}`;
   return "edge";
 }
 

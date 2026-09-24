@@ -39,6 +39,106 @@ export const DelegationSnapshotSchema = z.object({
   destination: ModelDestinationSchema,
 });
 export type DelegationSnapshot = z.infer<typeof DelegationSnapshotSchema>;
+export const TaskInputSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), text: z.string().trim().min(1).max(2000) }).strict(),
+  z.object({ type: z.literal("file"), artifactId: z.string().min(1).max(200) }).strict(),
+  z
+    .object({
+      type: z.literal("url"),
+      url: z
+        .url()
+        .max(2000)
+        .refine((value) => /^https?:\/\//u.test(value)),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("document"),
+      documentId: z.string().min(1).max(200),
+      revision: z.number().int().positive(),
+    })
+    .strict(),
+]);
+/** Only task content is writable by a requester. Admission owns the remaining fields. */
+export const TaskCardRequestSchema = z
+  .object({
+    goal: z.string().trim().min(1).max(2000),
+    inputs: z.array(TaskInputSchema).max(20).default([]),
+    doneWhen: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
+    deadlineAt: z.iso.datetime().nullable().default(null),
+  })
+  .strict();
+export type TaskCardRequest = z.infer<typeof TaskCardRequestSchema>;
+export const TaskEventSchema = z.object({
+  id: z.string(),
+  kind: z.enum([
+    "created",
+    "started",
+    "progress",
+    "artifact",
+    "blocked",
+    "waiting-approval",
+    "completed",
+    "accepted",
+    "cancel-requested",
+    "cancelled",
+    "failed",
+  ]),
+  at: z.iso.datetime(),
+  text: z.string().max(2000),
+  action: z.string().max(200).optional(),
+});
+export type TaskEvent = z.infer<typeof TaskEventSchema>;
+export const TaskCriterionReportSchema = z
+  .object({
+    index: z.number().int().min(0).max(9),
+    met: z.boolean(),
+    report: z.string().trim().min(1).max(500),
+  })
+  .strict();
+export const TaskCardSchema = TaskCardRequestSchema.extend({
+  requesterBotId: z.string(),
+  workerBotId: z.string(),
+  responsibleUserId: z.string().optional(),
+  approvalBoundaries: DelegationAuthoritySchema.readonly(),
+  snapshot: DelegationSnapshotSchema.readonly(),
+  budget: z
+    .object({ tokens: z.number().int().positive(), deadlineAt: z.iso.datetime() })
+    .readonly(),
+  artifacts: z.array(z.string().min(1).max(200)).max(50),
+  timeline: z.array(TaskEventSchema).max(200),
+  reports: z.array(TaskCriterionReportSchema).max(10).default([]),
+});
+export type TaskCard = z.infer<typeof TaskCardSchema>;
+export const TaskProgressSchema = z
+  .object({
+    text: z.string().trim().min(1).max(2000),
+    state: z.enum(["progress", "blocked"]).default("progress"),
+    action: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.state !== "blocked" || Boolean(value.action),
+    "A blocker needs an action",
+  );
+export const TaskCompletionSchema = z
+  .object({
+    summary: z.string().trim().min(1).max(2000),
+    reports: z.array(TaskCriterionReportSchema).max(10).default([]),
+  })
+  .strict();
+export const TaskArtifactSchema = z.object({ artifactId: z.string().min(1).max(200) }).strict();
+export function taskCardSentence(
+  card: Pick<TaskCard, "goal" | "doneWhen" | "deadlineAt" | "workerBotId">,
+  workerName = card.workerBotId,
+): string {
+  const plain = (text: string) =>
+    text
+      .replace(/\s+/gu, " ")
+      .trim()
+      .replace(/[.!?]+$/u, "");
+  return `${plain(workerName)}: ${plain(card.goal)}${card.doneWhen.length ? ` — done when ${card.doneWhen.map(plain).join("; ")}` : ""} — ${card.deadlineAt ? `by ${card.deadlineAt.slice(11, 16)} UTC` : "no deadline"}`;
+}
 export const DelegationRecordSchema = z.object({
   id: z.string(),
   rootTaskId: z.string(),
@@ -59,6 +159,7 @@ export const DelegationRecordSchema = z.object({
   createdAt: z.string(),
   completedAt: z.string().nullable(),
   acceptedAt: z.string().nullable(),
+  card: TaskCardSchema.nullable().optional(),
 });
 export type DelegationRecord = z.infer<typeof DelegationRecordSchema>;
 const problemCopy = {
@@ -115,6 +216,7 @@ export const DELEGATION_LIMITS = {
   durationMs: 3_600_000,
 } as const;
 export const delegationsContract = {
+  accept: oc.input(z.object({ id: z.string() })).output(z.object({ accepted: z.boolean() })),
   policy: oc.input(z.object({ botId: z.string().optional() })).output(LocalityPolicySchema),
   setPolicy: oc
     .input(z.object({ botId: z.string().optional(), policy: LocalityPolicySchema }))

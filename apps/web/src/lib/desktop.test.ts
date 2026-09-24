@@ -47,9 +47,9 @@ describe("window chrome", () => {
     expect(windowChromeKind(desktop("darwin"))).toBe("darwin");
   });
 
-  it("uses real window-control buttons on Windows and Linux", () => {
-    expect(windowChromeKind(desktop("win32"))).toBe("controls");
-    expect(windowChromeKind(desktop("linux"))).toBe("controls");
+  it("uses native window frames on Windows and Linux", () => {
+    expect(windowChromeKind(desktop("win32"))).toBe("native");
+    expect(windowChromeKind(desktop("linux"))).toBe("native");
   });
 
   it("does not paint fake traffic lights into the browser shell or welcome page", () => {

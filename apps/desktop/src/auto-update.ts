@@ -9,6 +9,8 @@ export interface UpdaterEnvironment {
   packaged: boolean;
   version: string;
   disabled?: boolean;
+  downloadOnly?: boolean;
+  previewChannel?: boolean;
 }
 
 export function updaterSupport(env: UpdaterEnvironment): { supported: boolean; reason: string } {
@@ -30,6 +32,7 @@ export function initialUpdateState(env: UpdaterEnvironment): DesktopUpdateState 
     percent: null,
     message: support.supported ? null : support.reason,
     checkedAt: null,
+    downloadOnly: env.downloadOnly ?? false,
   };
 }
 
@@ -259,6 +262,7 @@ export class DesktopUpdateController {
     private readonly loadUpdater: () => Promise<ElectronAutoUpdater>,
     private readonly clock: UpdateClock = systemClock,
     private readonly onInstallFailure?: () => void,
+    private readonly openDownload?: (url: string) => Promise<void>,
   ) {
     this.current = initialUpdateState(environment);
   }
@@ -268,6 +272,11 @@ export class DesktopUpdateController {
   }
 
   private push(event: UpdaterEvent) {
+    if (
+      this.environment.downloadOnly &&
+      ["download-start", "progress", "downloaded"].includes(event.type)
+    )
+      return;
     this.current = reduceUpdateState(this.current, event, this.clock.iso());
     if (event.type === "not-available" || event.type === "downloaded" || event.type === "failed") {
       this.checkWasRequested = false;
@@ -281,8 +290,9 @@ export class DesktopUpdateController {
     const loading = this.loadUpdater()
       .then((updater) => {
         updater.autoDownload = false;
-        updater.autoInstallOnAppQuit = true;
-        updater.allowPrerelease = false;
+        updater.autoInstallOnAppQuit = !this.environment.downloadOnly;
+        updater.allowPrerelease =
+          this.environment.previewChannel ?? this.environment.version.includes("-");
         updater.allowDowngrade = false;
         updater.disableWebInstaller = true;
         updater.on("checking-for-update", () => this.push({ type: "check-start" }));
@@ -297,7 +307,7 @@ export class DesktopUpdateController {
             return;
           }
           this.push({ type: "available", version });
-          void this.download();
+          if (!this.environment.downloadOnly) void this.download();
         });
         updater.on("update-not-available", () => this.push({ type: "not-available" }));
         updater.on("download-progress", (payload) => {
@@ -383,6 +393,19 @@ export class DesktopUpdateController {
 
   private async runDownload() {
     if (this.current.phase !== "available") return this.current;
+    if (this.environment.downloadOnly) {
+      const version = this.current.availableVersion;
+      if (version && this.openDownload) {
+        try {
+          await this.openDownload(
+            `https://github.com/ArdurAI/ardur-bot/releases/tag/v${encodeURIComponent(version)}`,
+          );
+        } catch (error) {
+          this.fail(error);
+        }
+      }
+      return this.current;
+    }
     const updater = await this.updater();
     if (updater === null || this.current.phase !== "available") return this.current;
     this.push({ type: "download-start" });
@@ -409,6 +432,7 @@ export class DesktopUpdateController {
   }
 
   async install() {
+    if (this.environment.downloadOnly) return this.current;
     if (this.installStarted || this.current.phase !== "ready") return this.current;
     const updater = await this.updater();
     if (updater === null || this.installStarted || this.current.phase !== "ready") {

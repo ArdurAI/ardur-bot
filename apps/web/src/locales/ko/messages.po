@@ -187,6 +187,10 @@ msgstr "@{0}"
 msgid "A bit of everything"
 msgstr ""
 
+#: src/components/DesktopUpdates.tsx
+msgid "A new version is available — download"
+msgstr ""
+
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
 msgstr ""
@@ -195,11 +199,16 @@ msgstr ""
 msgid "About spaces"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Accept"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
 msgstr ""
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Accepted"
 msgstr ""
 
@@ -607,6 +616,10 @@ msgstr ""
 msgid "Arguments"
 msgstr "인자"
 
+#: src/pages/TeamBoard.tsx
+msgid "Artifacts"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -754,6 +767,11 @@ msgstr ""
 msgid "Block link copied."
 msgstr ""
 
+#. placeholder {0}: row.reason
+#: src/pages/TeamBoard.tsx
+msgid "Blocked — {0}"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "라이브 데스크톱 시작 중…"
@@ -830,6 +848,10 @@ msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Budget"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -1057,7 +1079,6 @@ msgstr ""
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
-#: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "닫기"
 
@@ -1174,6 +1195,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Computer"
 msgstr "컴퓨터"
 
@@ -1384,6 +1406,10 @@ msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Copy pairing details"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Cost"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -1614,6 +1640,10 @@ msgstr "스킬을 불러오지 못했습니다"
 msgid "Could not load sync status. Retry."
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Could not load Team; retry."
+msgstr ""
+
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
 msgstr ""
@@ -1817,6 +1847,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "반응을 업데이트할 수 없습니다"
+
+#: src/pages/TeamBoard.tsx
+msgid "Could not update this task; try again."
+msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
@@ -2178,6 +2212,10 @@ msgstr "계정이 없나요?"
 msgid "Done"
 msgstr "완료"
 
+#: src/pages/TeamBoard.tsx
+msgid "Done — waiting for your OK"
+msgstr ""
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -2226,6 +2264,10 @@ msgstr ""
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "수정 후 보내기"
+
+#: src/pages/TeamBoard.tsx
+msgid "Effort"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2312,6 +2354,10 @@ msgstr "매주"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Executing"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -2463,10 +2509,6 @@ msgstr "비밀번호를 잊으셨나요?"
 msgid "Free"
 msgstr "무료"
 
-#: src/pages/WindowChrome.tsx
-msgid "Fullscreen"
-msgstr "전체 화면"
-
 #: src/pages/SettingsOverlay.tsx
 msgid "General"
 msgstr "일반"
@@ -2606,6 +2648,10 @@ msgstr "완료 확인 방법"
 msgid "I’m done"
 msgstr "조작 끝내기"
 
+#: src/pages/TeamBoard.tsx
+msgid "Idle"
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
 msgstr "샘플이 들렸다면 음성 설정이 완료되었습니다."
@@ -2657,6 +2703,10 @@ msgstr "기본 설정 사용"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
 msgstr "입력값"
+
+#: src/pages/TeamBoard.tsx
+msgid "Inputs and boundaries"
+msgstr ""
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -3097,10 +3147,6 @@ msgstr "마이크를 사용할 수 없습니다."
 msgid "minimal — quickest, for simple tasks"
 msgstr ""
 
-#: src/pages/WindowChrome.tsx
-msgid "Minimize"
-msgstr "최소화"
-
 #: src/pages/Shell.tsx
 msgid "Minimize bots"
 msgstr ""
@@ -3118,6 +3164,7 @@ msgstr "분"
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Model"
 msgstr "모델"
 
@@ -3414,6 +3461,10 @@ msgstr "나중에"
 msgid "Not recorded"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Not reported"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "실행 중인 작업 없음"
@@ -3547,7 +3598,7 @@ msgstr "채팅 여는 중…"
 msgid "Opening terminal"
 msgstr ""
 
-#: src/App.tsx
+#: src/components/ShellSkeleton.tsx
 msgid "Opening your Space…"
 msgstr "작업공간을 여는 중…"
 
@@ -3748,6 +3799,7 @@ msgid "provider"
 msgstr ""
 
 #: src/pages/Onboarding.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "서비스"
 
@@ -3774,6 +3826,7 @@ msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "대기 중"
 
@@ -4013,6 +4066,14 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Reported met"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Reported unmet"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository authentication"
 msgstr ""
@@ -4027,6 +4088,12 @@ msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Repository URL"
+msgstr ""
+
+#. placeholder {0}: row.requesterName
+#. placeholder {1}: row.botName
+#: src/pages/TeamBoard.tsx
+msgid "Requested by {0} — acting as {1}"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
@@ -4074,6 +4141,10 @@ msgstr "재설정 중…"
 msgid "Resources"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Responsible human"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Restart to update"
 msgstr ""
@@ -4116,6 +4187,10 @@ msgstr "Ardur Bot로 돌아가기"
 #: src/pages/KnowledgeSection.tsx
 msgid "rev {0}"
 msgstr "리비전 {0}"
+
+#: src/pages/TeamBoard.tsx
+msgid "Review approval"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Review destination"
@@ -4233,6 +4308,10 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Runtime"
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -4658,6 +4737,7 @@ msgstr "실행 단계"
 #: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Stop"
 msgstr "중지"
 
@@ -4758,7 +4838,9 @@ msgstr "작업 가르치기"
 msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "작업을 가르치는 중입니다. 새 메시지를 보내려면 먼저 가르치기를 종료하세요."
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "팀 공용"
 
@@ -4925,6 +5007,7 @@ msgid "Time of day"
 msgstr "실행 시각"
 
 #: src/pages/LearningInbox.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Timeline"
 msgstr ""
 
@@ -4938,6 +5021,10 @@ msgstr "받는 사람:"
 
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
+msgstr ""
+
+#: src/pages/TeamBoard.tsx
+msgid "Tokens"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5120,6 +5207,10 @@ msgstr "확인 중…"
 msgid "Voice"
 msgstr "음성"
 
+#: src/pages/TeamBoard.tsx
+msgid "Waiting for approval"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Waiting for sign-in…"
@@ -5207,8 +5298,18 @@ msgstr "Bot을 어디에서 실행할까요?"
 msgid "Window"
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Working"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"
+msgstr ""
+
+#. placeholder {0}: row.sentence
+#. placeholder {1}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {0} for {1}"
 msgstr ""
 
 #: src/pages/Auth.tsx

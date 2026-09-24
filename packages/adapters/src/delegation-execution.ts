@@ -30,7 +30,7 @@ export async function checkDelegationExecution(
   if (helperDelegationId && (row.kind !== "helper" || row.parentRunId !== runId))
     return "This helper does not belong to this run.";
   if (
-    row.status === "cancel-requested" ||
+    !["queued", "running"].includes(row.status) ||
     row.deadlineAt <= new Date() ||
     row.usedTokens >= row.reservedTokens
   ) {

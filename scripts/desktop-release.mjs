@@ -1,0 +1,87 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+export function releaseVersion(tag, version) {
+  if (
+    !/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/.test(tag) ||
+    tag !== `v${version}`
+  ) {
+    throw new Error("Release tag must match the root package version.");
+  }
+  return version;
+}
+
+// Only fixed labels and counts leave this process. Subjects, scopes, author identities,
+// and file names cannot leak into public release notes.
+export function releaseNotes(subjects) {
+  const labels = {
+    feat: "Features",
+    fix: "Fixes",
+    perf: "Performance",
+    docs: "Documentation",
+    build: "Builds",
+    ci: "Automation",
+    test: "Tests",
+    refactor: "Maintenance",
+    chore: "Maintenance",
+    style: "Style",
+    revert: "Reverts",
+  };
+  const counts = new Map();
+  for (const subject of subjects) {
+    const prefix = /^([a-z]+)(?:\([^)]*\))?!?:/.exec(subject)?.[1];
+    const label = labels[prefix] ?? "Other changes";
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [
+    "Unsigned preview. Signed builds come later.",
+    "",
+    "macOS updates require downloading and installing the new build manually.",
+    "",
+    ...[...counts]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, count]) => `- ${label}: ${count} ${count === 1 ? "change" : "changes"}.`),
+    "",
+  ].join("\n");
+}
+
+export async function generateCask(version, assets, output) {
+  releaseVersion(`v${version}`, version);
+  let template = await readFile(new URL("../homebrew/Casks/ardur-bot.rb", import.meta.url), "utf8");
+  for (const arch of ["arm64", "x64"]) {
+    const dmg = await readFile(path.join(assets, `ardur-bot-${version}-mac-${arch}.dmg`));
+    template = template.replace(
+      `@${arch.toUpperCase()}_SHA256@`,
+      createHash("sha256").update(dmg).digest("hex"),
+    );
+  }
+  template = template.replace("@VERSION@", version);
+  await mkdir(path.dirname(output), { recursive: true });
+  await writeFile(output, template);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const [command, ...args] = process.argv.slice(2);
+  if (command === "validate") {
+    const { version } = JSON.parse(await readFile("package.json", "utf8"));
+    console.log(releaseVersion(args[0], version));
+  } else if (command === "notes") {
+    const tag = args[0];
+    const git = (values) => execFileSync("git", values, { encoding: "utf8" }).trim();
+    let previous;
+    try {
+      previous = git(["describe", "--tags", "--abbrev=0", "--match", "v*", `${tag}^`]);
+    } catch {
+      /* First release includes all ancestors. */
+    }
+    const subjects = git(["log", "--format=%s", previous ? `${previous}..${tag}` : tag])
+      .split("\n")
+      .filter(Boolean);
+    process.stdout.write(releaseNotes(subjects));
+  } else if (command === "cask") {
+    await generateCask(args[0], args[1], args[2]);
+  } else throw new Error("Expected validate, notes, or cask.");
+}

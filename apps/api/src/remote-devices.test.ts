@@ -100,3 +100,14 @@ describe("isolated device routes", () => {
     ).rejects.toThrow("home owner");
   });
 });
+
+it("allows signed Team reads but refuses task controls without their scopes", async () => {
+  const f = fixture();
+  expect((await f.call(f.signed("rpc", { procedure: "team/board", input: {} }))).status).toBe(200);
+  for (const operation of ["team-stop", "team-accept"]) {
+    const reader = fixture();
+    expect(
+      (await reader.call(reader.signed(operation, { id: "handoff", rootTaskId: "root" }))).status,
+    ).toBe(403);
+  }
+});

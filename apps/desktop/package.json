@@ -1,13 +1,13 @@
 {
   "name": "@ardurbot/desktop",
   "productName": "Ardur Bot",
-  "version": "0.1.6",
+  "version": "0.1.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "tsc -p tsconfig.json && node scripts/copy-static.mjs",
+    "build": "node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs",
     "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --mac --win --linux",
     "pack:dir": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json",
@@ -49,40 +49,59 @@
       {
         "from": "../../infra/compose/.env.images.example",
         "to": "stack/.env.images.example"
+      },
+      {
+        "from": "assets/icon.png",
+        "to": "tray.png"
+      },
+      {
+        "from": "assets/icon.ico",
+        "to": "tray.ico"
       }
     ],
     "extraMetadata": {
       "main": "dist/main.js"
     },
     "mac": {
-      "icon": "../../packages/ui-tokens/assets/ArdurBot.icon",
+      "icon": "assets/icon-macos.png",
       "category": "public.app-category.productivity",
       "target": [
         "dmg",
         "zip"
       ],
-      "notarize": true
+      "notarize": false,
+      "identity": null
     },
     "win": {
       "icon": "assets/icon.ico",
       "target": [
         "nsis"
       ],
-      "verifyUpdateCodeSignature": true
+      "verifyUpdateCodeSignature": true,
+      "signExecutable": false
     },
     "linux": {
-      "executableName": "ardurbot",
+      "executableName": "ardur-bot",
       "icon": "assets/icon.png",
       "target": [
-        "AppImage"
-      ]
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "maintainer": "Ardur Bot maintainers"
     },
     "publish": [
       {
         "provider": "github",
         "owner": "ArdurAI",
-        "repo": "ardur-bot"
+        "repo": "ardur-bot",
+        "releaseType": "prerelease"
       }
-    ]
-  }
+    ],
+    "artifactName": "ardur-bot-${version}-${os}-${arch}.${ext}",
+    "forceCodeSigning": false
+  },
+  "description": "Persistent bots on computers and models you choose",
+  "homepage": "https://github.com/ArdurAI/ardur-bot",
+  "author": "Ardur Bot maintainers"
 }

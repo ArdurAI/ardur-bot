@@ -21,6 +21,7 @@ import {
   LAUNCH_CHECK_DELAY_MS,
 } from "./auto-update.js";
 import { openBrowserAuth } from "./browser-auth.js";
+import { cliVersion } from "./cli.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
 import { requestLocalSettings } from "./local-settings.js";
 import {
@@ -62,6 +63,7 @@ import {
   sessionPartitionForServerUrl,
 } from "./setup-config.js";
 import { clearSetup, readSetup, writeSetup } from "./setup-store.js";
+import { createDesktopTray, staysRunning } from "./tray.js";
 import { shouldOpenInAppPopup } from "./window-open.js";
 import {
   browserWindowOptions,
@@ -70,12 +72,19 @@ import {
   warmWindowTtlMs,
 } from "./window-options.js";
 
+const versionOutput = cliVersion(process.argv, app.getVersion());
+if (versionOutput !== null) {
+  process.stdout.write(versionOutput);
+  process.exit(0);
+}
+
 const PERFORMANCE_USER_DATA = process.env.ARDURBOT_PERFORMANCE_USER_DATA;
 /** Test hook: where the app-managed stack answers. Mode `new` still requires loopback. */
 const LOCAL_WEB_URL = process.env.ARDURBOT_LOCAL_WEB_URL?.trim() || DEFAULT_LOCAL_WEB_URL;
 const PROBE_TIMEOUT_MS = 8_000;
 const DESKTOP_STACK_PROBE_PATH = "/.well-known/ardurbot-desktop-stack";
 const DESKTOP_STACK_TOKEN_HEADER = "x-ardurbot-desktop-stack-token";
+let desktopTray: ReturnType<typeof createDesktopTray> = null;
 let mainWindow: BrowserWindow | null = null;
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
 let setupWindow: BrowserWindow | null = null;
@@ -103,6 +112,8 @@ const updaterEnvironment = {
   packaged: app.isPackaged,
   version: app.getVersion(),
   disabled: process.env.ARDURBOT_DISABLE_AUTO_UPDATE === "1",
+  downloadOnly: true,
+  previewChannel: true,
 };
 const desktopUpdater = new DesktopUpdateController(
   updaterEnvironment,
@@ -114,6 +125,7 @@ const desktopUpdater = new DesktopUpdateController(
   () => {
     quitting = false;
   },
+  (url) => shell.openExternal(url),
 );
 let launchUpdateCheckScheduled = false;
 let localStack: LocalStackController;
@@ -124,6 +136,9 @@ if (PERFORMANCE_USER_DATA) {
   app.setPath("userData", PERFORMANCE_USER_DATA);
   app.setPath("sessionData", path.join(PERFORMANCE_USER_DATA, "session"));
 }
+if (!app.requestSingleInstanceLock()) process.exit(0);
+app.on("second-instance", () => app.emit("activate"));
+
 app.once("will-finish-launching", () => markOnce("rk:main:will-finish-launching"));
 app.once("ready", () => markOnce("rk:main:ready"));
 // Includes fresh partitions and popup-created sessions, before they load remote content.
@@ -316,7 +331,7 @@ function createWindow(url: string, partition: string | null) {
   });
   win.on("close", (event) => {
     if (
-      process.platform === "darwin" &&
+      staysRunning(process.platform, desktopTray !== null) &&
       !quitting &&
       process.env.ARDURBOT_DISABLE_WARM_WINDOW !== "1"
     ) {
@@ -1393,6 +1408,21 @@ app.whenReady().then(async () => {
       });
   });
 
+  desktopTray = createDesktopTray(
+    process.platform,
+    app.isPackaged
+      ? path.join(process.resourcesPath, process.platform === "win32" ? "tray.ico" : "tray.png")
+      : path.join(
+          app.getAppPath(),
+          "assets",
+          process.platform === "win32" ? "icon.ico" : "icon.png",
+        ),
+    () => {
+      app.emit("activate");
+    },
+    () => app.quit(),
+  );
+
   if (target.kind === "setup") {
     showSetupWindow();
   } else if (target.source === "saved") {
@@ -1434,11 +1464,13 @@ app.on("window-all-closed", () => {
   // A hidden session probe (defaultSessionHasOriginData) can be the only window
   // during startup; its teardown must not quit the app.
   if (liveProbeWindows > 0) return;
-  if (process.platform !== "darwin") app.quit();
+  if (!staysRunning(process.platform, desktopTray !== null)) app.quit();
 });
 
 app.on("before-quit", () => {
   quitting = true;
+  desktopTray?.destroy();
+  desktopTray = null;
   clearTimeout(warmWindowTimer);
   // Containers keep running; only an in-flight pull/up is cut short.
   void remoteListener.stop();

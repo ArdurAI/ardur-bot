@@ -48,9 +48,15 @@ describe("resolveImageTag", () => {
     expect(resolveImageTag({ version: "0.2.0", packaged: true })).toBe("v0.2.0");
   });
 
-  it("follows edge for development builds and prereleases", () => {
+  it("pins installed prereleases to their own version too", () => {
+    expect(resolveImageTag({ version: "0.2.0-beta.1", packaged: true })).toBe("v0.2.0-beta.1");
+    expect(resolveImageTag({ version: "0.1.0-alpha.1", packaged: true })).toBe("v0.1.0-alpha.1");
+  });
+
+  it("follows edge for development builds and versions that are not releases", () => {
     expect(resolveImageTag({ version: "0.2.0", packaged: false })).toBe("edge");
-    expect(resolveImageTag({ version: "0.2.0-beta.1", packaged: true })).toBe("edge");
+    expect(resolveImageTag({ version: "0.2.0-beta.1", packaged: false })).toBe("edge");
+    expect(resolveImageTag({ version: "0.0.0-dev", packaged: true })).toBe("v0.0.0-dev");
   });
 
   it("lets ARDURBOT_IMAGE_TAG override everything", () => {
