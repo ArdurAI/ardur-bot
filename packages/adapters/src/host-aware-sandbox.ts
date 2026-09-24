@@ -12,6 +12,8 @@ import type {
   ScreenRequest,
 } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
+import type { ComputerSecretLoader } from "./computer-connections.js";
+import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { createSandboxProvider, type SandboxProviderOptions } from "./sandbox-factory.js";
 
@@ -22,7 +24,7 @@ export function sandboxKindForBot(envKind: string, computerHost: string | null |
 
 export function createRunSandbox(
   kind: string,
-  opts: SandboxProviderOptions & { prisma?: PrismaClient },
+  opts: SandboxProviderOptions & { prisma?: PrismaClient; secrets?: ComputerSecretLoader },
 ): SandboxProvider {
   if (kind === "desktop") {
     return new DesktopSandboxProvider({
@@ -30,7 +32,14 @@ export function createRunSandbox(
       hostRoots: [homedir()],
     });
   }
-  const primary = createSandboxProvider(kind, opts);
+  const selected = createSandboxProvider(kind, opts);
+  const primary =
+    opts.prisma && opts.secrets
+      ? new ConnectedSandboxProvider(
+          selected,
+          new ComputerConnections(opts.prisma, opts.secrets, opts),
+        )
+      : selected;
   if (kind !== "docker" || !opts.prisma) return primary;
   return new HostAwareSandbox(
     primary,
@@ -88,10 +97,13 @@ export class HostAwareSandbox implements SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      connectionId?: string | null;
+      imageProfile?: ComputerRef["imageProfile"];
     },
     context: AdapterContext,
   ) {
-    const provider = (await this.hostEnabled()) ? this.host : this.isolated;
+    const provider =
+      !request.connectionId && (await this.hostEnabled()) ? this.host : this.isolated;
     const providerKind = provider.describe().id;
     return provider.provision(
       {

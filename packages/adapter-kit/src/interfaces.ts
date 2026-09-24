@@ -97,6 +97,8 @@ export interface SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      imageProfile?: ComputerRef["imageProfile"];
+      connectionId?: string | null;
     },
     context: AdapterContext,
   ): Promise<ComputerRef>;

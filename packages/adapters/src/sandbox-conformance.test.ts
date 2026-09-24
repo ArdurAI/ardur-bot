@@ -2,12 +2,17 @@ import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ComputerRef, ProcessEvent, SandboxProvider } from "@ardurbot/adapter-kit";
-import { describe, expect, it } from "vitest";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { describe, expect, it, vi } from "vitest";
 import { BoxSandboxEmulator } from "./box-emulator.js";
 import { DaytonaSandboxEmulator } from "./daytona-emulator.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { DockerSandboxProvider } from "./docker-sandbox.js";
+import { fakePodmanSupervisor } from "./docker-test-supervisor.js";
 import { ManagedSandboxEmulator } from "./e2b-emulator.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
+import { KubernetesSandboxProvider } from "./kubernetes-sandbox.js";
+import { FakeKubernetesApi } from "./kubernetes-test-api.js";
 import { provisionPrepared } from "./sandbox-test-support.js";
 
 const ctx = {
@@ -58,7 +63,12 @@ describe("sandbox conformance", () => {
   });
 
   it("offers the same observation, action, and workspace contract across providers", async () => {
+    const kubernetesApi = new FakeKubernetesApi();
     const providers: SandboxProvider[] = [
+      new KubernetesSandboxProvider(
+        kubernetesApi,
+        ComputerConnectionSettingsSchema.parse({ engine: "kubernetes" }),
+      ),
       new FakeSandboxProvider(),
       new ManagedSandboxEmulator(),
       new DaytonaSandboxEmulator(),
@@ -93,13 +103,20 @@ describe("sandbox conformance", () => {
       expect(await provider.listFiles(computer, "bin", ctx)).toEqual([
         { path: "bin/tool", kind: "file", size: 4, executable: true },
       ]);
-      const acted = await provider.act(
-        computer,
-        { actions: [{ kind: "clipboard", text: "visible" }], observe: true },
-        ctx,
-      );
-      expect(acted.completed).toBe(1);
-      expect(acted.observation?.image.byteLength).toBeGreaterThan(0);
+      if (provider.describe().capabilities.graphical || provider.describe().id === "desktop") {
+        const acted = await provider.act(
+          computer,
+          { actions: [{ kind: "clipboard", text: "visible" }], observe: true },
+          ctx,
+        );
+        expect(acted.completed).toBe(1);
+        expect(acted.observation?.image.byteLength).toBeGreaterThan(0);
+      } else {
+        expect((await provider.connectScreen(computer, { view: "stream" }, ctx)).url).toBeNull();
+        await expect(provider.observe(computer, ctx)).rejects.toThrow(
+          "Not available on this computer",
+        );
+      }
       const exported = [];
       for await (const file of provider.exportWorkspace(computer, ctx)) exported.push(file);
       expect(exported.map((file) => file.path)).toContain("notes/result.txt");
@@ -109,6 +126,7 @@ describe("sandbox conformance", () => {
       });
       await provider.destroy(computer, ctx);
     }
+    kubernetesApi.dispose();
   });
 
   it("desktop executor refuses paths outside the computer home", async () => {
@@ -237,5 +255,62 @@ describe("sandbox conformance", () => {
 
     await desktop.destroy(computer, ctx);
     rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe("computer lifecycle conformance", () => {
+  it("uses the same exec, file, sleep, wake and destroy contract on Podman and Kubernetes", async () => {
+    const api = new FakeKubernetesApi();
+    vi.stubGlobal("fetch", fakePodmanSupervisor(ctx));
+    const providers: SandboxProvider[] = [
+      new DockerSandboxProvider("http://supervisor.test", "test-token", {
+        name: "podman",
+        socket: "/tmp/podman.sock",
+      }),
+      new KubernetesSandboxProvider(
+        api,
+        ComputerConnectionSettingsSchema.parse({ engine: "kubernetes" }),
+      ),
+    ];
+    try {
+      for (const provider of providers) {
+        const request = {
+          botId: "conformance",
+          homePath: "/unused",
+          imageProfile: "developer" as const,
+        };
+        const computer = await provisionPrepared(provider, request, ctx);
+        expect(await drain(provider, computer)).toContain("graphical-ok");
+        await provider.writeFile(
+          computer,
+          { path: "checkpoint.txt", content: new TextEncoder().encode("keep") },
+          ctx,
+        );
+        const files = [];
+        for await (const file of provider.exportWorkspace(computer, ctx)) files.push(file);
+        await provider.stop(computer, ctx);
+        const awake = await provisionPrepared(provider, request, ctx);
+        expect(
+          new TextDecoder().decode(await provider.readFile(awake, "checkpoint.txt", ctx)),
+        ).toBe("keep");
+        await provider.destroy(awake, ctx);
+        const replacement = await provisionPrepared(provider, request, ctx);
+        await provider.importWorkspace(
+          replacement,
+          (async function* () {
+            yield* files;
+          })(),
+          ctx,
+        );
+        expect(
+          new TextDecoder().decode(await provider.readFile(replacement, "checkpoint.txt", ctx)),
+        ).toBe("keep");
+        await provider.destroy(replacement, ctx);
+        await provider.destroy(replacement, ctx);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+      api.dispose();
+    }
   });
 });

@@ -148,3 +148,7 @@ export function controlLabel(computer: ComputerStatus | null, name: string, botI
 export function computerLabel(mode: ComputerMode | undefined, name: string) {
   return mode === "dedicated" ? t("{name}’s computer", { name }) : t("Team Computer");
 }
+
+export function computerScreenUnavailable(computer: ComputerStatus | null): boolean {
+  return computer?.capabilities?.graphical === false;
+}

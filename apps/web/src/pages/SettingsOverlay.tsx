@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { useEffect, useRef, useState } from "react";
-import { computersAreUnavailable } from "../components/ComputersUnavailableHint";
 import { IntegrationCatalog } from "../components/integrations/catalog/IntegrationCatalog";
 import {
   ComputerSettingsPanel,
@@ -55,7 +54,6 @@ export function SettingsOverlay({
   avatarStyle,
   onAvatarStyleChange,
   isDeploymentOwner = false,
-  sandboxProvider,
   messagingEnabled = false,
   onOpenMessaging,
   memoryConfig,
@@ -85,7 +83,7 @@ export function SettingsOverlay({
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
-  const showComputer = isDeploymentOwner && computersAreUnavailable(sandboxProvider);
+  const showComputer = isDeploymentOwner;
   const panelBusy = memoryBusy || voiceBusy;
 
   useEffect(() => {
@@ -106,7 +104,7 @@ export function SettingsOverlay({
     { id: "memory", label: t`Memory & Skills`, icon: Brain },
     { id: "voice", label: t`Voice`, icon: Volume2 },
     { id: "usage", label: t`Usage`, icon: Gauge },
-    ...(showComputer ? [{ id: "computer" as const, label: t`Computer`, icon: Monitor }] : []),
+    ...(showComputer ? [{ id: "computer" as const, label: t`Computers`, icon: Monitor }] : []),
     { id: "updates", label: t`Updates`, icon: CloudDownload },
   ];
 

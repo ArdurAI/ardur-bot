@@ -5,11 +5,15 @@ import type { ComputerMode } from "@ardurbot/contracts";
 
 export function toComputerRef(computer: {
   homeKey: string;
+  imageProfile?: string;
+  connectionId?: string | null;
   kind: string;
   providerRef: string | null;
 }): ComputerRef {
   if (!computer.providerRef) throw new Error("computer provider reference is missing");
   return {
+    imageProfile: (computer.imageProfile ?? "base") as ComputerRef["imageProfile"],
+    connectionId: computer.connectionId,
     id: computer.providerRef,
     botId: computer.homeKey,
     kind: computer.kind as ComputerRef["kind"],

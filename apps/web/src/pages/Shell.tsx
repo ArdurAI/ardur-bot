@@ -3571,6 +3571,8 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                     <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
                       <Trans>Open in full window</Trans>
                     </div>
+                  ) : computer?.capabilities?.graphical === false ? (
+                    <p className="p-4 text-muted-foreground">{t`Not available on this computer`}</p>
                   ) : computer?.kind === "desktop" ? (
                     <DesktopKindEmptyState className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground/80" />
                   ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
@@ -4425,7 +4427,9 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             {terminalSurface.tabs}
             <div className="relative min-h-0 flex-1 bg-background">
               {terminalSurface.content ??
-                (computer?.kind === "desktop" ? (
+                (computer?.capabilities?.graphical === false ? (
+                  <p className="p-4 text-muted-foreground">{t`Not available on this computer`}</p>
+                ) : computer?.kind === "desktop" ? (
                   <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
                 ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
                   <>

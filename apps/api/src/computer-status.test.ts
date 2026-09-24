@@ -128,3 +128,21 @@ describe("executionBlocksUserTakeover", () => {
     ).toBe(false);
   });
 });
+
+it("reports unavailable Kubernetes screen and terminal from shared capability flags", () => {
+  const status = toComputerStatus("bot", {
+    kind: "kubernetes",
+    state: "running",
+    scope: "team",
+    controlHolder: "none",
+    homeRevision: "saved",
+    imageProfile: "developer",
+    connectionId: "local-kind",
+  });
+  expect(status).toMatchObject({
+    imageProfile: "developer",
+    connectionId: "local-kind",
+    screenAvailable: false,
+    capabilities: { graphical: false, interactiveTerminal: false },
+  });
+});

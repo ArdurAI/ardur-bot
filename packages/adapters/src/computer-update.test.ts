@@ -137,3 +137,34 @@ describe("background computer maintenance", () => {
     expect(jobs.enqueue).not.toHaveBeenCalled();
   });
 });
+
+describe("profile replacement intent", () => {
+  it("refuses an unconfirmed replacement before reserving or queuing anything", async () => {
+    const { deps, jobs, computerUpdate } = fixture();
+    await expect(
+      queueComputerUpdate(deps, "computer-1", "bot-1", "update", {
+        imageProfile: "developer",
+        connectionId: null,
+        confirmed: false,
+      }),
+    ).rejects.toThrow("Continue?");
+    expect(computerUpdate.create).not.toHaveBeenCalled();
+    expect(jobs.enqueue).not.toHaveBeenCalled();
+  });
+  it("persists the confirmed profile with the maintenance job", async () => {
+    const { deps, computerUpdate } = fixture();
+    await queueComputerUpdate(deps, "computer-1", "bot-1", "update", {
+      imageProfile: "developer",
+      connectionId: "engine-1",
+      confirmed: true,
+    });
+    expect(computerUpdate.create).toHaveBeenCalledWith({
+      data: {
+        computerId: "computer-1",
+        botId: "bot-1",
+        action: "update",
+        configuration: { imageProfile: "developer", connectionId: "engine-1", confirmed: true },
+      },
+    });
+  });
+});

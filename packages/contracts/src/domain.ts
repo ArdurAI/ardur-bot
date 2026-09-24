@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
+import { ComputerProfileSchema } from "./computer-profiles.js";
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
@@ -802,6 +803,9 @@ export const ComputerUpdateSchema = z.object({
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
 export const ComputerStatusSchema = z.object({
+  imageProfile: ComputerProfileSchema.optional(),
+  connectionId: Id.nullable().optional(),
+  capabilities: z.object({ graphical: z.boolean(), interactiveTerminal: z.boolean() }).optional(),
   computerId: Id.optional(),
   botId: Id,
   mode: ComputerModeSchema,

@@ -43,7 +43,8 @@
     "shell-quote": "1.10.0",
     "undici": "8.10.2",
     "zod": "4.6.2",
-    "@ardurbot/memory": "workspace:*"
+    "@ardurbot/memory": "workspace:*",
+    "@kubernetes/client-node": "1.4.0"
   },
   "devDependencies": {
     "@chat-adapter/tests": "4.40.0",

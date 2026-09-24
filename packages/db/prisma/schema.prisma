@@ -953,6 +953,7 @@ model BrowserProfile {
 }
 
 model ComputerUpdate {
+  configuration Json?
   action     String   @default("update")
   id         String   @id @default(cuid())
   computerId String
@@ -969,6 +970,8 @@ model ComputerUpdate {
 }
 
 model Computer {
+  imageProfile String @default("base")
+  connectionId String?
   screenGeneration Int @default(0)
   id                      String                   @id @default(cuid())
   spaceId                 String

@@ -473,3 +473,41 @@ describe("Docker sandbox stopped containers", () => {
     ).resolves.toMatchObject({ url: null });
   });
 });
+
+describe("Docker profiles and Podman engine", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("sends the selected engine socket and profile, and explains absent Standard tools", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, _init?: RequestInit) =>
+      String(url).endsWith("/exec")
+        ? Response.json({ stdout: "", stderr: "bash: line 1: git: command not found", code: 127 })
+        : Response.json({ id: "podman-computer", resumed: false }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new DockerSandboxProvider("http://supervisor.test", "test-token", {
+      name: "podman",
+      socket: "/tmp/engine.sock",
+    });
+    const computer = await provider.provision(
+      { botId: "bot", homePath: "/tmp/home", imageProfile: "developer" },
+      context,
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]!.body))).toMatchObject({
+      imageProfile: "developer",
+    });
+    expect(fetchMock.mock.calls[0]![1]!.headers).toMatchObject({
+      "x-ardurbot-engine": "podman",
+      "x-ardurbot-engine-socket": "/tmp/engine.sock",
+    });
+    const events: ProcessEvent[] = [];
+    for await (const event of provider.execute(
+      { ...computer, imageProfile: "base" },
+      { argv: ["bash", "-lc", "git status"] },
+      context,
+    ))
+      events.push(event);
+    expect(events).toContainEqual({
+      type: "stderr",
+      data: "git is not installed on this computer; ask the owner to switch it to the Developer profile",
+    });
+  });
+});

@@ -306,6 +306,10 @@ msgstr "Add an HTTPS server URL."
 msgid "Add another"
 msgstr "Add another"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Add computer connection"
+msgstr "Add computer connection"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add Executor"
 msgstr "Add Executor"
@@ -544,6 +548,10 @@ msgstr "Appearance"
 #: src/pages/LearningInbox.tsx
 msgid "Applied"
 msgstr "Applied"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Apply"
+msgstr "Apply"
 
 #: src/pages/LearningInbox.tsx
 msgid "Apply memory suggestions for me automatically"
@@ -863,6 +871,7 @@ msgstr "Can't reach the server."
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryImportExport.tsx
@@ -896,6 +905,10 @@ msgstr "cancelled"
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Cancelled"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Change computer"
+msgstr "Change computer"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "Change model"
@@ -1002,6 +1015,10 @@ msgstr "Choose a new password"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Choose bots and the tools they can use."
 msgstr "Choose bots and the tools they can use."
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Choose context"
+msgstr "Choose context"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
@@ -1175,7 +1192,6 @@ msgid "Completion not recorded"
 msgstr "Completion not recorded"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -1200,12 +1216,17 @@ msgid "Computer is stopped"
 msgstr "Computer is stopped"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/SettingsOverlay.tsx
 msgid "Computers"
 msgstr "Computers"
 
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set SANDBOX_PROVIDER to e2b, daytona, or box with its API key. Recreate the stack after changing .env."
 msgstr "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set SANDBOX_PROVIDER to e2b, daytona, or box with its API key. Recreate the stack after changing .env."
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Computers are unavailable; reconnect and try again."
+msgstr "Computers are unavailable; reconnect and try again."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Configured by deployment"
@@ -1323,9 +1344,17 @@ msgstr "Connected. Review tools in MCP settings."
 msgid "Connecting…"
 msgstr "Connecting…"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Connection"
+msgstr "Connection"
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Connection lost — reconnecting"
 msgstr "Connection lost — reconnecting"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Connection name"
+msgstr "Connection name"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -1342,6 +1371,7 @@ msgid "Context limit"
 msgstr "Context limit"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/Onboarding.tsx
 msgid "Continue"
 msgstr "Continue"
@@ -1409,6 +1439,10 @@ msgstr "Could not change memory location. Check the folder and preview again."
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Could not change password"
 msgstr "Could not change password"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Could not change the computer; stop its bots and try again."
+msgstr "Could not change the computer; stop its bots and try again."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not change the default model"
@@ -1754,6 +1788,10 @@ msgstr "Could not save that choice"
 msgid "Could not save that voice"
 msgstr "Could not save that voice"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Could not save the connection; check its settings and try again."
+msgstr "Could not save the connection; check its settings and try again."
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not save this choice"
 msgstr "Could not save this choice"
@@ -1826,11 +1864,23 @@ msgstr "Couldn't update avatars"
 msgid "Couldn't update messaging settings"
 msgstr "Couldn't update messaging settings"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "CPU limit"
+msgstr "CPU limit"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "CPU request"
+msgstr "CPU request"
+
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Create"
 msgstr "Create"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Create a kind cluster: kind create cluster --name ardurbot"
+msgstr "Create a kind cluster: kind create cluster --name ardurbot"
 
 #. placeholder {0}: bot.name
 #: src/pages/shell/dialogs.tsx
@@ -2035,6 +2085,7 @@ msgstr "Deny"
 msgid "Deploy private key"
 msgstr "Deploy private key"
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Deployment default"
@@ -2063,6 +2114,14 @@ msgstr "Destination scope"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
 msgstr "Details"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
+msgstr "Developer (git, GitHub and GitLab CLIs, node, jq)"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Developer is a larger download and uses more disk space."
+msgstr "Developer is a larger download and uses more disk space."
 
 #: src/pages/DevicesSettings.tsx
 msgid "Device name"
@@ -2217,6 +2276,19 @@ msgstr "Email"
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
 msgstr "Engage when... Ignore..."
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Engine"
+msgstr "Engine"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Engine socket"
+msgstr "Engine socket"
+
+#. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Engine: {0}"
+msgstr "Engine: {0}"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Enter a code instead"
@@ -2551,6 +2623,10 @@ msgstr "Home fingerprint"
 msgid "Home link"
 msgstr "Home link"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Home storage size"
+msgstr "Home storage size"
+
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
 msgstr "hour"
@@ -2583,6 +2659,10 @@ msgstr "If you heard that, voice is ready."
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Ignore"
 msgstr "Ignore"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Image profile"
+msgstr "Image profile"
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Image upload area"
@@ -2715,6 +2795,22 @@ msgstr "key"
 msgid "Knowledge"
 msgstr "Knowledge"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Kubeconfig contents"
+msgstr "Kubeconfig contents"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Kubeconfig path"
+msgstr "Kubeconfig path"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Kubeconfig path on the server"
+msgstr "Kubeconfig path on the server"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Kubernetes context"
+msgstr "Kubernetes context"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Language"
 msgstr "Language"
@@ -2776,6 +2872,10 @@ msgstr "Linear issue"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Link a chat app"
 msgstr "Link a chat app"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "List contexts"
+msgstr "List contexts"
 
 #: src/pages/ModelDestinations.tsx
 msgid "Listed hosts"
@@ -2969,6 +3069,10 @@ msgstr "Memory & Skills"
 msgid "Memory folder on your server"
 msgstr "Memory folder on your server"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Memory limit"
+msgstr "Memory limit"
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory location"
 msgstr "Memory location"
@@ -2976,6 +3080,10 @@ msgstr "Memory location"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory location and documents"
 msgstr "Memory location and documents"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Memory request"
+msgstr "Memory request"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Memory scope"
@@ -3153,6 +3261,10 @@ msgstr "Name this group"
 msgid "Name this routine"
 msgstr "Name this routine"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Namespace"
+msgstr "Namespace"
+
 #: src/pages/ActivityList.tsx
 msgid "Needs input"
 msgstr "Needs input"
@@ -3323,6 +3435,10 @@ msgstr "None yet"
 #: src/pages/shell/runtime-settings.tsx
 msgid "not available"
 msgstr "not available"
+
+#: src/pages/Shell.tsx
+msgid "Not available on this computer"
+msgstr "Not available on this computer"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
@@ -3506,6 +3622,10 @@ msgstr "Or connect an API key"
 #: src/pages/Onboarding.tsx
 msgid "Or paste an API key"
 msgstr "Or paste an API key"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Or paste kubeconfig contents"
+msgstr "Or paste kubeconfig contents"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Organic"
@@ -4017,6 +4137,10 @@ msgstr "Reset your password"
 msgid "Resetting…"
 msgstr "Resetting…"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Resources"
+msgstr "Resources"
+
 #: src/pages/TeamBoard.tsx
 msgid "Responsible human"
 msgstr "Responsible human"
@@ -4216,6 +4340,10 @@ msgstr "safety"
 msgid "Save"
 msgstr "Save"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Save connection"
+msgstr "Save connection"
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/ExternalConversationSettings.tsx
@@ -4283,6 +4411,10 @@ msgstr "Say yes or no, or answer in a sentence."
 #: src/pages/shell/computer-terminal.tsx
 msgid "Screen"
 msgstr "Screen"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Screen and terminal: Not available on this computer"
+msgstr "Screen and terminal: Not available on this computer"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
@@ -4576,6 +4708,10 @@ msgstr "Speaking…"
 msgid "Stale"
 msgstr "Stale"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Standard"
+msgstr "Standard"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "Start recording"
@@ -4621,6 +4757,10 @@ msgstr "Stopped."
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
 msgstr "Stopping"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Storage class"
+msgstr "Storage class"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Stored encrypted"
@@ -4704,6 +4844,7 @@ msgstr "Teaching in progress. Stop teaching before sending a new message."
 msgid "Team"
 msgstr "Team"
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/Shell.tsx
 msgid "Team Computer"
 msgstr "Team Computer"
@@ -4832,6 +4973,10 @@ msgstr "This path is on your server, which may be a different machine."
 #: src/pages/shell/dialogs.tsx
 msgid "This permanently removes every message and stops current work. The chat remains available."
 msgstr "This permanently removes every message and stops current work. The chat remains available."
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "This replaces the computer's files. Continue?"
+msgstr "This replaces the computer's files. Continue?"
 
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
