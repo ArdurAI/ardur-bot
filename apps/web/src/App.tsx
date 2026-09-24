@@ -4,10 +4,12 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import { LoadingState } from "./components/ai/primitives";
+import { PreferencesProvider } from "./components/PreferencesProvider";
 import { ShellSkeleton } from "./components/ShellSkeleton";
 import { authClient } from "./lib/auth";
 import { authReturnPath } from "./lib/auth-return-path";
 import { markAfterPaint, markOnce } from "./lib/performance";
+import { resetPreferences } from "./lib/preferences";
 import {
   holdUnreachableGate,
   sessionGate,
@@ -43,6 +45,9 @@ function SessionApp() {
   const signInDestination = authReturnPath(searchParams.get("next"));
   const session = authClient.useSession();
   const gate = sessionGate(session);
+  useEffect(() => {
+    if (gate === "anonymous") resetPreferences();
+  }, [gate]);
   const [holdingUnreachable, setHoldingUnreachable] = useState(false);
   const nextHolding = holdUnreachableGate(gate, holdingUnreachable);
   if (nextHolding !== holdingUnreachable) setHoldingUnreachable(nextHolding);
@@ -70,7 +75,7 @@ function SessionApp() {
   }
 
   const user = session.data?.user;
-  return (
+  const content = (
     <div className="h-full" data-ardurbot-app-state="ready">
       <Suspense fallback={<div className="h-full bg-background" />}>
         <Routes>
@@ -130,6 +135,13 @@ function SessionApp() {
         </Routes>
       </Suspense>
     </div>
+  );
+  return user ? (
+    <PreferencesProvider key={user.id} userId={user.id}>
+      {content}
+    </PreferencesProvider>
+  ) : (
+    content
   );
 }
 

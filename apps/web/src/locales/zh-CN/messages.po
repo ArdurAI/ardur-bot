@@ -43,6 +43,11 @@ msgstr "{0, plural, one {# 个模型} other {# 个模型}}"
 msgid "{0} {unitLabel}"
 msgstr "{0} {unitLabel}"
 
+#. placeholder {0}: file.size
+#: src/pages/settings/UploadedFiles.tsx
+msgid "{0} bytes"
+msgstr ""
+
 #. placeholder {0}: block.name
 #: src/pages/shell/message-cards.tsx
 msgid "{0} connection"
@@ -134,19 +139,19 @@ msgid "{minutes}m ago"
 msgstr "{minutes} 分钟前"
 
 #. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
+#: src/lib/use-notifications.ts
 msgid "{name} failed"
 msgstr "{name} 失败"
 
 #. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
+#: src/lib/use-notifications.ts
 msgid "{name} finished"
 msgstr "{name} 已完成"
 
 #. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "{name} stopped"
-msgstr "{name} 已停止"
+#: src/lib/use-notifications.ts
+msgid "{name} needs your input"
+msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
@@ -216,6 +221,7 @@ msgstr "访问令牌（可选）"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "账户"
 
@@ -331,6 +337,7 @@ msgid "Add item"
 msgstr "添加项目"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Add MCP server"
 msgstr "添加 MCP 服务器"
@@ -446,6 +453,14 @@ msgstr ""
 msgid "Allow email actions without asking"
 msgstr "允许邮件操作，无需询问"
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Allow notifications"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Allow notifications in your browser settings, then try again."
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Allow once"
 msgstr "允许一次"
@@ -545,7 +560,11 @@ msgstr "API 密钥请求头"
 msgid "App token"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings/DeveloperSection.tsx
+msgid "App version"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
 msgid "Appearance"
 msgstr "外观"
 
@@ -580,6 +599,10 @@ msgstr "审批边界"
 #. placeholder {0}: tool.id
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Approval for {0}"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Approvals needed"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -793,11 +816,6 @@ msgstr "Bot"
 msgid "Bot"
 msgstr "Bot"
 
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "Bot"
-msgstr "Bot"
-
 #: src/pages/Shell.tsx
 msgid "Bot screen"
 msgstr "Bot 屏幕"
@@ -838,6 +856,10 @@ msgstr "默认情况下 Bot 会直接执行。只有当你想先审核某类操�
 msgid "Bots are working"
 msgstr "Bot 正在工作"
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Bots may read and write here; consequential actions still ask"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -874,8 +896,10 @@ msgstr "无法连接服务器。"
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
 msgstr "取消"
@@ -905,6 +929,10 @@ msgstr "已取消"
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "已取消"
+
+#: src/pages/settings-sections.ts
+msgid "Capabilities"
+msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Change computer"
@@ -952,6 +980,10 @@ msgstr "聊天应用、群组频道和 Agent 连接。"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Chat bot"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Chat font"
 msgstr ""
 
 #: src/pages/ChannelPairingSettings.tsx
@@ -1228,7 +1260,7 @@ msgid "Computer is stopped"
 msgstr "电脑已停止"
 
 #: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Computers"
 msgstr "电脑"
 
@@ -1244,14 +1276,16 @@ msgstr ""
 msgid "Configured by deployment"
 msgstr "由部署配置"
 
-#: src/pages/McpServersOverlay.tsx
-msgid "Configured servers"
-msgstr "已配置的服务器"
-
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/settings/UploadedFiles.tsx
 msgid "Confirm delete"
 msgstr "确认删除"
+
+#. placeholder {0}: file.name
+#: src/pages/settings/UploadedFiles.tsx
+msgid "Confirm delete {0}"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Auth.tsx
@@ -1374,10 +1408,6 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "与 {0} 的连接仍在等待。可以关闭此窗口稍后再看。"
-
-#: src/components/composer/ComposerMenu.tsx
-msgid "Connectors"
-msgstr ""
 
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
@@ -1610,6 +1640,10 @@ msgstr "无法下载 {0}。请重试。"
 msgid "Could not download {name}. Try again."
 msgstr "无法下载 {name}。请重试。"
 
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Could not export data. Try again."
+msgstr ""
+
 #: src/pages/MemoryImportExport.tsx
 msgid "Could not export memory. Retry."
 msgstr ""
@@ -1666,6 +1700,10 @@ msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 msgid "Could not load plugins"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Could not load settings. Try again."
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
@@ -1816,6 +1854,10 @@ msgstr "无法保存例行任务"
 msgid "Could not save rule"
 msgstr "无法保存规则"
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Could not save settings. Try again."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not save skill"
 msgstr "无法保存技能"
@@ -1898,6 +1940,10 @@ msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Could not update this task; try again."
+msgstr ""
+
+#: src/pages/settings/UploadedFiles.tsx
+msgid "Could not update uploaded files."
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2024,11 +2070,15 @@ msgstr "当前密码"
 msgid "Customer support"
 msgstr "客户支持"
 
+#: src/pages/settings-sections.ts
+msgid "Customize"
+msgstr ""
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Customize bot avatar"
 msgstr "自定义机器人头像"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings/GeneralSettings.tsx
 msgid "Dark"
 msgstr "深色"
 
@@ -2074,13 +2124,16 @@ msgstr "默认范围"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/settings/UploadedFiles.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Delete"
 msgstr "删除"
 
 #. placeholder {0}: bot.name
+#. placeholder {0}: file.name
 #. placeholder {0}: group.name
+#: src/pages/settings/UploadedFiles.tsx
 #: src/pages/Shell.tsx
 msgid "Delete {0}"
 msgstr "删除 {0}"
@@ -2147,6 +2200,7 @@ msgid "Description"
 msgstr "描述"
 
 #: src/components/DesktopUpdates.tsx
+#: src/pages/settings-sections.ts
 msgid "Desktop app"
 msgstr ""
 
@@ -2161,6 +2215,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
+msgstr ""
+
+#: src/pages/settings-sections.ts
+msgid "Developer"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -2179,7 +2237,7 @@ msgstr ""
 msgid "Device permissions"
 msgstr ""
 
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Devices"
 msgstr ""
 
@@ -2222,6 +2280,10 @@ msgstr "关闭错误"
 #: src/pages/shell/message-cards.tsx
 msgid "Dismissed. Reconnect anytime from MCP settings."
 msgstr "已关闭，可随时在 MCP 设置中重新连接。"
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Dispatch messages"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Display name"
@@ -2441,12 +2503,21 @@ msgstr ""
 msgid "Expires in five minutes."
 msgstr ""
 
+#: src/pages/settings/PrivacySettings.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "导出"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Export block"
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Export data"
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Export memory"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
@@ -2459,6 +2530,10 @@ msgstr "从 CRM 导出本周名单并放到共享文件夹"
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Export with history"
+msgstr ""
+
+#: src/pages/settings-sections.ts
+msgid "Extensions"
 msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
@@ -2482,11 +2557,6 @@ msgstr "发送消息失败"
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "停止失败"
-
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "Failed."
-msgstr "失败。"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -2536,11 +2606,6 @@ msgstr ""
 msgid "finished"
 msgstr "已完成"
 
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "Finished."
-msgstr "已完成。"
-
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "正在完成 MCP 连接…"
@@ -2561,12 +2626,16 @@ msgstr "忘记密码？"
 msgid "Free"
 msgstr "免费"
 
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "General"
 msgstr "通用"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Get credentials"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Get notified when a response finishes. Useful for long-running tasks."
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -2784,8 +2853,9 @@ msgstr ""
 msgid "Integration options"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "集成"
@@ -2843,6 +2913,10 @@ msgstr "保留记忆"
 msgid "Keep scope"
 msgstr ""
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Keep working when the window is closed"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "密钥"
@@ -2898,7 +2972,12 @@ msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/settings-sections.ts
 msgid "Learning"
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Learning consent"
 msgstr ""
 
 #: src/pages/MemoryHistory.tsx
@@ -2917,7 +2996,7 @@ msgstr ""
 msgid "Leave"
 msgstr "退出"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings/GeneralSettings.tsx
 msgid "Light"
 msgstr "浅色"
 
@@ -2952,6 +3031,10 @@ msgstr "正在听…"
 #: src/pages/Shell.tsx
 msgid "Load earlier messages"
 msgstr "加载更早的消息"
+
+#: src/pages/settings/UploadedFiles.tsx
+msgid "Load more"
+msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "Load more history to compare."
@@ -2997,6 +3080,7 @@ msgstr ""
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 msgid "Loading…"
@@ -3031,6 +3115,8 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "请确认这台电脑上没有仍在运行的任务。"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/pages/settings/GeneralSettings.tsx
+#: src/pages/settings/PrivacySettings.tsx
 msgid "Manage"
 msgstr ""
 
@@ -3038,6 +3124,7 @@ msgstr ""
 msgid "Manage devices from the home owner account."
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Manage MCP servers"
 msgstr "管理 MCP 服务器"
@@ -3084,6 +3171,10 @@ msgstr "最大输出 token 数"
 msgid "May not be available on your plan"
 msgstr ""
 
+#: src/pages/settings-sections.ts
+msgid "MCP"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "MCP endpoint"
 msgstr ""
@@ -3118,12 +3209,9 @@ msgstr "成员（选择 {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX} 个）"
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Memory"
 msgstr "记忆"
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Memory & Skills"
-msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
@@ -3139,6 +3227,10 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory location and documents"
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Memory preferences"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -3162,11 +3254,6 @@ msgid "Mentions only"
 msgstr ""
 
 #: src/pages/Shell.tsx
-msgid "Message"
-msgstr "消息"
-
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
 msgid "Message"
 msgstr "消息"
 
@@ -3255,7 +3342,7 @@ msgstr "模型已更新。"
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Models"
 msgstr "模型"
 
@@ -3286,6 +3373,10 @@ msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "More history"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Motion"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -3476,6 +3567,10 @@ msgstr "无结果"
 msgid "No runs yet"
 msgstr "还没有运行记录"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "No settings found."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
 msgstr "暂无技能"
@@ -3491,6 +3586,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "无触发器"
+
+#: src/pages/settings/UploadedFiles.tsx
+msgid "No uploaded files"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
@@ -3537,6 +3636,10 @@ msgstr ""
 msgid "Not set up"
 msgstr ""
 
+#: src/pages/settings/PluginsSection.tsx
+msgid "Nothing installed yet"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "没有仍在运行的任务"
@@ -3549,6 +3652,7 @@ msgstr "暂无记忆"
 msgid "Nothing to review."
 msgstr ""
 
+#: src/pages/settings/GeneralSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "通知"
@@ -3800,11 +3904,16 @@ msgstr ""
 msgid "Pin"
 msgstr "置顶"
 
+#: src/pages/settings-sections.ts
+msgid "Platform"
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "播放中…"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/settings-sections.ts
 msgid "Plugins"
 msgstr ""
 
@@ -3836,6 +3945,10 @@ msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Previous"
+msgstr ""
+
+#: src/pages/settings-sections.ts
+msgid "Privacy"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -3903,6 +4016,10 @@ msgstr ""
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "拉取请求"
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Push notifications on your phone."
+msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "Pushed"
@@ -4029,6 +4146,14 @@ msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recreating the computer"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Reduce animation in streaming responses and other interface elements."
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Reduced"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -4226,6 +4351,10 @@ msgstr "正在重置…"
 msgid "Resources"
 msgstr ""
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Response completions"
+msgstr ""
+
 #: src/pages/TeamBoard.tsx
 msgid "Responsible human"
 msgstr ""
@@ -4252,6 +4381,8 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
+#: src/pages/settings/GeneralSettings.tsx
+#: src/pages/settings/UploadedFiles.tsx
 msgid "Retry"
 msgstr ""
 
@@ -4346,6 +4477,7 @@ msgid "Routine"
 msgstr "例行任务"
 
 #: src/pages/RoutineEditor.tsx
+#: src/pages/settings/GeneralSettings.tsx
 msgid "Routines"
 msgstr "例行任务"
 
@@ -4405,6 +4537,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "safety"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Sans"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -4544,6 +4680,10 @@ msgstr "搜索提供方"
 msgid "Search run output"
 msgstr ""
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Search settings"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -4599,6 +4739,10 @@ msgstr ""
 msgid "Sentry alert"
 msgstr "Sentry 告警"
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Serif"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Server"
 msgstr ""
@@ -4617,6 +4761,7 @@ msgstr "服务器名称"
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/settings/DeveloperSection.tsx
 msgid "Server URL"
 msgstr "服务器 URL"
 
@@ -4629,6 +4774,7 @@ msgid "Set up"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/sidebar-settings.tsx
@@ -4726,6 +4872,7 @@ msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/settings-sections.ts
 msgid "Skills"
 msgstr "技能"
 
@@ -4854,11 +5001,6 @@ msgstr "停止示范"
 msgid "Stop the current run"
 msgstr ""
 
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "Stopped."
-msgstr "已停止。"
-
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
 msgstr ""
@@ -4915,7 +5057,8 @@ msgstr "正在切换…"
 msgid "Syncs to {0}"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings-sections.ts
+#: src/pages/settings/GeneralSettings.tsx
 msgid "System"
 msgstr "系统"
 
@@ -4933,6 +5076,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Tasks"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -5012,6 +5159,10 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Theme"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -5156,6 +5307,10 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg token"
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Trusted folders"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
@@ -5251,7 +5406,7 @@ msgstr ""
 msgid "Updated"
 msgstr "已更新"
 
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "更新"
 
@@ -5273,8 +5428,12 @@ msgstr "正在更新…"
 msgid "Upload"
 msgstr "上传"
 
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Uploaded files"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "用量"
@@ -5317,7 +5476,8 @@ msgstr "校验并添加"
 msgid "Verifying…"
 msgstr "正在校验…"
 
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
+#: src/pages/settings/GeneralSettings.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -5395,9 +5555,17 @@ msgstr ""
 msgid "What was wrong?"
 msgstr ""
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "When a command needs your approval."
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"
 msgstr "当 Webhook 触发时"
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "When routines finish, cannot run, or need your input."
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "When to run"
@@ -5472,6 +5640,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Your bots can use the selected tools."
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Your data"
 msgstr ""
 
 #: src/pages/Auth.tsx

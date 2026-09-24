@@ -24,6 +24,7 @@ import {
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { McpToolReview } from "../components/integrations/catalog/McpToolReview";
 import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
@@ -40,8 +41,15 @@ function oauthActionLabel(server: McpServer, pending: boolean): string {
   return server.oauthStatus === "none" ? t`Connect OAuth` : t`Reconnect OAuth`;
 }
 
-export function McpServersOverlay({ onClose }: { onClose: () => void }) {
+export function McpServersOverlay({
+  onClose,
+  embedded = false,
+}: {
+  onClose: () => void;
+  embedded?: boolean;
+}) {
   const { t } = useLingui();
+  const [adding, setAdding] = useState(false);
   const [reviewing, setReviewing] = useState<McpServer | null>(null);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [bots, setBots] = useState<Bot[]>([]);
@@ -168,6 +176,7 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
       setCommand("");
       setArgs("");
       setSelectedBotIds([]);
+      setAdding(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : t`Could not add MCP server`);
     } finally {
@@ -245,16 +254,8 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent
-        showCloseButton={false}
-        className="flex max-h-[calc(100%-2rem)] w-[960px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl bg-card p-0 sm:max-w-[960px]"
-      >
+    <McpSettingsFrame embedded={embedded} onClose={onClose}>
+      <div className="contents">
         {reviewing ? (
           <McpToolReview
             server={reviewing}
@@ -264,16 +265,18 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
             onSaved={refresh}
           />
         ) : null}
-        <DialogHeader className="flex-row items-center justify-between border-b border-border px-6 py-5">
-          <DialogTitle className="text-xl text-foreground">
-            <Trans>MCP servers</Trans>
-          </DialogTitle>
-          <DialogClose
-            render={<Button variant="ghost" size="icon-sm" aria-label={t`Close MCP servers`} />}
-          >
-            <X />
-          </DialogClose>
-        </DialogHeader>
+        {!embedded ? (
+          <DialogHeader className="flex-row items-center justify-between border-b border-border px-6 py-5">
+            <DialogTitle className="text-xl text-foreground">
+              <Trans>MCP servers</Trans>
+            </DialogTitle>
+            <DialogClose
+              render={<Button variant="ghost" size="icon-sm" aria-label={t`Close MCP servers`} />}
+            >
+              <X />
+            </DialogClose>
+          </DialogHeader>
+        ) : null}
         {error ? (
           <p
             role="alert"
@@ -282,157 +285,172 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
             {error}
           </p>
         ) : null}
-        <div className="rk-scroll grid min-h-0 grid-cols-1 gap-5 overflow-y-auto p-6 lg:grid-cols-2">
-          <Card className="self-start">
-            <CardHeader>
-              <CardTitle>
-                <Trans>Add server</Trans>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <FieldGroup className="gap-4">
-                <Field>
-                  <FieldLabel htmlFor="mcp-name">
-                    <Trans>Server name</Trans>
-                  </FieldLabel>
-                  <Input
-                    id="mcp-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Mobbin"
-                  />
-                </Field>
-                <Tabs
-                  value={transport}
-                  onValueChange={(value) => setTransport(value as McpTransport)}
-                >
-                  <TabsList className="w-full">
-                    <TabsTrigger value="streamable_http">HTTP</TabsTrigger>
-                    <TabsTrigger value="sse">SSE</TabsTrigger>
-                    <TabsTrigger value="stdio">STDIO</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-                {transport === "stdio" ? (
-                  <>
-                    <Field>
-                      <FieldLabel htmlFor="mcp-command">
-                        <Trans>Command</Trans>
-                      </FieldLabel>
-                      <Input
-                        id="mcp-command"
-                        value={command}
-                        onChange={(e) => setCommand(e.target.value)}
-                        placeholder="/opt/mcp-server"
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="mcp-args">
-                        <Trans>Arguments</Trans>
-                      </FieldLabel>
-                      <Input
-                        id="mcp-args"
-                        value={args}
-                        onChange={(e) => setArgs(e.target.value)}
-                        placeholder="--stdio"
-                      />
-                    </Field>
-                  </>
-                ) : (
+        <div className="rk-scroll min-h-0 space-y-5 overflow-y-auto p-6">
+          {!adding ? (
+            <Button onClick={() => setAdding(true)}>
+              <Trans>Add MCP server</Trans>
+            </Button>
+          ) : null}
+          {adding ? (
+            <Card className="self-start">
+              <CardHeader>
+                <CardTitle>
+                  <Trans>Add MCP server</Trans>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <FieldGroup className="gap-4">
                   <Field>
-                    <FieldLabel htmlFor="mcp-endpoint">
-                      <Trans>Server URL</Trans>
+                    <FieldLabel htmlFor="mcp-name">
+                      <Trans>Server name</Trans>
                     </FieldLabel>
                     <Input
-                      id="mcp-endpoint"
-                      value={endpoint}
-                      onChange={(e) => setEndpoint(e.target.value)}
-                      placeholder="https://api.mobbin.com/mcp"
+                      id="mcp-name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Mobbin"
                     />
                   </Field>
-                )}
-                <details className="group rounded-xl border border-border">
-                  <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-sm text-foreground">
-                    <span>
-                      <Trans>Advanced</Trans>
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      className="text-muted-foreground transition-transform group-open:rotate-90"
-                    >
-                      ›
-                    </span>
-                  </summary>
-                  <div className="space-y-4 border-t border-border p-3">
+                  <Tabs
+                    value={transport}
+                    onValueChange={(value) => setTransport(value as McpTransport)}
+                  >
+                    <TabsList className="w-full">
+                      <TabsTrigger value="streamable_http">HTTP</TabsTrigger>
+                      <TabsTrigger value="sse">SSE</TabsTrigger>
+                      <TabsTrigger value="stdio">STDIO</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                  {transport === "stdio" ? (
+                    <>
+                      <Field>
+                        <FieldLabel htmlFor="mcp-command">
+                          <Trans>Command</Trans>
+                        </FieldLabel>
+                        <Input
+                          id="mcp-command"
+                          value={command}
+                          onChange={(e) => setCommand(e.target.value)}
+                          placeholder="/opt/mcp-server"
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="mcp-args">
+                          <Trans>Arguments</Trans>
+                        </FieldLabel>
+                        <Input
+                          id="mcp-args"
+                          value={args}
+                          onChange={(e) => setArgs(e.target.value)}
+                          placeholder="--stdio"
+                        />
+                      </Field>
+                    </>
+                  ) : (
                     <Field>
-                      <FieldLabel htmlFor="mcp-secret">
-                        <Trans>Access token (optional)</Trans>
+                      <FieldLabel htmlFor="mcp-endpoint">
+                        <Trans>Server URL</Trans>
                       </FieldLabel>
                       <Input
-                        id="mcp-secret"
-                        type="password"
-                        value={secret}
-                        onChange={(e) => setSecret(e.target.value)}
-                        placeholder={t`Stored encrypted`}
+                        id="mcp-endpoint"
+                        value={endpoint}
+                        onChange={(e) => setEndpoint(e.target.value)}
+                        placeholder="https://api.mobbin.com/mcp"
                       />
                     </Field>
-                    {transport !== "stdio" ? (
-                      <div className="grid grid-cols-[.7fr_1fr] gap-2">
+                  )}
+                  <details className="group rounded-xl border border-border">
+                    <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-sm text-foreground">
+                      <span>
+                        <Trans>Advanced</Trans>
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="text-muted-foreground transition-transform group-open:rotate-90"
+                      >
+                        ›
+                      </span>
+                    </summary>
+                    <div className="space-y-4 border-t border-border p-3">
+                      <Field>
+                        <FieldLabel htmlFor="mcp-secret">
+                          <Trans>Access token (optional)</Trans>
+                        </FieldLabel>
                         <Input
-                          aria-label={t`Header name`}
-                          value={headerName}
-                          onChange={(e) => setHeaderName(e.target.value)}
-                        />
-                        <Input
-                          aria-label={t`Header value`}
+                          id="mcp-secret"
                           type="password"
-                          value={headerValue}
-                          onChange={(e) => setHeaderValue(e.target.value)}
-                          placeholder={t`Optional header value`}
+                          value={secret}
+                          onChange={(e) => setSecret(e.target.value)}
+                          placeholder={t`Stored encrypted`}
                         />
-                      </div>
-                    ) : null}
-                  </div>
-                </details>
-                {bots.length > 0 ? (
-                  <Field>
-                    <FieldTitle>
-                      <Trans>Agents:</Trans>
-                    </FieldTitle>
-                    <div className="flex flex-wrap gap-1.5">
-                      {bots.map((bot) => {
-                        const selected = selectedBotIds.includes(bot.id);
-                        return (
-                          <Button
-                            key={bot.id}
-                            type="button"
-                            variant={selected ? "default" : "outline"}
-                            size="xs"
-                            className="rounded-full"
-                            aria-pressed={selected}
-                            onClick={() => toggleBot(bot.id)}
-                          >
-                            {selected ? <Check aria-hidden="true" /> : null}
-                            {bot.name}
-                          </Button>
-                        );
-                      })}
+                      </Field>
+                      {transport !== "stdio" ? (
+                        <div className="grid grid-cols-[.7fr_1fr] gap-2">
+                          <Input
+                            aria-label={t`Header name`}
+                            value={headerName}
+                            onChange={(e) => setHeaderName(e.target.value)}
+                          />
+                          <Input
+                            aria-label={t`Header value`}
+                            type="password"
+                            value={headerValue}
+                            onChange={(e) => setHeaderValue(e.target.value)}
+                            placeholder={t`Optional header value`}
+                          />
+                        </div>
+                      ) : null}
                     </div>
-                  </Field>
-                ) : null}
-              </FieldGroup>
-              <Button
-                type="button"
-                className="mt-5 w-full"
-                disabled={saving}
-                onClick={() => void addServer()}
-              >
-                {saving ? <Trans>Adding…</Trans> : <Trans>Add server</Trans>}
-              </Button>
-            </CardContent>
-          </Card>
+                  </details>
+                  {bots.length > 0 ? (
+                    <Field>
+                      <FieldTitle>
+                        <Trans>Agents:</Trans>
+                      </FieldTitle>
+                      <div className="flex flex-wrap gap-1.5">
+                        {bots.map((bot) => {
+                          const selected = selectedBotIds.includes(bot.id);
+                          return (
+                            <Button
+                              key={bot.id}
+                              type="button"
+                              variant={selected ? "default" : "outline"}
+                              size="xs"
+                              className="rounded-full"
+                              aria-pressed={selected}
+                              onClick={() => toggleBot(bot.id)}
+                            >
+                              {selected ? <Check aria-hidden="true" /> : null}
+                              {bot.name}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </Field>
+                  ) : null}
+                </FieldGroup>
+                <Button
+                  type="button"
+                  className="mt-5 w-full"
+                  disabled={saving}
+                  onClick={() => void addServer()}
+                >
+                  {saving ? <Trans>Adding…</Trans> : <Trans>Add server</Trans>}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="mt-2 w-full"
+                  disabled={saving}
+                  onClick={() => setAdding(false)}
+                >
+                  <Trans>Cancel</Trans>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
           <div>
             <h2 className="text-[15px] font-medium text-foreground">
-              <Trans>Configured servers</Trans>
+              <Trans>Manage MCP servers</Trans>
             </h2>
             <div className="mt-3 space-y-2">
               {servers.length === 0 ? (
@@ -539,6 +557,33 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         </div>
+      </div>
+    </McpSettingsFrame>
+  );
+}
+
+function McpSettingsFrame({
+  embedded,
+  onClose,
+  children,
+}: {
+  embedded: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (embedded) return <div className="flex min-h-0 flex-col">{children}</div>;
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[calc(100%-2rem)] w-[960px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl bg-card p-0 sm:max-w-[960px]"
+      >
+        {children}
       </DialogContent>
     </Dialog>
   );

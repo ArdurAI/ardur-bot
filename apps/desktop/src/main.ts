@@ -38,6 +38,7 @@ import {
   nativeMemoryFolderDependencies,
   registerMemoryFolder,
 } from "./memory-folders.js";
+import { installDesktopNotifications } from "./notifications.js";
 import { oauthCallbackFrom } from "./oauth-callback.js";
 import { RemoteListener } from "./remote-listener.js";
 import {
@@ -281,6 +282,8 @@ function createWindow(url: string, partition: string | null) {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      // Deliver completion and approval notifications while the tray keeps work alive.
+      backgroundThrottling: false,
       ...(partition === null ? {} : { partition }),
     },
   });
@@ -333,7 +336,7 @@ function createWindow(url: string, partition: string | null) {
   });
   win.on("close", (event) => {
     if (
-      staysRunning(process.platform, desktopTray !== null) &&
+      staysRunning(process.platform, desktopTray !== null, hostService?.keepRunning) &&
       !quitting &&
       process.env.ARDURBOT_DISABLE_WARM_WINDOW !== "1"
     ) {
@@ -341,12 +344,20 @@ function createWindow(url: string, partition: string | null) {
       win.hide();
       clearTimeout(warmWindowTimer);
       warmWindowTimer = setTimeout(() => {
-        if (mainWindow === win && !win.isDestroyed() && !win.isVisible()) win.destroy();
+        // The hidden renderer continues the authenticated notification feed while work continues.
+        if (
+          !hostService?.keepRunning &&
+          mainWindow === win &&
+          !win.isDestroyed() &&
+          !win.isVisible()
+        )
+          win.destroy();
       }, WARM_WINDOW_TTL_MS);
     }
   });
   win.once("closed", () => {
     clearTimeout(warmWindowTimer);
+    hostService?.windowClosed();
     if (mainWindow === win) mainWindow = null;
   });
   markOnce("rk:main:window-created");
@@ -1027,6 +1038,7 @@ function safeOrigin(targetUrl: string) {
 }
 
 app.whenReady().then(async () => {
+  installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
   hostService = installHostService({
     window: () => mainWindow,
     target: () => currentTargetUrl,
@@ -1472,7 +1484,7 @@ app.on("window-all-closed", () => {
   // A hidden session probe (defaultSessionHasOriginData) can be the only window
   // during startup; its teardown must not quit the app.
   if (liveProbeWindows > 0) return;
-  if (!staysRunning(process.platform, desktopTray !== null)) app.quit();
+  if (!staysRunning(process.platform, desktopTray !== null, hostService?.keepRunning)) app.quit();
 });
 
 app.on("before-quit", () => {

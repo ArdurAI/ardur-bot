@@ -13,6 +13,10 @@ describe("account preferences", () => {
   function preferencesDeps(avatarStyle: string) {
     const update = vi.fn().mockResolvedValue({});
     const prisma = {
+      userPreferences: {
+        findUnique: vi.fn(async () => null),
+        upsert: vi.fn(async ({ create }: { create: Record<string, unknown> }) => create),
+      },
       user: {
         update,
         findUniqueOrThrow: vi.fn().mockResolvedValue({

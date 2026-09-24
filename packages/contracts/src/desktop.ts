@@ -39,8 +39,13 @@ export interface ArdurBotDesktopOAuthCallback {
 }
 
 export interface ArdurBotDesktop {
+  notifications?: {
+    supported(): Promise<boolean>;
+    show(message: { title: string; body: string; threadId: string }): Promise<boolean>;
+  };
   host?: {
-    state(): Promise<{ configured: boolean; roots: string[] }>;
+    state(): Promise<{ configured: boolean; roots: string[]; keepRunning?: boolean }>;
+    setKeepRunning?(enabled: boolean): Promise<void>;
     setup(): Promise<void>;
     addRoot(): Promise<string | null>;
     /** Opens the same native picker, initially showing a dropped directory. */

@@ -91,6 +91,7 @@ it.each([false, true])(
       authority: { scopes: [], connectors: [] },
     };
     const prisma = {
+      userPreferences: { findUnique: vi.fn(async () => null) },
       run: { findMany: vi.fn(async () => (includeCoordinator ? [worker, coordinator] : [worker])) },
       delegation: { findMany: vi.fn(async () => [lineage]) },
     } as unknown as PrismaClient;

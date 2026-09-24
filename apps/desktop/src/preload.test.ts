@@ -40,6 +40,7 @@ describe("desktop preload bridge", () => {
       "host",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
       "update",
@@ -58,6 +59,7 @@ describe("desktop preload bridge", () => {
       "addRoot",
       "clear",
       "removeRoot",
+      "setKeepRunning",
       "setup",
       "state",
     ]);
@@ -98,6 +100,7 @@ describe("desktop preload bridge", () => {
       "host",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
       "update",

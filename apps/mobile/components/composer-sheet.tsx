@@ -102,7 +102,7 @@ export function ComposerSheet({
               : mode === "routines"
                 ? t("Routines")
                 : mode === "connectors"
-                  ? t("Connectors")
+                  ? t("Integrations")
                   : ""}
           </Text>
           <Pressable

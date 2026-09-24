@@ -118,7 +118,7 @@ export default function ComposerMenu(props: ComposerMenuProps) {
       <DropdownMenuItem onClick={props.onSlash}>{t`Slash commands`}</DropdownMenuItem>
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>
-          {t`Connectors`}
+          {t`Integrations`}
           {reconnectCount > 0 ? (
             <span className="text-xs text-muted-foreground">
               ({t`${reconnectCount} need reconnection`})

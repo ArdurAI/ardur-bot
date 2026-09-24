@@ -1317,7 +1317,7 @@ function Thread() {
       setSkillsOnly(false);
       setSlashQuery("");
     }
-    if (option === "Connectors") setComposerSheet("connectors");
+    if (option === "Integrations") setComposerSheet("connectors");
   }
   function showAttachMenu() {
     if (Platform.OS === "ios") {

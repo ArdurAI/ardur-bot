@@ -21,6 +21,13 @@ vi.mock("electron", () => ({
 }));
 beforeEach(() => vi.clearAllMocks());
 describe("platform tray lifecycle", () => {
+  it.each(["win32", "linux", "darwin"] as const)(
+    "stops with the window on %s when background work is off",
+    (platform) => {
+      expect(staysRunning(platform, true, false)).toBe(false);
+      expect(staysRunning(platform, false, false)).toBe(false);
+    },
+  );
   it.each(["win32", "linux"] as const)(
     "keeps %s reachable after closing its window",
     (platform) => {

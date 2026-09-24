@@ -43,6 +43,11 @@ msgstr "{0, plural, one {# Modell} other {# Modelle}}"
 msgid "{0} {unitLabel}"
 msgstr "{0} {unitLabel}"
 
+#. placeholder {0}: file.size
+#: src/pages/settings/UploadedFiles.tsx
+msgid "{0} bytes"
+msgstr ""
+
 #. placeholder {0}: block.name
 #: src/pages/shell/message-cards.tsx
 msgid "{0} connection"
@@ -134,19 +139,19 @@ msgid "{minutes}m ago"
 msgstr "vor {minutes} Min."
 
 #. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
+#: src/lib/use-notifications.ts
 msgid "{name} failed"
 msgstr "{name} ist fehlgeschlagen"
 
 #. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
+#: src/lib/use-notifications.ts
 msgid "{name} finished"
 msgstr "{name} ist fertig"
 
 #. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "{name} stopped"
-msgstr "{name} wurde gestoppt"
+#: src/lib/use-notifications.ts
+msgid "{name} needs your input"
+msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
@@ -216,6 +221,7 @@ msgstr "Zugriffstoken (optional)"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "Konto"
 
@@ -331,6 +337,7 @@ msgid "Add item"
 msgstr "Element hinzufügen"
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Add MCP server"
 msgstr "MCP-Server hinzufügen"
@@ -446,6 +453,14 @@ msgstr ""
 msgid "Allow email actions without asking"
 msgstr "E-Mail-Aktionen ohne Nachfrage erlauben"
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Allow notifications"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Allow notifications in your browser settings, then try again."
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Allow once"
 msgstr "Einmal erlauben"
@@ -545,7 +560,11 @@ msgstr "API-Schlüssel-Header"
 msgid "App token"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings/DeveloperSection.tsx
+msgid "App version"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
 msgid "Appearance"
 msgstr "Erscheinungsbild"
 
@@ -580,6 +599,10 @@ msgstr "Bestätigungsgrenzen"
 #. placeholder {0}: tool.id
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Approval for {0}"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Approvals needed"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -793,11 +816,6 @@ msgstr "Bot"
 msgid "Bot"
 msgstr "Bot"
 
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "Bot"
-msgstr ""
-
 #: src/pages/Shell.tsx
 msgid "Bot screen"
 msgstr "Bot-Bildschirm"
@@ -838,6 +856,10 @@ msgstr "Bots handeln standardmäßig ohne Nachfrage. Füge nur dann eine Ausnahm
 msgid "Bots are working"
 msgstr "Bots arbeiten"
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Bots may read and write here; consequential actions still ask"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -874,8 +896,10 @@ msgstr "Server nicht erreichbar."
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Cancel"
 msgstr "Abbrechen"
@@ -905,6 +929,10 @@ msgstr "abgebrochen"
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Abgebrochen"
+
+#: src/pages/settings-sections.ts
+msgid "Capabilities"
+msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Change computer"
@@ -952,6 +980,10 @@ msgstr ""
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Chat bot"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Chat font"
 msgstr ""
 
 #: src/pages/ChannelPairingSettings.tsx
@@ -1228,7 +1260,7 @@ msgid "Computer is stopped"
 msgstr "Computer ist gestoppt"
 
 #: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Computers"
 msgstr "Computer"
 
@@ -1244,14 +1276,16 @@ msgstr ""
 msgid "Configured by deployment"
 msgstr "Durch die Bereitstellung konfiguriert"
 
-#: src/pages/McpServersOverlay.tsx
-msgid "Configured servers"
-msgstr "Konfigurierte Server"
-
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/settings/UploadedFiles.tsx
 msgid "Confirm delete"
 msgstr "Löschen bestätigen"
+
+#. placeholder {0}: file.name
+#: src/pages/settings/UploadedFiles.tsx
+msgid "Confirm delete {0}"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Auth.tsx
@@ -1374,10 +1408,6 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Die Verbindung zu {0} steht noch aus. Du kannst dieses Fenster schließen und später erneut nachsehen."
-
-#: src/components/composer/ComposerMenu.tsx
-msgid "Connectors"
-msgstr ""
 
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
@@ -1610,6 +1640,10 @@ msgstr "{0} konnte nicht heruntergeladen werden. Versuche es erneut."
 msgid "Could not download {name}. Try again."
 msgstr "{name} konnte nicht heruntergeladen werden. Versuche es erneut."
 
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Could not export data. Try again."
+msgstr ""
+
 #: src/pages/MemoryImportExport.tsx
 msgid "Could not export memory. Retry."
 msgstr ""
@@ -1666,6 +1700,10 @@ msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 msgid "Could not load plugins"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Could not load settings. Try again."
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
@@ -1816,6 +1854,10 @@ msgstr "Routine konnte nicht gespeichert werden"
 msgid "Could not save rule"
 msgstr "Regel konnte nicht gespeichert werden"
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Could not save settings. Try again."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not save skill"
 msgstr "Skill konnte nicht gespeichert werden"
@@ -1898,6 +1940,10 @@ msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Could not update this task; try again."
+msgstr ""
+
+#: src/pages/settings/UploadedFiles.tsx
+msgid "Could not update uploaded files."
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2024,11 +2070,15 @@ msgstr "Aktuelles Passwort"
 msgid "Customer support"
 msgstr ""
 
+#: src/pages/settings-sections.ts
+msgid "Customize"
+msgstr ""
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Customize bot avatar"
 msgstr "Bot-Avatar anpassen"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings/GeneralSettings.tsx
 msgid "Dark"
 msgstr "Dunkel"
 
@@ -2074,13 +2124,16 @@ msgstr "Standardbereich"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/settings/UploadedFiles.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Delete"
 msgstr "Löschen"
 
 #. placeholder {0}: bot.name
+#. placeholder {0}: file.name
 #. placeholder {0}: group.name
+#: src/pages/settings/UploadedFiles.tsx
 #: src/pages/Shell.tsx
 msgid "Delete {0}"
 msgstr "{0} löschen"
@@ -2147,6 +2200,7 @@ msgid "Description"
 msgstr "Beschreibung"
 
 #: src/components/DesktopUpdates.tsx
+#: src/pages/settings-sections.ts
 msgid "Desktop app"
 msgstr ""
 
@@ -2161,6 +2215,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
+msgstr ""
+
+#: src/pages/settings-sections.ts
+msgid "Developer"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -2179,7 +2237,7 @@ msgstr ""
 msgid "Device permissions"
 msgstr ""
 
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Devices"
 msgstr ""
 
@@ -2222,6 +2280,10 @@ msgstr ""
 #: src/pages/shell/message-cards.tsx
 msgid "Dismissed. Reconnect anytime from MCP settings."
 msgstr "Verworfen. Du kannst die Verbindung jederzeit in den MCP-Einstellungen wiederherstellen."
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Dispatch messages"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Display name"
@@ -2441,12 +2503,21 @@ msgstr ""
 msgid "Expires in five minutes."
 msgstr ""
 
+#: src/pages/settings/PrivacySettings.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Exportieren"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Export block"
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Export data"
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Export memory"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
@@ -2459,6 +2530,10 @@ msgstr "Exportiere die Liste dieser Woche aus dem CRM und lege sie im freigegebe
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Export with history"
+msgstr ""
+
+#: src/pages/settings-sections.ts
+msgid "Extensions"
 msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
@@ -2482,11 +2557,6 @@ msgstr "Nachricht konnte nicht gesendet werden"
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "Stoppen fehlgeschlagen"
-
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "Failed."
-msgstr "Fehlgeschlagen."
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -2536,11 +2606,6 @@ msgstr ""
 msgid "finished"
 msgstr "abgeschlossen"
 
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "Finished."
-msgstr "Fertig."
-
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "MCP-Verbindung wird abgeschlossen…"
@@ -2561,12 +2626,16 @@ msgstr "Passwort vergessen?"
 msgid "Free"
 msgstr "Kostenlos"
 
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "General"
 msgstr "Allgemein"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Get credentials"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Get notified when a response finishes. Useful for long-running tasks."
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -2784,8 +2853,9 @@ msgstr ""
 msgid "Integration options"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "Integrationen"
@@ -2843,6 +2913,10 @@ msgstr "Erinnerungen behalten"
 msgid "Keep scope"
 msgstr ""
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Keep working when the window is closed"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr ""
@@ -2898,7 +2972,12 @@ msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/settings-sections.ts
 msgid "Learning"
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Learning consent"
 msgstr ""
 
 #: src/pages/MemoryHistory.tsx
@@ -2917,7 +2996,7 @@ msgstr ""
 msgid "Leave"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings/GeneralSettings.tsx
 msgid "Light"
 msgstr "Hell"
 
@@ -2952,6 +3031,10 @@ msgstr "Hört zu…"
 #: src/pages/Shell.tsx
 msgid "Load earlier messages"
 msgstr "Frühere Nachrichten laden"
+
+#: src/pages/settings/UploadedFiles.tsx
+msgid "Load more"
+msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "Load more history to compare."
@@ -2997,6 +3080,7 @@ msgstr ""
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 msgid "Loading…"
@@ -3031,6 +3115,8 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "Stelle sicher, dass auf diesem Computer nichts mehr läuft."
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/pages/settings/GeneralSettings.tsx
+#: src/pages/settings/PrivacySettings.tsx
 msgid "Manage"
 msgstr ""
 
@@ -3038,6 +3124,7 @@ msgstr ""
 msgid "Manage devices from the home owner account."
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Manage MCP servers"
 msgstr "MCP-Server verwalten"
@@ -3084,6 +3171,10 @@ msgstr "Maximale Ausgabetokens"
 msgid "May not be available on your plan"
 msgstr ""
 
+#: src/pages/settings-sections.ts
+msgid "MCP"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "MCP endpoint"
 msgstr ""
@@ -3118,12 +3209,9 @@ msgstr "Mitglieder ({GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX} auswählen)"
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Memory"
 msgstr "Erinnerungen"
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Memory & Skills"
-msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory folder on your server"
@@ -3139,6 +3227,10 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Memory location and documents"
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Memory preferences"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -3162,11 +3254,6 @@ msgid "Mentions only"
 msgstr ""
 
 #: src/pages/Shell.tsx
-msgid "Message"
-msgstr "Nachricht"
-
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
 msgid "Message"
 msgstr "Nachricht"
 
@@ -3255,7 +3342,7 @@ msgstr "Modell aktualisiert."
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Models"
 msgstr "Modelle"
 
@@ -3286,6 +3373,10 @@ msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "More history"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Motion"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -3476,6 +3567,10 @@ msgstr "Keine Ergebnisse"
 msgid "No runs yet"
 msgstr ""
 
+#: src/pages/SettingsOverlay.tsx
+msgid "No settings found."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
 msgstr "Noch keine Skills"
@@ -3490,6 +3585,10 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
+msgstr ""
+
+#: src/pages/settings/UploadedFiles.tsx
+msgid "No uploaded files"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -3537,6 +3636,10 @@ msgstr ""
 msgid "Not set up"
 msgstr ""
 
+#: src/pages/settings/PluginsSection.tsx
+msgid "Nothing installed yet"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
 msgstr "Nichts läuft mehr"
@@ -3549,6 +3652,7 @@ msgstr "Noch nichts gemerkt"
 msgid "Nothing to review."
 msgstr ""
 
+#: src/pages/settings/GeneralSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
 msgstr "Benachrichtigungen"
@@ -3800,11 +3904,16 @@ msgstr ""
 msgid "Pin"
 msgstr "Anheften"
 
+#: src/pages/settings-sections.ts
+msgid "Platform"
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "Wiedergabe…"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/settings-sections.ts
 msgid "Plugins"
 msgstr ""
 
@@ -3836,6 +3945,10 @@ msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Previous"
+msgstr ""
+
+#: src/pages/settings-sections.ts
+msgid "Privacy"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -3903,6 +4016,10 @@ msgstr ""
 #: src/components/CloudAgentCard.tsx
 msgid "Pull request"
 msgstr "Pull Request"
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Push notifications on your phone."
+msgstr ""
 
 #: src/pages/MemoryHistory.tsx
 msgid "Pushed"
@@ -4029,6 +4146,14 @@ msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recreating the computer"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Reduce animation in streaming responses and other interface elements."
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Reduced"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -4226,6 +4351,10 @@ msgstr ""
 msgid "Resources"
 msgstr ""
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Response completions"
+msgstr ""
+
 #: src/pages/TeamBoard.tsx
 msgid "Responsible human"
 msgstr ""
@@ -4252,6 +4381,8 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
+#: src/pages/settings/GeneralSettings.tsx
+#: src/pages/settings/UploadedFiles.tsx
 msgid "Retry"
 msgstr ""
 
@@ -4346,6 +4477,7 @@ msgid "Routine"
 msgstr "Routine"
 
 #: src/pages/RoutineEditor.tsx
+#: src/pages/settings/GeneralSettings.tsx
 msgid "Routines"
 msgstr "Routinen"
 
@@ -4405,6 +4537,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "safety"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Sans"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -4544,6 +4680,10 @@ msgstr "Anbieter suchen"
 msgid "Search run output"
 msgstr ""
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Search settings"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -4599,6 +4739,10 @@ msgstr ""
 msgid "Sentry alert"
 msgstr ""
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Serif"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Server"
 msgstr ""
@@ -4617,6 +4761,7 @@ msgstr "Servername"
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/settings/DeveloperSection.tsx
 msgid "Server URL"
 msgstr "Server-URL"
 
@@ -4629,6 +4774,7 @@ msgid "Set up"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/sidebar-settings.tsx
@@ -4726,6 +4872,7 @@ msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/settings-sections.ts
 msgid "Skills"
 msgstr "Skills"
 
@@ -4854,11 +5001,6 @@ msgstr "Anlernen beenden"
 msgid "Stop the current run"
 msgstr ""
 
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts
-msgid "Stopped."
-msgstr "Gestoppt."
-
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
 msgstr ""
@@ -4915,7 +5057,8 @@ msgstr "Wird gewechselt…"
 msgid "Syncs to {0}"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings-sections.ts
+#: src/pages/settings/GeneralSettings.tsx
 msgid "System"
 msgstr "System"
 
@@ -4933,6 +5076,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Tasks"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -5012,6 +5159,10 @@ msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Theme"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -5156,6 +5307,10 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg-Token"
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "Trusted folders"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
@@ -5251,7 +5406,7 @@ msgstr ""
 msgid "Updated"
 msgstr ""
 
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "Updates"
 
@@ -5273,8 +5428,12 @@ msgstr ""
 msgid "Upload"
 msgstr "Hochladen"
 
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Uploaded files"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "Nutzung"
@@ -5317,7 +5476,8 @@ msgstr "Prüfen und hinzufügen"
 msgid "Verifying…"
 msgstr "Wird geprüft…"
 
-#: src/pages/SettingsOverlay.tsx
+#: src/pages/settings-sections.ts
+#: src/pages/settings/GeneralSettings.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -5395,8 +5555,16 @@ msgstr ""
 msgid "What was wrong?"
 msgstr ""
 
+#: src/pages/settings/GeneralSettings.tsx
+msgid "When a command needs your approval."
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "When a webhook fires"
+msgstr ""
+
+#: src/pages/settings/GeneralSettings.tsx
+msgid "When routines finish, cannot run, or need your input."
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -5472,6 +5640,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Your bots can use the selected tools."
+msgstr ""
+
+#: src/pages/settings/PrivacySettings.tsx
+msgid "Your data"
 msgstr ""
 
 #: src/pages/Auth.tsx

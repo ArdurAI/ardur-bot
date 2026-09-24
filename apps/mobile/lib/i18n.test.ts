@@ -88,11 +88,13 @@ describe("mobile i18n", () => {
     const { RU_MESSAGES } = await import("./locales/ru");
     const { EMPTY_PLUGIN_CATALOG_MESSAGE, SLASH_ACTIONS } = await import("@ardurbot/core");
     const { OPENAI_COMPATIBLE_BASE_URL_HINT } = await import("@ardurbot/contracts");
+    const { COMPOSER_MENU_OPTIONS } = await import("./composer-menu");
     const mobileRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
     const ids = new Set<string>([
       EMPTY_PLUGIN_CATALOG_MESSAGE,
       OPENAI_COMPATIBLE_BASE_URL_HINT,
       ...SLASH_ACTIONS.map((action) => action.label),
+      ...COMPOSER_MENU_OPTIONS,
       "Sign-in did not return a session",
       "Sign-up did not return a session",
       "{count} model",
