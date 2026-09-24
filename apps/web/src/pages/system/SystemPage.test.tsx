@@ -98,9 +98,9 @@ function fixture(platform = "darwin", mode: "new" | "existing" = "new") {
 }
 
 describe("desktop system rows", () => {
-  it("renders nothing in a browser or older desktop without the bridge", async () => {
+  it("shows a restart hint in a browser or older desktop without the bridge", async () => {
     const c = await render(<SystemPage />);
-    expect(c.textContent).toBe("");
+    expect(c.textContent).toBe("Restart the desktop app to update it.");
     expect(fake.list).not.toHaveBeenCalled();
   });
   it("shows native macOS status with labeled controls and no unsupported rows", async () => {
