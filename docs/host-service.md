@@ -81,11 +81,12 @@ worker still runs them directly during source development. A catalog conformance
 test checks the native Claude compatibility list against the pinned Pi catalog,
 without putting Pi's provider SDKs in the host bundle.
 
-The verified bundle is **793,496 bytes** (about 775 KiB). It contains the host agent,
+The single JavaScript bundle contains the host agent,
 desktop provider, native adapters, MCP server/relay, shared contract schemas and
 command limits, ws, Zod, MCP validation dependencies and small ORPC helpers pulled
-in through the contracts. Only Node built-ins remain external. Prisma, Pi and koffi
-are absent; there are no runtime TypeScript or workspace imports.
+in through the contracts. Only Node built-ins remain external JavaScript imports.
+Prisma, Pi and the koffi package loader are absent; there are no runtime TypeScript
+or workspace imports. Windows loads one optional native binary beside the bundle.
 
 `pnpm --filter @ardurbot/host-service build` uses esbuild to produce exactly
 `dist/host-service.cjs`. The desktop build includes it as an extraResource. The
@@ -93,6 +94,51 @@ bundle test copies it to an isolated temporary directory and starts it without
 workspace packages. It rejects external non-Node imports and Prisma, Pi or native
 addon inputs. `pnpm dev` includes the source runner through tsx; without desktop IPC
 pairing it is idle, and existing host-worker routing remains unchanged.
+
+### Windows native writes
+
+`packages/host-runtime/src/desktop-sandbox-win32-path.ts` owns the existing NT
+relative-handle implementation. The adapter path re-exports it and supplies its
+installed koffi module lazily on Windows. The packaged host supplies its own loader
+through `installWin32NativeApi`. Both use the same `NtCreateFile` root handle,
+`FILE_OPEN_REPARSE_POINT`, leaf-name validation and inode checks. The bridge enables
+file writes and confined `mkdir -p` only when `win32NtRelativeAvailable()` succeeds.
+Otherwise it keeps the existing error: "Host file writes require native directory
+handles on Windows." No new interface copy or runtime dependency is added.
+
+Koffi **3.2.1** is already declared in `packages/adapters/package.json`. Its native
+binaries live in optional platform packages. The installed macOS package contains
+`node_modules/.pnpm/@koromix+koffi-darwin-arm64@3.2.1/node_modules/@koromix/koffi-darwin-arm64/darwin_arm64/koffi.node`.
+The Windows x64 lookup is
+`@koromix/koffi-win32-x64/win32_x64/koffi.node`, resolved from the installed koffi
+entry point. The build also recognizes koffi's local build location,
+`koffi/build/koffi/win32_x64/koffi.node`. It checks the corresponding locations for
+arm64 and ia32 without downloading or compiling anything.
+
+The host build removes stale native output and copies each available Windows binary
+byte for byte to `dist/native/win_<arch>/koffi.node`. If a target is absent it logs
+`Host service native: skipped win32_<arch>.` followed by both checked locations and
+the reason that Windows writes remain refused. With no Windows prebuild installed,
+`dist/native/` is absent. The macOS install used for this change has no Windows
+prebuild; the copy tests use offline fixtures, not executable Windows binaries.
+
+`apps/desktop/package.json` maps `../host-service/dist/native/${os}_${arch}` to
+`host-service/native/${os}_${arch}`, filtered to `koffi.node`. The existing Windows
+x64 release job therefore packages `native/win_x64/koffi.node`. macOS and Linux
+select their own target names, for which the build stages no native files. This also
+prevents cross-platform packaging from copying a binary for the build host or a
+different architecture. Cross-building Windows requires the matching optional
+package to be installed first; its absence is an explicit build log and a runtime
+refusal. The release matrix and its build steps are unchanged.
+
+The runtime uses `createRequire` anchored to the CJS bundle's `__filename`, then
+loads only `native/win_<process.arch>/koffi.node` under that directory. It never
+searches the working directory, `node_modules`, or `process.execPath`. macOS and
+Linux do not probe or load the addon. Missing binaries, substituted symlinks,
+unloadable binaries and version/API mismatches leave the writer unavailable.
+The loader provides koffi's `sizeof` helper using the raw addon's `type(spec).size`;
+it does not change the NT policy. The ESM source host runner has no packaged addon;
+use the compiled bundle for Windows bridge writes.
 
 The new manifests declare cached **ws 8.21.3 (MIT)** and **esbuild 0.28.2 (MIT)**.
 Both versions already existed in the workspace store. esbuild is a build dependency.
@@ -128,6 +174,25 @@ The connection hub runs in the API process; the host package has no database cli
 Native turns use the owner's vendor allowance, including any vendor overage already
 configured. No additional hosted service is required by this bridge.
 
+### Windows file-write acceptance
+
+1. On Windows x64, run the host-service build and confirm it reports staging
+   `win32_x64`. In the installed desktop resources, check for
+   `host-service/host-service.cjs` and
+   `host-service/native/win_x64/koffi.node`.
+2. Pair the host, register a disposable folder and assign the host computer to a
+   bot. Launch the installed app from a different working directory. No checkout
+   or workspace `node_modules` should be needed.
+3. Through the bridge, create a nested directory and a small file, then replace
+   that file. Verify the resulting directories and file contents on disk.
+4. In disposable folders, try traversal, a directory junction to an outside folder
+   and a hard link to an outside sentinel file. Confirm refusal and unchanged
+   outside content. Confirm ordinary writes still work afterwards.
+5. Quit the app, temporarily move the packaged addon aside and restart. Writes and
+   directory creation must report the existing native-directory-handle error and
+   leave the requested output absent. Restore the addon and restart; normal writes
+   must work again.
+
 ## Visible copy and persona impact
 
 The operator sees **This Mac** / **This computer**, **Host service: Connected**,
@@ -143,15 +208,22 @@ of an unnoticed replay. The team lead retains owner/run/space authorization and 
 audit. The local-first user grants folders locally and can revoke the computer
 without sharing vendor sign-in material with the API or worker.
 
+On Windows, the operator and local-first user can now save files and create folders
+through the host bridge when the native addon is installed. The researcher can keep
+generated work on the chosen host. The shared policy and negative tests protect the
+same folder boundaries and audit expectations for the team lead. Target-specific
+packaging, explicit missing-binary logs and these acceptance steps let the builder
+inspect and diagnose the installation without hidden native-module lookup.
+
 ## Remaining verification and platform limits
 
 No DMG build, desktop Playwright run, signed-in vendor turn or real Windows/Linux
 acceptance was performed in this sandbox. Windows executable discovery, named-pipe
 construction, Electron launch environment and absolute taskkill invocation have
-stub/source coverage. Windows host writes and directory creation fail closed: the
-existing strong relative-handle writer depends on a native addon, incompatible with
-the required single JavaScript artifact. The ordinary adapter retains that native
-implementation. Windows cannot yet complete the Team Computer file workflow.
+stub/source coverage. Windows host writes and directory creation now use the shared
+relative-handle writer when the packaged addon loads. Offline tests stub the addon
+and platform while exercising real file and inode checks. Real Windows acceptance
+is still required; these tests do not establish native DLL or Electron compatibility.
 
 Native runtime model/effort, managed-policy isolation, vendor approval behavior and
 session recovery remain Experimental release gates from the native-runtime ADR.
@@ -159,7 +231,22 @@ Codex sign-in remains in the user's own CLI; this protocol does not add a remote
 vendor-login operation. The hub assumes one API process per deployment; horizontally
 replicated API routing would need a shared connection owner before use.
 
-## Validation for the host bridge
+## Windows write validation
+
+- The offline suite covers addon location, OS and architecture selection, missing
+  or incompatible addons, symlink substitution, the pinned koffi version, byte-for-byte
+  staging, stale output removal and the desktop resource mapping.
+- With the platform stubbed to Windows and the addon stubbed, the shared writer
+  creates and replaces files and creates nested directories. Traversal, alternate
+  streams, invalid leaf names, symlinks, hard links, outside junctions and parent
+  swaps are rejected. Missing addons and missing NT functions retain the exact error.
+- The NT writer implementation was compared with the original adapter source. Its
+  policy is identical apart from the injected native API initialization.
+- `pnpm check` remains blocked by the sandbox's denial of the token generator's IPC
+  listener. The recursive workspace check passed. Desktop listener tests also need
+  an environment that permits loopback sockets. Real Windows acceptance is pending.
+
+## Host bridge baseline validation
 
 - `pnpm check` was blocked by the sandbox denying the tsx IPC listener used by UI
   token generation. `pnpm -r --workspace-concurrency=4 run check` passed across the
@@ -185,6 +272,14 @@ replicated API routing would need a shared connection owner before use.
   publication was performed. The added web screenshot case awaits CI.
 
 ## Primary documentation checked
+
+- [Koffi migration](https://koffi.dev/migration#split-packages): version 3 distributes
+  prebuilds in optional platform packages. The installed 3.2.1 package source confirms
+  the paths above and the `sizeof` wrapper around `type(spec).size`.
+- [Koffi loading](https://koffi.dev/load): `load`, library `func` declarations and
+  calling conventions. The copied addon supplies these functions directly.
+- [Koffi supported platforms](https://koffi.dev/): Windows x64, arm64 and ia32 have
+  official prebuilt support. Local installation availability is a separate check.
 
 - [Electron environment variables](https://www.electronjs.org/docs/latest/api/environment-variables#electron_run_as_node):
   Node launch mode and the `runAsNode` fuse. This package does not disable that fuse.
