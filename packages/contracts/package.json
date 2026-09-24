@@ -9,6 +9,7 @@
       "development": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./device-paths": "./src/device-paths.js",
     "./local-settings": "./src/local-settings.js"
   },
   "scripts": {

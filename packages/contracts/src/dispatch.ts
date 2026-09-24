@@ -88,16 +88,8 @@ export const DeviceProofSchema = z.strictObject({
   signature: z.string().min(1).max(256),
 });
 export type DeviceProof = z.infer<typeof DeviceProofSchema>;
-export const DEVICE_API_PATHS = [
-  "/device/pair",
-  "/device/code",
-  "/device/claim",
-  "/device/nonce",
-  "/device/request",
-] as const;
-export function isDeviceApiPath(path: string): boolean {
-  return (DEVICE_API_PATHS as readonly string[]).includes(path);
-}
+// Defined in plain JavaScript so the packaged desktop app can load it (see device-paths.js).
+export { DEVICE_API_PATHS, isDeviceApiPath } from "./device-paths.js";
 
 /** Stable JSON is shared by the signer and verifier; signatures cover the operation and body. */
 export function canonicalDispatchJson(value: unknown): string {
