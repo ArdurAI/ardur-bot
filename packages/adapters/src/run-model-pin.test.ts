@@ -243,28 +243,31 @@ it("checks root locality against the resolved endpoint before returning an execu
   ).toMatchObject({ kind: "resolved", runtimePin: custom });
 });
 
-it("resolves native snapshots without looking up or loading a credential", async () => {
-  const f = fixture();
-  const snapshot = {
-    ...pin,
-    runtimeKind: "claude-code" as const,
-    provider: "anthropic",
-    modelId: "claude-opus-5",
-    effort: "low",
-    credentialId: "native:claude-code",
-  };
-  const result = await resolveRunModelPin({
-    ...f,
-    snapshot,
-    bot: { runtimeKind: "pi", modelProvider: "xai" },
-  });
-  expect(result).toMatchObject({ kind: "resolved", pin: snapshot, runtimePin: snapshot });
-  expect(f.loadKey).not.toHaveBeenCalled();
-  expect(f.findCredential).not.toHaveBeenCalled();
-  expect(f.findPreference).not.toHaveBeenCalled();
-  expect(result).not.toHaveProperty("apiKey");
-  expect(result).not.toHaveProperty("oauth");
-});
+it.each(["low", "medium", "high", "xhigh", "max"])(
+  "resolves native %s snapshots without looking up or loading a credential",
+  async (effort) => {
+    const f = fixture();
+    const snapshot = {
+      ...pin,
+      runtimeKind: "claude-code" as const,
+      provider: "anthropic",
+      modelId: "claude-opus-5",
+      effort,
+      credentialId: "native:claude-code",
+    };
+    const result = await resolveRunModelPin({
+      ...f,
+      snapshot,
+      bot: { runtimeKind: "pi", modelProvider: "xai" },
+    });
+    expect(result).toMatchObject({ kind: "resolved", pin: snapshot, runtimePin: snapshot });
+    expect(f.loadKey).not.toHaveBeenCalled();
+    expect(f.findCredential).not.toHaveBeenCalled();
+    expect(f.findPreference).not.toHaveBeenCalled();
+    expect(result).not.toHaveProperty("apiKey");
+    expect(result).not.toHaveProperty("oauth");
+  },
+);
 
 it.each(["claude-code", "codex-app-server"] as const)(
   "never loads an inherited hosted credential for a %s pin",

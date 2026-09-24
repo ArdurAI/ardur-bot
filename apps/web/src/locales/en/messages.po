@@ -4630,6 +4630,12 @@ msgstr "Repository token"
 msgid "Repository URL"
 msgstr "Repository URL"
 
+#: src/pages/ComparePanel.tsx
+#: src/pages/shell/bot-model-chip.tsx
+#: src/pages/TeamBoard.tsx
+msgid "requested"
+msgstr "requested"
+
 #. placeholder {0}: row.requesterName
 #. placeholder {1}: row.botName
 #: src/pages/TeamBoard.tsx

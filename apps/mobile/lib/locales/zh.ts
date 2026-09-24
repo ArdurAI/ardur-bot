@@ -116,6 +116,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Dispatch messages": "Dispatch 消息",
   "Could not update notifications. Check permissions and try again.":
     "无法更新通知。请检查权限后重试。",
+  requested: "已请求",
   "What was wrong?": "哪里做得不好？",
   "What was good?": "哪里做得好？",
   "Remove feedback": "移除反馈",

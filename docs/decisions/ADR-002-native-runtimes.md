@@ -62,11 +62,52 @@ disabled by command-line settings.** The tool list is not proof that startup hoo
 did not run. Isolation under managed policy is therefore an explicit release gate.
 Native runtimes remain behind a per-bot **Experimental** switch, off by default.
 
-Only exact catalog IDs documented to support effort are offered, currently at `low`.
-Higher effort is rejected because stream-json can silently apply an organization cap
-without reporting the effective value. The adapter does not translate `off` to `low`
-or clamp other efforts. Subscription model entitlement is confirmed by the first
-turn, not inferred from a successful sign-in probe.
+Only exact catalog IDs documented to support effort are offered. The installed CLI
+version gates the effort catalog: stable **2.1.259 through 2.1.281**, inclusive, offer
+`low`, `medium`, `high`, and `max` for Opus 4.6 and Sonnet 4.6, and also `xhigh` for
+the other catalog models (Fable 5 and 5.1, Opus 4.7, 4.8, 5 and 5.5, and Sonnet 5).
+Outside that checked range the catalog retains only `low`. The existing runtime
+protocol gate still rejects versions below 2.1.259, unknown major/minor lines, and
+prereleases. A newer stable 2.1 patch retains `low` until its expanded effort
+compatibility is checked. `probeClaude` uses the version probe to build the catalog;
+`ClaudeCodeRuntime.run` checks the installed version again before each turn, including
+resume, so a saved pin cannot bypass the gate after the binary changes.
+
+The pin records **requested effort**. Every turn passes that exact value with
+`--effort`; the adapter does not translate `off` to `low`, clamp a selection, or alias
+`xhigh` to `max`. Both `xhigh` and `max` are distinct documented levels and already
+exist in `ThinkingLevelSchema`; `max` is the deepest level. The pin UI displays these
+literal values. `ultracode` is also accepted by `--effort` on 2.1.203 and later, but
+the documentation defines it as workflow orchestration at `xhigh`, not a model
+effort level. It is not offered as Thinking, and this change does not enable vendor
+workflow orchestration.
+
+Stream-json init reports `model`, and the result reports model identities through
+`modelUsage`; both remain subject to exact model validation. The documented optional
+init `effort` field is sent only to Remote Control clients and is omitted from the
+application stream. The result schema has no effort field. Ordinary runs therefore
+record `Run.runtimeInfo.effortAttested: false` and `effortAttestationReason:
+"Claude Code does not report the applied effort"` and proceed. This records a request,
+not proof that an organization cap or managed setting did not lower it.
+
+If an init or result message supplies `effort`, the parser compares it with the pin.
+A matching report records `effortAttested: true` and clears the reason. A mismatch,
+including explicit `null` or a malformed value, closes the MCP execution gate and
+fails with `pin-effort-unsupported`; a contradictory result cannot complete the run.
+Defensive result-field tests cover a possible future report, not a field the current
+result schema promises. Attestation starts fresh on each turn; session reuse cannot
+carry it forward. Runtime callbacks merge cumulatively so a later model or session
+report cannot erase effort evidence.
+
+Web/Electron and mobile headers, the Team execution snapshot, and comparison results
+show `high · requested` (or the selected effort) without attestation and the plain
+effort with attestation. Older Claude snapshots without evidence also show requested;
+other runtimes keep their existing labels. The header accepts evidence only for the
+complete current bot pin, including connection and revision. Team and comparison
+results retain the run's evidence even after the bot is edited, and comparison JSON
+exports retain the attestation and reason. No run pin is rewritten or backfilled.
+Usage parsing and learning behavior are unchanged. Subscription model entitlement
+is confirmed by the first turn, not inferred from a successful sign-in probe.
 
 ## Codex app-server
 
@@ -158,6 +199,13 @@ These sentences identify the action needed to keep the saved pin usable. Removin
 them would leave an unavailable choice without a recovery path. They appear only
 where the native selection or failure makes them relevant.
 
+The effort change adds only **requested** as visible copy, appended to the existing
+effort label when it is not attested. Removing or hiding this suffix would make a
+requested value look verified. It helps builders select deeper reasoning and lets
+researchers and team leads distinguish requested effort from runtime evidence without
+adding a persistent explanation. The pin picker uses the unchanged literal labels
+`low`, `medium`, `high`, `xhigh`, and `max`, restricted by model and installed version.
+
 ## Official documentation checked
 
 All entries below were checked on **2026-09-23**. Documentation and locally generated
@@ -170,6 +218,8 @@ protocol types are compatibility evidence, not evidence of a successful signed-i
 | Shell selection from `SHELL`; `CLAUDE_CODE_SHELL` override (rechecked 2026-09-24) | [Environment variables](https://code.claude.com/docs/en/env-vars) |
 | SDK overview and streaming event format | [SDK entry point](https://code.claude.com/docs/en/sdk), [streaming output](https://code.claude.com/docs/en/agent-sdk/streaming-output), [streaming input](https://code.claude.com/docs/en/agent-sdk/streaming-vs-single-mode) |
 | Exact IDs, supported effort, silent effort caps, `switchModelsOnFlag`, `fallbackModel` | [Model configuration](https://code.claude.com/docs/en/model-config) |
+| Effort values, model-specific `xhigh`, separate `max`, and `ultracode` workflow semantics (rechecked 2026-09-24) | [CLI reference](https://code.claude.com/docs/en/cli-reference#cli-flags), [effort levels](https://code.claude.com/docs/en/model-config#adjust-effort-level) |
+| Application stream versus Remote Control: `SDKSystemMessage.model`, optional Remote-Control-only `effort`, and `SDKResultMessage.modelUsage` with no effort field (rechecked 2026-09-24) | [TypeScript message reference](https://code.claude.com/docs/en/agent-sdk/typescript#sdksystemmessage), [result message](https://code.claude.com/docs/en/agent-sdk/typescript#sdkresultmessage), [CLI streaming](https://code.claude.com/docs/en/headless#stream-responses) |
 | `disableAllHooks` and managed-hook limitations | [Hooks reference](https://code.claude.com/docs/en/hooks#disable-or-remove-hooks), [settings precedence](https://code.claude.com/docs/en/settings) |
 | `app-server`, `initialize`, `initialized`; `account/read`, `account/login/start`, `account/login/completed`, `account/login/cancel`; `model/list`, `config/read` | [App-server protocol](https://learn.chatgpt.com/docs/app-server) |
 | `thread/start`, `thread/resume`, `turn/start`, `turn/steer`, `turn/interrupt`; `item/agentMessage/delta`, `turn/completed`, `model/rerouted`; typed command/file approval requests | [App-server protocol](https://learn.chatgpt.com/docs/app-server) |
@@ -187,9 +237,15 @@ take precedence over differently formatted examples in the prose documentation.
    computer and a single Ardur user, or follow the [packaged host acceptance](../host-service.md#owner-acceptance).
 2. Install the unmodified Claude binary yourself and run `claude` once to complete
    its own sign-in. In bot settings select **Runs on → Claude Code (your claude
-   sign-in)**, select an offered exact model and `low`, and enable **Experimental**
+   sign-in)**, select an offered exact model and `high`, and enable **Experimental**
    only when testing these gates. Without sign-in, settings show the terminal
    instruction; a run fails without switching to Pi.
+   Use **Check again** to refresh the installed-version catalog. Save the pin and
+   confirm `high · requested` in the header. Send a short message, then expand the
+   Team row's **Executing** details and open the corresponding comparison result to
+   confirm the same label. Inspect the saved run's `runtimePin.effort` and
+   `runtimeInfo.effortAttested` separately. Repeat on mobile. A documented ordinary
+   CLI stream is expected to remain requested even after a successful turn.
 3. Select **Runs on → Codex (your ChatGPT sign-in)**. In a source deployment, choose **Connect**
    and use **Continue with ChatGPT** if needed. For the packaged host bridge, sign in
    through the installed Codex CLI first. After completion, choose an offered model and
@@ -218,6 +274,33 @@ starting an API or worker built with these fields. Older run JSON remains readab
 do not backfill or overwrite non-null run snapshots. Review concurrent model-picker,
 pin-resolver, router, and executor edits together. Keep both native runtimes
 Experimental until the release gates above are evidenced.
+
+## Effort validation (2026-09-24)
+
+- Installed CLI verification: `claude --version` reports **2.1.281**; `claude --help`
+  lists `--effort <level>`; `claude auth status` exits successfully. Authentication
+  output was discarded. Calling the updated `probeClaude` reports available at
+  2.1.281 with the documented effort sets for all nine catalog models. These probes
+  are not evidence of a signed-in model turn.
+- `pnpm -r --workspace-concurrency=4 run check`: passed, including Expo's online
+  dependency check. `EXPO_OFFLINE=1` was not needed.
+- `pnpm exec biome check --write .`, followed by `pnpm lint`: passed with the
+  existing 31 warnings and 7 informational diagnostics.
+- Vitest: **32 files, 523 tests; 521 passed and 2 failed**. The selection includes
+  every changed unit test, Claude runtime/process/MCP, runtime pins and sessions,
+  executor suites, bot settings, host callbacks, Team, comparisons, and mobile.
+  Every added effort test passed. The two failures also reproduce in an isolated
+  source snapshot of `HEAD`: `apps/mobile/lib/api.test.ts` expects a legacy pin
+  without the schema's default `runtimeKind`; `apps/mobile/lib/i18n.test.ts` reports
+  pre-existing missing translations. These unrelated failures were not suppressed.
+- `pnpm --filter @ardurbot/web intl:extract`: passed. The sole new message,
+  `requested`, has translations in all eight non-English web catalogs and both
+  non-English mobile catalogs; its mobile locale test passed.
+- `git diff --check`: passed. No dependencies, database migrations, renames,
+  commits, or publication were added. Usage and learning behavior are unchanged.
+- The web screenshot case in `apps/web/e2e/model-recovery.spec.ts` now checks the
+  five-level picker and `high · requested` header. It remains for CI; desktop
+  Playwright, native device acceptance, and signed-in model turns were not run.
 
 ## Native-runtime validation before the host bridge
 

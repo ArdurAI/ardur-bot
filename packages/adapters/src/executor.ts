@@ -1387,11 +1387,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 pin: selected.pin,
               })
             : undefined;
-        const runtimeInfo = {
+        let runtimeInfo = {
           ...native?.previous,
           runtimeKind: selected.pin.runtimeKind,
           version: runtimeSelection.availability.version,
           binding: native?.binding,
+          ...(selected.pin.runtimeKind === "claude-code"
+            ? { effortAttested: false, effortAttestationReason: null }
+            : {}),
         };
         await deps.prisma.run.updateMany({
           where: { id: runId, leaseOwner: workerId, leaseFence: fence },
@@ -4114,9 +4117,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
               nativeSession: native?.previous,
               nativeCwd: computer.kind === "desktop" ? computer.providerRef : undefined,
               onRuntimeInfo: async (info) => {
+                runtimeInfo = { ...runtimeInfo, ...info };
                 const saved = await deps.prisma.run.updateMany({
                   where: { id: runId, leaseOwner: workerId, leaseFence: fence },
-                  data: { runtimeInfo: { ...runtimeInfo, ...info } },
+                  data: { runtimeInfo },
                 });
                 if (saved.count !== 1) throw new Error("Runtime session ownership was lost.");
               },

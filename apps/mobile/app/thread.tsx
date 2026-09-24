@@ -11,7 +11,6 @@ import {
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
   type MessageReaction,
-  runtimeNames,
   runtimePinMessage,
 } from "@ardurbot/contracts";
 import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot/core";
@@ -73,6 +72,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppConnectCard } from "../components/AppConnectCard";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
+import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { NativeCommandBlock } from "../components/command-block";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
@@ -575,9 +575,10 @@ function Thread() {
               {displayName || t("Thread")}
             </Text>
             {!inGroup && currentBot ? (
-              <Text numberOfLines={1} style={{ color: tokens.mutedForeground, fontSize: 12 }}>
-                {runtimeNames[currentBot.runtimeKind ?? "pi"]}
-              </Text>
+              <BotRuntimeLabel
+                bot={currentBot}
+                run={snap?.run?.botId === currentBot.id ? snap.run : null}
+              />
             ) : null}
           </View>
         </Pressable>

@@ -45,31 +45,40 @@ function fixture() {
   return { deps, findFirst, credential };
 }
 describe("bot pin editing", () => {
-  it("saves a complete native binding without looking up API credentials", async () => {
-    const { deps, findFirst } = fixture();
-    vi.mocked(nativeRuntimeAvailability).mockResolvedValue({
-      runtimeKind: "claude-code",
-      available: true,
-      models: [{ id: "claude-opus-5", label: "Opus", efforts: ["low"] }],
-    });
-    expect(
-      await botModelPinUpdate(deps, actor, existing, {
-        botId: "bot",
+  it.each(["low", "medium", "high", "xhigh", "max"] as const)(
+    "saves a complete native %s binding without looking up API credentials",
+    async (effort) => {
+      const { deps, findFirst } = fixture();
+      vi.mocked(nativeRuntimeAvailability).mockResolvedValue({
+        runtimeKind: "claude-code",
+        available: true,
+        models: [
+          {
+            id: "claude-opus-5",
+            label: "Opus",
+            efforts: ["low", "medium", "high", "xhigh", "max"],
+          },
+        ],
+      });
+      expect(
+        await botModelPinUpdate(deps, actor, existing, {
+          botId: "bot",
+          runtimeKind: "claude-code",
+          modelProvider: "anthropic",
+          modelId: "claude-opus-5",
+          thinkingLevel: effort,
+        }),
+      ).toEqual({
         runtimeKind: "claude-code",
         modelProvider: "anthropic",
         modelId: "claude-opus-5",
-        thinkingLevel: "low",
-      }),
-    ).toEqual({
-      runtimeKind: "claude-code",
-      modelProvider: "anthropic",
-      modelId: "claude-opus-5",
-      thinkingLevel: "low",
-      modelCredentialId: "native:claude-code",
-      modelPinRevision: { increment: 1 },
-    });
-    expect(findFirst).not.toHaveBeenCalled();
-  });
+        thinkingLevel: effort,
+        modelCredentialId: "native:claude-code",
+        modelPinRevision: { increment: 1 },
+      });
+      expect(findFirst).not.toHaveBeenCalled();
+    },
+  );
   it("validates model-only edits against the runtime's model and effort capabilities", async () => {
     const { deps } = fixture();
     vi.mocked(nativeRuntimeAvailability).mockResolvedValue({

@@ -117,6 +117,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Dispatch messages": "Сообщения Dispatch",
   "Could not update notifications. Check permissions and try again.":
     "Не удалось обновить уведомления. Проверьте разрешения и повторите попытку.",
+  requested: "запрошено",
   "What was wrong?": "Что было не так?",
   "What was good?": "Что было хорошо?",
   "Remove feedback": "Удалить отзыв",

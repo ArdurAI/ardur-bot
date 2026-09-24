@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import ComparisonsScreen from "../app/comparisons";
+import ComparisonsScreen, { MobileComparisonOutput } from "../app/comparisons";
 import { loadComparisons } from "./comparisons";
 
 vi.mock("./comparisons", () => ({ loadComparisons: vi.fn() }));
@@ -97,3 +97,41 @@ it("opens the read-only list into fixed participant pages with failures and prov
   ]);
   await act(async () => root.unmount());
 });
+
+it.each([false, true, undefined])(
+  "matches the web comparison effort suffix for evidence %s",
+  async (effortAttested) => {
+    const participant = {
+      botId: "a",
+      name: "Reviewer",
+      executing: {
+        pin: {
+          runtimeKind: "claude-code",
+          modelId: "claude-opus-5",
+          provider: "anthropic",
+          effort: "high",
+        },
+        computer: { kind: "desktop" },
+      },
+    } as ComparisonParticipant;
+    const result = {
+      status: "completed",
+      output: "Output",
+      citations: [],
+      approvals: [],
+      durationMs: null,
+      usage: { reported: false, costs: [] },
+      provenance: { effortAttested },
+    } as unknown as ComparisonResult;
+    const node = document.createElement("div");
+    const root = createRoot(node);
+    await act(async () =>
+      root.render(createElement(MobileComparisonOutput, { participant, result })),
+    );
+    expect(node.textContent).toContain(
+      `anthropic · claude-opus-5 · high${effortAttested ? "" : " · requested"}`,
+    );
+    expect(node.textContent?.includes("requested")).toBe(effortAttested !== true);
+    await act(async () => root.unmount());
+  },
+);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ProductEventSchema } from "./events.js";
 import { RunFailurePayloadSchema } from "./provider-errors.js";
 import {
+  RuntimeInfoSchema,
   RuntimePinError,
   RuntimePinSchema,
   runtimePinMessage,
@@ -17,6 +18,21 @@ const pin = {
   revision: 2,
 };
 describe("runtime pin contracts", () => {
+  it("round trips effort evidence while keeping older runtime info readable", () => {
+    const info = {
+      runtimeKind: "claude-code",
+      effortAttested: false,
+      effortAttestationReason: "Claude Code does not report the applied effort",
+    };
+    expect(RuntimeInfoSchema.parse(JSON.parse(JSON.stringify(info)))).toEqual(info);
+    expect(RuntimeInfoSchema.parse({ runtimeKind: "claude-code" })).toEqual({
+      runtimeKind: "claude-code",
+    });
+    expect(
+      RuntimeInfoSchema.parse({ ...info, effortAttested: true, effortAttestationReason: null }),
+    ).toMatchObject({ effortAttested: true, effortAttestationReason: null });
+    expect(RuntimeInfoSchema.safeParse({ ...info, effortAttested: "false" }).success).toBe(false);
+  });
   it("round trips a snapshot and a typed failure without secrets", () => {
     expect(RuntimePinSchema.parse(pin)).toEqual(pin);
     const problem = runtimePinProblem(pin, "pin-credential-missing", "The connection was deleted.");
