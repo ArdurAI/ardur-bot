@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentHomeStore, JobPublisher, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BACKGROUND_WORK_LAUNCH,
   BACKGROUND_WORK_PROBE,
@@ -250,6 +252,11 @@ describe("sandbox idle", () => {
 describe("background work launch and probe", () => {
   const children: ReturnType<typeof spawn>[] = [];
   const markers = new Set<string>();
+  let shellHome: string;
+
+  beforeEach(() => {
+    shellHome = mkdtempSync(join(tmpdir(), "ardurbot-background-home-"));
+  });
 
   afterEach(() => {
     for (const child of children.splice(0)) {
@@ -259,6 +266,7 @@ describe("background work launch and probe", () => {
       rmSync(marker, { force: true, recursive: true });
     }
     markers.clear();
+    rmSync(shellHome, { force: true, recursive: true });
   });
 
   it.skipIf(process.platform === "win32")(
@@ -280,7 +288,8 @@ describe("background work launch and probe", () => {
           launchId,
           "exec sleep 30",
         ],
-        { stdio: "ignore" },
+        // The launcher starts a login shell; keep host startup files out of the fixture.
+        { stdio: "ignore", env: { ...process.env, HOME: shellHome } },
       );
       children.push(launched);
 
@@ -309,7 +318,7 @@ describe("background work launch and probe", () => {
           "completed",
           "true",
         ],
-        { stdio: "ignore" },
+        { stdio: "ignore", env: { ...process.env, HOME: shellHome } },
       );
       children.push(completed);
 
@@ -328,7 +337,7 @@ describe("background work launch and probe", () => {
           "active",
           "exec sleep 30",
         ],
-        { stdio: "ignore" },
+        { stdio: "ignore", env: { ...process.env, HOME: shellHome } },
       );
       children.push(active);
       await expect.poll(() => probeBackgroundWork(markerId)).toBe(0);
@@ -355,7 +364,7 @@ describe("background work launch and probe", () => {
           "collision",
           `touch ${commandRan}`,
         ],
-        { stdio: "ignore" },
+        { stdio: "ignore", env: { ...process.env, HOME: shellHome } },
       );
       children.push(launched);
 
@@ -384,7 +393,7 @@ describe("background work launch and probe", () => {
           "collision",
           `touch ${commandRan}`,
         ],
-        { stdio: "ignore" },
+        { stdio: "ignore", env: { ...process.env, HOME: shellHome } },
       );
       children.push(launched);
 
@@ -413,7 +422,7 @@ describe("background work launch and probe", () => {
           launchId,
           "exec sleep 30",
         ],
-        { stdio: "ignore" },
+        { stdio: "ignore", env: { ...process.env, HOME: shellHome } },
       );
       children.push(launched);
 
