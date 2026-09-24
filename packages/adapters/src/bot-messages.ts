@@ -9,14 +9,15 @@ import {
   nextBotMessageHop,
   resolveBotAddress,
 } from "@ardurbot/core";
+import type { PrismaClient } from "@ardurbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
-  inheritedRemoteOrigin,
-  type PrismaClient,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import type { DelegationResolver } from "./delegation.js";
+import { delegationFailure, prepareDelegation } from "./delegation.js";
 import type { ExecutorDeps } from "./executor.js";
 
 /**
@@ -61,7 +62,9 @@ export async function loadBotMessageContext(
 }
 
 export async function messageBot(
-  deps: Pick<ExecutorDeps, "prisma" | "events" | "jobs">,
+  deps: Pick<ExecutorDeps, "prisma" | "events" | "jobs"> & {
+    resolveDelegationPin?: DelegationResolver;
+  },
   run: {
     id: string;
     spaceId: string;
@@ -120,6 +123,30 @@ export async function messageBot(
     };
   }
 
+  const parentRun = await deps.prisma.run.findUnique({ where: { id: run.id } });
+  if (parentRun?.delegationId && ["status", "result", "fyi"].includes(intent)) {
+    const delegation = await deps.prisma.delegation.findUniqueOrThrow({
+      where: { id: parentRun.delegationId },
+    });
+    if (target.id === delegation.requesterBotId) {
+      await deps.prisma.$transaction((tx) =>
+        appendEventInTransaction(tx, {
+          spaceId: run.spaceId,
+          threadId: run.threadId,
+          botId: run.botId,
+          runId: run.id,
+          type: "delegation.progress",
+          payload: { delegationId: delegation.id, intent, text: message },
+        }),
+      );
+      return {
+        ok: true as const,
+        botId: target.id,
+        delegationId: delegation.id,
+        note: "Recorded for the coordinator; completion will produce one summary.",
+      };
+    }
+  }
   const targetThreadId = target.thread.id;
 
   // A tool call can be re-executed after a lease expiry, so a delivery has to be
@@ -150,6 +177,8 @@ export async function messageBot(
         runId: string;
         targetEventSeq: number;
         senderEventSeq: number;
+        differences?: string[];
+        delegationId?: string;
       }
     | {
         ok: false;
@@ -203,12 +232,27 @@ export async function messageBot(
         if (!stillAddressable)
           return { ok: false as const, error: `${target.name} is no longer available` };
 
+        const admitted = await prepareDelegation(
+          tx,
+          {
+            ...run,
+            parentRunId: run.id,
+            actingBotId: target.id,
+            actingName: target.name,
+            kind: "message",
+            admissionKey: deliveryKey ?? `message:${run.id}:${target.id}`,
+            prompt: message,
+          },
+          deps.resolveDelegationPin,
+        );
+        if (!admitted.ok) return admitted;
         // Echo into the sender's chat in the same transaction so a failed notify
         // cannot leave one side delivered and the other blank.
         const outbound = await createThreadMessageInTransaction(tx, {
           threadId: run.threadId,
           role: "bot",
           blocks: [outboundBlock],
+          markUnread: false,
           botId: run.botId,
           runId: run.id,
         });
@@ -233,7 +277,7 @@ export async function messageBot(
               ? sourceContext.returnToMessageId
               : undefined,
           clientNonce: deliveryKey,
-          markUnread: true,
+          markUnread: false,
         });
         const task = await tx.task.create({
           data: {
@@ -247,7 +291,7 @@ export async function messageBot(
         });
         const nextRun = await tx.run.create({
           data: {
-            ...(await inheritedRemoteOrigin(tx, run.id)),
+            ...admitted.runData,
 
             spaceId: run.spaceId,
             botId: target.id,
@@ -259,6 +303,10 @@ export async function messageBot(
             sourceMessageId: inbound.id,
           },
           select: { id: true },
+        });
+        await tx.delegation.update({
+          where: { id: admitted.record.id },
+          data: { runId: nextRun.id },
         });
         await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
         const inboundEvent = await appendEventInTransaction(tx, {
@@ -280,6 +328,8 @@ export async function messageBot(
         return {
           ok: true as const,
           runId: nextRun.id,
+          differences: admitted.record.differences,
+          delegationId: admitted.record.id,
           targetEventSeq: inboundEvent.seq,
           senderEventSeq: outboundEvent.seq,
         };
@@ -295,7 +345,7 @@ export async function messageBot(
       });
       if (winner) return replayed();
     }
-    throw error;
+    return delegationFailure(error);
   }
   if ("replayed" in committed) return replayed();
   if (!committed.ok) return committed;
@@ -315,13 +365,17 @@ export async function messageBot(
     botId: target.id,
     name: target.name,
     delivered: message,
+    delegationId: committed.delegationId,
+    differences: committed.differences,
     note: `Sent to ${target.name}. Delivery is async; a reply wakes you later as a new message. Continue independent work; send another update later only if it adds something new.`,
   };
 }
 
 /** Return a delegated run's terminal outcome unless it already sent one explicitly. */
 export async function returnBotMessageOutcome(
-  deps: Pick<ExecutorDeps, "prisma" | "events" | "jobs">,
+  deps: Pick<ExecutorDeps, "prisma" | "events" | "jobs"> & {
+    resolveDelegationPin?: DelegationResolver;
+  },
   run: {
     id: string;
     spaceId: string;
@@ -334,6 +388,11 @@ export async function returnBotMessageOutcome(
   text: string,
   intent: "result" | "status" = "result",
 ) {
+  const saved = await deps.prisma.run.findUnique({ where: { id: run.id } });
+  if (saved?.delegationId) {
+    await markBotOutcomeReturned(deps.prisma, run.id);
+    return true;
+  }
   const source = await loadBotMessageContext(deps.prisma, run.sourceMessageId);
   if (!source) {
     await markBotOutcomeReturned(deps.prisma, run.id);

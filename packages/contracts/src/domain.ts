@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
+import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
@@ -43,6 +44,7 @@ export const AgentSecretInputSchema = z.object({
 export type AgentSecretInput = z.infer<typeof AgentSecretInputSchema>;
 
 export const BotSchema = z.object({
+  allowedModelDestinations: LocalityPolicySchema.optional(),
   id: Id,
   spaceId: Id,
   name: z.string(),
@@ -752,6 +754,13 @@ export const ArtifactWithContentSchema = ArtifactSchema.extend({
 export type ArtifactWithContent = z.infer<typeof ArtifactWithContentSchema>;
 
 export const UsageRecordSchema = z.object({
+  delegationId: z.string().nullable().optional(),
+  rootTaskId: z.string().nullable().optional(),
+  requesterBotId: z.string().nullable().optional(),
+  actingBotId: z.string().nullable().optional(),
+  depth: z.number().int().optional(),
+  cost: z.number().nullable().optional(),
+  pricingProvenance: z.unknown().nullable().optional(),
   id: Id,
   botId: Id.nullable(),
   runId: Id.nullable(),

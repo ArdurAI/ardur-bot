@@ -97,3 +97,80 @@ test("sidebar Now and Recent surface active and terminal runs", async ({ page },
   await expect(aside.getByText("Recent", { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(activityRow(page, "Chief")).toBeVisible();
 });
+
+test("Activity shows delegation lineage and requests a tree stop", async ({ page }, testInfo) => {
+  await signup(page, `delegation-${Date.now()}@ardurbot.test`, "password12", "Delegation");
+  await completeOnboarding(page);
+  let stopping = false;
+  await page.route("**/rpc/runs/list", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          runs: [
+            {
+              runId: "coordinator-run",
+              rootTaskId: "root-task",
+              botId: "chief",
+              botName: "Chief",
+              groupId: null,
+              groupName: null,
+              threadId: "chief-thread",
+              status: "running",
+              trigger: "user",
+              notificationsEnabled: true,
+              promptSnippet: "Review the task",
+              updatedAt: new Date().toISOString(),
+              delegations: [
+                {
+                  id: "handoff",
+                  rootTaskId: "root-task",
+                  parentRunId: "coordinator-run",
+                  runId: "worker-run",
+                  requesterBotId: "chief",
+                  actingBotId: "reviewer",
+                  requesterName: "Chief",
+                  actingName: "Reviewer",
+                  kind: "message",
+                  depth: 1,
+                  hop: 1,
+                  status: stopping ? "cancel-requested" : "running",
+                  snapshot: {
+                    pin: {
+                      provider: "scripted",
+                      modelId: "scripted",
+                      effort: "off",
+                      credentialId: "scripted",
+                      revision: 1,
+                    },
+                    computer: { id: "computer", mode: "team", kind: "test" },
+                    destination: { host: "localhost", local: true },
+                  },
+                  authority: { scopes: [], connectors: [] },
+                  differences: [],
+                  budget: {
+                    tokens: 10000,
+                    deadlineAt: new Date(Date.now() + 3600000).toISOString(),
+                  },
+                  createdAt: new Date().toISOString(),
+                  completedAt: null,
+                  acceptedAt: null,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/delegations/cancel", (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({ json: { rootTaskId: "root-task" } });
+    stopping = true;
+    return route.fulfill({ json: { json: { cancelRequested: true } } });
+  });
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  const aside = page.locator("aside").first();
+  await expect(aside.getByText("Chief → Reviewer · Running").first()).toBeVisible();
+  await captureActivitySidebar(page, testInfo, "delegation-lineage");
+  await aside.getByRole("button", { name: "Stop", exact: true }).first().click();
+  await expect(aside.getByText("Chief → Reviewer · Stopping").first()).toBeVisible();
+});

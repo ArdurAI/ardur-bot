@@ -1082,13 +1082,35 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
 async function executeSubagent(host: ToolHost, executionId: string, args: Record<string, unknown>) {
   if (host.depth > 0) return "Subagents cannot nest further.";
   await host.subagentGate.acquire();
-  const agentId = executionId;
+  let agentId = executionId;
   const name =
     String(args.name ?? "helper")
       .trim()
       .slice(0, 80) || "helper";
   const task = String(args.task ?? "").trim();
   const extra = args.instructions ? String(args.instructions).trim() : "";
+
+  if (args.model_provider || args.model_id) {
+    host.subagentGate.release();
+    return "Helpers use the parent's resolved pin; message an existing bot to use a different pin.";
+  }
+  if (!host.request.admitHelper) {
+    host.subagentGate.release();
+    return "Helper admission is unavailable; continue in this run.";
+  }
+  let admission: Awaited<ReturnType<NonNullable<AgentRunRequest["admitHelper"]>>>;
+  try {
+    admission = await host.request.admitHelper(executionId, name, task);
+  } catch (error) {
+    host.subagentGate.release();
+    throw error;
+  }
+  if ("error" in admission) {
+    host.subagentGate.release();
+    return admission.problem ? JSON.stringify(admission.problem) : admission.error;
+  }
+  const delegationId = admission.id;
+  agentId = delegationId;
   host.queue.push({
     type: "subagent",
     agentId,
@@ -1097,31 +1119,17 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     status: "running",
     progress: "starting…",
   });
-
-  const requestedProvider = String(args.model_provider ?? "").trim();
-  const requestedModelId = String(args.model_id ?? "").trim();
-  let requestModel = host.request.model;
-  try {
-    if (Boolean(requestedProvider) !== Boolean(requestedModelId)) {
-      throw new Error("model_provider and model_id must both be set");
-    }
-    if (requestedProvider && requestedModelId) {
-      if (!host.request.resolveModel) {
-        throw new Error("Per-call subagent model selection is unavailable");
-      }
-      requestModel = await host.request.resolveModel(requestedProvider, requestedModelId);
-    }
-  } catch (error) {
-    const message = sanitizeError(error instanceof Error ? error.message : String(error));
-    host.queue.push({ type: "subagent", agentId, name, task, status: "failed", result: message });
-    host.subagentGate.release();
-    return `Subagent failed: ${message}`;
-  }
-
+  const requestModel = {
+    ...host.request.model,
+    maxTokens: Math.min(host.request.model.maxTokens ?? admission.tokens, admission.tokens),
+  };
+  let helperStatus: "completed" | "failed" | "cancelled" = "failed";
+  let helperResult = "Helper stopped before returning a result.";
   const selectedModel = resolveRuntimeModel(requestModel);
   if (!selectedModel.model) {
     const message = `Unknown model ${selectedModel.provider}/${selectedModel.modelId}`;
     host.queue.push({ type: "subagent", agentId, name, task, status: "failed", result: message });
+    await host.request.finishHelper?.(delegationId, "failed", message);
     host.subagentGate.release();
     return `Subagent failed: ${message}`;
   }
@@ -1134,8 +1142,20 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
         ? host.request.tools
         : builtinAgentTools
   ).filter((tool) => !DELEGATION_TOOL_NAMES.has(tool.name));
+  const helperSignal = AbortSignal.any([
+    host.signal,
+    AbortSignal.timeout(Math.max(1, new Date(admission.deadlineAt).getTime() - Date.now())),
+  ]);
   const nestedHost: ToolHost = {
     ...host,
+    signal: helperSignal,
+    request: {
+      ...host.request,
+      executeTool: host.request.executeHelperTool
+        ? (name, args, executionId, route) =>
+            host.request.executeHelperTool!(delegationId, name, args, executionId, route)
+        : host.request.executeTool,
+    },
     models: selectedModel.models,
     model: subagentModel,
     apiKey: selectedModel.apiKey,
@@ -1172,6 +1192,8 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   });
   host.nestedAgents.add(nested);
 
+  const usageWrites: Promise<void>[] = [];
+  let consumedTokens = 0;
   let streamed = "";
   let lastPush = 0;
   nested.subscribe((event) => {
@@ -1209,18 +1231,19 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
       const text = assistantText(event.message);
       if (text && !streamed) streamed = text;
       if ("usage" in event.message && event.message.usage) {
-        host.queue.push({
-          type: "usage",
-          ...billedPromptTokens(event.message.usage),
-          provider: subagentModel.provider,
-          model: subagentModel.id,
-        });
+        const used = billedPromptTokens(event.message.usage);
+        consumedTokens += used.inputTokens + used.outputTokens;
+        if (consumedTokens >= admission.tokens) nested.abort();
+        const usage = { ...used, provider: subagentModel.provider, model: subagentModel.id };
+        if (host.request.recordHelperUsage)
+          usageWrites.push(host.request.recordHelperUsage(delegationId, usage));
+        else host.queue.push({ type: "usage", delegationId, ...usage });
       }
     }
   });
 
   try {
-    if (host.signal.aborted) {
+    if (helperSignal.aborted) {
       host.queue.push({
         type: "subagent",
         agentId,
@@ -1232,14 +1255,14 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
       return "stopped";
     }
     const onAbort = () => nested.abort();
-    host.signal.addEventListener("abort", onAbort);
+    helperSignal.addEventListener("abort", onAbort);
     try {
       await nested.prompt(task || "Complete the delegated task.");
     } finally {
       try {
         await nested.waitForIdle();
       } finally {
-        host.signal.removeEventListener("abort", onAbort);
+        helperSignal.removeEventListener("abort", onAbort);
         // nestedHost is a shallow copy; ask_user / request_takeover set pause
         // only on the child. Copy it up before the parent releases the budget.
         if (nestedHost.pausePending) host.pausePending = true;
@@ -1262,6 +1285,8 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
         ? `${streamed.trim()}\n\n${budgetMessage}`
         : budgetMessage || streamed || assistantText(nested.state.messages.at(-1)) || "done.";
     const clipped = clipToolResultText(result, 12_000);
+    helperStatus = helperSignal.aborted ? "cancelled" : "completed";
+    helperResult = clipped;
     host.queue.push({
       type: "subagent",
       agentId,
@@ -1273,11 +1298,22 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     return clipped;
   } catch (error) {
     const message = sanitizeError(error instanceof Error ? error.message : String(error));
+    helperResult = message;
     host.queue.push({ type: "subagent", agentId, name, task, status: "failed", result: message });
     return `Subagent failed: ${message}`;
   } finally {
     host.nestedAgents.delete(nested);
-    host.subagentGate.release();
+    try {
+      await Promise.all(usageWrites);
+      if (!nestedHost.pausePending)
+        await host.request.finishHelper?.(
+          delegationId,
+          helperSignal.aborted ? "cancelled" : helperStatus,
+          helperResult,
+        );
+    } finally {
+      host.subagentGate.release();
+    }
   }
 }
 

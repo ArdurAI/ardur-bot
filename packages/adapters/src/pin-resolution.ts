@@ -106,6 +106,7 @@ export function validateRuntimePin(
 }
 
 export type BotPinFields = {
+  allowedModelDestinations?: unknown;
   modelProvider?: string | null;
   modelId?: string | null;
   thinkingLevel?: string | null;

@@ -121,6 +121,7 @@ import {
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
+  listDelegations,
   lockOwnedGroup,
   newestModelCredentialOrder,
   newestVoiceCredentialOrder,
@@ -128,6 +129,7 @@ import {
   parseComputerMode,
   releaseSpaceDeletionClaim,
   renewSpaceDeletionClaim,
+  requestCancel,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
   SpaceLimitError,
@@ -152,6 +154,7 @@ import {
   resolveBusyBotName,
   toComputerStatus,
 } from "./computer-status.js";
+import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
@@ -4665,6 +4668,13 @@ export function createRouter(deps: RouterDeps) {
           model: row.model,
           inputTokens: row.inputTokens,
           outputTokens: row.outputTokens,
+          delegationId: row.delegationId,
+          rootTaskId: row.rootTaskId,
+          requesterBotId: row.requesterBotId,
+          actingBotId: row.actingBotId,
+          depth: row.depth,
+          cost: row.pricingProvenance ? row.cost : null,
+          pricingProvenance: row.pricingProvenance,
           createdAt: row.createdAt.toISOString(),
         }));
       }),
@@ -4745,6 +4755,24 @@ export function createRouter(deps: RouterDeps) {
       query: authed.search.query.handler(async ({ context, input }) => ({
         hits: await querySpaceSearch(deps.prisma, context.actor, input.q),
       })),
+    },
+    delegations: {
+      list: authed.delegations.list.handler(async ({ context, input }) => ({
+        delegations: await listDelegations(deps.prisma, context.actor, input.rootTaskId),
+      })),
+      cancel: authed.delegations.cancel.handler(async ({ context, input }) =>
+        requestCancel(
+          deps.prisma,
+          { spaceId: context.actor.spaceId, userId: context.actor.userId },
+          input.rootTaskId,
+        ),
+      ),
+      policy: authed.delegations.policy.handler(({ context, input }) =>
+        getModelDestinations(deps.prisma, context.actor, input.botId),
+      ),
+      setPolicy: authed.delegations.setPolicy.handler(({ context, input }) =>
+        setModelDestinations(deps.prisma, context.actor, input),
+      ),
     },
     runs: {
       list: authed.runs.list.handler(async ({ context, input }) => ({

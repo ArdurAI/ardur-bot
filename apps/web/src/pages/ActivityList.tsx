@@ -5,6 +5,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { ChatTaskReview } from "./ChatTaskReview";
+import { DelegationLines } from "./DelegationLines";
 
 function statusTone(status: RunActivityRow["status"]): string {
   if (status === "failed") return "text-destructive";
@@ -101,33 +102,38 @@ function ActivityRow({ run, onOpen }: { run: RunActivityRow; onOpen: () => void 
   const activityLabel = t`${title}, ${label}`;
   const tone = statusTone(run.status);
   return (
-    <button
-      type="button"
-      aria-label={activityLabel}
-      onClick={onOpen}
-      className="flex w-full gap-3 rounded-xl px-2.5 py-[9px] text-left hover:bg-accent"
-    >
-      <span
-        className={`mt-1.5 size-2 shrink-0 rounded-full bg-current ${tone}`}
-        aria-hidden="true"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground">{title}</span>
-          <span className="shrink-0 text-xs text-muted-foreground/80">
-            {formatRelativeTime(run.updatedAt)}
-          </span>
-        </div>
-        <div className="mt-0.5 flex items-baseline gap-2">
-          {run.promptSnippet ? (
-            <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-              {run.promptSnippet}
+    <div>
+      <button
+        type="button"
+        aria-label={activityLabel}
+        onClick={onOpen}
+        className="flex w-full gap-3 rounded-xl px-2.5 py-[9px] text-left hover:bg-accent"
+      >
+        <span
+          className={`mt-1.5 size-2 shrink-0 rounded-full bg-current ${tone}`}
+          aria-hidden="true"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-sm font-medium text-foreground">{title}</span>
+            <span className="shrink-0 text-xs text-muted-foreground/80">
+              {formatRelativeTime(run.updatedAt)}
             </span>
-          ) : null}
-          <span className={`ms-auto shrink-0 text-xs ${tone}`}>{label}</span>
+          </div>
+          <div className="mt-0.5 flex items-baseline gap-2">
+            {run.promptSnippet ? (
+              <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
+                {run.promptSnippet}
+              </span>
+            ) : null}
+            <span className={`ms-auto shrink-0 text-xs ${tone}`}>{label}</span>
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+      {run.rootTaskId && run.delegations ? (
+        <DelegationLines rootTaskId={run.rootTaskId} rows={run.delegations} />
+      ) : null}
+    </div>
   );
 }
 

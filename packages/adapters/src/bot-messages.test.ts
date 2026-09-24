@@ -1,3 +1,17 @@
+import { delegationProblem } from "@ardurbot/contracts";
+import { DelegationAdmissionError } from "@ardurbot/db";
+import type * as DelegationModule from "./delegation.js";
+import { prepareDelegation } from "./delegation.js";
+
+vi.mock("./delegation.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof DelegationModule>()),
+  prepareDelegation: vi.fn(async () => ({
+    ok: true,
+    record: { id: "delegation", differences: [] },
+    runData: { delegationId: "delegation" },
+  })),
+}));
+
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -40,6 +54,7 @@ function deps(
         : { blocks: options.hopBlocks ?? [] },
     );
   const tx = {
+    delegation: { update: vi.fn(async () => ({})) },
     $queryRaw: vi.fn().mockResolvedValue([{ id: "thread" }]),
     run: {
       findFirst: vi
@@ -72,7 +87,10 @@ function deps(
         ),
     },
     message: { findUnique: messageFindUnique, findMany: vi.fn().mockResolvedValue([]) },
-    run: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    run: {
+      findUnique: vi.fn(async () => null),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     $transaction: vi.fn(async (fn: (client: unknown) => unknown) => {
       transactionAttempts += 1;
       if (options.transactionConflictOnce && transactionAttempts === 1) {
@@ -130,7 +148,7 @@ describe("messaging another bot", () => {
       harness.tx.thread.update.mock.calls.filter(
         ([call]) => (call as { data?: { unread?: boolean } }).data?.unread,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(0);
     expect(harness.enqueue).toHaveBeenCalledTimes(1);
   });
 
@@ -651,4 +669,14 @@ describe("automatic outcome return", () => {
     expect(harness.enqueue).not.toHaveBeenCalled();
     expect(harness.deps.prisma.run.updateMany).toHaveBeenCalled();
   });
+});
+
+it("returns the shared admission problem without creating a run", async () => {
+  const f = deps();
+  const problem = delegationProblem("budget-exhausted");
+  vi.mocked(prepareDelegation).mockRejectedValueOnce(new DelegationAdmissionError(problem));
+  expect(
+    await messageBot(f.deps, run, sender, { bot_id: "bot-target", message: "Review" }),
+  ).toMatchObject({ error: problem.message, problem });
+  expect(f.tx.run.create).not.toHaveBeenCalled();
 });

@@ -46,6 +46,7 @@ import {
   selectSpace,
 } from "../lib/api";
 import { mobileTokens, resolveMobileAppearance } from "../lib/appearance";
+import { delegationLine } from "../lib/delegation";
 import { hasPairedDevice } from "../lib/dispatch";
 import { allowFocusPrompt, scheduleFocusPrompt } from "../lib/focus-prompt";
 import { t, useI18n } from "../lib/i18n";
@@ -758,16 +759,30 @@ function ActivityRow({
   const status = activityStatusLabel(run.status);
   const preview = run.promptSnippet ? `${run.promptSnippet} · ${status}` : status;
   return (
-    <ConversationRow
-      title={title}
-      preview={preview}
-      time={formatActivityRelativeTime(run.updatedAt)}
-      accessibilityLabel={`${title}, ${status}`}
-      onPress={onPress}
-      avatar={
-        <BotAvatar identity={run.botId} color={bot?.color ?? FALLBACK_COLOR} status={run.status} />
-      }
-    />
+    <View>
+      <ConversationRow
+        title={title}
+        preview={preview}
+        time={formatActivityRelativeTime(run.updatedAt)}
+        accessibilityLabel={`${title}, ${status}`}
+        onPress={onPress}
+        avatar={
+          <BotAvatar
+            identity={run.botId}
+            color={bot?.color ?? FALLBACK_COLOR}
+            status={run.status}
+          />
+        }
+      />
+      {run.delegations?.map((row) => (
+        <Text
+          key={row.id}
+          style={{ color: mobileTokens().mutedForeground, marginHorizontal: 20, marginBottom: 4 }}
+        >
+          {delegationLine(row, t)}
+        </Text>
+      ))}
+    </View>
   );
 }
 

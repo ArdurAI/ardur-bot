@@ -179,6 +179,10 @@ msgstr "About groups"
 msgid "About spaces"
 msgstr "About spaces"
 
+#: src/pages/DelegationLines.tsx
+msgid "Accepted"
+msgstr "Accepted"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr "Access token"
@@ -421,6 +425,14 @@ msgstr "Allowed destination"
 msgid "Allowed destinations"
 msgstr "Allowed destinations"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed hosts"
+msgstr "Allowed hosts"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed model destinations"
+msgstr "Allowed model destinations"
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "Allowed once"
@@ -461,6 +473,10 @@ msgstr "Answered: {0}"
 #: src/components/AskCard.tsx
 msgid "Answered: {answer}"
 msgstr "Answered: {answer}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Any"
+msgstr "Any"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
@@ -784,6 +800,7 @@ msgstr "cancelled"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Cancelled"
 
@@ -1020,6 +1037,10 @@ msgstr "Command"
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "Complete"
+
+#: src/pages/DelegationLines.tsx
+msgid "Completed"
+msgstr "Completed"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Completion not recorded"
@@ -1539,6 +1560,10 @@ msgstr "Could not save"
 msgid "Could not save Auto Review"
 msgstr "Could not save Auto Review"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Could not save destinations; try again."
+msgstr "Could not save destinations; try again."
+
 #: src/pages/GroupPanel.tsx
 msgid "Could not save group"
 msgstr "Could not save group"
@@ -1594,6 +1619,10 @@ msgstr "Could not start OAuth"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
 msgstr "Could not start teaching"
+
+#: src/pages/DelegationLines.tsx
+msgid "Could not stop this task; try again."
+msgstr "Could not stop this task; try again."
 
 #: src/components/AskCard.tsx
 msgid "Could not submit this answer"
@@ -2107,6 +2136,7 @@ msgid "failed"
 msgstr "failed"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "Failed"
 
@@ -2470,6 +2500,10 @@ msgstr "Linear issue"
 msgid "Link a chat app"
 msgstr "Link a chat app"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Listed hosts"
+msgstr "Listed hosts"
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Listen"
 msgstr "Listen"
@@ -2538,6 +2572,10 @@ msgstr "Local"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "Local access lets bots run commands without asking. Avoid it on shared or public servers."
+
+#: src/pages/ModelDestinations.tsx
+msgid "Local only"
+msgstr "Local only"
 
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
@@ -3302,6 +3340,7 @@ msgid "Pushed"
 msgstr "Pushed"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Queued"
 msgstr "Queued"
 
@@ -3698,6 +3737,7 @@ msgid "running"
 msgstr "running"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "Running"
 
@@ -3726,6 +3766,7 @@ msgstr "Runs when this bot receives a verified message from this provider."
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/ModelDestinations.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4098,6 +4139,7 @@ msgstr "Starting…"
 msgid "Steps"
 msgstr "Steps"
 
+#: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
@@ -4115,6 +4157,10 @@ msgstr "Stop teaching"
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "Stopped."
+
+#: src/pages/DelegationLines.tsx
+msgid "Stopping"
+msgstr "Stopping"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Stored encrypted"
@@ -4255,6 +4301,10 @@ msgstr "This action could not finish; try again."
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "This bot may only run locally — change the pin or the space policy"
+msgstr "This bot may only run locally — change the pin or the space policy"
 
 #: src/pages/Shell.tsx
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."

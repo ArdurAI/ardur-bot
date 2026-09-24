@@ -28,6 +28,7 @@ function fixture() {
     async (): Promise<AgentRunModel> => ({ provider: "xai", id: "grok-4.6", apiKey: "test-key" }),
   );
   const prisma = {
+    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
     userModelCredential: { findFirst: findCredential },
     spaceModelPreference: { findFirst: findPreference },
   } as unknown as PrismaClient;
@@ -213,4 +214,30 @@ describe("run pin snapshots", () => {
       code: "pin-credential-missing",
     });
   });
+});
+
+it("checks root locality against the resolved endpoint before returning an executable pin", async () => {
+  const f = fixture();
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: pin,
+      bot: { allowedModelDestinations: { mode: "local" } },
+    }),
+  ).toMatchObject({ kind: "problem", code: "locality-denied" });
+  f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
+  f.loadKey.mockResolvedValue({
+    provider: "openai-compatible",
+    id: "local-model",
+    baseUrl: "http://localhost:8080/v1",
+    reasoning: false,
+  });
+  const custom = { ...pin, provider: "openai-compatible", modelId: "local-model", effort: "off" };
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: custom,
+      bot: { allowedModelDestinations: { mode: "local" } },
+    }),
+  ).toMatchObject({ kind: "resolved", runtimePin: custom });
 });

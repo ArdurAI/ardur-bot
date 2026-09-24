@@ -1,3 +1,10 @@
+import type * as DelegationApproval from "./delegation-approval.js";
+
+vi.mock("./delegation-approval.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof DelegationApproval>()),
+  delegationAnswerThread: vi.fn(async (_tx, input) => input.threadId),
+}));
+
 import type { RealtimeFanout } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";

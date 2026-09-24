@@ -137,6 +137,19 @@ function fixture(runId = "run-1") {
   };
   const replayRequest = { command: "pnpm test", cwd: "/workspace" };
   const prisma = {
+    delegationRoot: { findUnique: vi.fn(async () => null) },
+    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+
+    $queryRaw: vi.fn(async () => [{ acquired: true }]),
+    computer: {
+      findFirstOrThrow: vi.fn(async () => computer),
+      findUniqueOrThrow: vi.fn(async () => computer),
+    },
+    computerAdmission: {
+      findFirst: vi.fn(async () => null),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+      create: vi.fn(async () => ({ id: "admission" })),
+    },
     event: {
       findFirst: vi.fn(async () => ({
         runId: "source-run",
@@ -228,6 +241,9 @@ function fixture(runId = "run-1") {
     actionApprovalRule: { findMany: vi.fn(async (): Promise<ActionApprovalRule[]> => []) },
     actionAutoReviewPreference: { findUnique: vi.fn(async () => ({ enabled: false })) },
     externalEffect,
+    $transaction: vi.fn(
+      async (callback: (tx: unknown) => Promise<unknown>): Promise<unknown> => callback(prisma),
+    ),
   };
   const pauseRunForInput = vi.fn(async () => {
     run.status = "waiting_input";

@@ -3,6 +3,7 @@ import * as z from "zod";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
 import { CommandBlockSchema } from "./command-blocks.js";
+import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
 import {
   ActionApprovalRuleSchema,
@@ -967,6 +968,7 @@ export const appContract = {
   search: {
     query: oc.input(z.object({ q: z.string().max(200) })).output(SearchQueryOutputSchema),
   },
+  delegations: delegationsContract,
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),
   },

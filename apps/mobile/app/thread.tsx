@@ -1281,7 +1281,9 @@ function Thread() {
   const runError =
     snap?.run?.status === "failed"
       ? snap.run.runtimeProblem
-        ? runtimePinMessage(snap.run.runtimeProblem.pin)
+        ? snap.run.runtimeProblem.code === "locality-denied"
+          ? snap.run.runtimeProblem.reason
+          : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
       : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);

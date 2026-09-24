@@ -1,3 +1,17 @@
+import { delegationProblem } from "@ardurbot/contracts";
+import { DelegationAdmissionError } from "@ardurbot/db";
+import type * as DelegationModule from "./delegation.js";
+import { prepareDelegation } from "./delegation.js";
+
+vi.mock("./delegation.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof DelegationModule>()),
+  prepareDelegation: vi.fn(async () => ({
+    ok: true,
+    record: { id: "delegation", differences: [] },
+    runData: { delegationId: "delegation" },
+  })),
+}));
+
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { handoffToGroupBot } from "./group-handoff.js";
@@ -17,6 +31,7 @@ function harness(
   const runCreate = vi.fn(async () => ({ id: "run-b" }));
   const messageCreate = vi.fn(async () => ({ id: "message-1" }));
   const tx = {
+    delegation: { update: vi.fn(async () => ({})) },
     $queryRaw: vi.fn(async () => [{ id: "group-1" }]),
     chatGroup: {
       findFirst: vi.fn(async () => ({
@@ -154,4 +169,17 @@ describe("group handoff ownership", () => {
     ).resolves.toEqual({ error: "cannot verify the group handoff chain" });
     expect(runCreate).not.toHaveBeenCalled();
   });
+});
+
+it("returns the shared admission problem without creating a run", async () => {
+  const f = harness([]);
+  const problem = delegationProblem("budget-exhausted");
+  vi.mocked(prepareDelegation).mockRejectedValueOnce(new DelegationAdmissionError(problem));
+  expect(
+    await handoffToGroupBot(f.deps as never, run, "group-1", {
+      bot_id: "bot-b",
+      message: "Review",
+    }),
+  ).toMatchObject({ error: problem.message, problem });
+  expect(f.runCreate).not.toHaveBeenCalled();
 });

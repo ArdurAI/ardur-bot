@@ -49,6 +49,7 @@ export function createCommandRecording(input: {
   attemptId: string;
   secrets: string[];
   replayOf?: string | null;
+  resolveCwd?: (requested: string | undefined, executionId: string) => string | undefined;
 }) {
   const entries = new Map<
     string,
@@ -98,11 +99,13 @@ export function createCommandRecording(input: {
     let cwdError = false;
     try {
       if (request) {
-        const cwd = resolveBotWorkspaceCwd(
-          input.storedComputer.scope === "team" ? "team" : "dedicated",
-          input.context.botId,
-          request.cwd,
-        );
+        const cwd = input.resolveCwd
+          ? input.resolveCwd(request.cwd, executionId)
+          : resolveBotWorkspaceCwd(
+              input.storedComputer.scope === "team" ? "team" : "dedicated",
+              input.context.botId,
+              request.cwd,
+            );
         resolvedCwd =
           (await input.sandbox.resolveCommandCwd?.(input.computer, cwd, input.context)) ?? null;
       }

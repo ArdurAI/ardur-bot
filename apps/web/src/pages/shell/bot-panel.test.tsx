@@ -9,7 +9,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({ list: vi.fn(), credentials: vi.fn(), me: vi.fn() }));
 vi.mock("../../lib/rpc", () => ({
-  rpc: { models: api, me: api.me, voice: { voices: async () => [] } },
+  rpc: {
+    delegations: { policy: async () => ({ mode: "any" }), setPolicy: async () => ({ ok: true }) },
+    models: api,
+    me: api.me,
+    voice: { voices: async () => [] },
+  },
 }));
 vi.mock("./avatar-studio-popover", () => ({ AvatarStudioPopover: () => null }));
 vi.mock("../ScratchpadSection", () => ({ ScratchpadSection: () => null }));

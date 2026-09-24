@@ -179,6 +179,10 @@ msgstr ""
 msgid "About spaces"
 msgstr ""
 
+#: src/pages/DelegationLines.tsx
+msgid "Accepted"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr ""
@@ -421,6 +425,14 @@ msgstr ""
 msgid "Allowed destinations"
 msgstr ""
 
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed hosts"
+msgstr ""
+
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed model destinations"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "Permitido uma vez"
@@ -461,6 +473,10 @@ msgstr "Respondido: {0}"
 #: src/components/AskCard.tsx
 msgid "Answered: {answer}"
 msgstr "Respondido: {answer}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Any"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
@@ -784,6 +800,7 @@ msgstr "cancelado"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "Cancelado"
 
@@ -1020,6 +1037,10 @@ msgstr "Comando"
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "Concluir"
+
+#: src/pages/DelegationLines.tsx
+msgid "Completed"
+msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Completion not recorded"
@@ -1539,6 +1560,10 @@ msgstr "Não foi possível salvar"
 msgid "Could not save Auto Review"
 msgstr ""
 
+#: src/pages/ModelDestinations.tsx
+msgid "Could not save destinations; try again."
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "Could not save group"
 msgstr "Não foi possível salvar o grupo"
@@ -1593,6 +1618,10 @@ msgstr "Não foi possível iniciar o OAuth"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
+msgstr ""
+
+#: src/pages/DelegationLines.tsx
+msgid "Could not stop this task; try again."
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -2107,6 +2136,7 @@ msgid "failed"
 msgstr "falhou"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "Falha"
 
@@ -2470,6 +2500,10 @@ msgstr ""
 msgid "Link a chat app"
 msgstr ""
 
+#: src/pages/ModelDestinations.tsx
+msgid "Listed hosts"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Listen"
 msgstr ""
@@ -2538,6 +2572,10 @@ msgstr "Local"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "O acesso local permite que os bots executem comandos sem perguntar. Evite usá-lo em servidores compartilhados ou públicos."
+
+#: src/pages/ModelDestinations.tsx
+msgid "Local only"
+msgstr ""
 
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
@@ -3302,6 +3340,7 @@ msgid "Pushed"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Queued"
 msgstr "Na fila"
 
@@ -3698,6 +3737,7 @@ msgid "running"
 msgstr "em execução"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "Em execução"
 
@@ -3726,6 +3766,7 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/ModelDestinations.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4098,6 +4139,7 @@ msgstr "Iniciando…"
 msgid "Steps"
 msgstr "Passos"
 
+#: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
@@ -4115,6 +4157,10 @@ msgstr "Parar de ensinar"
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "Interrompido."
+
+#: src/pages/DelegationLines.tsx
+msgid "Stopping"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Stored encrypted"
@@ -4254,6 +4300,10 @@ msgstr ""
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
+msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "This bot may only run locally — change the pin or the space policy"
 msgstr ""
 
 #: src/pages/Shell.tsx

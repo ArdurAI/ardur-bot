@@ -8,6 +8,9 @@ import {
 import { z } from "zod";
 
 export const DELEGATION_TOOL_NAMES = new Set([
+  "delegation_status",
+  "stop_delegation",
+  "accept_delegation",
   "run_subagent",
   "spawn_bot",
   "archive_bot",
@@ -17,6 +20,27 @@ export const DELEGATION_TOOL_NAMES = new Set([
 ]);
 
 export const builtinAgentTools: ConnectorTool[] = [
+  {
+    name: "delegation_status",
+    description: "Read workers, ids and status for this task or a previous root task.",
+    inputSchema: { type: "object", properties: { root_task_id: { type: "string" } } },
+  },
+  {
+    name: "stop_delegation",
+    description:
+      "Request that every worker in this task or a previous root task stop; confirmation is separate.",
+    inputSchema: { type: "object", properties: { root_task_id: { type: "string" } } },
+  },
+  {
+    name: "accept_delegation",
+    description:
+      "Accept a completed handoff after reviewing its result; only the coordinator may accept.",
+    inputSchema: {
+      type: "object",
+      properties: { delegation_id: { type: "string" } },
+      required: ["delegation_id"],
+    },
+  },
   {
     name: "computer_observe",
     description:

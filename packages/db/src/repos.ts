@@ -7,12 +7,13 @@ import {
   type SpaceBot,
 } from "@ardurbot/contracts";
 import { userVisibleMessages } from "@ardurbot/core";
-import type { PrismaClient } from "./client.js";
+import type { Prisma, PrismaClient } from "./client.js";
 import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import { activeRunSelection, previewFromBlocks } from "./thread-listing.js";
+import { withTransactionRetry } from "./transaction-retry.js";
 
 /** Newest messages loaded for sidebar preview; enough to skip a short peer-run tail. */
 const SIDEBAR_PREVIEW_MESSAGE_WINDOW = 16;
@@ -388,6 +389,11 @@ export function createRepos(prisma: PrismaClient) {
         parentBotId?: string | null;
         computerMode?: ComputerMode;
         spawnKey?: string;
+        onCreated?: (
+          tx: Prisma.TransactionClient,
+          botId: string,
+          threadId: string,
+        ) => Promise<void>;
         modelProvider?: string | null;
         modelId?: string | null;
         thinkingLevel?: string | null;
@@ -493,6 +499,7 @@ export function createRepos(prisma: PrismaClient) {
             });
             await tx.bot.update({ where: { id: created.id }, data: { computerId: dedicated.id } });
           }
+          await input.onCreated?.(tx, created.id, thread.id);
           await tx.browserProfile.create({
             data: {
               spaceId: actor.spaceId,
@@ -531,7 +538,7 @@ export function createRepos(prisma: PrismaClient) {
 
       let bot: Awaited<ReturnType<typeof insertBot>>;
       try {
-        bot = await insertBot();
+        bot = await withTransactionRetry(insertBot);
       } catch (error) {
         if (!input.spawnKey || !isSpawnKeyConflict(error)) throw error;
         const existing = await findBySpawnKey();
@@ -546,7 +553,7 @@ export function createRepos(prisma: PrismaClient) {
             data: { spawnKey: null },
           });
           try {
-            bot = await insertBot();
+            bot = await withTransactionRetry(insertBot);
           } catch (retryError) {
             if (!isSpawnKeyConflict(retryError)) throw retryError;
             const winner = await findBySpawnKey();

@@ -174,6 +174,10 @@ export function createJobReconciler(
                 OR: [
                   { status: "queued" },
                   {
+                    status: { in: ["waiting_input", "waiting_takeover"] },
+                    cancelRequestedAt: { not: null },
+                  },
+                  {
                     status: { in: ["leased", "running"] },
                     leaseExpiresAt: { lte: now },
                   },

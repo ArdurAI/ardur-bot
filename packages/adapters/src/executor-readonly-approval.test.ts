@@ -172,6 +172,16 @@ function fixture({
     updatedAt: new Date(0),
   };
   const prisma = {
+    delegationRoot: { findUnique: vi.fn(async () => null) },
+    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+
+    computer: {
+      findFirstOrThrow: vi.fn(async () => ({
+        id: "computer-1",
+        scope: "dedicated",
+        kind: "desktop",
+      })),
+    },
     instanceIdentity: { findUnique: vi.fn(async () => null) },
     deviceApprovalBinding: { findUnique: vi.fn(async () => null) },
     botMcpServer: { findFirst: vi.fn(async () => grant) },
@@ -190,7 +200,7 @@ function fixture({
         title: bot.title,
         description: bot.description,
         computerId: "computer-1",
-        computer: { id: "computer-1", scope: "dedicated" },
+        computer: { id: "computer-1", scope: "dedicated", kind: "desktop" },
       })),
       findMany: vi.fn(async () => []),
     },

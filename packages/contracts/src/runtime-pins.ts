@@ -3,6 +3,7 @@ import type { ThinkingLevel } from "./domain.js";
 
 /** A requested pin may be incomplete; preserve it in failures instead of filling it in. */
 export const RuntimePinSchema = z.object({
+  runtimeKind: z.string().optional(),
   provider: z.string().nullable(),
   modelId: z.string().nullable(),
   effort: z.string().nullable(),
@@ -27,6 +28,7 @@ export const RuntimeProblemSchema = z.object({
     "pin-model-unknown",
     "pin-effort-unsupported",
     "pin-incomplete",
+    "locality-denied",
   ]),
   pin: RuntimePinSchema,
   reason: z.string(),
@@ -52,7 +54,7 @@ export function runtimePinMessage(
 /** Carries a configuration failure across adapter boundaries without losing its type. */
 export class RuntimePinError extends Error {
   constructor(readonly problem: RuntimeProblem) {
-    super(runtimePinMessage(problem.pin));
+    super(problem.code === "locality-denied" ? problem.reason : runtimePinMessage(problem.pin));
     this.name = "RuntimePinError";
   }
 }

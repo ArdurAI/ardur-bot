@@ -8,6 +8,7 @@ import {
 import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
+import { finishDelegation } from "./delegation.js";
 import { auditDevice, DeviceRequestError, deviceDigest } from "./device-grants.js";
 import { appendEventInTransaction, steerRunInTransaction } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
@@ -374,9 +375,22 @@ export async function requestDispatchStop(
       )
     )
       throw new DeviceRequestError("This task is unavailable on this device.");
+    await tx.delegationRoot.updateMany({
+      where: { rootTaskId: taskId, spaceId: grant.spaceId, userId: grant.userId },
+      data: { cancelRequestedAt: now },
+    });
+    await tx.delegation.updateMany({
+      where: {
+        rootTaskId: taskId,
+        spaceId: grant.spaceId,
+        userId: grant.userId,
+        status: { in: ["queued", "running"] },
+      },
+      data: { status: "cancel-requested", cancelRequestedAt: now },
+    });
     await tx.run.updateMany({
       where: {
-        OR: [{ taskId }, { remoteRootTaskId: taskId }],
+        OR: [{ taskId }, { remoteRootTaskId: taskId }, { delegationRootTaskId: taskId }],
         spaceId: grant.spaceId,
         userId: grant.userId,
         status: { in: ACTIVE },
@@ -398,7 +412,11 @@ export async function confirmDispatchStop(
     if (!run?.cancelRequestedAt || !ACTIVE.includes(run.status)) return false;
     if (
       await tx.run.count({
-        where: { remoteRootTaskId: run.taskId, id: { not: runId }, status: { in: ACTIVE } },
+        where: {
+          OR: [{ remoteRootTaskId: run.taskId }, { delegationRootTaskId: run.taskId }],
+          id: { not: runId },
+          status: { in: ACTIVE },
+        },
       })
     )
       return false;
@@ -427,6 +445,17 @@ export async function confirmDispatchStop(
       where: { runId, status: "running" },
       data: { status: "cancelled", finishedAt: now },
     });
+    if (run.delegationId)
+      await finishDelegation(tx, run.delegationId, "cancelled", "Worker stopped.");
+    const helpers = await tx.delegation.findMany({
+      where: {
+        parentRunId: runId,
+        kind: "helper",
+        status: { in: ["queued", "running", "cancel-requested"] },
+      },
+    });
+    for (const helper of helpers)
+      await finishDelegation(tx, helper.id, "cancelled", "Worker stopped.");
     await persistDispatchSummary(tx, run, "stopped", null);
     return true;
   });

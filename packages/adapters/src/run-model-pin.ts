@@ -4,6 +4,7 @@ import { RuntimePinError, RuntimePinSchema, runtimePinProblem } from "@ardurbot/
 import { spaceDefaultEffort } from "@ardurbot/core";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
+import { modelLocalityAllowed } from "./model-locality.js";
 import { listPiCatalog } from "./pi-models.js";
 import { AnthropicOAuthUnavailableError } from "./pi-oauth.js";
 import type { BotPinFields } from "./pin-resolution.js";
@@ -95,6 +96,18 @@ export async function resolveRunModelPin(input: {
   try {
     const model = loadedModel ?? (await input.loadKey(credential, pin));
     const resolved = { ...model, runtimePin: pin, thinkingLevel: selected.thinkingLevel };
+    const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });
+    if (
+      !modelLocalityAllowed(
+        [bot?.allowedModelDestinations, space?.allowedModelDestinations],
+        resolved,
+      )
+    )
+      return runtimePinProblem(
+        pin,
+        "locality-denied",
+        "This bot may only run locally — change the pin or the space policy",
+      );
     const problem = validateRuntimePin(resolved, pin);
     return problem ?? { ...resolved, kind: "resolved", pin };
   } catch (error) {

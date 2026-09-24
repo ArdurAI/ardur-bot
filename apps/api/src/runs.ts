@@ -1,6 +1,8 @@
-import { type Actor, MessageBlock, type RunActivityRow } from "@ardurbot/contracts";
+import type { Actor, RunActivityRow } from "@ardurbot/contracts";
+import { MessageBlock } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, botMessageContext } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
+import { delegationView } from "@ardurbot/db";
 
 const RECENT_LIMIT = 20;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
@@ -67,7 +69,26 @@ export async function listSpaceRuns(
     take: filter === "recent" ? RECENT_LIMIT : undefined,
   });
 
+  const roots = [...new Set(rows.map((row) => row.delegationRootTaskId ?? row.taskId))];
+  const delegations = await prisma.delegation.findMany({
+    where: { rootTaskId: { in: roots }, spaceId: actor.spaceId, userId: actor.userId },
+    orderBy: { createdAt: "asc" },
+  });
+  const representative = new Map(
+    roots.map((root) => [
+      root,
+      rows.find((row) => row.taskId === root)?.id ??
+        rows.find((row) => row.delegationRootTaskId === root)?.id,
+    ]),
+  );
   return rows.map((row) => ({
+    rootTaskId: row.delegationRootTaskId ?? row.taskId,
+    delegations:
+      representative.get(row.delegationRootTaskId ?? row.taskId) === row.id
+        ? delegations
+            .filter((item) => item.rootTaskId === (row.delegationRootTaskId ?? row.taskId))
+            .map(delegationView)
+        : [],
     runId: row.id,
     botId: row.botId,
     botName: row.bot.name,

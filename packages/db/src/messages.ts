@@ -105,13 +105,20 @@ export async function assertRunCanWriteHistory(
       startedAt: Date | null;
       originDeviceGrantId: string | null;
       remoteRootTaskId: string | null;
+      delegationId: string | null;
     }
   | undefined
 > {
   if (!runId) return;
   const run = await tx.run.findUnique({
     where: { id: runId },
-    select: { status: true, startedAt: true, originDeviceGrantId: true, remoteRootTaskId: true },
+    select: {
+      status: true,
+      startedAt: true,
+      originDeviceGrantId: true,
+      remoteRootTaskId: true,
+      delegationId: true,
+    },
   });
   if (!run || run.status === "cancelled") {
     throw new RunHistoryWriteError();

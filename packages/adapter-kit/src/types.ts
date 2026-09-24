@@ -1,7 +1,9 @@
 import type {
   ConnectionCatalogItem,
+  DelegationProblem,
   DocumentScope,
   RuntimePin,
+  RuntimeProblem,
   SandboxKind,
 } from "@ardurbot/contracts";
 
@@ -411,6 +413,30 @@ export interface AgentRunRequest {
   tools: ConnectorTool[] | "none";
   model: AgentRunModel;
   /** Resolve an explicitly requested helper model within the active user and space scope. */
+  admitHelper?: (
+    executionId: string,
+    name: string,
+    task: string,
+  ) => Promise<
+    | { id: string; tokens: number; deadlineAt: string }
+    | { error: string; problem?: DelegationProblem | RuntimeProblem }
+  >;
+  executeHelperTool?: (
+    delegationId: string,
+    name: string,
+    args: Record<string, unknown>,
+    executionId: string,
+    route?: ConnectorRoute,
+  ) => Promise<unknown>;
+  recordHelperUsage?: (
+    id: string,
+    usage: { provider: string; model: string; inputTokens: number; outputTokens: number },
+  ) => Promise<void>;
+  finishHelper?: (
+    id: string,
+    status: "completed" | "failed" | "cancelled",
+    result: string,
+  ) => Promise<void>;
   resolveModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
   resumeFromCheckpoint?: string;
   script?: ScriptedTurn[];
@@ -461,7 +487,14 @@ export type AgentRuntimeEvent =
       actions?: Array<{ id: string; label: string }>;
     }
   | { type: "takeover"; reason: string }
-  | { type: "usage"; inputTokens: number; outputTokens: number; provider: string; model: string }
+  | {
+      type: "usage";
+      delegationId?: string;
+      inputTokens: number;
+      outputTokens: number;
+      provider: string;
+      model: string;
+    }
   | { type: "checkpoint"; blob: string }
   | {
       type: "subagent";

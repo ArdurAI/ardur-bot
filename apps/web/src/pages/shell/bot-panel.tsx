@@ -35,6 +35,7 @@ import { rpc } from "../../lib/rpc";
 import { thinkingLevelDescription } from "../../lib/thinking-level-options";
 import type { ModelSettings } from "../../lib/use-model-settings";
 import { useModelSettings } from "../../lib/use-model-settings";
+import { ModelDestinations } from "../ModelDestinations";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
 
 const ScratchpadSection = lazy(() =>
@@ -506,6 +507,7 @@ export function BotSettings({
           }}
         />
       </div>
+      <ModelDestinations botId={bot.id} />
       <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
         <Trans>Model</Trans>
         <NativeSelect

@@ -19,6 +19,17 @@ export function ProviderErrorMessage({
   onConnect?: () => void;
 }) {
   if (runtimeProblem) {
+    if (runtimeProblem.code === "locality-denied")
+      return (
+        <>
+          <span className="min-w-0 flex-1">
+            <Trans>This bot may only run locally — change the pin or the space policy</Trans>
+          </span>
+          <Button variant="link" size="xs" onClick={onChangeModel}>
+            <Trans>Change pin</Trans>
+          </Button>
+        </>
+      );
     const { pin } = runtimeProblem;
     const entry = catalog?.find(
       (item) => item.provider === pin.provider && item.id === pin.modelId,

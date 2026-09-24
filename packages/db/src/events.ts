@@ -21,6 +21,8 @@ import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { materializeCommandEvent } from "./command-blocks.js";
 import { expireComputerExecutionLeases } from "./computers.js";
+import { finishDelegation } from "./delegation.js";
+import { delegationAnswerThread, delegationApprovalTarget } from "./delegation-approval.js";
 import { inheritedRemoteOrigin, persistDispatchSummary } from "./dispatch.js";
 import {
   assertRunCanWriteHistory,
@@ -129,6 +131,7 @@ export type FinalizeRunInput = FinalizeRunBase &
   );
 
 export interface PauseRunForInput {
+  helperDelegationId?: string;
   spaceId: string;
   threadId: string;
   botId: string;
@@ -613,11 +616,12 @@ async function commitAnswerRunInput(
   // Thread row first, then run rows — the same order as clearThread and finalizeRun, so a
   // concurrent clear cannot deadlock against this transaction.
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+  const runThreadId = await delegationAnswerThread(tx, input);
   const run = await tx.run.findFirst({
     where: {
       id: input.runId,
       spaceId: input.spaceId,
-      threadId: input.threadId,
+      threadId: runThreadId,
       status: "waiting_input",
     },
     select: { botId: true, userId: true, checkpoint: true },
@@ -671,7 +675,7 @@ async function commitAnswerRunInput(
     where: {
       id: input.runId,
       spaceId: input.spaceId,
-      threadId: input.threadId,
+      threadId: runThreadId,
       status: "waiting_input",
     },
     data: {
@@ -808,6 +812,14 @@ export async function pauseRunForInput(
   realtime?: RealtimeFanout,
 ): Promise<boolean> {
   const committed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const target = await delegationApprovalTarget(
+      tx,
+      input.runId,
+      input.threadId,
+      input.botId,
+      input.blocks,
+      input.helperDelegationId,
+    );
     // Thread row first, then run rows — the same order as clearThread and finalizeRun, so a
     // concurrent clear cannot deadlock against this transaction.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
@@ -843,25 +855,35 @@ export async function pauseRunForInput(
     });
     if (attempt.count !== 1) throw new Error("Active run attempt was not available to pause");
 
-    const message = await createThreadMessageInTransaction(tx, {
-      threadId: input.threadId,
-      role: "bot",
-      blocks: input.blocks,
-      botId: input.botId,
-      runId: input.runId,
-    });
+    const existing = target.clientNonce
+      ? await tx.message.findUnique({
+          where: {
+            threadId_clientNonce: { threadId: target.threadId, clientNonce: target.clientNonce },
+          },
+        })
+      : null;
+    const message =
+      existing ??
+      (await createThreadMessageInTransaction(tx, {
+        clientNonce: target.clientNonce,
+        threadId: target.threadId,
+        role: "bot",
+        blocks: target.blocks,
+        botId: target.botId,
+        runId: input.runId,
+      }));
     await appendEventInTransaction(tx, {
       spaceId: input.spaceId,
-      threadId: input.threadId,
-      botId: input.botId,
+      threadId: target.threadId,
+      botId: target.botId,
       type: "thread.message.created",
       runId: input.runId,
-      payload: { messageId: message.id, role: "bot", blocks: input.blocks },
+      payload: { messageId: message.id, role: "bot", blocks: target.blocks },
     });
     const waitingEvent = await appendEventInTransaction(tx, {
       spaceId: input.spaceId,
-      threadId: input.threadId,
-      botId: input.botId,
+      threadId: target.threadId,
+      botId: target.botId,
       type: "run.waiting_input",
       runId: input.runId,
       payload: {},
@@ -1082,6 +1104,8 @@ export async function finalizeRun(
   const committed = await withTransactionRetry(() => finalizeRunOnce(prisma, input));
   if (!committed) return false;
   await notifyRealtime(realtime, committed.threadId, committed.seq);
+  if (committed.summary)
+    await notifyRealtime(realtime, committed.summary.threadId, committed.summary.seq);
   return { continuationRunId: committed.continuationRunId };
 }
 
@@ -1106,7 +1130,12 @@ export function completedRunBlocks(
 async function finalizeRunOnce(
   prisma: PrismaClient,
   input: FinalizeRunInput,
-): Promise<{ threadId: string; seq: number; continuationRunId: string | null } | null> {
+): Promise<{
+  threadId: string;
+  seq: number;
+  continuationRunId: string | null;
+  summary?: { threadId: string; seq: number };
+} | null> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
     let writableRun:
@@ -1114,6 +1143,7 @@ async function finalizeRunOnce(
           startedAt: Date | null;
           originDeviceGrantId: string | null;
           remoteRootTaskId: string | null;
+          delegationId: string | null;
         }
       | undefined;
     try {
@@ -1131,6 +1161,7 @@ async function finalizeRunOnce(
         botId: input.botId,
         taskId: input.taskId,
         status: "running",
+        cancelRequestedAt: null,
         leaseOwner: input.leaseOwner,
         leaseFence: input.leaseFence,
       },
@@ -1171,7 +1202,7 @@ async function finalizeRunOnce(
     if (task.count !== 1) throw new Error("Run task was not available to finalize");
 
     let finalMessageId: string | null = null;
-    if (input.outcome === "completed") {
+    if (input.outcome === "completed" && !writableRun?.delegationId) {
       const completedBlocks = completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
       if (completedBlocks.length > 0) {
         const message = await createThreadMessageInTransaction(tx, {
@@ -1193,6 +1224,16 @@ async function finalizeRunOnce(
         });
       }
     }
+    const summary = writableRun?.delegationId
+      ? await finishDelegation(
+          tx,
+          writableRun.delegationId,
+          input.outcome,
+          input.outcome === "completed"
+            ? input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n")
+            : input.error,
+        )
+      : undefined;
     await persistDispatchSummary(
       tx,
       { taskId: input.taskId, ...writableRun },
@@ -1243,7 +1284,7 @@ async function finalizeRunOnce(
         ? null
         : await createSteeringContinuation(tx, input);
     await tx.bot.update({ where: { id: input.botId }, data: { updatedAt: now } });
-    return { threadId: lastEvent.threadId, seq: lastEvent.seq, continuationRunId };
+    return { threadId: lastEvent.threadId, seq: lastEvent.seq, continuationRunId, summary };
   });
 }
 

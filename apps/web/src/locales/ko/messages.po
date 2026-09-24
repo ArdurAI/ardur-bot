@@ -179,6 +179,10 @@ msgstr ""
 msgid "About spaces"
 msgstr ""
 
+#: src/pages/DelegationLines.tsx
+msgid "Accepted"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr ""
@@ -421,6 +425,14 @@ msgstr ""
 msgid "Allowed destinations"
 msgstr ""
 
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed hosts"
+msgstr ""
+
+#: src/pages/ModelDestinations.tsx
+msgid "Allowed model destinations"
+msgstr ""
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "한 번 허용됨"
@@ -461,6 +473,10 @@ msgstr "응답: {0}"
 #: src/components/AskCard.tsx
 msgid "Answered: {answer}"
 msgstr "응답: {answer}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Any"
+msgstr ""
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
@@ -784,6 +800,7 @@ msgstr "취소됨"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Cancelled"
 msgstr "취소됨"
 
@@ -1020,6 +1037,10 @@ msgstr "실행 명령"
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "완료"
+
+#: src/pages/DelegationLines.tsx
+msgid "Completed"
+msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Completion not recorded"
@@ -1539,6 +1560,10 @@ msgstr "저장하지 못했습니다."
 msgid "Could not save Auto Review"
 msgstr "자동 검토를 저장할 수 없습니다"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Could not save destinations; try again."
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "Could not save group"
 msgstr "그룹을 저장하지 못했습니다."
@@ -1594,6 +1619,10 @@ msgstr "OAuth 인증을 시작하지 못했습니다."
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
 msgstr "가르치기를 시작하지 못했습니다."
+
+#: src/pages/DelegationLines.tsx
+msgid "Could not stop this task; try again."
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Could not submit this answer"
@@ -2107,6 +2136,7 @@ msgid "failed"
 msgstr "실패"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "실패"
 
@@ -2470,6 +2500,10 @@ msgstr "Linear 이슈"
 msgid "Link a chat app"
 msgstr "채팅 앱 연결"
 
+#: src/pages/ModelDestinations.tsx
+msgid "Listed hosts"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Listen"
 msgstr ""
@@ -2538,6 +2572,10 @@ msgstr "로컬"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "로컬 접근을 허용하면 Bot이 묻지 않고 명령을 실행할 수 있습니다. 공유 서버나 공개 서버에서는 허용하지 마세요."
+
+#: src/pages/ModelDestinations.tsx
+msgid "Local only"
+msgstr ""
 
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
@@ -3302,6 +3340,7 @@ msgid "Pushed"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Queued"
 msgstr "대기 중"
 
@@ -3698,6 +3737,7 @@ msgid "running"
 msgstr "실행 중"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/DelegationLines.tsx
 msgid "Running"
 msgstr "실행 중"
 
@@ -3726,6 +3766,7 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/ModelDestinations.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4098,6 +4139,7 @@ msgstr "시작하는 중…"
 msgid "Steps"
 msgstr "실행 단계"
 
+#: src/pages/DelegationLines.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Stop"
@@ -4115,6 +4157,10 @@ msgstr "가르치기 종료"
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "중지되었습니다."
+
+#: src/pages/DelegationLines.tsx
+msgid "Stopping"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Stored encrypted"
@@ -4254,6 +4300,10 @@ msgstr ""
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
+msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "This bot may only run locally — change the pin or the space policy"
 msgstr ""
 
 #: src/pages/Shell.tsx
