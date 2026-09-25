@@ -1,7 +1,7 @@
 import * as z from "zod";
-import { LocalImportRootsSchema } from "./local-import.js";
 import { HostIntegrationSchema } from "./host-integrations.js";
 import { IDE_FILE_BYTES } from "./ide.js";
+import { LocalImportRootsSchema } from "./local-import.js";
 import {
   RuntimeAvailabilitySchema,
   RuntimeInfoSchema,

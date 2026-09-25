@@ -7,8 +7,8 @@ import type {
   RuntimeProblem,
   SandboxKind,
 } from "@ardurbot/contracts";
-import type { LocalImportJob } from "@ardurbot/contracts/local-import";
 import type { HostCommandApproval, HostIntegrationId } from "@ardurbot/contracts/host-integrations";
+import type { LocalImportJob } from "@ardurbot/contracts/local-import";
 
 export interface AdapterContext {
   /** Supplied by the executor only after claiming the exact approved host command. */

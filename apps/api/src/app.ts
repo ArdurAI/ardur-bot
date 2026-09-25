@@ -98,10 +98,10 @@ import { HostBridge } from "./host-bridge.js";
 import { mountHostMcpRoutes } from "./host-mcp-routes.js";
 import { sourceHostStatus } from "./host-status.js";
 import { ensureInstanceIdentity } from "./instance-identity.js";
-import { LocalImportRequests } from "./local-import-requests.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { integrationOAuthReturn } from "./integration-oauth-return.js";
 import { createLearningService } from "./learning.js";
+import { LocalImportRequests } from "./local-import-requests.js";
 import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
 import { createLegacyChatDispatch, mountMessagingDispatch } from "./messaging-dispatch.js";
 import {

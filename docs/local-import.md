@@ -1,6 +1,6 @@
 # Import local tool data
 
-The deployment owner can open Settings → Import to find instructions, memories,
+The deployment owner can open Settings → Customize → Import to find instructions, memories,
 skills and MCP server definitions on the host computer. Discovery is automatic;
 the first import requires a click. The local-first user can reuse existing work
 without uploading files. The operator can inspect provenance, rescan and undo.
@@ -133,9 +133,11 @@ content hash, source modification time, import time and the target revision.
 Both tables have explicit mapped names in migration
 `20260925120000_local_import`.
 
-Instruction files become private user documents under `imported/instructions/`,
-with provenance kind `instructions`, because this checkout has no space-wide
-instruction setting. Memory notes use the existing memory lifecycle directly;
+Instruction files remain private user documents under `imported/instructions/`,
+with provenance kind `instructions`. The account settings now include space-wide
+instructions; merging that setting does not promote existing private imports to
+shared instructions or change their revision and undo behavior.
+Memory notes use the existing memory lifecycle directly;
 they do not create learning proposals. Their provenance sets
 `authorizesIntent: false`. Learning and revision history show the source tool.
 Runtime memory writes cannot overwrite imported source documents.
@@ -166,13 +168,14 @@ idempotent. Revoked ownership or disabled consent prevents subsequent mutations.
 
 ## Merge points and verification
 
-There is no extension installer in this checkout. The minimal MCPB reader only
-recognizes manifest metadata. When `feat/extensions-plugins` lands, route these
-entries through its validated installer and reuse its manifest reader. When
-`feat/account-settings` lands, retain existing journal provenance while deciding
-how approved imported instructions populate its space-wide setting. The current
-flat settings registry adds one `Import` entry; move it to `Customize` if that
-group becomes available.
+The extension and plugin installers coexist with import. Import's minimal MCPB
+reader still reports manifest metadata without installing or executing bundles.
+Connecting discovered bundles to the validated installer remains a separate change.
+Import is an owner-only, lazy-loaded entry under Customize in `settings-sections.ts`.
+The shared MCP serializer retains import provenance alongside host placement,
+extension ownership, tool policies and argument redaction. The scheduler retains
+weekly learning, ten-minute brief maintenance and hourly import refresh; Graphile's
+cron metadata is removed before all strict job payload validation.
 
 Deterministic fixture tests cover host scanning, exclusion and size rules, latest
 scan IDs, imported lifecycle behavior, credentials, owner authorization, hourly

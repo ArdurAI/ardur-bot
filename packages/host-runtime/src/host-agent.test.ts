@@ -7,8 +7,8 @@ import { decodeHostFrame, encodeHostFrame, HOST_WINDOW } from "@ardurbot/contrac
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostAgent } from "./host-agent.js";
-import { createLocalImportScanner, LocalImportScanner } from "./import/scanner.js";
 import { HostMcpServers } from "./host-mcp.js";
+import { createLocalImportScanner, LocalImportScanner } from "./import/scanner.js";
 import { nativeEnvironment } from "./runtimes/native-process.js";
 
 vi.mock("node:os", async (original) => ({
@@ -133,8 +133,7 @@ function fakeRuntime(events: number): AgentRuntime {
 }
 describe("host process operations", () => {
   it("streams a metadata manifest in bounded frames and reads a scanned item without provisioning a computer", async () => {
-    const { agent, frames } = await fixture();
-    const home = roots.at(-1)!;
+    const { agent, frames, root: home, completed } = await fixture(undefined, true);
     const folder = path.join(home, ".claude/projects/fixture/memory");
     await mkdir(folder, { recursive: true });
     await Promise.all(
@@ -146,7 +145,8 @@ describe("host process operations", () => {
     vi.mocked(createLocalImportScanner).mockResolvedValueOnce(scanner);
     const provision = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
     await agent.receive(request({ op: "import.scan" }));
-    await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
+    await completed("req");
+    expect(frames.at(-1)).toEqual({ v: 1, type: "end", id: "req" });
     const chunks = frames.flatMap((frame) => (frame.type === "stream" ? [String(frame.data)] : []));
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.every((chunk) => chunk.length <= 24 * 1024)).toBe(true);
@@ -159,7 +159,8 @@ describe("host process operations", () => {
       ...request({ op: "import.read", scanId: manifest.scanId, itemId: manifest.items[0].id }),
       id: "read-request",
     });
-    await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
+    await completed("read-request");
+    expect(frames.at(-1)).toEqual({ v: 1, type: "end", id: "read-request" });
     const body = JSON.parse(
       frames.flatMap((frame) => (frame.type === "stream" ? [String(frame.data)] : [])).join(""),
     );

@@ -31,10 +31,10 @@ import { McpToolReview } from "../components/integrations/catalog/McpToolReview"
 import { desktopBridge } from "../lib/desktop";
 import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
 import { rpc } from "../lib/rpc";
-import { ImportedServerCredentials } from "./import/ImportedServerCredentials";
 import { McpConfigEditor } from "./customize/McpConfigEditor";
 import { McpDefaults } from "./customize/McpDefaults";
 import { McpDiagnostics } from "./customize/McpDiagnostics";
+import { ImportedServerCredentials } from "./import/ImportedServerCredentials";
 
 function oauthStatusText(server: McpServer): string | null {
   if (server.oauthStatus === "connected") return t`OAuth connected`;
