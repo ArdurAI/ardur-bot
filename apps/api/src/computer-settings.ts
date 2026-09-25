@@ -2,12 +2,18 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
-import { DockerSandboxProvider, kubernetesContexts, snapshotKubeconfig } from "@ardurbot/adapters";
+import {
+  DockerSandboxProvider,
+  kubernetesContexts,
+  sandboxKindForBot,
+  snapshotKubeconfig,
+} from "@ardurbot/adapters";
 import {
   ComputerConfigurationSchema,
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
   ComputerEngineUnavailableError,
+  moveOntoThisMacUnavailableMessage,
   thisMacUnavailableMessage,
 } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
@@ -119,10 +125,25 @@ export async function validateComputerConfiguration(
   prisma: PrismaClient,
   spaceId: string,
   raw: z.infer<typeof ComputerConfigurationSchema>,
+  sandboxProvider = "docker",
 ) {
   const configuration = ComputerConfigurationSchema.parse(raw);
   if (!configuration.confirmed) throw new Error("This replaces the computer's files. Continue?");
   if (configuration.thisMac) throw new Error(thisMacUnavailableMessage);
+  if (configuration.connectionId === null) {
+    const bot = await prisma.bot.findFirst({
+      where: { id: configuration.botId, spaceId },
+      include: { computer: { select: { connectionId: true } } },
+    });
+    if (bot?.computer?.connectionId) {
+      const deployment =
+        sandboxProvider === "docker"
+          ? await prisma.deploymentSettings.findUnique({ where: { id: "default" } })
+          : null;
+      if (sandboxKindForBot(sandboxProvider, deployment?.computerHost) === "desktop")
+        throw new Error(moveOntoThisMacUnavailableMessage);
+    }
+  }
   if (
     configuration.connectionId &&
     !(await prisma.connection.findFirst({

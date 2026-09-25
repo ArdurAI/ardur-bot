@@ -75,6 +75,49 @@ describe("computer connection settings", () => {
     );
     expect(findUnique).not.toHaveBeenCalled();
   });
+  it("rejects an empty connection for a connected computer when This Mac is the deployment default", async () => {
+    const update = vi.fn();
+    const prisma = {
+      bot: {
+        findFirst: vi.fn(async () => ({ computer: { connectionId: "office" } })),
+      },
+      deploymentSettings: {
+        findUnique: vi.fn(async () => ({ computerHost: "this-mac" })),
+      },
+      computer: { update },
+      computerUpdate: { create: vi.fn() },
+      connection: { findFirst: vi.fn() },
+    } as unknown as PrismaClient;
+    await expect(
+      validateComputerConfiguration(prisma, "space", {
+        botId: "bot",
+        imageProfile: "base",
+        connectionId: null,
+        confirmed: true,
+      }),
+    ).rejects.toThrow(
+      "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.",
+    );
+    expect(update).not.toHaveBeenCalled();
+    expect(prisma.computerUpdate.create).not.toHaveBeenCalled();
+    expect(prisma.connection.findFirst).not.toHaveBeenCalled();
+  });
+  it("accepts an empty connection when Docker is the deployment default", async () => {
+    const prisma = {
+      bot: { findFirst: async () => ({ computer: { connectionId: "office" } }) },
+      deploymentSettings: { findUnique: async () => ({ computerHost: "docker" }) },
+      connection: { findFirst: vi.fn() },
+    } as unknown as PrismaClient;
+    await expect(
+      validateComputerConfiguration(prisma, "space", {
+        botId: "bot",
+        imageProfile: "base",
+        connectionId: null,
+        confirmed: true,
+      }),
+    ).resolves.toMatchObject({ connectionId: null, confirmed: true });
+    expect(prisma.connection.findFirst).not.toHaveBeenCalled();
+  });
   it("stores a generic engine socket without a credential or provider-specific variable", async () => {
     const create = vi.fn(async ({ data }) => ({ id: "connection", ...data }));
     const tx = { connection: { create }, secret: { create: vi.fn() } };

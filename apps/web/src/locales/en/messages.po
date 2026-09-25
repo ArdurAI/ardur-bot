@@ -360,6 +360,9 @@ msgstr "Add"
 msgid "Add a connection under Settings, Connections, to move this computer to another machine."
 msgstr "Add a connection under Settings, Connections, to move this computer to another machine."
 
+msgid "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
+msgstr "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
 msgstr "Add a model in Settings to use this."
@@ -2888,6 +2891,9 @@ msgstr "Deploy private key"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Deployment default"
+
+msgid "Deployment default (Docker)"
+msgstr "Deployment default (Docker)"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Describe what this bot does"

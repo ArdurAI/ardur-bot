@@ -59,6 +59,17 @@ export const ComputerConnectionInputSchema = z.object({
 /** Older clients can still ask for This Mac. The next step is part of the refusal. */
 export const thisMacUnavailableMessage =
   "This Mac is not available. Choose a saved connection or keep the current engine.";
+/** An empty connection would place a connected computer on This Mac. That move stays withdrawn. */
+export const moveOntoThisMacUnavailableMessage =
+  "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.";
+
+/** One host label: darwin and any Mac platform string, otherwise this computer. */
+export function hostComputerLabel(
+  platform: string | null | undefined,
+): "This Mac" | "This computer" {
+  if (platform === "darwin" || (platform != null && /mac/i.test(platform))) return "This Mac";
+  return "This computer";
+}
 export const ComputerConfigurationSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema,

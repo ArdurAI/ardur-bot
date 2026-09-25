@@ -2023,6 +2023,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           deps.prisma,
           context.actor.spaceId,
           input,
+          deps.env.sandboxProvider,
         );
         try {
           await releaseMaintenanceControl(deps, context.actor, bot.computer.id);

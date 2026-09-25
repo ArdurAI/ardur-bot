@@ -2,8 +2,13 @@ import type {
   ComputerConnectionSettings,
   ComputerProfileId,
   ComputerStatus,
+  Me,
 } from "@ardurbot/contracts";
-import { COMPUTER_PROFILES } from "@ardurbot/contracts";
+import {
+  COMPUTER_PROFILES,
+  hostComputerLabel,
+  moveOntoThisMacUnavailableMessage,
+} from "@ardurbot/contracts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,9 +34,18 @@ function hostPlatform() {
   return typeof navigator !== "undefined" ? navigator.platform : "";
 }
 
+export type DeploymentDefault = "docker" | "this-mac" | "other";
+
+export function deploymentDefaultEngine(
+  me: Pick<Me, "computerHost" | "sandboxProvider">,
+): DeploymentDefault {
+  if (me.sandboxProvider === "desktop" || me.computerHost === "this-mac") return "this-mac";
+  if (me.sandboxProvider === "docker") return "docker";
+  return "other";
+}
+
 function engineLabel(engine: string) {
-  if (engine === "desktop" || engine === "host")
-    return /mac/i.test(hostPlatform()) ? "This Mac" : "This computer";
+  if (engine === "desktop" || engine === "host") return hostComputerLabel(hostPlatform());
   if (engine === "podman") return "Podman";
   if (engine === "kubernetes") return "Kubernetes";
   if (engine === "docker" || engine === "remote-docker") return "Docker";
@@ -47,14 +61,17 @@ export function ComputerProfilesSettings() {
     { botId: string; name: string; status: ComputerStatus }[]
   >([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [deploymentDefault, setDeploymentDefault] = useState<DeploymentDefault>("docker");
   const [error, setError] = useState("");
   async function refresh() {
-    const [computers, connections] = await Promise.all([
+    const [computers, connections, me] = await Promise.all([
       rpc.computer.list(),
       rpc.computer.connections(),
+      rpc.me(),
     ]);
     setComputers(computers);
     setConnections(connections);
+    setDeploymentDefault(deploymentDefaultEngine(me));
   }
   useEffect(() => {
     const reload = () =>
@@ -75,6 +92,7 @@ export function ComputerProfilesSettings() {
           key={computer.status.computerId}
           {...computer}
           connections={connections}
+          deploymentDefault={deploymentDefault}
           onChanged={refresh}
         />
       ))}
@@ -87,12 +105,14 @@ export function ComputerProfile({
   name,
   status,
   connections,
+  deploymentDefault = "docker",
   onChanged,
 }: {
   botId: string;
   name: string;
   status: ComputerStatus;
   connections: Connection[];
+  deploymentDefault?: DeploymentDefault;
   onChanged: () => Promise<void>;
 }) {
   const { t } = useLingui();
@@ -148,6 +168,7 @@ export function ComputerProfile({
       ? detectedEngine.name
       : (connection?.settings.engine ?? status.kind);
   const savedEngine = engineLabel(status.kind);
+  const offerDeploymentDefault = !connectionless && deploymentDefault === "docker";
   const supported = ["docker", "podman", "kubernetes", "remote-docker", "desktop"].includes(engine);
   async function save() {
     setPending(true);
@@ -161,8 +182,14 @@ export function ComputerProfile({
       });
       setConfirm(false);
       await onChanged();
-    } catch {
-      setError(t`Could not change the computer; stop its bots and try again.`);
+    } catch (caught: unknown) {
+      const message = caught instanceof Error ? caught.message : "";
+      setError(
+        message === moveOntoThisMacUnavailableMessage
+          ? // biome-ignore format: one catalog sentence
+            t`Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.`
+          : t`Could not change the computer; stop its bots and try again.`,
+      );
     } finally {
       setPending(false);
     }
@@ -195,16 +222,22 @@ export function ComputerProfile({
         >
           {connectionless ? (
             <NativeSelectOption value="">{savedEngine}</NativeSelectOption>
-          ) : (
+          ) : offerDeploymentDefault ? (
             <NativeSelectOption value="">
-              <Trans>Deployment default</Trans>
+              <Trans>Deployment default (Docker)</Trans>
             </NativeSelectOption>
+          ) : (
+            <NativeSelectOption value={savedConnectionId}>{savedEngine}</NativeSelectOption>
           )}
-          {connections.map((entry) => (
-            <NativeSelectOption key={entry.id} value={entry.id}>
-              {entry.name}
-            </NativeSelectOption>
-          ))}
+          {connections
+            .filter(
+              (entry) => connectionless || offerDeploymentDefault || entry.id !== savedConnectionId,
+            )
+            .map((entry) => (
+              <NativeSelectOption key={entry.id} value={entry.id}>
+                {entry.name}
+              </NativeSelectOption>
+            ))}
         </NativeSelect>
       </label>
       {connectionless && connections.length === 0 ? (

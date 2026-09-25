@@ -263,16 +263,23 @@ describe("lingui catalogs", () => {
     const sentences = [
       "Add a connection under Settings, Connections, to move this computer to another machine.",
       "The computer changed before the move, so it stayed where it is.",
+      "Deployment default (Docker)",
+      "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.",
     ];
     const translations: Record<string, Record<string, string>> = {
       ru: {
         [sentences[0]!]:
           "Добавьте подключение в разделе «Настройки», «Подключения», чтобы перенести этот компьютер на другую машину.",
         [sentences[1]!]: "Компьютер изменился до переноса, поэтому он остался на месте.",
+        [sentences[2]!]: "Развертывание по умолчанию (Docker)",
+        [sentences[3]!]:
+          "Перенос этого компьютера на этот Mac пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
       },
       "zh-CN": {
         [sentences[0]!]: "在“设置”的“连接”中添加连接，即可将此电脑移到另一台机器。",
         [sentences[1]!]: "电脑在移动前已更改，因此仍留在原处。",
+        [sentences[2]!]: "部署默认（Docker）",
+        [sentences[3]!]: "暂时无法将此电脑移到这台 Mac。请选择已保存的连接，或保留当前引擎。",
       },
     };
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {

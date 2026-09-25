@@ -1559,3 +1559,42 @@ it("moves a local Docker computer to a remote Docker engine and never to SSH", a
     await rm(homeRoot, { recursive: true, force: true });
   }
 });
+
+it("names the host row This Mac on darwin and This computer on linux", async () => {
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockRejectedValue(new Error("offline"));
+  const prisma = {
+    connection: { findMany: async () => [] },
+    bot: { findMany: async () => [] },
+    space: { findUniqueOrThrow: async () => ({ placement: {} }) },
+    deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
+  };
+  const context: AdapterContext = {
+    userId: "owner",
+    spaceId: "space",
+    operationId: "list",
+    traceId: "list",
+    signal: new AbortController().signal,
+  };
+  const fallback = {
+    describe: () => ({ id: "docker" }),
+    capacity: async () => unknownCapacity(),
+  } as unknown as SandboxProvider;
+  const listed = async (platform: string) =>
+    new FleetCatalog(
+      prisma as unknown as PrismaClient,
+      { load: () => "" },
+      {},
+      fallback,
+      platform,
+    ).list(context);
+  expect((await listed("darwin")).targets.find((target) => target.id === "host")?.name).toBe(
+    "This Mac",
+  );
+  expect((await listed("linux")).targets.find((target) => target.id === "host")?.name).toBe(
+    "This computer",
+  );
+  expect((await listed("MacIntel")).targets.find((target) => target.id === "host")?.name).toBe(
+    "This Mac",
+  );
+});

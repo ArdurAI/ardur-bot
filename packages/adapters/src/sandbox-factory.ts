@@ -30,6 +30,26 @@ export interface SandboxProviderOptions {
   providers?: Partial<Record<string, () => SandboxProvider>>;
 }
 
+/** One instance per factory. Docker and the host use the same shape. */
+export function lazy<T>(create: () => T): () => T {
+  let value: T | undefined;
+  return () => {
+    value ??= create();
+    return value;
+  };
+}
+
+/** Each kind factory constructs once, so later calls share that instance. */
+export function memoizeProviders(
+  factories: Partial<Record<string, () => SandboxProvider>> | undefined,
+): Partial<Record<string, () => SandboxProvider>> {
+  const providers: Partial<Record<string, () => SandboxProvider>> = {};
+  for (const [kind, create] of Object.entries(factories ?? {})) {
+    if (create) providers[kind] = lazy(create);
+  }
+  return providers;
+}
+
 function missingRemoteKey(provider: "e2b" | "daytona" | "box", envName: string): SandboxProvider {
   return new NoneSandboxProvider(
     `Computers unavailable: ${envName} is required for SANDBOX_PROVIDER=${provider}.`,
@@ -44,7 +64,7 @@ export function sandboxProvidersForKeys(
   if (opts.e2bApiKey?.trim()) providers.e2b = () => createSandboxProvider("e2b", opts);
   if (opts.daytonaApiKey?.trim()) providers.daytona = () => createSandboxProvider("daytona", opts);
   if (opts.boxApiKey?.trim()) providers.box = () => createSandboxProvider("box", opts);
-  return providers;
+  return memoizeProviders(providers);
 }
 
 export function createSandboxProvider(kind: string, opts: SandboxProviderOptions): SandboxProvider {

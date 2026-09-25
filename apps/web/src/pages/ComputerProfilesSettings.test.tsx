@@ -39,7 +39,7 @@ vi.mock("@ardurbot/ui-web", () => {
   };
 });
 
-import { ComputerProfile } from "./ComputerProfilesSettings";
+import { ComputerProfile, deploymentDefaultEngine } from "./ComputerProfilesSettings";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -252,6 +252,118 @@ it("moves a connectionless computer to a saved connection and explains when none
   await act(async () => root.unmount());
 });
 
+it("treats This Mac as the deployment default only when that engine is selected", () => {
+  expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "this-mac" })).toBe(
+    "this-mac",
+  );
+  expect(deploymentDefaultEngine({ sandboxProvider: "desktop", computerHost: null })).toBe(
+    "this-mac",
+  );
+  expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: null })).toBe("docker");
+  expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "docker" })).toBe(
+    "docker",
+  );
+  expect(deploymentDefaultEngine({ sandboxProvider: "kubernetes", computerHost: null })).toBe(
+    "other",
+  );
+});
+
+it("labels a desktop computer This Mac on darwin and This computer on linux", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const render = () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={{ ...status, kind: "desktop" }}
+        connections={[{ id: "ssh", name: "Office", settings: { engine: "ssh" } as never }]}
+        onChanged={async () => {}}
+      />,
+    );
+  window.ardurbotDesktop = { platform: "darwin" } as NonNullable<Window["ardurbotDesktop"]>;
+  await act(async () => render());
+  const options = () =>
+    [...element.querySelectorAll<HTMLOptionElement>('[aria-label="Connection"] option')].map(
+      (option) => option.textContent,
+    );
+  expect(element.textContent).toContain("Engine: This Mac");
+  expect(options()).toEqual(["This Mac", "Office"]);
+  expect(element.textContent).not.toContain("This computer");
+  window.ardurbotDesktop = { platform: "linux" } as NonNullable<Window["ardurbotDesktop"]>;
+  await act(async () => render());
+  expect(element.textContent).toContain("Engine: This computer");
+  expect(options()).toEqual(["This computer", "Office"]);
+  expect(element.textContent).not.toContain("This Mac");
+  window.ardurbotDesktop = { platform: "MacIntel" } as NonNullable<Window["ardurbotDesktop"]>;
+  await act(async () => render());
+  expect(element.textContent).toContain("Engine: This Mac");
+  expect(options()[0]).toBe("This Mac");
+  delete window.ardurbotDesktop;
+  await act(async () => root.unmount());
+});
+
+it("offers Deployment default (Docker) only when Docker is the deployment default", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  const ssh = { ...status, kind: "ssh" as const, connectionId: "office" };
+  const connections = [
+    { id: "office", name: "Office", settings: { engine: "ssh" } as never },
+    { id: "lab", name: "Lab", settings: { engine: "ssh" } as never },
+  ];
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={ssh}
+        connections={connections}
+        deploymentDefault="this-mac"
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const hidden = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  expect([...hidden.options].map((option) => option.textContent)).toEqual(["ssh", "Lab"]);
+  expect(hidden.value).toBe("office");
+  expect(element.textContent).not.toContain("Deployment default");
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={ssh}
+        connections={connections}
+        deploymentDefault="docker"
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const shown = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  expect([...shown.options].map((option) => option.textContent)).toEqual([
+    "Deployment default (Docker)",
+    "Office",
+    "Lab",
+  ]);
+  await act(async () => {
+    shown.value = "";
+    shown.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => button("Apply").click());
+  await act(async () => button("Continue").click());
+  expect(api.configure).toHaveBeenCalledWith({
+    botId: "bot",
+    imageProfile: "base",
+    connectionId: null,
+    confirmed: true,
+  });
+  await act(async () => root.unmount());
+});
+
 it("still moves a connected computer to another saved connection or the deployment default", async () => {
   const element = document.createElement("div");
   document.body.append(element);
@@ -272,7 +384,7 @@ it("still moves a connected computer to another saved connection or the deployme
   );
   const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
   expect([...connection.options].map((option) => option.textContent)).toEqual([
-    "Deployment default",
+    "Deployment default (Docker)",
     "Local",
     "Remote",
   ]);

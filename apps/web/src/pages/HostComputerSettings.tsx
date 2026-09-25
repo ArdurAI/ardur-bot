@@ -1,4 +1,5 @@
 import type { HostStatus } from "@ardurbot/contracts";
+import { hostComputerLabel } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
@@ -54,7 +55,7 @@ export function HostComputerSettings() {
   return (
     <section className="space-y-3 py-4" data-testid="host-computer-settings">
       <h4 className="text-sm font-medium">
-        {(status.health?.platform ?? desktop?.platform) === "darwin"
+        {hostComputerLabel(status.health?.platform ?? desktop?.platform) === "This Mac"
           ? t`This Mac`
           : t`This computer`}
       </h4>

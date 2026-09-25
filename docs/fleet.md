@@ -67,9 +67,12 @@ old one. Moving a connectionless computer between Docker and This Mac is not ava
 migration lands. Settings shows the engine the computer runs on. A computer with no connection can
 move to a saved connection; with none, Settings says to add one under Settings, Connections.
 Deployment default and This Mac are not offered for that computer. A computer that already has a
-connection can move to another saved connection, or back to the deployment engine. If the computer
-changes before an automatic move starts, the move is skipped: the computer stays, and the update
-is not a failure.
+connection can move to another saved connection. When Docker is the deployment default, it can also
+move back to that engine; the option reads Deployment default (Docker). When This Mac is the
+deployment default, that option is not offered, and an empty connection is refused: Moving this
+computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.
+If the computer changes before an automatic move starts, the move is skipped: the computer stays,
+and the update is not a failure.
 
 `placeRunComputer` runs before the first computer execution lease and before tool effects. It
 never moves an existing run snapshot. A first move pauses for that bot's consent unless `Move

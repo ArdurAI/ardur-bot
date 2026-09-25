@@ -1,6 +1,11 @@
 import type { AdapterContext, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { FleetTarget } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema, thisMacUnavailableMessage } from "@ardurbot/contracts";
+import {
+  ComputerConnectionSettingsSchema,
+  hostComputerLabel,
+  moveOntoThisMacUnavailableMessage,
+  thisMacUnavailableMessage,
+} from "@ardurbot/contracts";
 import { PlacementSettingsSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "../computer-connections.js";
@@ -49,6 +54,7 @@ export class FleetCatalog {
     secrets: ComputerSecretLoader,
     private readonly options: SandboxProviderOptions,
     private readonly fallback: SandboxProvider,
+    private readonly hostPlatform: string = process.platform,
   ) {
     this.connections = new ComputerConnections(prisma, secrets, options);
     const docker = new DockerSandboxProvider(
@@ -105,8 +111,19 @@ export class FleetCatalog {
         configuration.connectionId === computer.connectionId
       )
         return { source, target: source };
+      if (!configuration.connectionId && computer.connectionId) {
+        const fallbackId = this.fallback.describe().id;
+        if (fallbackId === "desktop" || fallbackId === "docker") {
+          const deployment =
+            fallbackId === "desktop"
+              ? undefined
+              : await this.prisma.deploymentSettings.findUnique({ where: { id: "default" } });
+          if (sandboxKindForBot(fallbackId, deployment?.computerHost) === "desktop")
+            throw new Error(moveOntoThisMacUnavailableMessage);
+        }
+      }
       // A Settings connection change is already confirmed and may cross kinds.
-      // Deployment default is that engine, distinct from This Mac.
+      // Deployment default is Docker when that engine is the default, never This Mac.
       const target = configuration.connectionId
         ? await this.routing.target({ connectionId: configuration.connectionId }, context)
         : await this.resolveComputer({ kind: this.fallback.describe().id }, context);
@@ -176,7 +193,7 @@ export class FleetCatalog {
     const targets: FleetTarget[] = [
       {
         id: "host",
-        name: "This Mac",
+        name: hostComputerLabel(this.hostPlatform),
         kind: "host",
         connectionId: null,
         state: usesHostBridge() && !host ? "unavailable" : "connected",

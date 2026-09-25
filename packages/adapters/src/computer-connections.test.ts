@@ -4,10 +4,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
 import { fakePodmanSupervisor } from "./docker-test-supervisor.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
+import { createRunSandbox, HostAwareSandbox } from "./host-aware-sandbox.js";
 import { createKubernetesApi } from "./kubernetes-client.js";
 import { FakeKubernetesApi } from "./kubernetes-test-api.js";
 import { NoneSandboxProvider } from "./none-sandbox.js";
+import { sandboxProvidersForKeys } from "./sandbox-factory.js";
 
+const daytonaSdk = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock("@daytona/sdk", () => ({
+  Daytona: class Daytona {
+    get = daytonaSdk.get;
+  },
+  DaytonaNotFoundError: class DaytonaNotFoundError extends Error {},
+  DaytonaProcessExecutionTimeoutError: class DaytonaProcessExecutionTimeoutError extends Error {},
+  SandboxState: { STARTED: "started", STOPPED: "stopped", ARCHIVED: "archived" },
+}));
 vi.mock("./kubernetes-client.js", () => ({ createKubernetesApi: vi.fn() }));
 const context = {
   operationId: "test",
@@ -134,4 +145,62 @@ describe("saved computer connections", () => {
       api.dispose();
     }
   });
+});
+
+function daytonaHandle(id: string) {
+  return {
+    id,
+    state: "stopped",
+    start: vi.fn(async () => undefined),
+    stop: vi.fn(async () => undefined),
+    computerUse: { stop: vi.fn(async () => undefined) },
+    getUserHomeDir: vi.fn(async () => "/home/daytona"),
+    getWorkDir: vi.fn(async () => "/home/daytona"),
+    process: { executeCommand: vi.fn(async () => ({ exitCode: 0, result: "ok" })) },
+  };
+}
+
+it("reuses one Daytona, E2B, and Box provider so a stop and a command share the handle cache", async () => {
+  const keys = { e2bApiKey: "e2b-test", daytonaApiKey: "daytona-test", boxApiKey: "box-test" };
+  const created = createRunSandbox("docker", {
+    prisma: {} as PrismaClient,
+    secrets: { load: () => "" },
+    ...keys,
+    providers: sandboxProvidersForKeys(keys),
+  });
+  expect(created).toBeInstanceOf(HostAwareSandbox);
+  const sandbox = created as HostAwareSandbox;
+  const e2b = await sandbox.owner({ kind: "e2b" }, context);
+  const box = await sandbox.owner({ kind: "box" }, context);
+  const daytona = await sandbox.owner({ kind: "daytona" }, context);
+  expect(await sandbox.owner({ kind: "e2b" }, context)).toBe(e2b);
+  expect(await sandbox.owner({ kind: "box" }, context)).toBe(box);
+  expect(await sandbox.owner({ kind: "daytona" }, context)).toBe(daytona);
+  const cache = (daytona as unknown as { boxes: Map<string, ReturnType<typeof daytonaHandle>> })
+    .boxes;
+  const cached = daytonaHandle("sandbox");
+  cached.state = "started";
+  cache.set("sandbox", cached);
+  const reconnect = daytonaHandle("sandbox");
+  daytonaSdk.get.mockResolvedValue(reconnect);
+  const computer: ComputerRef = {
+    id: "sandbox",
+    providerRef: "sandbox",
+    botId: "bot",
+    kind: "daytona",
+  };
+  await sandbox.stop(computer, context);
+  expect(cached.stop).toHaveBeenCalledOnce();
+  expect(cache.has("sandbox")).toBe(false);
+  expect(daytonaSdk.get).not.toHaveBeenCalled();
+  const events = [];
+  for await (const event of sandbox.execute(computer, { argv: ["echo", "ok"] }, context))
+    events.push(event);
+  expect(await sandbox.owner({ kind: "daytona" }, context)).toBe(daytona);
+  expect((daytona as unknown as { boxes: Map<string, unknown> }).boxes).toBe(cache);
+  expect(daytonaSdk.get).toHaveBeenCalledOnce();
+  expect(reconnect.start).toHaveBeenCalledOnce();
+  expect(cached.start).not.toHaveBeenCalled();
+  expect(events).toContainEqual({ type: "stdout", data: "ok" });
+  expect(events).toContainEqual({ type: "exit", code: 0 });
 });
