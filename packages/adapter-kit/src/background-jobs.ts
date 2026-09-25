@@ -43,7 +43,10 @@ const payloadSchemas = {
     evidenceWatermark: z.string().min(1),
     policyVersion: z.string().min(1),
   }),
-  "history.compact": z.object({ threadId: z.string().min(1) }),
+  "history.compact": z.object({
+    threadId: z.string().min(1),
+    sourceRunId: z.string().min(1).optional(),
+  }),
   "messaging.deliver": z.object({ runId: z.string().min(1).optional() }),
   "cloud_agent.poll": z.object({ agentId: z.string().min(1) }),
 } satisfies { [Name in BackgroundJobName]: z.ZodType<BackgroundJobPayloads[Name]> };
@@ -148,10 +151,10 @@ export function messagingDeliverJob(runId?: string, availableAt?: Date): Backgro
   };
 }
 
-export function historyCompactJob(threadId: string): BackgroundJob {
+export function historyCompactJob(threadId: string, sourceRunId?: string): BackgroundJob {
   return {
     name: "history.compact",
-    payload: { threadId },
+    payload: { threadId, ...(sourceRunId ? { sourceRunId } : {}) },
     replaceKey: historyCompactJobKey(threadId),
   };
 }

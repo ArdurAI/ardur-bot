@@ -327,6 +327,7 @@ import { recordRunUsage } from "./run-usage.js";
 import type { RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRegistry } from "./runtime-registry.js";
 import { withRuntimeCleanup } from "./runtime-stream.js";
+import { accountRuntimeUsage } from "./runtime-usage.js";
 import { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "./runtimes/native-host.js";
 import { runtimeSession } from "./runtimes/runtime-session.js";
 import {
@@ -4505,7 +4506,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
             },
             context,
           );
-          for await (const event of withRuntimeCleanup(runtimeEvents, runAbortController)) {
+          const accountedEvents =
+            scripted || commandReplay
+              ? runtimeEvents
+              : accountRuntimeUsage(runtimeEvents, {
+                  provider: resolved.provider,
+                  model: resolved.id,
+                  purpose: run.delegationId ? "delegated" : "main",
+                  signal: context.signal,
+                  record: async (event) => {
+                    const recorded = await recordRunUsage(
+                      deps,
+                      { ...run, delegationId: event.delegationId ?? run.delegationId },
+                      event,
+                    );
+                    if (!comparisonRun && recorded) {
+                      recordContextUsage(turnContext.snapshot, recorded);
+                      await saveContextSnapshot();
+                    }
+                  },
+                });
+          for await (const event of withRuntimeCleanup(accountedEvents, runAbortController)) {
             if (approvalPausePending) return;
             if (!leaseValid) return;
             const now = Date.now();

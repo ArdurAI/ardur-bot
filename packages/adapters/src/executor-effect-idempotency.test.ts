@@ -3,6 +3,8 @@ vi.mock("./context/concurrency.js", () => ({
   claimBotRun: (prisma: unknown, input: { claim: (tx: unknown) => Promise<unknown> }) =>
     input.claim(prisma),
 }));
+// Ledger transactions have disposable-PostgreSQL coverage; this fixture isolates effect fences.
+vi.mock("./run-usage.js", () => ({ recordRunUsage: vi.fn(async () => null) }));
 
 import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
 import type { CommandBlock as FixtureCommandBlock, MessageBlock } from "@ardurbot/contracts";
@@ -20,6 +22,7 @@ import { acquireComputerExecutionLease, provisionComputer } from "./computer-lif
 import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
 import { createRunExecutor } from "./executor.js";
 import { ProviderError } from "./provider-error.js";
+import { recordRunUsage } from "./run-usage.js";
 
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
@@ -60,6 +63,7 @@ type ToolCall = {
 };
 
 function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
+  vi.mocked(recordRunUsage).mockClear();
   const effects: Effect[] = [];
   const results: unknown[] = [];
   const scratchpadRows: Array<{
@@ -825,6 +829,15 @@ it("persists a sanitized typed provider failure through the executor", async () 
     throw new ProviderError("Access denied", "model-unavailable");
   });
   await f.executor.continueRun("run-1", "worker-1");
+  expect(recordRunUsage).toHaveBeenLastCalledWith(
+    expect.anything(),
+    expect.objectContaining({ id: "run-1" }),
+    expect.objectContaining({
+      request: expect.objectContaining({
+        collection: expect.objectContaining({ outcome: "failed", availability: "unavailable" }),
+      }),
+    }),
+  );
   expect(f.finalizeRun).toHaveBeenCalledWith(
     expect.objectContaining({
       outcome: "failed",

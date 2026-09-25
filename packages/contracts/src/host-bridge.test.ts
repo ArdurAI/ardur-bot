@@ -5,10 +5,58 @@ import {
   HOST_FRAME_BYTES,
   HOST_WRITE_FRAME_BYTES,
   HostOperationSchema,
+  HostRuntimeEventSchema,
   hostSocketUrl,
 } from "./host-bridge.js";
 
 describe("host protocol", () => {
+  it("carries numeric usage receipts across the strict host boundary and rejects raw payloads", () => {
+    const event = {
+      type: "usage",
+      provider: "fixture",
+      model: "fixture",
+      inputTokens: 0,
+      outputTokens: 0,
+      reported: false,
+      request: {
+        requestId: "request",
+        attemptId: "attempt",
+        parentRequestId: null,
+        purpose: "main",
+        counter: { mode: "cumulative", epochId: "0", sequence: 0 },
+        inputSemantics: "unknown",
+        reasoningSemantics: "unknown",
+        categories: {
+          logicalInput: null,
+          uncachedInput: null,
+          cacheReadInput: null,
+          cacheWriteInput: null,
+          output: null,
+          reasoning: null,
+        },
+        cost: null,
+        pricingProvenance: null,
+        collection: {
+          mappingVersion: "fixture-v1",
+          scope: "native-turn",
+          outcome: "started",
+          availability: "unavailable",
+          raw: {},
+          limitations: ["native-request-detail-unavailable"],
+        },
+      },
+    };
+    expect(HostRuntimeEventSchema.parse(JSON.parse(JSON.stringify(event)))).toEqual(event);
+    expect(
+      HostRuntimeEventSchema.safeParse({
+        ...event,
+        request: {
+          ...event.request,
+          collection: { ...event.request.collection, raw: { prompt: "must not persist" } },
+        },
+      }).success,
+    ).toBe(false);
+  });
   it("round-trips versioned streams and refuses oversize frames before parsing", () => {
     const frame = {
       v: 1 as const,

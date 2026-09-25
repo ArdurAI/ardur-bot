@@ -74,7 +74,11 @@ function fixture() {
     feedback: { findMany: vi.fn(async () => records.feedback) },
     steeringSummary: { findMany: vi.fn(async () => []) },
     event: { findMany: vi.fn(async () => records.events) },
-    usageRecord: { findMany: vi.fn(async () => records.usage) },
+    usageRecord: {
+      findMany: vi.fn(async ({ where }: { where: { purpose?: { not: string } } }) =>
+        records.usage.filter((row) => !where.purpose || row.purpose !== where.purpose.not),
+      ),
+    },
     externalEffect: { findMany: vi.fn(async () => []) },
     runKnowledgeExposure: { findMany: vi.fn(async () => records.exposures) },
     agentSkill: { findMany: vi.fn(async () => []) },
@@ -218,6 +222,51 @@ function fixture() {
 }
 
 describe("proposal-only learning review", () => {
+  it("records detached review spend separately without changing reviewer pin or reservation behavior", async () => {
+    const f = fixture();
+    const recordUsage = vi.fn(async () => {
+      f.thread.nextEventSeq++;
+      if (!f.records.usage.length)
+        f.records.usage.push({
+          id: "review-usage",
+          inputTokens: 20,
+          outputTokens: 30,
+          purpose: "detached-learning",
+        });
+    });
+    await reviewLearning({ ...f.deps, recordUsage }, await f.payload());
+    expect(recordUsage).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({
+        inputTokens: 20,
+        outputTokens: 30,
+        request: expect.objectContaining({ purpose: "detached-learning" }),
+      }),
+    );
+    expect(f.runtimeRun.mock.calls[0]?.[0]).toMatchObject({
+      model: { provider: pin.provider, id: pin.modelId },
+      tools: "none",
+    });
+    expect(f.records.reviews[0]).toMatchObject({ status: "proposed", tokens: 50 });
+  });
+  it("records unavailable usage when the detached reviewer fails before totals", async () => {
+    const f = fixture();
+    f.setOnCall(async () => {
+      throw new Error("fixture failure");
+    });
+    const recordUsage = vi.fn(async () => undefined);
+    await reviewLearning({ ...f.deps, recordUsage }, await f.payload());
+    expect(recordUsage).toHaveBeenLastCalledWith(
+      "run-1",
+      expect.objectContaining({
+        request: expect.objectContaining({
+          purpose: "detached-learning",
+          collection: expect.objectContaining({ outcome: "failed", availability: "unavailable" }),
+        }),
+      }),
+    );
+    expect(f.records.proposals).toHaveLength(0);
+  });
   it("deduplicates concurrent jobs, disables tools, and persists a server-computed diff", async () => {
     const f = fixture();
     const payload = await f.payload();

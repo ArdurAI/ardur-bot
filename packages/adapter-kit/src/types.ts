@@ -6,6 +6,7 @@ import type {
   RuntimePin,
   RuntimeProblem,
   SandboxKind,
+  UsageCollection,
 } from "@ardurbot/contracts";
 import type { HostCommandApproval, HostIntegrationId } from "@ardurbot/contracts/host-integrations";
 
@@ -453,6 +454,8 @@ export interface RequestUsageObservation {
     datedAt: string;
     kind: "provider-reported" | "rate-card";
   } | null;
+  /** Optional on historical receipts; runtime collectors supply lifecycle and numeric provenance. */
+  collection?: UsageCollection;
 }
 
 export interface AgentUsage {
@@ -636,7 +639,7 @@ export interface BackgroundJobPayloads {
   "computer.update": { updateId: string };
   "computer.control-expire": { computerId: string; leaseId: string };
   "skill.teaching-expire": { skillId: string };
-  "history.compact": { threadId: string };
+  "history.compact": { threadId: string; sourceRunId?: string };
   "messaging.deliver": { runId?: string };
   /** Reconcile durable remote-agent intent; scope is loaded from the database. */
   "cloud_agent.poll": { agentId: string };

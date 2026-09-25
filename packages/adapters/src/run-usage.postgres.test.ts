@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { AgentUsage, RequestUsageObservation } from "@ardurbot/adapter-kit";
+import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import type { ContextSnapshot } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { createDb } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
+import { loadLearningRecords } from "./learning-records.js";
 import { recordRunUsage } from "./run-usage.js";
+import { accountRuntimeUsage } from "./runtime-usage.js";
 
 const databaseUrl = process.env.USAGE_LEDGER_TEST_DATABASE_URL;
 const postgres = databaseUrl ? describe.sequential : describe.skip;
@@ -159,6 +162,91 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(rows[0]!.observations).toHaveLength(1);
     expect(rows[0]!.observations[0]!.observation).toEqual(f.request);
     expect(await db.prisma.event.count({ where: { runId: f.id, type: "usage.recorded" } })).toBe(1);
+  });
+  it("persists runtime lifecycle receipts, raw categories and cancelled spend exactly once", async () => {
+    const f = await fixture();
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      inputSemantics: "additive-cache-categories",
+      mappingVersion: "fixture-wire-v1",
+    });
+    const started = collector.start();
+    const measured = collector.snapshot({ input: 12, cacheRead: 80, cacheWrite: 20, output: 8 });
+    const ended = collector.finish("cancelled");
+    await db.prisma.run.update({ where: { id: f.id }, data: { status: "cancelled" } });
+    const stream = accountRuntimeUsage(
+      (async function* () {
+        yield usageEvent(started);
+        yield usageEvent(measured);
+        yield usageEvent(measured);
+        yield usageEvent(ended);
+      })(),
+      {
+        provider: "fixture",
+        model: "fixture",
+        record: async (usage) => {
+          await f.record(usage);
+        },
+      },
+    );
+    for await (const _ of stream) {
+      /* no user-visible output */
+    }
+    const rows = await f.rows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      inputTokens: 112,
+      outputTokens: 8,
+      cacheReadInputTokens: 80,
+      cacheWriteInputTokens: 20,
+      reasoningTokens: null,
+      cost: null,
+    });
+    expect(rows[0]!.observations).toHaveLength(3);
+    expect(rows[0]!.observations.map((receipt) => receipt.observation)).toContainEqual(
+      expect.objectContaining({
+        collection: expect.objectContaining({
+          outcome: "cancelled",
+          mappingVersion: "fixture-wire-v1",
+          raw: { input: 12, cacheRead: 80, cacheWrite: 20, output: 8 },
+        }),
+      }),
+    );
+    expect(await f.root()).toMatchObject({ usedTokens: 120 });
+    expect(await db.prisma.event.count({ where: { runId: f.id } })).toBe(0);
+  });
+  it("retains lower bounds but withdraws complete coverage after a counter discontinuity", async () => {
+    const f = await fixture();
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      inputSemantics: "total-with-cache-subsets",
+      mappingVersion: "fixture-wire-v1",
+    });
+    await f.record(collector.start());
+    await f.record(
+      collector.snapshot({ input: 100, cacheRead: 60, cacheWrite: 10, output: 20, reasoning: 8 }),
+    );
+    collector.limit("counter-discontinuity");
+    await f.record(collector.finish("failed"));
+    expect((await f.rows())[0]).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 20,
+      coverage: "partial",
+      categoryCoverage: { logicalInput: "partial", output: "partial" },
+    });
+    expect(await f.root()).toMatchObject({ usedTokens: 120 });
+  });
+  it("keeps detached metering out of the review source watermark while preserving source-change fences", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({ where: { id: f.id }, data: { status: "completed" } });
+    await f.record();
+    const before = await loadLearningRecords(db.prisma, f.id);
+    await f.record(f.usage({ requestId: "review", purpose: "detached-learning" }));
+    expect((await loadLearningRecords(db.prisma, f.id))?.watermark).toBe(before?.watermark);
+    await f.record(f.usage({ requestId: "late-primary" }));
+    expect((await loadLearningRecords(db.prisma, f.id))?.watermark).not.toBe(before?.watermark);
   });
   it("bills distinct retry attempts and epochs while retaining the requested pin", async () => {
     const f = await fixture();

@@ -5,3 +5,4 @@ export * from "./memory-documents.js";
 export * from "./registry.js";
 export * from "./terminal.js";
 export * from "./types.js";
+export * from "./usage-collection.js";

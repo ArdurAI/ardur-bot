@@ -42,6 +42,7 @@ function fixture(
     | "mcp-conflict"
     | "skills-error"
     | "usage" = "success",
+  scenario?: { beforeStart?: Message[]; duringTurn: Message[] },
 ) {
   const messages: Message[] = [];
   const child = new EventEmitter() as ChildProcessWithoutNullStreams;
@@ -95,6 +96,7 @@ function fixture(
           break;
         case "thread/start":
         case "thread/resume":
+          for (const event of scenario?.beforeStart ?? []) send(event);
           result({
             thread: { id: "thread-native" },
             model: mode === "wrong-model" ? "replacement" : "model",
@@ -126,7 +128,9 @@ function fixture(
                   command: "must-not-run",
                 },
               });
-            else {
+            else if (scenario) {
+              for (const event of scenario.duringTurn) send(event);
+            } else {
               if (mode === "usage")
                 for (const total of [
                   { inputTokens: 10, outputTokens: 5, cachedInputTokens: 4 },
@@ -152,6 +156,7 @@ function fixture(
           });
           break;
         case "turn/interrupt":
+        case "thread/read":
           result({});
           break;
       }
@@ -205,9 +210,87 @@ function fixture(
   return { collect, messages, request, info, spawn };
 }
 describe("Codex app-server protocol", () => {
+  const usage = (inputTokens: number, outputTokens: number, turnId = "turn-native"): Message => ({
+    method: "thread/tokenUsage/updated",
+    params: {
+      threadId: "thread-native",
+      turnId,
+      tokenUsage: {
+        total: {
+          inputTokens,
+          outputTokens,
+          cachedInputTokens: inputTokens / 2,
+          cacheWriteInputTokens: 0,
+          reasoningOutputTokens: 0,
+        },
+      },
+    },
+  });
+  const completed: Message = {
+    method: "turn/completed",
+    params: { threadId: "thread-native", turn: { id: "turn-native", status: "completed" } },
+  };
+  it("accounts ordinary final usage after completion and ignores unrelated turns and duplicate completion", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        usage(10, 5),
+        usage(900, 200, "other-turn"),
+        completed,
+        completed,
+        usage(30, 8),
+        usage(30, 8),
+      ],
+    });
+    const events = await f.collect();
+    const receipts = events.filter((event) => event.type === "usage");
+    expect(receipts.at(-1)).toMatchObject({
+      inputTokens: 30,
+      outputTokens: 8,
+      request: { collection: { outcome: "success" } },
+    });
+    expect(events.filter((event) => event.type === "done")).toHaveLength(1);
+    expect(f.messages.filter((message) => message.method === "thread/read")).toHaveLength(1);
+    expect(f.request.controlledComparison).toBeUndefined();
+  });
+  it("seeds a resumed invocation only from usage observed before its new turn", async () => {
+    const f = fixture("success", {
+      beforeStart: [usage(100, 20, "previous-turn")],
+      duringTurn: [usage(110, 25), usage(130, 28), completed],
+    });
+    f.request.nativeSession = { runtimeKind: "codex-app-server", sessionId: "thread-native" };
+    const receipts = (await f.collect()).filter((event) => event.type === "usage");
+    expect(receipts.at(-1)).toMatchObject({
+      inputTokens: 30,
+      outputTokens: 8,
+      request: {
+        categories: { logicalInput: 30, cacheReadInput: 15 },
+        collection: { raw: { input: 130, output: 28 } },
+      },
+    });
+  });
+  it("exposes an unavailable resumed boundary without charging the thread lifetime", async () => {
+    const f = fixture("success", { duringTurn: [usage(110, 25), usage(130, 28), completed] });
+    f.request.nativeSession = { runtimeKind: "codex-app-server", sessionId: "thread-native" };
+    const receipts = (await f.collect()).filter((event) => event.type === "usage");
+    expect(receipts.at(-1)?.request).toMatchObject({
+      categories: { logicalInput: null, output: null },
+      collection: {
+        outcome: "success",
+        availability: "unavailable",
+        limitations: expect.arrayContaining(["unverified-resume-boundary"]),
+      },
+    });
+  });
   it("initializes ardur-bot, keeps the exact model and effort, records the session and disables other MCPs", async () => {
     const f = fixture();
-    expect(await f.collect()).toEqual([{ type: "text", text: "hello" }, { type: "done" }]);
+    const events = await f.collect();
+    expect(events.filter((event) => event.type !== "usage")).toEqual([
+      { type: "text", text: "hello" },
+      { type: "done" },
+    ]);
+    expect(events.filter((event) => event.type === "usage").at(-1)).toMatchObject({
+      request: { collection: { outcome: "success", availability: "unavailable" } },
+    });
     expect(f.messages[0]).toMatchObject({
       method: "initialize",
       params: { clientInfo: { name: "ardur-bot" } },
@@ -249,7 +332,9 @@ describe("Codex app-server protocol", () => {
   );
   it("declines built-in effects and yields an Ardur ask card", async () => {
     const f = fixture("approval");
-    expect(await f.collect()).toEqual([expect.objectContaining({ type: "ask" })]);
+    expect((await f.collect()).filter((event) => event.type !== "usage")).toEqual([
+      expect.objectContaining({ type: "ask" }),
+    ]);
     expect(f.messages).toContainEqual({ id: "approval", result: { decision: "decline" } });
     expect(f.messages.some((event) => event.method === "turn/interrupt")).toBe(true);
   });
@@ -288,24 +373,27 @@ it.each([false, true])(
   async (comparison) => {
     const f = fixture("usage");
     f.request.controlledComparison = comparison;
-    expect((await f.collect()).filter((event) => event.type === "usage")).toEqual([
-      {
-        type: "usage",
-        provider: "openai-codex",
-        model: "model",
-        inputTokens: 10,
-        outputTokens: 5,
-        cachedTokens: 4,
+    const events = (await f.collect()).filter((event) => event.type === "usage");
+    expect(events).toHaveLength(4); // start, two distinct snapshots, terminal receipt
+    expect(events.at(-1)).toMatchObject({
+      provider: "openai-codex",
+      model: "model",
+      inputTokens: 30,
+      outputTokens: 8,
+      cachedTokens: 14,
+      request: {
+        counter: { mode: "cumulative" },
+        categories: {
+          logicalInput: 30,
+          output: 8,
+          cacheReadInput: 14,
+          cacheWriteInput: null,
+          reasoning: null,
+        },
+        collection: { outcome: "success", scope: "native-turn" },
       },
-      {
-        type: "usage",
-        provider: "openai-codex",
-        model: "model",
-        inputTokens: 20,
-        outputTokens: 3,
-        cachedTokens: 10,
-      },
-    ]);
+    });
+    expect(new Set(events.map((event) => event.request?.attemptId)).size).toBe(1);
   },
 );
 
@@ -400,7 +488,10 @@ it("runs a native pin while the space has an inherited hosted credential", async
   });
   if (selected.kind !== "resolved") throw new Error(selected.reason);
   f.request.model = selected;
-  expect(await f.collect()).toEqual([{ type: "text", text: "hello" }, { type: "done" }]);
+  expect((await f.collect()).filter((event) => event.type !== "usage")).toEqual([
+    { type: "text", text: "hello" },
+    { type: "done" },
+  ]);
   expect(hosted).not.toHaveBeenCalled();
   expect(loadKey).not.toHaveBeenCalled();
 });

@@ -36,6 +36,7 @@ export * from "./preferences.js";
 export * from "./privacy.js";
 export * from "./provider-errors.js";
 export * from "./reactions.js";
+export * from "./request-usage.js";
 export * from "./rpc.js";
 export * from "./runs.js";
 export * from "./runtime-pins.js";
