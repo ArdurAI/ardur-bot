@@ -222,6 +222,46 @@ it("separates pending copy from applied copy, approves without removing the card
   expect(api.revert).toHaveBeenCalledWith({ proposalId: "proposal" });
   expect(container.textContent).toContain("Undone");
 });
+it("shows Closing on the Board until the pending close clears", async () => {
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    status: "rejected",
+    boardClosing: true,
+  };
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [board],
+    pendingCount: 0,
+    appliedThisWeek: 0,
+  });
+  vi.useFakeTimers();
+  try {
+    await act(async () => root.render(<LearningInbox botId="bot" />));
+    expect(container.textContent).toContain("Closing on the Board.");
+    expect(catalogTranslation("ru", "Closing on the Board.")).toBe("Закрывается на доске.");
+    expect(catalogTranslation("zh-CN", "Closing on the Board.")).toBe("正在看板上关闭。");
+    api.list.mockResolvedValue({
+      reviews: [],
+      proposals: [{ ...board, boardClosing: false }],
+      pendingCount: 0,
+      appliedThisWeek: 0,
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    expect(container.textContent).toContain("Rejected");
+    expect(container.textContent).not.toContain("Closing on the Board.");
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("says a board item was closed without being completed and what to do", async () => {
   const board = {
     ...proposal,

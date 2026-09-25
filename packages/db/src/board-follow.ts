@@ -1,4 +1,5 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
+import { getLogger } from "@ardurbot/logging";
 import type { PrismaClient } from "./client.js";
 
 const COMPLETION_WORD = "done|complete|completed|fixed|resolved";
@@ -39,38 +40,39 @@ export async function observeBoardItems(
   for (const item of closed) {
     const pending = await prisma.botBoardFiling.findMany({
       where: { workspaceId, itemId: item.id, closedAt: null, outcome: null },
-      select: { learningProposalId: true },
+      select: { id: true, learningProposalId: true },
     });
-    await prisma.botBoardFiling.updateMany({
-      where: {
-        workspaceId,
-        itemId: item.id,
-        closedAt: null,
-        outcome: null,
-      },
-      data: {
-        closedAt: item.closedAt ? new Date(item.closedAt) : new Date(),
-        outcome: boardFilingOutcome(item.closeReason ?? ""),
-      },
-    });
+    const closedAt = item.closedAt ? new Date(item.closedAt) : new Date();
+    const outcome = boardFilingOutcome(item.closeReason ?? "");
     const closeReason = item.closeReason?.trim() ?? "";
     for (const row of pending) {
-      if (!row.learningProposalId || !closeReason) continue;
-      const proposal = await prisma.learningProposal.findUnique({
-        where: { id: row.learningProposalId },
-        select: { body: true },
-      });
-      const body = proposal?.body;
-      if (!body || typeof body !== "object" || Array.isArray(body)) continue;
-      const applied = "appliedBoardItem" in body ? body.appliedBoardItem : undefined;
-      if (!applied || typeof applied !== "object" || Array.isArray(applied)) continue;
-      if ("closeReason" in applied && applied.closeReason === closeReason) continue;
-      await prisma.learningProposal.update({
-        where: { id: row.learningProposalId },
-        data: {
-          body: { ...body, appliedBoardItem: { ...applied, closeReason } },
-        },
-      });
+      try {
+        await prisma.$transaction(async (tx) => {
+          const updated = await tx.botBoardFiling.updateMany({
+            where: { id: row.id, closedAt: null, outcome: null },
+            data: { closedAt, outcome },
+          });
+          if (!updated.count || !row.learningProposalId || !closeReason) return;
+          const proposal = await tx.learningProposal.findUnique({
+            where: { id: row.learningProposalId },
+            select: { body: true },
+          });
+          const body = proposal?.body;
+          if (!body || typeof body !== "object" || Array.isArray(body)) return;
+          const applied = "appliedBoardItem" in body ? body.appliedBoardItem : undefined;
+          if (!applied || typeof applied !== "object" || Array.isArray(applied)) return;
+          if ("closeReason" in applied && applied.closeReason === closeReason) return;
+          await tx.learningProposal.update({
+            where: { id: row.learningProposalId },
+            data: {
+              body: { ...body, appliedBoardItem: { ...applied, closeReason } },
+            },
+          });
+        });
+      } catch (error) {
+        // Leave the outcome empty so the next board read retries the outcome and the close reason together.
+        getLogger().error("board filing outcome", error);
+      }
     }
   }
   const follows = await prisma.boardFollow.findMany({

@@ -1020,4 +1020,6 @@ export const ZH_MESSAGES: Record<string, string> = {
     "此看板事项在创建后已有变更。请在看板上查看。",
   "This board item changed after it was filed, so it was left open for review on the Board.":
     "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。",
+  "Board outcomes are unavailable right now.": "看板结果暂时无法获取。",
+  "Closing on the Board.": "正在看板上关闭。",
 };

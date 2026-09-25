@@ -179,8 +179,15 @@ older than 15 minutes is never claimed: the next Approve deletes it and creates 
 and the next Reject deletes it. Learning approval holds the filing lock until the suggestion
 is saved as applied, filing first and then the save. Reject and Undo commit the status
 change under that lock before they close the item. If that close fails, the filing keeps
-the close reason in `closePending` and a later Undo or Reject finishes the close. An item
-already closed with "Undone from Learning" counts as undone. Beads lists `created_at` as a
+the close reason in `closePending`. The worker's board notification tick and the next
+board read of that space finish the close, delete the filing, and free the hourly slot.
+Reject and Undo answer "The board item will be closed shortly." The inbox shows
+"Closing on the Board." until that marker clears. A close that keeps failing waits
+longer between tries and, after five failures, appears in board notifications as
+"A board item could not be closed." An item
+already closed with "Undone from Learning" counts as undone. A learning proposal's
+labels are written on the new item together with `bot-filed`, the same labels the
+diff showed before approval. Beads lists `created_at` as a
 whole second while a reservation stores milliseconds. A human item created in the
 reservation's same second, with no filer and no filing row, is claimed while the reservation
 is still fresh; that is accepted. It redacts that run's secrets from titles,
@@ -191,9 +198,10 @@ read-only; the run pauses for confirmation the same way as other consequential t
 
 The Work panel and mobile Overview group the last 30 days of filing records by bot
 and show completed, open and closed-without-being-completed counts. If that outcome
-query fails, the Work panel still shows the work list and one line: "Board outcomes
-are unavailable right now." A board read observes returned
-closed items and records the first outcome without another Beads call. An empty close
+query fails, the Work panel and mobile Overview still show the work list and one line:
+"Board outcomes are unavailable right now." A board read observes returned
+closed items and records each filing's outcome and the proposal's close reason in one
+transaction. If that write fails, the outcome stays empty and the next read retries both. An empty close
 reason or a completion word (done, complete, completed, fixed, resolved) is completed unless a
 negation comes up to three words before it. The negation words are not, never, no, nothing,
 nobody, none, nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't,
@@ -260,9 +268,10 @@ for management and Files access. New mobile strings have Russian and Chinese tra
   queue. Very large boards can exceed these limits and return a structured error.
 - The UI and provider add no runtime dependencies or required hosted service.
   Ordinary model costs still apply when work is sent to a bot.
-- Apply the application migrations through `20260925210000_board_filing_close_pending`,
+- Apply the application migrations through `20260925220000_board_filing_close_retry`,
   which follows `20260925170000_bot_upkeep`, `20260925180000_board_filing_outcomes`,
-  `20260925190000_board_filing_reuse`, and `20260925200000_board_filing_title_key`,
+  `20260925190000_board_filing_reuse`, `20260925200000_board_filing_title_key`, and
+  `20260925210000_board_filing_close_pending`,
   before opening Board. Generation and offline tests do not prove a live
   deployment has applied the schema.
 

@@ -175,6 +175,66 @@ it.each(["needs-sign-in", "not-connected"])(
     expect(node.textContent).toContain("Calendar · Needs sign-in");
   },
 );
+it("shows the quiet line and the work list when filing outcomes fail", async () => {
+  const original = vi.mocked(rpc).getMockImplementation()!;
+  vi.mocked(rpc).mockImplementation(async (procedure: string, input?: unknown) => {
+    if (procedure === "board/filingOutcomes") throw new Error("outcomes unavailable");
+    if (procedure === "board/work")
+      return {
+        workspace: {
+          id: "workspace",
+          kind: "space",
+          path: "",
+          prefix: "work",
+          name: "Work",
+          enabled: true,
+          initialized: true,
+          isDefault: true,
+          allowAllBots: true,
+          allowedBotIds: [],
+        },
+        ready: 2,
+        inProgress: 0,
+        blocked: 0,
+        items: [
+          {
+            id: "work-1",
+            title: "Ready work",
+            description: "",
+            acceptanceCriteria: "",
+            type: "task",
+            status: "open",
+            priority: 2,
+            assignee: null,
+            labels: [],
+            parent: null,
+            dependencies: [],
+            dueAt: null,
+            deferUntil: null,
+            estimateMinutes: null,
+            externalRef: null,
+            createdAt: "2026-09-25T12:00:00.000Z",
+            updatedAt: "2026-09-25T12:00:00.000Z",
+            closedAt: null,
+            commentCount: 0,
+            comments: [],
+            history: [],
+            closeWhenDone: false,
+          },
+        ],
+      };
+    return original(procedure, input);
+  });
+  try {
+    await act(async () => root.render(createElement(OverviewScreen)));
+    expect(node.textContent).toContain("Board outcomes are unavailable right now.");
+    expect(node.textContent).toContain("Ready work");
+    expect(node.textContent).toContain("Ready: 2");
+    expect(node.textContent).not.toContain("Could not load");
+  } finally {
+    vi.mocked(rpc).mockImplementation(original);
+  }
+});
 it("renders the Work summary from a server that has no filing outcomes", async () => {
   const original = vi.mocked(rpc).getMockImplementation()!;
   vi.mocked(rpc).mockImplementation(async (procedure: string, input?: unknown) => {

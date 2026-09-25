@@ -1,9 +1,16 @@
 import type { PrismaClient } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { botRunOutcomeText } from "../job-reconciler.js";
+import { BoardService } from "./service.js";
 import { finishBoardRun } from "./tools.js";
 
 /** Recover an interrupted delivery after a terminal run or a disconnected host. */
 export async function reconcileBoardOutcomes(deps: { prisma: PrismaClient; dataDir: string }) {
+  await new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir })
+    .sweepPendingCloses()
+    .catch((error) => {
+      getLogger().error("pending board close", error);
+    });
   const runs = await deps.prisma.run.findMany({
     where: {
       boardItemId: { not: null },

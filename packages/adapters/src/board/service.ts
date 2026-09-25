@@ -15,6 +15,8 @@ import { BoardRunner } from "@ardurbot/host-runtime/board/runner";
 import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
+import type { PendingCloseRow } from "./pending-close.js";
+import { recordPendingCloseFailure } from "./pending-close.js";
 import {
   normalizeBoardTitle,
   RUN_FILING_CAP,
@@ -75,6 +77,7 @@ async function withLocalFilingLock<T>(spaceId: string, work: () => Promise<T>): 
   }
 }
 export class BoardService {
+  private sweeping = false;
   constructor(private readonly options: BoardServiceOptions) {}
   async actor(scope: BoardScope) {
     const [deployment, member] = await Promise.all([
@@ -325,11 +328,76 @@ export class BoardService {
       workspace,
       actor,
       run: (request) => this.run(request, scope),
-      observe: (items) =>
-        observeBoardItems(this.options.prisma, workspace.id, items).catch((error) => {
+      observe: async (items) => {
+        await observeBoardItems(this.options.prisma, workspace.id, items).catch((error) => {
           // A notification failure cannot turn a successful Beads write into a failed item edit.
           getLogger().error("board follow observation", error);
-        }),
+        });
+        await this.sweepPendingCloses(workspace.id).catch((error) => {
+          getLogger().error("pending board close", error);
+        });
+      },
+    });
+  }
+  /** Closes filings whose Reject or Undo already committed. A nested board read does not start another sweep. */
+  async sweepPendingCloses(workspaceId?: string) {
+    if (this.sweeping) return;
+    this.sweeping = true;
+    try {
+      const now = new Date();
+      const filings = await this.options.prisma.botBoardFiling.findMany({
+        where: {
+          ...(workspaceId ? { workspaceId } : {}),
+          closePending: { not: null },
+          itemId: { not: null },
+          OR: [{ closeNextAt: null }, { closeNextAt: { lte: now } }],
+        },
+      });
+      for (const filing of filings) {
+        if (!filing.closePending || !filing.itemId || !filing.workspaceId) continue;
+        try {
+          await this.finishPendingClose(filing);
+        } catch (error) {
+          getLogger().error("pending board close", error);
+          await recordPendingCloseFailure(this.options.prisma, filing).catch((recordError) => {
+            getLogger().error("pending board close retry", recordError);
+          });
+        }
+      }
+    } finally {
+      this.sweeping = false;
+    }
+  }
+  async notePendingCloseFailure(filingId: string) {
+    const filing = await this.options.prisma.botBoardFiling.findUnique({
+      where: { id: filingId },
+    });
+    if (!filing?.closePending || !filing.itemId) return;
+    await recordPendingCloseFailure(this.options.prisma, filing);
+  }
+  private async finishPendingClose(filing: PendingCloseRow) {
+    if (!filing.closePending || !filing.itemId || !filing.workspaceId) return;
+    const workspace = this.options.prisma.boardWorkspace
+      ? await this.options.prisma.boardWorkspace.findUnique({
+          where: { id: filing.workspaceId },
+          select: { ownerUserId: true },
+        })
+      : null;
+    let userId = workspace?.ownerUserId ?? null;
+    if (!userId && filing.learningProposalId) {
+      const proposal = await this.options.prisma.learningProposal.findUnique({
+        where: { id: filing.learningProposalId },
+        select: { userId: true },
+      });
+      userId = proposal?.userId ?? null;
+    }
+    if (!userId) throw new Error("This board close has no owner.");
+    const provider = await this.provider({ userId, spaceId: filing.spaceId }, filing.workspaceId);
+    const item = await provider.show(filing.itemId);
+    const done = item.status === "closed" && item.closeReason === filing.closePending;
+    if (!done) await provider.close([item.id], filing.closePending);
+    await this.options.prisma.botBoardFiling.deleteMany({
+      where: { id: filing.id, spaceId: filing.spaceId },
     });
   }
   async workspaces(scope: BoardScope) {
@@ -594,7 +662,7 @@ export class BoardService {
   async fileLearningProposal(
     scope: BoardScope & { botId: string },
     proposalId: string,
-    input: Pick<BoardCreate, "title" | "description" | "acceptanceCriteria"> & {
+    input: Pick<BoardCreate, "title" | "description" | "acceptanceCriteria" | "labels"> & {
       workspaceId?: string;
     },
     secrets: string[],
@@ -667,7 +735,7 @@ export class BoardService {
         ...item,
         type: "task",
         priority: 2,
-        labels: withBotFiledLabel(undefined),
+        labels: withBotFiledLabel(input.labels?.map((label) => redactBoardText(label, secrets))),
       });
       createdId = created.id;
       await this.recordFilingItem(filing.id, workspace.id, created.id);

@@ -1,8 +1,9 @@
 import type { LearningProposal, RuntimePin } from "@ardurbot/contracts";
-import { IsolationError, observeBoardItems, type PrismaClient } from "@ardurbot/db";
+import { IsolationError, observeBoardItems, type Pool, type PrismaClient } from "@ardurbot/db";
 import { MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import { memoryDatabaseFake, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
 import { describe, expect, it, vi } from "vitest";
+import { createBoardNotificationDelivery } from "./board/notifications.js";
 import { BoardService } from "./board/service.js";
 import { createLearningApplyService } from "./learning-apply.js";
 import { applyGrantedLearning } from "./learning-auto-apply.js";
@@ -31,6 +32,20 @@ function matches(row: Row, where: Row = {}): boolean {
       return matches(row, value as Row);
     if (value && typeof value === "object" && !(value instanceof Date)) {
       const condition = value as Row;
+      if ("not" in condition) {
+        if (condition.not === null) return row[key] != null;
+        return row[key] !== condition.not;
+      }
+      if ("lte" in condition) {
+        const left = row[key];
+        if (left == null || condition.lte == null) return false;
+        const leftMs = left instanceof Date ? left.getTime() : Date.parse(String(left));
+        const rightMs =
+          condition.lte instanceof Date
+            ? condition.lte.getTime()
+            : Date.parse(String(condition.lte));
+        return leftMs <= rightMs;
+      }
       if ("gte" in condition) return Number(row[key]) >= Number(condition.gte);
       if ("gt" in condition) return Number(row[key]) > Number(condition.gt);
       if ("in" in condition) return (condition.in as unknown[]).includes(row[key]);
@@ -914,6 +929,13 @@ function boardFixture(filed: { duplicate: boolean; updatedAt?: string }) {
       };
     }),
     provider: vi.fn(async () => ({ show, close })),
+    notePendingCloseFailure: vi.fn(async (filingId: string) => {
+      const row = f.filings.find((filing) => filing.id === filingId);
+      if (!row?.closePending) return;
+      const previous = typeof row.closeAttempts === "number" ? row.closeAttempts : 0;
+      row.closeAttempts = previous + 1;
+      row.closeNextAt = new Date();
+    }),
   };
   const apply = createLearningApplyService({ ...f.deps, boardService: boardService as never });
   const proposal = () =>
@@ -1910,7 +1932,8 @@ it("leaves Undo reverted with a close marker when the board close fails, and a r
   };
   show.mockImplementation(async () => item);
   close.mockRejectedValueOnce(new Error("beads down"));
-  await expect(apply.revert(proposal.id, actor)).rejects.toThrow(/beads down/);
+  const pending = await apply.revert(proposal.id, actor);
+  expect(pending.sentence).toBe("The board item will be closed shortly.");
   expect(f.proposals[0]?.status).toBe("reverted");
   expect(f.filings).toEqual([
     expect.objectContaining({ itemId: "board-a", closePending: "Undone from Learning" }),
@@ -1939,7 +1962,8 @@ it("treats a board item already closed as Undone from Learning as a finished Und
   };
   show.mockImplementation(async () => ({ ...item }));
   close.mockRejectedValueOnce(new Error("beads down"));
-  await expect(apply.revert(proposal.id, actor)).rejects.toThrow(/beads down/);
+  const pending = await apply.revert(proposal.id, actor);
+  expect(pending.sentence).toBe("The board item will be closed shortly.");
   expect(f.proposals[0]?.status).toBe("reverted");
   expect(f.filings[0]).toMatchObject({ closePending: "Undone from Learning" });
   item.status = "closed";
@@ -1999,7 +2023,8 @@ it("leaves Reject rejected with a close marker when the board close fails, and a
   };
   show.mockImplementation(async () => item);
   close.mockRejectedValueOnce(new Error("beads down"));
-  await expect(apply.reject(proposal.id, actor)).rejects.toThrow(/beads down/);
+  const pending = await apply.reject(proposal.id, actor);
+  expect(pending.sentence).toBe("The board item will be closed shortly.");
   expect(f.proposals[0]?.status).toBe("rejected");
   expect(f.filings).toEqual([
     expect.objectContaining({ itemId: "board-a", closePending: "Rejected from Learning" }),
@@ -2027,4 +2052,222 @@ it("names an Undo board conflict board-changed", async () => {
     code: "board-changed",
     current: "This board item changed after it was filed. Review it on the Board.",
   });
+});
+
+const BOARD_CLOSE_SOON = "The board item will be closed shortly.";
+
+function notificationPool() {
+  return {
+    connect: async () => ({
+      query: async (sql: string) => {
+        if (sql.includes("pg_try_advisory_xact_lock")) return { rows: [{ acquired: true }] };
+        return { rows: [] };
+      },
+      release: () => undefined,
+    }),
+  } as unknown as Pick<Pool, "connect">;
+}
+
+async function runBoardTick(board: BoardService, prisma: PrismaClient) {
+  vi.useFakeTimers();
+  const delivery = createBoardNotificationDelivery({
+    prisma,
+    notifications: { send: async () => undefined } as never,
+    pool: notificationPool(),
+    board,
+  } as never);
+  try {
+    delivery.start();
+    await vi.advanceTimersByTimeAsync(0);
+  } finally {
+    await delivery.stop();
+    vi.useRealTimers();
+  }
+}
+
+function ownedFiling(proposalId: string, reason: string) {
+  return {
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposalId,
+    reused: false,
+    closePending: reason,
+    createdAt: new Date(),
+  };
+}
+
+it("returns a short sentence when Reject's close fails, and the tick closes it without another click", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    createdAt: new Date(),
+  });
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  const result = await apply.reject(proposal.id, actor).catch(() => null);
+  expect(result).toMatchObject({
+    sentence: BOARD_CLOSE_SOON,
+    proposal: { status: "rejected", boardClosing: true },
+  });
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", closePending: "Rejected from Learning" }),
+  ]);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Rejected from Learning";
+    return [{ ...item }];
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  await runBoardTick(board, f.deps.prisma);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("returns a short sentence when Undo's close fails, and the tick closes it without another click", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  const result = await apply.revert(proposal.id, actor).catch(() => null);
+  expect(result).toMatchObject({
+    sentence: BOARD_CLOSE_SOON,
+    proposal: { status: "reverted", boardClosing: true },
+  });
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", closePending: "Undone from Learning" }),
+  ]);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Undone from Learning";
+    return [{ ...item }];
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  await runBoardTick(board, f.deps.prisma);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("the board notification tick closes a pending filing and frees its hourly slot", async () => {
+  const { f, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push(ownedFiling(proposal.id, "Rejected from Learning"));
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Rejected from Learning";
+    return [{ ...item }];
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  await runBoardTick(board, f.deps.prisma);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("surfaces a board notification after five failed closes", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-25T12:00:00.000Z"));
+  const notices: Array<{ title: string; changes: string[] }> = [];
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    createdAt: new Date(),
+  });
+  show.mockImplementation(async () => ({
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null,
+  }));
+  close.mockRejectedValue(new Error("beads down"));
+  await apply.reject(proposal.id, actor).catch(() => undefined);
+  Object.assign(f.deps.prisma, {
+    boardNotification: {
+      findMany: async () => [],
+      create: async ({ data }: { data: { title: string; changes: string[] } }) => {
+        notices.push(data);
+        return data;
+      },
+      update: async () => ({}),
+    },
+    boardFollow: {
+      upsert: async ({ create: data }: { create: Record<string, unknown> }) => ({
+        id: "follow",
+        version: 0,
+        ...data,
+      }),
+      update: async () => ({}),
+    },
+    boardWorkspace: {
+      findUnique: async () => ({ id: "workspace", ownerUserId: actor.userId }),
+    },
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  const delivery = createBoardNotificationDelivery({
+    prisma: f.deps.prisma,
+    notifications: { send: async () => undefined } as never,
+    pool: notificationPool(),
+    board,
+  } as never);
+  try {
+    delivery.start();
+    await vi.advanceTimersByTimeAsync(0);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      vi.setSystemTime(new Date(Date.now() + 16 * 60_000));
+      await vi.advanceTimersByTimeAsync(30_000);
+    }
+  } finally {
+    await delivery.stop();
+    vi.useRealTimers();
+  }
+  expect(notices).toEqual([
+    expect.objectContaining({
+      title: "A board item could not be closed.",
+      changes: ["close"],
+    }),
+  ]);
+  expect(f.filings).toHaveLength(1);
 });

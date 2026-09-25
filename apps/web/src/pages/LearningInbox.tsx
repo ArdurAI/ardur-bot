@@ -391,13 +391,17 @@ function LearningCard({
           </>
         ) : (
           <span className="text-sm">
-            {proposal.status === "reverted"
-              ? t`Undone`
-              : proposal.status === "rejected"
-                ? t`Rejected`
-                : proposal.status === "superseded"
-                  ? t`Superseded`
-                  : t`Expired`}
+            {proposal.boardClosing ? (
+              <Trans>Closing on the Board.</Trans>
+            ) : proposal.status === "reverted" ? (
+              t`Undone`
+            ) : proposal.status === "rejected" ? (
+              t`Rejected`
+            ) : proposal.status === "superseded" ? (
+              t`Superseded`
+            ) : (
+              t`Expired`
+            )}
           </span>
         )}
       </div>

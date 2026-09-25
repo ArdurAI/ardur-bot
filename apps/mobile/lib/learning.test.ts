@@ -215,6 +215,62 @@ it("renders the native list, approves, shows applied copy and supports Undo with
   }
 });
 
+it("shows Closing on the Board until the pending close clears", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    diff: "+Finish the import follow-up",
+    status: "rejected",
+    boardClosing: true,
+  };
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/journey") return [];
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    return { reviews: [], proposals: [board], pendingCount: 0, appliedThisWeek: 0 };
+  });
+  const container = document.createElement("div");
+  let root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    expect(container.textContent).toContain("Closing on the Board.");
+    i18n.locale = "ru";
+    i18n.messages = RU_MESSAGES;
+    await act(async () => root.render(createElement(Learning)));
+    expect(container.textContent).toContain(RU_MESSAGES["Closing on the Board."]);
+    i18n.locale = "zh-CN";
+    i18n.messages = ZH_MESSAGES;
+    await act(async () => root.render(createElement(Learning)));
+    expect(container.textContent).toContain(ZH_MESSAGES["Closing on the Board."]);
+    request.mockImplementation(async (path: string) => {
+      if (path === "learning/journey") return [];
+      if (path === "learning/settings")
+        return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+      return {
+        reviews: [],
+        proposals: [{ ...board, boardClosing: false }],
+        pendingCount: 0,
+        appliedThisWeek: 0,
+      };
+    });
+    i18n.locale = "en";
+    i18n.messages = {};
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(createElement(Learning)));
+    expect(container.textContent).toContain("rejected");
+    expect(container.textContent).not.toContain("Closing on the Board.");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 it("says a board item was closed without being completed and what to do", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const board = {

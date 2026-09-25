@@ -48,6 +48,23 @@ function fixture() {
     );
   return { prisma, row, notifications, deliver };
 }
+it("says when a board item could not be closed", async () => {
+  const { prisma, notifications, row } = fixture();
+  prisma.boardNotification.findMany.mockResolvedValue([
+    { ...row, title: "A board item could not be closed.", changes: ["close"] },
+  ]);
+  await deliverBoardNotifications(
+    prisma as unknown as PrismaClient,
+    notifications as unknown as NotificationProvider,
+  );
+  expect(notifications.send).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: "A board item could not be closed.",
+      body: "Could not close this board item.",
+    }),
+    expect.anything(),
+  );
+});
 it("delivers follower changes through the existing provider with the Board deep-link target", async () => {
   const { prisma, notifications, deliver } = fixture();
   await deliver();

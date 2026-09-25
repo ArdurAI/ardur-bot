@@ -12,6 +12,7 @@ import { createMessagingReceivers } from "./messaging-receivers.js";
 loadRootEnv();
 
 import {
+  BoardService,
   backfillRuntimePins,
   ChatSdkMessagingSurface,
   createBackgroundJobHandlers,
@@ -297,6 +298,7 @@ async function main() {
     prisma,
     notifications: new ExpoPushProvider(dataDir),
     pool,
+    board: new BoardService({ prisma, dataDir }),
   });
   boardNotifications.start();
   const chatReceivers = createMessagingReceivers({

@@ -202,6 +202,7 @@ export const LearningProposalSchema = z
       })
       .strict()
       .optional(),
+    boardClosing: z.boolean().optional(),
     documentId: z.string().optional(),
     blockedReason: z.string().optional(),
     settingBefore: z.boolean().optional(),
@@ -368,6 +369,7 @@ export const LearningEditSchema = z
 export type LearningEdit = z.infer<typeof LearningEditSchema>;
 export const LearningActionSchema = z.object({
   proposal: LearningProposalSchema,
+  sentence: z.string().max(500).optional(),
   conflict: z
     .object({
       before: z.string(),

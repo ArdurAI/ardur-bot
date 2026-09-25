@@ -14,7 +14,9 @@ import {
 import { isReadPolicyTool, parseSkillMd, redactLearningText } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
+import { BOARD_CLOSE_SOON } from "./board/pending-close.js";
 import type { BoardService } from "./board/service.js";
 import {
   learningMember,
@@ -37,8 +39,23 @@ const BOARD_REJECT_LEFT =
   "This board item changed after it was filed, so it was left open for review on the Board.";
 const BOARD_LEFT_OPEN = "board-left-open";
 const BOARD_CHANGED = "board-changed";
+function closingSoon(proposal: LearningProposal): LearningActionResult {
+  return {
+    sentence: BOARD_CLOSE_SOON,
+    proposal: { ...proposal, boardClosing: true },
+  };
+}
+async function rememberCloseFailure(service: BoardService, filingId: string | undefined) {
+  if (!filingId || typeof service.notePendingCloseFailure !== "function") return;
+  try {
+    await service.notePendingCloseFailure(filingId);
+  } catch {
+    // The marker stays. The next board tick retries the close.
+  }
+}
 type LearningActionResult = {
   proposal: LearningProposal;
+  sentence?: string;
   conflict?: {
     before: string;
     applied: string;
@@ -465,20 +482,26 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     if (!row) throw new IsolationError();
     const proposal = proposalView(row);
     if (!filing?.closePending || !filing.itemId || !filing.workspaceId) return { proposal };
-    const provider = await service.provider(
-      {
-        ...actor,
-        ...(proposal.scope.botId ? { botId: proposal.scope.botId } : {}),
-      },
-      filing.workspaceId,
-    );
-    const item = await provider.show(filing.itemId);
-    const done = item.status === "closed" && item.closeReason === reason;
-    if (!done) await provider.close([item.id], reason);
-    await deps.prisma.botBoardFiling.deleteMany({
-      where: { id: filing.id, spaceId: actor.spaceId },
-    });
-    return { proposal };
+    try {
+      const provider = await service.provider(
+        {
+          ...actor,
+          ...(proposal.scope.botId ? { botId: proposal.scope.botId } : {}),
+        },
+        filing.workspaceId,
+      );
+      const item = await provider.show(filing.itemId);
+      const done = item.status === "closed" && item.closeReason === reason;
+      if (!done) await provider.close([item.id], reason);
+      await deps.prisma.botBoardFiling.deleteMany({
+        where: { id: filing.id, spaceId: actor.spaceId },
+      });
+      return { proposal };
+    } catch (error) {
+      getLogger().error("board close", error);
+      await rememberCloseFailure(service, filing.id);
+      return closingSoon(proposal);
+    }
   }
   /** Commits the revert before closing the filed item, and only when nobody changed it. */
   async function undoBoardItem(
@@ -531,12 +554,18 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         return { proposal: await save(tx, current) };
       });
       if (changed || saved.conflict || undone) return saved;
-      await provider.close([item.id], BOARD_UNDO_REASON);
-      if (filing)
-        await deps.prisma.botBoardFiling.deleteMany({
-          where: { spaceId: actor.spaceId, learningProposalId: proposal.id, reused: false },
-        });
-      return saved;
+      try {
+        await provider.close([item.id], BOARD_UNDO_REASON);
+        if (filing)
+          await deps.prisma.botBoardFiling.deleteMany({
+            where: { spaceId: actor.spaceId, learningProposalId: proposal.id, reused: false },
+          });
+        return saved;
+      } catch (error) {
+        getLogger().error("board close", error);
+        await rememberCloseFailure(service, filing?.id);
+        return { ...saved, ...closingSoon(saved.proposal) };
+      }
     });
   }
   async function apply(id: string, actor: Identity, edits?: LearningEdit, grantId?: string) {
@@ -877,10 +906,16 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
             },
           };
         if (willClose && provider && filing?.itemId) {
-          await provider.close([filing.itemId], BOARD_REJECT_REASON);
-          await deps.prisma.botBoardFiling.deleteMany({
-            where: { id: filing.id, spaceId: identity.spaceId },
-          });
+          try {
+            await provider.close([filing.itemId], BOARD_REJECT_REASON);
+            await deps.prisma.botBoardFiling.deleteMany({
+              where: { id: filing.id, spaceId: identity.spaceId },
+            });
+          } catch (error) {
+            getLogger().error("board close", error);
+            await rememberCloseFailure(boardService, filing.id);
+            return { ...result, ...closingSoon(result.proposal) };
+          }
         }
         return result;
       });

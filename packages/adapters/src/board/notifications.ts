@@ -48,7 +48,9 @@ export async function deliverBoardNotifications(
                   ? "New comment"
                   : change === "assignee"
                     ? "Assignee changed"
-                    : "Status changed",
+                    : change === "close"
+                      ? "Could not close this board item."
+                      : "Status changed",
               )
               .join(" · "),
             botId: "",
@@ -113,6 +115,7 @@ export function createBoardNotificationDelivery(deps: {
   prisma: PrismaClient;
   notifications: NotificationProvider;
   pool: Pick<Pool, "connect">;
+  board?: { sweepPendingCloses: () => Promise<void> };
 }) {
   let timer: ReturnType<typeof setInterval> | undefined;
   let running: Promise<void> | undefined;
@@ -123,9 +126,12 @@ export function createBoardNotificationDelivery(deps: {
     const abort = new AbortController();
     controller = abort;
     const deadline = setTimeout(() => abort.abort(), 15_000);
-    running = deliverWithLock(deps.pool, () =>
-      deliverBoardNotifications(deps.prisma, deps.notifications, abort.signal),
-    )
+    running = deliverWithLock(deps.pool, async () => {
+      await deps.board?.sweepPendingCloses().catch((error) => {
+        getLogger().error("pending board close", error);
+      });
+      await deliverBoardNotifications(deps.prisma, deps.notifications, abort.signal);
+    })
       .catch((error) => getLogger().error("board notification delivery", error))
       .finally(() => {
         clearTimeout(deadline);

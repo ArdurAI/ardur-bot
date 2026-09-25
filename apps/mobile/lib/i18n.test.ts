@@ -41,6 +41,17 @@ describe("mobile i18n", () => {
     vi.unstubAllEnvs();
   });
 
+  it("translates the quiet board-outcomes line and the closing card in Russian and Chinese", async () => {
+    const { ZH_MESSAGES } = await import("./locales/zh");
+    const { RU_MESSAGES } = await import("./locales/ru");
+    expect(RU_MESSAGES["Board outcomes are unavailable right now."]).toBe(
+      "Результаты доски сейчас недоступны.",
+    );
+    expect(ZH_MESSAGES["Board outcomes are unavailable right now."]).toBe("看板结果暂时无法获取。");
+    expect(RU_MESSAGES["Closing on the Board."]).toBe("Закрывается на доске.");
+    expect(ZH_MESSAGES["Closing on the Board."]).toBe("正在看板上关闭。");
+  });
+
   it("falls back to the English source message when a translation is missing", async () => {
     const { resetI18nForTests, t } = await import("./i18n");
     resetI18nForTests("zh-CN");

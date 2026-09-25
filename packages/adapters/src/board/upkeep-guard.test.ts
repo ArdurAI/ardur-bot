@@ -1077,6 +1077,22 @@ it("repairs missing filing metadata when the same run finds the item it filed", 
   expect(theirs.provider.noteFiling).not.toHaveBeenCalled();
 });
 
+it("files a labeled learning proposal with those labels plus bot-filed", async () => {
+  const learningScope = { userId: "owner", spaceId: "space", botId: "builder" };
+  const filed = service();
+  const proposal = {
+    title: "Finish the import follow-up",
+    description: "The run stopped before the import finished.",
+    acceptanceCriteria: "The import completes.",
+    labels: ["follow-up", "import"],
+  };
+  await filed.board.fileLearningProposal(learningScope, "proposal", proposal, []);
+  const [created] = filed.provider.create.mock.calls[0] as unknown as [{ labels?: string[] }];
+  expect(created?.labels).toEqual(["follow-up", "import", "bot-filed"]);
+  expect(JSON.stringify(proposal)).toContain("follow-up");
+  expect(JSON.stringify(proposal)).toContain("import");
+});
+
 it("records a proposal's reuse of an open item and returns its own filing on retry", async () => {
   const learningScope = { userId: "owner", spaceId: "space", botId: "builder" };
   const reused = service({ open: [item("Recurring failure")] });

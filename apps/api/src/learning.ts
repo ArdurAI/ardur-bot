@@ -87,22 +87,22 @@ export function createLearningService(deps: {
     return { pendingCount, appliedThisWeek };
   }
   const identity = (actor: Actor) => ({ spaceId: actor.spaceId, userId: actor.userId });
-  /** Applied board items carry the outcome of the filing, or reuse link, made for them. */
+  /** Board items carry a filing outcome, and a pending close stays visible until the worker finishes it. */
   async function withBoardOutcomes(spaceId: string, proposals: ReturnType<typeof proposalView>[]) {
-    const ids = new Set(
-      proposals
-        .filter((proposal) => proposal.status === "applied" && proposal.appliedBoardItem)
-        .map((proposal) => proposal.id),
-    );
-    if (!ids.size) return proposals;
+    const ids = proposals
+      .filter((proposal) => proposal.type === "board-item")
+      .map((proposal) => proposal.id);
+    if (!ids.length) return proposals;
     const filings = await deps.prisma.botBoardFiling.findMany({
-      where: { spaceId, learningProposalId: { in: [...ids] } },
-      select: { learningProposalId: true, closedAt: true, outcome: true },
+      where: { spaceId, learningProposalId: { in: ids } },
+      select: { learningProposalId: true, closedAt: true, outcome: true, closePending: true },
     });
     const byProposal = new Map(filings.map((filing) => [filing.learningProposalId, filing]));
     return proposals.map((proposal) => {
-      if (!ids.has(proposal.id)) return proposal;
       const filing = byProposal.get(proposal.id);
+      const boardClosing = Boolean(filing?.closePending);
+      if (!(proposal.status === "applied" && proposal.appliedBoardItem))
+        return boardClosing ? { ...proposal, boardClosing: true } : proposal;
       const outcome: "completed" | "closed-other" | null =
         filing?.outcome === "completed" || filing?.outcome === "closed-other"
           ? filing.outcome
@@ -110,6 +110,7 @@ export function createLearningService(deps: {
       const closeReason = proposal.appliedBoardItem?.closeReason?.trim() || null;
       return {
         ...proposal,
+        ...(boardClosing ? { boardClosing: true } : {}),
         boardOutcome: {
           closedAt: filing?.closedAt?.toISOString() ?? null,
           outcome,

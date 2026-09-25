@@ -5839,6 +5839,10 @@ msgstr ""
 msgid "Rejected"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
+msgstr "正在看板上关闭。"
+
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
 msgid "Release"

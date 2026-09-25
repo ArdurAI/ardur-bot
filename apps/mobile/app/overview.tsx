@@ -1,4 +1,5 @@
 import type { ConnectionOverview, UsagePeriod, UsageSummary } from "@ardurbot/contracts";
+import type { BoardFilingOutcomeCount } from "@ardurbot/contracts/board";
 import { BoardFilingOutcomeCountSchema, BoardWorkSchema } from "@ardurbot/contracts/board";
 import type { OverviewNow } from "@ardurbot/core";
 import { activeDelegations, TEAM_REFRESH_MS } from "@ardurbot/core";
@@ -22,17 +23,23 @@ import { useMobileTokens } from "../lib/native";
 import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "../lib/overview";
 
 const loadWork = async () => {
-  const [work, outcomes] = await Promise.all([
-    rpc("board/work", {}),
-    // A server without filing outcomes still shows the Work summary.
-    rpc("board/filingOutcomes", {}).catch(() => null),
-  ]);
-  const filingOutcomes = BoardFilingOutcomeCountSchema.array().safeParse(
-    (outcomes as { bots?: unknown } | null)?.bots,
-  );
+  const work = await rpc("board/work", {});
+  let filingOutcomes: BoardFilingOutcomeCount[] = [];
+  let outcomesUnavailable = false;
+  try {
+    const outcomes = await rpc("board/filingOutcomes", {});
+    const parsed = BoardFilingOutcomeCountSchema.array().safeParse(
+      (outcomes as { bots?: unknown } | null)?.bots,
+    );
+    filingOutcomes = parsed.success ? parsed.data : [];
+  } catch {
+    // The work list stays. The quiet line says the counts could not be read.
+    outcomesUnavailable = true;
+  }
   return {
     ...BoardWorkSchema.parse(work),
-    filingOutcomes: filingOutcomes.success ? filingOutcomes.data : [],
+    filingOutcomes,
+    outcomesUnavailable,
   };
 };
 const MobileBoard = lazy(() =>
@@ -101,6 +108,9 @@ export default function OverviewScreen() {
                     ) : null}
                   </View>
                 ))}
+                {data.outcomesUnavailable ? (
+                  <Line>{t("Board outcomes are unavailable right now.")}</Line>
+                ) : null}
                 {data.filingOutcomes.map((row) => (
                   <Line key={row.botId}>
                     {t(
