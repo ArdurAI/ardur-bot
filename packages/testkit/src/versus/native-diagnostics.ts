@@ -40,6 +40,9 @@ export async function diagnoseNativeIsolation(input: {
     return { containment, probes, interpreterHash: null, runtimeCanariesPassed: false };
   // Resolve the installed launcher's sibling interpreter; never execute the Hermes entrypoint.
   const interpreter = await realpath(path.join(path.dirname(input.executable), "python3"));
+  const redactions = [trial.root, outside.root, input.source, interpreter];
+  const interpreterPrefix = path.dirname(path.dirname(interpreter));
+  if (interpreterPrefix !== path.parse(interpreter).root) redactions.push(interpreterPrefix);
   const interpreterHash = bytesHash(await readFile(interpreter));
   const env = await prepareEnvironment(trial.state, interpreter);
   const profile = nativeProfile(policy);
@@ -78,7 +81,7 @@ export async function diagnoseNativeIsolation(input: {
       observation.stderr = failure.stderr ?? "";
     }
     for (const field of ["stdout", "stderr"] as const)
-      observation[field] = sanitize(observation[field], [trial.root, outside.root, input.source]);
+      observation[field] = sanitize(observation[field], redactions);
     probes.push(observation);
     return observation;
   };

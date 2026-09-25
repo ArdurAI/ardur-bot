@@ -59,6 +59,15 @@ export interface Budget {
 export function requireValue(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
+export function validateModelMetadataLabel(value: unknown, field: string): asserts value is string {
+  requireValue(
+    typeof value === "string" &&
+      value.length > 0 &&
+      value.length <= 80 &&
+      !/[^a-zA-Z0-9._-]/.test(value),
+    `Invalid ${field}`,
+  );
+}
 export function record(value: unknown): Record<string, unknown> {
   requireValue(
     value !== null && typeof value === "object" && !Array.isArray(value),
@@ -153,10 +162,7 @@ export function parseBudget(value: unknown): Budget {
       `Model ${field} must be a nonzero SHA-256`,
     );
   for (const field of ["quantization", "serverVersion"])
-    requireValue(
-      typeof model[field] === "string" && /^[a-zA-Z0-9._-]{1,80}$/.test(model[field] as string),
-      `Invalid ${field}`,
-    );
+    validateModelMetadataLabel(model[field], field);
   for (const field of ["contextSize", "maxOutputTokens", "concurrency"])
     positiveInteger(object[field], field);
   requireValue(
