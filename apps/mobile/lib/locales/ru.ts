@@ -879,4 +879,6 @@ export const RU_MESSAGES: Record<string, string> = {
   "Taught skill": "Обученный навык",
   Web: "Веб",
   "by you": "создано вами",
+  "by {author}": "автор: {author}",
+  "From a plugin": "Из плагина",
 };

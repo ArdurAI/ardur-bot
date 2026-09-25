@@ -66,7 +66,7 @@ async function connect() {
         try {
           await host.configureMcp(await readHostMcpConfiguration(config));
         } catch {
-          await host.configureMcp([]);
+          // A failed poll is not a new configuration. Keep the last authenticated set.
         } finally {
           mcpRefresh = undefined;
         }
