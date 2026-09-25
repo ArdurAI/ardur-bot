@@ -48,6 +48,7 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
     controlLeaseId: null as string | null,
     controlLeaseExpiresAt: null as Date | null,
     controlBotId: null as string | null,
+    controlRunId: null as string | null,
     maintenanceId: null as string | null,
     homeRevision: "saved",
     updatedAt: new Date("2024-01-01T00:00:00.000Z"),
@@ -57,9 +58,28 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
   const computer = {
     findUniqueOrThrow: vi.fn(async () => ({ ...row })),
     updateMany: vi.fn(async ({ where, data }) => {
-      const matches = ["id", "state", "providerRef", "kind", "updatedAt", "provisioningId"].every(
-        (key) => !(key in where) || where[key] === row[key as keyof typeof row],
-      );
+      const keys = [
+        "id",
+        "state",
+        "providerRef",
+        "kind",
+        "updatedAt",
+        "provisioningId",
+        "controlHolder",
+        "controlLeaseId",
+        "controlLeaseExpiresAt",
+        "controlBotId",
+        "controlRunId",
+      ] as const;
+      const matches = keys.every((key) => {
+        if (!(key in where)) return true;
+        const expected = where[key];
+        const actual = row[key];
+        if (expected instanceof Date && actual instanceof Date) {
+          return expected.getTime() === actual.getTime();
+        }
+        return expected === actual;
+      });
       if (!matches) return { count: 0 };
       Object.assign(row, { updatedAt: new Date(row.updatedAt.getTime() + 1) }, data);
       return { count: 1 };

@@ -9,6 +9,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { clearThread, type PrismaClient, type ThreadEvents } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
+import { expireComputerControl, extendActiveComputerControl } from "./computer-control.js";
 import {
   acquireComputerExecutionLease,
   ComputerBusyError,
@@ -1284,7 +1285,253 @@ describe("computer provisioning", () => {
       }
     },
   );
+
+  it("keeps a lease renewed during preparation when an abandoned boot activates after the original expiry", async () => {
+    const started = Date.parse("2026-04-01T00:00:00.000Z");
+    const originalExpiry = new Date(started + 60_000);
+    const { root, row, deps } = await freshBootHarness({
+      state: "booting",
+      updatedAt: new Date(started - 5 * 60_000 - 1),
+      controlHolder: "user",
+      controlLeaseId: "teaching-lease",
+      controlBotId: "bot-1",
+      controlLeaseExpiresAt: originalExpiry,
+      controlRunId: "run-teaching",
+    });
+    const clock = installBootClock(started);
+    // The provisioning snapshot keeps this expiry. Renewal replaces it on the stored row.
+    vi.spyOn(deps.sandbox, "prepare").mockImplementation(async () => {
+      expect(
+        await extendActiveComputerControl(
+          deps.prisma,
+          deps.jobs,
+          row,
+          "bot-1",
+          new Date(started + 30 * 60_000),
+        ),
+      ).toBe(true);
+      expect(row.controlLeaseExpiresAt?.getTime()).toBeGreaterThan(originalExpiry.getTime());
+      clock.advanceTo(originalExpiry.getTime() + 1_000);
+    });
+    try {
+      await expect(provisionComputer(deps, row.id, context)).resolves.toMatchObject({
+        kind: "fake",
+      });
+      expect(row).toMatchObject({
+        state: "running",
+        provisioningId: null,
+        controlHolder: "user",
+        controlLeaseId: "teaching-lease",
+        controlBotId: "bot-1",
+        controlRunId: "run-teaching",
+      });
+      expect(row.controlLeaseExpiresAt?.getTime()).toBeGreaterThan(
+        originalExpiry.getTime() + 1_000,
+      );
+    } finally {
+      await clock.restore();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a lease id retained after failed revocation when fresh-boot activation finishes", async () => {
+    const started = Date.parse("2026-04-01T00:00:00.000Z");
+    const originalExpiry = new Date(started + 60_000);
+    const { root, row, deps } = await freshBootHarness(
+      {
+        state: "stopped",
+        providerRef: "old-provider",
+        controlHolder: "user",
+        controlLeaseId: "lease-kept",
+        controlBotId: "bot-1",
+        controlLeaseExpiresAt: originalExpiry,
+        controlRunId: "run-held",
+      },
+      async () => {
+        throw new Error("provider revocation failed");
+      },
+    );
+    const clock = installBootClock(started);
+    vi.spyOn(deps.sandbox, "prepare").mockImplementation(async () => {
+      clock.advanceTo(originalExpiry.getTime() + 1_000);
+      await expect(expireComputerControl(deps, row.id, "lease-kept")).rejects.toThrow(
+        "provider revocation failed",
+      );
+      expect(row.controlHolder).toBe("none");
+      expect(row.controlLeaseId).toBe("lease-kept");
+    });
+    try {
+      await expect(provisionComputer(deps, row.id, context)).resolves.toBeTruthy();
+      expect(row).toMatchObject({
+        state: "running",
+        provisioningId: null,
+        controlHolder: "none",
+        controlLeaseId: "lease-kept",
+        controlBotId: "bot-1",
+        controlRunId: "run-held",
+      });
+      expect(row.controlLeaseExpiresAt).toEqual(originalExpiry);
+    } finally {
+      await clock.restore();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("clears a genuinely expired control that retained no lease when a fresh boot activates", async () => {
+    const started = Date.parse("2026-04-01T00:00:00.000Z");
+    const expiredAt = new Date(started - 60_000);
+    const { root, row, deps } = await freshBootHarness({
+      state: "stopped",
+      controlHolder: "user",
+      controlLeaseId: null,
+      controlBotId: "bot-1",
+      controlLeaseExpiresAt: expiredAt,
+      controlRunId: "run-stale",
+    });
+    const clock = installBootClock(started);
+    vi.spyOn(deps.sandbox, "prepare").mockImplementation(async () => {
+      clock.advanceTo(started + 5 * 60_000);
+    });
+    try {
+      await provisionComputer(deps, row.id, context, "bot");
+      expect(row).toMatchObject({
+        state: "running",
+        provisioningId: null,
+        controlHolder: "bot",
+        controlLeaseId: null,
+        controlLeaseExpiresAt: null,
+        controlBotId: null,
+        controlRunId: null,
+      });
+    } finally {
+      await clock.restore();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
+
+const FRESH_BOOT_MATCH_KEYS = [
+  "id",
+  "state",
+  "providerRef",
+  "kind",
+  "updatedAt",
+  "provisioningId",
+  "maintenanceId",
+  "controlHolder",
+  "controlLeaseId",
+  "controlLeaseExpiresAt",
+  "controlBotId",
+  "controlRunId",
+] as const;
+
+function sameStoredValue(expected: unknown, actual: unknown) {
+  if (expected instanceof Date && actual instanceof Date) {
+    return expected.getTime() === actual.getTime();
+  }
+  return Object.is(expected, actual);
+}
+
+interface FreshBootRow {
+  id: string;
+  homeKey: string;
+  scope: string;
+  state: string;
+  provisioningId: string | null;
+  providerRef: string | null;
+  kind: string;
+  controlHolder: string;
+  controlLeaseId: string | null;
+  controlLeaseExpiresAt: Date | null;
+  controlBotId: string | null;
+  controlRunId: string | null;
+  maintenanceId: string | null;
+  spaceId: string;
+  userId: string;
+  networkEgress: boolean;
+  imageProfile: string;
+  connectionId: string | null;
+  updatedAt: Date;
+}
+
+async function freshBootHarness(
+  overrides: Partial<FreshBootRow>,
+  setScreenControl?: SandboxProvider["setScreenControl"],
+) {
+  const root = await mkdtemp(path.join(tmpdir(), "ardurbot-fresh-boot-control-"));
+  const row: FreshBootRow = {
+    id: "computer-1",
+    homeKey: "bot-1",
+    scope: "dedicated",
+    state: "stopped",
+    provisioningId: null,
+    providerRef: null,
+    kind: "fake",
+    controlHolder: "none",
+    controlLeaseId: null,
+    controlLeaseExpiresAt: null,
+    controlBotId: null,
+    controlRunId: null,
+    maintenanceId: null,
+    spaceId: "workspace-1",
+    userId: "user-1",
+    networkEgress: true,
+    imageProfile: "base",
+    connectionId: null,
+    updatedAt: new Date(0),
+    ...overrides,
+  };
+  const updateMany = vi.fn(
+    async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      const matches = FRESH_BOOT_MATCH_KEYS.every(
+        (key) => !(key in where) || sameStoredValue(where[key], row[key]),
+      );
+      if (!matches) return { count: 0 };
+      Object.assign(row, { updatedAt: new Date(row.updatedAt.getTime() + 1) }, data);
+      return { count: 1 };
+    },
+  );
+  const prisma = {
+    computer: {
+      findUniqueOrThrow: vi.fn(async () => ({ ...row })),
+      findUnique: vi.fn(async () => ({ ...row })),
+      updateMany,
+    },
+    run: { findFirst: vi.fn(async () => null) },
+    computerExecutionLease: { findFirst: vi.fn(async () => null) },
+  } as unknown as PrismaClient;
+  const sandbox: SandboxProvider = new FakeSandboxProvider();
+  if (setScreenControl) sandbox.setScreenControl = setScreenControl;
+  const deps = {
+    prisma,
+    sandbox,
+    home: new LocalAgentHomeStore(root),
+    jobs: { enqueue: vi.fn(async () => undefined) } as unknown as JobPublisher,
+    events: {
+      finalizeComputerControlRelease: vi.fn(async () => {
+        throw new Error("revocation finalized");
+      }),
+    } as unknown as ThreadEvents,
+    dataDir: root,
+  };
+  return { root, row, deps, updateMany };
+}
+
+function installBootClock(nowMs: number) {
+  const setTimeoutReal = globalThis.setTimeout;
+  vi.useFakeTimers({ now: nowMs });
+  vi.stubGlobal("setTimeout", ((fn: (...args: never[]) => void, _ms?: number, ...args: never[]) =>
+    setTimeoutReal(fn, 0, ...args)) as unknown as typeof setTimeout);
+  return {
+    advanceTo(ms: number) {
+      vi.setSystemTime(ms);
+    },
+    async restore() {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    },
+  };
+}
 
 describe("computer execution leases", () => {
   it("does not serialize dedicated computers", async () => {
