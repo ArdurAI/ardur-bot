@@ -160,9 +160,18 @@ function setup(
 ) {
   const parent = report(Array(count).fill(before), id);
   parent.build.commit = "b".repeat(40);
+  parent.build.parentCommit = "d".repeat(40);
   const candidate = report(Array(count).fill(after), id);
   const fixedRelease = structuredClone(parent);
   fixedRelease.build.commit = "c".repeat(40);
+  if (id === "m05.cache-token-hit" || id === "m05.cache-request-hit")
+    for (const value of [parent, candidate, fixedRelease]) {
+      value.scenario.tier = "T3";
+      value.scenario.timingMode = "live";
+      metric(value, id).observations.forEach((item) => {
+        item.provenance!.kind = "provider-live";
+      });
+    }
   const policy = createBudgetPolicy(selection([id]), {
     mode,
     environmentHash: parent.environmentHash,
@@ -705,7 +714,7 @@ describe("evidence and calibration", () => {
       taskCompleted: true,
       traceIds: ["trace-01"],
     });
-    expect(compare(fixture).exitCode).toBe(1);
+    expect(compare(fixture).exitCode).toBe(2);
     fixture.candidate.crashes[3]!.recovery = "explicit-uncertainty";
     fixture.candidate.crashes[3]!.taskCompleted = false;
     expect(compare(fixture).reasons.some((item) => item.code === "safety-failure")).toBe(false);

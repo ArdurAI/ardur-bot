@@ -13,6 +13,7 @@ import type {
   RequiredEvidenceSelection,
 } from "./performance-report.js";
 import {
+  assertCalibrationPerformanceEvidence,
   assertComparablePerformanceEvidence,
   assertRequiredEvidence,
   createPerformanceEvidenceEnvelope,
@@ -162,7 +163,10 @@ function evidence(): PerformanceEvidenceReport {
       routeHash: hash("pin-and-route"),
       deadlineMs: 1000,
     },
-    artifacts: [{ sha256: hash("trace"), bytes: 1, kind: "trace" }],
+    artifacts: [
+      { sha256: hash("trace"), bytes: 1, kind: "trace" },
+      { sha256: hash("synthetic-source"), bytes: 1, kind: "raw" },
+    ],
     traces: [{ id: "trace-01", artifactHash: hash("trace"), clock: "monotonic" }],
     metrics: METRIC_DEFINITIONS.map((metric) => ({
       id: metric.id,
@@ -822,4 +826,180 @@ describe("pair compatibility", () => {
     expect(() => assertComparablePerformanceEvidence(before, after)).toThrow("measurement plan");
     expect(after.metrics[0]!.observations).toHaveLength(2);
   });
+});
+
+describe("evidence contract regressions", () => {
+  it.each(CRASH_BOUNDARIES)("enforces the declared recovery for $id", ({ id, expected }) => {
+    const report = evidence();
+    const crash = report.crashes.find((item) => item.id === id)!;
+    Object.assign(crash, {
+      status: "complete",
+      missingReason: null,
+      recovery: expected === "automatic-recovery" ? "safe-retry" : "automatic-recovery",
+      safetyPassed: true,
+      taskCompleted: true,
+      traceIds: ["trace-01"],
+    });
+    expect(() => parsePerformanceEvidenceReport(report, "wrong-recovery")).toThrow(
+      "recovery does not match boundary",
+    );
+    expect(() => assertRequiredEvidence(report, required({ crashBoundaryIds: [id] }))).toThrow();
+    crash.recovery = expected;
+    crash.taskCompleted = expected !== "explicit-uncertainty";
+    expect(() =>
+      assertRequiredEvidence(report, required({ crashBoundaryIds: [id] })),
+    ).not.toThrow();
+  });
+
+  it.each(["estimated", "virtual"] as const)(
+    "retains %s usage without counting it as observed coverage",
+    (kind) => {
+      const report = evidence();
+      const request = usage(report);
+      request.categories.reasoning.provenance!.kind = kind;
+      expect(() => assertRequiredEvidence(report, required({ usage: true }))).toThrow("coverage");
+      report.usageCoverage.observed = 0;
+      expect(parsePerformanceEvidenceReport(report, "synthetic-usage").usage).toEqual([request]);
+      expect(() => assertRequiredEvidence(report, required({ usage: true }))).toThrow(
+        "incomplete required usage",
+      );
+    },
+  );
+
+  it("requires the left commit to be a declared candidate baseline", () => {
+    const before = evidence();
+    const after = evidence();
+    before.build.commit = "d".repeat(40);
+    expect(() => assertComparablePerformanceEvidence(before, after)).toThrow(
+      "undeclared comparison baseline",
+    );
+    before.build.commit = after.build.parentCommit;
+    expect(() => assertComparablePerformanceEvidence(before, after)).not.toThrow();
+    before.build.commit = after.build.fixedReleaseCommit;
+    expect(() => assertComparablePerformanceEvidence(before, after)).not.toThrow();
+  });
+
+  it("validates repeated-build calibration separately from candidate comparisons", () => {
+    const before = evidence();
+    measured(before);
+    const after = structuredClone(before);
+    after.id = "calibration-repeat";
+    expect(() => assertComparablePerformanceEvidence(before, after)).toThrow(
+      "undeclared comparison baseline",
+    );
+    expect(() => assertCalibrationPerformanceEvidence(before, after)).not.toThrow();
+    after.build.parentCommit = "d".repeat(40);
+    expect(() => assertCalibrationPerformanceEvidence(before, after)).toThrow(
+      "identical build provenance",
+    );
+    after.build.parentCommit = before.build.parentCommit;
+    after.metrics[0]!.observations[0]!.pairId = "unrelated-pair";
+    expect(() => assertCalibrationPerformanceEvidence(before, after)).toThrow("measurement plan");
+  });
+
+  it("matches task pair IDs independently of trial count and ordering", () => {
+    const before = evidence();
+    const task = before.tasks[0]!;
+    Object.assign(task, {
+      status: "complete",
+      missingReason: null,
+      fixtureHash: hash("task-fixture"),
+      graderHash: hash("task-grader"),
+      trials: ["pair-01", "pair-02", null, "null"].map((pairId, index) => ({
+        id: `trial-${index}`,
+        sessionId: `session-${index}`,
+        pairId,
+        traceId: "trace-01",
+        outcome: "success",
+        passed: true,
+        criticalPassed: true,
+        withinDeadline: true,
+      })),
+    });
+    const after = structuredClone(before);
+    after.build.parentCommit = before.build.commit;
+    after.tasks[0]!.trials[0]!.pairId = "unrelated-pair";
+    expect(() => assertComparablePerformanceEvidence(before, after)).toThrow("task bindings");
+    after.tasks[0]!.trials[0]!.pairId = "pair-01";
+    after.tasks[0]!.trials.reverse();
+    expect(() => assertComparablePerformanceEvidence(before, after)).not.toThrow();
+  });
+
+  it.each(["metric", "usage"] as const)("resolves %s provenance to a declared artifact", (kind) => {
+    const report = evidence();
+    const value =
+      kind === "metric" ? measured(report).observations[0]! : usage(report).categories.output;
+    value.provenance!.sourceHash = hash("absent-source");
+    expect(() => parsePerformanceEvidenceReport(report, "orphan-source")).toThrow(
+      "observation source artifact missing",
+    );
+    report.artifacts.push({ sha256: hash("absent-source"), bytes: 1, kind: "raw" });
+    expect(() => parsePerformanceEvidenceReport(report, "retained-source")).not.toThrow();
+  });
+
+  it.each(["m05.cache-token-hit", "m05.cache-request-hit"])(
+    "requires live provider observations for %s",
+    (id) => {
+      const report = evidence();
+      const metric = measured(report, id, [0, 1]);
+      for (const tier of ["T0", "T1", "T2"] as const) {
+        report.scenario.tier = tier;
+        report.scenario.timingMode = tier === "T0" ? "virtual" : "zero-service-delay";
+        report.traces[0]!.clock = tier === "T0" ? "virtual" : "monotonic";
+        expect(() => parsePerformanceEvidenceReport(report, "replay-cache-hit")).toThrow(
+          "cache hits require live provider evidence",
+        );
+      }
+      report.scenario.tier = "T3";
+      report.scenario.timingMode = "live";
+      for (const kind of ["measured", "counted", "recorded-provider", "estimated"] as const) {
+        metric.observations.forEach((item) => {
+          item.provenance!.kind = kind;
+        });
+        expect(() => parsePerformanceEvidenceReport(report, "non-provider-cache-hit")).toThrow(
+          "cache hits require live provider evidence",
+        );
+      }
+      metric.observations.forEach((item) => {
+        item.provenance!.kind = "provider-live";
+      });
+      expect(() => assertRequiredEvidence(report, required({ metricIds: [id] }))).not.toThrow();
+    },
+  );
+
+  it("preserves replay accounting and prefix eligibility without claiming cache hits", () => {
+    const report = evidence();
+    usage(report);
+    measured(report, "m05.prefix-eligibility", [0, 1]);
+    expect(() =>
+      assertRequiredEvidence(
+        report,
+        required({ metricIds: ["m05.prefix-eligibility"], usage: true }),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertRequiredEvidence(report, required({ metricIds: ["m05.cache-token-hit"] })),
+    ).toThrow("incomplete");
+  });
+
+  it.each(METRIC_DEFINITIONS.filter(({ familyId }) => familyId === "m10"))(
+    "requires memory accounting for numeric $id observations",
+    ({ id }) => {
+      const report = evidence();
+      const metric = measured(report, id, [0, 1000]);
+      report.environment.memoryAccounting = "not-measured";
+      report.environmentHash = contentDigest(report.environment);
+      expect(() => parsePerformanceEvidenceReport(report, "unaccounted-memory")).toThrow(
+        "memory observations require an accounting method",
+      );
+      metric.observations = metric.observations.map((item) => ({ ...item, ...unknown() }));
+      metric.coverage.observed = 0;
+      metric.missingReason = "not-measured";
+      expect(() => parsePerformanceEvidenceReport(report, "unknown-memory")).not.toThrow();
+      report.environment.memoryAccounting = "rss";
+      report.environmentHash = contentDigest(report.environment);
+      measured(report, id, [0, 1000]);
+      expect(() => assertRequiredEvidence(report, required({ metricIds: [id] }))).not.toThrow();
+    },
+  );
 });

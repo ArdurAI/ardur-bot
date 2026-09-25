@@ -6,6 +6,7 @@ import type {
   RequiredEvidenceSelection,
 } from "../performance-report.js";
 import {
+  assertCalibrationPerformanceEvidence,
   assertComparablePerformanceEvidence,
   assertRequiredEvidence,
   parsePerformanceEvidenceEnvelope,
@@ -533,7 +534,6 @@ function analyzePair(
   baseline: "parent" | "fixed-release",
   reasons: VerdictReason[],
 ): MetricComparison[] {
-  assertComparablePerformanceEvidence(before, after);
   const comparisons: MetricComparison[] = [];
   for (const id of policy.required.metricIds) {
     const definition = METRIC_DEFINITIONS.find((item) => item.id === id)!;
@@ -666,6 +666,7 @@ function validateCalibration(policy: BudgetPolicy) {
   }
   for (const { report } of envelopes.slice(1)) {
     const reasons: VerdictReason[] = [];
+    assertCalibrationPerformanceEvidence(first, report);
     const comparisons = analyzePair(first, report, policy, "parent", reasons);
     requireCondition(
       !reasons.length &&
@@ -784,6 +785,7 @@ export function comparePerformanceEvidence(input: {
       ["fixed-release", fixedRelease],
     ] as const) {
       try {
+        assertComparablePerformanceEvidence(envelope.report, candidate.report);
         result.comparisons.push(
           ...analyzePair(envelope.report, candidate.report, policy, scope, result.reasons),
         );
