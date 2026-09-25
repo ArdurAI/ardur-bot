@@ -27,7 +27,7 @@ import {
   restoreComputerWorkspace,
 } from "./computer-workspace.js";
 import { resolveAgentHomePath } from "./home.js";
-import { owningSandbox } from "./host-aware-sandbox.js";
+import { isComputerRouter, owningSandbox } from "./host-aware-sandbox.js";
 
 type ComputerUpdateProgress = (
   stage: Exclude<ComputerUpdate["stage"], "preparing">,
@@ -315,6 +315,13 @@ export async function provisionComputer(
   // Advance past the observed stamp even when Date.now() equals it (same ms or clock skew);
   // otherwise a booting self-transition would leave the CAS token unchanged and a second
   // worker that observed the same stamp could also claim and provision.
+  // A missing provider fails before the boot claim, so the saved machine stays as it is.
+  if (!existing.connectionId && existing.kind !== "docker" && existing.kind !== "desktop")
+    await owningSandbox(
+      deps.sandbox,
+      { connectionId: existing.connectionId, kind: existing.kind },
+      context,
+    );
   const observedStamp = reclaimStamp ?? suspendStamp ?? existing.updatedAt;
   const claimStamp = new Date(Math.max(Date.now(), observedStamp.getTime() + 1));
   const provisioningId = randomUUID();
@@ -749,7 +756,11 @@ export async function replaceComputer(
     if (activeBootRun) throw new ComputerBusyError();
   }
 
-  const sourceSandbox = routing?.source ?? (await owningSandbox(deps.sandbox, existing, context));
+  // A router destroys the computer just loaded. A precomputed source can still name the engine
+  // from before a Settings move finished.
+  const sourceSandbox = isComputerRouter(deps.sandbox)
+    ? await owningSandbox(deps.sandbox, existing, context)
+    : (routing?.source ?? (await owningSandbox(deps.sandbox, existing, context)));
   const targetSandbox = routing?.target ?? sourceSandbox;
   const previousState = existing.state;
   const now = new Date();

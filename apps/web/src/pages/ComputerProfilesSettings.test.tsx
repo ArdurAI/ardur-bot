@@ -122,6 +122,50 @@ it("shows unavailable controls from Kubernetes capability flags", async () => {
   await act(async () => root.unmount());
 });
 
+it("moves a connectionless computer to This Mac only while that choice is on", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const render = (thisMac: boolean) =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={status}
+        connections={[]}
+        thisMac={thisMac}
+        onChanged={async () => {}}
+      />,
+    );
+  await act(async () => render(false));
+  expect(
+    [...element.querySelectorAll("option")].some((option) => option.textContent === "This Mac"),
+  ).toBe(false);
+  await act(async () => render(true));
+  const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  expect([...connection.options].map((option) => option.textContent)).toEqual([
+    "Deployment default",
+    "This Mac",
+  ]);
+  await act(async () => {
+    connection.value = "host";
+    connection.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  await act(async () => button("Apply").click());
+  await act(async () => button("Continue").click());
+  expect(api.configure).toHaveBeenCalledWith({
+    botId: "bot",
+    imageProfile: "base",
+    connectionId: null,
+    thisMac: true,
+    confirmed: true,
+  });
+  expect(api.engine).not.toHaveBeenCalledWith({ connectionId: "host" });
+  await act(async () => root.unmount());
+});
+
 it("keeps a stopped engine quiet until Retry and clears its reason after recovery", async () => {
   vi.useFakeTimers();
   const message =

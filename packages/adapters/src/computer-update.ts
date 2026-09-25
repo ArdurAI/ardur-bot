@@ -50,6 +50,7 @@ export async function queueComputerUpdate(
     imageProfile?: "base" | "developer";
     connectionId?: string | null;
     networkEgress?: boolean;
+    thisMac?: true;
     confirmed: boolean;
   },
 ) {

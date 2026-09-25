@@ -60,7 +60,10 @@ function fixture(approved = false) {
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     space: { findUniqueOrThrow: vi.fn(async () => ({ placement: { mode: "threshold" } })) },
-    computer: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    computer: {
+      updateMany: vi.fn(async () => ({ count: 1 })),
+      findUniqueOrThrow: vi.fn(async () => computer),
+    },
     computerUpdate: {
       create: vi.fn(async () => ({ id: "move" })),
       update: vi.fn(),
@@ -211,6 +214,51 @@ it("uses the checkpoint lifecycle before execution and persists the move reason"
   );
   expect(f.prisma.computer.updateMany).toHaveBeenLastCalledWith(
     expect.objectContaining({ data: { maintenanceId: null } }),
+  );
+});
+it("aborts an automatic move when Settings changes the computer during listing", async () => {
+  const f = fixture(true);
+  const sourceDestroy = vi.fn();
+  const targetDestroy = vi.fn();
+  f.sourceSandbox.destroy = sourceDestroy;
+  f.targetSandbox.destroy = targetDestroy;
+  const moved = {
+    ...f.computer,
+    kind: "docker",
+    providerRef: "docker-after-settings",
+    connectionId: "engine",
+    state: "running",
+  };
+  const list = vi.mocked(f.catalog.list);
+  const listed = list.getMockImplementation();
+  if (!listed) throw new Error("listing is unavailable");
+  list.mockImplementation(async (context) => {
+    f.prisma.computer.findUniqueOrThrow.mockResolvedValue(moved as never);
+    return listed(context);
+  });
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(replace).not.toHaveBeenCalled();
+  expect(vi.mocked(f.catalog.resolveReplacementRouting)).not.toHaveBeenCalled();
+  expect(sourceDestroy).not.toHaveBeenCalled();
+  expect(targetDestroy).not.toHaveBeenCalled();
+  expect(f.computer).toMatchObject({
+    state: "running",
+    kind: "desktop",
+    providerRef: "desktop-computer",
+    connectionId: null,
+  });
+  expect(moved).toMatchObject({ state: "running", providerRef: "docker-after-settings" });
+  const updates = f.prisma.computer.updateMany.mock.calls as unknown as { data: object }[][];
+  expect(updates.every((call) => call[0] !== undefined && !("state" in call[0].data))).toBe(true);
+  expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: {
+        placement: expect.objectContaining({
+          status: "failed",
+          reason: "The computer changed before the move, so it stayed where it is.",
+        }),
+      },
+    }),
   );
 });
 it("keeps an automatic local Docker computer when only Kubernetes has room", async () => {

@@ -60,6 +60,8 @@ export const ComputerConfigurationSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema,
   connectionId: z.string().nullable(),
+  /** Move onto This Mac: kind desktop, no connection. Distinct from a null deployment default. */
+  thisMac: z.literal(true).optional(),
   confirmed: z.boolean().default(false),
 });
 export function computerCapabilities(kind: string) {

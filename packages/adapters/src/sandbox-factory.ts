@@ -26,6 +26,8 @@ export interface SandboxProviderOptions {
   boxApiKey?: string;
   boxApiUrl?: string;
   dataDir?: string;
+  /** Extra kind → provider factories for computers that are not the deployment default. */
+  providers?: Partial<Record<string, () => SandboxProvider>>;
 }
 
 function missingRemoteKey(provider: "e2b" | "daytona" | "box", envName: string): SandboxProvider {

@@ -77,7 +77,26 @@ export class ComputerConnections {
 export type ComputerIdentity = { connectionId?: string | null; kind?: string | null };
 
 /** Engines that keep connectionless computers of their own kind under any deployment default. */
-export type LocalSandboxes = { docker?: () => SandboxProvider; host?: () => SandboxProvider };
+export type LocalSandboxes = {
+  docker?: () => SandboxProvider;
+  host?: () => SandboxProvider;
+  providers?: Partial<Record<string, () => SandboxProvider>>;
+};
+
+const providerLabel: Record<string, string> = {
+  kubernetes: "Kubernetes",
+  e2b: "E2B",
+  daytona: "Daytona",
+  box: "Box",
+};
+
+/** One sentence naming the computer's kind and the provider that was not registered. */
+export class MissingComputerProviderError extends Error {
+  constructor(kind: string) {
+    super(`No ${providerLabel[kind] ?? kind} provider is registered.`);
+    this.name = "MissingComputerProviderError";
+  }
+}
 
 export class ConnectedSandboxProvider implements SandboxProvider {
   readonly terminal: TerminalProvider;
@@ -134,7 +153,12 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   private connectionless(kind: string | null | undefined) {
     const local =
       kind === "docker" ? this.local.docker : kind === "desktop" ? this.local.host : undefined;
-    return local?.() ?? this.fallback;
+    if (local) return local();
+    const registered = kind ? this.local.providers?.[kind]?.() : undefined;
+    if (registered) return registered;
+    // A computer with no saved kind is created on the deployment default.
+    if (!kind || this.fallback.describe().id === kind) return this.fallback;
+    throw new MissingComputerProviderError(kind);
   }
   async capacity(context: AdapterContext) {
     return this.fallback.capacity?.(context) ?? unknownCapacity();

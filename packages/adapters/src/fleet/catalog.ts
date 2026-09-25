@@ -86,22 +86,31 @@ export class FleetCatalog {
   }
   async resolveReplacementRouting(
     computer: ComputerIdentity,
-    configuration: { connectionId?: string | null; targetId?: string },
+    configuration: { connectionId?: string | null; targetId?: string; thisMac?: true },
     context: AdapterContext,
     listedFleet?: Awaited<ReturnType<FleetCatalog["list"]>>,
   ): Promise<{ source: SandboxProvider; target: SandboxProvider }> {
     const source = await this.resolveComputer(computer, context);
     if (configuration.targetId === undefined) {
+      if (configuration.thisMac) {
+        if (!computer.connectionId && computer.kind === "desktop")
+          return { source, target: source };
+        // Settings already confirmed this move onto This Mac.
+        return {
+          source,
+          target: await this.resolveComputer({ kind: "desktop" }, context),
+        };
+      }
       if (
         configuration.connectionId === undefined ||
         configuration.connectionId === computer.connectionId
       )
         return { source, target: source };
       // A Settings connection change is already confirmed and may cross kinds.
-      const target = await this.routing.target(
-        { connectionId: configuration.connectionId },
-        context,
-      );
+      // Deployment default is that engine, distinct from This Mac.
+      const target = configuration.connectionId
+        ? await this.routing.target({ connectionId: configuration.connectionId }, context)
+        : await this.resolveComputer({ kind: this.fallback.describe().id }, context);
       return { source, target };
     }
     const row = (listedFleet ?? (await this.list(context))).targets.find(

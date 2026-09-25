@@ -39,6 +39,11 @@ export async function placeRunComputer(
   if (policy.mode === "manual") return true;
   const computer = run.bot.computer;
   if (!computer || computer.maintenanceId || computer.controlHolder === "user") return true;
+  const listed = {
+    kind: computer.kind,
+    providerRef: computer.providerRef ?? null,
+    connectionId: computer.connectionId ?? null,
+  };
   const context: AdapterContext = {
     operationId: runId,
     traceId: runId,
@@ -243,6 +248,28 @@ export async function placeRunComputer(
     );
   }, 30_000);
   try {
+    const current = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computer.id } });
+    if (
+      current.kind !== listed.kind ||
+      (current.providerRef ?? null) !== listed.providerRef ||
+      (current.connectionId ?? null) !== listed.connectionId
+    ) {
+      await deps.prisma.computerUpdate.updateMany({
+        where: { id: updateId, status: "running" },
+        data: { status: "failed" },
+      });
+      await deps.prisma.run.updateMany({
+        where: ownedRun,
+        data: {
+          placement: {
+            ...decision,
+            status: "failed",
+            reason: "The computer changed before the move, so it stayed where it is.",
+          },
+        },
+      });
+      return true;
+    }
     const moveSignal = AbortSignal.any([signal, abort.signal]);
     moveSignal.throwIfAborted();
     const routing = await catalog.resolveReplacementRouting(

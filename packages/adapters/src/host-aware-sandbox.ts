@@ -14,7 +14,11 @@ import type {
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "./computer-connections.js";
-import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
+import {
+  ComputerConnections,
+  ConnectedSandboxProvider,
+  MissingComputerProviderError,
+} from "./computer-connections.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import {
   createHostClient,
@@ -55,7 +59,7 @@ export function createRunSandbox(
       ? new ConnectedSandboxProvider(
           selected,
           new ComputerConnections(opts.prisma, opts.secrets, opts),
-          { docker, host },
+          { docker, host, providers: opts.providers },
         )
       : selected;
   if (kind !== "docker" || !opts.prisma) return primary;
@@ -118,8 +122,8 @@ export class HostAwareSandbox implements SandboxProvider {
   }
 
   /**
-   * This Mac runs connectionless desktop computers. When a new machine is being chosen,
-   * pass the This Mac setting instead: it then decides for every connectionless computer.
+   * A saved kind routes itself: desktop to This Mac, anything else to its own provider.
+   * Pass the This Mac setting only while choosing a computer that has no saved kind yet.
    */
   private route(subject: ComputerIdentity, hostSelected?: boolean) {
     return !subject.connectionId && (hostSelected ?? subject.kind === "desktop")
@@ -155,20 +159,18 @@ export class HostAwareSandbox implements SandboxProvider {
     },
     context: AdapterContext,
   ) {
-    const provider = this.route(
-      { connectionId: request.connectionId, kind: request.providerKind },
-      request.providerRef ? undefined : await this.hostEnabled(),
+    const savedKind = request.providerKind;
+    const routed = this.route(
+      { connectionId: request.connectionId, kind: savedKind },
+      savedKind ? undefined : await this.hostEnabled(),
     );
-    const sameKind = request.providerKind === provider.describe().id;
-    return provider.provision(
-      {
-        ...request,
-        // Another kind's machine cannot be reused, and its kind must not re-route the request.
-        providerRef: sameKind ? request.providerRef : undefined,
-        providerKind: sameKind ? request.providerKind : undefined,
-      },
-      context,
-    );
+    const owner = isComputerRouter(routed)
+      ? await routed.owner({ connectionId: request.connectionId, kind: savedKind }, context)
+      : routed;
+    // Compare the provider that owns this computer. A mismatch must not drop its machine.
+    if (savedKind && savedKind !== owner.describe().id)
+      throw new MissingComputerProviderError(savedKind);
+    return routed.provision(request, context);
   }
 
   prepare(computer: ComputerRef, context: AdapterContext) {

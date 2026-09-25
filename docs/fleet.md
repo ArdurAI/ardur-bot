@@ -60,7 +60,7 @@ same kind of computer, such as between Docker engines or between Linux machines.
 another engine remains the goal. It waits because today's move removes the old computer before
 the new one has accepted the workspace. Verified migration will start the destination, import and
 verify the workspace, point the computer at it, and only then remove the old one. A person can
-still move a computer between engines by changing its connection in Settings.
+still move a computer between engines in Settings, by choosing another connection or This Mac while that choice is on.
 
 `placeRunComputer` runs before the first computer execution lease and before tool effects. It
 never moves an existing run snapshot. A first move pauses for that bot's consent unless `Move
@@ -75,11 +75,13 @@ runtime pins retain their existing host restriction; placement never changes a r
 pin to make a destination work. Explicit connection changes retain the chosen destination;
 automatic placement evaluates first use after creation or replacement at the next new run.
 
-Every run, reset, update, recovery, sleep, screen and terminal operation uses the computer's own
-engine: its saved connection, otherwise local Docker for a Docker computer, This Mac for a host
-computer, and the deployment's saved default for any other kind. Changing the default therefore
-does not strand an existing local computer. In a Docker deployment, a computer that has not
-started yet follows the current This Mac choice.
+Every run, reset, update, recovery, sleep, screen and terminal operation uses the computer's saved
+kind and connection. A saved connection uses that connection. Otherwise Docker uses local Docker,
+This Mac uses the host, and E2B, Daytona, Box, and Kubernetes use that kind's provider. The kind is
+chosen when the computer is created: This Mac when that choice is on and there is no connection,
+otherwise the deployment default. Changing This Mac or the deployment default does not move a
+computer that already has a kind, including one whose machine is missing after a failed reset or
+update.
 
 Moves reserve the computer using the existing maintenance record, save a checkpoint with the old
 connection, destroy the old computer, then provision and restore with the new connection. The

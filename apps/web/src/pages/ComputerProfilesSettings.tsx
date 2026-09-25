@@ -22,20 +22,25 @@ import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
 
 type Connection = { id: string; name: string; settings: ComputerConnectionSettings };
+const THIS_MAC = "host";
+
 export function ComputerProfilesSettings() {
   const { t } = useLingui();
   const [computers, setComputers] = useState<
     { botId: string; name: string; status: ComputerStatus }[]
   >([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [thisMac, setThisMac] = useState(false);
   const [error, setError] = useState("");
   async function refresh() {
-    const [computers, connections] = await Promise.all([
+    const [computers, connections, deployment] = await Promise.all([
       rpc.computer.list(),
       rpc.computer.connections(),
+      rpc.deployment.get().catch(() => null),
     ]);
     setComputers(computers);
     setConnections(connections);
+    setThisMac(deployment?.computerHost === "this-mac");
   }
   useEffect(() => {
     const reload = () =>
@@ -56,6 +61,7 @@ export function ComputerProfilesSettings() {
           key={computer.status.computerId}
           {...computer}
           connections={connections}
+          thisMac={thisMac}
           onChanged={refresh}
         />
       ))}
@@ -63,22 +69,32 @@ export function ComputerProfilesSettings() {
   );
 }
 
+function savedConnection(status: ComputerStatus, thisMac: boolean) {
+  if (status.connectionId) return status.connectionId;
+  return thisMac && status.kind === "desktop" ? THIS_MAC : "";
+}
+
 export function ComputerProfile({
   botId,
   name,
   status,
   connections,
+  thisMac = false,
   onChanged,
 }: {
   botId: string;
   name: string;
   status: ComputerStatus;
   connections: Connection[];
+  thisMac?: boolean;
   onChanged: () => Promise<void>;
 }) {
   const { t } = useLingui();
   const [profile, setProfile] = useState<ComputerProfileId>(status.imageProfile ?? "base");
-  const [connectionId, setConnectionId] = useState(status.connectionId ?? "");
+  const [connectionId, setConnectionId] = useState(savedConnection(status, thisMac));
+  useEffect(() => {
+    setConnectionId(savedConnection(status, thisMac));
+  }, [status.connectionId, status.kind, thisMac]);
   const [confirm, setConfirm] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -89,7 +105,13 @@ export function ComputerProfile({
     connectionId: string;
     name: string;
   } | null>(null);
+  const choosingHost = connectionId === THIS_MAC;
   useEffect(() => {
+    if (choosingHost) {
+      setEngineError("");
+      setDetectedEngine({ connectionId, name: "This Mac" });
+      return;
+    }
     let active = true;
     setEngineError("");
     void rpc.computer
@@ -111,7 +133,7 @@ export function ComputerProfile({
     return () => {
       active = false;
     };
-  }, [connectionId, engineRefresh]);
+  }, [choosingHost, connectionId, engineRefresh]);
   const engine =
     detectedEngine?.connectionId === connectionId
       ? detectedEngine.name
@@ -124,7 +146,8 @@ export function ComputerProfile({
       await rpc.computer.configure({
         botId,
         imageProfile: profile,
-        connectionId: connectionId || null,
+        connectionId: choosingHost ? null : connectionId || null,
+        ...(choosingHost ? { thisMac: true as const } : {}),
         confirmed: true,
       });
       setConfirm(false);
@@ -172,6 +195,11 @@ export function ComputerProfile({
           <NativeSelectOption value="">
             <Trans>Deployment default</Trans>
           </NativeSelectOption>
+          {thisMac ? (
+            <NativeSelectOption value={THIS_MAC}>
+              <Trans>This Mac</Trans>
+            </NativeSelectOption>
+          ) : null}
           {connections.map((entry) => (
             <NativeSelectOption key={entry.id} value={entry.id}>
               {entry.name}
@@ -217,7 +245,7 @@ export function ComputerProfile({
           pending ||
           status.state === "booting" ||
           (profile === (status.imageProfile ?? "base") &&
-            connectionId === (status.connectionId ?? ""))
+            connectionId === savedConnection(status, thisMac))
         }
         onClick={() => setConfirm(true)}
       >

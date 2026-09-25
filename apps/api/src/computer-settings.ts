@@ -121,6 +121,12 @@ export async function validateComputerConfiguration(
 ) {
   const configuration = ComputerConfigurationSchema.parse(raw);
   if (!configuration.confirmed) throw new Error("This replaces the computer's files. Continue?");
+  if (configuration.thisMac) {
+    if (configuration.connectionId) throw new Error("Choose an available computer connection.");
+    const deployment = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
+    if (deployment?.computerHost !== "this-mac") throw new Error("This Mac is not available.");
+    return configuration;
+  }
   if (
     configuration.connectionId &&
     !(await prisma.connection.findFirst({
