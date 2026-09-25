@@ -9,6 +9,7 @@ import type {
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { traceCurrent } from "./scoreboard-trace.js";
 import { dispatcherFetch } from "./undici-fetch.js";
 
 const HTTP_APIS = new Set([
@@ -134,10 +135,15 @@ export function observePiUsage(
         counts: Partial<Record<keyof RawUsageCounts, unknown>>;
         finished: boolean;
         http: boolean;
+        operationId: string;
+        transport: boolean;
+        text: boolean;
       }
     | undefined;
   const begin = (http: boolean) => {
     if (active && !active.finished) {
+      if (active.http)
+        traceCurrent("provider.finished", { operationId: active.operationId, outcome: "failed" });
       emit(active.collector.finish("failed"));
       active.finished = true;
     }
@@ -156,12 +162,26 @@ export function observePiUsage(
       scope: http ? "request" : "runtime-call",
       limitations: http ? [] : ["transport-detail-unavailable"],
     });
-    active = { collector, counts: {}, finished: false, http };
+    active = {
+      collector,
+      counts: {},
+      finished: false,
+      http,
+      operationId: `${requestId}:${attempt - 1}`,
+      transport: false,
+      text: false,
+    };
+    if (http) traceCurrent("provider.started", { operationId: active.operationId });
     emit(collector.start());
     return active;
   };
   const finish = (outcome: Exclude<UsageOutcome, "started">) => {
     if (active && !active.finished) {
+      if (active.http)
+        traceCurrent("provider.finished", {
+          operationId: active.operationId,
+          outcome: outcome === "unknown" ? "uncertain" : outcome,
+        });
       emit(active.collector.finish(outcome));
       active.finished = true;
     }
@@ -180,6 +200,10 @@ export function observePiUsage(
       const observed = observeBody(
         response,
         (payload) => {
+          if (!current.transport) {
+            current.transport = true;
+            traceCurrent("provider.transport", { operationId: current.operationId });
+          }
           const counts = piWireUsage(model.api, payload);
           if (!counts) return;
           for (const key of Object.keys(counts) as Array<keyof RawUsageCounts>) {
@@ -192,11 +216,18 @@ export function observePiUsage(
       );
       // Error bodies may still supply totals; any later snapshot keeps this failed outcome.
       if (!response.ok) {
+        traceCurrent("provider.finished", { operationId: current.operationId, outcome: "failed" });
+        if (response.status === 429)
+          traceCurrent("wait.quota", { operationId: current.operationId });
         emit(current.collector.finish("failed"));
         current.finished = true;
       }
       return observed;
     } catch (error) {
+      traceCurrent("provider.finished", {
+        operationId: current.operationId,
+        outcome: options.signal?.aborted ? "cancelled" : "failed",
+      });
       emit(current.collector.finish(options.signal?.aborted ? "cancelled" : "failed"));
       current.finished = true;
       throw error;
@@ -207,6 +238,10 @@ export function observePiUsage(
       if (!supported) begin(false);
       const source = start(supported ? { ...options, fetch } : options);
       for await (const event of source) {
+        if (event.type === "text_delta" && event.delta && active?.http && !active.text) {
+          active.text = true;
+          traceCurrent("provider.text", { operationId: active.operationId });
+        }
         if (event.type === "done" || event.type === "error") {
           const message = event.type === "done" ? event.message : event.error;
           // Non-HTTP transports expose SDK-normalized categories, not original provider fields.

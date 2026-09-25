@@ -4,6 +4,7 @@ import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
 import { desktopBridge } from "./desktop";
+import type {} from "./scoreboard-trace";
 
 const SPACE_STORAGE_KEY = "ardurbot:space-id";
 
@@ -52,6 +53,16 @@ export function withSpaceHeaders(
 }
 
 const link = new RPCLink<RpcClientContext>({
+  interceptors: [
+    ({ path, next }) => {
+      if (!globalThis.__ardurTrace) return next();
+      const submittedAt = performance.now();
+      return import("./scoreboard-trace").then(
+        ({ traceRpc }) => traceRpc(path, next, submittedAt),
+        () => next(),
+      );
+    },
+  ],
   url: () =>
     typeof window === "undefined"
       ? "http://127.0.0.1:5173/rpc"

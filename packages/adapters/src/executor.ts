@@ -340,6 +340,7 @@ import {
   filterBuiltinToolsForThread,
   listSchedulesFromTool,
 } from "./schedule-tools.js";
+import { tracePoint, traceRuntime } from "./scoreboard-trace.js";
 import { loadAgentScratchpadContext } from "./scratchpad-context.js";
 import {
   addScratchpadItemFromTool,
@@ -1210,7 +1211,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
       if (!run) return;
       if (isTerminal(run.status as RunStatus)) return;
       if (run.cancelRequestedAt && run.status === "queued" && !run.startedAt) {
-        await confirmDispatchStop(deps.prisma, runId);
+        if (await confirmDispatchStop(deps.prisma, runId))
+          tracePoint(runId, "terminal.committed", { outcome: "cancelled" });
         return;
       }
       let { resumeCheckpoint, heldForTakeover, resumeHeldLease, takeoverResume } =
@@ -1247,6 +1249,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }),
       });
       if (leased.queued) {
+        tracePoint(runId, "wait.capacity", { attempt: fence });
         await deps.jobs.enqueue({
           ...runContinueJob(runId),
           availableAt: new Date(Date.now() + 1000),
@@ -1254,6 +1257,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         return;
       }
       if (leased.count !== 1) return;
+      tracePoint(runId, "lease.acquired", { attempt: fence });
       if (deps.memoryDocuments) await markBriefPending(deps.prisma, runId).catch(() => undefined);
 
       const current = await deps.prisma.run.findUniqueOrThrow({ where: { id: runId } });
@@ -1296,6 +1300,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           });
           if (placementAttempt) {
             const failed = await deps.events.finalizeRun({
+              onCommitted: () =>
+                tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
               spaceId: run.spaceId,
               threadId: run.threadId,
               botId: run.botId,
@@ -1972,6 +1978,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (pendingToolNames.length > 0 && endsSentence(currentTextSegment)) flushPendingTools();
         };
         let pendingProgress = "";
+        let tracedText = false;
+        let tracedSafe = false;
+        let tracedRuntime = false;
         let lastProgressAt = 0;
         let hasStreamedText = false;
         let toolCallStreak: ToolCallStreak = { key: undefined, count: 0 };
@@ -1987,6 +1996,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : undefined;
         const flushProgress = async () => {
           if (scripted || !pendingProgress) return;
+          if (!tracedSafe) {
+            tracedSafe = true;
+            tracePoint(runId, "text.safe", { attempt: fence });
+          }
           await deps.events.append({
             spaceId: run.spaceId,
             threadId: thread.id,
@@ -1999,6 +2012,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               ? { delta: pendingProgress, streaming: true }
               : { text: pendingProgress, streaming: true },
           });
+          tracePoint(runId, "text.published", { attempt: fence });
           hasStreamedText = true;
           pendingProgress = "";
           lastProgressAt = Date.now();
@@ -4275,9 +4289,29 @@ export function createRunExecutor(deps: ExecutorDeps) {
             args: Record<string, unknown>,
             executionId: string,
           ) => {
-            const result = await commandRecording.invoke(name, args, executionId, applyTool);
-            briefToolResults = appendBriefToolResult(briefToolResults, name, result, runSecrets);
-            return result;
+            tracePoint(runId, "tool.started", { attempt: fence, operationId: executionId });
+            try {
+              const result = await commandRecording.invoke(name, args, executionId, applyTool);
+              briefToolResults = appendBriefToolResult(briefToolResults, name, result, runSecrets);
+              tracePoint(runId, "tool.finished", {
+                attempt: fence,
+                operationId: executionId,
+                outcome: isToolPauseResult(result)
+                  ? "uncertain"
+                  : isFailedToolResult(result)
+                    ? "failed"
+                    : "success",
+              });
+              if (isToolPauseResult(result)) tracePoint(runId, "wait.approval", { attempt: fence });
+              return result;
+            } catch (error) {
+              tracePoint(runId, "tool.finished", {
+                attempt: fence,
+                operationId: executionId,
+                outcome: "failed",
+              });
+              throw error;
+            }
           };
           const runRuntime: AgentRuntime["run"] = commandReplay
             ? () => commandReplayEvents(commandReplay, runId, recordedApplyTool)
@@ -4402,6 +4436,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return saveContextSnapshot();
           };
           if (!comparisonRun) await saveContextSnapshot();
+          tracePoint(runId, "context.ready", { attempt: fence });
+          tracePoint(runId, "runtime.started", { attempt: fence });
           const modelStartedAt = Date.now();
           const runtimeEvents = withComparisonInput(
             deps,
@@ -4567,7 +4603,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const accountedEvents =
             scripted || commandReplay
               ? runtimeEvents
-              : accountRuntimeUsage(runtimeEvents, {
+              : accountRuntimeUsage(traceRuntime(runId, fence, runtimeEvents), {
                   provider: resolved.provider,
                   model: resolved.id,
                   purpose: run.delegationId ? "delegated" : "main",
@@ -4612,7 +4648,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }
             }
 
+            if (!tracedRuntime) {
+              tracedRuntime = true;
+              tracePoint(runId, "runtime.first", { attempt: fence });
+            }
             if (event.type === "text") {
+              if (event.text && !tracedText) {
+                tracedText = true;
+                tracePoint(runId, "runtime.text", { attempt: fence });
+              }
               if (
                 !comparisonRun &&
                 event.text &&
@@ -4625,7 +4669,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
               currentTextSegment += event.text;
               toolCallStreak = { key: undefined, count: 0 };
               tryFlushPendingTools();
-              pendingProgress += progressRedactor.push(event.text);
+              const safeDelta = progressRedactor.push(event.text);
+              if (safeDelta && !tracedSafe) {
+                tracedSafe = true;
+                tracePoint(runId, "text.safe", { attempt: fence });
+              }
+              pendingProgress += safeDelta;
               const now = Date.now();
               if (!scripted && pendingProgress && now - lastProgressAt >= 250) {
                 await flushProgress();
@@ -4689,6 +4738,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 offeredActions: event.actions,
               });
               if (!paused) return;
+              tracePoint(runId, "wait.approval", { attempt: fence });
               await notifyRun(deps, run, {
                 kind: "help",
                 title: `${bot.name} needs an answer`,
@@ -4783,6 +4833,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 terminalCheckpointComplete = true;
                 const stuckText = `I got stuck calling ${humanizeToolName(event.name)} with the same input ${toolCallStreak.count} times in a row without making progress, so I stopped early. Try rephrasing this, or ask me to try a different approach.`;
                 const stopped = await deps.events.finalizeRun({
+                  onCommitted: () =>
+                    tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "success" }),
                   spaceId: run.spaceId,
                   threadId: thread.id,
                   botId: bot.id,
@@ -4900,6 +4952,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
           }
 
+          tracePoint(runId, "runtime.finished", { attempt: fence });
           if (approvalPausePending || !leaseValid) return;
           approvedEffectReplays.assertDrained();
           pendingProgress += progressRedactor.finish();
@@ -4981,6 +5034,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               ? botMessageOutcomeFromMidTurn(text, midTurnUserTexts)
               : null;
           const completed = await deps.events.finalizeRun({
+            onCommitted: () =>
+              tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "success" }),
             spaceId: run.spaceId,
             threadId: thread.id,
             botId: bot.id,
@@ -5048,6 +5103,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             runSecrets,
           );
           const failed = await deps.events.finalizeRun({
+            onCommitted: () =>
+              tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
             spaceId: run.spaceId,
             threadId: thread.id,
             botId: bot.id,
@@ -5104,6 +5161,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           setupError instanceof CommandReplayUnavailableError
         ) {
           const finalized = await deps.events.finalizeRun({
+            onCommitted: () =>
+              tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
             spaceId: run.spaceId,
             threadId: run.threadId,
             botId: run.botId,
@@ -5202,7 +5261,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           await releaseComputerExecutionLease(deps.prisma, computerLease).catch(() => undefined);
         }
-        if (stopConfirmed) await confirmDispatchStop(deps.prisma, runId);
+        if (stopConfirmed && (await confirmDispatchStop(deps.prisma, runId)))
+          tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "cancelled" });
         await scheduleCompactionAfterTurn(deps.prisma, deps.jobs, runId).catch((error) =>
           getLogger().error("history.compact enqueue failed", error),
         );

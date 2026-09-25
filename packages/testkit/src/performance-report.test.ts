@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createTraceBuffer } from "../../adapters/src/scoreboard-trace.js";
 import {
   parsePerformanceReport,
   parseTcpPort,
@@ -31,6 +32,7 @@ import {
   SCOREBOARD_MANIFEST,
   TASK_DEFINITIONS,
 } from "./scoreboard/manifest.js";
+import { collectTraceEvidence } from "./scoreboard/trace-collector.js";
 
 describe("performance report statistics", () => {
   it("summarizes a distribution without mutating it", () => {
@@ -1002,4 +1004,29 @@ describe("evidence contract regressions", () => {
       expect(() => assertRequiredEvidence(report, required({ metricIds: [id] }))).not.toThrow();
     },
   );
+});
+
+describe("production trace fragments", () => {
+  it("merges measured and missing trace metrics into schema 3 without replacing its registry", () => {
+    const buffer = createTraceBuffer({ processId: "fixture-worker", now: () => 10 });
+    buffer.record("fixture-run", "admission.started", undefined, 0);
+    buffer.record("fixture-run", "terminal.committed", { outcome: "failed" });
+    const fragments = collectTraceEvidence([buffer.snapshot()], {
+      sessionId: "session-1",
+      pairId: "pair-1",
+      expectedTraces: 1,
+      requiredBoundaries: ["admission.started", "terminal.committed"],
+    });
+    const report = evidence();
+    report.artifacts.push(...fragments.artifacts);
+    report.traces = fragments.traces;
+    report.metrics = report.metrics.map(
+      (metric) => fragments.metrics.find((part) => part.id === metric.id) ?? metric,
+    );
+    expect(() => parsePerformanceEvidenceReport(report, "trace-fixture")).not.toThrow();
+    expect(fragments.metrics.find((metric) => metric.id === "m01.user-ttft")!.missingReason).toBe(
+      "unknown",
+    );
+    expect(fragments.derived[0]!.admissionToTerminal.value).toBe(10);
+  });
 });
