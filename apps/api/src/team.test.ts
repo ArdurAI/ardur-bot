@@ -126,6 +126,17 @@ function fixture(runStatus = "running", delegationStatus = "running") {
   return { db, prisma: db as unknown as PrismaClient, delegation, run };
 }
 describe("team.board", () => {
+  it("projects the run's effort evidence without changing its saved pin", async () => {
+    const f = fixture();
+    const runtimeInfo = {
+      runtimeKind: "claude-code",
+      effortAttested: false,
+      effortAttestationReason: "Claude Code does not report the applied effort",
+    };
+    Object.assign(f.run, { runtimeInfo });
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.executing).toMatchObject({ pin: snapshot.pin, runtimeInfo });
+  });
   it.each([
     ["queued", "queued", "queued"],
     ["running", "running", "working"],

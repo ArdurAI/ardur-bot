@@ -1,6 +1,7 @@
 import type { JobPublisher, JobWorkerHost } from "@ardurbot/adapter-kit";
 import {
   ComposioConnector,
+  createHostClient,
   FleetCatalog,
   IntegrationProviderSettings,
   placeRunComputer,
@@ -113,6 +114,8 @@ async function main() {
     prisma,
     secrets,
     {
+      sandbox,
+      hostMcp: createHostClient(),
       stdioEnabled: process.env.MCP_STDIO_ENABLED === "true",
       allowedCommands: (process.env.MCP_STDIO_ALLOWED_COMMANDS ?? "")
         .split(",")

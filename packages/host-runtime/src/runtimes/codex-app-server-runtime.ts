@@ -28,7 +28,11 @@ type RpcMessage = {
   error?: unknown;
 };
 
-class CodexRequestRejected extends Error {}
+class CodexRequestRejected extends Error {
+  constructor(readonly code?: number) {
+    super("Codex app-server rejected the request.");
+  }
+}
 
 /** Bounded stdio RPC. No server output or account details are logged. */
 export class CodexRpc {
@@ -58,7 +62,7 @@ export class CodexRpc {
             clearTimeout(pending.timer);
             this.pending.delete(item.id as number);
             if (item.error)
-              pending.reject(new CodexRequestRejected("Codex app-server rejected the request."));
+              pending.reject(new CodexRequestRejected((item.error as { code?: number }).code));
             else pending.resolve(item.result);
           } else this.events.push(item);
         }
@@ -168,24 +172,41 @@ export async function codexModels(rpc: CodexRpc): Promise<RuntimeAvailability["m
 export async function probeCodex(start: NativeSpawn = spawnNative): Promise<RuntimeAvailability> {
   const base = { runtimeKind: "codex-app-server" as const, models: [] };
   let rpc: CodexRpc | undefined;
+  let version: string | undefined;
+  let signedIn: boolean | undefined;
   try {
     const binary = await findNativeBinary("codex");
-    if (!binary) throw new Error("missing");
-    const { version } = await probeCommand(binary, ["--version"], true, start);
+    if (!binary) return { ...base, available: false, reason: "Codex is not installed." };
+    const result = await probeCommand(binary, ["--version"], true, start);
+    version = result.version;
+    if (result.code !== 0) throw new Error("version probe failed");
     rpc = await openCodex(start);
     const { account } = await rpc.request<{ account: { type: string } | null }>("account/read", {
       refreshToken: false,
     });
-    if (account?.type !== "chatgpt")
+    signedIn = account?.type === "chatgpt";
+    if (!signedIn)
       return {
         ...base,
         version,
+        signedIn,
         available: false,
-        reason: "Not signed in — connect Codex with ChatGPT.",
+        reason: "Not signed in — run codex login.",
       };
-    return { ...base, version, available: true, models: await codexModels(rpc) };
-  } catch {
-    return { ...base, available: false, reason: "Codex app-server unavailable" };
+    return { ...base, version, signedIn, available: true, models: await codexModels(rpc) };
+  } catch (error) {
+    return {
+      ...base,
+      version,
+      signedIn,
+      available: false,
+      reason:
+        version &&
+        error instanceof CodexRequestRejected &&
+        [-32601, -32602].includes(error.code ?? 0)
+          ? `Codex version ${version} is not supported yet.`
+          : "Codex could not be reached. Check again or restart the desktop app.",
+    };
   } finally {
     await rpc?.close();
   }
@@ -214,10 +235,14 @@ export class CodexAppServerRuntime implements AgentRuntime {
       code: "runtime-unavailable" | "pin-model-unknown" | "pin-effort-unsupported",
       reason: string,
     ) => new RuntimePinError(runtimePinProblem(pin, code, reason));
-    if (request.model.apiKey || request.model.oauth)
+    if (
+      request.model.apiKey ||
+      request.model.oauth ||
+      (pin.credentialId && pin.credentialId !== "native:codex-app-server")
+    )
       throw problem(
         "runtime-unavailable",
-        "Codex uses its own ChatGPT sign-in — connect it or change the pin.",
+        "Codex uses its own ChatGPT sign-in. Remove the pinned connection or change the runtime.",
       );
     const rpc = await openCodex((binary, args) =>
       this.start(binary, args, request.nativeCwd),
@@ -231,6 +256,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
     let pinValid = false;
     let finished = false;
     let reportedInputTokens = 0;
+    let reportedCachedTokens = 0;
     let reportedOutputTokens = 0;
     let reader: Promise<void> | undefined;
     let steering: ReturnType<typeof setInterval> | undefined;
@@ -269,7 +295,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
         refreshToken: false,
       });
       if (account?.type !== "chatgpt")
-        throw problem("runtime-unavailable", "Not signed in — connect Codex with ChatGPT.");
+        throw problem("runtime-unavailable", "Not signed in — run codex login.");
       const model = (await codexModels(rpc)).find((entry) => entry.id === pin.modelId);
       if (!model) throw problem("pin-model-unknown", "The pinned model is unavailable in Codex.");
       if (!model.efforts.includes(pin.effort!))
@@ -399,12 +425,18 @@ export class CodexAppServerRuntime implements AgentRuntime {
               continue;
             }
             if (params.threadId && params.threadId !== threadId) continue;
-            if (request.controlledComparison && event.method === "thread/tokenUsage/updated") {
-              // Comparison sessions always start fresh. `last` is context usage,
+            if (!request.nativeSession?.sessionId && event.method === "thread/tokenUsage/updated") {
+              // Fresh sessions start at zero. `last` is context usage,
               // whereas changes in `total` account for every model call once.
               const usage = (
                 params.tokenUsage as
-                  | { total?: { inputTokens?: number; outputTokens?: number } }
+                  | {
+                      total?: {
+                        inputTokens?: number;
+                        outputTokens?: number;
+                        cachedInputTokens?: number;
+                      };
+                    }
                   | undefined
               )?.total;
               if (
@@ -416,13 +448,21 @@ export class CodexAppServerRuntime implements AgentRuntime {
                 (usage.inputTokens! > reportedInputTokens ||
                   usage.outputTokens! > reportedOutputTokens)
               ) {
+                const cachedTokens =
+                  Number.isSafeInteger(usage.cachedInputTokens) &&
+                  usage.cachedInputTokens! >= reportedCachedTokens &&
+                  usage.cachedInputTokens! <= usage.inputTokens!
+                    ? usage.cachedInputTokens! - reportedCachedTokens
+                    : undefined;
                 queue.push({
                   type: "usage",
                   provider: pin.provider!,
                   model: pin.modelId!,
                   inputTokens: usage.inputTokens! - reportedInputTokens,
                   outputTokens: usage.outputTokens! - reportedOutputTokens,
+                  ...(cachedTokens === undefined ? {} : { cachedTokens }),
                 });
+                if (cachedTokens !== undefined) reportedCachedTokens += cachedTokens;
                 reportedInputTokens = usage.inputTokens!;
                 reportedOutputTokens = usage.outputTokens!;
               }

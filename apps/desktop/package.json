@@ -110,7 +110,15 @@
       }
     ],
     "artifactName": "ardur-bot-${version}-${os}-${arch}.${ext}",
-    "forceCodeSigning": false
+    "forceCodeSigning": false,
+    "protocols": [
+      {
+        "name": "Ardur Bot integrations",
+        "schemes": [
+          "ardurbot"
+        ]
+      }
+    ]
   },
   "description": "Persistent bots on computers and models you choose",
   "homepage": "https://github.com/ArdurAI/ardur-bot",

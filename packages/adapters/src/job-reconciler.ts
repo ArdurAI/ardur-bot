@@ -1,9 +1,5 @@
-import {
-  type JobPublisher,
-  messagingDeliverJob,
-  routineWakeupJob,
-  runContinueJob,
-} from "@ardurbot/adapter-kit";
+import type { JobPublisher } from "@ardurbot/adapter-kit";
+import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock } from "@ardurbot/contracts";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -16,6 +12,7 @@ const DEFAULT_INTERVAL_MS = 30_000;
 const DEFAULT_BATCH_SIZE = 100;
 const ROUTINE_LOOKAHEAD_MS = 60_000;
 const CONTROL_LOOKAHEAD_MS = 60_000;
+const BRIEF_MAINTENANCE_INTERVAL_MS = 600_000;
 // Two keys give Ardur Bot's lock a namespace without relying on a hash that might collide
 // with an application using the one-key advisory-lock API.
 const RECONCILIATION_LOCK_NAMESPACE = 1_380_019_075;
@@ -107,6 +104,7 @@ export function createJobReconciler(
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileMemory?: () => Promise<void>;
+    reconcileBriefs?: () => Promise<void>;
   },
   options: { intervalMs?: number; batchSize?: number } = {},
 ) {
@@ -118,6 +116,7 @@ export function createJobReconciler(
   let routineCursor: Cursor | undefined;
   let controlCursor: ControlCursor | undefined;
   let controlScanDeadline: Date | undefined;
+  let nextBriefMaintenanceAt = 0;
 
   const reconcileOnce = async () => {
     if (reconciling) return reconciling;
@@ -125,9 +124,16 @@ export function createJobReconciler(
       if (deps.leadership && !(await deps.leadership.tryAcquire())) return;
 
       const auxiliary = await Promise.allSettled(
-        [deps.reconcileCloudAgents, deps.reconcileComputerUpdates, deps.reconcileMemory].map(
-          async (reconcile) => reconcile?.(),
-        ),
+        [
+          deps.reconcileCloudAgents,
+          deps.reconcileComputerUpdates,
+          deps.reconcileMemory,
+          async () => {
+            if (!deps.reconcileBriefs || Date.now() < nextBriefMaintenanceAt) return;
+            await deps.reconcileBriefs();
+            nextBriefMaintenanceAt = Date.now() + BRIEF_MAINTENANCE_INTERVAL_MS;
+          },
+        ].map(async (reconcile) => reconcile?.()),
       );
       for (const result of auxiliary) {
         if (result.status === "rejected")

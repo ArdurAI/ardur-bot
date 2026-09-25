@@ -7,8 +7,10 @@ import {
   ComputerConfigurationSchema,
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
+  ComputerEngineUnavailableError,
 } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
+import { ORPCError } from "@orpc/server";
 import type { z } from "zod";
 import { importFleetSecret } from "./fleet.js";
 import type { HostBridge } from "./host-bridge.js";
@@ -154,5 +156,11 @@ export async function computerEngineInfo(
       ? { name: settings.engine as "docker" | "podman", socket: settings.socket }
       : undefined,
   );
-  return provider.engineInfo(context);
+  try {
+    return await provider.engineInfo(context);
+  } catch (error) {
+    if (error instanceof ComputerEngineUnavailableError)
+      throw new ORPCError("SERVICE_UNAVAILABLE", { message: error.message });
+    throw error;
+  }
 }

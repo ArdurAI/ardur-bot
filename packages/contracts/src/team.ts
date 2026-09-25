@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 import { DelegationRecordSchema, DelegationSnapshotSchema } from "./delegation.js";
+import { RuntimeInfoSchema } from "./runtime-pins.js";
 export const TeamStateSchema = z.enum([
   "idle",
   "queued",
@@ -34,7 +35,9 @@ export const TeamRowSchema = z.object({
     }),
   ),
   delegations: z.array(DelegationRecordSchema),
-  executing: DelegationSnapshotSchema.nullable(),
+  executing: DelegationSnapshotSchema.extend({
+    runtimeInfo: RuntimeInfoSchema.nullable().optional(),
+  }).nullable(),
   usage: z.object({
     tokens: z.number().int(),
     costs: z.array(z.object({ amount: z.number(), provenance: z.string() })),

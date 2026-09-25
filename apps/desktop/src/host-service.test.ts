@@ -5,9 +5,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  HostLifecyclePreferences,
   HostServiceStore,
   HostServiceSupervisor,
   hostServiceEnvironment,
+  hostServiceIdentity,
   hostServiceLaunch,
   hostStorageAvailable,
 } from "./host-service.js";
@@ -21,6 +23,32 @@ const config = {
 afterEach(() => vi.useRealTimers());
 
 describe("desktop host service", () => {
+  it("identifies an existing pairing without exposing its token or host verifier", () => {
+    const registrationId = hostServiceIdentity({ ...config, token: "fixture-pairing-token" });
+    expect(registrationId).toBe("abec6392afbdae15f7d66b9ef0b06fb1b36fff3dcd9d8ae47ddc5c4dabcfd2f3");
+    expect(registrationId).not.toBe(
+      "88c4c7666e266dc304941faed55a473c5103f9226538773a685b514f62e997e6",
+    );
+    expect(hostServiceIdentity({ ...config, token: "another-fixture-pairing" })).not.toBe(
+      registrationId,
+    );
+  });
+  it("persists the close-window choice separately from pairing secrets", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "host-lifecycle-"));
+    try {
+      const file = path.join(root, "lifecycle.json");
+      const preferences = new HostLifecyclePreferences(file);
+      await preferences.load();
+      expect(preferences.keepRunning).toBe(true);
+      await preferences.setKeepRunning(false);
+      const reopened = new HostLifecyclePreferences(file);
+      await reopened.load();
+      expect(reopened.keepRunning).toBe(false);
+      expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ keepRunning: false });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it.each(["win32", "linux", "darwin"] as const)(
     "launches compiled JavaScript using Electron Node mode on %s",
     (platform) => {
@@ -65,7 +93,7 @@ describe("desktop host service", () => {
         HOMEBREW_PREFIX: "/fixture/brew",
       });
       expect(env.GH_TOKEN).toBeUndefined();
-      expect(env.AWS_PROFILE).toBeUndefined();
+      expect(env.AWS_PROFILE).toBe("placeholder");
       expect(env.NODE_OPTIONS).toBeUndefined();
       expect(env.ANTHROPIC_API_KEY).toBeUndefined();
       expect(env.HOST_TOKEN).toBeUndefined();

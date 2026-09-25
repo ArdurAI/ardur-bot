@@ -51,6 +51,7 @@ import type { MemoryService } from "@ardurbot/memory";
 import { ORPCError } from "@orpc/server";
 
 type TaughtSkillRow = {
+  enabled: boolean;
   id: string;
   documentId?: string | null;
   activeRevision?: number | null;
@@ -526,6 +527,8 @@ export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
 
     async testRun(actor: Actor, skillId: string, prompt?: string): Promise<{ runId: string }> {
       const skill = await getOwnedSkill(deps, actor, skillId);
+      if (skill.enabled === false)
+        throw new ORPCError("BAD_REQUEST", { message: "Enable this skill before running it." });
       if (skill.status !== "saved" && skill.status !== "draft") {
         throw new ORPCError("BAD_REQUEST", { message: "Skill must be saved or drafted first" });
       }

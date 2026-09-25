@@ -32,6 +32,7 @@ import {
   PORTABLE_TRANSFER_BATCH_BYTES,
   shouldSkipPortableWorkspaceFile,
 } from "./computer-workspace.js";
+import { readFilePreview } from "./file-preview.js";
 import { LinuxDesktop, PREPARE_LINUX_DESKTOP } from "./linux-desktop.js";
 import { withAbort } from "./web-ssrf.js";
 
@@ -353,8 +354,17 @@ export class BoxSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     filePath: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ): Promise<Uint8Array> {
+    if (options?.preview && options.maxBytes !== undefined)
+      return readFilePreview(
+        this,
+        computer,
+        BOX_WORKSPACE,
+        normalizeWorkspacePath(filePath),
+        context,
+        options.maxBytes,
+      );
     return this.readRemoteFile(
       this.id(computer),
       workspacePath(BOX_WORKSPACE, filePath),

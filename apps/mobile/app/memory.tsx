@@ -3,6 +3,12 @@ import type {
   MemoryHistoryRevision,
   MemorySyncState,
 } from "@ardurbot/contracts";
+import {
+  groupMemoryDocuments,
+  memoryDocumentSummary,
+  memoryTopicTitle,
+  memoryUpdatedDate,
+} from "@ardurbot/core";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -18,6 +24,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { LearningObservations } from "../lib/LearningObservations";
+import { MemoryControls, MemoryIntentControls } from "../lib/MemoryControls";
 import {
   loadMemoryDestination,
   loadMemoryDocuments,
@@ -28,7 +35,7 @@ import {
 import { native, useThemedStyles } from "../lib/native";
 
 export default function Memory() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const styles = useThemedStyles(createStyles);
   const [destination, setDestination] = useState<string | null>(null);
   const [sync, setSync] = useState<MemorySyncState | null>(null);
@@ -123,8 +130,9 @@ export default function Memory() {
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
+        {!open ? <MemoryControls /> : null}
         <Text style={styles.secondary}>
-          {t("Memory is read-only here. Edit it in Settings on desktop or web.")}
+          {t("Documents are read-only here. Request changes below and approve them in Learning.")}
         </Text>
         {destination ? (
           <Text style={styles.secondary}>
@@ -205,37 +213,39 @@ export default function Memory() {
             ))}
           </>
         ) : (
-          documents.map((doc) => (
-            <Pressable
-              accessibilityRole="button"
-              key={doc.id}
-              onPress={() => void show(doc)}
-              style={styles.card}
-            >
-              <Text style={styles.title}>{doc.path}</Text>
-              <Text style={styles.secondary}>
-                {t("Revision")} {doc.revision}
-                {doc.deletedAt ? ` · ${t("Deleted")}` : ""}
-              </Text>
-              {doc.gitSync ? (
-                <Text style={styles.secondary}>
-                  {doc.gitSync.status === "pushed"
-                    ? t("Pushed")
-                    : doc.gitSync.status === "failed"
-                      ? t("Saved locally. GitHub sync failed.")
-                      : t("Saved locally. Sync pending.")}
-                </Text>
-              ) : null}
-              {doc.delivery.status !== "delivered" ? (
-                <Text style={styles.secondary}>
-                  {doc.delivery.status === "pending"
-                    ? t("Saved locally. Indexing pending.")
-                    : t("Saved locally. Indexing failed.")}
-                </Text>
-              ) : null}
-            </Pressable>
+          Object.entries(groupMemoryDocuments(documents)).map(([group, items]) => (
+            <View key={group}>
+              <Text style={styles.title}>{group === "you" ? t("You") : t("Topics")}</Text>
+              {items.map((doc) => (
+                <Pressable
+                  accessibilityRole="button"
+                  key={doc.id}
+                  onPress={() => void show(doc)}
+                  style={styles.card}
+                >
+                  <Text style={styles.title}>
+                    {doc.kind === "profile"
+                      ? t("Profile")
+                      : doc.kind === "preferences"
+                        ? t("Preferences")
+                        : memoryTopicTitle(doc)}
+                  </Text>
+                  <Text style={styles.secondary}>
+                    {doc.kind === "profile"
+                      ? t("Who the user is and the professional domain")
+                      : doc.kind === "preferences"
+                        ? t("How the user wants the assistant to respond")
+                        : memoryDocumentSummary(doc.content)}
+                  </Text>
+                  <Text style={styles.secondary}>
+                    {t("Updated")} {memoryUpdatedDate(doc.updatedAt, locale)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           ))
         )}
+        {!open ? <MemoryIntentControls /> : null}
         {(open ? historyCursor : cursor) ? (
           <Pressable disabled={busy} accessibilityRole="button" onPress={() => void more()}>
             <Text style={styles.title}>{t("Load more")}</Text>

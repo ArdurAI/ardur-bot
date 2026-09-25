@@ -30,6 +30,8 @@ function fixture() {
     usedAt: null as Date | null,
   };
   const grant = {
+    kind: "device",
+    trustedAt: now as Date | null,
     id: "phone",
     ...challenge,
     devicePublicKey: device.public,
@@ -39,6 +41,7 @@ function fixture() {
   const throttle = { instanceId: "home", attempts: 0, lockedUntil: null as Date | null };
   let nonceUsed = false;
   const tx = {
+    space: { findUniqueOrThrow: vi.fn(async () => ({ requireTrustedDevices: false })) },
     $queryRaw: vi.fn(async () => []),
     pairingChallenge: {
       create: vi.fn(async ({ data }) => data),
@@ -68,7 +71,7 @@ function fixture() {
     },
     pendingDevicePairing: { create: vi.fn(async ({ data }) => ({ ...data, id: "pending" })) },
     deviceGrant: {
-      create: vi.fn(async () => grant),
+      create: vi.fn(async ({ data }) => Object.assign(grant, data)),
       findFirst: vi.fn(async () => (grant.revokedAt ? null : grant)),
       updateMany: vi.fn(async () => ({ count: grant.revokedAt ? 0 : 1 })),
     },
@@ -82,7 +85,18 @@ function fixture() {
     },
     spaceMember: { findUnique: vi.fn(async () => ({ id: "membership" })) },
   };
-  const db = { ...tx, $transaction: vi.fn(async (fn) => fn(tx)) } as unknown as PrismaClient;
+  const db = {
+    ...tx,
+    $transaction: vi.fn(async (fn) => {
+      const previousNonceUsed = nonceUsed;
+      try {
+        return await fn(tx);
+      } catch (error) {
+        nonceUsed = previousNonceUsed;
+        throw error;
+      }
+    }),
+  } as unknown as PrismaClient;
   const input = (value = "challenge", instanceId = "home") => ({
     challenge: value,
     instanceId,
@@ -98,6 +112,48 @@ function fixture() {
   return { tx, db, device, presence, challenge, grant, throttle, input };
 }
 describe("device grants", () => {
+  it.each(["dispatch", "answer", "default", "team-accept"])(
+    "requires approval for a newly paired device before %s, then accepts it",
+    async (operation) => {
+      const f = fixture();
+      f.tx.space.findUniqueOrThrow.mockResolvedValue({ requireTrustedDevices: true });
+      const paired = await completeDevicePairing(f.db, "home", f.input(), now);
+      expect(paired.trustedAt).toBeNull();
+      const unsigned = { grantId: paired.id, nonce: "n".repeat(43), timestamp: now.getTime() };
+      const proof = {
+        ...unsigned,
+        signature: sign(
+          "sha256",
+          Buffer.from(deviceSignedText("home", unsigned, operation, {})),
+          f.device.privateKey,
+        ).toString("base64"),
+      };
+      await expect(authenticateDevice(f.db, "home", proof, operation, {}, now)).rejects.toThrow(
+        "approve this device",
+      );
+      f.grant.trustedAt = now;
+      await expect(
+        authenticateDevice(f.db, "home", proof, operation, {}, now),
+      ).resolves.toMatchObject({ trustedAt: now });
+    },
+  );
+  it("keeps previously approved devices usable when trust is enabled", async () => {
+    const f = fixture();
+    f.tx.space.findUniqueOrThrow.mockResolvedValue({ requireTrustedDevices: true });
+    const unsigned = { grantId: f.grant.id, nonce: "n".repeat(43), timestamp: now.getTime() };
+    const proof = {
+      ...unsigned,
+      signature: sign(
+        "sha256",
+        Buffer.from(deviceSignedText("home", unsigned, "dispatch", {})),
+        f.device.privateKey,
+      ).toString("base64"),
+    };
+    await expect(
+      authenticateDevice(f.db, "home", proof, "dispatch", {}, now),
+    ).resolves.toMatchObject({ trustedAt: now });
+    expect(f.tx.space.findUniqueOrThrow).not.toHaveBeenCalled();
+  });
   it("stores only challenge hashes and a five-minute expiry", async () => {
     const f = fixture();
     const result = await startDevicePairing(
@@ -242,14 +298,19 @@ it("requires home confirmation before issuing a short-code grant", async () => {
     confirmShortCodePairing(prisma, { userId: "other", spaceId: "space" }, "pending", true, now),
   ).rejects.toThrow();
   expect(f.tx.deviceGrant.create).not.toHaveBeenCalled();
-  await confirmShortCodePairing(
-    prisma,
-    { userId: "owner", spaceId: "space" },
-    "pending",
-    true,
-    now,
-  );
+  const owner = { userId: "owner", spaceId: "space", isDeploymentOwner: true };
+  await confirmShortCodePairing(prisma, owner, "pending", true, now);
   expect(f.tx.deviceGrant.create).toHaveBeenCalledOnce();
+  expect(db.pendingDevicePairing.findFirst).toHaveBeenLastCalledWith({
+    where: {
+      id: "pending",
+      userId: "owner",
+      spaceId: "space",
+      grantId: null,
+      deniedAt: null,
+      expiresAt: { gt: now },
+    },
+  });
   await expect(
     confirmShortCodePairing(prisma, { userId: "owner", spaceId: "space" }, "pending", true, now),
   ).rejects.toThrow();

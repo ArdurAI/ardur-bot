@@ -29,6 +29,7 @@ import {
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { isToolPauseResult } from "./approval-effect.js";
 import { builtinAgentTools, DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
+import { markStablePrefix } from "./context/provider-cache.js";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
 import {
   normalizeOpenAiToolParameters,
@@ -315,7 +316,18 @@ export class PiAgentRuntime implements AgentRuntime {
           sessionId: conversationSessionId(request.threadId, request.botId),
           steeringMode: "all",
           streamFn: (m, ctx, options) =>
-            models.streamSimple(m, ctx, reliableStreamOptions(m, options, request.model.maxTokens)),
+            models.streamSimple(m, ctx, {
+              ...reliableStreamOptions(m, options, request.model.maxTokens),
+              ...(m.api === "anthropic-messages" && request.stablePrefix
+                ? {
+                    onPayload: async (payload: unknown) =>
+                      markStablePrefix(
+                        (await options?.onPayload?.(payload, m)) ?? payload,
+                        request.stablePrefix!,
+                      ),
+                  }
+                : {}),
+            }),
           getApiKey: async () => apiKey,
           transformContext: async (messages) =>
             pruneComputerScreenshotContext(
@@ -440,7 +452,17 @@ export class PiAgentRuntime implements AgentRuntime {
             if ("usage" in event.message && event.message.usage) {
               queue.push({
                 type: "usage",
+                reported: Object.values(billedPromptTokens(event.message.usage)).some(
+                  (value) => value > 0,
+                ),
                 ...billedPromptTokens(event.message.usage),
+                ...(typeof event.message.usage.cacheRead === "number" &&
+                (event.message.usage.cacheRead > 0 ||
+                  ["anthropic", "openai", "azure-openai-responses", "openai-codex"].includes(
+                    model.provider,
+                  ))
+                  ? { cachedTokens: event.message.usage.cacheRead }
+                  : {}),
                 provider: model.provider,
                 model: model.id,
               });

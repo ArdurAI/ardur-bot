@@ -16,7 +16,13 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
-import { CapacitySnapshotSchema, profileCommandError, unknownCapacity } from "@ardurbot/contracts";
+import {
+  CapacitySnapshotSchema,
+  ComputerEngineUnavailableError,
+  ComputerEngineUnavailableSchema,
+  profileCommandError,
+  unknownCapacity,
+} from "@ardurbot/contracts";
 import { boundedSandboxCommandTimeoutMs, resolveSupervisorToken } from "@ardurbot/core";
 import { cachedCapacity } from "@ardurbot/host-runtime/fleet/capacity";
 import { outgoingCorrelationHeaders } from "@ardurbot/logging";
@@ -167,7 +173,18 @@ export class DockerSandboxProvider implements SandboxProvider {
       headers: this.headers(context),
       signal: context.signal,
     });
-    if (!res.ok) throw new Error("Computer engine is unavailable.");
+    if (!res.ok) {
+      const body = await safeBody(res, context.signal);
+      let failure: unknown;
+      try {
+        failure = JSON.parse(body);
+      } catch {
+        /* Only structured engine failures are safe to show. */
+      }
+      const parsed = ComputerEngineUnavailableSchema.safeParse(failure);
+      if (parsed.success) throw new ComputerEngineUnavailableError(parsed.data);
+      throw new Error("Computer engine is unavailable.");
+    }
     return readSandboxJson<{
       name: "docker" | "podman";
       rootless: boolean;
@@ -183,6 +200,7 @@ export class DockerSandboxProvider implements SandboxProvider {
       homePath: string;
       imageProfile?: "base" | "developer";
       connectionId?: string | null;
+      networkEgress?: boolean;
     },
     context: AdapterContext,
   ): Promise<ComputerRef> {
@@ -190,6 +208,7 @@ export class DockerSandboxProvider implements SandboxProvider {
       method: "POST",
       headers: { ...this.headers(context, request.botId), "content-type": "application/json" },
       body: JSON.stringify({
+        networkEgress: request.networkEgress ?? true,
         imageProfile: request.imageProfile ?? "base",
         botId: request.botId,
         homePath: request.homePath,
@@ -208,6 +227,7 @@ export class DockerSandboxProvider implements SandboxProvider {
     }
     const body = await readSandboxJson<{ id: string; resumed?: boolean }>(res, context.signal);
     return {
+      networkEgress: request.networkEgress ?? true,
       imageProfile: request.imageProfile ?? "base",
       connectionId: request.connectionId,
       id: body.id,
@@ -471,13 +491,13 @@ export class DockerSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     filePath: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     const path = normalizeWorkspacePath(filePath);
     const maxBytes = options?.maxBytes;
     const res = await fetch(
       this.url(
-        `/computers/${computer.id}/files?path=${encodeURIComponent(path)}&mode=read${maxBytes === undefined ? "" : `&maxBytes=${maxBytes}`}`,
+        `/computers/${computer.id}/files?path=${encodeURIComponent(path)}&mode=read${maxBytes === undefined ? "" : `&maxBytes=${maxBytes}`}${options?.preview ? "&preview=1" : ""}`,
       ),
       { headers: this.headers(context, computer.botId), signal: context.signal },
     );

@@ -91,11 +91,18 @@ import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { mountExportRoutes } from "./account-export.js";
+import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { HostBridge } from "./host-bridge.js";
+import { mountHostMcpRoutes } from "./host-mcp-routes.js";
+import { sourceHostStatus } from "./host-status.js";
 import { ensureInstanceIdentity } from "./instance-identity.js";
+import { IntegrationConnections } from "./integration-connections.js";
+import { integrationOAuthReturn } from "./integration-oauth-return.js";
+import { createLearningService } from "./learning.js";
 import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
 import { createLegacyChatDispatch, mountMessagingDispatch } from "./messaging-dispatch.js";
 import {
@@ -108,6 +115,7 @@ import { mountRemoteDevices } from "./remote-devices.js";
 import { mountApiRequestBodyLimits } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
 import { mountScreenTarget } from "./screen-proxy.js";
+import { mountSystemRoutines } from "./system/routines.js";
 import { isDeferredReservationLost, TeamChatBridge } from "./team-chat-bridge.js";
 import { ModelTeamChatEngagementJudge } from "./team-chat-judge.js";
 import {
@@ -165,6 +173,7 @@ export async function createApp(
   const env = { ...loadEnv(process.env), ...envOverrides };
   const logger = loggerOverride ?? createServiceLogger({ service: SERVICE_NAMES.api });
   installLogger(logger);
+  warnAutoReviewConfiguration(logger);
   const created = prismaOverride
     ? { prisma: prismaOverride, pool: undefined }
     : createDb(env.databaseUrl, {
@@ -253,7 +262,26 @@ export async function createApp(
       prisma,
       secrets,
     });
+  const hostBridge = new HostBridge(prisma, env.encryptionKey);
   const mcpOAuth = new McpOAuthBroker(prisma, secrets, remoteConnectors);
+  const integrationConnections = new IntegrationConnections(
+    prisma,
+    mcpOAuth,
+    secrets,
+    env.webOrigin,
+    remoteConnectors,
+    {
+      stdioEnabled: env.mcpStdioEnabled,
+      allowedCommands: env.mcpStdioAllowedCommands,
+      hostMcp: hostBridge,
+    },
+    async (actor) =>
+      (
+        (await sourceHostStatus(prisma, actor.userId, env.sandboxProvider)) ??
+        (await hostBridge.status(actor.userId))
+      )?.health?.integrations ?? [],
+  );
+  const stopIntegrationHealth = integrationConnections.startHealthChecks();
   const memoryProviders = new SpaceMemoryProviderResolver(prisma, secrets);
   const oauthLogins = new PiOAuthLogins();
   const home = new LocalAgentHomeStore(env.dataDir);
@@ -268,6 +296,8 @@ export async function createApp(
     prisma,
     secrets,
     {
+      sandbox,
+      hostMcp: hostBridge,
       stdioEnabled: env.mcpStdioEnabled,
       allowedCommands: env.mcpStdioAllowedCommands,
       network: remoteConnectors,
@@ -455,6 +485,12 @@ export async function createApp(
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
+        reconcileBriefs: () =>
+          jobs.enqueue({
+            name: "briefs.maintain",
+            payload: {},
+            replaceKey: "briefs.maintain:drain",
+          }),
       })
     : undefined;
   reconciler?.start();
@@ -465,6 +501,7 @@ export async function createApp(
     trustedOrigin: (origin) => isTrustedOrigin(origin, env),
   });
   const router = createRouter({
+    runtime,
     resolveComparisonPin: (bot) =>
       executor.resolveModel({ spaceId: bot.spaceId, userId: bot.userId, botId: bot.id }),
     terminals,
@@ -482,6 +519,7 @@ export async function createApp(
     secrets,
     oauthLogins,
     integrationSettings,
+    integrationConnections,
     mcpOAuth,
     composio: stack.composio,
     connectors: stack.connector,
@@ -521,6 +559,7 @@ export async function createApp(
   });
   const app = new Hono();
   app.use("*", requestLogging(logger));
+  app.route("/api/oauth/done", integrationOAuthReturn(mcpOAuth, integrationConnections));
   app.use(
     "*",
     cors({
@@ -570,6 +609,7 @@ export async function createApp(
     }
     return auth.handler(c.req.raw);
   });
+  mountSystemRoutines(app, prisma, env.desktopStackToken);
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
   app.post("/local/device-listener", async (c) => {
     c.header("cache-control", "no-store");
@@ -628,6 +668,7 @@ export async function createApp(
         actor,
         signal: c.req.raw.signal,
         authSessionId: session?.session.id,
+        authHeaders: sessionHeaders(c.req.raw),
         origin: c.req.header("origin"),
       },
     });
@@ -645,6 +686,24 @@ export async function createApp(
     if (actor) enrichLogContext({ "user.id": actor.userId, "space.id": actor.spaceId });
     return actor;
   });
+  mountExportRoutes(
+    app,
+    {
+      prisma,
+      memory,
+      memoryDocuments,
+      home,
+      artifacts,
+      exportLearning: createLearningService({ prisma, jobs, memoryDocuments, secrets })
+        .exportLearning,
+    },
+    async (c) => {
+      const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
+      return session?.user
+        ? requireMembership(prisma, session.user.id, c.req.query("spaceId")).catch(() => null)
+        : null;
+    },
+  );
   mountWebhookHttpRoutes(app, { prisma, secrets, events, jobs });
   mountMessagingDispatch(app, { prisma, secrets, events, jobs });
   // Shared with stop so a shutdown during retry delays does not restart polling.
@@ -914,6 +973,7 @@ export async function createApp(
     })();
   }
 
+  mountHostMcpRoutes(app, { prisma, secrets, hostBridge });
   app.post("/api/host-bridge/pair", async (c) => {
     const origin = c.req.header("origin");
     if (origin && !isTrustedOrigin(origin, env)) return c.json({ error: "Forbidden" }, 403);
@@ -970,6 +1030,7 @@ export async function createApp(
     stop: async () => {
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
+      stopIntegrationHealth();
       hostBridge.hub.detach();
       await terminals.gateway?.stop();
       shutdown.abort();

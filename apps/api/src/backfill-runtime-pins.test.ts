@@ -39,6 +39,7 @@ function fixture() {
   const messages: object[] = [];
   let seq = 0;
   const tx = {
+    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
     bot: {
       findFirst: vi.fn(async ({ where }) => (matches(bot, where) ? { ...bot } : null)),
       updateMany: vi.fn(async ({ where, data }) => {
@@ -330,6 +331,7 @@ describe("legacy runtime pin backfill", () => {
       pin: { credentialId: "connection", effort: "medium", revision: 1 },
     });
     expect(input.loadKey).toHaveBeenCalledOnce();
+    expect(f.tx.space.findUnique).toHaveBeenCalledWith({ where: { id: run.spaceId } });
   });
 
   it("leaves unknown effort and missing custom metadata blocked", async () => {

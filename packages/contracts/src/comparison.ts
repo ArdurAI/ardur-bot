@@ -53,6 +53,8 @@ export const ComparisonResultSchema = z.object({
   provenance: z.object({
     reportedModel: z.string().nullable(),
     reportedModelVersion: z.string().nullable(),
+    effortAttested: z.boolean().optional(),
+    effortAttestationReason: z.string().nullable().optional(),
     memoryRead: z.boolean(),
     memoryDiffered: z.boolean(),
     ambientHistory: z.literal(false),

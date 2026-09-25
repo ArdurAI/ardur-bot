@@ -33,6 +33,8 @@ export interface ModelEmulatorStep {
   /** Assertions run before the response; failures also make assertComplete fail. */
   expect: (request: ModelEmulatorRequest) => void | Promise<void>;
   response: ModelEmulatorResponse | ((request: ModelEmulatorRequest) => ModelEmulatorResponse);
+  /** Synthetic provider-reported totals, omitted when the fixture supplies no usage. */
+  usage?: { inputTokens: number; outputTokens: number };
 }
 
 /**
@@ -122,6 +124,22 @@ export async function startModelEmulator(options: {
           return;
         }
         emit({}, "stop");
+      }
+      if (step.usage) {
+        response.write(
+          `data: ${JSON.stringify({
+            id: `fixture-${stepIndex}`,
+            object: "chat.completion.chunk",
+            created: 0,
+            model: modelId,
+            choices: [],
+            usage: {
+              prompt_tokens: step.usage.inputTokens,
+              completion_tokens: step.usage.outputTokens,
+              total_tokens: step.usage.inputTokens + step.usage.outputTokens,
+            },
+          })}\n\n`,
+        );
       }
       response.end("data: [DONE]\n\n");
     })().catch((error: unknown) => {

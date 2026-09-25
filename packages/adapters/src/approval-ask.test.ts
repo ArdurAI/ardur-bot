@@ -1,7 +1,165 @@
+import type { HostCommandApproval } from "@ardurbot/contracts";
+import { HOST_INTEGRATIONS, hostIntegrationCommand } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import { buildApprovalAskBlock } from "./approval-ask.js";
 
+function commandAsk(argv: string[], secrets: string[] = []) {
+  const hostCommand: HostCommandApproval = {
+    id: "github",
+    argv,
+    identity: "fixture-account",
+    workspace: "fixture-workspace",
+    cwd: "/workspace",
+    computerId: "computer",
+  };
+  return buildApprovalAskBlock(
+    "effect",
+    "mcp__fixture__execute_command",
+    { args: argv.slice(1) },
+    secrets,
+    {
+      integration: {
+        vendorName: "Fixture",
+        toolId: "execute_command",
+        description: "Execute a command.",
+        hostCommand,
+      },
+    },
+  );
+}
+
 describe("buildApprovalAskBlock", () => {
+  it.each([
+    ["github", ["issue", "list"]],
+    ["gitlab", ["mr", "list"]],
+    ["aws", ["s3", "rm", "s3://example-bucket", "--recursive"]],
+    ["google-cloud", ["compute", "instances", "list"]],
+    ["azure", ["group", "list"]],
+    ["kubernetes", ["delete", "deployment", "example"]],
+    ["jenkins", ["build", "example"]],
+  ] as const)(
+    "shows the fixed %s program and every argument without an always-allow action",
+    (id, args) => {
+      const argv = hostIntegrationCommand(id, { args });
+      const block = commandAsk(argv);
+      expect(block).toMatchObject({
+        text: [HOST_INTEGRATIONS[id].command, ...args].map((value) => `'${value}'`).join(" "),
+        preformatted: true,
+        detail:
+          "Identity: fixture-account\nWorkspace: fixture-workspace\nWorking directory: '/workspace'",
+        actions: [
+          { id: "allow", label: "Allow once" },
+          { id: "deny", label: "Deny" },
+        ],
+      });
+    },
+  );
+  it("quotes whitespace, empty arguments, quotes, Markdown, and shell metacharacters verbatim", () => {
+    const block = commandAsk([
+      "gh",
+      "issue",
+      "create",
+      "--title",
+      "it's $(false); `false` \\ **[label]**",
+      "",
+    ]);
+    expect(block).toMatchObject({
+      text: "'gh' 'issue' 'create' '--title' 'it'\"'\"'s $(false); `false` \\ **[label]**' ''",
+    });
+  });
+  it("retains maximum-length argv through the final argument", () => {
+    const argv = [
+      "gh",
+      "issue",
+      ...Array.from({ length: 47 }, (_, index) => `${index}-`.padEnd(4096, "x")),
+    ];
+    const block = commandAsk(argv);
+    expect(block.text).toBe(argv.map((arg) => `'${arg}'`).join(" "));
+    expect(block.text).not.toContain("…");
+  });
+  it("redacts known secrets before quoting and masks secret-looking arguments only in the display", () => {
+    const argv = [
+      "gh",
+      "issue",
+      "create",
+      "--title",
+      "known'private",
+      "--token",
+      "fixture-value",
+      "--api-key=fixture-key",
+      "ghp_fixturevalue123",
+      "Bearer fixture-bearer",
+      '{"password":"fixture password"}',
+    ];
+    const original = [...argv];
+    const block = commandAsk(argv, ["known'private"]);
+    const display = JSON.stringify(block);
+    for (const hidden of [
+      "known",
+      "fixture-value",
+      "fixture-key",
+      "ghp_fixturevalue123",
+      "fixture-bearer",
+      "fixture password",
+    ])
+      expect(display).not.toContain(hidden);
+    expect(block.text).toContain("'[redacted]'");
+    expect(block.text).toContain("'--api-key=[redacted]'");
+    expect(argv).toEqual(original);
+  });
+  it.each(["synthetic_write", "graphql_mutation", "cloud_agent_reply"])(
+    "retains primitive and nested array payloads for %s",
+    (toolName) => {
+      const args = {
+        ids: ["first", "last"],
+        nested: {
+          edits: [{ values: [false, 0, "x".repeat(5000), "tail"], password: "fixture-hidden" }],
+        },
+      };
+      const block = buildApprovalAskBlock(
+        "effect",
+        toolName,
+        args,
+        [],
+        toolName === "synthetic_write"
+          ? {
+              integration: {
+                vendorName: "Fixture",
+                toolId: toolName,
+                description: "Write content.",
+              },
+            }
+          : undefined,
+      );
+      if (block.kind !== "ask") throw new Error("Expected an approval");
+      expect(block.preformatted).toBe(true);
+      expect(block.detail).toContain('"first"');
+      expect(block.detail).toContain('"last"');
+      expect(block.detail).toContain("x".repeat(5000));
+      expect(block.detail).toContain('"tail"');
+      expect(block.detail).toContain("false");
+      expect(block.detail).toContain("[redacted]");
+      expect(block.detail).not.toContain("fixture-hidden");
+    },
+  );
+  it("never falls back to prose when a host command snapshot is missing", () => {
+    expect(() =>
+      buildApprovalAskBlock(
+        "effect",
+        "mcp__fixture__execute_command",
+        { args: ["issue", "list"] },
+        [],
+        {
+          integration: {
+            vendorName: "Fixture",
+            toolId: "execute_command",
+            description: "Execute a command.",
+            hostCommandRequired: true,
+          },
+        },
+      ),
+    ).toThrow("command preview is unavailable");
+  });
   it("names a vendor and manifest action with a repository target, keeping raw ids in detail", () => {
     const block = buildApprovalAskBlock(
       "effect",

@@ -1,4 +1,6 @@
 import type { AgentToolExecutionResult } from "@ardurbot/adapter-kit";
+import type { HostCommandApproval } from "@ardurbot/contracts";
+import { HostCommandApprovalSchema } from "@ardurbot/contracts";
 import { isToolPauseResult } from "@ardurbot/host-runtime/tool-pause";
 
 export { isToolPauseResult } from "@ardurbot/host-runtime/tool-pause";
@@ -87,6 +89,7 @@ export type BoundApprovalRoute = {
   resourceId: string;
   toolName: string;
   resourceRevision?: string | number;
+  hostCommand?: HostCommandApproval;
 };
 
 export function catalogApprovalRequest(
@@ -125,6 +128,8 @@ export function catalogApprovalDetails(
     typeof (route as BoundApprovalRoute).connectorId !== "string" ||
     typeof (route as BoundApprovalRoute).resourceId !== "string" ||
     typeof (route as BoundApprovalRoute).toolName !== "string" ||
+    ((route as BoundApprovalRoute).hostCommand !== undefined &&
+      !HostCommandApprovalSchema.safeParse((route as BoundApprovalRoute).hostCommand).success) ||
     ((route as BoundApprovalRoute).resourceRevision !== undefined &&
       typeof (route as BoundApprovalRoute).resourceRevision !== "string" &&
       typeof (route as BoundApprovalRoute).resourceRevision !== "number")
@@ -170,6 +175,8 @@ export function boundDirectApprovalDetails(
     typeof (route as BoundApprovalRoute).connectorId !== "string" ||
     typeof (route as BoundApprovalRoute).resourceId !== "string" ||
     typeof (route as BoundApprovalRoute).toolName !== "string" ||
+    ((route as BoundApprovalRoute).hostCommand !== undefined &&
+      !HostCommandApprovalSchema.safeParse((route as BoundApprovalRoute).hostCommand).success) ||
     ((route as BoundApprovalRoute).resourceRevision !== undefined &&
       typeof (route as BoundApprovalRoute).resourceRevision !== "string" &&
       typeof (route as BoundApprovalRoute).resourceRevision !== "number") ||

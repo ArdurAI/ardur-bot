@@ -113,7 +113,7 @@ describe("OpenAPI connector import", () => {
       },
     ]);
     expect(JSON.stringify(listed)).not.toContain("inputSchema");
-    expect(search!.description).toContain("Contacts API:");
+    expect(search!.description).toContain("operation_20: Read the final contact");
     expect(search!.description).toContain("operation_00");
     await expect(
       provider.resolveCall(

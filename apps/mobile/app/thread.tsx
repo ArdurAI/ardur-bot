@@ -11,7 +11,6 @@ import {
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
   type MessageReaction,
-  runtimeNames,
   runtimePinMessage,
 } from "@ardurbot/contracts";
 import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot/core";
@@ -71,9 +70,12 @@ import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-co
 import { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppConnectCard } from "../components/AppConnectCard";
+import { ApprovalPreview } from "../components/ApprovalPreview";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
+import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { NativeCommandBlock } from "../components/command-block";
+import { MobileRunContext } from "../components/context-section";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -86,6 +88,7 @@ import {
   blockText,
   copyableMobileMessageText,
   currentApiBase,
+  isMobileThreadSnapshotEvent,
   loadSessionToken,
   type MobileBot,
   type MobileGroup,
@@ -575,10 +578,15 @@ function Thread() {
               {displayName || t("Thread")}
             </Text>
             {!inGroup && currentBot ? (
-              <Text numberOfLines={1} style={{ color: tokens.mutedForeground, fontSize: 12 }}>
-                {runtimeNames[currentBot.runtimeKind ?? "pi"]}
-              </Text>
+              <BotRuntimeLabel
+                bot={currentBot}
+                run={snap?.run?.botId === currentBot.id ? snap.run : null}
+              />
             ) : null}
+            <MobileRunContext
+              snapshot={(snap?.contextRun ?? snap?.run)?.contextSnapshot}
+              routingRule={(snap?.contextRun ?? snap?.run)?.routingRule}
+            />
           </View>
         </Pressable>
       ),
@@ -916,20 +924,7 @@ function Thread() {
             (event) => {
               cursor = Math.max(cursor, event.seq ?? -1);
               retryMs = 250;
-              if (
-                event.type === "thread.progress" ||
-                event.type === "agent.tool.called" ||
-                event.type === "agent.tool.completed" ||
-                event.type === "thread.message.created" ||
-                event.type === "thread.message.updated" ||
-                event.type === "thread.message.reaction" ||
-                event.type === "thread.subagent" ||
-                event.type === "thread.cloud_agent" ||
-                event.type === "thread.cleared" ||
-                event.type === "run.waiting_input" ||
-                event.type === "computer.takeover.requested" ||
-                isRunTerminalEvent(event)
-              ) {
+              if (isMobileThreadSnapshotEvent(event)) {
                 if (event.type === "thread.cleared") {
                   expandedHistoryThread.current = null;
                   pinnedAroundRef.current = null;
@@ -1317,7 +1312,7 @@ function Thread() {
       setSkillsOnly(false);
       setSlashQuery("");
     }
-    if (option === "Connectors") setComposerSheet("connectors");
+    if (option === "Integrations") setComposerSheet("connectors");
   }
   function showAttachMenu() {
     if (Platform.OS === "ios") {
@@ -1394,8 +1389,8 @@ function Thread() {
   const runError =
     snap?.run?.status === "failed"
       ? snap.run.runtimeProblem
-        ? snap.run.runtimeProblem.code === "locality-denied" ||
-          snap.run.runtimeProblem.code.startsWith("runtime-")
+        ? snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
+          snap.run.runtimeProblem.code !== "pin-credential-missing"
           ? snap.run.runtimeProblem.reason
           : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
@@ -1705,18 +1700,21 @@ function Thread() {
           <Text style={{ color: tokens.destructive }}>{runError}</Text>
           {snap?.run?.runtimeProblem ? (
             <View style={{ flexDirection: "row", gap: 16, marginTop: 8 }}>
-              <Text
-                accessibilityRole="button"
-                style={{ color: tokens.destructive }}
-                onPress={() =>
-                  router.push(
-                    runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
-                      .connect,
-                  )
-                }
-              >
-                {t("Connect")}
-              </Text>
+              {snap.run.runtimeProblem.pin.runtimeKind === "pi" &&
+              snap.run.runtimeProblem.code === "pin-credential-missing" ? (
+                <Text
+                  accessibilityRole="button"
+                  style={{ color: tokens.destructive }}
+                  onPress={() =>
+                    router.push(
+                      runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
+                        .connect,
+                    )
+                  }
+                >
+                  {t("Connect")}
+                </Text>
+              ) : null}
               <Text
                 accessibilityRole="button"
                 style={{ color: tokens.destructive }}
@@ -2744,7 +2742,10 @@ const MessageBubble = memo(function MessageBubble({
             paddingVertical: 14,
           }}
         >
-          {askBlock.text ? (
+          {askBlock.preformatted ? (
+            <ApprovalPreview text={askBlock.text} detail={askBlock.detail} />
+          ) : null}
+          {askBlock.text && !askBlock.preformatted ? (
             <Text
               {...actionProps}
               style={{ color: tokens.foreground, fontSize: 15.5, lineHeight: 23 }}
@@ -2752,7 +2753,7 @@ const MessageBubble = memo(function MessageBubble({
               {askBlock.text}
             </Text>
           ) : null}
-          {askBlock.detail ? (
+          {askBlock.detail && !askBlock.preformatted ? (
             <Text
               {...(askBlock.text ? {} : actionProps)}
               style={{

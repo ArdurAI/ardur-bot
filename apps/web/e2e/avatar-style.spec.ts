@@ -8,8 +8,8 @@ test("account settings avatar style previews differ for robot and organic", asyn
   await signup(page, `avatar-style-${stamp}@ardurbot.test`, "password12", "Avatar style QA");
   await completeOnboarding(page);
 
-  const settings = await openUserSettings(page);
-  await expect(settings.getByRole("heading", { name: "Avatars", exact: true })).toBeVisible();
+  const settings = await openUserSettings(page, "account");
+  await expect(settings.getByRole("group", { name: "Avatar", exact: true })).toBeVisible();
 
   const robot = settings.getByTestId("avatar-style-robot");
   const organic = settings.getByTestId("avatar-style-organic");
@@ -32,4 +32,21 @@ test("account settings avatar style previews differ for robot and organic", asyn
   expect(robotMarkup).not.toBe(organicMarkup);
 
   await captureScreenshot(page, testInfo, "account-avatars-style-previews");
+  await settings.getByRole("textbox", { name: "What should your bots call you?" }).fill("Captain");
+  await organic.click();
+  await settings
+    .locator("form")
+    .filter({ has: robot })
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
+  await expect(settings.getByText("Saved", { exact: true })).toBeVisible();
+  await page.reload();
+  const reopened = await openUserSettings(page, "account");
+  await expect(
+    reopened.getByRole("textbox", { name: "What should your bots call you?" }),
+  ).toHaveValue("Captain");
+  await expect(reopened.getByTestId("avatar-style-organic")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 });

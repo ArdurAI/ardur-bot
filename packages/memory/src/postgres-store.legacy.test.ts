@@ -1,6 +1,6 @@
 import type { MemoryAccess } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
-import { PostgresMemoryJournal } from "./postgres-store.js";
+import { PostgresDocumentStore, PostgresMemoryJournal } from "./postgres-store.js";
 
 const access: MemoryAccess = {
   operationId: "op",
@@ -44,6 +44,54 @@ function fakeTransaction(extra: Record<string, unknown> = {}) {
 }
 
 describe("PostgresMemoryJournal with documents that predate revision rows", () => {
+  it("preserves the seed through edit, reload, export and import", async () => {
+    let row = { ...structuredClone(legacyRow), kind: "topic", revision: 1 };
+    const tx = {
+      memoryDocument: {
+        findMany: async () => [structuredClone(row)],
+        upsert: async ({ update }: { update: object }) => {
+          row = { ...row, ...update };
+          return row;
+        },
+      },
+      memoryRevision: {
+        create: async ({ data }: { data: object }) => {
+          row.revisions.push({
+            sourceRunId: null,
+            sourceThreadId: null,
+            commitId: null,
+            learning: null,
+            deletedAt: null,
+            ...data,
+          });
+        },
+      },
+    };
+    const store = () => new PostgresDocumentStore(tx as never);
+    const seed = (await store().read(row.id, access))!;
+    await store().commit(
+      {
+        id: seed.id,
+        scopeKey: seed.scopeKey,
+        path: seed.path,
+        content: "Edited memory",
+        expectedRevision: 1,
+        author: { kind: "user", userId: access.userId },
+        delivery: seed.delivery,
+      },
+      access,
+    );
+    const bundle = await store().exportBundle(access);
+    expect(
+      bundle.documents[0]!.revisions.map(({ revision, content }) => ({ revision, content })),
+    ).toEqual([
+      { revision: 1, content: legacyRow.content },
+      { revision: 2, content: "Edited memory" },
+    ]);
+    await store().importBundle(bundle, seed.delivery, access);
+    expect(await store().exportBundle(access)).toEqual(bundle);
+    expect((await store().history(row.id, {}, access)).items).toHaveLength(2);
+  });
   it("reloads pending receipts and clears retry state on successful delivery without adding a revision", async () => {
     const retryAt = new Date("2026-09-23T12:00:05.000Z");
     const { tx, upsert, create } = fakeTransaction({
@@ -71,7 +119,10 @@ describe("PostgresMemoryJournal with documents that predate revision rows", () =
         }),
       }),
     );
-    expect(create).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledOnce();
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ revision: 3, content: legacyRow.content }),
+    });
   });
   it("exposes the stored row as the head revision instead of failing", async () => {
     const { tx } = fakeTransaction();

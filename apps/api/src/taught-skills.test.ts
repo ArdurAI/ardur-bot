@@ -14,6 +14,7 @@ it("keeps recording metadata while playbook edits, stale writes and deletion use
     name: "Steps",
     goal: "Repeat a procedure",
     status: "saved",
+    enabled: true,
     playbook: buildPlaybookFromRecording("Repeat a procedure", []),
     recording: { events: [], snapshots: [] },
     documentId: null as string | null,
@@ -44,6 +45,10 @@ it("keeps recording metadata while playbook edits, stale writes and deletion use
     prisma,
     memoryDocuments: memory.service,
   } as unknown as TaughtSkillsDeps);
+  row.enabled = false;
+  await expect(service.testRun(actor, row.id)).rejects.toThrow("Enable this skill");
+  expect(prisma.bot.findUnique).not.toHaveBeenCalled();
+  row.enabled = true;
   const edited = await service.updateDraft(actor, row.id, {
     expectedRevision: 1,
     playbook: { ...row.playbook, steps: ["Check each step."] },

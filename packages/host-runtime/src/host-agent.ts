@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, realpath } from "node:fs/promises";
+import { hostname } from "node:os";
 import path from "node:path";
 import type {
   AdapterContext,
@@ -7,7 +8,13 @@ import type {
   AgentRuntime,
   ComputerRef,
 } from "@ardurbot/adapter-kit";
-import type { HostFrame, HostHealth, HostRequest } from "@ardurbot/contracts/host-bridge";
+import { IDE_FILE_BYTES } from "@ardurbot/contracts";
+import type {
+  HostFrame,
+  HostHealth,
+  HostMcpRegistration,
+  HostRequest,
+} from "@ardurbot/contracts/host-bridge";
 import {
   HOST_FILE_BYTES,
   HOST_IN_FLIGHT,
@@ -25,6 +32,8 @@ import { discoverFleet } from "./fleet/discovery.js";
 import { systemFleetProcess } from "./fleet/process.js";
 import { FleetService } from "./fleet/service.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import { inspectHostIntegrations } from "./host-integrations.js";
+import { HostMcpServers } from "./host-mcp.js";
 import { confinedHostCwd } from "./host-policy.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
@@ -45,8 +54,15 @@ export class HostAgent {
   private sandbox: DesktopSandboxProvider;
   private roots: string[] = [];
   private fleet: FleetService;
+  private readonly mcp: HostMcpServers;
+  refreshMcp?: () => Promise<void>;
   constructor(
-    private readonly config: { root: string; hostRoots: string[]; token?: string },
+    private readonly config: {
+      token?: string;
+      root: string;
+      hostRoots: string[];
+      mcpServers?: HostMcpRegistration[];
+    },
     private readonly wire: HostWire,
     private readonly runtimes: Record<"claude-code" | "codex-app-server", AgentRuntime> = {
       "claude-code": new ClaudeCodeRuntime(),
@@ -54,6 +70,7 @@ export class HostAgent {
     },
   ) {
     this.fleet = new FleetService(config.root, config.token ?? randomUUID());
+    this.mcp = new HostMcpServers(config.mcpServers);
     this.sandbox = new DesktopSandboxProvider({
       root: config.root,
       hostRoots: config.hostRoots,
@@ -65,22 +82,33 @@ export class HostAgent {
     await mkdir(this.config.root, { recursive: true, mode: 0o700 });
     this.roots = await Promise.all(this.config.hostRoots.map((root) => realpath(root)));
   }
+  async configureMcp(registrations: HostMcpRegistration[]) {
+    await this.mcp.replace(
+      registrations.map((entry) => ({
+        ...entry,
+        cwd: entry.cwd === "." ? this.config.root : entry.cwd,
+      })),
+    );
+  }
   async health(): Promise<HostHealth> {
     const cwd = await confinedHostCwd(this.config.root, [this.config.root]);
     const start: NativeSpawn = (binary, args) => spawnNative(binary, args, cwd);
-    const [claude, codex, environment] = await Promise.all([
+    const [claude, codex, environment, integrations] = await Promise.all([
       probeClaude(start),
       probeCodex(start),
       inspectHostEnvironment(getHostEnvironment(), false),
+      inspectHostIntegrations(),
     ]);
     return {
       platform: process.platform as HostHealth["platform"],
+      name: hostname().slice(0, 80),
       roots: this.roots,
       load: this.active.size,
       claude,
       codex,
       environment,
       capacity: await hostCapacity(),
+      integrations,
     };
   }
   async receive(frame: HostFrame) {
@@ -139,6 +167,7 @@ export class HostAgent {
   }
   close() {
     void this.fleet.close();
+    void this.mcp.close();
     for (const state of this.active.values()) {
       state.abort.abort();
       state.wake?.();
@@ -209,6 +238,9 @@ export class HostAgent {
         await this.fleet.call(op, context, send);
       } else if (op.op === "host.health") {
         await send("result", await this.health());
+      } else if ("serverId" in op) {
+        if (!this.mcp.has(op.serverId, op.revision)) await this.refreshMcp?.();
+        await send("result", await this.mcp.execute(op, request.scope, state.abort.signal));
       } else {
         // Never accept providerRef or a computer home from the wire. The service owns this mapping.
         const computerKey = createHash("sha256")
@@ -250,7 +282,11 @@ export class HostAgent {
         } else if (op.op === "computer.files.read") {
           const target = this.fileTarget(computer, op.path);
           const bytes = await this.sandbox.readFile(target.computer, target.path, context, {
-            maxBytes: op.maxBytes ?? HOST_FILE_BYTES,
+            maxBytes: Math.min(
+              op.maxBytes ?? HOST_FILE_BYTES,
+              op.editor ? IDE_FILE_BYTES + 1 : HOST_FILE_BYTES,
+            ),
+            preview: op.editor === true,
           });
           for (let offset = 0; offset < bytes.length; offset += 32 * 1024)
             await send(
@@ -259,7 +295,8 @@ export class HostAgent {
             );
         } else if (op.op === "computer.files.write") {
           const content = Buffer.from(op.content, "base64");
-          if (content.byteLength > HOST_FILE_BYTES) throw new Error("Host file too large.");
+          if (content.byteLength > (op.editor ? IDE_FILE_BYTES : HOST_FILE_BYTES))
+            throw new Error("Host file too large.");
           const target = this.fileTarget(computer, op.path);
           await this.sandbox.writeFile(target.computer, {
             path: target.path,

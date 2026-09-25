@@ -41,6 +41,7 @@ export type DeviceAuditType =
   | "pairing.completed"
   | "pairing.failed"
   | "device.revoked"
+  | "device.approved"
   | "dispatch.accepted"
   | "approval.device.answered"
   | "remote.consequential.blocked";
@@ -91,6 +92,7 @@ export async function startDevicePairing(
   return { challenge, shortCode, expiresAt };
 }
 export interface PairDeviceInput {
+  platform?: string;
   challenge: string;
   instanceId: string;
   deviceName: string;
@@ -123,6 +125,7 @@ function grantData(
     instanceId: challenge.instanceId,
     scopes: challenge.scopes,
     deviceName: input.deviceName,
+    platform: input.platform,
     devicePublicKey: input.devicePublicKey,
     presencePublicKey: input.presencePublicKey,
   };
@@ -143,7 +146,15 @@ export async function completeDevicePairing(
       });
       if (claimed.count !== 1) return null;
       const challenge = await tx.pairingChallenge.findUniqueOrThrow({ where: { hash } });
-      const created = await tx.deviceGrant.create({ data: grantData(challenge, input) });
+      // Serialize pairing with policy changes so a newly paired device cannot slip past trust.
+      await tx.$queryRaw`SELECT id FROM spaces WHERE id = ${challenge.spaceId} FOR UPDATE`;
+      const space = await tx.space.findUniqueOrThrow({ where: { id: challenge.spaceId } });
+      const created = await tx.deviceGrant.create({
+        data: {
+          ...grantData(challenge, input),
+          trustedAt: space.requireTrustedDevices ? null : now,
+        },
+      });
       await auditDevice(tx, "pairing.completed", {
         instanceId,
         userId: created.userId,
@@ -218,7 +229,14 @@ export async function confirmShortCodePairing(
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM pending_device_pairings WHERE id = ${id} FOR UPDATE`;
     const pending = await tx.pendingDevicePairing.findFirst({
-      where: { id, ...actor, grantId: null, deniedAt: null, expiresAt: { gt: now } },
+      where: {
+        id,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        grantId: null,
+        deniedAt: null,
+        expiresAt: { gt: now },
+      },
     });
     if (!pending) throw pairingFailure();
     if (!allow) {
@@ -232,8 +250,10 @@ export async function confirmShortCodePairing(
         instanceId: pending.instanceId,
         scopes: pending.scopes,
         deviceName: pending.deviceName,
+        platform: pending.platform,
         devicePublicKey: pending.devicePublicKey,
         presencePublicKey: pending.presencePublicKey,
+        trustedAt: now,
       },
     });
     await tx.pendingDevicePairing.update({ where: { id }, data: { grantId: grant.id } });
@@ -311,6 +331,8 @@ export async function authenticateDevice(
       data: { usedAt: now },
     });
     if (used.count !== 1) throw failure();
+    if (["dispatch", "answer", "default", "team-accept"].includes(operation))
+      await assertDeviceTrusted(tx, grant);
     const member = await tx.spaceMember.findUnique({
       where: { spaceId_userId: { spaceId: grant.spaceId, userId: grant.userId } },
     });
@@ -322,4 +344,15 @@ export async function authenticateDevice(
     if (touched.count !== 1) throw failure();
     return grant;
   });
+}
+
+/** Also called at transactional dispatch admission, where a grant may have changed. */
+export async function assertDeviceTrusted(
+  prisma: Pick<Prisma.TransactionClient, "space">,
+  grant: Pick<DeviceGrant, "kind" | "trustedAt" | "spaceId">,
+) {
+  if (grant.kind === "channel" || grant.trustedAt !== null) return;
+  const space = await prisma.space.findUniqueOrThrow({ where: { id: grant.spaceId } });
+  if (space.requireTrustedDevices)
+    throw new DeviceRequestError("Ask the owner to approve this device in Account settings.");
 }

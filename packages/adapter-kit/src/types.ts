@@ -7,8 +7,12 @@ import type {
   RuntimeProblem,
   SandboxKind,
 } from "@ardurbot/contracts";
+import type { HostCommandApproval, HostIntegrationId } from "@ardurbot/contracts/host-integrations";
 
 export interface AdapterContext {
+  /** Supplied by the executor only after claiming the exact approved host command. */
+  hostCommandApproval?: HostCommandApproval;
+  toolAccessMode?: "when-needed" | "all";
   operationId: string;
   traceId: string;
   spaceId: string;
@@ -60,7 +64,15 @@ export interface PortableFile {
   executable?: boolean;
 }
 
+export interface HomeArchiveFile {
+  path: string;
+  size: number;
+  content: AsyncIterable<Uint8Array>;
+  executable?: boolean;
+}
+
 export interface ComputerRef {
+  networkEgress?: boolean;
   imageProfile?: "base" | "developer";
   connectionId?: string | null;
   id: string;
@@ -73,6 +85,8 @@ export interface ComputerRef {
 
 export interface CommandRequest {
   argv: string[];
+  /** Host-owned credentials must still match the integration the owner granted. */
+  hostIntegration?: { id: HostIntegrationId; identity: string; workspace: string | null };
   cwd?: string;
   env?: Record<string, string>;
   pty?: boolean;
@@ -261,6 +275,7 @@ export interface MemoryCommitRequest {
   botId?: string;
   path: string;
   content: string;
+  expectedRevision?: number;
   sourceRunId?: string;
   sourceThreadId?: string;
 }
@@ -403,6 +418,55 @@ export interface AgentRunModel {
   };
 }
 
+/** Disjoint normalized categories. Unknown provider detail is null, never invented zero. */
+export interface UsageCategories {
+  logicalInput: number | null;
+  uncachedInput: number | null;
+  cacheReadInput: number | null;
+  cacheWriteInput: number | null;
+  output: number | null;
+  reasoning: number | null;
+}
+
+export type UsagePurpose =
+  | "main"
+  | "retry"
+  | "helper"
+  | "summary"
+  | "delegated"
+  | "detached-learning";
+
+/** Provider-neutral persistence contract; see docs/request-usage.md. */
+export interface RequestUsageObservation {
+  requestId: string;
+  attemptId: string;
+  parentRequestId: string | null;
+  purpose: UsagePurpose;
+  counter: { mode: "delta" | "cumulative"; epochId: string; sequence: number };
+  inputSemantics: "total-with-cache-subsets" | "additive-cache-categories" | "unknown";
+  reasoningSemantics: "subset-of-output" | "separate" | "unknown";
+  categories: UsageCategories;
+  /** USD only when reported or calculated from an applicable dated rate. */
+  cost: number | null;
+  pricingProvenance: {
+    source: string;
+    datedAt: string;
+    kind: "provider-reported" | "rate-card";
+  } | null;
+}
+
+export interface AgentUsage {
+  provider: string;
+  model: string;
+  /** Legacy measurement coverage; normalized request categories take precedence. */
+  reported?: boolean;
+  cachedTokens?: number;
+  /** Legacy totals. With request present, its categories are authoritative. */
+  inputTokens: number;
+  outputTokens: number;
+  request?: RequestUsageObservation;
+}
+
 export interface AgentRunRequest {
   controlledComparison?: boolean;
   botId: string;
@@ -414,6 +478,7 @@ export interface AgentRunRequest {
   sourceMessageId?: string | null;
   prompt: string;
   instructions: string;
+  stablePrefix?: string;
   history: Array<{ id?: string; role: "user" | "assistant" | "system"; content: string }>;
   currentTurnImages?: AgentInputImage[];
   /** Explicit model-only mode; an empty array retains legacy built-in tools. */
@@ -436,10 +501,7 @@ export interface AgentRunRequest {
     executionId: string,
     route?: ConnectorRoute,
   ) => Promise<unknown>;
-  recordHelperUsage?: (
-    id: string,
-    usage: { provider: string; model: string; inputTokens: number; outputTokens: number },
-  ) => Promise<void>;
+  recordHelperUsage?: (id: string, usage: AgentUsage) => Promise<void>;
   finishHelper?: (
     id: string,
     status: "completed" | "failed" | "cancelled",
@@ -495,14 +557,7 @@ export type AgentRuntimeEvent =
       actions?: Array<{ id: string; label: string }>;
     }
   | { type: "takeover"; reason: string }
-  | {
-      type: "usage";
-      delegationId?: string;
-      inputTokens: number;
-      outputTokens: number;
-      provider: string;
-      model: string;
-    }
+  | ({ type: "usage"; delegationId?: string } & AgentUsage)
   | { type: "checkpoint"; blob: string }
   | {
       type: "subagent";
@@ -559,6 +614,7 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "briefs.maintain": { runId?: string };
   "learning.curate": { spaceId?: string; requestedBy?: string; requestId?: string };
   "learning.review": {
     runId: string;

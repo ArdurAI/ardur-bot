@@ -1,4 +1,5 @@
 import { isLocalMcpHost } from "@ardurbot/contracts";
+import type { McpLogBuffer } from "@ardurbot/host-runtime/mcp-diagnostics";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
@@ -8,6 +9,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult, ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import { combineSignals } from "./connector-safety.js";
+import { retryIntegrationRead } from "./integration-lifecycle.js";
 import type { RemoteTransportDependencies, SafeRemoteFetch } from "./remote-mcp.js";
 import { createSafeRemoteFetch } from "./remote-mcp.js";
 
@@ -59,6 +61,7 @@ export interface McpStdioOptions {
 }
 
 export interface McpClientOptions {
+  diagnostics?: McpLogBuffer;
   name?: string;
   version?: string;
   capabilities?: ConstructorParameters<typeof Client>[1];
@@ -239,11 +242,18 @@ export class McpSession {
   private transport?: Transport;
   private remoteFetch?: SafeRemoteFetch;
   private connected = false;
+  private diagnosticsTimer?: ReturnType<typeof setInterval>;
   private connecting?: Promise<void>;
 
   constructor(options: McpClientOptions = {}) {
     this.clientOptions = options;
     this.client = this.newClient();
+    this.client.onerror = (error) => this.clientOptions.diagnostics?.status("error", error);
+    this.client.onclose = () => {
+      this.connected = false;
+      clearInterval(this.diagnosticsTimer);
+      this.clientOptions.diagnostics?.finish();
+    };
   }
 
   private newClient(): Client {
@@ -269,7 +279,49 @@ export class McpSession {
       options.network,
     );
     this.remoteFetch = safeFetch;
-    const fetch = withEndpointOriginFallback(url.origin, safeFetch);
+    const remoteFetch = withEndpointOriginFallback(url.origin, safeFetch);
+    const provider = options.authProvider;
+    const managed =
+      provider &&
+      "managesTokenRefresh" in provider &&
+      provider.managesTokenRefresh &&
+      "prepareTokens" in provider &&
+      "rejectTokens" in provider
+        ? (provider as OAuthClientProvider & {
+            prepareTokens(force?: boolean): Promise<void>;
+            rejectTokens(): Promise<never>;
+          })
+        : undefined;
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (
+        !managed ||
+        new URL(input instanceof Request ? input.url : String(input)).origin !== url.origin
+      )
+        return remoteFetch(input, init);
+      const source = input instanceof Request ? input.clone() : input;
+      await managed.prepareTokens();
+      const request = async () => {
+        const headers = new Headers(
+          init?.headers ?? (input instanceof Request ? input.headers : undefined),
+        );
+        const token = (await managed.tokens())?.access_token;
+        if (token) headers.set("authorization", `Bearer ${token}`);
+        return remoteFetch(source instanceof Request ? source.clone() : source, {
+          ...init,
+          headers,
+        });
+      };
+      const response = await request();
+      if (response.status !== 401) return response;
+      await response.body?.cancel();
+      await managed.prepareTokens(true);
+      const retried = await request();
+      if (retried.status === 401) {
+        await retried.body?.cancel();
+        return managed.rejectTokens();
+      }
+      return retried;
+    };
     const signal = combineSignals(options.signal, AbortSignal.timeout(options.timeoutMs ?? 15_000));
     let usedFallback = false;
     const connect = async (kind: McpRemoteTransport): Promise<void> => {
@@ -332,12 +384,25 @@ export class McpSession {
     if (this.connected || this.connecting)
       throw new Error("MCP session is already connected or connecting");
     const transport = new StdioClientTransport(stdioParams(options));
+    transport.stderr?.on("data", (chunk: Buffer) => this.clientOptions.diagnostics?.append(chunk));
     this.transport = transport;
     const signal = combineSignals(options.signal, AbortSignal.timeout(options.timeoutMs ?? 15_000));
     this.connecting = this.client
       .connect(transport, { signal, timeout: options.timeoutMs ?? 15_000 })
       .then(() => {
         this.connected = true;
+        this.clientOptions.diagnostics?.status("running");
+        if (this.clientOptions.diagnostics) {
+          this.diagnosticsTimer = setInterval(
+            () => this.clientOptions.diagnostics?.touch(),
+            20_000,
+          );
+          this.diagnosticsTimer.unref?.();
+        }
+      })
+      .catch((error) => {
+        this.clientOptions.diagnostics?.status("error", error);
+        throw error;
       })
       .finally(() => {
         this.connecting = undefined;
@@ -351,7 +416,10 @@ export class McpSession {
     const cursors = new Set<string>();
     let cursor: string | undefined;
     do {
-      const page = await this.client.listTools({ cursor }, { signal: options?.signal });
+      const page = await retryIntegrationRead(
+        () => this.client.listTools({ cursor }, { signal: options?.signal }),
+        options?.signal,
+      );
       tools.push(...page.tools);
       if (tools.length > 2000) throw new Error("MCP tool manifest is too large");
       cursor = page.nextCursor;
@@ -378,6 +446,8 @@ export class McpSession {
   }
 
   async close(): Promise<void> {
+    clearInterval(this.diagnosticsTimer);
+    this.clientOptions.diagnostics?.finish();
     this.connecting = undefined;
     this.connected = false;
     await this.client.close().catch(() => undefined);

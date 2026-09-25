@@ -2752,9 +2752,10 @@ describe("computer replacement", () => {
 });
 
 describe("profile replacement workspace", () => {
-  it.each([false, true])(
-    "saves the old binding and retains the checkpoint (placement: %s)",
-    async (placement) => {
+  it.each(["profile", "egress", "placement"])(
+    "replaces %s through a checkpoint and retains files",
+    async (change) => {
+      const placement = change === "placement";
       const root = await mkdtemp(path.join(tmpdir(), "profile-replacement-"));
       const home = new LocalAgentHomeStore(root);
       const sandbox = new FakeSandboxProvider();
@@ -2771,6 +2772,7 @@ describe("profile replacement workspace", () => {
         scope: "dedicated",
         state: "running",
         providerRef: ref.providerRef as string | null,
+        networkEgress: true,
         imageProfile: "base",
         connectionId: "old-connection",
         homeRevision: "old-revision",
@@ -2800,12 +2802,15 @@ describe("profile replacement workspace", () => {
       } as unknown as PrismaClient;
       const provision = vi.spyOn(sandbox, "provision");
       const destroy = vi.spyOn(sandbox, "destroy");
-      const configuration = {
-        imageProfile: "developer" as const,
-        connectionId: "new-connection",
-        confirmed: true,
-        ...(placement ? { placementRunId: "placement-run" } : {}),
-      };
+      const configuration =
+        change === "egress"
+          ? { networkEgress: false, confirmed: true }
+          : {
+              imageProfile: "developer" as const,
+              connectionId: "new-connection",
+              confirmed: true,
+              ...(placement ? { placementRunId: "placement-run" } : {}),
+            };
       try {
         const replaced = await replaceComputer(
           { prisma, home, sandbox, jobs: {} as JobPublisher, events: {} as ThreadEvents },
@@ -2821,8 +2826,9 @@ describe("profile replacement workspace", () => {
           connectionId: "old-connection",
         });
         expect(provision.mock.calls[0]![0]).toMatchObject({
-          imageProfile: "developer",
-          connectionId: "new-connection",
+          imageProfile: change !== "egress" ? "developer" : "base",
+          connectionId: change !== "egress" ? "new-connection" : "old-connection",
+          networkEgress: change !== "egress",
         });
         expect(
           new TextDecoder().decode(await sandbox.readFile(replaced, "keep.txt", context)),

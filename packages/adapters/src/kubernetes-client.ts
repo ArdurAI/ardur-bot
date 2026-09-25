@@ -7,15 +7,19 @@ import type { ProcessEvent } from "@ardurbot/adapter-kit";
 import type {
   RequestContext,
   ResponseContext,
+  V1NetworkPolicy,
   V1PersistentVolumeClaim,
   V1Pod,
 } from "@kubernetes/client-node";
 import type { CapacityMetric, CapacityNode, CapacityPod } from "./fleet/kubernetes-capacity.js";
 import { streamKubernetesExec } from "./kubernetes-exec.js";
+import { kubernetesPolicyEnforced } from "./kubernetes-network.js";
 
 export interface KubernetesApi {
   capacity?(): Promise<{ nodes: CapacityNode[]; pods: CapacityPod[]; metrics?: CapacityMetric[] }>;
   namespaces?(): Promise<string[]>;
+  supportsEgress?(signal: AbortSignal): Promise<boolean>;
+  setEgress?(name: string, enabled: boolean, signal: AbortSignal): Promise<void>;
   read(
     resource: "pods" | "persistentvolumeclaims",
     name: string,
@@ -118,14 +122,16 @@ export async function createKubernetesApi(
   namespace: string,
   context: string,
 ): Promise<KubernetesApi> {
-  const { CoreV1Api, CustomObjectsApi, Exec, createConfiguration } = await import(
-    "@kubernetes/client-node"
-  );
+  const { CoreV1Api, AppsV1Api, NetworkingV1Api, CustomObjectsApi, Exec, createConfiguration } =
+    await import("@kubernetes/client-node");
   const config = await loadConfig(source);
   if (!config.getContexts().some((entry: { name: string }) => entry.name === context))
     throw new Error("The selected Kubernetes context is unavailable.");
   config.setCurrentContext(context);
   const client = config.makeApiClient(CoreV1Api);
+  const apps = config.makeApiClient(AppsV1Api);
+  const networking = config.makeApiClient(NetworkingV1Api);
+  const custom = config.makeApiClient(CustomObjectsApi);
   const exec = new Exec(config);
   const options = (signal: AbortSignal) => ({
     middlewareMergeStrategy: "append" as const,
@@ -152,6 +158,40 @@ export async function createKubernetesApi(
       throw new Error("Kubernetes request failed; check the connection and namespace permissions.");
     }
   }
+  async function supportsEgress(signal: AbortSignal) {
+    try {
+      const [controller, settings, policies, namespaced, clusterwide] = await Promise.all([
+        apps.readNamespacedDaemonSet({ namespace: "kube-system", name: "cilium" }, options(signal)),
+        client.readNamespacedConfigMap(
+          { namespace: "kube-system", name: "cilium-config" },
+          options(signal),
+        ),
+        networking.listNamespacedNetworkPolicy({ namespace }, options(signal)),
+        custom.listNamespacedCustomObject(
+          { group: "cilium.io", version: "v2", plural: "ciliumnetworkpolicies", namespace },
+          options(signal),
+        ),
+        custom.listClusterCustomObject(
+          { group: "cilium.io", version: "v2", plural: "ciliumclusterwidenetworkpolicies" },
+          options(signal),
+        ),
+      ]);
+      const customCount = (value: unknown) => {
+        const items = (value as { items?: unknown[] }).items;
+        if (!Array.isArray(items)) throw new Error("Unknown policy response");
+        return items.length;
+      };
+      return kubernetesPolicyEnforced({
+        desired: controller.status?.desiredNumberScheduled ?? 0,
+        ready: controller.status?.numberReady ?? 0,
+        mode: settings.data?.["enable-policy"] ?? "",
+        namespaceEgress: policies.items.map((policy) => ({ egress: policy.spec?.egress })),
+        customPolicies: customCount(namespaced) + customCount(clusterwide),
+      });
+    } catch {
+      return false;
+    }
+  }
   return {
     async capacity() {
       const signal = AbortSignal.timeout(8000);
@@ -176,6 +216,50 @@ export async function createKubernetesApi(
       return (await client.listNamespace({}, options(AbortSignal.timeout(8000)))).items.flatMap(
         (item) => (item.metadata?.name ? [item.metadata.name] : []),
       );
+    },
+    supportsEgress,
+    async setEgress(name, enabled, signal) {
+      if (enabled && !(await supportsEgress(signal))) return;
+      if (!enabled && !(await supportsEgress(signal)))
+        throw new Error(
+          "Network policy enforcement is unavailable or conflicting egress policies exist.",
+        );
+      let existing: V1NetworkPolicy | undefined;
+      try {
+        existing = await networking.readNamespacedNetworkPolicy(
+          { namespace, name },
+          options(signal),
+        );
+      } catch (error) {
+        if (statusCode(error) !== 404) throw new Error("Network policy lookup failed.");
+      }
+      if (existing && existing.metadata?.labels?.["ardurbot.com/computer"] !== name)
+        throw new Error("Network policy identity does not match.");
+      if (enabled) {
+        if (existing)
+          await apiCall(signal, () =>
+            networking.deleteNamespacedNetworkPolicy({ namespace, name }, options(signal)),
+          );
+        return;
+      }
+      const body = {
+        apiVersion: "networking.k8s.io/v1",
+        kind: "NetworkPolicy",
+        metadata: { name, labels: { "ardurbot.com/computer": name } },
+        spec: {
+          podSelector: { matchLabels: { "ardurbot.com/computer": name } },
+          policyTypes: ["Egress"],
+          egress: [],
+        },
+      };
+      if (existing)
+        await apiCall(signal, () =>
+          networking.replaceNamespacedNetworkPolicy({ namespace, name, body }, options(signal)),
+        );
+      else
+        await apiCall(signal, () =>
+          networking.createNamespacedNetworkPolicy({ namespace, body }, options(signal)),
+        );
     },
     async read(resource, name, signal) {
       try {

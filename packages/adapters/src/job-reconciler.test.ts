@@ -2,11 +2,8 @@ import type { BackgroundJob, JobPublisher } from "@ardurbot/adapter-kit";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { returnBotMessageOutcome } from "./bot-messages.js";
-import {
-  createJobReconciler,
-  createPostgresReconciliationLeadership,
-  type ReconciliationLeadership,
-} from "./job-reconciler.js";
+import type { ReconciliationLeadership } from "./job-reconciler.js";
+import { createJobReconciler, createPostgresReconciliationLeadership } from "./job-reconciler.js";
 
 vi.mock("./bot-messages.js", () => ({ returnBotMessageOutcome: vi.fn() }));
 
@@ -40,6 +37,30 @@ function fakePrisma(
 }
 
 describe("createJobReconciler", () => {
+  it("queues local brief recovery at startup and every ten minutes, retrying a rejected enqueue", async () => {
+    vi.useFakeTimers();
+    try {
+      const reconcileBriefs = vi.fn(async () => undefined);
+      const { jobs } = publisher();
+      const reconciler = createJobReconciler({ prisma: fakePrisma(), jobs, reconcileBriefs });
+      await reconciler.reconcileOnce();
+      expect(reconcileBriefs).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(599_999);
+      await reconciler.reconcileOnce();
+      expect(reconcileBriefs).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(1);
+      reconcileBriefs.mockRejectedValueOnce(new Error("queue closing"));
+      await reconciler.reconcileOnce();
+      expect(reconcileBriefs).toHaveBeenCalledTimes(2);
+      await reconciler.reconcileOnce();
+      expect(reconcileBriefs).toHaveBeenCalledTimes(3);
+      await reconciler.reconcileOnce();
+      expect(reconcileBriefs).toHaveBeenCalledTimes(3);
+      await reconciler.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("continues the main scans when an auxiliary reconciler fails", async () => {
     const prisma = fakePrisma();
     const { jobs } = publisher();

@@ -136,11 +136,16 @@ import {
   computersAreUnavailable,
 } from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
+import { RunContext } from "../components/ContextEntry";
 import type { PendingAttachment } from "../components/composer/attachments";
 import { prepareComposerAttachments } from "../components/composer/attachments";
 import { ComposerTools } from "../components/composer/ComposerTools";
 import { runComposerAction } from "../components/composer/composer-actions";
-import { pickComposerFolder, splitComposerDrop } from "../components/composer/folders";
+import {
+  composerFolderError,
+  pickComposerFolder,
+  splitComposerDrop,
+} from "../components/composer/folders";
 import { useComposerCommands } from "../components/composer/use-composer-commands";
 import type { FeedbackEdit } from "../components/MessageFeedback";
 import { MessageFeedback } from "../components/MessageFeedback";
@@ -159,11 +164,6 @@ import {
   readBotsSidebarCollapsed,
   writeBotsSidebarCollapsed,
 } from "../lib/bots-sidebar-pref";
-import {
-  deliverBrowserNotification as deliverNativeBrowserNotification,
-  requestBrowserNotificationPermission,
-  shouldNotifyBrowser,
-} from "../lib/browser-notifications";
 import {
   embeddableScreenUrl,
   loadComputerScreen,
@@ -208,10 +208,12 @@ import {
 } from "../lib/transcript-scroll";
 import { speaker } from "../lib/tts";
 import { useModelSettings } from "../lib/use-model-settings";
+import { useNotifications } from "../lib/use-notifications";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { CompareStart } from "./CompareStart";
+import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { PlacementNotice } from "./fleet/PlacementNotice";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
@@ -249,6 +251,7 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { SidebarSettings } from "./shell/sidebar-settings";
+import { SystemDictation } from "./system/SystemDictation";
 import { TeamBoard } from "./TeamBoard";
 import { WindowChrome } from "./WindowChrome";
 
@@ -266,12 +269,6 @@ const SettingsOverlay = lazy(() =>
 const PeerMessagesOverlay = lazy(() =>
   import("./PeerMessagesOverlay").then((module) => ({ default: module.PeerMessagesOverlay })),
 );
-const PluginsOverlay = lazy(() =>
-  import("./PluginsOverlay").then((module) => ({ default: module.PluginsOverlay })),
-);
-const McpServersOverlay = lazy(() =>
-  import("./McpServersOverlay").then((module) => ({ default: module.McpServersOverlay })),
-);
 const CallView = lazy(() => import("./CallView").then((module) => ({ default: module.CallView })));
 
 type Panel =
@@ -286,13 +283,6 @@ type Panel =
 
 const RoutinesPanel = lazy(() => import("../components/composer/RoutinesPanel"));
 const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
-
-type PendingBrowserNotification = {
-  event: Pick<ProductEvent, "id" | "type" | "threadId" | "botId" | "payload">;
-  botId: string;
-  botName: string;
-  groupNotification: boolean;
-};
 
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
 /** Identity colour for bots the roster no longer knows about. */
@@ -384,6 +374,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [modelFocusRequest, setModelFocusRequest] = useState(0);
+  const [runtimeFocusRequest, setRuntimeFocusRequest] = useState(0);
   useEffect(() => {
     if (panel !== "settings") setModelFocusRequest(0);
   }, [panel]);
@@ -460,8 +451,6 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   function updateSnapshot(update: (prev: ThreadSnapshot | null) => ThreadSnapshot | null) {
     commitSnapshot(update(snapshotRef.current));
   }
-  const [pluginsOpen, setPluginsOpen] = useState(false);
-  const [mcpOpen, setMcpOpen] = useState(false);
   const [integrationFocus, setIntegrationFocus] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   useSettingsShortcut(() => openSettings("general"));
@@ -654,8 +643,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   } | null>(null);
   const manuallyUnread = useRef(new Set<string>());
   const readVisibleGroups = useRef(new Set<string>());
-  const notifiedBrowserEvents = useRef(new Set<string>());
-  const pendingBrowserNotifications = useRef(new Map<string, PendingBrowserNotification>());
+  useNotifications();
   const computerVisible = useRef(false);
   computerVisible.current = panel === "computer" || computerOpen;
   const autoSpoken = useRef<string | null>(null);
@@ -730,71 +718,6 @@ export function ShellPage({ team = false }: { team?: boolean }) {
       }
     },
     [markBotRead],
-  );
-  const deliverBrowserNotification = useCallback((pending: PendingBrowserNotification): boolean => {
-    const currentBot = botsRef.current.find((bot) => bot.id === pending.botId);
-    if (!currentBot || typeof Notification === "undefined") return true;
-    const result = deliverNativeBrowserNotification(
-      pending.event,
-      currentBot.name || pending.botName,
-      {
-        enabled: pending.groupNotification || currentBot.notifyOnFinish,
-        pageVisible: document.visibilityState === "visible",
-        windowFocused: document.hasFocus(),
-        permission: Notification.permission,
-        notifiedEventIds: notifiedBrowserEvents.current,
-        show: (title, body, tag) => new Notification(title, { body, tag }),
-      },
-    );
-    return result !== "pending";
-  }, []);
-  const flushPendingBrowserNotifications = useCallback(() => {
-    for (const [threadId, pending] of pendingBrowserNotifications.current) {
-      if (deliverBrowserNotification(pending)) {
-        pendingBrowserNotifications.current.delete(threadId);
-      }
-    }
-  }, [deliverBrowserNotification]);
-  const notifyBrowserForEvent = useCallback(
-    (
-      event: Pick<ProductEvent, "id" | "type" | "threadId" | "seq" | "botId" | "payload">,
-      subscribedThreadId: string | undefined,
-      initialCursor: number,
-      streamReady: boolean,
-      botName: string,
-      enabled: boolean,
-      groupNotification: boolean,
-    ) => {
-      const botId = event.botId;
-      if (typeof botId !== "string") return;
-      const eligible = shouldNotifyBrowser(event, {
-        subscribedThreadId: subscribedThreadId ?? "",
-        initialCursor,
-        streamReady,
-        pageVisible: document.visibilityState === "visible",
-        windowFocused: document.hasFocus(),
-        permission: "granted",
-        notifiedEventIds: notifiedBrowserEvents.current,
-      });
-      if (!eligible || !enabled) return;
-      const pending = {
-        event,
-        botId,
-        botName,
-        groupNotification,
-      } satisfies PendingBrowserNotification;
-      if (typeof Notification === "undefined" || Notification.permission === "denied") return;
-      if (Notification.permission === "default") {
-        pendingBrowserNotifications.current.set(event.threadId, pending);
-        return;
-      }
-      if (deliverBrowserNotification(pending)) {
-        pendingBrowserNotifications.current.delete(event.threadId);
-      } else {
-        pendingBrowserNotifications.current.set(event.threadId, pending);
-      }
-    },
-    [deliverBrowserNotification],
   );
 
   const refreshBots = useCallback(
@@ -1107,7 +1030,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
     const poll = window.setInterval(() => {
       if (botsRefreshInFlight.current > 0) return;
       refreshVisibleBots();
-    }, 3_000);
+    }, 5_000);
     return () => {
       cancelled = true;
       window.clearTimeout(refreshTimer);
@@ -1245,17 +1168,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
       },
       applyEvent: (event) =>
         applyThreadEvent(event, commitSnapshot, commitComputer, snapshotRef, computerRef),
-      onEvent: (event, initial) => {
-        const currentBot = botsRef.current.find((bot) => bot.id === active.id);
-        notifyBrowserForEvent(
-          event,
-          initial.threadId,
-          initial.cursor,
-          true,
-          currentBot?.name ?? active.name,
-          currentBot?.notifyOnFinish ?? false,
-          false,
-        );
+      onEvent: (event) => {
         if (event.type === "thread.cleared") {
           expandedHistoryThread.current = null;
           pinnedAroundRef.current = null;
@@ -1296,7 +1209,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
     return () => {
       abort.abort();
     };
-  }, [active?.id, markBotReadIfVisible, notifyBrowserForEvent]);
+  }, [active?.id, markBotReadIfVisible]);
 
   useEffect(() => {
     if (!groupId || !activeGroup) return;
@@ -1356,17 +1269,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
           snapshotRef,
           computerRef,
         ),
-      onEvent: (event, initial) => {
-        const eventBot = botsRef.current.find((bot) => bot.id === event.botId);
-        notifyBrowserForEvent(
-          event,
-          initial.threadId,
-          initial.cursor,
-          true,
-          eventBot?.name ?? activeGroup.name,
-          true,
-          true,
-        );
+      onEvent: (event) => {
         if (event.type === "thread.message.created" && event.payload.role === "bot") {
           readVisibleGroups.current.delete(groupId);
           markVisibleGroupRead();
@@ -1393,7 +1296,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
       document.removeEventListener("visibilitychange", markVisibleGroupRead);
       abort.abort();
     };
-  }, [activeGroup?.id, groupId, notifyBrowserForEvent]);
+  }, [activeGroup?.id, groupId]);
 
   const sidebarGroups = useMemo(() => {
     const needle = query.toLowerCase();
@@ -1994,13 +1897,6 @@ export function ShellPage({ team = false }: { team?: boolean }) {
       );
       const groupTarget = plan.rerouteGroupId ?? initialGroupTarget;
       const botTarget = reroutedToGroup ? undefined : initialBotTarget;
-      if (
-        plan.shouldSend &&
-        (groupTarget || botsRef.current.find((bot) => bot.id === botTarget)?.notifyOnFinish)
-      ) {
-        const permissionRequest = requestBrowserNotificationPermission();
-        if (permissionRequest) void permissionRequest.then(flushPendingBrowserNotifications);
-      }
       const trimmed = plan.trimmed;
       setSending(true);
       setSendError(null);
@@ -2118,16 +2014,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         setSending(false);
       }
     },
-    [
-      activeReplyTarget?.id,
-      activeReplyQuote,
-      clearReply,
-      flushPendingBrowserNotifications,
-      navigate,
-      pendingAttachments,
-      sending,
-      t,
-    ],
+    [activeReplyTarget?.id, activeReplyQuote, clearReply, navigate, pendingAttachments, sending, t],
   );
   const followUpMessage = useCallback(async (text: string) => {
     const id = activeBotId.current;
@@ -2266,8 +2153,23 @@ export function ShellPage({ team = false }: { team?: boolean }) {
     writeBotsSidebarCollapsed(userId, collapsed);
   }
 
+  useEffect(
+    () =>
+      desktopBridge()?.integrations?.onReturn((id) => {
+        setIntegrationFocus(id || undefined);
+        setSettingsSection("integrations");
+        setSettingsOpen(true);
+      }),
+    [],
+  );
+
   const [settingsProvider, setSettingsProvider] = useState<string | undefined>();
-  function openSettings(section: SettingsSection = "general", provider?: string) {
+  function openSettings(
+    section: SettingsSection = "general",
+    provider?: string,
+    integration?: string,
+  ) {
+    setIntegrationFocus(integration);
     setSettingsProvider(provider);
     setSettingsSection(section);
     setSettingsOpen(true);
@@ -3157,7 +3059,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         </div>
         <button
           type="button"
-          onClick={() => setPluginsOpen(true)}
+          onClick={() => openSettings("integrations")}
           className="mx-3 mb-1 flex items-center gap-3 rounded-xl px-2.5 py-2 hover:bg-sidebar-accent"
         >
           <span className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-accent text-foreground/80">
@@ -3362,9 +3264,11 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                 key={bootstrapMe?.spaceId}
                 bot={active}
                 settings={modelSettings}
+                run={activeSnapshot?.run?.botId === active.id ? activeSnapshot.run : null}
                 onClick={openBotModelSettings}
               />
             ) : null}
+            <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
           <div className="flex items-center gap-1">
             {!inGroup && active ? (
@@ -3496,10 +3400,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             computerKind={!inGroup ? computer?.kind : undefined}
             botAvailable={!inGroup}
             onComposerError={setAttachmentNotice}
-            onManage={(connectionId) => {
-              setIntegrationFocus(connectionId);
-              openSettings("integrations");
-            }}
+            onManage={(connectionId) => openSettings("integrations", undefined, connectionId)}
             onRoutine={(routineId) => {
               return rpc.routines
                 .testRun({ routineId, clientNonce: newClientNonce() })
@@ -3710,6 +3611,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                 key={active.id}
                 bot={active}
                 modelFocusRequest={modelFocusRequest}
+                runtimeFocusRequest={runtimeFocusRequest}
                 modelSettings={modelSettings}
                 memoryProviderConfigured={memoryProviderConfig != null}
                 onSkillsChange={setAgentSkills}
@@ -3724,16 +3626,11 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                   await refreshBots();
                 }}
                 onExport={async () => {
-                  const manifest = await rpc.export.bot({ botId: active.id });
-                  const blob = new Blob([JSON.stringify(manifest, null, 2)], {
-                    type: "application/json",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `${active.name.toLowerCase().replace(/\s+/g, "-")}-export.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
+                  const { path } = await rpc.export.bot({ botId: active.id });
+                  const anchor = document.createElement("a");
+                  anchor.href = path;
+                  anchor.download = "bot-v2.tar.gz";
+                  anchor.click();
                 }}
                 onClear={() => setClearTarget({ kind: "bot", chat: active })}
               />
@@ -4273,17 +4170,6 @@ export function ShellPage({ team = false }: { team?: boolean }) {
           />
         ) : null}
 
-        {pluginsOpen ? (
-          <PluginsOverlay
-            activeBotId={activeBotId.current}
-            onClose={() => setPluginsOpen(false)}
-            onOpenMcp={() => {
-              setPluginsOpen(false);
-              setMcpOpen(true);
-            }}
-          />
-        ) : null}
-        {mcpOpen ? <McpServersOverlay onClose={() => setMcpOpen(false)} /> : null}
         {messagingSettingsOpen ? (
           <MessagingSettingsOverlay onClose={() => setMessagingSettingsOpen(false)} />
         ) : null}
@@ -4298,6 +4184,15 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             initialSection={settingsSection}
             initialIntegration={integrationFocus}
             initialProvider={settingsProvider}
+            onOpenBotRuntime={
+              active
+                ? () => {
+                    setSettingsOpen(false);
+                    setRuntimeFocusRequest((value) => value + 1);
+                    setPanel("settings");
+                  }
+                : undefined
+            }
             avatarStyle={bootstrapMe?.avatarStyle ?? "robot"}
             isDeploymentOwner={bootstrapMe?.isDeploymentOwner === true}
             sandboxProvider={bootstrapMe?.sandboxProvider}
@@ -4723,6 +4618,7 @@ const Transcript = memo(function Transcript({
       <div
         ref={scrollRef}
         data-testid="transcript"
+        data-chat-transcript
         onPointerDown={(event) => {
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
@@ -5191,12 +5087,12 @@ export const Composer = memo(function Composer({
   const desktop = desktopBridge();
   const folderAvailable = canAddComposerFolder(Boolean(desktop?.host), computerKind);
   async function addFolder(dropped?: File) {
-    if (!folderAvailable || !desktop?.host) return;
     try {
-      const folder = await pickComposerFolder(desktop.host, dropped);
+      if (computerKind !== "desktop") throw new Error("Folders require this computer.");
+      const folder = await pickComposerFolder(desktop?.host, dropped);
       if (folder) insertMention(folder);
-    } catch {
-      onComposerError(t`Could not add folder. Try again.`);
+    } catch (error) {
+      onComposerError(composerFolderError(error, t`Could not add folder. Try again.`));
     }
   }
 
@@ -5324,6 +5220,7 @@ export const Composer = memo(function Composer({
       onDrop={handleDrop}
       className="composer-drop-target relative z-30 m-0 min-w-0 border-0 px-3 pb-4 pt-3 md:px-6 md:pb-6"
     >
+      <SystemDictation textarea={textareaRef} setDraft={setDraft} />
       {sendError || runError ? (
         <div
           ref={runErrorRef}
@@ -6214,6 +6111,8 @@ const MessageView = memo(function MessageView({
           if (!botId) return null;
           return <ChoiceCard key={i} botId={botId} block={block} onBotChanged={onBotChanged} />;
         }
+        if (block.kind === "app_connect" && block.connectorId === "trusted-catalog")
+          return <ConnectorSuggestion key={i} name={block.name} />;
         if (block.kind === "app_connect") {
           const botId = "botId" in artifactTarget ? artifactTarget.botId : message.botId;
           if (!botId) return null;

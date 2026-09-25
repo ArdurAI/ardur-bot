@@ -30,6 +30,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
+import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { HOST_FILE_BYTES, hostEnvironmentNote } from "@ardurbot/contracts/host-bridge";
 import {
   boundedSandboxCommandTimeoutMs,
@@ -53,6 +54,7 @@ import {
 } from "./desktop-sandbox-win32-path.js";
 import { hostCapacity } from "./fleet/capacity.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import { verifyHostIntegration } from "./host-integrations.js";
 import { confinedHostCwd, hostCommand } from "./host-policy.js";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
@@ -220,6 +222,12 @@ export class DesktopSandboxProvider implements SandboxProvider {
       return;
     }
     const { env } = await getHostEnvironment();
+    if (request.hostIntegration) {
+      if (cwd !== request.cwd)
+        throw new Error("The command's working directory changed. Review it again.");
+      await verifyHostIntegration(request.hostIntegration, request.argv);
+      context.signal.throwIfAborted();
+    }
     let argv: string[];
     try {
       argv = await hostCommand(request, env);
@@ -293,14 +301,16 @@ export class DesktopSandboxProvider implements SandboxProvider {
       : await readdir(target, { withFileTypes: true });
     const listed = await Promise.all(
       entries.map(async (entry) => {
-        const child = await localWorkspaceTarget(
-          box.home,
-          relative ? `${relative}/${entry.name}` : entry.name,
-          true,
-        );
-        const info = await stat(child);
+        const listedPath = relative ? `${relative}/${entry.name}` : entry.name;
+        // POSIX permits literal backslashes. List their metadata without treating them as
+        // separators or following a link; clients can reject unsupported names individually.
+        const literalName = process.platform !== "win32" && entry.name.includes("\\");
+        const child = literalName
+          ? path.join(target, entry.name)
+          : await localWorkspaceTarget(box.home, listedPath, true);
+        const info = literalName ? await lstat(child) : await stat(child);
         return {
-          path: normalizeWorkspacePath(relative ? `${relative}/${entry.name}` : entry.name),
+          path: listedPath,
           kind: info.isDirectory() ? ("dir" as const) : ("file" as const),
           size: info.size,
           ...(info.isFile() && info.mode & 0o100 ? { executable: true } : {}),
@@ -314,7 +324,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     filePath: string,
     _context?: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     const box = this.requiredBox(computer);
     const target = await localWorkspaceTarget(box.home, filePath, true);
@@ -322,7 +332,11 @@ export class DesktopSandboxProvider implements SandboxProvider {
       return readContainedWorkspaceFile(
         box.home,
         target,
-        Math.min(options?.maxBytes ?? HOST_FILE_BYTES, HOST_FILE_BYTES),
+        Math.min(
+          options?.maxBytes ?? HOST_FILE_BYTES,
+          options?.preview ? IDE_FILE_BYTES + 1 : HOST_FILE_BYTES,
+        ),
+        options?.preview,
       );
     const info = await stat(target);
     if (options?.maxBytes !== undefined && info.size > options.maxBytes) {
@@ -418,12 +432,17 @@ async function boundedDirectoryEntries(target: string) {
   const entries = [];
   for await (const entry of await opendir(target)) {
     if (entries.length >= 2048) throw new Error("Host directory too large.");
-    entries.push(entry);
+    if (entry.isFile() || entry.isDirectory()) entries.push(entry);
   }
   return entries;
 }
 
-async function readContainedWorkspaceFile(home: string, target: string, maxBytes: number) {
+async function readContainedWorkspaceFile(
+  home: string,
+  target: string,
+  maxBytes: number,
+  preview = false,
+) {
   const resolvedHome = await realpath(home);
   const parent = await open(
     path.dirname(target),
@@ -447,8 +466,8 @@ async function readContainedWorkspaceFile(home: string, target: string, maxBytes
       if (!bytesRead) break;
       offset += bytesRead;
     }
-    if (offset > maxBytes) throw new Error("Host file too large.");
-    return new Uint8Array(buffer.subarray(0, offset));
+    if (offset > maxBytes && !preview) throw new Error("Host file too large.");
+    return new Uint8Array(buffer.subarray(0, Math.min(offset, maxBytes)));
   } finally {
     await handle?.close();
     await parent.close();

@@ -26,12 +26,13 @@ try:
    if stat.S_ISREG(info.st_mode) and info.st_mode & 0o111: item['executable']=True
    out.append(item)
   print(json.dumps(out))
- elif operation=='read':
+ elif operation in ('read','preview'):
   f=os.open(parts[-1],os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=fd)
   with os.fdopen(f,'rb') as stream:
    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode): raise ValueError('Not a regular file')
    data=stream.read(limit+1)
-   if len(data)>limit: raise ValueError('File exceeds limit')
+   if len(data)>limit and operation!='preview': raise ValueError('File exceeds limit')
+   data=data[:limit]
    print(base64.b64encode(data).decode())
  elif operation=='write':
   data=sys.stdin.buffer.read(limit+1)

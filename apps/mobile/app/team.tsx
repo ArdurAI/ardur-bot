@@ -1,5 +1,5 @@
 import type { TeamRow } from "@ardurbot/contracts";
-import { TEAM_REFRESH_MS } from "@ardurbot/core";
+import { runtimeEffortLabel, TEAM_REFRESH_MS } from "@ardurbot/core";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Button, FlatList, StyleSheet, Text, View } from "react-native";
@@ -88,6 +88,16 @@ export default function TeamScreen() {
               {row.state === "waiting-approval" && row.requesterName ? (
                 <Text style={{ color: tokens.mutedForeground }}>
                   {t("Requested by")} {row.requesterName} — {t("acting as")} {row.botName}
+                </Text>
+              ) : null}
+              {row.executing ? (
+                <Text style={{ color: tokens.mutedForeground }}>
+                  {row.executing.pin.modelId} ·{" "}
+                  {runtimeEffortLabel(
+                    row.executing.pin,
+                    row.executing.runtimeInfo,
+                    t("requested"),
+                  ) ?? "—"}
                 </Text>
               ) : null}
               <View style={styles.actions}>

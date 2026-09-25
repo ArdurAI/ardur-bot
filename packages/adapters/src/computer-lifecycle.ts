@@ -283,6 +283,7 @@ export async function provisionComputer(
     await onProgress?.("recreating");
     const ref = await deps.sandbox.provision(
       {
+        networkEgress: existing.networkEgress,
         imageProfile: (existing.imageProfile ?? "base") as ComputerRef["imageProfile"],
         connectionId: existing.connectionId,
         botId: existing.homeKey,
@@ -602,9 +603,10 @@ export async function replaceComputer(
   controlHolder: "bot" | "none" = "none",
   onProgress?: ComputerUpdateProgress,
   configuration?: {
-    imageProfile: "base" | "developer";
-    connectionId: string | null;
     placementRunId?: string;
+    imageProfile?: "base" | "developer";
+    connectionId?: string | null;
+    networkEgress?: boolean;
   },
 ): Promise<ComputerRef> {
   let placementRunId: string | undefined;
@@ -742,7 +744,8 @@ export async function replaceComputer(
           existing.homeKey,
           oldRef,
           context,
-          Boolean(configuration && configuration.connectionId !== existing.connectionId),
+          configuration?.connectionId !== undefined &&
+            configuration.connectionId !== existing.connectionId,
         );
         const recorded = await deps.prisma.computer.updateMany({
           where: { id: computerId, state: "suspending", updatedAt: claimStamp },
@@ -771,7 +774,17 @@ export async function replaceComputer(
       },
       data: {
         ...(configuration
-          ? { imageProfile: configuration.imageProfile, connectionId: configuration.connectionId }
+          ? {
+              ...(configuration.imageProfile !== undefined
+                ? { imageProfile: configuration.imageProfile }
+                : {}),
+              ...(configuration.connectionId !== undefined
+                ? { connectionId: configuration.connectionId }
+                : {}),
+              ...(configuration.networkEgress !== undefined
+                ? { networkEgress: configuration.networkEgress }
+                : {}),
+            }
           : {}),
         state: "stopped",
         providerRef: null,
@@ -790,7 +803,8 @@ export async function replaceComputer(
       context,
       controlHolder,
       onProgress,
-      Boolean(configuration && configuration.connectionId !== existing.connectionId),
+      configuration?.connectionId !== undefined &&
+        configuration.connectionId !== existing.connectionId,
     );
   } catch (error) {
     await deps.prisma.computer

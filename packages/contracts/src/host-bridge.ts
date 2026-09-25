@@ -6,6 +6,8 @@ import {
   RemoteKubeconfigSchema,
   RemoteSecretSchema,
 } from "./fleet-bridge.js";
+import { HostIntegrationSchema } from "./host-integrations.js";
+import { IDE_FILE_BYTES } from "./ide.js";
 import {
   RuntimeAvailabilitySchema,
   RuntimeInfoSchema,
@@ -17,6 +19,8 @@ export const HOST_BRIDGE_VERSION = 1;
 export const HOST_FRAME_BYTES = 256 * 1024;
 export const HOST_TOTAL_BYTES = 8 * 1024 * 1024;
 export const HOST_FILE_BYTES = 128 * 1024;
+// Only explicit owner editor writes may carry a larger request. Stream frames keep their limit.
+export const HOST_WRITE_FRAME_BYTES = Math.ceil(IDE_FILE_BYTES / 3) * 4 + 8192;
 export const HOST_IN_FLIGHT = 4;
 export const HOST_WINDOW = 8;
 export const HOST_TOOLS = [
@@ -131,6 +135,19 @@ export const HostTurnSchema = z.strictObject({
   emptyResponseText: text.optional(),
 });
 export type HostTurn = z.infer<typeof HostTurnSchema>;
+export const HostMcpRegistrationSchema = z.strictObject({
+  redactions: z.array(z.string().max(4096)).max(256).default([]),
+  serverId: id,
+  userId: id,
+  spaceId: id,
+  revision: z.number().int().positive(),
+  command: z.string().min(1).max(512),
+  args: z.array(z.string().max(2048)).max(64),
+  env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().max(4096)),
+  cwd: path,
+});
+export type HostMcpRegistration = z.infer<typeof HostMcpRegistrationSchema>;
+const mcpTarget = { serverId: id, revision: z.number().int().positive() };
 export const HostOperationSchema = z.discriminatedUnion("op", [
   RemoteComputerCallSchema,
   RemoteDiscoverySchema,
@@ -146,11 +163,23 @@ export const HostOperationSchema = z.discriminatedUnion("op", [
     homeKey: id,
     maintenanceId: id.optional(),
   }),
+  z.strictObject({ op: z.literal("mcp.tools"), ...mcpTarget }),
+  z.strictObject({
+    op: z.literal("mcp.call"),
+    ...mcpTarget,
+    name: z.string().min(1).max(160),
+    args: z.record(z.string(), z.unknown()),
+  }),
+  z.strictObject({ op: z.literal("mcp.status"), ...mcpTarget }),
+  z.strictObject({ op: z.literal("mcp.stop"), ...mcpTarget }),
   z.strictObject({
     op: z.literal("computer.exec"),
     homeKey: id,
     maintenanceId: id.optional(),
     argv: z.array(z.string().max(4096)).min(1).max(64),
+    hostIntegration: HostIntegrationSchema.pick({ id: true, identity: true, workspace: true })
+      .extend({ identity: z.string().min(1).max(240) })
+      .optional(),
     cwd: path.optional(),
     timeoutMs: z.number().int().min(1).max(300_000).optional(),
   }),
@@ -159,7 +188,13 @@ export const HostOperationSchema = z.discriminatedUnion("op", [
     homeKey: id,
     maintenanceId: id.optional(),
     path,
-    maxBytes: z.number().int().min(1).max(HOST_FILE_BYTES).optional(),
+    maxBytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(IDE_FILE_BYTES + 1)
+      .optional(),
+    editor: z.literal(true).optional(),
   }),
   z.strictObject({
     op: z.literal("computer.files.write"),
@@ -168,9 +203,10 @@ export const HostOperationSchema = z.discriminatedUnion("op", [
     path,
     content: z
       .string()
-      .max(Math.ceil(HOST_FILE_BYTES / 3) * 4)
+      .max(Math.ceil(IDE_FILE_BYTES / 3) * 4)
       .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
     executable: z.boolean().optional(),
+    editor: z.literal(true).optional(),
   }),
   z.strictObject({
     op: z.literal("computer.files.list"),
@@ -199,12 +235,14 @@ export const HostRequestSchema = z.strictObject({
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 export const HostHealthSchema = z.strictObject({
   capacity: CapacitySnapshotSchema.optional(),
+  name: z.string().trim().min(1).max(80).optional(),
   platform: z.enum(["darwin", "linux", "win32"]),
   roots: z.array(path).max(32),
   load: z.number().int().min(0).max(HOST_IN_FLIGHT),
   claude: RuntimeAvailabilitySchema,
   codex: RuntimeAvailabilitySchema,
   environment: HostEnvironmentSchema.optional(),
+  integrations: z.array(HostIntegrationSchema).max(16).optional(),
 });
 export type HostHealth = z.infer<typeof HostHealthSchema>;
 export const HostStatusSchema = z.strictObject({
@@ -264,14 +302,23 @@ export const HostFrameSchema = z.discriminatedUnion("type", [
 export type HostFrame = z.infer<typeof HostFrameSchema>;
 export function encodeHostFrame(frame: HostFrame) {
   const data = JSON.stringify(HostFrameSchema.parse(frame));
-  if (new TextEncoder().encode(data).byteLength > HOST_FRAME_BYTES)
+  if (new TextEncoder().encode(data).byteLength > frameLimit(frame))
     throw new Error("Host frame too large.");
   return data;
 }
 export function decodeHostFrame(data: string): HostFrame {
-  if (new TextEncoder().encode(data).byteLength > HOST_FRAME_BYTES)
-    throw new Error("Host frame too large.");
-  return HostFrameSchema.parse(JSON.parse(data));
+  const size = new TextEncoder().encode(data).byteLength;
+  if (size > HOST_WRITE_FRAME_BYTES) throw new Error("Host frame too large.");
+  const frame = HostFrameSchema.parse(JSON.parse(data));
+  if (size > frameLimit(frame)) throw new Error("Host frame too large.");
+  return frame;
+}
+function frameLimit(frame: HostFrame) {
+  return frame.type === "request" &&
+    frame.operation.op === "computer.files.write" &&
+    frame.operation.editor
+    ? HOST_WRITE_FRAME_BYTES
+    : HOST_FRAME_BYTES;
 }
 export function hostSocketUrl(apiUrl: string, internal = false) {
   const url = new URL(apiUrl);
@@ -315,9 +362,13 @@ export const HostRuntimeEventSchema = z.discriminatedUnion("type", [
     delegationId: z.string().optional(),
     inputTokens: z.number().nonnegative(),
     outputTokens: z.number().nonnegative(),
+    cachedTokens: z.number().nonnegative().optional(),
     provider: z.string(),
     model: z.string(),
   }),
   z.strictObject({ type: z.literal("checkpoint"), blob: text }),
   z.strictObject({ type: z.literal("done"), text: text.optional() }),
 ]);
+/** Canonical text for a public identifier; hashing it never yields a host credential. */
+// Defined in plain JavaScript so the packaged desktop app can load it.
+export { hostRegistrationIdentityText } from "./host-registration-identity.js";
