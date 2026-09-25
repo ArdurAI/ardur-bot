@@ -9,6 +9,7 @@ import {
   learningApprovalBlock,
   learningJourneyLabel,
 } from "@ardurbot/contracts";
+import { LOCAL_IMPORT_TOOL_NAMES } from "@ardurbot/contracts/local-import";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -163,7 +164,15 @@ export default function Learning() {
           ? timeline.map((entry) => (
               <View key={entry.id} style={styles.card}>
                 <Text style={styles.body}>
-                  {t(learningJourneyLabel(entry.action))} · {entry.at}
+                  {entry.importedFrom
+                    ? t(
+                        entry.action === "import-removed"
+                          ? "Removed import from {tool}"
+                          : "Imported from {tool}",
+                        { tool: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom] },
+                      )
+                    : t(learningJourneyLabel(entry.action))}{" "}
+                  · {entry.at}
                 </Text>
                 {entry.proposalId ? (
                   <Button

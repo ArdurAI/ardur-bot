@@ -224,6 +224,11 @@ async function main() {
     jobs,
     events,
     workerId: process.pid.toString(),
+    localImport: {
+      apiUrl: process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://127.0.0.1:3100",
+      encryptionKey: resolveEncryptionKey(process.env),
+      packaged: process.env.ARDURBOT_HOST_BRIDGE === "api",
+    },
     runtime,
     secretStore: secrets,
     memoryProviders,

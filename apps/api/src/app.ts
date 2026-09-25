@@ -102,6 +102,7 @@ import { ensureInstanceIdentity } from "./instance-identity.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { integrationOAuthReturn } from "./integration-oauth-return.js";
 import { createLearningService } from "./learning.js";
+import { LocalImportRequests } from "./local-import-requests.js";
 import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
 import { createLegacyChatDispatch, mountMessagingDispatch } from "./messaging-dispatch.js";
 import {
@@ -281,6 +282,7 @@ export async function createApp(
   const artifacts = new LocalArtifactStore(env.dataDir);
   const memoryLifecycleDeps = { prisma, secrets, jobs, dataDir: env.dataDir };
   const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
+  const localImportRequests = new LocalImportRequests(jobs);
   const mcp = new McpConnector(
     prisma,
     secrets,
@@ -450,6 +452,12 @@ export async function createApp(
     jobs,
     events,
     workerId: "api",
+    localImport: {
+      apiUrl: process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://127.0.0.1:3100",
+      encryptionKey: env.encryptionKey,
+      packaged: process.env.ARDURBOT_HOST_BRIDGE === "api",
+      reply: (id, response, failed) => localImportRequests.complete(id, response, failed),
+    },
     memoryDocuments,
     runtime,
     secretStore: secrets,
@@ -469,6 +477,13 @@ export async function createApp(
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
         reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir: env.dataDir }),
+        reconcileLocalImport: async () => {
+          await jobs.enqueue({
+            name: "local-import.refresh",
+            payload: {},
+            replaceKey: "local-import:refresh",
+          });
+        },
         reconcileBriefs: () =>
           jobs.enqueue({
             name: "briefs.maintain",
@@ -490,6 +505,7 @@ export async function createApp(
       executor.resolveModel({ spaceId: bot.spaceId, userId: bot.userId, botId: bot.id }),
     terminals,
     hostBridge,
+    localImportRequests,
     cloudAgent,
     prisma,
     events,
@@ -978,6 +994,21 @@ export async function createApp(
     if (!hostBridge.isWorker(c.req.header("authorization")))
       return c.json({ error: "Unauthorized" }, 401);
     return c.json(hostBridge.hub.health);
+  });
+  app.post("/api/local-import/result", async (c) => {
+    if (!hostBridge.isWorker(c.req.header("authorization")))
+      return c.json({ error: "Unauthorized" }, 401);
+    const text = await c.req.text();
+    if (Buffer.byteLength(text) > 8 * 1024 * 1024)
+      return c.json({ error: "Result too large" }, 413);
+    try {
+      const reply = JSON.parse(text) as { requestId: string; response?: unknown; failed?: boolean };
+      if (typeof reply.requestId !== "string") return c.json({ error: "Invalid result" }, 400);
+      localImportRequests.complete(reply.requestId, reply.response, reply.failed === true);
+      return c.json({ ok: true });
+    } catch {
+      return c.json({ error: "Invalid result" }, 400);
+    }
   });
 
   app.get("/health", (c) =>

@@ -368,6 +368,18 @@ export default function Account() {
           <Text style={styles.chevron}>›</Text>
         </Pressable>
 
+        {me?.isDeploymentOwner ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={pending}
+            onPress={() => router.push("/import")}
+            style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.settingsTitle}>{t("Import")}</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        ) : null}
+
         <Pressable
           accessibilityRole="button"
           disabled={pending}

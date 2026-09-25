@@ -32,6 +32,8 @@ import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.j
 import { inspectHostIntegrations } from "./host-integrations.js";
 import { HostMcpServers } from "./host-mcp.js";
 import { confinedHostCwd } from "./host-policy.js";
+import type { LocalImportScanner } from "./import/scanner.js";
+import { createLocalImportScanner } from "./import/scanner.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
@@ -50,6 +52,7 @@ export class HostAgent {
   private seen = new Set<string>();
   private sandbox: DesktopSandboxProvider;
   private roots: string[] = [];
+  private importer?: LocalImportScanner;
   private readonly mcp: HostMcpServers;
   refreshMcp?: () => Promise<void>;
   constructor(
@@ -215,6 +218,16 @@ export class HostAgent {
             await send("stdout", result.stdout.slice(offset, offset + 24 * 1024));
           await send("result", { ...result, stdout: undefined });
         } else await send("result", result);
+      } else if (op.op === "import.scan" || op.op === "import.read") {
+        this.importer ??= await createLocalImportScanner(this.roots);
+        const result =
+          op.op === "import.scan"
+            ? await this.importer.scan(op.roots)
+            : this.importer.read(op.scanId, op.itemId);
+        // Manifests can span frames; each frame and the complete request retain bridge bounds.
+        const json = JSON.stringify(result);
+        for (let offset = 0; offset < json.length; offset += 24 * 1024)
+          await send("result", json.slice(offset, offset + 24 * 1024));
       } else if ("serverId" in op) {
         if (!this.mcp.has(op.serverId, op.revision)) await this.refreshMcp?.();
         await send("result", await this.mcp.execute(op, request.scope, state.abort.signal));

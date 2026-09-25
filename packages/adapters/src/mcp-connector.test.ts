@@ -108,6 +108,48 @@ function mcpFetch(
 }
 
 describe("MCP connector session cache", () => {
+  it("blocks imported servers until required credentials exist and resolves bearer variable names from the encrypted store", async () => {
+    const state = { failNext: false, initializations: 0, headers: [] as Record<string, string>[] };
+    const network = mcpFetch(state);
+    vi.stubGlobal("fetch", network);
+    const server = {
+      ...SERVER,
+      imported: { tool: "codex" },
+      env: { ACCESS_TOKEN: true },
+      headers: { Authorization: { name: "ACCESS_TOKEN", bearer: true } },
+      secretId: null as string | null,
+    };
+    const secrets = new EncryptedSecretStore("fixture-encryption-material");
+    const stored = await secrets.put(
+      JSON.stringify({ env: { ACCESS_TOKEN: "fixture-value" } }),
+      {} as never,
+    );
+    const prisma = {
+      botMcpServer: {
+        findMany: vi.fn(async () => [{ ...ASSIGNMENT, server }]),
+        findFirst: vi.fn(async () => ({ ...ASSIGNMENT, server })),
+      },
+      secret: { findFirst: vi.fn(async () => stored) },
+    };
+    const connector = new McpConnector(prisma as never, secrets, { network: TEST_NETWORK });
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never;
+    // Discovery contains a server failure instead of starting a connection with missing values.
+    await connector.discoverTools(context);
+    expect(network).not.toHaveBeenCalled();
+    server.secretId = stored.id;
+    server.revision++;
+    await connector.discoverTools(context);
+    expect(state.initializations).toBe(1);
+    expect(state.headers.some((headers) => headers.authorization === "Bearer fixture-value")).toBe(
+      true,
+    );
+    await connector.close();
+  });
   it("requires sign-in after a personal token is rejected without a refresh mechanism", async () => {
     vi.stubGlobal(
       "fetch",

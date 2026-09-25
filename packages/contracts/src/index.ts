@@ -24,6 +24,7 @@ export * from "./ids.js";
 export * from "./integration-catalog.js";
 export * from "./integration-settings.js";
 export * from "./learning.js";
+export type * from "./local-import.js";
 export * from "./local-settings.js";
 export * from "./mcp.js";
 export * from "./mcp-defaults.js";

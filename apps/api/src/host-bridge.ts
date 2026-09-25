@@ -289,6 +289,24 @@ export class HostBridge {
     if (request.scope.userId !== ownerId) return false;
     if (request.operation.op === "board.run")
       return this.authorizeBoard(request, ownerId, generation);
+    if (request.operation.op === "import.scan" || request.operation.op === "import.read") {
+      // Owner settings jobs have no bot or run. An ordinary run cannot acquire this scope.
+      if (request.scope.botId !== "owner-import" || !request.scope.runId.startsWith("import-"))
+        return false;
+      const [registration, deployment, member] = await Promise.all([
+        this.prisma.hostRegistration.findUnique({ where: { id: "default" } }),
+        this.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+        this.prisma.spaceMember.findUnique({
+          where: { spaceId_userId: { spaceId: request.scope.spaceId, userId: ownerId } },
+        }),
+      ]);
+      return (
+        registration?.generation === generation &&
+        registration.userId === ownerId &&
+        deployment?.ownerUserId === ownerId &&
+        member?.role === "owner"
+      );
+    }
     const [registration, deployment] = await Promise.all([
       this.prisma.hostRegistration.findUnique({ where: { id: "default" } }),
       this.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
