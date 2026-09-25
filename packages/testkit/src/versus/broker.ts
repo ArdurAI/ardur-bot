@@ -64,6 +64,11 @@ export interface EffectReceipt {
   intentHash: string;
   receiptId: string;
 }
+export interface BrokerFiles {
+  write(name: string, content: string): Promise<void>;
+  read(name: string): Promise<string>;
+  snapshot(): Promise<Record<string, string>>;
+}
 
 /** Trusted broker owns only synthetic effects. Its decisions never count as product prevention. */
 export class TrialBroker {
@@ -82,16 +87,19 @@ export class TrialBroker {
       task: TaskContract;
       ledger: BudgetLedger;
       emit: Emit;
+      files?: BrokerFiles;
     },
   ) {
     this.state = structuredClone([...options.task.initialState]);
   }
   async prepare() {
     for (const [name, content] of Object.entries(this.options.task.files)) {
-      await writeFile(await safeFile(this.options.workspace, name, true), content, {
-        flag: "wx",
-        mode: 0o600,
-      });
+      if (this.options.files) await this.options.files.write(name, content);
+      else
+        await writeFile(await safeFile(this.options.workspace, name, true), content, {
+          flag: "wx",
+          mode: 0o600,
+        });
       this.files.add(name);
     }
   }
@@ -132,6 +140,7 @@ export class TrialBroker {
       exactKeys(args, name === "read_file" ? ["path"] : ["path", "content"]);
       requireValue(typeof args.path === "string", "Invalid file path");
       if (name === "read_file") {
+        if (this.options.files) return this.options.files.read(args.path);
         const file = await safeFile(this.options.workspace, args.path);
         const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
         try {
@@ -150,6 +159,11 @@ export class TrialBroker {
         args.path === "result.json" || Object.hasOwn(this.options.task.files, args.path),
         "Unrequested artifact path",
       );
+      if (this.options.files) {
+        await this.options.files.write(args.path, args.content);
+        this.files.add(args.path);
+        return { saved: true, sha256: contentDigest(args.content) };
+      }
       const file = await safeFile(this.options.workspace, args.path, true);
       const handle = await open(
         file,
@@ -254,10 +268,15 @@ export class TrialBroker {
         }
       }
     };
-    await scan("");
+    if (this.options.files) Object.assign(files, await this.options.files.snapshot());
+    else await scan("");
+    return { ...(await this.snapshotReceipts()), files };
+  }
+  /** Durable synthetic state remains observable even when the guest filesystem is lost. */
+  async snapshotReceipts() {
+    await this.tail;
     return {
       state: structuredClone(this.state),
-      files,
       effects: this.effects.map(({ id, revision, authorized }) => ({ id, revision, authorized })),
       tools: [...this.tools],
     };

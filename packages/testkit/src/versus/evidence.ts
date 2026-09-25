@@ -121,6 +121,10 @@ export async function writeEvidence(output: string, input: EvidenceInput) {
       file: `${product}${histories.length > 1 ? `-${history}` : ""}-schema3.json`,
     })),
   );
+  const trialBindings = input.trials.map(({ events: _events, raw, ...summary }) => ({
+    summary,
+    rawHash: contentDigest(raw),
+  }));
   const manifest = {
     ...VERSUS_PROTOCOL,
     mode: input.mode,
@@ -140,6 +144,8 @@ export async function writeEvidence(output: string, input: EvidenceInput) {
       : null,
     plan: input.plan,
     reports: reportFiles,
+    trialBindings,
+    results: input.results,
     plannedTrialsAreObservations: false,
     fixtureCommitments: histories.flatMap((history) =>
       frozenInputs(history).map(({ material: _material, ...commitment }) => ({
@@ -165,7 +171,7 @@ export async function writeEvidence(output: string, input: EvidenceInput) {
     ],
     missingW0: [
       "W0-3 landed; versus request/purpose/cache/reasoning coverage not qualified",
-      "W0-4 full cross-process and paint trace collection incomplete",
+      "W0-4 landed; versus cross-product timing and paint coverage unqualified",
       "W0-6 fault/load qualification unmeasured",
       "W0-7 packaged resources unmeasured",
       "W0-9 release indexing outside this stream",
@@ -406,15 +412,15 @@ export async function writeEvidence(output: string, input: EvidenceInput) {
     "",
     "## Live prerequisites",
     "",
-    "Use the owner-approved numeric loopback endpoint, exact model digest/quantization and finite budget file. Native confinement, protocol qualification, resource enforcement, and complete route pinning must pass before either product starts. No automatic budget expansion or model installation is permitted.",
+    "Use the owner-approved numeric loopback endpoint, exact model digest/quantization and finite budget file. The pinned container release, confinement, product protocol, resource enforcement and complete route pinning must pass qualification before live startup. No automatic budget expansion or model installation is permitted.",
     "",
   ].join("\n");
   await writeFile(path.join(output, "index.md"), index, { flag: "wx", mode: 0o600 });
-  await validateEvidenceDirectory(output, input.build.build, input.build.graderHash);
   const checksums = [];
   for (const name of (await readdir(output)).filter((name) => name !== "raw").sort())
     checksums.push({ name, sha256: bytesHash(await readFile(path.join(output, name))) });
   await readable("checksums.json", checksums);
+  await validateEvidenceDirectory(output, input.build.build, input.build.graderHash);
   return reports;
 }
 
@@ -423,6 +429,28 @@ export async function validateEvidenceDirectory(
   build?: PerformanceEvidenceReport["build"],
   graderHash?: string,
 ) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  requireValue(
+    entries.every((entry) => (entry.name === "raw" ? entry.isDirectory() : entry.isFile())),
+    "Evidence must contain regular files, not symlinks",
+  );
+  const checksums = JSON.parse(await readFile(path.join(directory, "checksums.json"), "utf8")) as {
+    name: string;
+    sha256: string;
+  }[];
+  const names = entries
+    .map((entry) => entry.name)
+    .filter((name) => !["raw", "checksums.json"].includes(name))
+    .sort();
+  requireValue(
+    contentDigest(checksums.map((entry) => entry.name)) === contentDigest(names),
+    "Final-file checksum inventory mismatch",
+  );
+  for (const checksum of checksums)
+    requireValue(
+      bytesHash(await readFile(path.join(directory, checksum.name))) === checksum.sha256,
+      "Final-file checksum mismatch",
+    );
   const manifest = JSON.parse(
     await readFile(path.join(directory, "versus-manifest.json"), "utf8"),
   ) as {
@@ -430,8 +458,67 @@ export async function validateEvidenceDirectory(
     plan: PairPlan[];
     graderHash: string;
     analysis: unknown;
+    trialBindings: { summary: Omit<EvidenceTrial, "events" | "raw">; rawHash: string }[];
+    results: PairedResult[];
     reports: { product: Product; history: "short" | "long"; file: string }[];
   };
+  const readLines = async (file: string) =>
+    (await readFile(path.join(directory, file), "utf8"))
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  const summaries = manifest.trialBindings.map((binding) => binding.summary);
+  requireValue(
+    contentDigest(await readLines("trials.jsonl")) === contentDigest(summaries),
+    "Trial sidecar mismatch",
+  );
+  requireValue(
+    contentDigest(await readLines("grades.jsonl")) ===
+      contentDigest(
+        summaries.map((trial) => ({
+          blindId: `blind-${contentDigest(trial.trialId).slice(0, 24)}`,
+          taskId: trial.taskId,
+          grade: trial.grade,
+        })),
+      ),
+    "Grade sidecar mismatch",
+  );
+  requireValue(
+    new Set(summaries.map((trial) => trial.trialId)).size === summaries.length,
+    "Duplicate retained trial",
+  );
+  requireValue(manifest.results.length === summaries.length, "Analysis omitted retained trial");
+  for (const { summary, rawHash } of manifest.trialBindings) {
+    requireValue(/^[a-f0-9]{64}$/.test(rawHash), "Invalid raw trial hash");
+    const bytes = await readFile(path.join(directory, "raw", `${rawHash}.json`));
+    requireValue(bytesHash(bytes) === rawHash, "Raw trial digest mismatch");
+    const raw = JSON.parse(bytes.toString("utf8"));
+    requireValue(
+      contentDigest(raw.grade) === contentDigest(summary.grade),
+      "Raw grade contradicts summarized grade",
+    );
+    requireValue(
+      (summary.outcome === "success") === summary.grade.passed,
+      "Outcome contradicts grade",
+    );
+    const result = manifest.results.find(
+      (item) => item.pairId === summary.pairId && item.product === summary.product,
+    );
+    requireValue(
+      result &&
+        result.taskId === summary.taskId &&
+        result.accepted === summary.grade.passed &&
+        result.criticalPassed === summary.grade.criticalPassed,
+      "Analysis contradicts retained grade",
+    );
+  }
+  requireValue(
+    contentDigest(manifest.analysis) ===
+      contentDigest(analyzePairs(manifest.plan, manifest.results)),
+    "Changed manifest analysis totals",
+  );
+  const coverage = JSON.parse(await readFile(path.join(directory, "coverage.json"), "utf8"));
+  requireValue(coverage.executedTrials === summaries.length, "Changed retained trial total");
   const histories = [...new Set(manifest.plan.map((pair) => pair.history))];
   const expectedFiles = PRODUCTS.flatMap((product) =>
     histories.map((history) => ({
@@ -448,6 +535,15 @@ export async function validateEvidenceDirectory(
     const report = parsePerformanceEvidenceReport(
       JSON.parse(await readFile(path.join(directory, file), "utf8")),
       product,
+    );
+    const selected = summaries.filter(
+      (trial) =>
+        trial.product === product &&
+        manifest.plan.some((pair) => pair.id === trial.pairId && pair.history === history),
+    );
+    requireValue(
+      contentDigest(report.tasks) === contentDigest(replayTaskEvidence(selected)),
+      "Schema trial outcome contradicts retained grades",
     );
     requireValue(
       !build || contentDigest(report.build) === contentDigest(build),

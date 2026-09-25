@@ -163,6 +163,7 @@ export class HermesOutput {
   private responseFrame: "stream" | "panel" | null = null;
   sessionId: string | null = null;
   protocolError: string | null = null;
+  private argumentErrorSeen = false;
   get reply(): string | null {
     return this.responses.length ? this.responses.join("\n\n") : null;
   }
@@ -181,14 +182,16 @@ export class HermesOutput {
       index = this.pending.indexOf("\n");
     }
   }
-  end() {
+  end(exitCode = 0) {
     this.pending += this.decoder.end();
     if (this.pending) this.line(this.pending);
     this.pending = "";
     if (this.responseLines !== null) this.protocolError = "incomplete-assistant-reply";
+    if (exitCode !== 0 && this.argumentErrorSeen) this.protocolError = "unsupported-flags";
   }
   private line(raw: string) {
     const line = stripVTControlCharacters(raw).replace(/\r/g, "");
+    const insideResponse = this.responseLines !== null;
     // Source: cli_stream_mixin's response box and cli_chat_turn_mixin's HORIZONTALS panel.
     // Keep unsanitized assistant text for the hidden grader; diagnostics are redacted separately.
     const streamHeader = /^\s*╭─+\s*⚕ Hermes(?: \d{2}:\d{2}(?::\d{2})?)?─+╮\s*$/.test(line);
@@ -214,8 +217,10 @@ export class HermesOutput {
         this.protocolError = "session-identity-changed";
       this.sessionId = session[1]!;
     }
-    if (/unrecognized arguments|no such option|invalid choice/i.test(line))
-      this.protocolError = "unsupported-flags";
+    if (/unrecognized arguments|no such option|invalid choice/i.test(line)) {
+      this.argumentErrorSeen = true;
+      if (!insideResponse) this.protocolError = "unsupported-flags";
+    }
     this.emit("diagnostic", "product-stdout", {
       text: sanitize(line, this.redact),
       renderBoundary: "unclassified-cli-output",
@@ -228,7 +233,12 @@ export class HermesOutput {
 export async function superviseHermesProcess(
   child: ChildProcess,
   options: { emit: Emit; signal: AbortSignal; timeoutMs: number; redact?: string[] },
-) {
+): Promise<{
+  terminal: TrialArtifacts["observation"]["terminal"];
+  reason: string;
+  sessionId: string | null;
+  reply: string | null;
+}> {
   const stdout = new HermesOutput(options.emit, options.redact);
   const stderr = new HermesOutput(options.emit, options.redact);
   let reason: string | null = null;
@@ -272,8 +282,8 @@ export async function superviseHermesProcess(
     });
     if (options.signal.aborted) cancel();
     const code = await done;
-    stdout.end();
-    stderr.end();
+    stdout.end(code ?? 1);
+    stderr.end(code ?? 1);
     const sessions = [stdout.sessionId, stderr.sessionId].filter((id): id is string => id !== null);
     const protocolError =
       stdout.protocolError ??
