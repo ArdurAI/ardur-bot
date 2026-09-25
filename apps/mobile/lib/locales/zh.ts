@@ -878,4 +878,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Owner edited recently": "所有者最近已编辑",
   "Could not load data": "无法加载数据",
   "7 days": "7 天",
+  "This bot may only run locally — change the pin or the space policy":
+    "此 Bot 只能在本地运行 — 请更改固定模型或空间策略",
 };
