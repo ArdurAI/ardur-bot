@@ -29,6 +29,37 @@ function commandAsk(argv: string[], secrets: string[] = []) {
 }
 
 describe("buildApprovalAskBlock", () => {
+  it("bounds redaction of repeated JWT prefixes in a large argument", () => {
+    const value = "eyJ-".repeat(32 * 1024);
+    const start = performance.now();
+    const block = commandAsk(["gh", value]);
+    expect(performance.now() - start).toBeLessThan(1000);
+    expect(block.text).toContain(value);
+  });
+  it.each(["", "prefix-"])("redacts a JWT with prefix %s", (prefix) => {
+    const token = `eyJ${"x".repeat(24)}.${"y".repeat(16)}.${"z".repeat(30)}`;
+    expect(commandAsk(["gh", `${prefix}${token}`]).text).not.toContain(token);
+  });
+  it.each(["command", "array", "file"])(
+    "formats a 64 KiB %s argument within one second",
+    (kind) => {
+      const value = "x".repeat(64 * 1024);
+      const start = performance.now();
+      const block =
+        kind === "command"
+          ? commandAsk(["gh", "issue", "create", "--body", value])
+          : buildApprovalAskBlock(
+              "effect",
+              "write_file",
+              kind === "array" ? { values: [value] } : { path: "file.txt", content: value },
+              [],
+            );
+      expect(performance.now() - start).toBeLessThan(1000);
+      if (kind === "command") expect(block.text).toContain(value);
+      if (kind === "array") expect(block.detail).toContain(value);
+      if (kind === "file") expect(block.preformatted).toBeUndefined();
+    },
+  );
   it.each([
     ["github", ["issue", "list"]],
     ["gitlab", ["mr", "list"]],
