@@ -182,6 +182,18 @@ export function Board({
     await pending.current;
     await refresh();
   };
+  const saveAndRefresh = async (write: () => Promise<void>) => {
+    // The in-flight view captured the board before this write. Advance the
+    // epoch so its response is discarded, then load the saved board unless a
+    // newer selection has already taken over.
+    const ticket = ++epoch.current;
+    try {
+      await write();
+    } finally {
+      await pending.current;
+      if (ticket === epoch.current) await refresh();
+    }
+  };
   const open = (id: string) => {
     setEditing(false);
     setComment("");
@@ -524,9 +536,10 @@ export function Board({
             items={catalog}
             bots={bots}
             save={async (item) => {
-              await rpc.board.create({ workspaceId, item: BoardCreateSchema.parse(item) });
-              setNewItem(false);
-              await refresh();
+              await saveAndRefresh(async () => {
+                await rpc.board.create({ workspaceId, item: BoardCreateSchema.parse(item) });
+                setNewItem(false);
+              });
             }}
           />
         </DialogContent>
@@ -552,9 +565,10 @@ export function Board({
                   items={catalog}
                   bots={bots}
                   save={async ({ dependencies: _dependencies, ...patch }) => {
-                    await rpc.board.update({ workspaceId, id: selected.id, patch });
-                    setEditing(false);
-                    await refresh();
+                    await saveAndRefresh(async () => {
+                      await rpc.board.update({ workspaceId, id: selected.id, patch });
+                      setEditing(false);
+                    });
                   }}
                 />
               ) : (

@@ -48,6 +48,7 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
     controlLeaseId: null as string | null,
     controlLeaseExpiresAt: null as Date | null,
     controlBotId: null as string | null,
+    controlRunId: null as string | null,
     maintenanceId: null as string | null,
     homeRevision: "saved",
     updatedAt: new Date("2024-01-01T00:00:00.000Z"),
@@ -57,9 +58,28 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
   const computer = {
     findUniqueOrThrow: vi.fn(async () => ({ ...row })),
     updateMany: vi.fn(async ({ where, data }) => {
-      const matches = ["id", "state", "providerRef", "kind", "updatedAt", "provisioningId"].every(
-        (key) => !(key in where) || where[key] === row[key as keyof typeof row],
-      );
+      const keys = [
+        "id",
+        "state",
+        "providerRef",
+        "kind",
+        "updatedAt",
+        "provisioningId",
+        "controlHolder",
+        "controlLeaseId",
+        "controlLeaseExpiresAt",
+        "controlBotId",
+        "controlRunId",
+      ] as const;
+      const matches = keys.every((key) => {
+        if (!(key in where)) return true;
+        const expected = where[key];
+        const actual = row[key];
+        if (expected instanceof Date && actual instanceof Date) {
+          return expected.getTime() === actual.getTime();
+        }
+        return expected === actual;
+      });
       if (!matches) return { count: 0 };
       Object.assign(row, { updatedAt: new Date(row.updatedAt.getTime() + 1) }, data);
       return { count: 1 };
@@ -68,11 +88,12 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
       Object.assign(row, { updatedAt: new Date(row.updatedAt.getTime() + 1) }, data),
     ),
   };
+  const runFindFirst = vi.fn<() => Promise<{ id: string } | null>>(async () => null);
   const deps = {
     prisma: {
       computer,
       computerExecutionLease: { findFirst: vi.fn().mockResolvedValue(null) },
-      run: { findFirst: vi.fn().mockResolvedValue(null) },
+      run: { findFirst: runFindFirst },
     } as unknown as PrismaClient,
     sandbox,
     home,
@@ -80,7 +101,7 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
     events: {} as ThreadEvents,
     dataDir: root,
   };
-  return { deps, row, computer, first, root };
+  return { deps, row, computer, first, root, runFindFirst };
 }
 
 describe("computer recovery preserves live work", () => {
@@ -166,6 +187,92 @@ describe("computer recovery preserves live work", () => {
       controlHolder: "bot",
       controlLeaseId: null,
       controlBotId: null,
+    });
+  });
+
+  it("does not disturb a concurrent replacement claim while clearing fresh-boot control", async () => {
+    const { deps, row, computer, runFindFirst } = await fixture();
+    row.state = "stopped";
+    row.providerRef = null;
+    const updateMany = computer.updateMany.getMockImplementation();
+    if (!updateMany) throw new Error("missing updateMany implementation");
+    let claimCommittedResolve: (() => void) | undefined;
+    const claimCommitted = new Promise<void>((resolve) => {
+      claimCommittedResolve = resolve;
+    });
+    let clearFinishedResolve: (() => void) | undefined;
+    const clearFinished = new Promise<void>((resolve) => {
+      clearFinishedResolve = resolve;
+    });
+    let replacement: ReturnType<typeof replaceComputer> | undefined;
+    runFindFirst.mockImplementation(async () => {
+      await clearFinished;
+      return { id: "active-run" };
+    });
+    computer.updateMany.mockImplementation(async (args) => {
+      const where = args.where as Record<string, unknown>;
+      const data = args.data as Record<string, unknown>;
+      const isActivation =
+        where.state === "booting" && data.state === "running" && data.provisioningId === null;
+      const isReplacementClaim = data.state === "suspending";
+      const isControlClear = "controlHolder" in where && data.controlLeaseId === null;
+      if (isControlClear) await claimCommitted;
+      const result = await updateMany(args);
+      if (isActivation && result.count === 1) {
+        replacement = replaceComputer(deps, row.id, "recover", context);
+      }
+      if (isReplacementClaim && result.count === 1) claimCommittedResolve?.();
+      if (isControlClear) clearFinishedResolve?.();
+      return result;
+    });
+
+    await expect(provisionComputer(deps, row.id, context)).resolves.toBeTruthy();
+    await expect(replacement).rejects.toBeInstanceOf(ComputerBusyError);
+    expect(row.state).toBe("running");
+  });
+
+  it("retries a failed fresh-boot control clear when reconnecting", async () => {
+    const { deps, row, computer } = await fixture();
+    Object.assign(row, {
+      state: "stopped",
+      providerRef: null,
+      controlHolder: "user",
+      controlLeaseId: null,
+      controlLeaseExpiresAt: null,
+      controlBotId: "bot",
+      controlRunId: "stale-run",
+    });
+    const updateMany = computer.updateMany.getMockImplementation();
+    if (!updateMany) throw new Error("missing updateMany implementation");
+    const clearFailure = new Error("control clear failed");
+    let clearFailed = false;
+    computer.updateMany.mockImplementation(async (args) => {
+      if (
+        !clearFailed &&
+        "controlHolder" in args.where &&
+        (args.data as { controlLeaseId?: unknown }).controlLeaseId === null
+      ) {
+        clearFailed = true;
+        throw clearFailure;
+      }
+      return updateMany(args);
+    });
+
+    await expect(provisionComputer(deps, row.id, context, "bot")).rejects.toBe(clearFailure);
+    expect(row).toMatchObject({
+      state: "running",
+      controlHolder: "user",
+      controlLeaseId: null,
+    });
+
+    await expect(provisionComputer(deps, row.id, context, "bot")).resolves.toBeTruthy();
+    expect(row).toMatchObject({
+      state: "running",
+      controlHolder: "bot",
+      controlLeaseId: null,
+      controlLeaseExpiresAt: null,
+      controlBotId: null,
+      controlRunId: null,
     });
   });
 

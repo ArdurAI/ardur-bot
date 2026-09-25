@@ -112,10 +112,13 @@ export class TrialAdmission {
             );
           },
           admitHelper: async (executionId, name, task, card) => {
-            consume("run_subagent", { name, task, card: card ?? null }, executionId);
+            const intent = consume("run_subagent", { name, task, card: card ?? null }, executionId);
             owner.descendant("run_subagent");
             requireValue(request.admitHelper, "Missing production helper boundary");
-            const result = await request.admitHelper(executionId, name, task, card);
+            // Workspace preparation is a confinement-compatible effect, not a second descendant.
+            const result = await owner.scope.run({ ...intent, name: "workspace-prepare" }, () =>
+              request.admitHelper!(executionId, name, task, card),
+            );
             if ("id" in result) admittedHelpers.add(result.id);
             return result;
           },

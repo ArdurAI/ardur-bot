@@ -14,6 +14,7 @@ import { createTrialDirectory, destroyOwnedDirectory } from "../isolation.js";
 import { bytesHash, inspectBuild, sanitize } from "../provenance.js";
 import { selfTestBudget } from "../self-test.js";
 import { probeCommandAdmission } from "./command-probe.js";
+import { qualifyCancellation, qualifyOrdinaryExecution } from "./ordinary.js";
 import {
   COMPUTER_IMAGE,
   HERMES_CONTAINER_REVISION,
@@ -234,6 +235,21 @@ print(json.dumps(out))
     await session.destroy();
     await save();
     if (standin) {
+      const laneRoot = resource.state;
+      const openLane = () =>
+        ContainerSession.open({
+          root: laneRoot,
+          image,
+          budget,
+          wallMs: 60000,
+        });
+      const ordinary = await openLane();
+      sessions.push(ordinary);
+      report.checks.push(...(await qualifyOrdinaryExecution(ordinary)));
+      const cancellation = await openLane();
+      sessions.push(cancellation);
+      report.checks.push(...(await qualifyCancellation(cancellation)));
+      await save();
       const task = getTask("task-01");
       const fixture = referenceSolution(task);
       const directory = await createTrialDirectory(resource.state);

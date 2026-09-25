@@ -208,11 +208,7 @@ import {
   type PluginConnectionRow,
   planLiveConnectionSync,
 } from "./composio-connector.js";
-import {
-  BACKGROUND_WORK_LAUNCH,
-  HOST_BACKGROUND_WORK_LAUNCH,
-  scheduleComputerSleep,
-} from "./computer-idle.js";
+import { backgroundShellArgv, scheduleComputerSleep } from "./computer-idle.js";
 import {
   acquireComputerExecutionLease,
   ComputerBusyError,
@@ -3101,20 +3097,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const result = await withComputerAdmission(deps.prisma, storedComputer.id, () =>
               commandRecording.execute(
                 executionId,
-                [
-                  "bash",
-                  "-c",
-                  computer.kind === "desktop"
-                    ? HOST_BACKGROUND_WORK_LAUNCH
-                    : BACKGROUND_WORK_LAUNCH,
-                  "ardurbot-background-launch",
-                  // Marker id must match sleepComputerIfIdle's probe (DB id), not ComputerRef.id
-                  // (providerRef via toComputerRef). Scope launches to this run for cancel teardown.
+                // Marker id must match sleepComputerIfIdle's probe (DB id), not ComputerRef.id
+                // (providerRef via toComputerRef). Scope launches to this run for cancel teardown.
+                backgroundShellArgv(
                   storedComputer.id,
                   runId,
                   randomUUID(),
                   command,
-                ],
+                  computer.kind === "desktop",
+                ),
                 cwd,
                 computer.kind === "desktop" ? {} : agentEnvironment,
               ),

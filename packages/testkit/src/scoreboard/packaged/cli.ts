@@ -208,6 +208,7 @@ export async function runPackagedCli(argv: string[]): Promise<number> {
         : ["process-cold-os-warm", "chromium-cache-cold", "warm-relaunch"],
   }).filter((t) => t.build === binding.role);
   await emit({ version: 1, binding, artifact, expected, plan, coverage: packagedCoverage([]) });
+  // Keeps the virtual display. Every other inherited variable is a credential or harness input.
   const clean = credentialFreeEnvironment(process.env);
   for (const key of Object.keys(process.env)) if (!(key in clean)) delete process.env[key];
   process.env.NODE_ENV = "test";

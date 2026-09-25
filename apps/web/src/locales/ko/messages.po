@@ -444,7 +444,7 @@ msgstr "원격 MCP 서버 추가"
 msgid "Add server"
 msgstr "서버 추가"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Add server URL"
 msgstr ""
 
@@ -1722,6 +1722,7 @@ msgid "Confluence space keys or IDs"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -1774,6 +1775,7 @@ msgid "Connect Treg"
 msgstr "Treg 연결"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -2042,6 +2044,7 @@ msgstr ""
 msgid "Could not complete this action."
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
@@ -3401,6 +3404,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Find apps"
 msgstr ""
 
 #: src/pages/shell/terminal-session.tsx
@@ -4904,7 +4911,7 @@ msgstr "검색된 AI 서비스가 없습니다."
 msgid "No ready work"
 msgstr "준비된 작업 없음"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "No remote MCP servers found"
 msgstr ""
 
@@ -6452,7 +6459,7 @@ msgstr ""
 msgid "Search"
 msgstr "검색"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Search apps"
 msgstr "앱 검색"
@@ -6469,7 +6476,7 @@ msgstr ""
 msgid "Search integrations"
 msgstr ""
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Search integrations.sh"
 msgstr ""
 
@@ -6602,6 +6609,7 @@ msgstr ""
 msgid "Server name"
 msgstr "서버 이름"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/components/OllamaSettings.tsx
 #: src/pages/customize/DeveloperPage.tsx

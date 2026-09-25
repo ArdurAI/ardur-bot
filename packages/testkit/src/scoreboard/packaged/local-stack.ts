@@ -14,6 +14,11 @@ import type { ReplayFixture } from "../replay/protocol.js";
 import { DepartmentSandbox, DepartmentServices } from "../replay/services.js";
 import { getTask } from "../tasks/catalog.js";
 import { calibrateTraceClock, collectTraceEvidence } from "../trace-collector.js";
+import {
+  electronAuthCookie,
+  persistentAuthCookies,
+  selectPrimingCookieStore,
+} from "./desktop-session.js";
 import type { ClientCapture } from "./evidence.js";
 import type { PackagedTrial } from "./plan.js";
 import { writeImmutableReport } from "./runner.js";
@@ -134,19 +139,7 @@ export async function runLocalClientTrial(
         signal,
         configure: async (_handles, cookie, botId) => {
           stage = "client-startup";
-          const cookies = cookie
-            .split("; ")
-            .filter(Boolean)
-            .map((entry) => {
-              const split = entry.indexOf("=");
-              return {
-                name: entry.slice(0, split),
-                value: entry.slice(split + 1),
-                url: origin,
-                httpOnly: true,
-                sameSite: "Lax" as const,
-              };
-            });
+          const cookies = persistentAuthCookies(cookie, origin, Date.now());
           const targetUrl = `${origin}/app/${botId}`;
           if (options.client === "desktop") {
             const env = {
@@ -159,7 +152,26 @@ export async function runLocalClientTrial(
             const priming = await electron.launch({ executablePath: options.executablePath!, env });
             try {
               const primingPage = await priming.firstWindow();
-              await primingPage.context().addCookies(cookies);
+              // The Playwright context writes the default session. The app window uses its partition.
+              const primingWindow = await priming.browserWindow(primingPage);
+              await selectPrimingCookieStore({
+                browserContext: {
+                  kind: "browser-context",
+                  set: (records) =>
+                    primingPage.context().addCookies(records.map((record) => ({ ...record }))),
+                },
+                webContentsSession: {
+                  kind: "web-contents-session",
+                  set: (records) =>
+                    primingWindow.evaluate(async (win, details) => {
+                      if (win.isDestroyed() || win.webContents.isDestroyed())
+                        throw new Error("Priming window has no session");
+                      for (const item of details) await win.webContents.session.cookies.set(item);
+                      // The next process only sees cookies that have reached the profile.
+                      await win.webContents.session.cookies.flushStore();
+                    }, records.map(electronAuthCookie)),
+                },
+              }).set(cookies);
               if (trial.stratum === "warm-relaunch") {
                 await primingPage.goto(targetUrl);
                 await primingPage

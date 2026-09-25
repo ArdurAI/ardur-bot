@@ -49,7 +49,13 @@ export const AgentSecretSchema = z.object({
 export type AgentSecret = z.infer<typeof AgentSecretSchema>;
 
 export const AgentSecretInputSchema = z.object({
-  name: z.string().trim().regex(AGENT_SECRET_NAME_PATTERN),
+  name: z
+    .string()
+    .trim()
+    .regex(AGENT_SECRET_NAME_PATTERN)
+    .refine((name) => !name.startsWith("ARDURBOT_"), {
+      message: "Agent environment names cannot start with ARDURBOT_.",
+    }),
   value: z.string().min(1).max(16_384),
 });
 export type AgentSecretInput = z.infer<typeof AgentSecretInputSchema>;

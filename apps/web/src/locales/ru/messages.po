@@ -444,7 +444,7 @@ msgstr "Добавить удалённый MCP-сервер"
 msgid "Add server"
 msgstr "Добавить сервер"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Add server URL"
 msgstr "Добавьте URL сервера"
 
@@ -1722,6 +1722,7 @@ msgid "Confluence space keys or IDs"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -1774,6 +1775,7 @@ msgid "Connect Treg"
 msgstr "Подключить Treg"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -2042,6 +2044,7 @@ msgstr "Не удалось завершить обновление. Попро�
 msgid "Could not complete this action."
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
@@ -3402,6 +3405,10 @@ msgstr ""
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
 msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Find apps"
+msgstr "Найти приложения"
 
 #: src/pages/shell/terminal-session.tsx
 msgid "Find in terminal"
@@ -4904,7 +4911,7 @@ msgstr "Поставщики не найдены."
 msgid "No ready work"
 msgstr "Нет готовых задач"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "No remote MCP servers found"
 msgstr "Удаленные MCP-серверы не найдены"
 
@@ -6452,7 +6459,7 @@ msgstr ""
 msgid "Search"
 msgstr "Поиск"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Search apps"
 msgstr "Поиск приложений"
@@ -6469,7 +6476,7 @@ msgstr "Поиск по домену"
 msgid "Search integrations"
 msgstr ""
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Search integrations.sh"
 msgstr "Поиск integrations.sh"
 
@@ -6602,6 +6609,7 @@ msgstr ""
 msgid "Server name"
 msgstr "Имя сервера"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/components/OllamaSettings.tsx
 #: src/pages/customize/DeveloperPage.tsx

@@ -189,6 +189,23 @@ describe("command recording boundary", () => {
     expect(cancelled.blocks()[0]?.outcome).toBe("cancelled");
     expect(cancelled.sandbox.execute).not.toHaveBeenCalled();
   });
+  it("does not record cancelled when stopping the command times out", async () => {
+    const f = fixture();
+    f.sandbox.execute = vi.fn(async function* () {
+      f.abort.abort();
+      yield { type: "stdout" as const, data: "" };
+      const error = new Error("The command's cancellation timed out, so its outcome is uncertain.");
+      Object.assign(error, { uncertain: true });
+      throw error;
+    });
+    await expect(f.invoke()).rejects.toThrow(
+      "The command's cancellation timed out, so its outcome is uncertain.",
+    );
+    expect(f.blocks()[0]?.outcome).toBe("unknown");
+    expect(f.blocks()[0]?.error).toBe(
+      "The command's cancellation timed out, so its outcome is uncertain.",
+    );
+  });
 });
 
 it("records the task-owned working directory selected for a helper execution", async () => {
