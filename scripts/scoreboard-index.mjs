@@ -7,7 +7,7 @@ import { tsImport } from "tsx/esm/api";
 
 /** Local historical scoreboard. Workflow artifacts are a transport copy, not this store. */
 export const SCOREBOARD_INDEX_RELATIVE_PATH = ".context/performance/scoreboard-index";
-export const INDEX_SCHEMA_VERSION = 5;
+export const INDEX_SCHEMA_VERSION = 6;
 export const COMMIT_OBJECT_RETENTION_DAYS = 180;
 export const WORKFLOW_ARTIFACT_RETENTION_DAYS = 90;
 export const RELEASE_EVIDENCE_RETENTION = "github-release-lifetime";
@@ -25,6 +25,20 @@ const CHAIN_ORIGINS = [
   "prior-artifact-missing",
   "non-durable-check",
 ];
+const ENUMERATION_REASONS = ["empty-chain-retention-window", "chain-without-ancestor"];
+/** The release evidence run must produce both reports for the same commit and build. */
+const GUARDRAIL_REPORTS = {
+  "effect-safety": { tier: "T1", label: "T1 durable crash report" },
+  "deterministic-tasks": { tier: "T1", label: "T1 durable crash report" },
+  recovery: { tier: "T1", label: "T1 durable crash report" },
+  "prompt-tokens": { tier: "T1", label: "T1 durable crash report" },
+  "cache-compaction": { tier: "T1", label: "T1 durable crash report" },
+  latency: { tier: "T2", label: "T2 startup strata report" },
+  "absolute-targets": { tier: "T2", label: "T2 startup strata report" },
+  bundle: { tier: "T2", label: "T2 startup strata report" },
+  memory: { tier: "T2", label: "T2 startup strata report" },
+  energy: { tier: "T2", label: "T2 startup strata report" },
+};
 const SAFETY_METRIC_IDS = [
   "m13.wrong-pin",
   "m13.unauthorized-effects",
@@ -98,11 +112,16 @@ const RECORD_KEYS = [
   "supersedes",
   "expiresRecord",
   "chainOrigin",
+  "enumerationStart",
+  "enumerationReason",
   "waiver",
   "metricIds",
   "previousHash",
 ];
-const V4_RECORD_KEYS = RECORD_KEYS.filter((key) => key !== "metricIds");
+const V5_RECORD_KEYS = RECORD_KEYS.filter(
+  (key) => key !== "enumerationStart" && key !== "enumerationReason",
+);
+const V4_RECORD_KEYS = V5_RECORD_KEYS.filter((key) => key !== "metricIds");
 const V3_RECORD_KEYS = V4_RECORD_KEYS.filter((key) => key !== "waiver");
 const V2_RECORD_KEYS = V3_RECORD_KEYS.filter((key) => key !== "chainOrigin");
 const LEGACY_RECORD_KEYS = V2_RECORD_KEYS.filter((key) => key !== "gateCodes");
@@ -549,7 +568,9 @@ async function readIndexUnlocked(root) {
             ? V3_RECORD_KEYS
             : record?.schemaVersion === 4
               ? V4_RECORD_KEYS
-              : RECORD_KEYS;
+              : record?.schemaVersion === 5
+                ? V5_RECORD_KEYS
+                : RECORD_KEYS;
     exactKeys(record, [...keys, "recordHash"]);
     const actual = hashRecord(record, contentDigest);
     if (record.recordHash !== actual || record.previousHash !== previous)
@@ -754,11 +775,18 @@ async function normalizeRecord(input, existing) {
     supersedes: input.supersedes,
     expiresRecord: input.expiresRecord ?? null,
     chainOrigin: existing.length === 0 ? (input.chainOrigin ?? "first-run") : null,
+    enumerationStart: input.enumerationStart ?? null,
+    enumerationReason: input.enumerationReason ?? null,
     waiver: null,
     previousHash: existing.at(-1)?.recordHash ?? GENESIS,
   };
   if (body.chainOrigin !== null && !CHAIN_ORIGINS.includes(body.chainOrigin))
     fail("invalid-chain-origin", "invalid-chain-origin");
+  if (body.enumerationStart !== null) sha40(body.enumerationStart);
+  if (body.enumerationReason !== null && !ENUMERATION_REASONS.includes(body.enumerationReason))
+    fail("invalid-record", "invalid-record");
+  if ((body.enumerationStart === null) !== (body.enumerationReason === null))
+    fail("invalid-record", "invalid-record");
   const prior = existing.filter((record) => sameKey(record, body));
   if (body.status === "pending" && prior.some((record) => record.status === "measured"))
     fail("pending-hides-measurement", "pending-hides-measurement");
@@ -1040,7 +1068,7 @@ function primaryInstallers(files) {
   return primaries;
 }
 
-async function validatedEnergy(file, artifactRoot, installers) {
+async function validatedEnergy(file, _artifactRoot, installers) {
   if (!(await exists(file))) return new Set();
   const scoreboard = await loadScoreboard();
   const { ingestPhysicalEnergy } = scoreboard;
@@ -1052,15 +1080,10 @@ async function validatedEnergy(file, artifactRoot, installers) {
   }
   if (!Array.isArray(entries)) return new Set();
   const accepted = new Map();
-  const { inventoryArtifact } = await loadScoreboard();
   for (const installer of installers) {
     const values = accepted.get(installer.target) ?? new Set();
+    // The inventory entry digest is the published file's bytes. The envelope digest is not accepted.
     values.add(installer.sha256);
-    try {
-      values.add((await inventoryArtifact(path.join(artifactRoot, installer.relativePath))).sha256);
-    } catch {
-      /* The gate separately rejects unreadable or changing publication files. */
-    }
     accepted.set(installer.target, values);
   }
   const observed = new Set();
@@ -1234,6 +1257,35 @@ function startupSampleCounts(report, strata) {
   );
 }
 
+function sameCandidateBuild(report, primary) {
+  const left = report?.build;
+  const right = primary?.build;
+  return (
+    !!left &&
+    !!right &&
+    left.commit === right.commit &&
+    left.parentCommit === right.parentCommit &&
+    left.fixedReleaseCommit === right.fixedReleaseCommit &&
+    left.artifactHash === right.artifactHash
+  );
+}
+
+function guardrailRequirement(id, selection) {
+  if (GUARDRAIL_REPORTS[id]) return GUARDRAIL_REPORTS[id];
+  if (selection.crashBoundaryIds?.length) return { tier: "T1", label: "T1 durable crash report" };
+  return null;
+}
+
+function candidateEvidenceSet(primary, extras) {
+  if (!primary) return [];
+  const reports = [primary];
+  for (const extra of extras ?? []) {
+    const report = extra?.report;
+    if (report && sameCandidateBuild(report, primary)) reports.push(report);
+  }
+  return reports;
+}
+
 export async function evaluatePublicationGate(input) {
   const scoreboard = await loadScoreboard();
   const reasons = [];
@@ -1270,13 +1322,29 @@ export async function evaluatePublicationGate(input) {
       );
     candidateReport = verdict.evidence?.candidate.report ?? null;
   }
-  if (candidateReport && releasePolicy)
+  const candidateSet = candidateEvidenceSet(candidateReport, input.candidateReports);
+  if (candidateSet.length && releasePolicy)
     for (const { id, ...selection } of releasePolicy.policy.guardrails) {
-      try {
-        scoreboard.assertRequiredEvidence(candidateReport, selection);
-      } catch (error) {
-        push("mandatory-evidence-unknown", id, error instanceof Error ? error.message : undefined);
+      const requirement = guardrailRequirement(id, selection);
+      const pool = requirement
+        ? candidateSet.filter((report) => report.scenario?.tier === requirement.tier)
+        : candidateSet;
+      if (requirement && !pool.length) {
+        push("mandatory-evidence-unknown", id, `missing ${requirement.label}`);
+        continue;
       }
+      let satisfied = false;
+      let detail;
+      for (const report of pool) {
+        try {
+          scoreboard.assertRequiredEvidence(report, selection);
+          satisfied = true;
+          break;
+        } catch (error) {
+          detail = error instanceof Error ? error.message : undefined;
+        }
+      }
+      if (!satisfied) push("mandatory-evidence-unknown", id, detail);
     }
   const files = input.files ?? [];
   assertPublicValue(
@@ -1628,6 +1696,28 @@ async function readJson(file) {
   }
 }
 
+async function readExtraCandidateReports(reportsRoot, primary) {
+  let names = [];
+  try {
+    names = (await readdir(reportsRoot)).filter((name) => /^candidate-.+\.json$/.test(name)).sort();
+  } catch {
+    return [];
+  }
+  const scoreboard = await loadScoreboard();
+  const primaryReport = primary?.report;
+  const reports = [];
+  for (const name of names) {
+    const parsed = await readJson(path.join(reportsRoot, name));
+    if (!parsed) continue;
+    try {
+      const envelope = scoreboard.parsePerformanceEvidenceEnvelope(parsed);
+      if (primaryReport && !sameCandidateBuild(envelope.report, primaryReport)) continue;
+      reports.push(envelope);
+    } catch {}
+  }
+  return reports;
+}
+
 async function appendVisible(root, input) {
   try {
     return await appendIndexRecord(root, input);
@@ -1795,6 +1885,7 @@ export async function runReleaseGate(options) {
   const gate = await evaluatePublicationGate({
     parent,
     candidate,
+    candidateReports: await readExtraCandidateReports(options.reportsRoot, candidate),
     fixedRelease,
     policy,
     files,
@@ -1871,17 +1962,58 @@ function firstParentRevList(args) {
   );
 }
 
-/** A cancelled pending run leaves a gap that only the chain itself can reveal. */
-function commitsSinceIndexed(records, head) {
-  const indexed = new Set(
-    records
-      .filter((record) => record.tier === "commit" && record.role === "candidate")
-      .map((record) => record.commit),
-  );
-  if (!indexed.size) return null;
+function retentionSince(now = new Date()) {
+  return new Date(
+    now.getTime() - WORKFLOW_ARTIFACT_RETENTION_DAYS * 24 * 60 * 60 * 1000 - 1000,
+  ).toISOString();
+}
+
+function newestCommit(shas) {
+  const listed = execFileSync("git", ["rev-list", "--max-count=1", ...shas], {
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+  }).trim();
+  sha40(listed);
+  return listed;
+}
+
+/**
+ * `before` is only an optimisation hint and is never the lower bound.
+ * An empty chain walks first-parent history back to the 90-day artifact window.
+ * A chain with no ancestor of head walks back to the newest commit that is in the chain.
+ */
+function enumerateBackfill(records, head) {
+  const indexed = [
+    ...new Set(
+      records
+        .filter((record) => record.tier === "commit" && record.role === "candidate")
+        .map((record) => record.commit),
+    ),
+  ];
+  if (!indexed.length) {
+    const commits = firstParentRevList(["--reverse", `--since=${retentionSince()}`, head]);
+    const enumerationStart = commits[0]?.commit ?? null;
+    return {
+      commits,
+      enumerationStart,
+      enumerationReason: enumerationStart ? "empty-chain-retention-window" : null,
+    };
+  }
   const history = firstParentRevList([head]);
-  const nearest = history.findIndex((item) => indexed.has(item.commit));
-  return nearest < 0 ? null : history.slice(0, nearest).reverse();
+  const nearest = history.findIndex((item) => indexed.includes(item.commit));
+  if (nearest >= 0) {
+    return {
+      commits: history.slice(0, nearest).reverse(),
+      enumerationStart: null,
+      enumerationReason: null,
+    };
+  }
+  const enumerationStart = newestCommit(indexed);
+  return {
+    commits: firstParentRevList(["--reverse", `${enumerationStart}..${head}`]),
+    enumerationStart,
+    enumerationReason: "chain-without-ancestor",
+  };
 }
 
 export async function runIndexPush(options) {
@@ -1892,6 +2024,8 @@ export async function runIndexPush(options) {
     if (!Array.isArray(parsed)) fail("invalid-commits", "invalid-commits");
     commits = parsed;
   }
+  let enumerationStart = null;
+  let enumerationReason = null;
   if (!commits) {
     const range = selectCommitRange({
       mode: options.mode ?? "commit",
@@ -1900,12 +2034,11 @@ export async function runIndexPush(options) {
       head: options.head,
     });
     try {
-      const resumed =
-        (options.mode ?? "commit") === "commit"
-          ? commitsSinceIndexed(await readIndex(options.root), range.head)
-          : null;
-      if (resumed) {
-        commits = resumed;
+      if ((options.mode ?? "commit") === "commit") {
+        const resumed = enumerateBackfill(await readIndex(options.root), range.head);
+        commits = resumed.commits;
+        enumerationStart = resumed.enumerationStart;
+        enumerationReason = resumed.enumerationReason;
       } else if (range.kind === "single") {
         let parentCommit = null;
         try {
@@ -1965,6 +2098,8 @@ export async function runIndexPush(options) {
       attempt: nextAttempt(records, key),
       supersedes: prior.at(-1)?.recordHash ?? null,
       chainOrigin: records.length ? null : origin,
+      enumerationStart,
+      enumerationReason,
       pendingReason: item.pendingReason,
       envelope: item.envelope,
     });

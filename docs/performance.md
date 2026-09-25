@@ -247,11 +247,16 @@ upload `scoreboard-index`; they build a throwaway `scoreboard-index-check` chain
 chain with a broken hash fails the job instead of silently starting over.
 
 Index writers for one ref are serialized. GitHub keeps one pending index job per ref and cancels an
-older pending one, so a burst of pushes can skip a run. Enumeration therefore resumes at the nearest
-first-parent ancestor of the head that the restored chain already records, not at the push's
-`before` commit, and the next run indexes the skipped commits. Commits reached only through a merged
-side branch are not indexed separately. The next upload contains the complete restored chain plus
-the new records.
+older pending one, so a burst of pushes can skip a run. The push event's `before` commit is only an
+optimisation hint and is never the lower bound. When the restored chain contains a first-parent
+ancestor of the head, enumeration resumes after the nearest such ancestor. When the chain contains
+commits but none is an ancestor of the head, enumeration walks first-parent history from the head
+back to the newest commit that is in the chain, and each new index line records that commit as
+`enumerationStart` with reason `chain-without-ancestor`. When the chain is empty, enumeration walks
+first-parent history from the head back to the start of the 90-day workflow-artifact retention
+window, and each new index line records the oldest included commit as `enumerationStart` with
+reason `empty-chain-retention-window`. Commits reached only through a merged side branch are not
+indexed separately. The next upload contains the complete restored chain plus the new records.
 
 A new genesis names why no chain was restored. `first-run` means git history shows the index job did
 not exist on the branch before the retention window, so no older chain can exist.
@@ -265,6 +270,28 @@ SHA-256 against the digest pinned in `scripts/scoreboard-index.mjs`, refuses a s
 policy that differs from it, and blocks publication while any mandatory guardrail in it is unknown:
 effect safety, deterministic tasks, crash recovery, latency, absolute targets, prompt tokens, cache
 and compaction, bundle, memory, and energy. Optional live-quality runs are not a release guardrail.
+The release evidence run must produce two candidate reports for the same commit and build.
+`candidate.json` is the T2 startup strata report. `candidate-crash.json` is the T1 durable crash
+report. The gate evaluates that set. Each mandatory guardrail is checked against the report whose
+tier can satisfy it, and `mandatory-evidence-unknown` is recorded only when no report in the set
+satisfies the guardrail:
+
+| Guardrail | Report |
+| --- | --- |
+| effect-safety | T1 durable crash report |
+| deterministic-tasks | T1 durable crash report |
+| recovery | T1 durable crash report |
+| prompt-tokens | T1 durable crash report |
+| cache-compaction | T1 durable crash report |
+| latency | T2 startup strata report |
+| absolute-targets | T2 startup strata report |
+| bundle | T2 startup strata report |
+| memory | T2 startup strata report |
+| energy | T2 startup strata report |
+
+Startup sample floors are read from the T2 report. A set that contains only that report records
+`mandatory-evidence-unknown` for recovery, with the detail `missing T1 durable crash report`.
+The pinned `docs/performance/release-policy.json` is unchanged.
 The five effect-safety counts are checked by their guardrail and the safety verdict rather than the
 budget selection, because seven reliability metrics in one family exceed the resample limit. Tool
 termination and retained-session growth have no reviewed declaration yet. retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared. That pending result is recorded as `undeclared-budget` with those metric ids. It is
@@ -275,6 +302,8 @@ being published. The release workflow resolves it with `git describe --tags --ab
 'v*' --first-parent`. `--first-parent` follows only the first parent of a merge, so a tag on a
 merged side branch is not selected
 ([git describe](https://git-scm.com/docs/git-describe#Documentation/git-describe.txt---first-parent)).
+Release notes select that same previous tag: `git describe --tags --abbrev=0 --match 'v*'
+--first-parent` on the parent of the tag being published.
 
 The release invocation is mandatory: `publish` depends on the evidence job, and that job fails
 closed when the report, platform, energy, or digest check is incomplete. The asset assembler merges
@@ -305,7 +334,11 @@ observations for every required startup stratum. Missing or short startup strata
 contains the predeclared binding used to start the measurement. The gate derives the target,
 platform, workload hash, and minimum 200-second window from the gated installer and release sample
 plans, then requires the capture and matched idle control to reproduce that plan's environment,
-hardware class, conditions, and duration exactly. Human acceptance is separate and is not granted
+hardware class, conditions, and duration exactly. The capture's artifact hash must be the SHA-256
+of the published installer file's bytes, which is that file's inventory entry digest. The digest of
+the inventory envelope does not satisfy the binding. A capture bound only to the envelope is
+`missing-energy` for every required target that lacks a file-byte capture. An unrelated digest is
+`missing-energy` as well. Human acceptance is separate and is not granted
 by the evidence.
 
 The `performance` workflow uses the production Vite build with synthetic auth/RPC responses and a

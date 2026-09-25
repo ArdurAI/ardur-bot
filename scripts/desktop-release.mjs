@@ -90,7 +90,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         const git = (values) => execFileSync("git", values, { encoding: "utf8" }).trim();
         let previous;
         try {
-          previous = git(["describe", "--tags", "--abbrev=0", "--match", "v*", `${tag}^`]);
+          // --first-parent follows only the first parent of a merge, so a tag on a
+          // merged side branch is not the previous desktop release.
+          // https://git-scm.com/docs/git-describe#Documentation/git-describe.txt---first-parent
+          previous = git([
+            "describe",
+            "--tags",
+            "--abbrev=0",
+            "--match",
+            "v*",
+            "--first-parent",
+            `${tag}^`,
+          ]);
         } catch {
           /* First release includes all ancestors. */
         }

@@ -1,8 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { generateCask, releaseNotes, releaseVersion } from "./desktop-release.mjs";
 import { syncDesktopVersion } from "./desktop-version.mjs";
@@ -48,6 +49,81 @@ describe("release metadata", () => {
       expect(cask).not.toContain("@VERSION@");
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the first-parent tag when a merged side branch tag is closer", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "release-notes-"));
+    const git = (args: string[], date = "2026-09-01T00:00:00Z") => {
+      const result = spawnSync("git", args, {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GIT_CONFIG_GLOBAL: os.devNull,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_AUTHOR_NAME: "Release Fixture",
+          GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+          GIT_COMMITTER_NAME: "Release Fixture",
+          GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+          GIT_AUTHOR_DATE: date,
+          GIT_COMMITTER_DATE: date,
+        },
+      });
+      if (result.status !== 0) throw new Error(result.stderr);
+    };
+    const commit = async (file: string, message: string) => {
+      await writeFile(path.join(root, file), `${file}\n`);
+      git(["add", file]);
+      git(["commit", "-q", "-m", message]);
+    };
+    try {
+      git(["init", "-q", "-b", "dev"]);
+      await commit("base", "fix: base");
+      git(["tag", "v1.0.0"]);
+      await commit("mainline", "perf: mainline");
+      git(["checkout", "-q", "-b", "side"]);
+      await commit("side", "feat: side");
+      git(["tag", "v9.0.0"]);
+      git(["checkout", "-q", "dev"]);
+      git(["merge", "--no-ff", "-q", "-m", "merge side", "side"]);
+      await commit("shipped", "fix: shipped");
+      git(["tag", "v1.1.0"]);
+      const gate = {
+        schemaVersion: 5,
+        path: "waiver",
+        allowPublication: true,
+        exitCode: 0,
+        reasons: [],
+        waiver: { reason: "Physical runners are not provisioned", actor: "release-bot" },
+        distributedDigests: [],
+      };
+      const gatePath = path.join(root, "gate.json");
+      await writeFile(gatePath, JSON.stringify(gate));
+      const notes = spawnSync(
+        process.execPath,
+        [
+          fileURLToPath(new URL("./desktop-release.mjs", import.meta.url)),
+          "notes",
+          "v1.1.0",
+          gatePath,
+        ],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            GIT_CONFIG_GLOBAL: os.devNull,
+            GIT_CONFIG_NOSYSTEM: "1",
+          },
+        },
+      );
+      expect(notes.status).toBe(0);
+      expect(notes.stdout).toContain("- Features: 1 change.");
+      expect(notes.stdout).toContain("- Performance: 1 change.");
+      expect(notes.stdout).toContain("- Fixes: 1 change.");
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

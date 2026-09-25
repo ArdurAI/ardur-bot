@@ -311,6 +311,12 @@ const TARGETS = [
   ["desktop-win-x64", "desktop-win32-x64", "synthetic.exe", "win32"],
 ] as const;
 
+function platformFor(target: string): "darwin" | "linux" | "win32" {
+  const found = TARGETS.find((item) => item[1] === target);
+  if (!found) throw new Error(`unknown target ${target}`);
+  return found[3];
+}
+
 function energyPair(binding: {
   artifactHash: string;
   environmentHash: string;
@@ -1181,6 +1187,46 @@ describe("release publication gate", () => {
     );
   }
 
+  function completeCrashes(report: ReturnType<typeof syntheticReport>) {
+    for (const crash of report.crashes) {
+      const expected = CRASH_BOUNDARIES.find((boundary) => boundary.id === crash.id)!.expected;
+      crash.status = "complete";
+      crash.missingReason = null;
+      crash.recovery = expected;
+      crash.safetyPassed = true;
+      crash.taskCompleted = expected !== "explicit-uncertainty";
+      crash.traceIds = ["trace-01"];
+    }
+  }
+
+  async function writeCandidateCrashReport(reportsRoot: string) {
+    const candidatePath = path.join(reportsRoot, "candidate.json");
+    const envelope = JSON.parse(await readFile(candidatePath, "utf8")) as {
+      report: ReturnType<typeof syntheticReport>;
+    };
+    envelope.report.id = "candidate-crash-report";
+    envelope.report.scenario.tier = "T1";
+    completeCrashes(envelope.report);
+    await writeFile(
+      path.join(reportsRoot, "candidate-crash.json"),
+      JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report)),
+    );
+  }
+
+  async function setStartupTier(caseRoot: { reportsRoot: string; artifactRoot: string }) {
+    for (const name of ["parent.json", "candidate.json", "fixed-release.json"]) {
+      const file = path.join(caseRoot.reportsRoot, name);
+      const envelope = JSON.parse(await readFile(file, "utf8")) as {
+        report: ReturnType<typeof syntheticReport>;
+      };
+      envelope.report.scenario.tier = "T2";
+      const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report));
+      await writeFile(file, bytes);
+      if (name === "candidate.json")
+        await writeFile(path.join(caseRoot.artifactRoot, "scoreboard-candidate.json"), bytes);
+    }
+  }
+
   async function rebindEnergy(
     reportsRoot: string,
     target: string,
@@ -1260,25 +1306,47 @@ describe("release publication gate", () => {
     }
   }, 60_000);
 
-  it("accepts energy bound to the installer inventory digest", async () => {
-    const inventoryCase = await stagePassing();
+  it("rejects energy bound to the inventory envelope and accepts the installer file bytes", async () => {
+    const probe = await stagePassing();
     try {
-      const dmgPath = path.join(inventoryCase.artifactRoot, "desktop-mac-arm64", "synthetic.dmg");
-      const inventory = await inventoryArtifact(dmgPath);
-      const fileHash = createHash("sha256")
-        .update(await readFile(dmgPath))
-        .digest("hex");
-      expect(inventory.sha256).not.toBe(fileHash);
-      await rebindEnergy(
-        inventoryCase.reportsRoot,
-        "desktop-darwin-arm64",
-        inventory.sha256,
-        "darwin",
-      );
-      const inventoryResult = await gate(inventoryCase, "index-inventory");
-      expect(inventoryResult.code).toBe(0);
+      const envelopes = new Map<string, string>();
+      const files = new Map<string, string>();
+      for (const [directory, target, name] of TARGETS) {
+        const full = path.join(probe.artifactRoot, directory, name);
+        const inventory = await inventoryArtifact(full);
+        const fileHash = createHash("sha256")
+          .update(await readFile(full))
+          .digest("hex");
+        expect(inventory.entries[0]?.sha256).toBe(fileHash);
+        expect(inventory.sha256).not.toBe(fileHash);
+        envelopes.set(target, inventory.sha256);
+        files.set(target, fileHash);
+      }
+      const missingTargets = (gateResult: Awaited<ReturnType<typeof gate>>) =>
+        gateResult.gate.reasons
+          .filter((reason: { code: string }) => reason.code === "missing-energy")
+          .map((reason: { scope: string }) => reason.scope)
+          .sort();
+      for (const [target, digest] of envelopes)
+        await rebindEnergy(probe.reportsRoot, target, digest, platformFor(target));
+      const envelopeGate = await gate(probe, "index-envelope");
+      expect(missingTargets(envelopeGate)).toEqual([...REQUIRED_RELEASE_TARGETS].sort());
+      for (const [target, digest] of files)
+        await rebindEnergy(probe.reportsRoot, target, digest, platformFor(target));
+      const fileGate = await gate(probe, "index-file-bytes");
+      expect(fileGate.code).toBe(0);
+      expect(missingTargets(fileGate)).toEqual([]);
+      for (const [target] of files)
+        await rebindEnergy(
+          probe.reportsRoot,
+          target,
+          hash("unrelated-energy"),
+          platformFor(target),
+        );
+      const unrelatedGate = await gate(probe, "index-unrelated-all");
+      expect(missingTargets(unrelatedGate)).toEqual([...REQUIRED_RELEASE_TARGETS].sort());
     } finally {
-      await rm(inventoryCase.root, { recursive: true, force: true });
+      await rm(probe.root, { recursive: true, force: true });
     }
   }, 60_000);
 
@@ -1734,6 +1802,39 @@ describe("release publication gate", () => {
     }
   }, 60_000);
 
+  it("satisfies pinned recovery from a T1 crash report beside the T2 startup report", async () => {
+    const paired = await stagePassing();
+    const startupOnly = await stagePassing();
+    const pinnedPolicy = path.join(repo, "docs/performance/release-policy.json");
+    const policyArgs = {
+      releasePolicyPath: pinnedPolicy,
+      releasePolicySha256: RELEASE_POLICY_SHA256,
+    };
+    const recovery = (gateResult: Awaited<ReturnType<typeof gate>>) =>
+      gateResult.gate.reasons.filter(
+        (reason: { code: string; scope: string }) =>
+          reason.code === "mandatory-evidence-unknown" && reason.scope === "recovery",
+      );
+    try {
+      await writeCandidateCrashReport(paired.reportsRoot);
+      await setStartupTier(paired);
+      const both = await gate(paired, "index-evidence-set", policyArgs);
+      expect(recovery(both)).toEqual([]);
+      await setStartupTier(startupOnly);
+      const onlyStartup = await gate(startupOnly, "index-startup-only", policyArgs);
+      expect(recovery(onlyStartup)).toEqual([
+        expect.objectContaining({
+          code: "mandatory-evidence-unknown",
+          scope: "recovery",
+          detail: "missing T1 durable crash report",
+        }),
+      ]);
+    } finally {
+      await rm(paired.root, { recursive: true, force: true });
+      await rm(startupOnly.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("writes recovery as a sentence for a complete crash", async () => {
     const crashed = await stagePassing();
     try {
@@ -1967,11 +2068,95 @@ describe("commit enumeration", () => {
       const third = push(c3, c6, restored);
       expect(third.status).toBe(0);
       const records = await readIndex(restored);
-      expect(records.map((record) => record.commit)).toEqual([c1, c2, c3, c4, merge, c6]);
+      expect(records.map((record) => record.commit)).toEqual([c0, c1, c2, c3, c4, merge, c6]);
       expect(records.some((record) => record.commit === side)).toBe(false);
       expect(records.find((record) => record.commit === merge)?.parentCommit).toBe(c4);
       expect(push(c3, c6, restored).status).toBe(0);
-      expect(await readIndex(restored)).toHaveLength(6);
+      expect(await readIndex(restored)).toHaveLength(7);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("records every commit in an empty index when before is the middle commit", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-empty-chain-"));
+    const work = path.join(root, "repo");
+    const indexRoot = path.join(root, "index");
+    await mkdir(work);
+    try {
+      fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      const oldest = await fixtureCommit(work, "c0");
+      const middle = await fixtureCommit(work, "c1");
+      const head = await fixtureCommit(work, "c2");
+      const pushed = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "index-push"],
+        {
+          cwd: work,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            SCOREBOARD_BEFORE: middle,
+            SCOREBOARD_BASE: "",
+            SCOREBOARD_HEAD: head,
+            SCOREBOARD_RUNNER: head,
+            SCOREBOARD_MODE: "commit",
+            SCOREBOARD_ROOT: indexRoot,
+          },
+        },
+      );
+      expect(pushed.status).toBe(0);
+      const records = await readIndex(indexRoot);
+      expect(records.map((record) => record.commit)).toEqual([oldest, middle, head]);
+      expect(records.every((record) => record.enumerationStart === oldest)).toBe(true);
+      expect(
+        records.every((record) => record.enumerationReason === "empty-chain-retention-window"),
+      ).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("backfills to the newest chained commit when none is an ancestor of head", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-no-ancestor-"));
+    const work = path.join(root, "repo");
+    const indexRoot = path.join(root, "index");
+    await mkdir(work);
+    try {
+      fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      const oldest = await fixtureCommit(work, "c0");
+      const middle = await fixtureCommit(work, "c1");
+      const head = await fixtureCommit(work, "c2");
+      fixtureGit(work, ["checkout", "--orphan", "other"]);
+      fixtureGit(work, ["rm", "-q", "-r", "-f", "."]);
+      const chained = await fixtureCommit(work, "orphan");
+      fixtureGit(work, ["checkout", "-q", "dev"]);
+      await appendIndexRecord(indexRoot, pending(chained));
+      const pushed = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "index-push"],
+        {
+          cwd: work,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            SCOREBOARD_BEFORE: middle,
+            SCOREBOARD_BASE: "",
+            SCOREBOARD_HEAD: head,
+            SCOREBOARD_RUNNER: head,
+            SCOREBOARD_MODE: "commit",
+            SCOREBOARD_ROOT: indexRoot,
+          },
+        },
+      );
+      expect(pushed.status).toBe(0);
+      const records = await readIndex(indexRoot);
+      expect(records.map((record) => record.commit)).toEqual([chained, oldest, middle, head]);
+      const filled = records.filter((record) => record.commit !== chained);
+      expect(filled.every((record) => record.enumerationStart === chained)).toBe(true);
+      expect(filled.every((record) => record.enumerationReason === "chain-without-ancestor")).toBe(
+        true,
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
