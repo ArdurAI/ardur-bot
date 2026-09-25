@@ -43,11 +43,13 @@ export async function probeCommand(
   capture = false,
   start = spawnNative,
 ) {
+  const maxOutputBytes = 16 * 1024;
   const child = start(binary, args);
   let output = "";
   child.stdin.end();
   child.stdout.on("data", (chunk: Buffer) => {
-    if (capture && output.length < 1024) output += chunk.toString().slice(0, 1024 - output.length);
+    if (capture && output.length < maxOutputBytes)
+      output += chunk.toString().slice(0, maxOutputBytes - output.length);
   });
   child.stderr.resume();
   const timer = setTimeout(() => child.kill("SIGKILL"), 5_000);
@@ -58,6 +60,7 @@ export async function probeCommand(
     });
     return {
       code,
+      output: capture ? output.trim() : undefined,
       version: capture ? output.trim().match(/\d+\.\d+\.\d+(?:[-+][\w.-]+)?/)?.[0] : undefined,
     };
   } finally {

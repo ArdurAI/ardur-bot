@@ -1113,6 +1113,11 @@ msgstr "बॉट डिफ़ॉल्ट रूप से बिना पू�
 msgid "Bots are working"
 msgstr "बॉट काम कर रहे हैं"
 
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Bots keep the board and memory current"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -2034,6 +2039,7 @@ msgstr ""
 msgid "Could not complete the update. Try again."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Could not complete this action."
@@ -3158,6 +3164,7 @@ msgstr ""
 msgid "Email"
 msgstr "ईमेल"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3386,6 +3393,10 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "Feedback corrections"
+msgstr ""
+
+#: src/pages/board/FiledBy.tsx
+msgid "Filed by {name}"
 msgstr ""
 
 #: src/pages/customize/CustomizeControls.tsx
@@ -4073,6 +4084,19 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
+msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Learning review"
+msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is off"
+msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is on"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -4897,6 +4921,10 @@ msgstr ""
 #: src/pages/SpaceSearch.tsx
 msgid "No results"
 msgstr "कोई परिणाम नहीं"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "No reviewer model yet."
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
@@ -6159,6 +6187,10 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Reviewer"
+msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Reviewer: {reviewer}"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx

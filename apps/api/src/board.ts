@@ -93,6 +93,11 @@ export function createBoard(deps: RouterDeps) {
             select: { id: true, name: true },
           }),
         ]);
+        await service.attachFilingTargets(actor, [
+          ...snapshot.items,
+          ...(snapshot.allItems ?? []),
+          selected,
+        ]);
         return {
           ...empty,
           snapshot,

@@ -4,6 +4,7 @@ import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { FiledBy } from "./FiledBy";
 
 const ROW_HEIGHT = 104;
 export function BoardColumns({
@@ -112,49 +113,52 @@ function Column({
             className="absolute inset-x-0"
             style={{ top: (start + offset) * ROW_HEIGHT, height: ROW_HEIGHT }}
           >
-            <button
-              type="button"
-              data-index={start + offset}
-              data-board-item={item.id}
-              draggable={!!onDrop && !busy}
-              onDragStart={(event) => {
-                event.dataTransfer.setData("text/ardur-board-item", item.id);
-                event.dataTransfer.effectAllowed = "move";
-              }}
-              onClick={() => onOpen(item.id)}
-              onKeyDown={(event) => {
-                const index = start + offset;
-                const next =
-                  event.key === "ArrowDown"
-                    ? Math.min(items.length - 1, index + 1)
-                    : event.key === "ArrowUp"
-                      ? Math.max(0, index - 1)
-                      : event.key === "Home"
-                        ? 0
-                        : event.key === "End"
-                          ? items.length - 1
-                          : null;
-                if (next === null) return;
-                event.preventDefault();
-                const target = list.current?.querySelector<HTMLButtonElement>(
-                  `[data-index="${next}"]`,
-                );
-                if (target) {
-                  target.focus();
-                  return;
-                }
-                focusIndex.current = next;
-                if (list.current) list.current.scrollTop = next * ROW_HEIGHT;
-                setScrollTop(next * ROW_HEIGHT);
-              }}
-              className="h-24 w-full overflow-hidden rounded-lg border border-border bg-card p-3 text-start shadow-sm focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <span className="line-clamp-2 font-medium">{item.title}</span>
-              <span className="mt-2 block truncate text-xs text-muted-foreground">
-                {item.id} · P{item.priority}
-                {item.assignee ? ` · ${item.assignee}` : ""}
-              </span>
-            </button>
+            <div className="flex h-24 flex-col overflow-hidden rounded-lg border border-border bg-card p-3 text-start shadow-sm">
+              <button
+                type="button"
+                data-index={start + offset}
+                data-board-item={item.id}
+                draggable={!!onDrop && !busy}
+                onDragStart={(event) => {
+                  event.dataTransfer.setData("text/ardur-board-item", item.id);
+                  event.dataTransfer.effectAllowed = "move";
+                }}
+                onClick={() => onOpen(item.id)}
+                className="min-h-0 flex-1 text-start focus-visible:outline-2 focus-visible:outline-ring"
+                onKeyDown={(event) => {
+                  const index = start + offset;
+                  const next =
+                    event.key === "ArrowDown"
+                      ? Math.min(items.length - 1, index + 1)
+                      : event.key === "ArrowUp"
+                        ? Math.max(0, index - 1)
+                        : event.key === "Home"
+                          ? 0
+                          : event.key === "End"
+                            ? items.length - 1
+                            : null;
+                  if (next === null) return;
+                  event.preventDefault();
+                  const target = list.current?.querySelector<HTMLButtonElement>(
+                    `[data-index="${next}"]`,
+                  );
+                  if (target) {
+                    target.focus();
+                    return;
+                  }
+                  focusIndex.current = next;
+                  if (list.current) list.current.scrollTop = next * ROW_HEIGHT;
+                  setScrollTop(next * ROW_HEIGHT);
+                }}
+              >
+                <span className="line-clamp-2 font-medium">{item.title}</span>
+                <span className="mt-1 block truncate text-xs text-muted-foreground">
+                  {item.id} · P{item.priority}
+                  {item.assignee ? ` · ${item.assignee}` : ""}
+                </span>
+              </button>
+              {item.filedBy ? <FiledBy filing={item.filedBy} /> : null}
+            </div>
           </li>
         ))}
       </ul>

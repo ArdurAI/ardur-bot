@@ -14,6 +14,8 @@ vi.mock("@ardurbot/host-runtime/runtimes/native-process", async (original) => ({
 
 import { ClaudeCodeRuntime, probeClaude } from "./claude-code-runtime.js";
 
+const effortHelp = "--effort <level>  Effort (low, medium, high, xhigh, max)\n";
+
 function probeProcess(output: string, code = 0) {
   const child = new EventEmitter() as ChildProcessWithoutNullStreams;
   const stdout = new PassThrough();
@@ -36,6 +38,7 @@ function fixture(
   resume = false,
   options: {
     effort?: string;
+    help?: string;
     version?: string;
     init?: Record<string, unknown>;
     result?: Record<string, unknown>;
@@ -72,7 +75,7 @@ function fixture(
           ...options.result,
         },
       ];
-      stdout.end(events.map((event) => JSON.stringify(event)).join("\n") + "\n");
+      stdout.end(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`);
       done();
       queueMicrotask(() => {
         Object.assign(child, { exitCode });
@@ -93,9 +96,11 @@ function fixture(
       return true;
     }),
   });
-  const spawn = vi.fn((_binary: string, args: string[], _cwd?: string) =>
-    args[0] === "--version" ? probeProcess(`${options.version ?? "2.1.281"}\n`) : child,
-  );
+  const spawn = vi.fn((_binary: string, args: string[], _cwd?: string) => {
+    if (args[0] === "--version") return probeProcess(`${options.version ?? "2.1.281"}\n`);
+    if (args[0] === "--help") return probeProcess(options.help ?? effortHelp);
+    return child;
+  });
   const info = vi.fn();
   const request: AgentRunRequest = {
     botId: "bot",
@@ -140,12 +145,20 @@ describe("Claude subprocess lifecycle", () => {
     async (authCode) => {
       const start = vi.fn((_binary: string, args: string[]) => {
         return probeProcess(
-          args[0] === "--version" ? "2.1.281\n" : "fake-private-auth-output\n",
-          args[0] === "--version" ? 0 : authCode,
+          args[0] === "--version"
+            ? "2.1.281\n"
+            : args[0] === "--help"
+              ? effortHelp
+              : "fake-private-auth-output\n",
+          args[0] === "--version" || args[0] === "--help" ? 0 : authCode,
         );
       });
       const status = await probeClaude(start);
-      expect(start.mock.calls.map((call) => call[1])).toEqual([["--version"], ["auth", "status"]]);
+      expect(start.mock.calls.map((call) => call[1])).toEqual([
+        ["--version"],
+        ["--help"],
+        ["auth", "status"],
+      ]);
       expect(status.available).toBe(authCode === 0);
       expect(status.version).toBe("2.1.281");
       expect(status.models.find((model) => model.id === "claude-opus-5")?.efforts).toEqual([
@@ -179,7 +192,7 @@ describe("Claude subprocess lifecycle", () => {
           collection: { scope: "native-turn", availability: "unavailable" },
         },
       });
-    expect(f.spawn.mock.calls[1]?.[1]).toEqual(
+    expect(f.spawn.mock.calls[2]?.[1]).toEqual(
       expect.arrayContaining([
         "--resume",
         "session",
@@ -217,7 +230,7 @@ describe("Claude subprocess lifecycle", () => {
       for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
         const f = fixture(0, resume, { effort });
         expect(await f.run()).toContainEqual({ type: "done" });
-        const args = f.spawn.mock.calls[1]![1];
+        const args = f.spawn.mock.calls[2]![1];
         expect(args[args.indexOf("--effort") + 1]).toBe(effort);
         expect(args).toContain(resume ? "--resume" : "--session-id");
         expect(f.info.mock.calls[0]![0]).toMatchObject({ effortAttested: false });
@@ -249,10 +262,10 @@ describe("Claude subprocess lifecycle", () => {
     async (effort) => {
       const f = fixture(0, false, { effort });
       await expect(f.run()).rejects.toMatchObject({ problem: { code: "pin-effort-unsupported" } });
-      expect(f.spawn.mock.calls.map((call) => call[1])).toEqual([["--version"]]);
+      expect(f.spawn.mock.calls.map((call) => call[1])).toEqual([["--version"], ["--help"]]);
     },
   );
-  it.each(["2.1.258", "2.2.0", "3.0.0", "2.1.281-beta.1"])(
+  it.each(["2.1.258", "2.1.281-beta.1"])(
     "retains low only and blocks an unverified runtime %s",
     async (version) => {
       const start = vi.fn(() => probeProcess(version));
@@ -267,13 +280,36 @@ describe("Claude subprocess lifecycle", () => {
       });
     },
   );
-  it("falls back to low outside the checked effort range without clamping a high pin", async () => {
-    const status = await probeClaude(() => probeProcess("2.1.282"));
+  it("uses advertised efforts on current and future versions without clamping a high pin", async () => {
+    for (const version of ["2.1.282", "2.1.999"]) {
+      const status = await probeClaude((_binary, args) =>
+        probeProcess(args[0] === "--version" ? version : args[0] === "--help" ? effortHelp : ""),
+      );
+      expect(status.available).toBe(true);
+      expect(status.models.find((model) => model.id === "claude-opus-5")?.efforts).toEqual([
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+      ]);
+      expect(await fixture(0, false, { version, effort: "high" }).run()).toContainEqual({
+        type: "done",
+      });
+    }
+  });
+  it("falls back to low with an availability reason when help has no effort line", async () => {
+    const status = await probeClaude((_binary, args) =>
+      probeProcess(args[0] === "--version" ? "2.1.282" : ""),
+    );
     expect(status.available).toBe(true);
     expect(status.models.every((model) => JSON.stringify(model.efforts) === '["low"]')).toBe(true);
+    expect(status.reason).toBe("Update Claude Code to choose a thinking effort.");
     await expect(
-      fixture(0, false, { version: "2.1.282", effort: "high" }).run(),
+      fixture(0, false, { version: "2.1.282", help: "", effort: "high" }).run(),
     ).rejects.toMatchObject({ problem: { code: "pin-effort-unsupported" } });
-    expect(await fixture(0, false, { version: "2.1.282" }).run()).toContainEqual({ type: "done" });
+    expect(await fixture(0, false, { version: "2.1.282", help: "" }).run()).toContainEqual({
+      type: "done",
+    });
   });
 });

@@ -171,6 +171,59 @@ it("persists only the acting user's follow and authorizes before reading or writ
   ).rejects.toThrow("forbidden");
   expect(follows.upsert).toHaveBeenCalledTimes(1);
 });
+it("attaches the filing thread in one query for the view", async () => {
+  const { board, provider, prisma, item } = fixture();
+  vi.spyOn(BoardService.prototype, "configured").mockResolvedValue([
+    {
+      id: "workspace",
+      enabled: true,
+      initialized: true,
+      isDefault: true,
+      allowAllBots: true,
+    } as never,
+  ]);
+  const query = vi.fn(async () => [
+    { runId: "run-1", groupId: "squad", messageId: "msg-1" },
+    { runId: "run-2", groupId: null, messageId: null },
+  ]);
+  Object.assign(prisma, {
+    boardFollow: { findMany: vi.fn(async () => []) },
+    $queryRaw: query,
+  });
+  Object.assign(prisma.bot, { findMany: vi.fn(async () => []) });
+  const filed = {
+    ...item,
+    filedBy: {
+      botId: "builder",
+      botName: "Builder",
+      runId: "run-1",
+      groupId: null,
+      messageId: null,
+    },
+  };
+  const quiet = {
+    ...item,
+    id: "board-b",
+    filedBy: {
+      botId: "builder",
+      botName: "Builder",
+      runId: "run-2",
+      groupId: null,
+      messageId: null,
+    },
+  };
+  provider.list.mockResolvedValue([filed, quiet]);
+  provider.show.mockResolvedValue({ ...quiet, filedBy: { ...quiet.filedBy } });
+  const result = await board.view(actor, { itemId: "board-b" });
+  expect(result.snapshot.items[0]?.filedBy).toMatchObject({
+    groupId: "squad",
+    messageId: "msg-1",
+  });
+  expect(result.snapshot.items[1]?.filedBy).toMatchObject({ groupId: null, messageId: null });
+  expect(result.selected?.filedBy).toMatchObject({ groupId: null, messageId: null });
+  expect(query).toHaveBeenCalledTimes(1);
+});
+
 it("checks board-specific bot permission before dispatch", async () => {
   const { board, provider } = fixture();
   vi.mocked(BoardService.prototype.workspace).mockRejectedValueOnce(

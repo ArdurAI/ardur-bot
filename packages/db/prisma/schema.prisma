@@ -191,6 +191,7 @@ model Space {
   features SpaceFeature[]
   boardWorkspaces BoardWorkspace[]
   boardCommands BoardCommand[]
+  botBoardFilings BotBoardFiling[]
   localImportConfigs LocalImportConfig[]
   contextBudgets Json?
   concurrentRuns Int @default(3)
@@ -198,6 +199,7 @@ model Space {
   customizationMarketplaces CustomizationMarketplace[]
   pluginInstalls PluginInstall[]
   botInstructions String @default("")
+  botUpkeep Boolean @default(true)
   botInstructionsAuthorId String?
   botInstructionsRevision Int @default(0)
   requireTrustedDevices Boolean @default(false)
@@ -2215,6 +2217,18 @@ model BoardCommand {
 
   @@index([expiresAt])
   @@map("board_commands")
+}
+
+model BotBoardFiling {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  runId String
+  createdAt DateTime @default(now())
+
+  @@index([runId])
+  @@index([spaceId, createdAt])
+  @@map("bot_board_filings")
 }
 
 model LocalImportConfig {
