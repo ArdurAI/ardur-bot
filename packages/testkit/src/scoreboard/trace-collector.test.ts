@@ -137,6 +137,66 @@ describe("trace evidence", () => {
     ).toBeNull();
   });
 
+  it("pairs crash boundaries across processes only when crash evidence asks", () => {
+    const before = createTraceBuffer({ processId: "interrupted-worker", now: () => 1 });
+    const after = createTraceBuffer({ processId: "recovered-worker", now: () => 1 });
+    before.record("run-a", "admission.started", {}, 0);
+    before.record("run-a", "provider.started", { operationId: "provider-1", attempt: 0 }, 10);
+    before.record("run-a", "tool.started", { operationId: "tool-1", attempt: 0 }, 20);
+    before.record("run-a", "tool.started", { operationId: "tool-cut", attempt: 0 }, 25);
+    after.record(
+      "run-a",
+      "provider.finished",
+      { operationId: "provider-1", attempt: 0, outcome: "success" },
+      40,
+    );
+    after.record(
+      "run-a",
+      "tool.finished",
+      { operationId: "tool-1", attempt: 0, outcome: "success" },
+      50,
+    );
+    after.record("run-a", "terminal.committed", { outcome: "success" }, 60);
+    const requiredBoundaries = [
+      "admission.started",
+      "provider.started",
+      "provider.finished",
+      "tool.started",
+      "tool.finished",
+      "terminal.committed",
+    ] as const;
+    const options = { sessionId: "crash", pairId: null, requiredBoundaries };
+    const batches = [before.snapshot(), after.snapshot()];
+    const paired = collectTraceEvidence(batches, { ...options, pairAcrossProcesses: true });
+    expect(paired.derived[0]!.complete).toBe(true);
+    expect(
+      paired.derived[0]!.operations.find((operation) => operation.kind === "tool.started")!.duration
+        .value,
+    ).toBe(30);
+    expect(
+      paired.derived[0]!.operations.find((operation) => operation.outcome === "interrupted"),
+    ).toMatchObject({ kind: "tool.started", duration: { reason: "interrupted" } });
+    const ordinary = collectTraceEvidence(batches, options);
+    expect(ordinary.derived[0]!.complete).toBe(false);
+    expect(ordinary.derived[0]!.operations[0]!.duration.reason).toBe("boundary-not-observed");
+    const single = createTraceBuffer({ processId: "only-worker", now: () => 1 });
+    single.record("run-a", "admission.started", {}, 0);
+    single.record("run-a", "provider.started", { operationId: "provider-1", attempt: 0 }, 10);
+    single.record("run-a", "tool.started", { operationId: "tool-1", attempt: 0 }, 20);
+    single.record("run-a", "terminal.committed", { outcome: "success" }, 30);
+    const alone = collectTraceEvidence([single.snapshot()], {
+      ...options,
+      requiredBoundaries: [
+        "admission.started",
+        "provider.started",
+        "tool.started",
+        "terminal.committed",
+      ],
+    });
+    expect(alone.derived[0]!.missingBoundaries).toEqual([]);
+    expect(alone.derived[0]!.complete).toBe(false);
+  });
+
   it("does not pair service boundaries from independently numbered processes", () => {
     const result = deriveTrace([
       point("admission.started", 0, 500),

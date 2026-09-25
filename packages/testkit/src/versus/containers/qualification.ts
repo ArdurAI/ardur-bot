@@ -62,6 +62,26 @@ assert not result['result'].get('isError'), result
 print('╭─⚕ Hermes──╮\n  Saved the requested result.\n╰────────────╯')
 `;
 
+/** Cancel and loss probes pass only when the guest retained neither files nor symlink paths. */
+export function retainsReceiptsWithoutWorkspace(input: {
+  cancelled: boolean;
+  terminal: string;
+  effects: readonly unknown[];
+  files: Record<string, string>;
+  links: readonly string[] | undefined;
+  providerRequests: number;
+  gradedPassed: boolean;
+}) {
+  return (
+    input.terminal === (input.cancelled ? "cancelled" : "uncertain") &&
+    input.effects.length === 1 &&
+    Object.keys(input.files).length === 0 &&
+    input.links?.length === 0 &&
+    input.providerRequests === 0 &&
+    !input.gradedPassed
+  );
+}
+
 /** Explicit opt-in container probes; never pulls an image or invokes an inference endpoint. */
 export async function qualifyContainers(output: string, standin: boolean) {
   await mkdir(output, { recursive: true });
@@ -395,12 +415,15 @@ print(json.dumps(out))
           else await lost.session!.destroy();
           await lost.submit();
           const retained = await lost.collect();
-          const passed =
-            retained.observation.terminal === (cancelled ? "cancelled" : "uncertain") &&
-            retained.observation.effects.length === 1 &&
-            Object.keys(retained.observation.files).length === 0 &&
-            gateway.requests.length === 0 &&
-            !gradeOutcome(task, retained.observation).passed;
+          const passed = retainsReceiptsWithoutWorkspace({
+            cancelled,
+            terminal: retained.observation.terminal,
+            effects: retained.observation.effects,
+            files: retained.observation.files,
+            links: retained.observation.links,
+            providerRequests: gateway.requests.length,
+            gradedPassed: gradeOutcome(task, retained.observation).passed,
+          });
           report.checks.push({
             name: `${id}-retains-receipts-and-nonsuccess`,
             passed,

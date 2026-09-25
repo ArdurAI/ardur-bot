@@ -62,8 +62,10 @@ function sameBoundaries(left: readonly TraceBoundary[], right: readonly TraceBou
   return left.length === right.length && left.every((boundary, index) => boundary === right[index]);
 }
 /**
- * Both processes must contribute a batch. The merged trace is complete only when recollection
- * under the stored boundaries reports exactly one terminal, no missing boundary, and no drop.
+ * Both processes must contribute a batch. Crash recollection pairs a start with a finish
+ * recorded by the other process. The merged trace is complete when that recollection reports
+ * exactly one terminal, every stored boundary, and no drop. A start with no finish is interrupted
+ * and does not by itself make the crash incomplete.
  */
 function crashTraces(boundaryId: string, attempts: readonly MatrixResult[]) {
   const phases = attempts.flatMap((attempt) =>
@@ -85,7 +87,7 @@ function crashTraces(boundaryId: string, attempts: readonly MatrixResult[]) {
   try {
     const fragment = collectTraceEvidence(
       phases.flatMap((phase) => phase.batches),
-      { sessionId: boundaryId, pairId: null, requiredBoundaries },
+      { sessionId: boundaryId, pairId: null, requiredBoundaries, pairAcrossProcesses: true },
     );
     if (
       fragment.derived.length === 0 ||

@@ -139,17 +139,25 @@ also cites the traces of every durable run it drove: the interrupted and recover
 each attempt merge into one trace artifact, written beside the fragments. Each process must
 contribute at least one batch. Those batches are collected again with the required boundaries
 stored for that trace, or with the local trace boundaries when that is the list the fault worker
-recorded. An empty boundary list is never substituted. The merged trace is accepted only when
-collection is complete: exactly one terminal point, every required boundary present, and no batch
-that dropped or invalidated a point. One process alone, admission points alone, two terminal
-points, or a dropped terminal stay `trace-links-missing`. An incomplete crash must not record a
-recovery or a passed safety result. The evidence schema stays the existing crash keys.
+recorded. An empty boundary list is never substituted. Crash collection pairs `provider.started`
+and `tool.started` with the matching finish even when the recovering process recorded it. That
+pair is observed, and its duration is the difference of the two recorded timestamps when the
+recovering timestamp is not earlier. A start with no finish in either process is `interrupted`;
+that cut alone does not make the crash incomplete. The merged trace is accepted only when both
+processes contributed a batch and collection is complete: exactly one terminal point, every
+required boundary present on the merged trace, and no batch that dropped or invalidated a point.
+One process alone, admission points alone, two terminal points, or a dropped terminal stay
+`trace-links-missing`. Ordinary single-process traces still require each start and finish on the
+same process. An incomplete crash must not record a recovery or a passed safety result. The
+evidence schema stays the existing crash keys.
 Detailed probe results are supplemental raw evidence, not a replacement release schema. All
 experiment variants remain incomplete until their full acceptance closes.
 
 Trace collection reuses W0-4 and preserves unknown/unobserved boundaries. Cross-process timing
-is not combined without clock calibration. Fixture counters do not become provider usage,
-and hashes do not become live cache hits. No priced cost is emitted without dated rate evidence.
+is not combined without clock calibration, except the crash pairing above, which measures the
+interrupted operation from the timestamps the two processes recorded. Fixture counters do not
+become provider usage, and hashes do not become live cache hits. No priced cost is emitted
+without dated rate evidence.
 Background load, uncontrolled OS caches, absent fixed-release evidence, platform coverage,
 subscription quotas and human-review time remain explicit gaps. Follow
 [performance measurement guidance](../../../../../docs/performance.md) for paired timing and

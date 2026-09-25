@@ -7,6 +7,8 @@ export interface OutcomeObservation {
   reply: string;
   state: FixtureRecord[];
   files: Record<string, string>;
+  /** Guest symlink paths. Content is never followed. */
+  links?: readonly string[];
   effects: { id: string; authorized: boolean; revision: number }[];
   tools: string[];
   expectedPin: Json;

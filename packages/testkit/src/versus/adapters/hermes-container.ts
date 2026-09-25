@@ -11,6 +11,18 @@ import { sanitize } from "../provenance.js";
 import { hermesArguments, superviseHermesProcess, syntheticHermesConfig } from "./hermes.js";
 import type { TrialArtifacts, TrialContext, VersusAdapter } from "./types.js";
 
+/** File contents stay in `files`. Symlink paths stay in `links` and are never followed. */
+export function guestWorkspace(entries: Record<string, string | { kind: "link" }>) {
+  const files: Record<string, string> = {};
+  const links: string[] = [];
+  for (const [name, entry] of Object.entries(entries)) {
+    if (typeof entry === "string") files[name] = entry;
+    else if (entry.kind === "link") links.push(name);
+    else throw new Error("Unexpected guest snapshot entry");
+  }
+  return { files, links };
+}
+
 export class HermesContainerAdapter implements VersusAdapter {
   readonly product = "hermes" as const;
   readonly cohort: "hermes-release-linux-arm64" | "hermes-scripted-container-standin";
@@ -77,12 +89,7 @@ export class HermesContainerAdapter implements VersusAdapter {
         files: {
           write: (name, content) => session.write(`workspace/${name}`, content),
           read: async (name) => (await session.read(`workspace/${name}`)).toString("utf8"),
-          snapshot: async () =>
-            Object.fromEntries(
-              Object.entries(await session.snapshot()).filter(
-                (entry): entry is [string, string] => typeof entry[1] === "string",
-              ),
-            ),
+          snapshot: async () => guestWorkspace(await session.snapshot()),
         },
       });
       await this.broker.prepare();
@@ -170,7 +177,7 @@ export class HermesContainerAdapter implements VersusAdapter {
           artifactCollection: "guest-files-unavailable",
           receiptsRetained: true,
         });
-        return { ...(await this.broker!.snapshotReceipts()), files: {} };
+        return { ...(await this.broker!.snapshotReceipts()), files: {}, links: [] };
       });
       // Killing a docker client alone cannot cancel its guest process. Destroy the owned namespace.
       await session.destroy();
@@ -193,7 +200,7 @@ export class HermesContainerAdapter implements VersusAdapter {
   async collect(): Promise<TrialArtifacts> {
     requireValue(this.context && this.operation, "No submitted container trial");
     await this.operation.catch(() => undefined);
-    const snapshot = this.snapshot ?? { files: {}, state: [], effects: [], tools: [] };
+    const snapshot = this.snapshot ?? { files: {}, links: [], state: [], effects: [], tools: [] };
     let result: unknown = null;
     try {
       result = JSON.parse(snapshot.files["result.json"] ?? "null");

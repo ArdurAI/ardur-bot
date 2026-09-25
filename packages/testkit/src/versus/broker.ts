@@ -67,7 +67,7 @@ export interface EffectReceipt {
 export interface BrokerFiles {
   write(name: string, content: string): Promise<void>;
   read(name: string): Promise<string>;
-  snapshot(): Promise<Record<string, string>>;
+  snapshot(): Promise<{ files: Record<string, string>; links: readonly string[] }>;
 }
 
 /** Trusted broker owns only synthetic effects. Its decisions never count as product prevention. */
@@ -242,6 +242,7 @@ export class TrialBroker {
   async snapshot() {
     await this.tail;
     const files: Record<string, string> = {};
+    const links: string[] = [];
     const scan = async (relative: string) => {
       const directory = relative
         ? await safeFile(this.options.workspace, relative)
@@ -268,9 +269,12 @@ export class TrialBroker {
         }
       }
     };
-    if (this.options.files) Object.assign(files, await this.options.files.snapshot());
-    else await scan("");
-    return { ...(await this.snapshotReceipts()), files };
+    if (this.options.files) {
+      const shot = await this.options.files.snapshot();
+      Object.assign(files, shot.files);
+      links.push(...shot.links);
+    } else await scan("");
+    return { ...(await this.snapshotReceipts()), files, links };
   }
   /** Durable synthetic state remains observable even when the guest filesystem is lost. */
   async snapshotReceipts() {

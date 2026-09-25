@@ -228,10 +228,50 @@ function serviceUnion(
   return exact(union + upper - lower);
 }
 
+function operationFinish(
+  points: readonly TracePoint[],
+  start: TracePoint,
+  pairAcrossProcesses: boolean,
+) {
+  const boundary = start.boundary.replace("started", "finished");
+  const matches = (point: TracePoint) =>
+    point.boundary === boundary &&
+    point.operationId === start.operationId &&
+    point.attempt === start.attempt;
+  const local = points.find(
+    (point) =>
+      matches(point) && point.processId === start.processId && point.sequence > start.sequence,
+  );
+  if (local || !pairAcrossProcesses) return local;
+  return points.find((point) => matches(point) && point.processId !== start.processId);
+}
+
+/** A crash may finish on the recovering process. Ordinary traces still refuse that pair. */
+function operationSpan(
+  start: TracePoint,
+  end: TracePoint | undefined,
+  calibrations: readonly TraceCalibration[],
+  pairAcrossProcesses: boolean,
+): TraceDuration {
+  if (!end)
+    return pairAcrossProcesses
+      ? { value: null, lowerMs: null, upperMs: null, reason: "interrupted" }
+      : missing("boundary-not-observed");
+  if (!pairAcrossProcesses || start.processId === end.processId)
+    return traceDuration(start, end, calibrations);
+  if (start.traceId !== end.traceId) return missing("different-traces");
+  if (![start.at, end.at].every((at) => Number.isFinite(at) && at >= 0))
+    return missing("invalid-clock");
+  if (end.at < start.at) return missing("reversed-boundaries");
+  return exact(end.at - start.at);
+}
+
 export function deriveTrace(
   points: readonly TracePoint[],
   calibrations: readonly TraceCalibration[] = [],
+  options: { pairAcrossProcesses?: boolean } = {},
 ) {
+  const pairAcrossProcesses = options.pairAcrossProcesses === true;
   if (!points.length || new Set(points.map((p) => p.traceId)).size !== 1)
     throw new Error("Expected one nonempty trace");
   // A first boundary is only ordered when it belongs to a single process.
@@ -290,14 +330,7 @@ export function deriveTrace(
   const operations = points
     .filter((p) => p.boundary === "provider.started" || p.boundary === "tool.started")
     .map((p) => {
-      const end = points.find(
-        (e) =>
-          e.boundary === p.boundary.replace("started", "finished") &&
-          e.processId === p.processId &&
-          e.operationId === p.operationId &&
-          e.attempt === p.attempt &&
-          e.sequence > p.sequence,
-      );
+      const end = operationFinish(points, p, pairAcrossProcesses);
       const text = points.find(
         (e) =>
           e.boundary === "provider.text" &&
@@ -305,12 +338,17 @@ export function deriveTrace(
           e.attempt === p.attempt &&
           e.processId === p.processId,
       );
+      const outcome: TraceOutcome | "interrupted" = end
+        ? (end.outcome ?? "uncertain")
+        : pairAcrossProcesses
+          ? "interrupted"
+          : "uncertain";
       return {
         kind: p.boundary,
         attempt: p.attempt,
         operationId: p.operationId,
-        outcome: end?.outcome ?? "uncertain",
-        duration: traceDuration(p, end),
+        outcome,
+        duration: operationSpan(p, end, calibrations, pairAcrossProcesses),
         firstText: traceDuration(p, text),
       };
     });
@@ -370,8 +408,11 @@ export function collectTraceEvidence(
     calibrations?: readonly TraceCalibration[];
     virtual?: boolean;
     expectedTraces?: number;
+    /** Crash evidence only. A recovering process may finish a start recorded before the kill. */
+    pairAcrossProcesses?: boolean;
   },
 ) {
+  const pairAcrossProcesses = options.pairAcrossProcesses === true;
   validateBatches(batches);
   for (const c of options.calibrations ?? []) {
     if (
@@ -411,17 +452,22 @@ export function collectTraceEvidence(
   const dropped = raw.some((b) => b.counters.dropped > 0 || b.counters.invalid > 0);
   const traces = [...new Set(points.map((p) => p.traceId))].map((id) => {
     const subset = points.filter((p) => p.traceId === id);
-    const derived = deriveTrace(subset, calibrations);
+    const derived = deriveTrace(subset, calibrations, { pairAcrossProcesses });
     const missingBoundaries = options.requiredBoundaries.filter(
       (b) => !subset.some((p) => p.boundary === b),
     );
+    const operationsObserved = pairAcrossProcesses
+      ? derived.operations.every(
+          (operation) => operation.duration.reason !== "boundary-not-observed",
+        )
+      : derived.operations.every((operation) => operation.duration.value !== null);
     return {
       ...derived,
       missingBoundaries,
       complete:
         !dropped &&
         missingBoundaries.length === 0 &&
-        derived.operations.every((o) => o.duration.value !== null) &&
+        operationsObserved &&
         subset.filter((p) => p.boundary === "terminal.committed").length === 1,
     };
   });

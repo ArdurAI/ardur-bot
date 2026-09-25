@@ -683,12 +683,21 @@ describe("task, experiment and recovery evidence", () => {
         before: {
           trace: phase(
             "interrupted-worker",
-            stored.filter((boundary) => boundary !== "terminal.committed"),
+            stored.filter(
+              (boundary) =>
+                boundary !== "tool.finished" &&
+                boundary !== "provider.finished" &&
+                boundary !== "terminal.committed",
+            ),
           ),
         },
         after: {
           autonomousCompletion: false,
-          trace: phase("recovered-worker", ["terminal.committed"]),
+          trace: phase("recovered-worker", [
+            "tool.finished",
+            "provider.finished",
+            "terminal.committed",
+          ]),
         },
       },
       coverage: [],
