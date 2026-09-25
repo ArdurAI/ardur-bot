@@ -42,8 +42,27 @@ test("launches with a narrow preload bridge and an isolated renderer", async () 
       };
     });
 
-    expect(renderer.bridgeKeys).toEqual(["localSettings", "oauth", "platform", "update", "window"]);
-    expect(renderer.windowKeys).toEqual(["close", "minimize", "state", "toggleMaximize"]);
+    expect(renderer.bridgeKeys).toEqual([
+      "customization",
+      "devices",
+      "host",
+      "integrations",
+      "localSettings",
+      "memoryFolders",
+      "notifications",
+      "oauth",
+      "platform",
+      "system",
+      "update",
+      "window",
+    ]);
+    expect(renderer.windowKeys).toEqual([
+      "close",
+      "minimize",
+      "setUnsavedChanges",
+      "state",
+      "toggleMaximize",
+    ]);
     expect(renderer.updateKeys).toEqual(["check", "download", "install", "state"]);
     expect(renderer.platform).toBe(process.platform);
     expect(renderer.state).toEqual({ minimized: false, maximized: false, fullScreen: false });

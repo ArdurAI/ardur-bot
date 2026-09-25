@@ -1,5 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
-import { cleanupActors, type EvalActor, type EvalApp } from "./runner.js";
+import type { EvalActor, EvalApp } from "./runner.js";
+import { cleanupActors, readMemorySnapshot } from "./runner.js";
+
+it("collects every memory page before grading a trial or switching workspaces", async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({ json: { items: [{ content: "First fact" }], nextCursor: "next-page" } }),
+    )
+    .mockResolvedValueOnce(
+      Response.json({ json: { items: [{ content: "Last fact" }], nextCursor: null } }),
+    );
+  await expect(readMemorySnapshot({ request }, "session", "bot")).resolves.toBe(
+    "First fact\nLast fact",
+  );
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(request.mock.calls.map(([url, init]) => [url, JSON.parse(init.body).json])).toEqual([
+    ["/rpc/memory/list", { botId: "bot", limit: 100 }],
+    ["/rpc/memory/list", { botId: "bot", limit: 100, cursor: "next-page" }],
+  ]);
+});
 
 const actors: EvalActor[] = [
   {

@@ -1,4 +1,4 @@
-import { withComputerAdmission } from "@ardurbot/adapters";
+import { ComputerAdmissionError, withComputerAdmission } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
@@ -31,6 +31,10 @@ export function guardComputerTakeover<T>(
         return handler(request);
       },
       true,
-    );
+    ).catch((error: unknown) => {
+      if (error instanceof ComputerAdmissionError)
+        throw new ORPCError("CONFLICT", { message: error.message, cause: error });
+      throw error;
+    });
   };
 }

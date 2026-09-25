@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 import {
   ComposioEmulator,
   createScheduleFromTool,
@@ -10,6 +11,7 @@ import {
   ManagedSandboxEmulator,
   toComputerRef,
 } from "@ardurbot/adapters";
+import type { MemoryPage, TaughtSkill } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, ONCE_ROUTINE_CRON } from "@ardurbot/core";
 import {
   appendEvent,
@@ -376,10 +378,10 @@ describeJourneys("required product journeys", () => {
       path: "notes/result.txt",
     });
     expect(persisted.content).toContain("isolation-ok");
-    const coderMem = await rpc<Array<{ content: string }>>(app, ada, "memory/list", {
+    const coderMem = await rpc<MemoryPage>(app, ada, "memory/list", {
       botId: coder.id,
     });
-    expect(coderMem.some((m) => m.content.toLowerCase().includes("rust"))).toBe(true);
+    expect(coderMem.items.some((m) => m.content.toLowerCase().includes("rust"))).toBe(true);
     const dedicated = await rpc<Bot>(app, ada, "bots/setComputer", {
       botId: coder.id,
       mode: "dedicated",
@@ -414,11 +416,12 @@ describeJourneys("required product journeys", () => {
       bot.id,
       "write a file in your home called notes/result.txt that says kept-after-clear",
     );
-    const memories = await rpc<Array<{ id: string }>>(app, cookie, "memory/list", {
+    const memories = await rpc<MemoryPage>(app, cookie, "memory/list", {
       botId: bot.id,
     });
     await rpc(app, cookie, "memory/update", {
-      documentId: memories[0]!.id,
+      documentId: memories.items[0]!.id,
+      expectedRevision: memories.items[0]!.revision,
       content: "# Keeper\n\nRemember this after clearing.",
     });
     const routine = await rpc<{ id: string }>(app, cookie, "routines/create", {
@@ -491,7 +494,7 @@ describeJourneys("required product journeys", () => {
     expect(
       await rpc(app, cookie, "computer/readFile", { botId: bot.id, path: "notes/result.txt" }),
     ).toMatchObject({ content: expect.stringContaining("kept-after-clear") });
-    expect(await rpc(app, cookie, "memory/list", { botId: bot.id })).toEqual(
+    expect((await rpc<MemoryPage>(app, cookie, "memory/list", { botId: bot.id })).items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ content: expect.stringContaining("Remember this") }),
       ]),
@@ -867,18 +870,21 @@ describeJourneys("required product journeys", () => {
     let staleRelease: Promise<{ ok: true }> | undefined;
     let researcherLease!: { leaseId: string; expiresAt: string };
     try {
-      // Pause Release after it captures Writer's lease but before database finalization. The
-      // replacement takeover then commits first, so the resumed Release must lose its lease CAS.
+      // Provider cleanup leaves a fencing tombstone: a replacement cannot take
+      // control until revocation finishes, even though the holder is already none.
       staleRelease = rpc<{ ok: true }>(app, cookie, "computer/release", { botId: writer.id });
       await releaseRevocationReached;
+      expect((await raw(app, cookie, "computer/takeover", { botId: researcher.id })).status).toBe(
+        409,
+      );
+      allowReleaseRevocation();
+      await staleRelease;
       researcherLease = await rpc<{ leaseId: string; expiresAt: string }>(
         app,
         cookie,
         "computer/takeover",
         { botId: researcher.id },
       );
-      allowReleaseRevocation();
-      await staleRelease;
     } finally {
       allowReleaseRevocation();
       await staleRelease?.catch(() => undefined);
@@ -886,7 +892,7 @@ describeJourneys("required product journeys", () => {
     }
 
     expect(researcherLease.leaseId).not.toBe(writerLease.leaseId);
-    expect(revokedLeases).toEqual([writerLease.leaseId, writerLease.leaseId]);
+    expect(revokedLeases).toEqual([writerLease.leaseId]);
 
     const writerRecord = await prisma.bot.findUniqueOrThrow({
       where: { id: writer.id },
@@ -898,6 +904,19 @@ describeJourneys("required product journeys", () => {
     });
     const computerId = writerRecord.computer!.id;
     expect(researcherRecord.computer!.id).toBe(computerId);
+    // A delayed finalization of the old lease must still lose its database CAS
+    // after a new owner has been admitted.
+    await expect(
+      createThreadEvents(prisma).finalizeComputerControlRelease({
+        spaceId: writerRecord.spaceId,
+        computerId,
+        botId: writer.id,
+        runId: null,
+        leaseId: writerLease.leaseId,
+        holder: "bot",
+        reason: "released",
+      }),
+    ).resolves.toBe(false);
     const afterStaleRelease = await prisma.computer.findUniqueOrThrow({
       where: { id: computerId },
     });
@@ -992,38 +1011,46 @@ describeJourneys("required product journeys", () => {
 
     const originalSetScreenControl = sandbox.setScreenControl;
     let revocations = 0;
+    let signalRevocation!: () => void;
     let releaseRevocations!: () => void;
-    const bothRevocationsReached = new Promise<void>((resolve) => {
+    const revocationReached = new Promise<void>((resolve) => {
+      signalRevocation = resolve;
+    });
+    const revocationAllowed = new Promise<void>((resolve) => {
       releaseRevocations = resolve;
     });
-    const barrierTimeout = setTimeout(releaseRevocations, 1_000);
     sandbox.setScreenControl = async (_computer, interactive, _context, controlToken) => {
       expect(interactive).toBe(false);
       expect(controlToken).toBe(writerLease.leaseId);
       revocations += 1;
-      if (revocations === 2) releaseRevocations();
-      await bothRevocationsReached;
+      signalRevocation();
+      await revocationAllowed;
     };
 
     let responses: Response[] = [];
+    let firstTakeover: Promise<Response> | undefined;
     try {
-      responses = await Promise.all([
-        raw(app, cookie, "computer/takeover", { botId: researcher.id }),
-        raw(app, cookie, "computer/takeover", { botId: analyst.id }),
-      ]);
-    } finally {
-      clearTimeout(barrierTimeout);
+      firstTakeover = raw(app, cookie, "computer/takeover", { botId: researcher.id });
+      await revocationReached;
+      // Admission rejects the competing request before a second provider revoke.
+      const competing = await raw(app, cookie, "computer/takeover", { botId: analyst.id });
+      expect(competing.status).toBe(409);
       releaseRevocations();
+      responses = [await firstTakeover, competing];
+    } finally {
+      releaseRevocations();
+      await firstTakeover?.catch(() => undefined);
       sandbox.setScreenControl = originalSetScreenControl;
     }
 
-    expect(revocations).toBe(2);
+    expect(revocations).toBe(1);
     expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
     const computer = await prisma.computer.findFirstOrThrow({
       where: { bots: { some: { id: writer.id } } },
       select: { controlBotId: true, controlLeaseId: true },
     });
     const winner = computer.controlBotId === researcher.id ? researcher : analyst;
+    expect(winner.id).toBe(researcher.id);
     const successfulResponse = responses.find((response) => response.status === 200)!;
     await expect(successfulResponse.clone().json()).resolves.toMatchObject({
       json: { leaseId: computer.controlLeaseId },
@@ -1318,10 +1345,11 @@ describeJourneys("required product journeys", () => {
     const before = connector.records.length;
     const secret = "test-openrouter-key-not-a-real-secret";
     await rpc(app, cookie, "models/connect", {
-      provider: "openrouter",
+      provider: "openai-compatible",
+      baseUrl: "http://127.0.0.1:9/v1",
       apiKey: secret,
       label: "test",
-      modelId: "scripted",
+      modelId: "offline-fixture",
     });
     await sendAndWait(app, cookie, bot.id, "write this to the destination crm as a note");
     expect(connector.records.length).toBeGreaterThan(before);
@@ -1373,10 +1401,11 @@ describeJourneys("required product journeys", () => {
     });
     const secret = "test-openrouter-key-not-a-real-secret";
     await rpc(app, cookie, "models/connect", {
-      provider: "openrouter",
+      provider: "openai-compatible",
+      baseUrl: "http://127.0.0.1:9/v1",
       apiKey: secret,
       label: "hidden",
-      modelId: "scripted",
+      modelId: "offline-fixture",
     });
     await sendAndWait(
       app,
@@ -1384,14 +1413,17 @@ describeJourneys("required product journeys", () => {
       bot.id,
       "write a file in your home called notes/result.txt that says export-ok",
     );
-    const manifest = await rpc<Record<string, unknown>>(app, cookie, "export/bot", {
+    const download = await rpc<{ path: string }>(app, cookie, "export/bot", {
       botId: bot.id,
     });
-    const rawJson = JSON.stringify(manifest);
-    expect(rawJson).toContain("export-ok");
-    expect(rawJson).toContain("Be useful");
-    expect(rawJson).not.toContain(secret);
-    expect(rawJson).not.toMatch(/browserProfile|ciphertext|sessionCookie/i);
+    const exported = await app.request(download.path, { headers: { cookie } });
+    expect(exported.status).toBe(200);
+    expect(exported.headers.get("content-type")).toBe("application/gzip");
+    const archive = gunzipSync(Buffer.from(await exported.arrayBuffer())).toString("utf8");
+    expect(archive).toContain("export-ok");
+    expect(archive).toContain("Be useful");
+    expect(archive).not.toContain(secret);
+    expect(archive).not.toMatch(/browserProfile|ciphertext|sessionCookie/i);
   });
 
   it("10: bots can be archived safely and deleted with or without their memories", async () => {
@@ -2331,11 +2363,7 @@ describeJourneys("required product journeys", () => {
       text: "please act now",
     });
     expect(blocked.status).toBeGreaterThanOrEqual(400);
-    const stopped = await rpc<{
-      status: string;
-      playbook: { steps: string[] };
-      recording: { events: Array<{ kind: string }>; snapshots: Array<{ summary: string }> };
-    }>(app, cookie, "skills/stop", { skillId: skill.id });
+    const stopped = await rpc<TaughtSkill>(app, cookie, "skills/stop", { skillId: skill.id });
     expect(stopped.status).toBe("draft");
     expect(stopped.playbook.steps.join(" ")).toMatch(/Click|120|40|x/i);
     expect(stopped.recording.events.some((event) => event.kind === "pointer")).toBe(true);
@@ -2352,6 +2380,7 @@ describeJourneys("required product journeys", () => {
       skillId: skill.id,
       name: "Export weekly CRM list",
       playbook: stopped.playbook,
+      expectedRevision: stopped.activeRevision,
     });
     const saved = await rpc<{ status: string; name: string }>(app, cookie, "skills/save", {
       skillId: skill.id,
