@@ -302,7 +302,7 @@ it("keeps Undo bound to the original board after switching workspaces", async ()
   await act(async () =>
     node.querySelector('[data-board-column="in_progress"]')!.dispatchEvent(event),
   );
-  const select = node.querySelector<HTMLSelectElement>('[aria-label="Board"]')!;
+  const select = node.querySelector<HTMLSelectElement>('select[aria-label="Board"]')!;
   await act(async () => {
     select.value = "folder";
     select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -316,6 +316,31 @@ it("keeps Undo bound to the original board after switching workspaces", async ()
     id: "ready",
     patch: { status: "open", deferUntil: null },
   });
+});
+it("removes the previous board's editing controls while the next workspace loads", async () => {
+  const workspaces = [workspace, { ...workspace, id: "folder", name: "Folder" }];
+  calls.view.mockResolvedValueOnce({ ...view(), workspaces });
+  let resolve!: (result: ReturnType<typeof view>) => void;
+  calls.view.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const node = await render(<Board />);
+  const select = node.querySelector<HTMLSelectElement>('select[aria-label="Board"]')!;
+  await act(async () => {
+    select.value = "folder";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(node.querySelectorAll('[aria-label="New item"]')).toHaveLength(0);
+  expect(
+    [...node.querySelectorAll("button")].some((button) => button.textContent === "New item"),
+  ).toBe(false);
+  expect(node.textContent).toContain("Loading");
+  expect(node.textContent).not.toContain("No board");
+  await act(async () => resolve({ ...view(), workspaces, workspaceId: "folder" }));
+  expect(node.querySelectorAll('[aria-label="New item"]')).toHaveLength(5);
 });
 function input(node: HTMLInputElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(node, value);

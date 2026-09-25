@@ -105,6 +105,17 @@ export function Board({
   const epoch = useRef(0);
   const catalog = snapshot.allItems ?? snapshot.items;
   const workspace = workspaces.find((row) => row.id === workspaceId);
+  useEffect(() => {
+    setWorkspaceId("");
+    setLoaded(false);
+    setSnapshot(empty);
+    setSelected(null);
+    setNewItem(false);
+    setEditing(false);
+    setExportPath("");
+    setProblem(null);
+    setError("");
+  }, [requestedWorkspace]);
   const refresh = useCallback(async () => {
     if (pending.current) return pending.current;
     const abort = controller.current;
@@ -274,11 +285,9 @@ export function Board({
         {workspaces.length ? (
           <NativeSelect
             aria-label={t`Board`}
-            value={workspaceId}
+            value={requestedWorkspace ?? workspaceId}
             onChange={(e) => {
               setParams({ view: "board", workspace: e.target.value });
-              setSelected(null);
-              setSnapshot(empty);
             }}
           >
             {workspaces
@@ -339,7 +348,7 @@ export function Board({
         </div>
       ) : null}
       {exportPath ? <output className="my-2 block break-all text-sm">{exportPath}</output> : null}
-      {loaded && !workspace ? (
+      {loaded && !workspace && !error && !problem ? (
         <div className="space-y-2">
           <p>
             <Trans>No board</Trans>
