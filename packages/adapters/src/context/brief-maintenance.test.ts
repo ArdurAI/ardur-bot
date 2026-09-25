@@ -1,8 +1,10 @@
 import type { AgentRunRequest, AgentRuntime } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
+import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import type { MemoryService } from "@ardurbot/memory";
 import { maintainBriefs, markBriefPending, refreshRunBrief } from "@ardurbot/memory";
 import { expect, it, vi } from "vitest";
+import { RemoteHostRuntime } from "../remote-host-runtime.js";
 import { claimBotRun } from "./concurrency.js";
 
 function fixture() {
@@ -23,6 +25,8 @@ function fixture() {
     spaceId: "space",
     userId: "owner",
     status: "completed",
+    trigger: "user",
+    sourceMessageId: "source",
     runtimePin: { modelId: "pinned" },
     thread: { id: "thread", groupId: "group", nextMessageSeq: 2, historyCompactionGeneration: 0 },
   };
@@ -40,6 +44,9 @@ function fixture() {
         space: { concurrentRuns: 3 },
       })),
     },
+    chatGroupMember: {
+      findUnique: vi.fn(async () => ({ id: "membership" }) as { id: string } | null),
+    },
     botBrief: {
       count: vi.fn(async () => 0),
       findUnique: vi.fn(async () => state),
@@ -50,6 +57,7 @@ function fixture() {
       }),
     },
     message: {
+      findUnique: vi.fn(async () => ({ blocks: [{ kind: "text", text: "Private turn" }] })),
       findMany: vi.fn(async () => [
         { role: "assistant", blocks: [{ kind: "text", text: "Work reported" }] },
       ]),
@@ -114,6 +122,19 @@ function fixture() {
     },
   };
 }
+it("never schedules or refreshes a private brief from a shared messaging run", async () => {
+  const f = fixture();
+  f.run.trigger = "messaging";
+  f.tx.message.findUnique.mockResolvedValue({
+    blocks: [{ kind: "channel_message", channelId: "shared-channel" }] as never,
+  });
+  await markBriefPending(f.deps.prisma, "run");
+  await refreshRunBrief(f.deps, "run");
+  expect(f.tx.botBrief.upsert).not.toHaveBeenCalled();
+  expect(f.tx.message.findMany).not.toHaveBeenCalled();
+  expect(f.resolve).not.toHaveBeenCalled();
+  expect(f.commit).not.toHaveBeenCalled();
+});
 it("marks a changed group pending and rewrites after the turn with the selected model and no tools", async () => {
   const f = fixture();
   await markBriefPending(f.deps.prisma, "run");
@@ -139,6 +160,111 @@ it("marks a changed group pending and rewrites after the turn with the selected 
   expect(f.requests).toHaveLength(attempts + 1);
   expect(f.state.lastMessageSeq).toBe(2);
 });
+it.each(["claude-code", "codex-app-server"] as const)(
+  "uses a wire-valid auxiliary run for %s briefs",
+  async (kind) => {
+    const f = fixture();
+    const request = vi.fn(async function* () {
+      yield {
+        v: 1,
+        type: "stream",
+        id: "request",
+        seq: 0,
+        channel: "event",
+        data: { type: "done", text: "## Goal\nReview the plan" },
+      };
+    });
+    const provider = kind === "claude-code" ? "anthropic" : "openai-codex";
+    await refreshRunBrief(
+      {
+        ...f.deps,
+        resolve: async () => ({
+          runtime: new RemoteHostRuntime({ request } as unknown as HostClient, kind),
+          model: {
+            provider,
+            id: "pinned",
+            thinkingLevel: "high",
+            runtimePin: {
+              runtimeKind: kind,
+              provider,
+              modelId: "pinned",
+              credentialId: "credential",
+              effort: "high",
+              revision: 1,
+            },
+          },
+        }),
+      },
+      "run",
+    );
+    expect(request).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: "runtime.turn",
+        request: expect.objectContaining({ runId: "brief-run", tools: "none" }),
+      }),
+      expect.objectContaining({ runId: "brief-run" }),
+      expect.any(Function),
+    );
+    expect(f.commit).toHaveBeenCalledOnce();
+    expect(f.state).toMatchObject({ reason: null, lastMessageSeq: 1 });
+  },
+);
+it("retains a redacted failure reason when brief generation fails", async () => {
+  const f = fixture();
+  await refreshRunBrief(
+    {
+      ...f.deps,
+      secrets: ["fixture-secret"],
+      resolve: async () => {
+        throw new Error("Connection rejected fixture-secret");
+      },
+    },
+    "run",
+  );
+  expect(f.state).toMatchObject({
+    reason: "Brief refresh failed: Connection rejected [redacted]",
+    lastMessageSeq: -1,
+    leaseExpiresAt: null,
+  });
+  expect(f.commit).not.toHaveBeenCalled();
+});
+it("does not read evidence or resolve the model after a bot leaves its group", async () => {
+  const f = fixture();
+  f.tx.chatGroupMember.findUnique.mockResolvedValue(null);
+  await refreshRunBrief(f.deps, "run");
+  expect(f.tx.message.findMany).not.toHaveBeenCalled();
+  expect(f.resolve).not.toHaveBeenCalled();
+  expect(f.commit).not.toHaveBeenCalled();
+  expect(f.state.lastMessageSeq).toBe(-1);
+});
+it.each(["leased", "running"])(
+  "counts a source run that becomes %s before maintenance admission",
+  async (status) => {
+    const f = fixture();
+    f.tx.bot.findUniqueOrThrow.mockResolvedValue({
+      id: "chief",
+      concurrentRuns: 1,
+      space: { concurrentRuns: 1 },
+    });
+    f.tx.run.count.mockImplementation(async (...args: unknown[]) => {
+      const { where } = args[0] as { where: { id: { not: string } } };
+      return ["leased", "running"].includes(f.run.status) && where.id.not !== f.run.id ? 1 : 0;
+    });
+    await refreshRunBrief(
+      {
+        ...f.deps,
+        claim: async (input) => {
+          f.run.status = status;
+          return f.deps.claim(input);
+        },
+      },
+      "run",
+    );
+    expect(f.resolve).not.toHaveBeenCalled();
+    expect(f.tx.botBrief.updateMany).not.toHaveBeenCalled();
+  },
+);
 it("skips a group turn with no new facts before resolving a model and consumes no tokens", async () => {
   const f = fixture();
   f.state.toolResults = "";

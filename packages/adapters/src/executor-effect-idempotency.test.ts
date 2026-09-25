@@ -5,12 +5,13 @@ vi.mock("./context/concurrency.js", () => ({
 }));
 
 import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
-import type { CommandBlock as FixtureCommandBlock } from "@ardurbot/contracts";
+import type { CommandBlock as FixtureCommandBlock, MessageBlock } from "@ardurbot/contracts";
 import type { ActionApprovalRule } from "@ardurbot/core";
 import {
   legacyScopedToolEffectIdempotencyKey,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
+import type { MemoryService } from "@ardurbot/memory";
 import { describe, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "./auto-review.js";
 import { commandComputerFingerprint } from "./command-replay.js";
@@ -58,7 +59,7 @@ type ToolCall = {
   executionId: string;
 };
 
-function fixture(runId = "run-1") {
+function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
   const effects: Effect[] = [];
   const results: unknown[] = [];
   const scratchpadRows: Array<{
@@ -82,6 +83,7 @@ function fixture(runId = "run-1") {
     userId: "user-1",
     status: "queued",
     trigger: "user",
+    sourceMessageId: null as string | null,
     leaseFence: 0,
     commandReplayId: null as string | null,
   };
@@ -145,6 +147,8 @@ function fixture(runId = "run-1") {
   const replayRequest = { command: "pnpm test", cwd: "/workspace" };
   const prisma = {
     delegationRoot: { findUnique: vi.fn(async () => null) },
+    botBrief: { updateMany: vi.fn(async () => ({ count: 0 })) },
+    runKnowledgeExposure: { createMany: vi.fn(async () => ({ count: 1 })) },
     space: {
       findUnique: vi.fn(async () => ({ allowedModelDestinations: null })),
       findUniqueOrThrow: vi.fn(async () => ({
@@ -203,8 +207,20 @@ function fixture(runId = "run-1") {
       update: vi.fn(),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
-    thread: { findUniqueOrThrow: vi.fn(async () => ({ id: run.threadId, groupId: null })) },
-    message: { findMany: vi.fn(async () => []) },
+    thread: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: run.threadId,
+        groupId: null as string | null,
+        externalConversationId: null,
+        historyCompactionSummary: "",
+        historyCompactedUpToSeq: null as number | null,
+      })),
+    },
+    message: {
+      findFirst: vi.fn(async () => null),
+      findUnique: vi.fn(async () => ({ blocks: [] as MessageBlock[] })),
+      findMany: vi.fn(async () => []),
+    },
     task: {
       findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Update shared state" })),
     },
@@ -284,6 +300,8 @@ function fixture(runId = "run-1") {
   const resolveCommandCwd = vi.fn(async () => "/workspace");
   const sandboxDescription = { capabilities: { graphical: false } };
   const events = { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun };
+  const memoryRead = vi.fn(async () => ({ documents: [] }));
+  const memorySearch = vi.fn(async () => []);
   const executor = createRunExecutor({
     prisma,
     secretStore: { load: () => "test-key" },
@@ -301,12 +319,13 @@ function fixture(runId = "run-1") {
     },
     memory: {
       describe: () => ({ capabilities: {} }),
-      read: async () => ({ documents: [] }),
-      search: async () => [],
+      read: memoryRead,
+      search: memorySearch,
       commit: memoryCommit,
       exportMarkdown: async function* () {},
     },
     memoryProviders: { resolve: async () => null },
+    memoryDocuments,
     events,
     jobs: { enqueue: vi.fn(async () => undefined) },
     secrets: [],
@@ -329,6 +348,8 @@ function fixture(runId = "run-1") {
     results,
     scratchpadRows,
     memoryCommit,
+    memoryRead,
+    memorySearch,
     setCalls(next: ToolCall[]) {
       calls = next;
     },
@@ -343,6 +364,83 @@ function fixture(runId = "run-1") {
 }
 
 describe("mutating tool effect idempotency keys", () => {
+  it("keeps private context out of a shared messaging run on a personal thread", async () => {
+    const list = vi.fn(async () => ({
+      items: [
+        {
+          path: "briefs/direct.md",
+          content: "PRIVATE_BRIEF",
+        },
+      ],
+    }));
+    const f = fixture("channel-run", {
+      list,
+      generation: async () => 0,
+      exportBundle: async () => ({ documents: [] }),
+      commit: async (input: { path: string; content: string }) => ({
+        ...input,
+        id: "skill-document",
+        revision: 1,
+      }),
+    } as unknown as MemoryService);
+    f.runRecord.trigger = "messaging";
+    f.runRecord.sourceMessageId = "channel-message";
+    f.prisma.message.findUnique.mockResolvedValue({
+      blocks: [
+        {
+          kind: "channel_message",
+          provider: "fake",
+          channelId: "shared-channel",
+          fromAddress: "sender",
+          fromLabel: "Sender",
+          text: "Recall our previous decision",
+          hop: 0,
+        },
+      ],
+    });
+    f.prisma.thread.findUniqueOrThrow.mockResolvedValue({
+      id: "thread-1",
+      groupId: null,
+      externalConversationId: null,
+      historyCompactionSummary: "PRIVATE_SUMMARY",
+      historyCompactedUpToSeq: 5,
+    });
+    f.prisma.task.findUniqueOrThrow.mockResolvedValue({
+      id: "task-1",
+      prompt: "Recall our previous decision",
+    });
+    f.prisma.space.findUniqueOrThrow.mockResolvedValue({
+      botInstructions: "PRIVATE_ACCOUNT_INSTRUCTIONS",
+      botInstructionsAuthorId: "owner",
+      botInstructionsRevision: 1,
+    });
+    f.prisma.user.findUniqueOrThrow.mockResolvedValue({
+      displayName: "PRIVATE_PROFILE",
+      workType: "research",
+    });
+    await f.run();
+    const request = f.runtimeRun.mock.calls[0]![0];
+    const input = JSON.stringify({
+      instructions: request.instructions,
+      prompt: request.prompt,
+      history: request.history,
+    });
+    expect(input).not.toContain("PRIVATE_");
+    expect(list).not.toHaveBeenCalledWith(
+      expect.objectContaining({ scope: "group" }),
+      expect.anything(),
+    );
+    expect(f.memoryRead).not.toHaveBeenCalled();
+    expect(f.memorySearch).not.toHaveBeenCalled();
+    expect(f.prisma.scratchpadItem.findMany).not.toHaveBeenCalled();
+    expect(f.runRecord).toHaveProperty(
+      "contextSnapshot",
+      expect.objectContaining({
+        layers: expect.objectContaining({ brief: 0, summary: 0, recall: 0 }),
+        recallRan: false,
+      }),
+    );
+  });
   it("passes a human-authored account snapshot after the bot instructions and retains it on resume", async () => {
     const f = fixture();
     const bot = await f.prisma.bot.findUniqueOrThrow();

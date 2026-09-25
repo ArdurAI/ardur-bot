@@ -51,6 +51,10 @@ export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
     open: (context, action) => {
       const open = async (tx: Prisma.TransactionClient) => {
         if (context.memorySessionStart) await tx.$executeRaw`SET LOCAL lock_timeout = '500ms'`;
+        // Thread first, then memory: clearing holds this row through its generation update.
+        if (context.briefGeneration !== undefined) {
+          await tx.$queryRaw`SELECT id FROM threads WHERE id = ${context.threadId} AND "spaceId" = ${context.spaceId} AND "userId" = ${context.userId} FOR UPDATE`;
+        }
         await lockMemorySpace(tx, context.spaceId);
         const access = await authenticatedMemoryAccess(tx, context);
         if (context.briefGeneration !== undefined) {
