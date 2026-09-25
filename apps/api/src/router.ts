@@ -34,6 +34,7 @@ import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
+  assertLocalImportOwner,
   autoReviewConfigurationWarning,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
@@ -59,6 +60,7 @@ import {
   isSandboxGoneError,
   isScratchpadStatus,
   kubernetesContexts,
+  LocalImportService,
   listPiCatalog,
   listScratchpadItems,
   loadPushToken,
@@ -99,12 +101,12 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
-  appContract,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@ardurbot/contracts";
+import { appContract } from "@ardurbot/contracts/rpc";
 import {
   ACTIVE_RUN_STATUSES,
   AttachmentValidationError,
@@ -167,6 +169,7 @@ import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-sec
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
+import { boardCall, createBoard } from "./board.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
 import { createCapabilitySettings } from "./capability-settings.js";
@@ -195,6 +198,8 @@ import { createIdeFiles } from "./ide-files.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { connectionDto, IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
+import { saveImportedServerCredentials } from "./local-import-credentials.js";
+import type { LocalImportRequests } from "./local-import-requests.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
 import { mcpServerDto } from "./mcp-server-dto.js";
 import { changeGitMemoryLocation } from "./memory-git-location.js";
@@ -433,6 +438,7 @@ export interface RouterDeps {
   runtime?: AgentRuntime;
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
+  localImportRequests?: LocalImportRequests;
   terminals?: ReturnType<typeof createTerminalRoutes>;
   cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
@@ -500,6 +506,7 @@ function mapSpaceLifecycleError(error: unknown): unknown {
 }
 
 export function createRouter(deps: RouterDeps): Router<typeof appContract, RouterContext> {
+  const board = createBoard(deps);
   const comparisons = createComparisons({
     prisma: deps.prisma,
     jobs: deps.jobs,
@@ -554,6 +561,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   });
   const learning = createLearningService(deps);
   const agentSkills = createAgentSkillsService(deps.prisma, deps.memoryDocuments);
+  const localImport = new LocalImportService({
+    prisma: deps.prisma,
+    documents: deps.memoryDocuments!,
+  });
 
   const authed = os.use(async ({ context, next }) => {
     if (!context.actor) throw new ORPCError("UNAUTHORIZED");
@@ -2578,6 +2589,24 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           ).catch(() => undefined);
         }
         return { ok: true as const };
+      }),
+    },
+    localImport: {
+      credentials: authed.localImport.credentials.handler(async ({ context, input }) => {
+        await assertLocalImportOwner(deps.prisma, context.actor);
+        return saveImportedServerCredentials(deps.prisma, deps.secrets, context.actor, input);
+      }),
+      status: authed.localImport.status.handler(({ context }) => localImport.status(context.actor)),
+      configure: authed.localImport.configure.handler(({ context, input }) =>
+        localImport.configure(context.actor, input),
+      ),
+      run: authed.localImport.run.handler(async ({ context, input }) => {
+        await assertLocalImportOwner(deps.prisma, context.actor);
+        if (!deps.localImportRequests)
+          throw new ORPCError("SERVICE_UNAVAILABLE", {
+            message: "The import worker is unavailable.",
+          });
+        return deps.localImportRequests.run(context.actor, input);
       }),
     },
     memory: {
@@ -5158,6 +5187,84 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       list: authed.comparisons.list.handler(({ context }) => comparisons.list(context.actor)),
       merge: authed.comparisons.merge.handler(({ context, input }) =>
         comparisons.merge(context.actor, input),
+      ),
+    },
+    board: {
+      workspaces: authed.board.workspaces.handler(({ context }) =>
+        boardCall(() => board.service.workspaces(context.actor)),
+      ),
+      start: authed.board.start.handler(({ context, input }) =>
+        boardCall(() => board.service.start(context.actor, input.workspaceId)),
+      ),
+      snapshot: authed.board.snapshot.handler(({ context, input }) =>
+        boardCall(() => board.snapshot(context.actor, input)),
+      ),
+      send: authed.board.send.handler(async ({ context, input }) => {
+        if ((await modelSetup(deps, context.actor)).needsModel)
+          throw new ORPCError("BAD_REQUEST", { message: "Connect a model to start a run." });
+        return boardCall(() => board.send(context.actor, input));
+      }),
+      show: authed.board.show.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).show(input.id),
+        ),
+      ),
+      create: authed.board.create.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).create(input.item),
+        ),
+      ),
+      update: authed.board.update.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).update(
+            input.id,
+            input.patch,
+          ),
+        ),
+      ),
+      claim: authed.board.claim.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).claim(
+            input.id,
+            await board.service.actor(context.actor),
+          ),
+        ),
+      ),
+      close: authed.board.close.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).close(
+            input.ids,
+            input.reason,
+          ),
+        ),
+      ),
+      comment: authed.board.comment.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).comment(
+            input.id,
+            input.text,
+          ),
+        ),
+      ),
+      graph: authed.board.graph.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).graph(input.rootId),
+        ),
+      ),
+      export: authed.board.export.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).export(),
+        ),
+      ),
+      link: authed.board.link.handler(({ context, input }) =>
+        boardCall(async () => {
+          await (await board.service.provider(context.actor, input.workspaceId)).link(
+            input.from,
+            input.to,
+            input.type,
+          );
+          return { ok: true as const };
+        }),
       ),
     },
     team: {

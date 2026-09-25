@@ -18,12 +18,8 @@ test("Team opens as a board with one row per bot", async ({ page }, testInfo) =>
   await expect(page.locator("[data-team-bot]")).toHaveCount(2);
   await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
   await expect(page.locator("main").getByRole("combobox")).toHaveCount(0);
-  await page
-    .locator("[data-team-bot]")
-    .filter({ hasText: "Reviewer" })
-    .locator("summary")
-    .first()
-    .click();
-  await expect(page.locator("main").getByText("Tokens", { exact: false })).toBeVisible();
+  const reviewer = page.locator("[data-team-bot]").filter({ hasText: "Reviewer" });
+  await reviewer.locator("summary").click();
+  await expect(reviewer.getByText("Tokens", { exact: false })).toBeVisible();
   await captureScreenshot(page, testInfo, "delegation-team-board");
 });

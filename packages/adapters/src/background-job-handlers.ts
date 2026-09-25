@@ -11,6 +11,7 @@ import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { deliverMemory, maintainBriefs } from "@ardurbot/memory";
+import { executeBoardCommand } from "./board/worker.js";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { expireComputerControl } from "./computer-control.js";
@@ -21,6 +22,8 @@ import { compactHistory } from "./history-compaction.js";
 import { curateLearningSpaces } from "./learning-curator.js";
 import { enqueueLearningReview } from "./learning-queue.js";
 import { reviewLearning } from "./learning-review.js";
+import type { LocalImportJobOptions } from "./local-import-jobs.js";
+import { createLocalImportJobs } from "./local-import-jobs.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -38,9 +41,11 @@ export function createBackgroundJobHandlers(deps: {
   secretStore: EncryptedSecretStore;
   memoryProviders: MemoryProviderResolver;
   memoryDocuments?: MemoryService;
+  localImport?: LocalImportJobOptions;
   deploymentModelKey?: string;
   messaging?: MessagingSurface;
   cloudAgent?: CloudAgentConnection | null;
+  dataDir?: string;
 }): BackgroundJobHandlers {
   const deliverMessaging = async (runId?: string) => {
     if (!deps.messaging) return;
@@ -58,6 +63,11 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
+    "board.run": ({ requestId }) =>
+      executeBoardCommand({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" }, requestId),
+    ...(deps.localImport && deps.memoryDocuments
+      ? createLocalImportJobs(deps.prisma, deps.memoryDocuments, deps.localImport)
+      : {}),
     "briefs.maintain": async (payload) => {
       if (payload.runId) await deps.executor.refreshBrief(payload.runId);
       else await maintainBriefs(deps.prisma, deps.executor.refreshBrief);

@@ -104,6 +104,8 @@ export function createJobReconciler(
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileMemory?: () => Promise<void>;
+    reconcileBoardOutcomes?: () => Promise<void>;
+    reconcileLocalImport?: () => Promise<void>;
     reconcileBriefs?: () => Promise<void>;
   },
   options: { intervalMs?: number; batchSize?: number } = {},
@@ -128,6 +130,8 @@ export function createJobReconciler(
           deps.reconcileCloudAgents,
           deps.reconcileComputerUpdates,
           deps.reconcileMemory,
+          deps.reconcileBoardOutcomes,
+          deps.reconcileLocalImport,
           async () => {
             if (!deps.reconcileBriefs || Date.now() < nextBriefMaintenanceAt) return;
             await deps.reconcileBriefs();
@@ -379,7 +383,7 @@ export function createJobReconciler(
 }
 
 /** Prefer the full bot transcript for a run so interim progress is not mistaken for the sole result. */
-async function botRunOutcomeText(
+export async function botRunOutcomeText(
   prisma: {
     message: {
       findMany: (args: {

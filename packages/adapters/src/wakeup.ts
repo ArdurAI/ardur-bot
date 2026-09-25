@@ -124,6 +124,8 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
       ]),
     );
     if (handlers["learning.curate"]) taskList.learning_curate = taskList["learning.curate"]!;
+    if (handlers["local-import.refresh"])
+      taskList.local_import_refresh = taskList["local-import.refresh"]!;
     if (handlers["briefs.maintain"]) taskList.briefs_maintain = taskList["briefs.maintain"]!;
     const runner = await run({
       pgPool: this.pgPool,
@@ -135,6 +137,9 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
         [
           handlers["learning.curate"]
             ? "0 3 * * 1 learning_curate ?id=learningCurator&fill=1w"
+            : null,
+          handlers["local-import.refresh"]
+            ? "0 * * * * local_import_refresh ?id=localImport&fill=1h"
             : null,
           handlers["briefs.maintain"] ? "*/10 * * * * briefs_maintain ?id=briefMaintenance" : null,
         ]

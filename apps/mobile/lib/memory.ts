@@ -6,6 +6,7 @@ import {
   memoryProviderHost,
   SpaceMemoryConfigSchema,
 } from "@ardurbot/contracts";
+import { LOCAL_IMPORT_TOOL_NAMES } from "@ardurbot/contracts/local-import";
 import { rpc } from "./api";
 
 /** Native UI consumes the same paginated, authorized contracts as desktop and web. */
@@ -24,7 +25,9 @@ export async function loadMemorySyncState() {
 }
 export function memoryAttribution(revision: DocumentRevision | MemoryDocumentHead): string {
   return [
-    revision.author.kind,
+    revision.imported
+      ? `Imported from ${LOCAL_IMPORT_TOOL_NAMES[revision.imported.tool]}`
+      : revision.author.kind,
     revision.author.userId,
     revision.author.botId,
     revision.runId,

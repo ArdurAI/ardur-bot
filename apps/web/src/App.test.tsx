@@ -20,7 +20,11 @@ vi.mock("@lingui/react/macro", () => ({
 vi.mock("./components/PreferencesProvider", () => ({
   PreferencesProvider: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("./pages/Shell", () => ({ ShellPage: () => <p>Bot route</p> }));
+vi.mock("./pages/Shell", () => ({
+  ShellPage: ({ board, team }: { board?: boolean; team?: boolean }) => (
+    <p>{board ? "Board route" : team ? "Team route" : "Bot route"}</p>
+  ),
+}));
 vi.mock("./pages/ide/IdePage", () => ({ default: () => <p>IDE route</p> }));
 vi.mock("./pages/IntegrationSetup", () => ({ IntegrationSetupPage: () => null }));
 vi.mock("./pages/LocalSettings", () => ({ LocalSettingsPage: () => null }));
@@ -39,6 +43,11 @@ import { App } from "./App";
 
 describe("App routing", () => {
   it.each([
+    ["/app/board", true, "Board route"],
+    ["/app/team", true, "Team route"],
+    ["/app/builder", true, "Bot route"],
+    ["/app/board", false, "Sign in route"],
+    ["/app/team", false, "Sign in route"],
     ["/app/ide", true, "IDE route"],
     ["/app/bot", true, "Bot route"],
     ["/app/ide", false, "Sign in route"],

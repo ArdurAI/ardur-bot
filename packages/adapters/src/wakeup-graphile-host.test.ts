@@ -61,6 +61,7 @@ it("replaces waiting Git pushes per space and serializes their execution", async
 
 function handlers(): BackgroundJobHandlers {
   return {
+    "board.run": vi.fn(async () => undefined),
     "briefs.maintain": async () => undefined,
     "learning.curate": async () => undefined,
     "learning.review": async () => undefined,
@@ -122,6 +123,32 @@ describe("databaseCapacityBackoffMs", () => {
 describe("GraphileJobWorkerHost runner lifecycle", () => {
   afterEach(() => {
     run.mockReset();
+  });
+
+  it("keeps import, brief and learning schedules together and strips cron metadata from imports", async () => {
+    const first = mockRunner();
+    run.mockResolvedValueOnce(first.runner);
+    const refresh = vi.fn(async () => undefined);
+    const host = new GraphileJobWorkerHost({} as Pool, { sleep: async () => undefined });
+    try {
+      await host.start({ ...handlers(), "local-import.refresh": refresh });
+      const { taskList, crontab } = run.mock.calls[0]![0] as {
+        taskList: Record<string, (payload: unknown) => Promise<void>>;
+        crontab: string;
+      };
+      expect(crontab.split("\n")).toEqual([
+        "0 3 * * 1 learning_curate ?id=learningCurator&fill=1w",
+        "0 * * * * local_import_refresh ?id=localImport&fill=1h",
+        "*/10 * * * * briefs_maintain ?id=briefMaintenance",
+      ]);
+      await taskList.local_import_refresh!({
+        _cron: { ts: "2026-09-25T12:00:00.000Z", backfilled: false },
+      });
+      expect(refresh.mock.calls).toEqual([[{}]]);
+      await expect(taskList.local_import_refresh!({ spaceId: "space" })).rejects.toThrow(/spaceId/);
+    } finally {
+      await host.stop();
+    }
   });
 
   it("strips Graphile's cron marker before strict payload validation", async () => {

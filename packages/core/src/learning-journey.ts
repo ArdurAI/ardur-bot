@@ -16,11 +16,18 @@ export function learningJourney(
   audits: JourneyAudit[],
 ): LearningJourneyEntry[] {
   const entries: LearningJourneyEntry[] = revisions
-    .filter((r) => r.author.kind === "learning-loop" || r.learning)
+    .filter((r) => r.author.kind === "learning-loop" || r.learning || r.imported)
     .map((r) => ({
       id: `revision:${r.documentId}:${r.revision}`,
       at: r.createdAt,
-      action: r.learning?.action === "revert" ? "revert" : "applied",
+      action: r.imported
+        ? r.deletedAt
+          ? "import-removed"
+          : "imported"
+        : r.learning?.action === "revert"
+          ? "revert"
+          : "applied",
+      importedFrom: r.imported?.tool,
       botId: r.scopeKey.kind === "bot" ? r.scopeKey.botId : undefined,
       proposalId: r.learning?.proposalId,
       revisionId: `${r.documentId}:${r.revision}`,

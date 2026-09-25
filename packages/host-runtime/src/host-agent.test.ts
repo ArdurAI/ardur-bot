@@ -1,13 +1,15 @@
-import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import type { HostFrame, HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
 import { decodeHostFrame, encodeHostFrame, HOST_WINDOW } from "@ardurbot/contracts/host-bridge";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BoardRunner } from "./board/runner.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostAgent } from "./host-agent.js";
 import { HostMcpServers } from "./host-mcp.js";
+import { createLocalImportScanner, LocalImportScanner } from "./import/scanner.js";
 import { nativeEnvironment } from "./runtimes/native-process.js";
 
 vi.mock("node:os", async (original) => ({
@@ -42,11 +44,38 @@ vi.mock("./host-environment.js", async (original) => ({
   }),
 }));
 const roots: string[] = [];
+vi.mock("./import/scanner.js", async (original) => ({
+  ...(await original<object>()),
+  createLocalImportScanner: vi.fn(),
+}));
 const agents: HostAgent[] = [];
 afterEach(async () => {
   for (const agent of agents.splice(0)) agent.close();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   vi.restoreAllMocks();
+});
+it("streams board JSON from the owner's runner without provisioning a bot computer", async () => {
+  const stdout = JSON.stringify([{ title: "x".repeat(60_000) }]);
+  const run = vi.spyOn(BoardRunner.prototype, "run").mockResolvedValue({ ok: true, stdout });
+  const provision = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
+  const { agent, frames } = await fixture();
+  const board = {
+    action: "command" as const,
+    actor: "Owner",
+    workspace: { kind: "space" as const },
+    argv: ["ready"],
+  };
+  await agent.receive(request({ op: "board.run", request: board }));
+  await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
+  expect(run).toHaveBeenCalledWith(board, "space", expect.any(AbortSignal));
+  expect(provision).not.toHaveBeenCalled();
+  expect(
+    frames
+      .filter((frame) => frame.type === "stream" && frame.channel === "stdout")
+      .map((frame) => (frame.type === "stream" ? frame.data : ""))
+      .join(""),
+  ).toBe(stdout);
+  expect(frames).toContainEqual(expect.objectContaining({ channel: "result", data: { ok: true } }));
 });
 const request = (operation: HostOperation): HostRequest => ({
   v: 1,
@@ -127,6 +156,41 @@ function fakeRuntime(events: number): AgentRuntime {
   };
 }
 describe("host process operations", () => {
+  it("streams a metadata manifest in bounded frames and reads a scanned item without provisioning a computer", async () => {
+    const { agent, frames, root: home, completed } = await fixture(undefined, true);
+    const folder = path.join(home, ".claude/projects/fixture/memory");
+    await mkdir(folder, { recursive: true });
+    await Promise.all(
+      Array.from({ length: 100 }, (_, index) =>
+        writeFile(path.join(folder, `fact-${index}.md`), "A fixture note."),
+      ),
+    );
+    const scanner = new LocalImportScanner({ home, platform: "darwin" });
+    vi.mocked(createLocalImportScanner).mockResolvedValueOnce(scanner);
+    const provision = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
+    await agent.receive(request({ op: "import.scan" }));
+    await completed("req");
+    expect(frames.at(-1)).toEqual({ v: 1, type: "end", id: "req" });
+    const chunks = frames.flatMap((frame) => (frame.type === "stream" ? [String(frame.data)] : []));
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.length <= 24 * 1024)).toBe(true);
+    const manifest = JSON.parse(chunks.join(""));
+    expect(manifest.items).toHaveLength(100);
+    expect(chunks.join("")).not.toContain("A fixture note.");
+    expect(provision).not.toHaveBeenCalled();
+    frames.splice(0);
+    await agent.receive({
+      ...request({ op: "import.read", scanId: manifest.scanId, itemId: manifest.items[0].id }),
+      id: "read-request",
+    });
+    await completed("read-request");
+    expect(frames.at(-1)).toEqual({ v: 1, type: "end", id: "read-request" });
+    const body = JSON.parse(
+      frames.flatMap((frame) => (frame.type === "stream" ? [String(frame.data)] : [])).join(""),
+    );
+    expect(body.content).toBe("A fixture note.");
+    expect(provision).not.toHaveBeenCalled();
+  });
   it("streams exec stdout, stderr, and exit through the existing provider", async () => {
     vi.spyOn(DesktopSandboxProvider.prototype, "execute").mockImplementation(async function* () {
       yield { type: "stdout", data: "ok" };

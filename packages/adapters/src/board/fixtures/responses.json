@@ -1,0 +1,289 @@
+{
+  "create": {
+    "acceptance_criteria": "Contract tests pass",
+    "created_at": "2026-01-01T00:00:00Z",
+    "created_by": "board-owner",
+    "description": "Define the shared contract",
+    "id": "board-a",
+    "issue_type": "task",
+    "priority": 1,
+    "schema_version": 1,
+    "status": "open",
+    "title": "Prepare schema",
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "show": [
+    {
+      "id": "board-a",
+      "title": "Prepare schema",
+      "description": "Contract verified",
+      "acceptance_criteria": "Contract tests pass",
+      "status": "in_progress",
+      "priority": 2,
+      "issue_type": "task",
+      "assignee": "bot:builder",
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "board-owner",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "started_at": "2026-01-01T00:00:00Z",
+      "metadata": {
+        "ardur_close_when_done": true
+      },
+      "dependents": [
+        {
+          "id": "board-b",
+          "title": "Build view",
+          "status": "open",
+          "priority": 2,
+          "issue_type": "feature",
+          "created_at": "0001-01-01T00:00:00Z",
+          "updated_at": "0001-01-01T00:00:00Z",
+          "dependency_type": "blocks"
+        }
+      ],
+      "comments": [
+        {
+          "id": "comment-1",
+          "issue_id": "board-a",
+          "author": "board-owner",
+          "text": "Contract checked",
+          "created_at": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "dependent_count": 1,
+      "dependency_count": 0,
+      "comment_count": 1
+    }
+  ],
+  "history": null,
+  "dep add": {
+    "depends_on_id": "board-a",
+    "issue_id": "board-b",
+    "schema_version": 1,
+    "status": "added",
+    "type": "blocks"
+  },
+  "ready": [
+    {
+      "id": "board-a",
+      "title": "Prepare schema",
+      "description": "Define the shared contract",
+      "acceptance_criteria": "Contract tests pass",
+      "status": "open",
+      "priority": 1,
+      "issue_type": "task",
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "board-owner",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "dependency_count": 0,
+      "dependent_count": 1,
+      "comment_count": 0
+    }
+  ],
+  "blocked": [
+    {
+      "id": "board-b",
+      "title": "Build view",
+      "status": "open",
+      "priority": 2,
+      "issue_type": "feature",
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "board-owner",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "blocked_by_count": 1,
+      "blocked_by": ["board-a"]
+    }
+  ],
+  "update": [
+    {
+      "id": "board-a",
+      "title": "Prepare schema",
+      "description": "Contract verified",
+      "acceptance_criteria": "Contract tests pass",
+      "status": "in_progress",
+      "priority": 2,
+      "issue_type": "task",
+      "assignee": "bot:builder",
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "board-owner",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "started_at": "2026-01-01T00:00:00Z",
+      "metadata": {
+        "ardur_close_when_done": true
+      }
+    }
+  ],
+  "comments add": {
+    "author": "board-owner",
+    "created_at": "2026-01-01T00:00:00Z",
+    "id": "comment-1",
+    "issue_id": "board-a",
+    "schema_version": 1,
+    "text": "Contract checked"
+  },
+  "graph": [
+    {
+      "Root": {
+        "id": "board-b",
+        "title": "Build view",
+        "status": "open",
+        "priority": 2,
+        "issue_type": "feature",
+        "created_at": "2026-01-01T00:00:00Z",
+        "created_by": "board-owner",
+        "updated_at": "2026-01-01T00:00:00Z"
+      },
+      "Issues": [
+        {
+          "id": "board-b",
+          "title": "Build view",
+          "status": "open",
+          "priority": 2,
+          "issue_type": "feature",
+          "created_at": "2026-01-01T00:00:00Z",
+          "created_by": "board-owner",
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        {
+          "id": "board-a",
+          "title": "Prepare schema",
+          "description": "Contract verified",
+          "acceptance_criteria": "Contract tests pass",
+          "status": "in_progress",
+          "priority": 2,
+          "issue_type": "task",
+          "assignee": "bot:builder",
+          "created_at": "2026-01-01T00:00:00Z",
+          "created_by": "board-owner",
+          "updated_at": "2026-01-01T00:00:00Z",
+          "started_at": "2026-01-01T00:00:00Z",
+          "metadata": {
+            "ardur_close_when_done": true
+          }
+        }
+      ],
+      "Dependencies": [
+        {
+          "issue_id": "board-b",
+          "depends_on_id": "board-a",
+          "type": "blocks",
+          "created_at": "2026-01-01T00:00:00Z",
+          "created_by": "board-owner",
+          "metadata": "{}"
+        }
+      ],
+      "IssueMap": {
+        "board-b": {
+          "id": "board-b",
+          "title": "Build view",
+          "status": "open",
+          "priority": 2,
+          "issue_type": "feature",
+          "created_at": "2026-01-01T00:00:00Z",
+          "created_by": "board-owner",
+          "updated_at": "2026-01-01T00:00:00Z"
+        },
+        "board-a": {
+          "id": "board-a",
+          "title": "Prepare schema",
+          "description": "Contract verified",
+          "acceptance_criteria": "Contract tests pass",
+          "status": "in_progress",
+          "priority": 2,
+          "issue_type": "task",
+          "assignee": "bot:builder",
+          "created_at": "2026-01-01T00:00:00Z",
+          "created_by": "board-owner",
+          "updated_at": "2026-01-01T00:00:00Z",
+          "started_at": "2026-01-01T00:00:00Z",
+          "metadata": {
+            "ardur_close_when_done": true
+          }
+        }
+      },
+      "VarDefs": null,
+      "Phase": "",
+      "Pour": false
+    }
+  ],
+  "close": [
+    {
+      "id": "board-a",
+      "title": "Prepare schema",
+      "description": "Contract verified",
+      "acceptance_criteria": "Contract tests pass",
+      "status": "closed",
+      "priority": 2,
+      "issue_type": "task",
+      "assignee": "bot:builder",
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "board-owner",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "started_at": "2026-01-01T00:00:00Z",
+      "closed_at": "2026-01-01T00:00:00Z",
+      "close_reason": "Verified",
+      "metadata": {
+        "ardur_close_when_done": true
+      }
+    }
+  ],
+  "list": [
+    {
+      "id": "board-b",
+      "title": "Build view",
+      "status": "open",
+      "priority": 2,
+      "issue_type": "feature",
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "board-owner",
+      "updated_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "board-a",
+      "title": "Prepare schema",
+      "description": "Contract verified",
+      "acceptance_criteria": "Contract tests pass",
+      "status": "in_progress",
+      "priority": 2,
+      "issue_type": "task",
+      "assignee": "bot:builder",
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "board-owner",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "started_at": "2026-01-01T00:00:00Z",
+      "metadata": {
+        "ardur_close_when_done": true
+      }
+    }
+  ],
+  "search": [
+    {
+      "id": "board-b",
+      "title": "Build view",
+      "status": "open",
+      "priority": 2,
+      "issue_type": "feature",
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "board-owner",
+      "updated_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "board-a",
+      "title": "Prepare schema",
+      "description": "Contract verified",
+      "acceptance_criteria": "Contract tests pass",
+      "status": "in_progress",
+      "priority": 2,
+      "issue_type": "task",
+      "assignee": "bot:builder",
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": "board-owner",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "started_at": "2026-01-01T00:00:00Z",
+      "metadata": {
+        "ardur_close_when_done": true
+      }
+    }
+  ],
+  "version": "bd version 1.2.2 (fixture)"
+}

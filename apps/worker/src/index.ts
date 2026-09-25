@@ -44,6 +44,7 @@ import {
   PipedreamConnector,
   PostgresRealtimeFanout,
   pipedreamConfigFromEnv,
+  reconcileBoardOutcomes,
   reconcileCloudAgents,
   reconcileComputerUpdates,
   reconcileMemoryDelivery,
@@ -215,6 +216,7 @@ async function main() {
 
   // Includes the proposal-only learning.review handler; all mutations stay in the regular executor.
   const jobHandlers = createBackgroundJobHandlers({
+    dataDir,
     executor,
     prisma,
     sandbox,
@@ -222,6 +224,11 @@ async function main() {
     jobs,
     events,
     workerId: process.pid.toString(),
+    localImport: {
+      apiUrl: process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://127.0.0.1:3100",
+      encryptionKey: resolveEncryptionKey(process.env),
+      packaged: process.env.ARDURBOT_HOST_BRIDGE === "api",
+    },
     runtime,
     secretStore: secrets,
     memoryProviders,
@@ -257,6 +264,7 @@ async function main() {
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
     reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
+    reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir }),
   });
   reconciler.start();
   const chatReceivers = createMessagingReceivers({

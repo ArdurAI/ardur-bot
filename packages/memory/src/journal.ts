@@ -126,6 +126,9 @@ export class JournalDocumentStore implements MemoryDocumentStore {
       content: input.deleted ? "" : input.content,
       author: input.author,
       ...(input.learning ? { learning: input.learning } : {}),
+      ...((input.imported ?? current?.imported)
+        ? { imported: input.imported ?? current?.imported }
+        : {}),
       model: input.model ?? null,
       runId: input.runId ?? null,
       threadId: input.threadId ?? null,
