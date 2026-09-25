@@ -52,7 +52,7 @@ const FILING_LOCK_ID = 4;
 const FILING_LOCK_KEY = "(hashtext($2::text) & -8) | $3::integer";
 const FILING_LOCK_WAIT_MS = 15_000;
 const FILING_LOCK_POLL_MS = 250;
-const FILING_BUSY = "Another write is in progress";
+const FILING_BUSY = "Another write is in progress. Try again in a few seconds.";
 const FILING_RECORD_ATTEMPTS = 3;
 const FILING_RECORD_BACKOFF_MS = 25;
 const HOLLOW_RESERVATION_MS = 15 * 60 * 1000;
@@ -700,10 +700,16 @@ function isFilingPoolTimeout(error: unknown): boolean {
   return message.includes("timeout exceeded when trying to connect");
 }
 
-/** An item created after the reservation, with no filing row, belongs to that reservation. */
+/**
+ * Beads lists created_at as a whole second. A reservation stores milliseconds.
+ * An item counts when its created_at, at whole-second precision, is at or after
+ * the reservation's createdAt truncated to a second. A human item created in that
+ * same second, with no filer and no filing row, is claimed; that is accepted.
+ */
 function createdAfterReservation(itemCreatedAt: string, reservedAt: Date): boolean {
   const created = new Date(itemCreatedAt).getTime();
-  return !Number.isNaN(created) && created > reservedAt.getTime();
+  if (Number.isNaN(created)) return false;
+  return Math.floor(created / 1000) >= Math.floor(reservedAt.getTime() / 1000);
 }
 
 /** A hollow reservation counts only for its first 15 minutes. An attached item always counts. */

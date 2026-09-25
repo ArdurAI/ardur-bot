@@ -7218,6 +7218,10 @@ msgid "This board item changed after it was filed. Review it on the Board."
 msgstr "此看板事项在创建后已有变更。请在看板上查看。"
 
 #: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed, so it was left open for review on the Board."
+msgstr "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。"
+
+#: src/pages/LearningInbox.tsx
 msgid "This board item is still open."
 msgstr "此看板事项仍处于开放状态。"
 

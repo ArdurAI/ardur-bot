@@ -1,8 +1,14 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+const i18n = vi.hoisted(() => ({
+  locale: "en",
+  messages: {} as Record<string, string>,
+}));
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -24,10 +30,17 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("../lib/rpc", () => ({ rpc: { learning: api } }));
 vi.mock("@lingui/react/macro", () => ({
-  Trans: ({ children }: { children: ReactNode }) => children,
+  Trans: ({ children }: { children: ReactNode }) => {
+    if (typeof children !== "string" || i18n.locale === "en") return children;
+    const text = children.replace(/\s+/g, " ").trim();
+    return i18n.messages[text] || children;
+  },
   useLingui: () => ({
-    t: (parts: TemplateStringsArray, ...values: unknown[]) =>
-      parts.reduce((text, part, i) => text + part + (values[i] ?? ""), ""),
+    t: (parts: TemplateStringsArray, ...values: unknown[]) => {
+      const text = parts.reduce((message, part, i) => message + part + (values[i] ?? ""), "");
+      if (i18n.locale === "en") return text;
+      return i18n.messages[text] || text;
+    },
   }),
 }));
 vi.mock("@ardurbot/ui-web", () => ({
@@ -135,11 +148,26 @@ it("opens an older timeline proposal even when it is outside the inbox page", as
   expect(container.textContent).toContain(proposal.proposedContent);
 });
 afterEach(async () => {
+  i18n.locale = "en";
+  i18n.messages = {};
   await act(async () => root.unmount());
   container.remove();
   vi.resetAllMocks();
   vi.unstubAllGlobals();
 });
+
+const LEFT_OPEN =
+  "This board item changed after it was filed, so it was left open for review on the Board.";
+
+function catalogTranslation(locale: string, msgid: string) {
+  const catalog = readFileSync(`apps/web/src/locales/${locale}/messages.po`, "utf8");
+  const key = `msgid ${JSON.stringify(msgid)}\nmsgstr "`;
+  const at = catalog.indexOf(key);
+  if (at < 0) return "";
+  const start = at + key.length;
+  const end = catalog.indexOf('"', start);
+  return catalog.slice(start, end);
+}
 async function click(label: string) {
   const button = [...container.querySelectorAll("button")].find(
     (node) => node.textContent === label,
@@ -313,6 +341,83 @@ it("shows the server sentence when Reject leaves a changed board item open", asy
     "This board item changed after it was filed. Review it on the Board.",
   );
 });
+it.each([
+  [
+    "ru",
+    "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске.",
+  ],
+  ["zh-CN", "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。"],
+] as const)(
+  "renders the left-open Reject sentence from the %s catalog",
+  async (locale, translated) => {
+    const board = {
+      ...proposal,
+      type: "board-item",
+      proposedContent: undefined,
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+      },
+      status: "pending",
+    };
+    api.list.mockResolvedValue({
+      reviews: [],
+      proposals: [board],
+      pendingCount: 1,
+      appliedThisWeek: 0,
+    });
+    api.reject.mockResolvedValue({
+      proposal: { ...board, status: "rejected" },
+      conflict: {
+        before: "",
+        applied: "board-a",
+        current: LEFT_OPEN,
+        expectedRevision: 0,
+        code: "board-left-open",
+      },
+    });
+    await act(async () => root.render(<LearningInbox botId="bot" />));
+    i18n.locale = locale;
+    i18n.messages = { [LEFT_OPEN]: catalogTranslation(locale, LEFT_OPEN) };
+    await click("Reject");
+    expect(container.querySelector("article [role=alert]")?.textContent).toBe(translated);
+  },
+);
+
+it("falls back to the server sentence for an unknown board conflict code", async () => {
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    status: "pending",
+  };
+  const current = "Kept for review on the Board.";
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [board],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  api.reject.mockResolvedValue({
+    proposal: { ...board, status: "rejected" },
+    conflict: { before: "", applied: "board-a", current, expectedRevision: 0, code: "board-other" },
+  });
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  i18n.locale = "ru";
+  i18n.messages = {
+    [LEFT_OPEN]:
+      "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске.",
+  };
+  await click("Reject");
+  expect(container.querySelector("article [role=alert]")?.textContent).toBe(current);
+});
+
 it("disables display-only approval with a sentence and does not fetch evidence until opened", async () => {
   api.list.mockResolvedValue({
     reviews: [],

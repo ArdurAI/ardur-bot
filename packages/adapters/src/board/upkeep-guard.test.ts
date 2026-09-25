@@ -954,6 +954,32 @@ it("holds a space session lock, not a transaction, across a create slower than 1
   }
 });
 
+it("tells the bot to retry when a filing lock stays busy", async () => {
+  vi.useFakeTimers();
+  try {
+    const lock = advisoryPool();
+    lock.held.set("space", 0);
+    const { board } = service({ pool: lock.pool });
+    const outcome = board
+      .withFilingLock(scope, async () => "filed")
+      .then(
+        (value) => value,
+        (error: unknown) => error,
+      );
+    await vi.advanceTimersByTimeAsync(16_000);
+    const error = await outcome;
+    expect(error).toBeInstanceOf(BoardError);
+    expect(error).toMatchObject({
+      problem: {
+        code: "busy",
+        message: "Another write is in progress. Try again in a few seconds.",
+      },
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("waits a bounded time for another filing in the same space, then reports it busy", async () => {
   vi.useFakeTimers();
   try {
@@ -971,7 +997,10 @@ it("waits a bounded time for another filing in the same space, then reports it b
     const error = await outcome;
     expect(error).toBeInstanceOf(BoardError);
     expect(error).toMatchObject({
-      problem: { code: "busy", message: "Another write is in progress" },
+      problem: {
+        code: "busy",
+        message: "Another write is in progress. Try again in a few seconds.",
+      },
     });
     expect(provider.list).not.toHaveBeenCalled();
     expect(provider.create).not.toHaveBeenCalled();
@@ -1287,7 +1316,10 @@ it("waits when the lock pool is exhausted and reports busy only after the deadli
 
     const busy = await scenario("Late");
     const settled = expect(busy.waiting).rejects.toMatchObject({
-      problem: { code: "busy", message: "Another write is in progress" },
+      problem: {
+        code: "busy",
+        message: "Another write is in progress. Try again in a few seconds.",
+      },
     });
     await vi.advanceTimersByTimeAsync(15_000);
     await settled;

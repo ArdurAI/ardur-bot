@@ -5,16 +5,24 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
 const request = vi.hoisted(() => vi.fn());
+const i18n = vi.hoisted(() => ({
+  locale: "en",
+  messages: {} as Record<string, string>,
+  t(text: string, values?: Record<string, string | number>) {
+    const template = this.messages[text] ?? text;
+    if (!values) return template;
+    return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, key: string) =>
+      Object.hasOwn(values, key) ? String(values[key]) : match,
+    );
+  },
+}));
 vi.mock("./api", () => ({ rpc: request }));
 vi.mock("./MemoryControls", () => ({
   MemoryControls: () => null,
   MemoryIntentControls: () => null,
 }));
 vi.mock("./i18n", () => ({
-  useI18n: () => ({
-    t: (text: string, values?: Record<string, string | number>) =>
-      text.replace(/\{(\w+)\}/g, (_, key: string) => String(values?.[key] ?? `{${key}}`)),
-  }),
+  useI18n: () => ({ t: i18n.t.bind(i18n) }),
 }));
 vi.mock("./appearance", () => ({ mobileTokens: () => ({ border: "gray", destructive: "red" }) }));
 vi.mock("./native", () => ({
@@ -59,6 +67,8 @@ import {
   loadLearning,
   loadLearningProposal,
 } from "./learning";
+import { RU_MESSAGES } from "./locales/ru";
+import { ZH_MESSAGES } from "./locales/zh";
 
 const observation = {
   documentId: "doc",
@@ -100,9 +110,14 @@ const proposal = {
   status: "pending",
 };
 afterEach(() => {
+  i18n.locale = "en";
+  i18n.messages = {};
   vi.resetAllMocks();
   vi.unstubAllGlobals();
 });
+
+const LEFT_OPEN =
+  "This board item changed after it was filed, so it was left open for review on the Board.";
 it("uses shared contracts for scoped list, approval and before/after text", async () => {
   request
     .mockResolvedValueOnce({
@@ -345,6 +360,120 @@ it("shows the server sentence when Reject leaves a changed board item open", asy
     expect(container.textContent).toContain(sentence);
     expect(container.textContent).not.toContain(
       "This board item changed after it was filed. Review it on the Board.",
+    );
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it.each([
+  [
+    "ru",
+    RU_MESSAGES,
+    "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске.",
+  ],
+  ["zh-CN", ZH_MESSAGES, "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。"],
+] as const)(
+  "renders the left-open Reject sentence from the %s catalog",
+  async (locale, messages, translated) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const board = {
+      ...proposal,
+      type: "board-item",
+      proposedContent: undefined,
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+      },
+      diff: "+Finish the import follow-up",
+      status: "pending",
+    };
+    request.mockImplementation(async (path: string) => {
+      if (path === "learning/journey") return [];
+      if (path === "learning/settings")
+        return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+      if (path === "learning/reject")
+        return {
+          proposal: { ...board, status: "rejected" },
+          conflict: {
+            before: "",
+            applied: "board-a",
+            current: LEFT_OPEN,
+            expectedRevision: 0,
+            code: "board-left-open",
+          },
+        };
+      return {
+        reviews: [],
+        proposals: [board],
+        pendingCount: 1,
+        appliedThisWeek: 0,
+        botNames: {},
+      };
+    });
+    const container = document.createElement("div"),
+      root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(Learning)));
+      i18n.locale = locale;
+      i18n.messages = messages;
+      await act(async () =>
+        [...container.querySelectorAll("button")].find((b) => b.textContent === "Reject")!.click(),
+      );
+      expect(container.textContent).toContain(translated);
+      expect(container.textContent).not.toContain(LEFT_OPEN);
+      expect(messages[LEFT_OPEN]).toBe(translated);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
+
+it("falls back to the server sentence for an unknown board conflict code", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    diff: "+Finish the import follow-up",
+    status: "pending",
+  };
+  const current = "Kept for review on the Board.";
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/journey") return [];
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    if (path === "learning/reject")
+      return {
+        proposal: { ...board, status: "rejected" },
+        conflict: {
+          before: "",
+          applied: "board-a",
+          current,
+          expectedRevision: 0,
+          code: "board-other",
+        },
+      };
+    return { reviews: [], proposals: [board], pendingCount: 1, appliedThisWeek: 0, botNames: {} };
+  });
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    i18n.locale = "ru";
+    i18n.messages = RU_MESSAGES;
+    await act(async () =>
+      [...container.querySelectorAll("button")].find((b) => b.textContent === "Reject")!.click(),
+    );
+    expect(container.textContent).toContain(current);
+    expect(container.textContent).not.toContain(
+      "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске.",
     );
   } finally {
     await act(async () => root.unmount());

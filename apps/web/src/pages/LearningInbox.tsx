@@ -543,7 +543,12 @@ function LearningCard({
         <div role="alert" className="mt-3 text-sm">
           {proposal.type === "board-item" ? (
             <p>
-              {conflict.current ? (
+              {conflict.code === "board-left-open" ? (
+                <Trans>
+                  This board item changed after it was filed, so it was left open for review on the
+                  Board.
+                </Trans>
+              ) : conflict.current ? (
                 conflict.current
               ) : (
                 <Trans>This board item changed after it was filed. Review it on the Board.</Trans>

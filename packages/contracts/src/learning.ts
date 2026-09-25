@@ -374,6 +374,7 @@ export const LearningActionSchema = z.object({
       applied: z.string(),
       current: z.string(),
       expectedRevision: z.number(),
+      code: z.string().optional(),
     })
     .optional(),
 });

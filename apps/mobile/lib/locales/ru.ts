@@ -1055,4 +1055,6 @@ export const RU_MESSAGES: Record<string, string> = {
     "Эта задача на доске закрыта без выполнения: {reason}. Проверьте её на доске.",
   "This board item changed after it was filed. Review it on the Board.":
     "Эта задача на доске изменилась после создания. Проверьте её на доске.",
+  "This board item changed after it was filed, so it was left open for review on the Board.":
+    "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске.",
 };

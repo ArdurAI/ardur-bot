@@ -7218,6 +7218,10 @@ msgid "This board item changed after it was filed. Review it on the Board."
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed, so it was left open for review on the Board."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
 msgid "This board item is still open."
 msgstr ""
 

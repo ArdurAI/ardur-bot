@@ -169,11 +169,17 @@ an existing open item when the normalized title matches. Filings in one space ru
 at a time under a Postgres session advisory lock held on a separate two-connection
 pool, so the lock never borrows from the shared database pool. The reservation is its
 own short transaction and no Beads command runs inside a database transaction. A filing
-that waits 15 seconds for the lock returns `Another write is in progress`. Once create
-returns an item id, that id stays on the reservation. A failed create that left no item
+that waits 15 seconds for the lock returns `Another write is in progress. Try again in a few seconds.`
+Once create returns an item id, that id stays on the reservation. A failed create that left no item
 removes its reservation. A reservation with no item id stops counting toward either cap
 after 15 minutes, and the same run's retry attaches a matching open item that has no
-filer to that reservation. It redacts that run's secrets from titles,
+filer to that reservation. Learning approval holds the filing lock until the suggestion
+is saved as applied. Reject and Undo read the suggestion status under that lock before
+they close or delete an item. Beads lists `created_at` as a whole second while a
+reservation stores milliseconds. An open item with no filing row counts as created for
+that reservation when its listed time, truncated to a second, is at or after the
+reservation time truncated to a second. A human item created in that same second, with
+no filer and no filing row, is claimed; that is accepted. It redacts that run's secrets from titles,
 descriptions, acceptance criteria, labels, assignees, external references, comments
 and close reasons whether or not the setting is on. Read-only
 grants still reject writes. A stale phone confirmation does not make the board

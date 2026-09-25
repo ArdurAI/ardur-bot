@@ -35,6 +35,7 @@ const BOARD_REJECT_REASON = "Rejected from Learning";
 const BOARD_ITEM_CHANGED = "This board item changed after it was filed. Review it on the Board.";
 const BOARD_REJECT_LEFT =
   "This board item changed after it was filed, so it was left open for review on the Board.";
+const BOARD_LEFT_OPEN = "board-left-open";
 type LearningActionResult = {
   proposal: LearningProposal;
   conflict?: {
@@ -42,6 +43,7 @@ type LearningActionResult = {
     applied: string;
     current: string;
     expectedRevision: number;
+    code?: string;
   };
 };
 export interface LearningApplyDependencies {
@@ -412,7 +414,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     if (!row) throw new IsolationError();
     return row.status;
   }
-  /** Files under the space lock, then releases it before the learning save. The save re-checks pending. */
+  /** Holds the filing lock through the applied save so Reject and Undo cannot pass it. */
   async function fileBoardItem(
     id: string,
     actor: Identity,
@@ -420,27 +422,27 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     secrets: string[],
   ) {
     const service = deps.boardService!;
-    const filed = await service.withFilingLock(actor, async () => {
+    return service.withFilingLock(actor, async () => {
       if ((await proposalStatus(id, actor)) !== "pending")
         throw new Error("This suggestion is no longer pending.");
-      return service.fileLearningProposal(
+      const filed = await service.fileLearningProposal(
         { ...actor, botId: proposal.scope.botId! },
         proposal.id,
         proposal.boardItem!,
         secrets,
       );
-    });
-    return operation(id, actor, async (tx, current, _context, audit) => {
-      if (current.status !== "pending") throw new Error("This suggestion is no longer pending.");
-      current.appliedBoardItem = {
-        workspaceId: filed.workspaceId,
-        itemId: filed.item.id,
-        updatedAt: filed.item.updatedAt,
-        duplicate: filed.duplicate,
-      };
-      current.status = "applied";
-      await audit("approve");
-      return { proposal: await save(tx, current, { appliedAt: new Date() }) };
+      return operation(id, actor, async (tx, current, _context, audit) => {
+        if (current.status !== "pending") throw new Error("This suggestion is no longer pending.");
+        current.appliedBoardItem = {
+          workspaceId: filed.workspaceId,
+          itemId: filed.item.id,
+          updatedAt: filed.item.updatedAt,
+          duplicate: filed.duplicate,
+        };
+        current.status = "applied";
+        await audit("approve");
+        return { proposal: await save(tx, current, { appliedAt: new Date() }) };
+      });
     });
   }
   /** Closes the filed item only if nobody changed it since approval. */
@@ -754,10 +756,12 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         select: { body: true },
       });
       const body = row?.body as { type?: unknown; scope?: { botId?: string } } | undefined;
-      // An approval that already passed its pending check finishes before this reject.
+      // Approval holds the filing lock through its save, so this read sees that result.
       if (body?.type !== "board-item" || !deps.boardService) return reject();
       const boardService = deps.boardService;
       return boardService.withFilingLock(identity, async () => {
+        if ((await proposalStatus(id, identity)) !== "pending")
+          throw new Error("This suggestion is no longer pending.");
         let leftOpen: { itemId: string; sentence: string } | undefined;
         const filing = await deps.prisma.botBoardFiling.findFirst({
           where: { spaceId: identity.spaceId, learningProposalId: id },
@@ -796,6 +800,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
                 applied: leftOpen.itemId,
                 current: leftOpen.sentence,
                 expectedRevision: 0,
+                code: BOARD_LEFT_OPEN,
               },
             }
           : result;

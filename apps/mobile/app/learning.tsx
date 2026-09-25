@@ -355,10 +355,14 @@ export default function Learning() {
                         <View>
                           <Text style={styles.error}>
                             {proposal.type === "board-item"
-                              ? conflict.current ||
-                                t(
-                                  "This board item changed after it was filed. Review it on the Board.",
-                                )
+                              ? conflict.code === "board-left-open"
+                                ? t(
+                                    "This board item changed after it was filed, so it was left open for review on the Board.",
+                                  )
+                                : conflict.current ||
+                                  t(
+                                    "This board item changed after it was filed. Review it on the Board.",
+                                  )
                               : t(
                                   "Later edits overlap this change. Review both versions in History.",
                                 )}

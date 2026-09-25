@@ -1107,9 +1107,11 @@ it("closes an unchanged filed item on Reject, leaves a changed item, and never c
   expect(changed.close).not.toHaveBeenCalled();
   expect(changed.f.filings).toHaveLength(1);
   expect(left.proposal.status).toBe("rejected");
-  expect(left.conflict?.current).toBe(
-    "This board item changed after it was filed, so it was left open for review on the Board.",
-  );
+  expect(left.conflict).toMatchObject({
+    code: "board-left-open",
+    current:
+      "This board item changed after it was filed, so it was left open for review on the Board.",
+  });
 
   const reused = boardFixture({ duplicate: true });
   const linked = await reused.proposal();
@@ -1332,7 +1334,332 @@ it("drops an undone filing so the Work panel and Overview do not count it as clo
   expect(panelCounts(f.filings)).toEqual({ filed: 0, done: 0, open: 0, other: 0 });
 });
 
-it("releases the filing lock before the learning save", async () => {
+function deferred() {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+async function flushMicrotasks() {
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
+}
+
+function racingBoard(f: ReturnType<typeof fixture>) {
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    title: "Finish the import follow-up",
+  };
+  const close = vi.fn(async () => [{ ...item, status: "closed" }]);
+  const show = vi.fn(async () => item);
+  const create = vi.fn(async () => item);
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => []),
+    create,
+    show,
+    close,
+  } as never);
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  return { item, close, show, create, apply };
+}
+
+async function pendingBoard(f: ReturnType<typeof fixture>) {
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+  });
+  return proposal;
+}
+
+it("owns a Beads item listed at the reservation's whole second and reuses the previous second", async () => {
+  const reservedAt = new Date("2026-09-24T21:16:44.171Z");
+  const f = fixture();
+  const created = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-24T21:16:44Z",
+    updatedAt: "2026-09-24T21:16:44Z",
+    title: "Finish the import follow-up",
+  };
+  const close = vi.fn(async () => [{ ...created, status: "closed" }]);
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => [created]),
+    create: vi.fn(async () => created),
+    show: vi.fn(async () => created),
+    close,
+  } as never);
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  f.filings.push({
+    id: "reservation",
+    ...actor,
+    botId: "bot",
+    workspaceId: null,
+    itemId: null,
+    learningProposalId: proposal.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+    createdAt: reservedAt,
+  });
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-a",
+    duplicate: false,
+  });
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", learningProposalId: proposal.id, reused: false }),
+  ]);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+
+  const older = fixture();
+  const previous = {
+    id: "board-b",
+    status: "open",
+    createdAt: "2026-09-24T21:16:43Z",
+    updatedAt: "2026-09-24T21:16:43Z",
+    title: "Finish the import follow-up",
+  };
+  const olderClose = vi.fn(async () => [{ ...previous, status: "closed" }]);
+  const olderBoard = new BoardService({ prisma: older.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(olderBoard, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(olderBoard, "provider").mockResolvedValue({
+    list: vi.fn(async () => [previous]),
+    create: vi.fn(async () => previous),
+    show: vi.fn(async () => previous),
+    close: olderClose,
+  } as never);
+  const olderApply = createLearningApplyService({ ...older.deps, boardService: olderBoard });
+  const earlier = await older.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  older.filings.push({
+    id: "reservation",
+    ...actor,
+    botId: "bot",
+    workspaceId: null,
+    itemId: null,
+    learningProposalId: earlier.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+    createdAt: reservedAt,
+  });
+  const reused = await olderApply.approve(earlier.id, actor);
+  expect(reused.proposal.appliedBoardItem).toMatchObject({ duplicate: true });
+  expect(older.filings.some((row) => row.reused === true && row.itemId === "board-b")).toBe(true);
+  await olderApply.revert(earlier.id, actor);
+  expect(olderClose).not.toHaveBeenCalled();
+});
+
+it("stops a racing Reject before it closes an item approval still holds", async () => {
+  const f = fixture();
+  const { close, create, apply } = racingBoard(f);
+  const proposal = await pendingBoard(f);
+  const gate = deferred();
+  let saves = 0;
+  const original = f.deps.prisma.$transaction.bind(f.deps.prisma);
+  f.deps.prisma.$transaction = (async (fn: (tx: unknown) => Promise<unknown>) => {
+    saves += 1;
+    if (saves === 2) {
+      await gate.promise;
+    }
+    return original(fn);
+  }) as typeof f.deps.prisma.$transaction;
+  const approved = apply.approve(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  const rejected = apply.reject(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  expect(close).not.toHaveBeenCalled();
+  gate.resolve();
+  const approveResult = await approved;
+  const rejectResult = await rejected;
+  expect(approveResult.ok).toBe(true);
+  if (approveResult.ok) expect(approveResult.value.proposal.status).toBe("applied");
+  expect(rejectResult.ok).toBe(false);
+  if (!rejectResult.ok) {
+    expect(rejectResult.error).toBeInstanceOf(Error);
+    expect((rejectResult.error as Error).message).toBe("This suggestion is no longer pending.");
+  }
+  expect(close).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", learningProposalId: proposal.id, reused: false }),
+  ]);
+  expect(f.proposals[0]?.status).toBe("applied");
+});
+
+it("stops a racing approval before it files an item Reject already settled", async () => {
+  const f = fixture();
+  const { close, create, show, apply } = racingBoard(f);
+  const proposal = await pendingBoard(f);
+  const gate = deferred();
+  show.mockImplementationOnce(async () => {
+    await gate.promise;
+    return {
+      id: "board-a",
+      status: "open",
+      createdAt: "2026-09-25T12:00:00.000Z",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      title: "Finish the import follow-up",
+    };
+  });
+  const rejected = apply.reject(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  const approved = apply.approve(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  expect(create).not.toHaveBeenCalled();
+  gate.resolve();
+  const rejectResult = await rejected;
+  const approveResult = await approved;
+  expect(rejectResult.ok).toBe(true);
+  if (rejectResult.ok) expect(rejectResult.value.proposal.status).toBe("rejected");
+  expect(approveResult.ok).toBe(false);
+  if (!approveResult.ok) {
+    expect((approveResult.error as Error).message).toBe("This suggestion is no longer pending.");
+  }
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings).toEqual([]);
+  expect(f.proposals[0]?.status).toBe("rejected");
+});
+
+it("stops a racing Undo before it closes an item approval still holds, then undoes once approval finishes", async () => {
+  const f = fixture();
+  const { close, apply } = racingBoard(f);
+  const proposal = await pendingBoard(f);
+  const gate = deferred();
+  const parked = deferred();
+  let saves = 0;
+  const original = f.deps.prisma.$transaction.bind(f.deps.prisma);
+  f.deps.prisma.$transaction = (async (fn: (tx: unknown) => Promise<unknown>) => {
+    saves += 1;
+    if (saves === 2) {
+      const result = await original(fn);
+      parked.resolve();
+      await gate.promise;
+      return result;
+    }
+    return original(fn);
+  }) as typeof f.deps.prisma.$transaction;
+  const approved = apply.approve(proposal.id, actor);
+  await parked.promise;
+  const undone = apply.revert(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  for (let i = 0; i < 500 && close.mock.calls.length === 0; i += 1) await Promise.resolve();
+  expect(close).not.toHaveBeenCalled();
+  expect(f.filings).toHaveLength(1);
+  gate.resolve();
+  await approved;
+  const undoResult = await undone;
+  expect(undoResult.ok).toBe(true);
+  if (undoResult.ok) expect(undoResult.value.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  expect(f.filings).toEqual([]);
+  expect(f.proposals[0]?.status).toBe("reverted");
+});
+
+it("stops a racing approval before it files an item Undo already settled", async () => {
+  const f = fixture();
+  const { close, create, show, apply } = racingBoard(f);
+  const proposal = await pendingBoard(f);
+  await apply.approve(proposal.id, actor);
+  close.mockClear();
+  create.mockClear();
+  const gate = deferred();
+  show.mockImplementationOnce(async () => {
+    await gate.promise;
+    return {
+      id: "board-a",
+      status: "open",
+      createdAt: "2026-09-25T12:00:00.000Z",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      title: "Finish the import follow-up",
+    };
+  });
+  const undone = apply.revert(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  const approved = apply.approve(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  expect(close).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings).toHaveLength(1);
+  gate.resolve();
+  const undoResult = await undone;
+  const approveResult = await approved;
+  expect(undoResult.ok).toBe(true);
+  if (undoResult.ok) expect(undoResult.value.proposal.status).toBe("reverted");
+  expect(approveResult.ok).toBe(false);
+  if (!approveResult.ok) {
+    expect((approveResult.error as Error).message).toBe("This suggestion is no longer pending.");
+  }
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings).toEqual([]);
+  expect(f.proposals[0]?.status).toBe("reverted");
+});
+
+it("holds the filing lock through the learning save", async () => {
   const state = { open: 0 };
   const held = new Map<string, number>();
   let clients = 0;
@@ -1397,6 +1724,6 @@ it("releases the filing lock before the learning save", async () => {
     },
   });
   await apply.approve(proposal.id, actor);
-  expect(opens.at(-1)).toBe(0);
-  expect(opens).toContain(1);
+  expect(opens.at(-1)).toBe(1);
+  expect(opens).toContain(0);
 });

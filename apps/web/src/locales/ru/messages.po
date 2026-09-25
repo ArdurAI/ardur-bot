@@ -7218,6 +7218,10 @@ msgid "This board item changed after it was filed. Review it on the Board."
 msgstr "Эта задача на доске изменилась после создания. Проверьте её на доске."
 
 #: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed, so it was left open for review on the Board."
+msgstr "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске."
+
+#: src/pages/LearningInbox.tsx
 msgid "This board item is still open."
 msgstr "Эта задача на доске всё ещё открыта."
 
