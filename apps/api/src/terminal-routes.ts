@@ -154,7 +154,7 @@ export function createTerminalRoutes(deps: {
               authSessionId,
               computer: toComputerRef(computer),
               context: {
-                operationId: "terminal.open",
+                operationId: "terminal-open",
                 traceId: "terminal.open",
                 userId: actor.userId,
                 spaceId: actor.spaceId,

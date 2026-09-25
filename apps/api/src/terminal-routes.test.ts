@@ -1,6 +1,9 @@
 import type { SandboxProvider, TerminalProvider } from "@ardurbot/adapter-kit";
+import { ComputerConnections, ConnectedSandboxProvider } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { TERMINAL_ENDED } from "@ardurbot/contracts";
+import type { HostOperation } from "@ardurbot/contracts/host-bridge";
+import { encodeHostFrame } from "@ardurbot/contracts/host-bridge";
 import type * as Db from "@ardurbot/db";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -93,6 +96,108 @@ function fixture(defaultTerminal = true) {
   return { actor, computer, provider, db, routes, resolveCommandCwd };
 }
 describe("terminal authorization", () => {
+  it.each(["ssh", "remote-docker"])(
+    "serializes %s terminal requests through the host bridge",
+    async (kind) => {
+      vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+      const f = fixture(false);
+      f.computer.kind = kind;
+      f.computer.connectionId = "saved-connection";
+      const root = kind === "ssh" ? "/remote/computers/home" : "/home/ardurbot";
+      const requests: HostOperation[] = [];
+      let finishOutput = () => {};
+      const output = new Promise<void>((resolve) => {
+        finishOutput = resolve;
+      });
+      const connections = new ComputerConnections(
+        {
+          connection: {
+            findFirst: async () => ({
+              metadata:
+                kind === "ssh"
+                  ? { engine: "ssh", ssh: { host: "computer.invalid", user: "runner" } }
+                  : { engine: "docker", endpoint: "ssh://runner@computer.invalid" },
+            }),
+          },
+        } as unknown as PrismaClient,
+        { load: () => "" },
+        {
+          hostClient: {
+            health: async () => null,
+            result: async () => undefined,
+            async *request(operation) {
+              encodeHostFrame({
+                v: 1,
+                type: "request",
+                id: "request",
+                scope: {
+                  userId: "user",
+                  spaceId: "space",
+                  botId: "bot",
+                  runId: "terminal",
+                },
+                operation,
+              });
+              requests.push(operation);
+              if (operation.op !== "computer.remote.call") throw new Error("Unexpected operation");
+              const action = operation.action;
+              if (action.type === "terminal.output") {
+                await output;
+                return;
+              }
+              if (action.type === "terminal.close") {
+                finishOutput();
+                return;
+              }
+              yield {
+                v: 1,
+                type: "stream",
+                id: "request",
+                seq: 0,
+                channel: "result",
+                data:
+                  action.type === "cwd"
+                    ? `${root}/${action.cwd}`
+                    : {
+                        id: "11111111-1111-4111-8111-111111111111",
+                        generation: "container",
+                      },
+              };
+            },
+          },
+        },
+      );
+      const routes = createTerminalRoutes({
+        prisma: f.db as unknown as PrismaClient,
+        sandbox: new ConnectedSandboxProvider(
+          { describe: () => ({ capabilities: { interactiveTerminal: false } }) } as SandboxProvider,
+          connections,
+        ),
+        trustedOrigin: (origin) => origin === "https://app.example",
+      });
+      const input = { botId: "bot", computerId: "computer" };
+      let sessionId: string | undefined;
+      try {
+        const ticket = await routes.ticket(f.actor, input, "auth", "https://app.example");
+        sessionId = ticket.sessionId;
+        expect(requests).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              op: "computer.remote.call",
+              action: expect.objectContaining({
+                type: "terminal.open",
+                workingRoot: `${root}/bots/bot`,
+              }),
+            }),
+          ]),
+        );
+      } finally {
+        finishOutput();
+        if (sessionId) await routes.close(f.actor, { ...input, sessionId });
+        vi.unstubAllEnvs();
+      }
+    },
+  );
   it.each(["ssh", "remote-docker"])(
     "opens and authorizes %s terminals at the resolved root",
     async (kind) => {
