@@ -23,6 +23,7 @@ const actor: Actor = {
 };
 const roots: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 type Row = Record<string, unknown>;
@@ -144,6 +145,172 @@ async function fixture() {
   };
 }
 describe("customization service boundaries", () => {
+  it("isolates plugin preview capacity by user and space and expires pending previews", async () => {
+    const f = await fixture();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+    const input = { name: "review-kit", catalogId: "review-kit" };
+    const pending = await Promise.all(
+      Array.from({ length: 16 }, () => f.plugins.preview(actor, input)),
+    );
+    await expect(f.plugins.preview(actor, input)).rejects.toThrow("pending plugin install");
+    for (const owner of [
+      { ...actor, userId: "other" },
+      { ...actor, spaceId: "other" },
+    ]) {
+      await expect(f.plugins.preview(owner, input)).resolves.toHaveProperty("id");
+      expect(() => f.plugins.files(owner, pending[0]!.id)).toThrow();
+    }
+    clock.mockReturnValue(15 * 60_000);
+    expect(() => f.plugins.files(actor, pending[0]!.id)).toThrow();
+    await expect(f.plugins.preview(actor, input)).resolves.toHaveProperty("id");
+  });
+  it("isolates MCP preview capacity by user and space and expires pending previews", async () => {
+    const f = await fixture();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+    const config = await f.mcp.config(actor);
+    const pending = await Promise.all(
+      Array.from({ length: 128 }, () => f.mcp.preview(actor, config)),
+    );
+    await expect(f.mcp.preview(actor, config)).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    for (const owner of [
+      { ...actor, userId: "other" },
+      { ...actor, spaceId: "other" },
+    ]) {
+      await expect(f.mcp.preview(owner, config)).resolves.toHaveProperty("id");
+      await expect(f.mcp.apply(owner, pending[0]!.id)).rejects.toThrow();
+    }
+    clock.mockReturnValue(10 * 60_000);
+    await expect(f.mcp.apply(actor, pending[0]!.id)).rejects.toThrow();
+    await expect(f.mcp.preview(actor, config)).resolves.toHaveProperty("id");
+  });
+  it("rejects stale MCP applies before stopping any running host server", async () => {
+    const f = await fixture();
+    f.tables.mcpServer!.push({
+      ...actor,
+      id: "running",
+      slug: "running",
+      name: "Running",
+      description: "",
+      transport: "stdio",
+      placement: "host",
+      revision: 1,
+      enabled: true,
+      command: "node",
+      args: [],
+      secretId: null,
+      managedBy: null,
+      catalogId: null,
+    });
+    const stop = vi.fn(async () => ({}));
+    f.deps.hostBridge = {
+      status: vi.fn(async () => ({ connected: true })),
+      result: stop,
+    } as unknown as RouterDeps["hostBridge"];
+    const preview = await f.mcp.preview(actor, await f.mcp.config(actor));
+    f.tables.mcpServer![0]!.revision = 2;
+    await expect(f.mcp.apply(actor, preview.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(stop).not.toHaveBeenCalled();
+    expect(f.tables.mcpServer![0]).toMatchObject({ enabled: true, revision: 2 });
+    const fresh = await f.mcp.preview(actor, await f.mcp.config(actor));
+    stop.mockImplementationOnce(async () => {
+      expect(f.deps.prisma.$executeRaw).toHaveBeenCalled();
+      expect(f.tables.mcpServer![0]!.revision).toBe(2);
+      return {};
+    });
+    await f.mcp.apply(actor, fresh.id);
+    expect(stop).toHaveBeenCalledExactlyOnceWith(
+      { op: "mcp.stop", serverId: "running", revision: 2 },
+      expect.objectContaining({ userId: actor.userId, spaceId: actor.spaceId }),
+    );
+  });
+  it("reimports a removed bundle while preserving a disabled skill that was not removed", async () => {
+    const f = await fixture();
+    const bundle = (body: string) => [
+      {
+        path: "SKILL.md",
+        bytes: Buffer.from(`---\nname: Fixture\ndescription: Recipe\n---\n${body}`),
+      },
+    ];
+    const [first] = await f.skills.import(actor, bundle("Original."));
+    await f.skills.setEnabled(actor, { id: first!.id, kind: "file", enabled: false });
+    await expect(f.skills.import(actor, bundle("Disabled is still owned."))).rejects.toThrow(
+      "already exists",
+    );
+    await f.skills.remove(actor, { id: first!.id, kind: "file" });
+    expect(await f.skills.list(actor)).toEqual([]);
+    const [again] = await f.skills.import(actor, bundle("Corrected."));
+    expect(again).toMatchObject({ name: "Fixture", enabled: true });
+    expect((await f.skills.get(actor, { id: again!.id, kind: "file" })).content).toContain(
+      "Corrected.",
+    );
+    expect(f.tables.agentSkill).toHaveLength(1);
+    const owners = await readdir(path.join(f.deps.dataDir, "skill-bundles"));
+    expect(await readdir(path.join(f.deps.dataDir, "skill-bundles", owners[0]!))).toHaveLength(1);
+  });
+  it("installs skill-only packaged plugins without pairing a host", async () => {
+    const f = await fixture();
+    const owner = { ...actor, isDeploymentOwner: false };
+    const preview = await f.plugins.preview(owner, { name: "review-kit", catalogId: "review-kit" });
+    await expect(
+      f.plugins.install(owner, preview.id, path.join(f.deps.dataDir, "native"), "host"),
+    ).resolves.toMatchObject({ state: "installed" });
+    expect(f.tables.agentSkill).toHaveLength(2);
+    expect(f.tables.mcpServer).toHaveLength(0);
+  });
+  it.each([false, true])(
+    "requires host pairing only when a packaged plugin has local commands: %s",
+    async (local) => {
+      const f = await fixture();
+      const files = [
+        {
+          path: "marketplace.json",
+          bytes: Buffer.from(
+            JSON.stringify({
+              name: "fixture-market",
+              owner: { name: "Fixture publisher" },
+              plugins: [{ name: "fixture", source: "./plugin" }],
+            }),
+          ),
+        },
+        {
+          path: "plugin/.claude-plugin/plugin.json",
+          bytes: Buffer.from(
+            JSON.stringify({
+              name: "fixture",
+              mcpServers: {
+                remote: { type: "http", url: "https://example.test/mcp" },
+                ...(local ? { local: { command: "node", args: ["server.js"] } } : {}),
+              },
+            }),
+          ),
+        },
+      ];
+      const marketplace = await f.plugins.addMarketplace(actor, { files });
+      const preview = await f.plugins.preview(actor, {
+        name: "fixture",
+        marketplaceId: marketplace.id,
+      });
+      const install = f.plugins.install(
+        actor,
+        preview.id,
+        path.join(f.deps.dataDir, "native"),
+        "host",
+      );
+      if (local) {
+        await expect(install).rejects.toThrow("Connect this computer");
+        expect(f.tables.pluginInstall).toEqual([]);
+      } else {
+        await expect(install).resolves.toMatchObject({ state: "installed" });
+        expect(f.tables.mcpServer).toEqual([
+          expect.objectContaining({
+            placement: "worker",
+            transport: "streamable_http",
+            enabled: true,
+          }),
+        ]);
+      }
+    },
+  );
   it("stores managed launch values encrypted and preserves a scoped registration across retries", async () => {
     const f = await fixture();
     const input = ManagedServerInputSchema.parse({

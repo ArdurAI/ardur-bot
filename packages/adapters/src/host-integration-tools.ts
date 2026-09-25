@@ -1,5 +1,12 @@
-import type { AdapterContext, ConnectorEvent, SandboxProvider } from "@ardurbot/adapter-kit";
+import type {
+  AdapterContext,
+  ComputerRef,
+  ConnectorEvent,
+  SandboxProvider,
+} from "@ardurbot/adapter-kit";
+import type { HostCommandApproval } from "@ardurbot/contracts";
 import {
+  canonicalDispatchJson,
   HostIntegrationSchema,
   hostIntegrationCommand,
   IntegrationManifestSchema,
@@ -36,6 +43,38 @@ export async function hostIntegrationComputer(prisma: PrismaClient, context: Ada
   return bot?.computer?.kind === "desktop" && bot.computer.providerRef ? bot.computer : null;
 }
 
+export async function prepareHostCommandApproval(
+  prisma: PrismaClient,
+  sandbox: SandboxProvider | undefined,
+  server: McpServer,
+  args: Record<string, unknown>,
+  context: AdapterContext,
+): Promise<{ approval: HostCommandApproval; computer: ComputerRef }> {
+  const computer = await hostIntegrationComputer(prisma, context);
+  if (!computer || !sandbox) throw new Error("This integration requires a bot on This computer.");
+  const argv = hostIntegrationCommand(server.catalogId!, args);
+  const manifest = IntegrationManifestSchema.parse(server.manifest);
+  if (!manifest.account) throw new Error("Reconnect this integration on this computer.");
+  const cwd = await sandbox.resolveCommandCwd?.(toComputerRef(computer), undefined, context);
+  if (!cwd) throw new Error("The command's working directory is unavailable. Try again.");
+  const approval: HostCommandApproval = {
+    id: HostIntegrationSchema.shape.id.parse(server.catalogId),
+    argv,
+    identity: manifest.account,
+    workspace: manifest.workspace ?? null,
+    cwd,
+    computerId: computer.id,
+  };
+  return { approval, computer: toComputerRef(computer) };
+}
+
+export function hostCommandApprovalMatches(
+  approved: HostCommandApproval | undefined,
+  current: HostCommandApproval,
+): boolean {
+  return Boolean(approved && canonicalDispatchJson(approved) === canonicalDispatchJson(current));
+}
+
 export async function* executeHostIntegration(
   prisma: PrismaClient,
   sandbox: SandboxProvider | undefined,
@@ -44,27 +83,31 @@ export async function* executeHostIntegration(
   args: Record<string, unknown>,
   context: AdapterContext,
 ): AsyncIterable<ConnectorEvent> {
-  const computer = await hostIntegrationComputer(prisma, context);
-  if (!computer || !sandbox) throw new Error("This integration requires a bot on This computer.");
+  if (!sandbox) throw new Error("This integration requires a bot on This computer.");
   if (tool === "get_identity") {
+    if (!(await hostIntegrationComputer(prisma, context)))
+      throw new Error("This integration requires a bot on This computer.");
     const manifest = server.manifest as { account?: string; workspace?: string };
     yield { type: "result", data: { account: manifest.account, workspace: manifest.workspace } };
     return;
   }
   if (tool !== "execute_command") throw new Error("Unknown host integration tool.");
-  const argv = hostIntegrationCommand(server.catalogId!, args);
-  const manifest = IntegrationManifestSchema.parse(server.manifest);
-  if (!manifest.account) throw new Error("Reconnect this integration on this computer.");
-  const hostIntegration = {
-    id: HostIntegrationSchema.shape.id.parse(server.catalogId),
-    identity: manifest.account,
-    workspace: manifest.workspace ?? null,
-  };
+  const { approval: current, computer } = await prepareHostCommandApproval(
+    prisma,
+    sandbox,
+    server,
+    args,
+    context,
+  );
+  if (!hostCommandApprovalMatches(context.hostCommandApproval, current))
+    throw new Error("This command changed or has no approval. Review it again.");
+  const { argv, cwd, id, identity, workspace } = current;
+  const hostIntegration = { id, identity, workspace };
   let output = "";
   let code: number | undefined;
   for await (const event of sandbox.execute(
-    toComputerRef(computer),
-    { argv, timeoutMs: 60_000, hostIntegration },
+    computer,
+    { argv, cwd, timeoutMs: 60_000, hostIntegration },
     context,
   )) {
     if (event.type === "exit") code = event.code;

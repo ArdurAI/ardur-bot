@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { BotAvatar } from "../components/bot-avatar";
 import { ComputerModePicker } from "../components/computer-mode-picker";
+import { ContextSection } from "../components/context-section";
 import { RuntimeSettings } from "../components/runtime-settings";
 import type { MobileBot, MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
@@ -363,6 +364,7 @@ export default function BotSettingsScreen() {
           ) : null}
         </Pressable>
 
+        {botId ? <ContextSection botId={botId} /> : null}
         {bot ? (
           <View style={{ alignItems: "center", marginBottom: 24 }}>
             <BotAvatar color={color} identity={bot.id} size={64} status={bot.status} />

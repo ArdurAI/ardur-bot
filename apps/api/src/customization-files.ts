@@ -1,7 +1,7 @@
 import type { BundleUploadSchema } from "@ardurbot/contracts";
+import type { BundleFile } from "@ardurbot/contracts/bundles/files";
+import { validateBundleFiles } from "@ardurbot/contracts/bundles/files";
 import type * as z from "zod";
-import type { BundleFile } from "../../desktop/src/extensions/files.js";
-import { validateBundleFiles } from "../../desktop/src/extensions/files.js";
 
 /** Uploads use the same bounded path validation as native bundle installation. */
 export function uploadedBundle(files: z.infer<typeof BundleUploadSchema>): BundleFile[] {

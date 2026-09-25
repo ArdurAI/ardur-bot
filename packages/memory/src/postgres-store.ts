@@ -47,9 +47,17 @@ export class PostgresMemoryJournal implements MemoryJournal {
       const scope: DocumentScope =
         row.scope === "space-shared"
           ? { kind: "space-shared", spaceId: row.spaceId }
-          : row.scope === "bot"
-            ? { kind: "bot", spaceId: row.spaceId, userId: row.userId, botId: row.botId! }
-            : { kind: "user", spaceId: row.spaceId, userId: row.userId };
+          : row.scope === "group"
+            ? {
+                kind: "group",
+                spaceId: row.spaceId,
+                userId: row.userId,
+                botId: row.botId!,
+                groupId: row.scopeKey!.slice(row.botId!.length + 1),
+              }
+            : row.scope === "bot"
+              ? { kind: "bot", spaceId: row.spaceId, userId: row.userId, botId: row.botId! }
+              : { kind: "user", spaceId: row.spaceId, userId: row.userId };
       return {
         id: row.id,
         delivery: {
@@ -99,7 +107,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
           head.scopeKey.kind === "space-shared"
             ? (existing?.userId ?? access.userId)
             : head.scopeKey.userId,
-        botId: head.scopeKey.kind === "bot" ? head.scopeKey.botId : null,
+        botId: "botId" in head.scopeKey ? head.scopeKey.botId : null,
         scope: head.scopeKey.kind,
         scopeKey: scopeKey(head.scopeKey),
         path: head.path,

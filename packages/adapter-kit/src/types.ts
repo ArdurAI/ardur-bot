@@ -7,9 +7,11 @@ import type {
   RuntimeProblem,
   SandboxKind,
 } from "@ardurbot/contracts";
-import type { HostIntegrationId } from "@ardurbot/contracts/host-integrations";
+import type { HostCommandApproval, HostIntegrationId } from "@ardurbot/contracts/host-integrations";
 
 export interface AdapterContext {
+  /** Supplied by the executor only after claiming the exact approved host command. */
+  hostCommandApproval?: HostCommandApproval;
   toolAccessMode?: "when-needed" | "all";
   operationId: string;
   traceId: string;
@@ -266,6 +268,7 @@ export interface MemoryCommitRequest {
   botId?: string;
   path: string;
   content: string;
+  expectedRevision?: number;
   sourceRunId?: string;
   sourceThreadId?: string;
 }
@@ -419,6 +422,7 @@ export interface AgentRunRequest {
   sourceMessageId?: string | null;
   prompt: string;
   instructions: string;
+  stablePrefix?: string;
   history: Array<{ id?: string; role: "user" | "assistant" | "system"; content: string }>;
   currentTurnImages?: AgentInputImage[];
   /** Explicit model-only mode; an empty array retains legacy built-in tools. */
@@ -502,6 +506,8 @@ export type AgentRuntimeEvent =
   | { type: "takeover"; reason: string }
   | {
       type: "usage";
+      reported?: boolean;
+      cachedTokens?: number;
       delegationId?: string;
       inputTokens: number;
       outputTokens: number;
@@ -564,6 +570,7 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "briefs.maintain": { runId?: string };
   "learning.curate": { spaceId?: string; requestedBy?: string; requestId?: string };
   "learning.review": {
     runId: string;

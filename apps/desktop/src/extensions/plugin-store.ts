@@ -86,12 +86,15 @@ export class NativePluginStore {
         await this.write([...rows, entry]);
       } catch (error) {
         entry.state = "removing";
-        await this.write([...rows, entry]);
-        // The request may have committed before a connection failed. Query ownership before cleanup.
-        if (!(await this.registry.installed()).some((row) => row.id === entry.id)) throw error;
-        await this.registry.uninstall(entry.id);
-        await rm(path.join(this.directory, entry.id), { recursive: true, force: true });
-        await this.write(rows);
+        try {
+          await this.write([...rows, entry]);
+          // A failed request may have committed. Retain the journal if remote cleanup fails.
+          if ((await this.registry.installed()).some((row) => row.id === entry.id))
+            await this.registry.uninstall(entry.id);
+          await this.write(rows);
+        } finally {
+          await rm(path.join(this.directory, entry.id), { recursive: true, force: true });
+        }
         throw error;
       }
     });
@@ -119,7 +122,7 @@ export class NativePluginStore {
       for (const row of rows) {
         if (
           installed.get(row.id) !== "installed" &&
-          row.state !== "installed" &&
+          row.state === "installing" &&
           this.now() - row.createdAt < 15 * 60_000
         ) {
           retained.push(row);
