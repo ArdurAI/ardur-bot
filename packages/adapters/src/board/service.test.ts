@@ -98,6 +98,84 @@ it("prevents close and status-update bypasses when the dispatched item stays a h
   expect(provider.close).not.toHaveBeenCalled();
   expect(provider.update).not.toHaveBeenCalled();
 });
+it("shows a folder-dispatched item when the tool omits its workspace", async () => {
+  const { prisma, service, workspace } = fixture();
+  prisma.run.findFirst.mockResolvedValue({ boardWorkspaceId: "folder" });
+  prisma.boardWorkspace.findFirst.mockImplementation(async (input?: unknown) => {
+    const { where } = input as { where: { id?: string } };
+    return where.id === "folder"
+      ? { ...workspace, id: "folder", kind: "folder", path: "/fixture/project" }
+      : workspace;
+  });
+  const transport = vi.spyOn(service, "run").mockImplementation(async (request) => ({
+    ok: true,
+    stdout: JSON.stringify(
+      request.workspaceId === "folder" && request.argv[0] === "show"
+        ? [{ id: "project-a", title: "Folder task" }]
+        : [],
+    ),
+  }));
+  await expect(
+    executeBoardTool(service, scope, "board_show", { id: "project-a" }),
+  ).resolves.toMatchObject({ id: "project-a", title: "Folder task" });
+  expect(prisma.run.findFirst).toHaveBeenCalledWith({
+    where: { id: scope.runId, spaceId: scope.spaceId, userId: scope.userId, botId: scope.botId },
+    select: { boardWorkspaceId: true },
+  });
+  expect(transport).toHaveBeenCalledWith(
+    expect.objectContaining({
+      workspaceId: "folder",
+      workspace: { kind: "folder", path: "/fixture/project" },
+    }),
+    scope,
+  );
+});
+it.each(["running", "queued"])("does not publish a Board outcome for a %s run", async (status) => {
+  const { prisma } = fixture();
+  prisma.run.findUnique.mockResolvedValue({
+    id: scope.runId,
+    ...scope,
+    status,
+    boardItemId: "board-a",
+    boardWorkspaceId: "workspace",
+  });
+  const provider = vi.spyOn(BoardService.prototype, "provider").mockResolvedValue({
+    show: vi.fn(async () => parseBeadsItem({ id: "board-a", title: "Task" })),
+    comment: vi.fn(),
+    close: vi.fn(),
+  } as never);
+  await finishBoardRun({ prisma: prisma as unknown as PrismaClient }, scope, "Done");
+  expect(provider).not.toHaveBeenCalled();
+  expect(prisma.run.update).not.toHaveBeenCalled();
+});
+it.each(["cancelled", "failed"])(
+  "uses persisted %s status for the Board outcome",
+  async (status) => {
+    const { prisma } = fixture();
+    prisma.run.findUnique.mockResolvedValue({
+      id: scope.runId,
+      ...scope,
+      status,
+      boardItemId: "board-a",
+      boardWorkspaceId: "workspace",
+      boardCloseWhenDone: true,
+    });
+    const provider = {
+      show: vi.fn(async () =>
+        parseBeadsItem({ id: "board-a", title: "Task", metadata: { ardur_close_when_done: true } }),
+      ),
+      comment: vi.fn(),
+      close: vi.fn(),
+    };
+    vi.spyOn(BoardService.prototype, "provider").mockResolvedValue(provider as never);
+    await finishBoardRun({ prisma: prisma as unknown as PrismaClient }, scope, "Outcome");
+    expect(provider.comment).toHaveBeenCalledWith(
+      "board-a",
+      `[Run run] ${status === "cancelled" ? "Cancelled" : "Failed"}\nOutcome`,
+    );
+    expect(provider.close).not.toHaveBeenCalled();
+  },
+);
 it("records an outcome once and closes only with both saved and current permission", async () => {
   const { prisma } = fixture();
   const run = {
@@ -107,6 +185,7 @@ it("records an outcome once and closes only with both saved and current permissi
     boardWorkspaceId: "workspace",
     boardCloseWhenDone: false,
     boardCommentedAt: null,
+    status: "completed",
   };
   prisma.run.findUnique.mockResolvedValue(run);
   const item = parseBeadsItem({
@@ -117,7 +196,7 @@ it("records an outcome once and closes only with both saved and current permissi
   const provider = { show: vi.fn(async () => item), comment: vi.fn(), close: vi.fn() };
   vi.spyOn(BoardService.prototype, "provider").mockResolvedValue(provider as never);
   const deps = { prisma: prisma as unknown as PrismaClient };
-  await finishBoardRun(deps, scope, "Checks passed", true);
+  await finishBoardRun(deps, scope, "Checks passed");
   expect(provider.comment).toHaveBeenCalledWith("board-a", "[Run run] Completed\nChecks passed");
   expect(provider.close).not.toHaveBeenCalled();
   run.boardCloseWhenDone = true;
@@ -127,14 +206,12 @@ it("records an outcome once and closes only with both saved and current permissi
     text: "[Run run] Completed\nChecks passed",
     createdAt: "2026-01-01T00:00:00Z",
   });
-  await finishBoardRun(deps, scope, "Checks passed", true);
+  await finishBoardRun(deps, scope, "Checks passed");
   expect(provider.comment).toHaveBeenCalledTimes(1);
   expect(provider.close).toHaveBeenCalledWith(["board-a"], "Bot reported done");
   item.closeWhenDone = false;
   provider.close.mockClear();
-  await finishBoardRun(deps, scope, "Checks passed", true);
+  await finishBoardRun(deps, scope, "Checks passed");
   expect(provider.close).not.toHaveBeenCalled();
-  await expect(finishBoardRun(deps, { ...scope, spaceId: "foreign" }, "", true)).rejects.toThrow(
-    "space",
-  );
+  await expect(finishBoardRun(deps, { ...scope, spaceId: "foreign" }, "")).rejects.toThrow("space");
 });

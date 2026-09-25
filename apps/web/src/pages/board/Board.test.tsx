@@ -38,6 +38,8 @@ const roots: ReturnType<typeof createRoot>[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await act(async () => root.unmount());
   vi.clearAllMocks();
+  calls.workspaces.mockReset();
+  calls.snapshot.mockReset();
   document.body.replaceChildren();
 });
 function item(id: string, status = "open"): WorkItem {
@@ -164,6 +166,42 @@ it("shows installation help only when Beads is missing", async () => {
   expect(node.querySelector("a")?.href).toContain("github.com/gastownhall/beads");
   expect(node.textContent).toContain("brew install beads");
   expect(calls.start).not.toHaveBeenCalled();
+});
+it("retries discovery after an initial workspace request fails", async () => {
+  vi.useFakeTimers();
+  try {
+    calls.workspaces.mockRejectedValueOnce(new Error("Host disconnected")).mockResolvedValueOnce({
+      workspaces: [
+        {
+          id: "space-board",
+          kind: "space",
+          name: "Board",
+          path: "/fixture/board",
+          enabled: true,
+          initialized: true,
+          prefix: "board",
+        },
+      ],
+      problem: null,
+    });
+    calls.snapshot.mockResolvedValue({
+      items: [item("recovered")],
+      readyIds: ["recovered"],
+      blockedIds: [],
+    });
+    const node = await render(<Board />);
+    expect(node.querySelector('[role="alert"]')?.textContent).toContain("Host disconnected");
+    await act(async () => node.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
+    expect(calls.workspaces).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(calls.snapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "space-board" }),
+    );
+    expect(node.querySelector('[data-board-column="ready"]')?.textContent).toContain("recovered");
+    expect(node.querySelector('[role="alert"]')).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it("previews folder initialization without writing until the owner acts", async () => {
   calls.workspaces.mockResolvedValue({

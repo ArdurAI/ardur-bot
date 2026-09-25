@@ -37,6 +37,5 @@ it("retries pending outcomes using the persisted result and rotates disconnected
     deps,
     { userId: "owner", spaceId: "space", botId: "builder", runId: "run" },
     "Verified",
-    true,
   );
 });

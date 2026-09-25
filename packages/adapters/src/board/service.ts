@@ -100,6 +100,18 @@ export class BoardService {
   }
   async workspace(scope: BoardScope, id?: string) {
     await this.actor(scope);
+    if (!id && scope.botId && scope.runId) {
+      const run = await this.options.prisma.run.findFirst({
+        where: {
+          id: scope.runId,
+          spaceId: scope.spaceId,
+          userId: scope.userId,
+          botId: scope.botId,
+        },
+        select: { boardWorkspaceId: true },
+      });
+      id = run?.boardWorkspaceId ?? undefined;
+    }
     let row = await this.options.prisma.boardWorkspace.findFirst({
       where: {
         ...(id ? { id } : { kind: "space" }),
