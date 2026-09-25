@@ -191,7 +191,7 @@ import {
 import { createContextService } from "./context.js";
 import type { RouterContext } from "./customization-routes.js";
 import { createCustomizationRoutes } from "./customization-routes.js";
-import { routineOverview, usageSummary } from "./dashboard.js";
+import { dashboardNow, routineOverview, usageSummary } from "./dashboard.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import { listSpaceFeatures, setSpaceFeature } from "./features.js";
 import {
@@ -5230,6 +5230,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
     },
     dashboard: {
+      now: authed.dashboard.now.handler(({ context }) => dashboardNow(deps.prisma, context.actor)),
       connections: authed.dashboard.connections.handler(async ({ context }) => {
         const actor = context.actor;
         const scope = { userId: actor.userId, spaceId: actor.spaceId };

@@ -55,3 +55,31 @@ describe("overview projections", () => {
     ]);
   });
 });
+
+it.each([
+  ["needs-sign-in", "none", true, "needs-sign-in"],
+  ["not-connected", "reconnect", true, "needs-sign-in"],
+  ["connected", "reconnect", true, "needs-sign-in"],
+  ["connected", "reconnect", false, "not-connected"],
+  ["discovery-failed", "none", true, "error"],
+])("projects integration %s / %s / enabled %s as %s", (state, oauthStatus, enabled, expected) => {
+  const result = connectionOverview({
+    integrations: {
+      catalog: [],
+      connections: [{ id: "connection", catalogId: "calendar", state }],
+    } as unknown as IntegrationCatalogList,
+    servers: [
+      {
+        id: "connection",
+        name: "Calendar",
+        enabled,
+        oauthStatus: oauthStatus as "none" | "reconnect",
+      },
+    ],
+    devices: [],
+    channels: [],
+  });
+  expect(result).toEqual([
+    { id: "connection", kind: "integration", name: "calendar", state: expected },
+  ]);
+});

@@ -7,8 +7,7 @@ import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "./o
 vi.mock("./api", () => ({ rpc: vi.fn() }));
 it("uses the shared read RPCs and validates their contracts", async () => {
   vi.mocked(rpc).mockImplementation(async (procedure) => {
-    if (procedure === "runs/list") return { runs: [] };
-    if (procedure === "team/board") return { rows: [] };
+    if (procedure === "dashboard/now") return { runs: [], rows: [], approvals: [] };
     if (procedure === "dashboard/connections") return [];
     return {
       inputTokens: 0,
@@ -20,12 +19,11 @@ it("uses the shared read RPCs and validates their contracts", async () => {
       providers: [],
     };
   });
-  expect(await loadOverviewNow()).toEqual({ rows: [], runs: [] });
+  expect(await loadOverviewNow()).toEqual({ rows: [], runs: [], approvals: [] });
   expect(await loadOverviewConnections()).toEqual([]);
   expect(await loadOverviewUsage()).toMatchObject({ providers: [] });
   expect(vi.mocked(rpc).mock.calls.map(([procedure]) => procedure)).toEqual([
-    "runs/list",
-    "team/board",
+    "dashboard/now",
     "dashboard/connections",
     "usage/summary",
   ]);

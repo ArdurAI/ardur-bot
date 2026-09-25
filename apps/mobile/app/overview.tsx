@@ -113,7 +113,20 @@ function Now({ data }: { data: OverviewNow }) {
         <View key={run.runId} style={styles.lines}>
           <Line>{run.botName}</Line>
           <Line>{run.promptSnippet}</Line>
-          {run.status === "waiting_input" ? <Line>{t("Waiting for input")}</Line> : null}
+          {run.status === "waiting_input" &&
+          !data.approvals.some((approval) => approval.runId === run.runId) ? (
+            <Line>{t("Waiting for input")}</Line>
+          ) : null}
+          {data.approvals
+            .filter((approval) => approval.runId === run.runId)
+            .map((approval, index) =>
+              approval.block.kind === "ask" ? (
+                <View key={`${approval.messageId}:${index}`} style={styles.lines}>
+                  <Line>{t("Waiting for your approval")}</Line>
+                  <Line>{approval.block.text}</Line>
+                </View>
+              ) : null,
+            )}
         </View>
       ))}
       {delegations.map((row) => (
@@ -129,15 +142,6 @@ function Now({ data }: { data: OverviewNow }) {
               : t("Working")}
         </Line>
       ))}
-      {data.rows
-        .filter((row) => row.state === "waiting-approval")
-        .map((row) => (
-          <Line key={row.botId}>
-            {row.botName}
-            {" · "}
-            {t("Waiting for your approval")}
-          </Line>
-        ))}
     </View>
   );
 }
@@ -183,7 +187,7 @@ function Period({ value }: { value: UsagePeriod }) {
   const { t } = useI18n();
   return (
     <Line>
-      {t("{requests} requests", { requests: value.requests })}
+      {t("{records} usage records", { records: value.records })}
       {" · "}
       {t("{tokens} tokens", { tokens: value.inputTokens + value.outputTokens })}
       {value.cost === null

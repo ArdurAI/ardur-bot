@@ -1,5 +1,47 @@
-import type { Actor, RoutineOverview, UsagePeriod, UsageSummary } from "@ardurbot/contracts";
+import type {
+  Actor,
+  DashboardNow,
+  RoutineOverview,
+  UsagePeriod,
+  UsageSummary,
+} from "@ardurbot/contracts";
+import { MessageBlock } from "@ardurbot/contracts";
+import { isApprovalAskBlock } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
+import { listSpaceRuns } from "./runs.js";
+import { teamBoard } from "./team.js";
+
+/** One finite request; approval cards are independent of the conversation's message page. */
+export async function dashboardNow(prisma: PrismaClient, actor: Actor): Promise<DashboardNow> {
+  const [{ rows }, runs] = await Promise.all([
+    teamBoard(prisma, actor),
+    listSpaceRuns(prisma, actor, "active"),
+  ]);
+  const waiting = runs.filter((run) => run.status === "waiting_input");
+  if (!waiting.length) return { rows, runs, approvals: [] };
+  const messages = await prisma.message.findMany({
+    where: {
+      thread: { spaceId: actor.spaceId, userId: actor.userId },
+      role: "bot",
+      OR: waiting.map((run) => ({
+        runId: run.runId,
+        threadId: (run.approvalTarget ?? run).threadId,
+      })),
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, runId: true, blocks: true },
+  });
+  const approvals = messages.flatMap((message) => {
+    const blocks = MessageBlock.array().safeParse(message.blocks);
+    if (!message.runId || !blocks.success) return [];
+    return blocks.data.flatMap((block) =>
+      block.kind === "ask" && block.status !== "answered" && isApprovalAskBlock(block)
+        ? [{ runId: message.runId!, messageId: message.id, block }]
+        : [],
+    );
+  });
+  return { rows, runs, approvals };
+}
 
 type UsageRow = {
   provider: string;
@@ -20,7 +62,8 @@ export function usageWindows(now: Date) {
 
 function period(rows: UsageRow[]): UsagePeriod {
   return {
-    requests: rows.length,
+    // Totals-only collectors can combine many model calls in a single ledger record.
+    records: rows.length,
     inputTokens: rows.reduce((sum, row) => sum + row.inputTokens, 0),
     outputTokens: rows.reduce((sum, row) => sum + row.outputTokens, 0),
     cost:
@@ -42,7 +85,7 @@ export function providerUsage(rows: UsageRow[], now: Date): UsageSummary["provid
       daily: Array.from({ length: 7 }, (_, index) => {
         const date = new Date(from.getTime() + index * DAY).toISOString().slice(0, 10);
         const value = period(own.filter((row) => row.createdAt.toISOString().startsWith(date)));
-        return { date, requests: value.requests, tokens: value.inputTokens + value.outputTokens };
+        return { date, records: value.records, tokens: value.inputTokens + value.outputTokens };
       }),
     };
   });
