@@ -70,3 +70,14 @@ describe("settings registry", () => {
     }
   });
 });
+
+it("places lazy searchable Boards beside Integrations for the owner", () => {
+  const index = settingsSections.findIndex((entry) => entry.id === "integrations");
+  const boards = settingsSections[index + 1]!;
+  expect(boards.id).toBe("boards");
+  expect(boards.group).toBe("Customize");
+  expect(boards.component.$$typeof).toBe(Symbol.for("react.lazy"));
+  expect(boards.searchLabels?.map((label) => label.message)).toContain("Default board");
+  expect(boards.available({ desktop: false, isDeploymentOwner: true })).toBe(true);
+  expect(boards.available({ desktop: true, isDeploymentOwner: false })).toBe(false);
+});

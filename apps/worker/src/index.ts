@@ -26,6 +26,7 @@ import {
   createRunSecretWriter,
   createWebProvider,
   databaseCapacityBackoffMs,
+  deliverBoardNotifications,
   EncryptedSecretStore,
   ExpoPushProvider,
   GraphileJobPublisher,
@@ -282,7 +283,10 @@ async function main() {
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
     reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
-    reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir }),
+    reconcileBoardOutcomes: async () => {
+      await reconcileBoardOutcomes({ prisma, dataDir });
+      await deliverBoardNotifications(prisma, new ExpoPushProvider(dataDir));
+    },
   });
   reconciler.start();
   const chatReceivers = createMessagingReceivers({

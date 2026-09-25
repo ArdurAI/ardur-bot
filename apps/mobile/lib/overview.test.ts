@@ -6,6 +6,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OverviewScreen from "../app/overview";
 import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "./overview";
 
+vi.mock("./api", () => ({
+  rpc: vi.fn(async () => ({ workspace: null, ready: 0, inProgress: 0, blocked: 0, items: [] })),
+}));
 vi.mock("./overview", () => ({
   loadOverviewConnections: vi.fn(),
   loadOverviewNow: vi.fn(),
@@ -20,6 +23,8 @@ vi.mock("./i18n", () => ({
 vi.mock("./native", () => ({ useMobileTokens: () => ({}) }));
 vi.mock("expo-router", () => ({
   Stack: { Screen: () => null },
+  useLocalSearchParams: () => ({}),
+  useRouter: () => ({ push: vi.fn(), setParams: vi.fn() }),
   useFocusEffect: (effect: () => void) => useEffect(effect, [effect]),
 }));
 vi.mock("react-native", () => ({
@@ -67,7 +72,7 @@ it("renders the three read-only Overview panels and their empty states", async (
     "No usage",
   ])
     expect(node.textContent).toContain(text);
-  expect(node.querySelector("button")).toBeNull();
+  expect(node.textContent).not.toContain("Allow once");
 });
 it("keeps loading and error recovery independent without exposing approval or settings actions", async () => {
   let reject!: (error: Error) => void;
@@ -85,10 +90,12 @@ it("keeps loading and error recovery independent without exposing approval or se
   expect(node.textContent).toContain("Calendar · Needs sign-in");
   await act(async () => reject(new Error("offline fixture")));
   expect(node.textContent).toContain("Could not load");
-  expect([...node.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+  expect([...node.querySelectorAll("button")].map((button) => button.textContent)).toContain(
     "Retry",
-  ]);
-  await act(async () => node.querySelector("button")!.click());
+  );
+  await act(async () =>
+    [...node.querySelectorAll("button")].find((button) => button.textContent === "Retry")!.click(),
+  );
   expect(node.textContent).toContain("Nothing running");
   expect(node.textContent).not.toContain("Could not load");
 });
@@ -103,7 +110,7 @@ it("shows recorded provider periods and never substitutes a price for unknown co
   expect(node.textContent).toContain("Today (UTC)");
   expect(node.textContent).toContain("3 usage records · 42 tokens");
   expect(node.textContent).not.toContain("Cost:");
-  expect(node.querySelector("button")).toBeNull();
+  expect(node.textContent).not.toContain("Allow once");
 });
 
 it("renders every pending approval per run in read-only form", async () => {
@@ -137,7 +144,7 @@ it("renders every pending approval per run in read-only form", async () => {
   expect(node.textContent).toContain("Approve older?");
   expect(node.textContent).toContain("Approve newer?");
   expect(node.textContent?.match(/Waiting for your approval/g)).toHaveLength(2);
-  expect(node.querySelector("button")).toBeNull();
+  expect(node.textContent).not.toContain("Allow once");
 });
 it.each(["needs-sign-in", "not-connected"])(
   "renders canonical %s integrations as needing sign-in",

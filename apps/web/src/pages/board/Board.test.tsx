@@ -4,14 +4,15 @@ import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Board, BoardColumns } from "./Board";
 import { DependencyGraph, graphPositions } from "./Graph";
 import { ItemForm } from "./ItemForm";
 
+const translate = (parts: TemplateStringsArray) => parts.join("");
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
-  useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
+  useLingui: () => ({ t: translate }),
 }));
 vi.mock("../../components/ai/primitives", () => ({ LoadingState: () => <span>Loading…</span> }));
 vi.mock("@ardurbot/ui-web", () => ({
@@ -29,6 +30,10 @@ vi.mock("@ardurbot/ui-web", () => ({
 }));
 const calls = vi.hoisted(() => ({
   workspaces: vi.fn(),
+  view: vi.fn(),
+  update: vi.fn(),
+  create: vi.fn(),
+  follow: vi.fn(),
   snapshot: vi.fn(),
   show: vi.fn(),
   start: vi.fn(),
@@ -40,6 +45,7 @@ afterEach(async () => {
   vi.clearAllMocks();
   calls.workspaces.mockReset();
   calls.snapshot.mockReset();
+  localStorage.clear();
   document.body.replaceChildren();
 });
 function item(id: string, status = "open"): WorkItem {
@@ -147,90 +153,252 @@ it("keeps all five columns on an empty board", async () => {
     />,
   );
   expect(node.querySelectorAll("[data-board-column]")).toHaveLength(5);
-  expect([...node.querySelectorAll("h2")].map((heading) => heading.textContent)).toEqual([
-    "Ready",
-    "In progress",
-    "Blocked",
-    "Deferred",
-    "Done",
-  ]);
+  expect(
+    [...node.querySelectorAll("h2")].map((heading) => heading.textContent?.replace(/ 0$/, "")),
+  ).toEqual(["Ready", "In progress", "Blocked", "Deferred", "Done"]);
   expect(node.querySelectorAll("button")).toHaveLength(0);
 });
-it("shows installation help only when Beads is missing", async () => {
-  calls.workspaces.mockResolvedValue({
-    workspaces: [],
-    problem: { code: "not_installed", message: "Beads is not installed on this computer" },
+const workspace = {
+  id: "workspace",
+  kind: "space",
+  name: "Work",
+  path: "/fixture/board",
+  enabled: true,
+  initialized: true,
+  prefix: "work",
+  isDefault: true,
+  allowAllBots: true,
+  allowedBotIds: [],
+};
+const view = (items: WorkItem[] = [item("ready")]) => ({
+  workspaces: [workspace],
+  workspaceId: workspace.id,
+  snapshot: {
+    items,
+    allItems: items,
+    readyIds: items.filter((item) => item.status === "open").map((item) => item.id),
+    blockedIds: [],
+  },
+  selected: null,
+  bots: [],
+  followingIds: [],
+  problem: null,
+});
+beforeEach(() => {
+  const values = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    clear: () => values.clear(),
   });
-  const node = await render(<Board />);
-  expect(node.textContent).toContain("Beads is not installed on this computer");
-  expect(node.querySelector("a")?.href).toContain("github.com/gastownhall/beads");
-  expect(node.textContent).toContain("brew install beads");
+  calls.view.mockReset().mockResolvedValue(view());
+  calls.update.mockReset();
+  calls.create.mockReset();
+});
+it("links an empty board to Settings without initialization controls", async () => {
+  calls.view.mockResolvedValue({ ...view([]), workspaces: [], workspaceId: null });
+  const openSettings = vi.fn();
+  const node = await render(<Board openSettings={openSettings} />);
+  expect(node.textContent).toContain("No board");
+  await act(async () =>
+    [...node.querySelectorAll("button")]
+      .find((button) => button.textContent === "Set up a board")!
+      .click(),
+  );
+  expect(openSettings).toHaveBeenCalledOnce();
   expect(calls.start).not.toHaveBeenCalled();
+  expect(node.textContent).not.toContain("Start a board in this folder");
 });
-it("retries discovery after an initial workspace request fails", async () => {
+it("bounds slow summary polling independently of item count and skips hidden windows", async () => {
   vi.useFakeTimers();
-  try {
-    calls.workspaces.mockRejectedValueOnce(new Error("Host disconnected")).mockResolvedValueOnce({
-      workspaces: [
-        {
-          id: "space-board",
-          kind: "space",
-          name: "Board",
-          path: "/fixture/board",
-          enabled: true,
-          initialized: true,
-          prefix: "board",
-        },
-      ],
-      problem: null,
-    });
-    calls.snapshot.mockResolvedValue({
-      items: [item("recovered")],
-      readyIds: ["recovered"],
-      blockedIds: [],
-    });
-    const node = await render(<Board />);
-    expect(node.querySelector('[role="alert"]')?.textContent).toContain("Host disconnected");
-    await act(async () => node.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
-    expect(calls.workspaces).toHaveBeenCalledTimes(2);
-    await act(async () => vi.advanceTimersByTimeAsync(200));
-    expect(calls.snapshot).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: "space-board" }),
-    );
-    expect(node.querySelector('[data-board-column="ready"]')?.textContent).toContain("recovered");
-    expect(node.querySelector('[role="alert"]')).toBeNull();
-  } finally {
-    vi.useRealTimers();
-  }
+  let resolve!: (value: ReturnType<typeof view>) => void;
+  calls.view.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const node = await render(<Board />);
+  await act(async () => vi.advanceTimersByTimeAsync(60_000));
+  expect(calls.view).toHaveBeenCalledTimes(1);
+  await act(async () =>
+    resolve(view(Array.from({ length: 5000 }, (_, index) => item(`work-${index}`)))),
+  );
+  expect(node.querySelectorAll("[data-board-item]").length).toBeLessThanOrEqual(12);
+  vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+  await act(async () => vi.advanceTimersByTimeAsync(60_000));
+  expect(calls.view).toHaveBeenCalledTimes(1);
+  vi.restoreAllMocks();
+  vi.useRealTimers();
 });
-it("previews folder initialization without writing until the owner acts", async () => {
-  calls.workspaces.mockResolvedValue({
-    workspaces: [
-      {
-        id: "folder",
-        kind: "folder",
-        name: "Project",
-        path: "/fixture/project",
-        enabled: true,
-        initialized: false,
-        prefix: "board",
-      },
-    ],
-    problem: null,
+it("moves immediately on drop and rolls back on command rejection", async () => {
+  let reject!: (reason: Error) => void;
+  calls.update.mockImplementation(
+    () =>
+      new Promise((_resolve, no) => {
+        reject = no;
+      }),
+  );
+  const node = await render(<Board />);
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", { value: { getData: () => "ready" } });
+  await act(async () =>
+    node.querySelector('[data-board-column="in_progress"]')!.dispatchEvent(event),
+  );
+  expect(
+    node.querySelector('[data-board-column="in_progress"] [data-board-item="ready"]'),
+  ).not.toBeNull();
+  expect(calls.update).toHaveBeenCalledWith({
+    workspaceId: "workspace",
+    id: "ready",
+    patch: { status: "in_progress", deferUntil: null },
+  });
+  await act(async () => reject(new Error("command refused")));
+  expect(
+    node.querySelector('[data-board-column="ready"] [data-board-item="ready"]'),
+  ).not.toBeNull();
+  expect(node.querySelector('[role="alert"]')?.textContent).toContain(
+    "Could not update this item.",
+  );
+});
+it("undoes a successful drop through the same authorized update", async () => {
+  let current = item("ready");
+  calls.view.mockImplementation(async () => view([current]));
+  calls.update.mockImplementation(async ({ patch }) => {
+    current = { ...current, ...patch };
+    return current;
   });
   const node = await render(<Board />);
-  const select = node.querySelector("select")!;
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", { value: { getData: () => "ready" } });
+  await act(async () =>
+    node.querySelector('[data-board-column="in_progress"]')!.dispatchEvent(event),
+  );
+  expect(
+    node.querySelector('[data-board-column="in_progress"] [data-board-item="ready"]'),
+  ).not.toBeNull();
+  await act(async () =>
+    [...node.querySelectorAll("button")].find((button) => button.textContent === "Undo")!.click(),
+  );
+  expect(calls.update).toHaveBeenLastCalledWith({
+    workspaceId: "workspace",
+    id: "ready",
+    patch: { status: "open", deferUntil: null },
+  });
+  expect(
+    node.querySelector('[data-board-column="ready"] [data-board-item="ready"]'),
+  ).not.toBeNull();
+});
+it("keeps Undo bound to the original board after switching workspaces", async () => {
+  calls.view.mockImplementation(async ({ workspaceId }) => ({
+    ...view(),
+    workspaceId: workspaceId ?? "workspace",
+    workspaces: [workspace, { ...workspace, id: "folder", name: "Folder" }],
+  }));
+  calls.update.mockResolvedValue(item("ready", "in_progress"));
+  const node = await render(<Board />);
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", { value: { getData: () => "ready" } });
+  await act(async () =>
+    node.querySelector('[data-board-column="in_progress"]')!.dispatchEvent(event),
+  );
+  const select = node.querySelector<HTMLSelectElement>('select[aria-label="Board"]')!;
   await act(async () => {
     select.value = "folder";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  expect(select.value).toBe("folder");
   await act(async () =>
-    [...node.querySelectorAll("button")]
-      .find((button) => button.textContent === "Start a board in this folder")!
-      .click(),
+    [...node.querySelectorAll("button")].find((button) => button.textContent === "Undo")!.click(),
   );
-  expect(node.querySelector("[role=dialog]")?.textContent).toContain(".beads/");
-  expect(calls.start).not.toHaveBeenCalled();
+  expect(calls.update).toHaveBeenLastCalledWith({
+    workspaceId: "workspace",
+    id: "ready",
+    patch: { status: "open", deferUntil: null },
+  });
+});
+it("removes the previous board's editing controls while the next workspace loads", async () => {
+  const workspaces = [workspace, { ...workspace, id: "folder", name: "Folder" }];
+  calls.view.mockResolvedValueOnce({ ...view(), workspaces });
+  let resolve!: (result: ReturnType<typeof view>) => void;
+  calls.view.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const node = await render(<Board />);
+  const select = node.querySelector<HTMLSelectElement>('select[aria-label="Board"]')!;
+  await act(async () => {
+    select.value = "folder";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(node.querySelectorAll('[aria-label="New item"]')).toHaveLength(0);
+  expect(
+    [...node.querySelectorAll("button")].some((button) => button.textContent === "New item"),
+  ).toBe(false);
+  expect(node.textContent).toContain("Loading");
+  expect(node.textContent).not.toContain("No board");
+  await act(async () => resolve({ ...view(), workspaces, workspaceId: "folder" }));
+  expect(node.querySelectorAll('[aria-label="New item"]')).toHaveLength(5);
+});
+function input(node: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(node, value);
+  node.dispatchEvent(new Event("input", { bubbles: true }));
+}
+it("quick-adds in the column and persists filters without another summary request", async () => {
+  calls.create.mockResolvedValue(item("new"));
+  const node = await render(<Board scope="owner:space" />);
+  await act(async () =>
+    input(node.querySelector<HTMLInputElement>('[data-board-column="blocked"] input')!, "New work"),
+  );
+  await act(async () =>
+    node
+      .querySelector('[data-board-column="blocked"] form')!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(calls.create).toHaveBeenCalledWith({
+    workspaceId: "workspace",
+    item: { title: "New work", type: "task", priority: 2 },
+  });
+  expect(calls.update).toHaveBeenCalledWith({
+    workspaceId: "workspace",
+    id: "new",
+    patch: { status: "blocked" },
+  });
+  const before = calls.view.mock.calls.length;
+  await act(async () =>
+    input(node.querySelector<HTMLInputElement>('[aria-label="Search"]')!, "missing"),
+  );
+  expect(node.querySelectorAll("[data-board-item]")).toHaveLength(0);
+  expect(JSON.parse(localStorage.getItem("ardurbot:board-filters:owner:space")!)).toMatchObject({
+    search: "missing",
+  });
+  expect(calls.view).toHaveBeenCalledTimes(before);
+});
+it("shows the selected item from the summary and toggles the per-user follow", async () => {
+  calls.view.mockResolvedValue({ ...view(), selected: item("ready") });
+  calls.follow.mockResolvedValue({ following: true });
+  const node = await render(<Board />);
+  await act(async () =>
+    [...node.querySelectorAll("button")].find((button) => button.textContent === "Follow")!.click(),
+  );
+  expect(calls.follow).toHaveBeenCalledWith({
+    workspaceId: "workspace",
+    id: "ready",
+    following: true,
+  });
+  expect(calls.show).not.toHaveBeenCalled();
+  const status = node.querySelector<HTMLSelectElement>('[aria-label="Status"]')!;
+  await act(async () => {
+    status.value = "blocked";
+    status.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(calls.update).toHaveBeenCalledWith({
+    workspaceId: "workspace",
+    id: "ready",
+    patch: { status: "blocked", deferUntil: null },
+  });
 });
 it("lays prerequisites before dependents and makes graph nodes keyboard accessible", async () => {
   const graph = { items: [item("a"), item("b")], edges: [{ from: "b", to: "a", type: "blocks" }] };
@@ -245,4 +413,23 @@ it("lays prerequisites before dependents and makes graph nodes keyboard accessib
   );
   expect(open).toHaveBeenCalledWith("a");
   expect(node.querySelectorAll("svg")).toHaveLength(1);
+});
+
+it("reaches virtualized items with the keyboard", async () => {
+  const items = Array.from({ length: 1000 }, (_, index) => item(`task-${index}`));
+  const node = await render(
+    <BoardColumns
+      snapshot={{ items, readyIds: items.map((row) => row.id), blockedIds: [] }}
+      onOpen={vi.fn()}
+    />,
+  );
+  const first = node.querySelector<HTMLButtonElement>('[data-board-item="task-0"]')!;
+  first.focus();
+  await act(async () =>
+    first.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }),
+    ),
+  );
+  expect(document.activeElement?.getAttribute("data-board-item")).toBe("task-999");
+  expect(node.querySelectorAll("[data-board-item]").length).toBeLessThanOrEqual(12);
 });

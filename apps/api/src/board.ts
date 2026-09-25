@@ -1,7 +1,7 @@
 import { BoardService, requestBoardCommand } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import type { BoardFilter, BoardSnapshot } from "@ardurbot/contracts/board";
-import { BoardError, BoardPatchSchema } from "@ardurbot/contracts/board";
+import type { BoardFilter, BoardSnapshot, BoardView, BoardWork } from "@ardurbot/contracts/board";
+import { BoardError, BoardPatchSchema, boardColumn } from "@ardurbot/contracts/board";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "./router.js";
@@ -35,8 +35,99 @@ export function createBoard(deps: RouterDeps) {
       return deps.hostBridge.runBoard(request, scope);
     },
   });
-  return {
+  const board = {
     service,
+    async view(actor: Actor, input: { workspaceId?: string; itemId?: string }): Promise<BoardView> {
+      const workspaces = (await service.configured(actor)).filter(
+        (row) => row.enabled && row.initialized,
+      );
+      const workspace = input.workspaceId
+        ? workspaces.find((row) => row.id === input.workspaceId)
+        : (workspaces.find((row) => row.isDefault) ?? workspaces[0]);
+      const empty: BoardView = {
+        workspaces,
+        workspaceId: workspace?.id ?? null,
+        snapshot: { items: [], readyIds: [], blockedIds: [] },
+        selected: null,
+        followingIds: [],
+        bots: [],
+        problem: null,
+      };
+      if (!workspace) return empty;
+      try {
+        // One browser request for the whole view, with at most one selected-item read.
+        const snapshot = await board.snapshot(actor, { workspaceId: workspace.id });
+        const selected = input.itemId
+          ? await (await service.provider(actor, workspace.id)).show(input.itemId)
+          : null;
+        const [follows, bots] = await Promise.all([
+          deps.prisma.boardFollow.findMany({
+            where: { workspaceId: workspace.id, userId: actor.userId },
+            select: { itemId: true },
+          }),
+          deps.prisma.bot.findMany({
+            where: {
+              spaceId: actor.spaceId,
+              userId: actor.userId,
+              archivedAt: null,
+              ...(!workspace.allowAllBots ? { id: { in: workspace.allowedBotIds } } : {}),
+            },
+            select: { id: true, name: true },
+          }),
+        ]);
+        return {
+          ...empty,
+          snapshot,
+          selected,
+          followingIds: follows.map((row) => row.itemId),
+          bots,
+        };
+      } catch (error) {
+        if (error instanceof BoardError) return { ...empty, problem: error.problem };
+        throw error;
+      }
+    },
+    async work(actor: Actor): Promise<BoardWork> {
+      const view = await board.view(actor, {});
+      if (view.problem) throw new BoardError(view.problem);
+      const counts = { ready: 0, inProgress: 0, blocked: 0 };
+      const membership = {
+        readyIds: new Set(view.snapshot.readyIds),
+        blockedIds: new Set(view.snapshot.blockedIds),
+      };
+      const ready = view.snapshot.items.filter((item) => {
+        const column = boardColumn(item, membership);
+        if (column === "ready") counts.ready++;
+        if (column === "in_progress") counts.inProgress++;
+        if (column === "blocked") counts.blocked++;
+        return column === "ready";
+      });
+      return {
+        workspace: view.workspaces.find((row) => row.id === view.workspaceId) ?? null,
+        ...counts,
+        items: ready
+          .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))
+          .slice(0, 3),
+      };
+    },
+    async follow(actor: Actor, input: { workspaceId: string; id: string; following: boolean }) {
+      const provider = await service.provider(actor, input.workspaceId);
+      const key = { workspaceId: input.workspaceId, itemId: input.id, userId: actor.userId };
+      if (input.following) {
+        const item = await provider.show(input.id);
+        await deps.prisma.boardFollow.upsert({
+          where: { workspaceId_itemId_userId: key },
+          create: {
+            ...key,
+            status: item.status,
+            assignee: item.assignee,
+            commentCount: item.commentCount,
+          },
+          update: {},
+        });
+      } else await deps.prisma.boardFollow.deleteMany({ where: key });
+      return { following: input.following };
+    },
     async snapshot(
       actor: Actor,
       input: { workspaceId: string; filter?: BoardFilter; search?: string },
@@ -74,6 +165,7 @@ export function createBoard(deps: RouterDeps) {
       pendingSends.add(key);
       try {
         await service.actor({ ...actor, botId: input.botId });
+        await service.workspace({ ...actor, botId: input.botId }, input.workspaceId);
         await assertTeachingSendAllowed(deps.prisma, actor.spaceId, input.botId);
         const nonce = `board:${input.workspaceId}:${input.id}:${input.clientNonce}`;
         const existing = await deps.prisma.run.findFirst({
@@ -151,4 +243,5 @@ export function createBoard(deps: RouterDeps) {
       }
     },
   };
+  return board;
 }

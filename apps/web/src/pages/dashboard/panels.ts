@@ -86,6 +86,7 @@ function lazyPanel<T>(
 }
 
 lazyPanel("now", msg`Now`, 10, "now", msg`Nothing running`, () => import("./NowPanel"));
+lazyPanel("work", msg`Work`, 15, "work", msg`No ready work`, () => import("./WorkPanel"));
 lazyPanel(
   "computers",
   msg`Computers`,

@@ -98,6 +98,9 @@ export const BoardWorkspaceSchema = z.object({
   name: z.string(),
   enabled: z.boolean(),
   initialized: z.boolean(),
+  isDefault: z.boolean().default(false),
+  allowAllBots: z.boolean().default(true),
+  allowedBotIds: z.array(z.string()).default([]),
 });
 export type BoardWorkspace = z.infer<typeof BoardWorkspaceSchema>;
 export const BoardFilterSchema = z.object({
@@ -215,9 +218,45 @@ export const BoardSnapshotSchema = z.object({
   allItems: z.array(WorkItemSchema).optional(),
 });
 export type BoardSnapshot = z.infer<typeof BoardSnapshotSchema>;
+export const BoardViewSchema = z.object({
+  workspaces: z.array(BoardWorkspaceSchema),
+  workspaceId: z.string().nullable(),
+  snapshot: BoardSnapshotSchema,
+  selected: WorkItemSchema.nullable(),
+  followingIds: z.array(z.string()),
+  bots: z.array(z.object({ id: z.string(), name: z.string() })),
+  problem: BoardProblemSchema.nullable(),
+});
+export type BoardView = z.infer<typeof BoardViewSchema>;
+export const BoardWorkSchema = z.object({
+  workspace: BoardWorkspaceSchema.nullable(),
+  ready: z.number().int(),
+  inProgress: z.number().int(),
+  blocked: z.number().int(),
+  items: z.array(WorkItemSchema),
+});
+export type BoardWork = z.infer<typeof BoardWorkSchema>;
+export const BoardConfigurationSchema = z.object({
+  name: text.min(1).max(100).optional(),
+  enabled: z.boolean().optional(),
+  isDefault: z.literal(true).optional(),
+  allowAllBots: z.boolean().optional(),
+  allowedBotIds: z.array(z.string().min(1)).max(1000).optional(),
+});
+export type BoardConfiguration = z.infer<typeof BoardConfigurationSchema>;
 const workspaceInput = z.object({ workspaceId: z.string() });
 const itemInput = workspaceInput.extend({ id: BoardItemIdSchema });
 export const boardContract = {
+  view: oc
+    .input(z.object({ workspaceId: z.string().optional(), itemId: BoardItemIdSchema.optional() }))
+    .output(BoardViewSchema),
+  work: oc.input(z.object({})).output(BoardWorkSchema),
+  configure: oc
+    .input(workspaceInput.extend({ patch: BoardConfigurationSchema }))
+    .output(BoardWorkspaceSchema),
+  follow: oc
+    .input(itemInput.extend({ following: z.boolean() }))
+    .output(z.object({ following: z.boolean() })),
   workspaces: oc.input(z.object({})).output(
     z.object({
       workspaces: z.array(BoardWorkspaceSchema),
@@ -262,7 +301,10 @@ export const boardContract = {
 /** Directions are relative to the item: outgoing depends on another item. */
 export function boardColumn(
   item: WorkItem,
-  snapshot: Pick<BoardSnapshot, "readyIds" | "blockedIds">,
+  snapshot: {
+    readyIds: readonly string[] | ReadonlySet<string>;
+    blockedIds: readonly string[] | ReadonlySet<string>;
+  },
   now = Date.now(),
 ) {
   if (item.status === "closed")
@@ -273,7 +315,9 @@ export function boardColumn(
     (item.deferUntil && Date.parse(item.deferUntil) > now)
   )
     return "deferred";
-  if (snapshot.blockedIds.includes(item.id) || item.status === "blocked") return "blocked";
+  const contains = (ids: readonly string[] | ReadonlySet<string>) =>
+    "has" in ids ? ids.has(item.id) : ids.includes(item.id);
+  if (contains(snapshot.blockedIds) || item.status === "blocked") return "blocked";
   if (item.status === "in_progress" || item.status === "hooked") return "in_progress";
-  return snapshot.readyIds.includes(item.id) ? "ready" : "blocked";
+  return contains(snapshot.readyIds) ? "ready" : "blocked";
 }

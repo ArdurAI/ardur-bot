@@ -345,6 +345,7 @@ msgstr ""
 msgid "Activity"
 msgstr "Etkinlik"
 
+#: src/pages/board/BoardColumns.tsx
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/McpConfigEditor.tsx
@@ -513,6 +514,7 @@ msgid "Agents:"
 msgstr "Agent'lar:"
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/board/BoardsSettings.tsx
 msgid "All bots"
 msgstr ""
 
@@ -588,6 +590,11 @@ msgstr ""
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Allowed bots"
+msgstr "İzin verilen botlar"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Allowed destination"
@@ -743,10 +750,19 @@ msgstr ""
 msgid "Archive"
 msgstr "Arşivle"
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Archive board"
+msgstr "Panoyu arşivle"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Archive board?"
+msgstr "Pano arşivlensin mi?"
+
 #: src/pages/Shell.tsx
 msgid "archived"
 msgstr "arşivlendi"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/Shell.tsx
 msgid "Archived"
 msgstr "Arşivlendi"
@@ -950,6 +966,11 @@ msgstr ""
 msgid "Base URL"
 msgstr "Temel URL"
 
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Beads"
+msgstr "Beads"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Bearer token"
@@ -985,6 +1006,8 @@ msgid "Block link copied."
 msgstr ""
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
+#: src/pages/dashboard/WorkPanel.tsx
 msgid "Blocked"
 msgstr ""
 
@@ -1003,10 +1026,23 @@ msgid "Blocks"
 msgstr ""
 
 #: src/pages/board/Board.tsx
-#: src/pages/Shell.tsx
-#: src/pages/shell/board-nav.ts
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/shell/TopNav.tsx
 msgid "Board"
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Board files will be kept."
+msgstr "Pano dosyaları korunacak."
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Board status"
+msgstr "Pano durumu"
+
+#: src/pages/settings-sections.ts
+msgid "Boards"
+msgstr "Panolar"
 
 #: src/pages/dashboard/ComputersPanel.tsx
 msgid "Booting"
@@ -1143,6 +1179,7 @@ msgstr "Sunucuya ulaşılamıyor."
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
@@ -1606,6 +1643,7 @@ msgstr "Bilgisayar durduruldu"
 msgid "Computer use"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/fleet/FleetSettings.tsx
@@ -1642,6 +1680,10 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Configured by deployment"
 msgstr "Dağıtım tarafından yapılandırıldı"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Confirm"
+msgstr "Onayla"
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1728,6 +1770,7 @@ msgstr "Treg'i bağla"
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
@@ -2117,6 +2160,7 @@ msgstr ""
 msgid "Could not install connector"
 msgstr "Bağlayıcı kurulamadı"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load"
@@ -2130,6 +2174,10 @@ msgstr ""
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not load approval rules"
 msgstr "Onay kuralları yüklenemedi"
+
+#: src/pages/board/Board.tsx
+msgid "Could not load Board; retry."
+msgstr "Pano yüklenemedi. Yeniden deneyin."
 
 #: src/pages/IntegrationSetup.tsx
 msgid "Could not load bots. Reload to try again."
@@ -2612,7 +2660,7 @@ msgstr ""
 msgid "Created by you"
 msgstr ""
 
-#: src/pages/board/Board.tsx
+#: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
 
@@ -2718,6 +2766,7 @@ msgstr ""
 msgid "default"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Default"
@@ -2727,6 +2776,11 @@ msgstr "Varsayılan"
 #: src/pages/shell/bot-panel.tsx
 msgid "Default ({0})"
 msgstr "Varsayılan ({0})"
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Default board"
+msgstr "Varsayılan pano"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
@@ -2741,6 +2795,7 @@ msgid "Defer until"
 msgstr ""
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
 msgid "Deferred"
 msgstr ""
 
@@ -2945,6 +3000,7 @@ msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Dismiss"
 msgstr ""
@@ -3004,6 +3060,7 @@ msgstr "Hesabın yok mu?"
 
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Bitti"
@@ -3379,9 +3436,17 @@ msgstr ""
 msgid "Flags"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Folder board"
+msgstr "Klasör panosu"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Folder inside your home"
 msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Follow"
+msgstr "Takip et"
 
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
@@ -3568,6 +3633,10 @@ msgstr ""
 msgid "Home link"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+msgid "Hooked"
+msgstr "Bağlı"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Host"
 msgstr ""
@@ -3674,6 +3743,8 @@ msgid "Imported from {0}"
 msgstr ""
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
+#: src/pages/dashboard/WorkPanel.tsx
 msgid "In progress"
 msgstr ""
 
@@ -3743,6 +3814,7 @@ msgid "Install {name}"
 msgstr ""
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardsSettings.tsx
 msgid "Install Beads"
 msgstr ""
 
@@ -3834,6 +3906,10 @@ msgstr "Yalıtılmış"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Item preview"
 msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Item updated"
+msgstr "Öğe güncellendi"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Items edited after import were kept."
@@ -4161,6 +4237,10 @@ msgstr ""
 #: src/lib/thinking-level-options.ts
 msgid "low — quick, with a little checking"
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Make default"
+msgstr "Varsayılan yap"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Make sure nothing is still running on this computer."
@@ -4557,6 +4637,7 @@ msgstr ""
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/Auth.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
@@ -4636,6 +4717,7 @@ msgid "New group"
 msgstr "Yeni grup"
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "New item"
 msgstr ""
@@ -4683,6 +4765,10 @@ msgstr "kimlik doğrulamasız"
 #: src/pages/PluginsOverlay.tsx
 msgid "No authentication"
 msgstr "Kimlik doğrulaması yok"
+
+#: src/pages/board/Board.tsx
+msgid "No board"
+msgstr "Pano yok"
 
 #: src/pages/shell/command-palette.tsx
 msgid "No bots"
@@ -4789,6 +4875,11 @@ msgstr ""
 msgid "No providers found."
 msgstr "Sağlayıcı bulunamadı."
 
+#: src/pages/dashboard/panels.ts
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "No ready work"
+msgstr "Hazır iş yok"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "No remote MCP servers found"
 msgstr ""
@@ -4866,6 +4957,7 @@ msgstr ""
 msgid "Not checked"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -4891,6 +4983,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Not in the plugin catalog"
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Not initialized"
+msgstr "Başlatılmadı"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
@@ -5197,6 +5293,10 @@ msgstr ""
 msgid "Other model…"
 msgstr "Başka model…"
 
+#: src/pages/dashboard/DashboardPage.tsx
+msgid "Overview"
+msgstr "Genel bakış"
+
 #: src/components/Context.tsx
 msgid "Owner edited recently"
 msgstr "Sahibi yakın zamanda düzenledi"
@@ -5298,6 +5398,10 @@ msgstr ""
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Sabitle"
+
+#: src/pages/board/Board.tsx
+msgid "Pinned"
+msgstr "Sabitlendi"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Placement"
@@ -5549,6 +5653,9 @@ msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
 msgstr ""
 
@@ -5660,6 +5767,10 @@ msgstr ""
 msgid "Reduced"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Refresh"
+msgstr "Yenile"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Refresh view"
 msgstr ""
@@ -5667,6 +5778,11 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Refreshing…"
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Registered folders"
+msgstr "Kayıtlı klasörler"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -5937,6 +6053,7 @@ msgstr ""
 msgid "Restart to update"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
 msgid "Restore"
@@ -5957,6 +6074,7 @@ msgstr ""
 #: src/components/Context.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
@@ -6183,6 +6301,7 @@ msgstr ""
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/DevicesSettings.tsx
@@ -6364,6 +6483,10 @@ msgstr ""
 msgid "Select the text to copy it."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Selected bots"
+msgstr "Seçili botlar"
+
 #: src/pages/ide/dialogs.tsx
 msgid "Selection shortened to 32,000 characters."
 msgstr "Seçim 32.000 karaktere kısaltıldı."
@@ -6467,6 +6590,11 @@ msgstr ""
 #: src/pages/HostComputerSettings.tsx
 msgid "Set up"
 msgstr ""
+
+#: src/pages/board/Board.tsx
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "Set up a board"
+msgstr "Pano kur"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Set up credentials"
@@ -6679,6 +6807,10 @@ msgstr ""
 msgid "Source revision"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Space board"
+msgstr "Alan panosu"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "Alan varsayılanı"
@@ -6740,13 +6872,17 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
-#: src/pages/board/Board.tsx
-msgid "Start a board in this folder"
-msgstr ""
-
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Start board"
+msgstr "Panoyu başlat"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Start board?"
+msgstr "Pano başlatılsın mı?"
 
 #: src/pages/CompareStart.tsx
 msgid "Start comparison"
@@ -6774,6 +6910,7 @@ msgstr "Başlıyor"
 msgid "Starting…"
 msgstr "Başlatılıyor…"
 
+#: src/pages/board/Board.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Status"
 msgstr ""
@@ -7076,10 +7213,6 @@ msgstr ""
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Bu dosya geçerli bir UTF-8 Markdown değil."
 
-#: src/pages/board/Board.tsx
-msgid "This folder has no board"
-msgstr ""
-
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
 msgstr ""
@@ -7279,6 +7412,7 @@ msgstr ""
 msgid "unclassified"
 msgstr ""
 
+#: src/pages/board/Board.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Undo"
@@ -7288,6 +7422,10 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Undone"
 msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Unfollow"
+msgstr "Takibi bırak"
 
 #: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -7615,6 +7753,14 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 msgid "Window"
 msgstr ""
+
+#: src/pages/dashboard/panels.ts
+msgid "Work"
+msgstr "İş"
+
+#: src/pages/board/BoardColumns.tsx
+msgid "Work items"
+msgstr "İş öğeleri"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/TeamBoard.tsx

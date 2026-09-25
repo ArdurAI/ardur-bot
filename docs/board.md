@@ -17,7 +17,7 @@ in `packages/adapters/src/board/beads.ts`.
 ```mermaid
 flowchart LR
   Web[Web and Electron Board] --> API[Board RPC and scope checks]
-  Mobile[Mobile Ready and item] --> API
+  Mobile[Mobile Overview and Board] --> API
   API --> Bridge[Authenticated host bridge]
   Bridge --> Host[Host service and BoardRunner]
   API --> Queue[Source mode command job]
@@ -51,7 +51,7 @@ read-only grants allow workspace, snapshot and item reads and reject mutations.
 
 ## Workspaces and initialization
 
-The default board is initialized on first use at
+The space board is initialized explicitly in Settings → Customize → Boards at
 `<app home>/board/<space id>/.beads/`. The space-id segment is intentional: using
 one `<app home>/board/.beads/` for every space would share unrelated work. Prefixes
 are derived from the space name. `board_workspaces` records kind, path, prefix,
@@ -59,7 +59,7 @@ enabled state and ownership. Existing folder prefixes are read from Beads.
 
 Registered folders appear in the picker. Existing `.beads/` folders are opened
 directly. An empty registered folder requires the owner to choose
-`Start a board in this folder`; a dialog lists the files before initialization.
+`Start board`; a dialog lists the files before initialization.
 The exact initialization flags tested against `bd version 1.2.2 (6c124203e)` are:
 
 ```text
@@ -109,12 +109,26 @@ human action.
 
 ## Board and bot behavior
 
-`/app/board` shows Ready, In progress, Blocked, Deferred and Done. Done contains
+The top bar contains Dashboard, Bots and IDE, with Cmd/Ctrl+1, 2 and 3. Dashboard
+contains Overview and Board views. `/app/board` selects Board; `workspace` and
+`item` query parameters preserve board and item deep links. The active view uses
+`Board — Ardur Bot` as the window title. Overview's Work panel shows the default
+board's Ready, In progress and Blocked counts and its next three ready items.
+
+Board shows Ready, In progress, Blocked, Deferred and Done. Done contains
 items closed during the last seven days. Ready and Blocked use Beads results;
 the application does not infer readiness from a cached dependency list. Pinned
 items appear in Deferred and hooked items in In progress. Search, type, label,
 assignee and epic filters narrow the board. The dependency view uses inline SVG;
 the epic view shows child completion counts.
+
+Columns virtualize long lists. Dragging a card changes its status immediately;
+a refused Beads command restores the prior card. The drawer's status selector
+provides the keyboard alternative, and Undo performs another authorized update.
+Each column has quick-add. Filters for text, label, assignee and bot are local to
+the device. The whole view uses one non-overlapping, foreground summary poll at
+15 seconds, including at most one selected item. There are no per-item or per-bot
+subscriptions. Work uses the Dashboard's bounded panel polling.
 
 The item drawer shows description, acceptance criteria, Blocks, Blocked by,
 comments and available history. New-item and edit forms keep parent, dependencies,
@@ -142,9 +156,29 @@ The switch is off by default; turning it off revokes a pending automatic close.
 Failed and cancelled runs report their outcome without closing. Bot tools cannot
 change this switch or close a dispatched item without that permission.
 
-Mobile offers a read-only Ready list and item view, including workspace selection,
-dependencies, acceptance criteria and comments. Every new mobile string has
-Russian and Chinese catalog entries; English is the source catalog.
+Settings → Customize → Boards is the only place to initialize and configure
+boards. It discovers the space board and registered folders, reports Beads health,
+saves names and the default board, and restricts which bots may access and dispatch
+work. Archive requires confirmation and disables the board without deleting Beads
+files. Restore re-enables it. A Board view with no configured board links to Settings.
+
+Following an item is per user. `board_follows` records the last observed status,
+assignee and comment count; `board_notifications` stores versioned changes. Shared
+provider reads and mutations observe those fields, including bot tools and outcome
+comments. An observation and notification share a database transaction. The normal
+notification activity poll delivers web and desktop notifications; the existing
+worker reconciliation loop retries mobile push delivery through the configured
+notification provider. Current ownership, membership, enabled state and notification
+preferences are checked before delivery. Unfollow removes pending notifications.
+External Beads changes are observed on the next app read. Push delivery is at least
+once on transport failures, with the existing per-item collapse key.
+
+Mobile home links to Dashboard, Bots and Files. Files is a native reader for the
+same registered roots as the desktop IDE; editing stays in the desktop IDE.
+Overview contains the Board view, with status changes, quick-add, comments, follow,
+dispatch and a virtualized native list. Board setup is beside Integrations in mobile
+account settings. Signed device grants remain read-only; account sign-in is required
+for management and Files access. New mobile strings have Russian and Chinese translations.
 
 ## Limits and review decisions
 
@@ -159,11 +193,8 @@ Russian and Chinese catalog entries; English is the source catalog.
   queue. Very large boards can exceed these limits and return a structured error.
 - The UI and provider add no runtime dependencies or required hosted service.
   Ordinary model costs still apply when work is sent to a bot.
-- `apps/web/src/pages/shell/top-nav.ts` was absent. Board is placed beside Team
-  in `Shell.tsx`; if the dashboard stream introduces `registerTopNavItem`, register
-  Board at order 30 when combining those changes.
-- Apply `20260925110000_beads_board` through the normal application migration
-  process before opening Board. Generation and offline tests do not prove a live
+- Apply the application migrations through `20260925150000_board_follow_settings`
+  before opening Board. Generation and offline tests do not prove a live
   deployment has applied the schema.
 
 See [verification evidence](board-verification.md) for the tested commands,
