@@ -9,6 +9,7 @@ import {
   useSettingsSearch,
 } from "../components/SettingsRow";
 import { desktopBridge } from "../lib/desktop";
+import { rpc } from "../lib/rpc";
 import { SETTINGS_GROUPS, settingsGroupLabels, settingsSections } from "./settings-sections";
 import type { SettingsPageProps, SettingsSection } from "./settings-types";
 
@@ -28,10 +29,29 @@ export function SettingsOverlay({
   const panelRef = useRef<HTMLDivElement>(null);
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [busy, setBusy] = useState(false);
+  const [targetLabel, setTargetLabel] = useState<string | null>(null);
+  const [serverUpdates, setServerUpdates] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setServerUpdates(false);
+    if (props.isDeploymentOwner) {
+      void rpc.updater
+        .status()
+        .then((status) => {
+          if (active) setServerUpdates(status.installKind === "sidecar");
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      active = false;
+    };
+  }, [props.isDeploymentOwner]);
   const search = useSettingsSearch();
   const context = {
     desktop: !!desktopBridge(),
     isDeploymentOwner: props.isDeploymentOwner === true,
+    desktopUpdates: !!desktopBridge()?.update,
+    serverUpdates,
   };
   const available = settingsSections.filter((item) => item.available(context));
   const active = available.find((item) => item.id === section) ?? available[0]!;
@@ -39,12 +59,18 @@ export function SettingsOverlay({
   const visible = available.filter(
     (item) =>
       matchesSetting(i18n._(item.label), search.query) ||
+      item.searchLabels?.some((label) => matchesSetting(i18n._(label), search.query)) ||
       (item.id === active.id && search.rowMatch),
   );
   const Page = active.component;
   useEffect(() => setSection(initialSection), [initialSection]);
   function navigate(next: SettingsSection) {
     if (busy) return;
+    const registration = available.find((item) => item.id === next);
+    const match =
+      search.query.trim() &&
+      registration?.searchLabels?.find((label) => matchesSetting(i18n._(label), search.query));
+    setTargetLabel(match ? i18n._(match) : null);
     search.setQuery("");
     setSection(next);
   }
@@ -61,7 +87,7 @@ export function SettingsOverlay({
         : active.id === "voice"
           ? t`Close voice settings`
           : t`Close user settings`;
-  const fullPane = ["models", "memory", "capabilities", "voice"].includes(active.id);
+  const fullPane = ["memory", "capabilities", "voice"].includes(active.id);
   return (
     <Dialog
       open
@@ -140,9 +166,10 @@ export function SettingsOverlay({
               </DialogClose>
             </div>
             <div
-              className={`min-h-0 flex-1 ${fullPane ? "flex flex-col overflow-hidden" : "rk-scroll overflow-y-auto px-6 pb-6 pt-2"}`}
+              className={`min-h-0 flex-1 ${active.id === "models" ? "@container rk-scroll overflow-y-auto" : fullPane ? "flex flex-col overflow-hidden" : "rk-scroll overflow-y-auto px-6 pb-6 pt-2"}`}
             >
               <SettingsSearchProvider
+                targetLabel={targetLabel}
                 query={search.query}
                 sectionLabel={title}
                 register={search.register}

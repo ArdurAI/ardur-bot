@@ -4,6 +4,7 @@ import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { statusLabel } from "../lib/run-status-label";
 import { ChatTaskReview } from "./ChatTaskReview";
 import { DelegationLines } from "./DelegationLines";
 
@@ -149,27 +150,4 @@ function formatRelativeTime(iso: string, now = new Date()): string {
   const days = Math.floor(hours / 24);
   if (days < 7) return t`${days}d ago`;
   return date.toLocaleDateString(i18n.locale || "en", { month: "short", day: "numeric" });
-}
-
-function statusLabel(status: RunActivityRow["status"]): string {
-  switch (status) {
-    case "queued":
-      return t`Queued`;
-    case "leased":
-      return t`Starting`;
-    case "running":
-      return t`Running`;
-    case "waiting_input":
-      return t`Needs input`;
-    case "waiting_takeover":
-      return t`Needs takeover`;
-    case "completed":
-      return t`Done`;
-    case "failed":
-      return t`Failed`;
-    case "cancelled":
-      return t`Cancelled`;
-    default:
-      return status;
-  }
 }

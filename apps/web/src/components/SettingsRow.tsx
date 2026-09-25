@@ -1,5 +1,14 @@
 import type { ReactNode } from "react";
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 export function matchesSetting(label: string, query: string) {
   return label
@@ -11,6 +20,7 @@ export function matchesSetting(label: string, query: string) {
 const Context = createContext({
   query: "",
   sectionLabel: "",
+  targetLabel: null as string | null,
   register:
     (_id: string, _label: string): (() => void) =>
     () =>
@@ -39,16 +49,21 @@ export function useSettingsSearch() {
 
 export function SettingsSearchProvider({
   query,
+  targetLabel = null,
   sectionLabel,
   register,
   children,
 }: {
   query: string;
+  targetLabel?: string | null;
   sectionLabel: string;
   register: (id: string, label: string) => () => void;
   children: ReactNode;
 }) {
-  const value = useMemo(() => ({ query, sectionLabel, register }), [query, sectionLabel, register]);
+  const value = useMemo(
+    () => ({ query, targetLabel, sectionLabel, register }),
+    [query, targetLabel, sectionLabel, register],
+  );
   return <Context value={value}>{children}</Context>;
 }
 
@@ -65,11 +80,20 @@ export function SettingsRow({
   content?: ReactNode;
 }) {
   const id = useId();
-  const { query, sectionLabel, register } = useContext(Context);
+  const { query, targetLabel, sectionLabel, register } = useContext(Context);
+  const row = useRef<HTMLFieldSetElement>(null);
+  useEffect(() => {
+    if (targetLabel !== label) return;
+    row.current?.scrollIntoView?.({ block: "center" });
+    row.current
+      ?.querySelector<HTMLElement>('input:not([aria-hidden="true"]), button, select, textarea')
+      ?.focus();
+  }, [label, targetLabel]);
   useEffect(() => register(id, label), [id, label, register]);
   const visible = matchesSetting(label, query) || matchesSetting(sectionLabel, query);
   return (
     <fieldset
+      ref={row}
       aria-labelledby={id}
       hidden={!visible}
       data-settings-row={label}

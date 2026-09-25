@@ -114,6 +114,26 @@ const comparison = {
   merge: null,
 } as unknown as Comparison;
 
+it("uses friendly pin labels and omits missing separator segments", async () => {
+  const selected = participant("a");
+  selected.executing.pin = {
+    ...selected.executing.pin,
+    runtimeKind: "pi",
+    provider: "openai-compatible",
+    modelId: null,
+    effort: null,
+  };
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () => root.render(<ComparisonPin participant={selected} />));
+    expect(node.querySelector("p")?.textContent).toBe("OpenAI-compatible");
+    expect(node.querySelector("summary")?.textContent).toBe("Ardur");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it.each([false, true, undefined])(
   "labels comparison effort with result evidence %s",
   async (effortAttested) => {

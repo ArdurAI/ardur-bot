@@ -129,9 +129,36 @@ it.each([false, true, undefined])(
       root.render(createElement(MobileComparisonOutput, { participant, result })),
     );
     expect(node.textContent).toContain(
-      `anthropic · claude-opus-5 · high${effortAttested ? "" : " · requested"}`,
+      `Anthropic · claude-opus-5 · high${effortAttested ? "" : " · requested"}`,
     );
+    expect(node.textContent).toContain("Claude Code · desktop");
     expect(node.textContent?.includes("requested")).toBe(effortAttested !== true);
     await act(async () => root.unmount());
   },
 );
+
+it("renders friendly pin labels without empty separator segments", async () => {
+  const participant = {
+    botId: "a",
+    name: "Reviewer",
+    executing: {
+      pin: {
+        runtimeKind: "pi",
+        modelId: null,
+        provider: "openai-compatible",
+        effort: null,
+      },
+      computer: { kind: "desktop" },
+    },
+  } as ComparisonParticipant;
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(createElement(MobileComparisonOutput, { participant })));
+  expect([...node.querySelectorAll("span")].map((span) => span.textContent)).toEqual([
+    "Reviewer",
+    "OpenAI-compatible",
+    "Ardur · desktop",
+    "Incomplete",
+  ]);
+  await act(async () => root.unmount());
+});

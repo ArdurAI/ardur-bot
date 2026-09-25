@@ -518,6 +518,7 @@ export function parsePerformanceEvidenceReport(
       }),
     );
     const artifacts = new Map(report.artifacts.map((artifact) => [artifact.sha256, artifact]));
+    const artifactHashes = new Set(artifacts.keys());
     const traces = new Set(
       array(report.traces).map((trace) => {
         keys(trace, ["id", "artifactHash", "clock"]);
@@ -569,7 +570,23 @@ export function parsePerformanceEvidenceReport(
           if (observation.pairId !== null) opaque(observation.pairId);
           traceRef(observation.traceId);
           outcome(observation.outcome);
-          evidenceValue(observation, metric.unit === "count" || metric.unit === "tokens");
+          evidenceValue(
+            observation,
+            metric.unit === "count" || metric.unit === "tokens",
+            artifactHashes,
+          );
+          if (observation.value !== null) {
+            if (metric.id === "m05.cache-token-hit" || metric.id === "m05.cache-request-hit")
+              check(
+                report.scenario.tier === "T3" && observation.provenance?.kind === "provider-live",
+                "cache hits require live provider evidence",
+              );
+            if (definition.familyId === "m10")
+              check(
+                report.environment.memoryAccounting !== "not-measured",
+                "memory observations require an accounting method",
+              );
+          }
           if (observation.value !== null && definition.maximum !== null)
             check(observation.value <= definition.maximum, "metric above valid range");
           if (observation.provenance?.kind === "provider-live")
@@ -676,6 +693,11 @@ export function parsePerformanceEvidenceReport(
       if (crash.status === "complete") {
         oneOf(crash.recovery, ["automatic-recovery", "safe-retry", "explicit-uncertainty"]);
         check(
+          crash.recovery ===
+            CRASH_BOUNDARIES.find((boundary) => boundary.id === crash.id)!.expected,
+          "recovery does not match boundary",
+        );
+        check(
           typeof crash.safetyPassed === "boolean" && typeof crash.taskCompleted === "boolean",
           "missing crash result",
         );
@@ -691,7 +713,7 @@ export function parsePerformanceEvidenceReport(
     const requestIds = new Set(report.usage.map((request) => request.requestId));
     const counterSamples = new Set<string>();
     for (const request of report.usage) {
-      validateUsage(request);
+      validateUsage(request, artifactHashes);
       if (request.counter.mode === "cumulative-difference") {
         const key = canonicalSerialize([
           request.routeId,
@@ -728,7 +750,14 @@ export function parsePerformanceEvidenceReport(
       }
     }
     const observedUsage = report.usage.filter((request) =>
-      USAGE_CATEGORIES.every((key) => request.categories[key].value !== null),
+      USAGE_CATEGORIES.every((key) => {
+        const category = request.categories[key];
+        return (
+          category.value !== null &&
+          category.provenance?.kind !== "estimated" &&
+          category.provenance?.kind !== "virtual"
+        );
+      }),
     ).length;
     coverage(report.usageCoverage, observedUsage);
     check(
@@ -741,7 +770,7 @@ export function parsePerformanceEvidenceReport(
   }
 }
 
-function validateUsage(request: RequestUsageEvidence) {
+function validateUsage(request: RequestUsageEvidence, artifactHashes: ReadonlySet<string>) {
   keys(request, [
     "requestId",
     "turnId",
@@ -784,7 +813,7 @@ function validateUsage(request: RequestUsageEvidence) {
   keys(request.categories, [...USAGE_CATEGORIES]);
   for (const category of Object.values(request.categories)) {
     keys(category, ["value", "missingReason", "provenance"]);
-    evidenceValue(category, true);
+    evidenceValue(category, true, artifactHashes);
   }
   const { logicalInput, uncachedInput, cacheReadInput, cacheWriteInput, output, reasoning } =
     request.categories;
@@ -918,6 +947,32 @@ export function assertComparablePerformanceEvidence(
 ): void {
   const left = parsePerformanceEvidenceReport(before, "before");
   const right = parsePerformanceEvidenceReport(after, "after");
+  assertMatchingEvidencePlan(left, right);
+  check(
+    left.build.commit === right.build.parentCommit ||
+      left.build.commit === right.build.fixedReleaseCommit,
+    "undeclared comparison baseline",
+  );
+}
+
+/** A/A calibration repeats one build; it does not compare a candidate to a baseline. */
+export function assertCalibrationPerformanceEvidence(
+  before: PerformanceEvidenceReport,
+  after: PerformanceEvidenceReport,
+): void {
+  const left = parsePerformanceEvidenceReport(before, "calibration-before");
+  const right = parsePerformanceEvidenceReport(after, "calibration-after");
+  check(
+    canonicalSerialize(left.build) === canonicalSerialize(right.build),
+    "calibration requires identical build provenance",
+  );
+  assertMatchingEvidencePlan(left, right);
+}
+
+function assertMatchingEvidencePlan(
+  left: PerformanceEvidenceReport,
+  right: PerformanceEvidenceReport,
+) {
   for (const key of ["manifestHash", "environmentHash", "hashes", "scenario"] as const)
     check(canonicalSerialize(left[key]) === canonicalSerialize(right[key]), `incompatible ${key}`);
   check(
@@ -954,6 +1009,7 @@ export function assertComparablePerformanceEvidence(
         fixtureHash,
         graderHash,
         trials: trials.length,
+        pairs: trials.flatMap(({ pairId }) => (pairId === null ? [] : [pairId])).sort(),
       }))
       .sort((a, b) => a.id.localeCompare(b.id));
   check(
@@ -1010,7 +1066,11 @@ function missing(value: unknown) {
 function outcome(value: unknown) {
   oneOf(value, ["success", "failed", "cancelled", "timed-out", "uncertain"]);
 }
-function evidenceValue(value: EvidenceValue, integral: boolean) {
+function evidenceValue(
+  value: EvidenceValue,
+  integral: boolean,
+  artifactHashes: ReadonlySet<string>,
+) {
   if (value.value === null) {
     missing(value.missingReason);
     check(value.provenance === null, "missing value cannot claim provenance");
@@ -1031,6 +1091,7 @@ function evidenceValue(value: EvidenceValue, integral: boolean) {
     "virtual",
   ]);
   digest(value.provenance.sourceHash);
+  check(artifactHashes.has(value.provenance.sourceHash), "observation source artifact missing");
 }
 function coverage(value: { expected: number; observed: number }, observed: number) {
   keys(value, ["expected", "observed"]);

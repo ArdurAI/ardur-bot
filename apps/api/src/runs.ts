@@ -1,5 +1,5 @@
 import type { Actor, RunActivityRow } from "@ardurbot/contracts";
-import { MessageBlock } from "@ardurbot/contracts";
+import { MessageBlock, RunTriggerSchema } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, botMessageContext, runNotificationCategory } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { delegationView, getUserPreferences } from "@ardurbot/db";
@@ -98,7 +98,7 @@ export async function listSpaceRuns(
     threadId: row.threadId,
     externalThread: Boolean(row.thread.externalConversationId),
     status: row.status as RunActivityRow["status"],
-    trigger: row.trigger as RunActivityRow["trigger"],
+    trigger: RunTriggerSchema.parse(row.trigger),
     notificationsEnabled:
       activityNotificationsEnabled(row.thread.groupId, row.bot.notifyOnFinish) &&
       preferences.notifications[

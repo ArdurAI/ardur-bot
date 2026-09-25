@@ -27,10 +27,17 @@ describe("settings registry", () => {
         "integrations",
         "mcp",
         "plugins",
-        "updates",
       ]),
     );
-    for (const id of ["system", "extensions", "developer", "computer", "local-api", "connectors"])
+    for (const id of [
+      "system",
+      "extensions",
+      "developer",
+      "computer",
+      "local-api",
+      "connectors",
+      "updates",
+    ])
       expect(web).not.toContain(id);
     const desktop = settingsSections
       .filter((item) => item.available({ desktop: true, isDeploymentOwner: true }))
@@ -38,6 +45,20 @@ describe("settings registry", () => {
     expect(desktop).toEqual(
       expect.arrayContaining(["system", "extensions", "developer", "computer"]),
     );
+  });
+  it("offers Updates only when an updater is available", () => {
+    const updates = settingsSections.find((item) => item.id === "updates")!;
+    expect(updates.available({ desktop: false, isDeploymentOwner: true })).toBe(false);
+    expect(updates.available({ desktop: true, isDeploymentOwner: true })).toBe(false);
+    expect(
+      updates.available({ desktop: true, isDeploymentOwner: false, desktopUpdates: true }),
+    ).toBe(true);
+    expect(
+      updates.available({ desktop: false, isDeploymentOwner: true, serverUpdates: true }),
+    ).toBe(true);
+    expect(
+      updates.available({ desktop: false, isDeploymentOwner: false, serverUpdates: true }),
+    ).toBe(false);
   });
   it("keeps Integrations and MCP in Customize on every surface", () => {
     for (const id of ["integrations", "mcp"]) {
