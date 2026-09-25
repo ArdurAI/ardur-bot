@@ -93,7 +93,7 @@ describe("desktop host service", () => {
         HOMEBREW_PREFIX: "/fixture/brew",
       });
       expect(env.GH_TOKEN).toBeUndefined();
-      expect(env.AWS_PROFILE).toBeUndefined();
+      expect(env.AWS_PROFILE).toBe("placeholder");
       expect(env.NODE_OPTIONS).toBeUndefined();
       expect(env.ANTHROPIC_API_KEY).toBeUndefined();
       expect(env.HOST_TOKEN).toBeUndefined();

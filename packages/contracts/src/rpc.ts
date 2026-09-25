@@ -940,6 +940,7 @@ export const appContract = {
   },
   integrations: {
     list: oc.output(IntegrationCatalogListSchema),
+    status: oc.input(z.object({ connectionId: Id })).output(IntegrationConnectionSchema),
     connect: oc
       .input(
         z.object({
@@ -953,7 +954,19 @@ export const appContract = {
             .max(16_384)
             .regex(/^[^\s]+$/)
             .optional(),
-          authKind: z.enum(["oauth", "token"]).optional(),
+          authKind: z.enum(["oauth", "token", "host"]).optional(),
+          oauthClient: z
+            .object({
+              clientId: z
+                .string()
+                .trim()
+                .min(1)
+                .max(1024)
+                .regex(/^[^\s]+$/),
+              clientSecret: z.string().min(1).max(16384).optional(),
+            })
+            .strict()
+            .optional(),
         }),
       )
       .output(
@@ -994,6 +1007,16 @@ export const appContract = {
   },
   mcp: {
     servers: {
+      permissions: oc
+        .input(
+          z.object({
+            serverId: Id,
+            botIds: z.array(Id).max(100),
+            toolIds: z.array(z.string().min(1).max(200)).max(500),
+            spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
+          }),
+        )
+        .output(z.array(IntegrationGrantSchema)),
       tools: oc.input(z.object({ serverId: Id })).output(IntegrationManifestSchema),
       list: oc.output(z.array(McpServerSchema)),
       create: oc.input(McpServerConfigInput).output(McpServerSchema),

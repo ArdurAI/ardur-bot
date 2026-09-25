@@ -65,9 +65,85 @@ Registered folders grant filesystem access; consequential actions still require 
 3. Follow Trusted folders to Computers and verify the count against the registered folders. In a desktop build, verify both keep-working states with a local host task.
 4. Allow notifications, change each available category, then finish a run, finish or fail a routine, request an approval and receive a Dispatch result. Test enabled and disabled states while another conversation is open.
 5. In Privacy, export account JSON and memory, inspect uploads, cancel a deletion, confirm it, and verify another account cannot list or delete those files.
-6. Open Integrations from the sidebar and composer. Check the nine registry entries, reconnect a connection from the composer, then open MCP and add or manage a server. Verify the old catalog dialog never opens.
+6. Open Integrations from the sidebar and composer. Check the ten registry entries, reconnect a connection from the composer, then open MCP and add or manage a server. Verify the old catalog dialog never opens.
 7. Open Extensions, Developer, Skills, and Plugins through their registry entries. Verify that Developer contains no MCP controls, managed servers cannot be changed in MCP, default servers need explicit enablement and tool approval, and local config changes show a diff before applying.
 
 Offline unit tests cover the contracts, persistence, filtering, appearance attributes and CSS, notification gates and transports, export, upload ownership, desktop IPC and mobile preferences. The web `settings-shell.spec.ts` captures General, row search and Privacy. Native OS notification delivery and host lifecycle still need a signed desktop build and a phone; the desktop Playwright suite is deliberately excluded from routine local verification.
 
 The composer prerequisite is the existing `355c8852` commit from `dev`. Account owns profile, avatar, password, shared bot instructions, trusted devices and sessions. General owns language and appearance. Privacy owns account and memory export. Account deletion remains in the native mobile Account screen; it is omitted from web and desktop Account. The preference migration uses `20260924052000_user_preferences`; its SQL is identical to the initial Settings migration. This keeps the comparisons timestamp `20260924050000` and account-settings timestamp `20260924055000` free for their streams.
+
+## Integration management
+
+`IntegrationsSection.tsx` lazily renders the compatibility `IntegrationCatalog`
+export of `IntegrationCards` from `components/integrations/card/`. That controller uses `IntegrationTable` as its
+only list, with Yours/Catalog and search. One row represents one catalog provider;
+local CLI sign-ins and remote accounts appear as options within that row. The Type
+column shows Desktop, Web, or both. Included provenance and the most urgent
+connection state stay visible. `IntegrationCatalog` is a compatibility export of
+that same controller, not a second connection flow.
+
+Manage replaces the list with `IntegrationDetails` under
+`components/integrations/manage/`. Test and Reconnect use the selected connection;
+returning to the list preserves search and tab selection. Pending sign-ins retain
+Cancel and completion polling. Composer reconnection opens this same detail flow;
+`connectors.summary` counts remote and host connections in `needs-sign-in`. MCP remains the home for custom and managed servers,
+opt-in defaults, diagnostics, redacted logs and reviewed configuration changes.
+
+Manage shows account/workspace when the provider supplies them, scopes, captured
+tools, Allow/Ask/Block controls, bot grants, last use and health, and recent safe
+errors. Block removes the tool from the grant. Allow applies only to read tools;
+write tools and host command execution always require Ask-first. A changed tool
+schema or identity clears previous grants for review. Test preserves grants when
+the identity and tool definitions are unchanged. `McpToolReview` uses the same Allow/Ask/Block control and saves through
+`mcp.servers.permissions`. The API shares `IntegrationConnections.assign` while
+checking whether the connection belongs to the catalog or MCP. Bot grants remain
+scoped to the chosen server; existing grants for other servers stay intact. Only
+the space owner can change read approvals. Tool changes and permission saves
+invalidate pending approvals and stale tool routes. Managed configuration still
+belongs to Extensions or Plugins.
+
+Mobile reads the same states and links to web management; it does not modify
+connection permissions.
+
+The Models Anthropic panel links a current bot to **Runs on → Claude Code**.
+The built-in runtime still accepts an API key only. See
+[integration lifecycle](./decisions/integration-lifecycle.md) for callback,
+refresh, provider limitations and manual verification.
+
+## Auto Review configuration
+
+`ActionAutoReviewSettingsSchema.configurationWarning` reports `jev-key-missing`
+when Jev is selected without a TypeSafe key. `ApprovalRulesSettings`, shared by web
+and desktop, shows “Jev needs a TypeSafe API key.” even when the LLM fallback is
+available or the toggle is off. This appears only for that deployment
+misconfiguration. The API logs the same sentence once per process. The existing
+fallback checker and Ask-first behavior remain unchanged. Mobile has no Auto Review
+status control.
+
+The bundle guard for the former `ToolPicker` shared chunk now follows
+`ToolPermissions`, which serves catalog and MCP review. It stays outside the
+initial graph. The historical numeric bundle baseline is unchanged; the follow-up
+budget compares actual builds against the merged `dev` revision.
+
+## Integration reconciliation verification
+
+The merge of `dev` revision `cd4f634d` is `4582f9c3`. Follow-up changes remain
+uncommitted. Actual production builds measured 412,550 bytes of initial JavaScript
+gzip on `dev` and 413,341 bytes after reconciliation: 791 bytes of growth against a
+1,024-byte limit. Both builds used the same locked dependencies and
+`scripts/bundle-budget.mjs` at gzip level 9. The direct comparison reports the
+expected removal of `chunk:ToolPicker`; its replacement `chunk:ToolPermissions`
+remains lazy. No numerical baseline was raised.
+
+`pnpm exec vitest run --maxWorkers=3` passed 6,276 tests, with 168 skipped and no
+failures, across 666 passing and 30 skipped files. The existing Postgres,
+Docker/Compose, end-to-end and live-canary gates account for the skipped files.
+Workspace checks passed with `EXPO_OFFLINE=1`; Biome and lint passed with repository
+warnings and no errors. Prisma generation, web build, desktop build, host-service
+build, web extraction and mobile catalog deduplication passed.
+
+The lifecycle migration retains `20260924150000_integration_lifecycle` unchanged.
+No migration was applied to an existing deployment. Live provider consent, packaged
+OS protocol acceptance, physical mobile checks and browser end-to-end screenshots
+remain manual. Windows native filesystem binaries were absent from the real local
+build; the existing refusal of unsupported Windows writes remains in place.

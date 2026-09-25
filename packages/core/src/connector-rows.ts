@@ -30,7 +30,7 @@ export function connectorRows(input: {
     return {
       id: server.id,
       name: server.name,
-      type: server.transport === "stdio" ? "desktop" : "web",
+      type: server.transport === "stdio" || server.transport === "host-cli" ? "desktop" : "web",
       badges: descriptor
         ? ["included"]
         : server.managedBy
@@ -40,7 +40,9 @@ export function connectorRows(input: {
             : ["custom"],
       status: !server.enabled
         ? "disconnected"
-        : server.oauthStatus === "reconnect" || state === "discovery-failed"
+        : server.oauthStatus === "reconnect" ||
+            state === "discovery-failed" ||
+            state === "needs-sign-in"
           ? "reconnect"
           : server.oauthStatus === "connected" || state === "connected"
             ? "connected"
@@ -56,12 +58,13 @@ export function connectorRows(input: {
     rows.push({
       id: connection.id,
       name: descriptor.name,
-      type: descriptor.transport === "stdio" ? "desktop" : "web",
+      type:
+        connection.transport === "host-cli" || descriptor.transport === "stdio" ? "desktop" : "web",
       badges: ["included"],
       status:
         connection.state === "connected"
           ? "connected"
-          : connection.state === "discovery-failed"
+          : connection.state === "discovery-failed" || connection.state === "needs-sign-in"
             ? "reconnect"
             : "disconnected",
       catalogId: descriptor.id,
@@ -69,16 +72,25 @@ export function connectorRows(input: {
     });
   }
   if (!input.catalogTab) return rows;
-  return input.catalog.map(
-    (descriptor) =>
-      rows.find((row) => row.catalogId === descriptor.id) ?? {
-        id: `catalog:${descriptor.id}`,
-        name: descriptor.name,
-        type: descriptor.transport === "stdio" ? "desktop" : "web",
-        badges: ["included"],
-        status: "disconnected",
-        catalogId: descriptor.id,
-        available: descriptor.available,
-      },
-  );
+  return input.catalog.map((descriptor) => {
+    const connections = rows.filter((row) => row.catalogId === descriptor.id);
+    const first =
+      connections.find((row) => row.status === "reconnect") ??
+      connections.find((row) => row.status === "connected") ??
+      connections[0];
+    return first
+      ? { ...first, name: descriptor.name }
+      : {
+          id: `catalog:${descriptor.id}`,
+          name: descriptor.name,
+          type:
+            descriptor.transport === "stdio" || descriptor.transport === "host-cli"
+              ? "desktop"
+              : "web",
+          badges: ["included"],
+          status: "disconnected",
+          catalogId: descriptor.id,
+          available: descriptor.available,
+        };
+  });
 }

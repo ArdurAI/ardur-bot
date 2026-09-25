@@ -1,7 +1,7 @@
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
 import { rpc } from "../lib/rpc";
 
@@ -12,7 +12,6 @@ const POPUP_NAME = MCP_OAUTH_CHANNEL;
 
 export function McpOAuthCallbackPage() {
   const { t } = useLingui();
-  const navigate = useNavigate();
   const [params] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -37,10 +36,11 @@ export function McpOAuthCallbackPage() {
           window.close();
           return;
         }
-        navigate("/app?mcp_oauth=connected", { replace: true });
+        setDone(true);
+        window.close();
       })
       .catch(() => setError(t`Could not complete authorization. Try connecting again.`));
-  }, [navigate, params, t]);
+  }, [params, t]);
   const showReturn = Boolean(error) && window.name !== POPUP_NAME;
   return (
     <div className="grid min-h-screen place-items-center bg-background p-6 text-center">
@@ -56,7 +56,7 @@ export function McpOAuthCallbackPage() {
         </div>
         {error ? <p className="mt-2 max-w-md text-sm text-muted-foreground">{error}</p> : null}
         {showReturn ? (
-          <Button type="button" className="mt-5" onClick={() => navigate("/app")}>
+          <Button type="button" className="mt-5" onClick={() => window.close()}>
             <Trans>Return to Ardur Bot</Trans>
           </Button>
         ) : (

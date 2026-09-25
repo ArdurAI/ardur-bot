@@ -200,6 +200,7 @@ export function CreateBotForm({
 export function BotSettings({
   bot,
   modelFocusRequest = 0,
+  runtimeFocusRequest = 0,
   modelSettings,
   memoryProviderConfigured,
   onSkillsChange,
@@ -209,6 +210,7 @@ export function BotSettings({
 }: {
   bot: Bot;
   modelFocusRequest?: number;
+  runtimeFocusRequest?: number;
   modelSettings?: ModelSettings | null;
   onSkillsChange: (skills: AgentSkillCatalogEntry[]) => void;
   memoryProviderConfigured: boolean;
@@ -236,6 +238,12 @@ export function BotSettings({
   const { t } = useLingui();
   const [advancedOpened, setAdvancedOpened] = useState(false);
   const modelRef = useRef<HTMLSelectElement>(null);
+  const runtimeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!runtimeFocusRequest) return;
+    runtimeRef.current?.querySelector("select")?.focus();
+    runtimeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [runtimeFocusRequest]);
   useEffect(() => {
     if (!modelFocusRequest) return;
     modelRef.current?.focus();
@@ -525,16 +533,18 @@ export function BotSettings({
         />
       </div>
       <ModelDestinations botId={bot.id} />
-      <RuntimeSettings
-        experimental={runtimeExperimental}
-        onExperimental={setRuntimeExperimental}
-        kind={runtimeKind}
-        onKind={setRuntimeKind}
-        modelKey={modelKey}
-        onModel={setModelKey}
-        effort={thinkingLevel}
-        onEffort={setThinkingLevel}
-      />
+      <div ref={runtimeRef}>
+        <RuntimeSettings
+          experimental={runtimeExperimental}
+          onExperimental={setRuntimeExperimental}
+          kind={runtimeKind}
+          onKind={setRuntimeKind}
+          modelKey={modelKey}
+          onModel={setModelKey}
+          effort={thinkingLevel}
+          onEffort={setThinkingLevel}
+        />
+      </div>
       {runtimeKind === "pi" ? (
         <>
           <label htmlFor={`${ids}-model`} className={fieldLabelClass}>

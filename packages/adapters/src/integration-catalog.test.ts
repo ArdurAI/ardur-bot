@@ -10,14 +10,20 @@ import { captureIntegrationManifest, inputSchemaDigest } from "./integration-man
 import { assertSafeRemoteUrl } from "./remote-mcp.js";
 
 describe("trusted integration registry", () => {
-  it("has nine unique valid entries, four empty opt-in grants, and no embedded credentials", () => {
-    expect(integrationCatalog).toHaveLength(9);
-    expect(new Set(integrationCatalog.map((entry) => entry.id)).size).toBe(9);
+  it("has ten unique valid entries, empty opt-in grants, and no embedded credentials", () => {
+    expect(integrationCatalog).toHaveLength(10);
+    expect(new Set(integrationCatalog.map((entry) => entry.id)).size).toBe(10);
     expect(integrationCatalog.filter((entry) => entry.available).map((entry) => entry.id)).toEqual([
       "github",
       "gitlab",
       "atlassian",
       "notion",
+      "linear",
+      "aws",
+      "jenkins",
+      "kubernetes",
+      "google-cloud",
+      "azure",
     ]);
     for (const descriptor of integrationCatalog) {
       expect(validateIntegrationDescriptor(descriptor)).toEqual(descriptor);
@@ -70,7 +76,7 @@ describe("trusted integration registry", () => {
     ])
       expect(() => connectableIntegration("gitlab", host)).toThrow();
     expect(() => connectableIntegration("github", "https://example.test")).toThrow();
-    for (const descriptor of integrationCatalog.filter((entry) => entry.available)) {
+    for (const descriptor of integrationCatalog.filter((entry) => entry.endpoint)) {
       await expect(
         assertSafeRemoteUrl(descriptor.endpoint!, async () => [
           { address: "203.0.113.10", family: 4 },

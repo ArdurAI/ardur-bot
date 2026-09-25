@@ -150,6 +150,11 @@ export function ApprovalRulesSettings() {
           <Label htmlFor={autoReviewId} className="text-[14px] font-normal text-foreground/75">
             <Trans>Flag unexpected actions</Trans>
           </Label>
+          {autoReview?.configurationWarning === "jev-key-missing" ? (
+            <p role="status" className="mt-1 text-[13px] text-warning">
+              <Trans>Jev needs a TypeSafe API key.</Trans>
+            </p>
+          ) : null}
           {autoReview?.enabled && !autoReview.checkerAvailable ? (
             <p className="mt-1 text-[13px] text-muted-foreground">
               <Trans>Add a model in Settings to use this.</Trans>

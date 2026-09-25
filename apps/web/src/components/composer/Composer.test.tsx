@@ -175,6 +175,22 @@ function menuItem(text: string): HTMLElement {
 }
 
 describe("composer controls", () => {
+  it.each(["streamable_http", "host-cli"])(
+    "opens Manage for a %s connection needing sign-in",
+    async (transport) => {
+      fake.integrations.mockResolvedValue({
+        catalog: [{ id: "reports", name: "Reports", authKind: "oauth" }],
+        connections: [
+          { id: "connection", catalogId: "reports", state: "needs-sign-in", transport },
+        ],
+      });
+      await mount();
+      await openMenu();
+      await click(menuItem("Integrations"));
+      await click(menuItem("Reports"));
+      expect(fake.manage).toHaveBeenCalledExactlyOnceWith("connection");
+    },
+  );
   it("shows the exact menu order and hides folders on the web", async () => {
     await mount();
     await openMenu();

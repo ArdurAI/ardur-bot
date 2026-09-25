@@ -1,4 +1,15 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Sign-in timed out.": "Время входа истекло.",
+  "Needs sign-in": "Требуется вход",
+  "Not available": "Недоступно",
+  "Signed in on this computer as {identity}": "Вход на этом компьютере: {identity}",
+  "Not found on this computer": "Не найдено на этом компьютере",
+  "Needs sign-in on this computer": "Требуется вход на этом компьютере",
+  "Could not check this computer.": "Не удалось проверить этот компьютер.",
+  "Last successful call": "Последний успешный вызов",
+  "Open bot settings": "Открыть настройки бота",
+  "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.":
+    "Чтобы использовать подписку Claude, выберите «Запускается на → Claude Code» в настройках бота.",
   "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.":
     "Проверка памяти через Claude Code или Codex пока недоступна; импортируйте память или отредактируйте документ напрямую.",
   Select: "Выбрать",

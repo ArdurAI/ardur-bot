@@ -271,6 +271,7 @@ it("reports the host inventory through health and the run-scoped environment ope
   expect(frames[0]).toMatchObject({ type: "stream", channel: "result", data: health.environment });
 });
 
+vi.mock("./host-integrations.js", () => ({ inspectHostIntegrations: async () => [] }));
 it("round-trips a 2 MB owner save and bounds larger previews without raising bot file limits", async () => {
   const { agent, frames, root, completed } = await fixture(undefined, true);
   const content = Buffer.alloc(2 * 1024 * 1024, 97);

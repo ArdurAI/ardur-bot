@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { HostIntegrationSchema } from "./host-integrations.js";
 import { IDE_FILE_BYTES } from "./ide.js";
 import {
   RuntimeAvailabilitySchema,
@@ -155,6 +156,9 @@ export const HostOperationSchema = z.discriminatedUnion("op", [
     op: z.literal("computer.exec"),
     homeKey: id,
     argv: z.array(z.string().max(4096)).min(1).max(64),
+    hostIntegration: HostIntegrationSchema.pick({ id: true, identity: true, workspace: true })
+      .extend({ identity: z.string().min(1).max(240) })
+      .optional(),
     cwd: path.optional(),
     timeoutMs: z.number().int().min(1).max(300_000).optional(),
   }),
@@ -208,6 +212,7 @@ export const HostHealthSchema = z.strictObject({
   claude: RuntimeAvailabilitySchema,
   codex: RuntimeAvailabilitySchema,
   environment: HostEnvironmentSchema.optional(),
+  integrations: z.array(HostIntegrationSchema).max(16).optional(),
 });
 export type HostHealth = z.infer<typeof HostHealthSchema>;
 export const HostStatusSchema = z.strictObject({

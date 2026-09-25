@@ -112,6 +112,7 @@ async function main() {
     prisma,
     secrets,
     {
+      sandbox,
       hostMcp: createHostClient(),
       stdioEnabled: process.env.MCP_STDIO_ENABLED === "true",
       allowedCommands: (process.env.MCP_STDIO_ALLOWED_COMMANDS ?? "")

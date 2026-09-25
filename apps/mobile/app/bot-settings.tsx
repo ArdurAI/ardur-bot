@@ -1,12 +1,10 @@
-import type { RuntimeKind } from "@ardurbot/contracts";
+import type { ComputerMode, RuntimeKind, ThinkingLevel } from "@ardurbot/contracts";
 import {
   BOT_COLORS,
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
-  type ComputerMode,
   normalizeCreateBotProfile,
-  type ThinkingLevel,
 } from "@ardurbot/contracts";
 import {
   modelPinOptionKey as modelOptionKey,
@@ -14,18 +12,13 @@ import {
   spaceDefaultEffort,
 } from "@ardurbot/core";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { BotAvatar } from "../components/bot-avatar";
 import { ComputerModePicker } from "../components/computer-mode-picker";
 import { RuntimeSettings } from "../components/runtime-settings";
-import {
-  type MobileBot,
-  type MobileMe,
-  type MobileModel,
-  type MobileModelCredential,
-  rpc,
-} from "../lib/api";
+import type { MobileBot, MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
+import { rpc } from "../lib/api";
 import { COMPUTER_LIFECYCLE_TIMEOUT_MS } from "../lib/computer";
 import { useI18n } from "../lib/i18n";
 import { loadLearning } from "../lib/learning";
@@ -54,6 +47,7 @@ export default function BotSettingsScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const { botId, focus } = useLocalSearchParams<{ botId: string; focus?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
   const [bot, setBot] = useState<BotSettingsRecord | null>(null);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
@@ -346,6 +340,7 @@ export default function BotSettingsScreen() {
     <>
       <Stack.Screen options={{ title: t("Chat settings") }} />
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1, backgroundColor: tokens.background }}
         contentContainerStyle={{ padding: 24 }}
         keyboardShouldPersistTaps="handled"
@@ -453,16 +448,23 @@ export default function BotSettingsScreen() {
           ))}
         </ScrollView>
         <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-        <RuntimeSettings
-          experimental={runtimeExperimental}
-          onExperimental={setRuntimeExperimental}
-          kind={runtimeKind}
-          onKind={setRuntimeKind}
-          modelKey={modelKey}
-          onModel={setModelKey}
-          effort={thinkingLevel}
-          onEffort={setThinkingLevel}
-        />
+        <View
+          onLayout={(event) => {
+            if (focus === "runtime")
+              scrollRef.current?.scrollTo({ y: event.nativeEvent.layout.y, animated: true });
+          }}
+        >
+          <RuntimeSettings
+            experimental={runtimeExperimental}
+            onExperimental={setRuntimeExperimental}
+            kind={runtimeKind}
+            onKind={setRuntimeKind}
+            modelKey={modelKey}
+            onModel={setModelKey}
+            effort={thinkingLevel}
+            onEffort={setThinkingLevel}
+          />
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("Advanced")}
