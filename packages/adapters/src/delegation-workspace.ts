@@ -2,6 +2,21 @@ import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/ada
 import type { PrismaClient } from "@ardurbot/db";
 
 /** Workspaces keep task files apart. They do not restrict shell or filesystem authority. */
+export const DELEGATION_WORKSPACE_SCRIPT = `set -eu
+root="$PWD"
+source_dir="$1"
+target="$root/$2"
+mkdir -p "$(dirname "$target")"
+if test -d "$target"; then
+  if test -f "$target/.git"; then printf worktree; else printf artifacts; fi
+elif git -C "$source_dir" rev-parse --verify HEAD >/dev/null 2>&1; then
+  git -C "$source_dir" worktree add --detach "$target" HEAD >/dev/null
+  printf worktree
+else
+  mkdir -p "$target"
+  printf artifacts
+fi`;
+
 export async function prepareDelegationWorkspace(
   prisma: PrismaClient,
   sandbox: SandboxProvider,
@@ -16,20 +31,7 @@ export async function prepareDelegationWorkspace(
     throw new Error("Invalid task workspace identity.");
   const directory = `tasks/${row.rootTaskId}/${id}`;
   // Every value is a positional argument. No prompt or repository text becomes shell syntax.
-  const script = `set -eu
-root="$PWD"
-source_dir="$1"
-target="$root/$2"
-mkdir -p "$(dirname "$target")"
-if test -d "$target"; then
-  if test -f "$target/.git"; then printf worktree; else printf artifacts; fi
-elif git -C "$source_dir" rev-parse --verify HEAD >/dev/null 2>&1; then
-  git -C "$source_dir" worktree add --detach "$target" HEAD >/dev/null
-  printf worktree
-else
-  mkdir -p "$target"
-  printf artifacts
-fi`;
+  const script = DELEGATION_WORKSPACE_SCRIPT;
   let kind = "";
   let success = false;
   for await (const event of sandbox.execute(

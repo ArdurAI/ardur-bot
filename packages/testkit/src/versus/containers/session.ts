@@ -408,7 +408,7 @@ export class ContainerSession {
     validateContainerInspection(this.policy, await this.inspect(), this.resource.owner);
   }
   async file(
-    op: "read" | "write" | "mkdir" | "snapshot",
+    op: "read" | "write" | "mkdir" | "list" | "snapshot",
     file: string,
     content?: Uint8Array,
   ): Promise<unknown> {
@@ -441,26 +441,35 @@ export class ContainerSession {
     return (await this.file("snapshot", directory)) as Record<string, string>;
   }
   /** The trusted caller must reserve a semantic tool/descendant before starting product-requested work. */
-  async exec(argv: string[], options: { env?: Record<string, string>; cwd?: string } = {}) {
+  async exec(
+    argv: string[],
+    options: { env?: Record<string, string>; cwd?: string; signal?: AbortSignal } = {},
+  ) {
+    options.signal?.throwIfAborted();
     await this.assertReady();
+    options.signal?.throwIfAborted();
     requireValue(
       argv.length > 0 && argv[0]!.startsWith("/") && argv.every((arg) => !arg.includes("\0")),
       "Container command must have an absolute executable",
     );
     const env = {
       PATH: "/usr/local/bin:/usr/bin:/bin",
-      HOME: "/opt/data/home",
-      TMPDIR: "/opt/data/tmp",
+      HOME: `${CONTAINER_ROOT}/home`,
       PYTHONDONTWRITEBYTECODE: "1",
-      HERMES_HOME: "/opt/data/state",
+      HERMES_HOME: `${CONTAINER_ROOT}/state`,
       HERMES_DISABLE_LAZY_INSTALLS: "1",
       ...options.env,
+      // The activity marker and product temp files share the bounded tmpfs, never the read-only /tmp.
+      TMPDIR: `${CONTAINER_ROOT}/tmp`,
+      ARDURBOT_BACKGROUND_DIR: `${CONTAINER_ROOT}/tmp`,
     };
-    const cwd = options.cwd ?? "/opt/data/workspace";
+    const cwd = options.cwd ?? `${CONTAINER_ROOT}/workspace`;
     requireValue(
       cwd === CONTAINER_ROOT || cwd.startsWith(`${CONTAINER_ROOT}/`),
       "Command cwd outside trial",
     );
+    options.signal?.throwIfAborted();
+    // Product and relay stay distinct users. The shared-group mask lets the relay update product files.
     const child = spawn(
       "docker",
       [
@@ -475,9 +484,20 @@ export class ContainerSession {
         "/usr/bin/env",
         "-i",
         ...Object.entries(env).map(([key, value]) => `${key}=${value}`),
+        "/usr/bin/python3",
+        "-I",
+        "-S",
+        "-u",
+        "-c",
+        "import os,sys\nos.umask(0o007)\nos.execv(sys.argv[1], sys.argv[1:])",
         ...argv,
       ],
-      { shell: false, detached: true, stdio: ["ignore", "pipe", "pipe"] },
+      {
+        shell: false,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        signal: options.signal,
+      },
     );
     return child;
   }

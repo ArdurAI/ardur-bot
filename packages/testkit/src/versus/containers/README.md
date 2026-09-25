@@ -45,7 +45,15 @@ usability or longitudinal sessions.
 ## Ardur computer and pre-effect admission
 
 Ardur keeps its ordinary authenticated app, queue, worker, executor, approval, cancellation and
-persisted-reply path. The composition root wraps existing runtime authorization hooks: every
+persisted-reply path. Shell commands use the production background-work launcher. Its activity
+marker is created under `ARDURBOT_BACKGROUND_DIR` (`/opt/data/tmp` here), because `/tmp` stays on
+the read-only root. The lane skips the login profile inside that launcher because profile startup
+forks, and fork stays denied. PATH remains the container PATH. Product processes keep a separate user id and the relay's shared-group
+creation mask, so the broker can update files and directories the product creates. Helper
+workspace preparation is an admitted artifact directory; fork and git worktrees stay denied. The
+computer id is the container id, the same value persisted as the provider reference. Directory
+listings are immediate children with workspace-relative paths, including directories. The
+composition root wraps existing runtime authorization hooks: every
 tool is charged before dispatch, helper admission consumes a descendant allowance, and commands
 require an active admitted intent. Main/helper model routes must equal the frozen gateway
 capability. Synthetic business effects retain production approval and durable receipts. Controller

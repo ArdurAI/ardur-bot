@@ -1,7 +1,7 @@
 /** Trusted PID 1 and loopback HTTP relay. Source is part of the executed TypeScript inventory.
  * It never accepts a command to execute from the guest network; only the host owns exec admission. */
 export const CONTAINER_GUEST = String.raw`
-import base64, http.server, json, os, queue, sys, threading, time, uuid
+import base64, http.server, json, os, queue, stat, sys, threading, time, uuid
 ROOT = '/opt/data'
 LIMIT = 2 * 1024 * 1024
 os.umask(0o007)
@@ -34,6 +34,27 @@ def files(operation):
         return base64.b64encode(data).decode()
     if operation['op'] == 'mkdir':
         os.makedirs(target, exist_ok=True); return True
+    if operation['op'] == 'list':
+        info = os.lstat(target)
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            raise ValueError('not a directory')
+        entries = []
+        for child in sorted(os.listdir(target)):
+            if child == '.ardurbot-runtime': continue
+            child_path = os.path.join(target, child)
+            child_info = os.lstat(child_path)
+            if stat.S_ISLNK(child_info.st_mode): continue
+            if stat.S_ISDIR(child_info.st_mode):
+                kind, size, executable = 'dir', 0, False
+            elif stat.S_ISREG(child_info.st_mode):
+                kind, size, executable = 'file', child_info.st_size, bool(child_info.st_mode & 0o111)
+            else:
+                continue
+            item = {'name': child, 'kind': kind, 'size': size}
+            if executable: item['executable'] = True
+            entries.append(item)
+            if len(entries) > 4096: raise ValueError('directory limit')
+        return entries
     if operation['op'] == 'snapshot':
         result = {}; total = 0
         if not os.path.isdir(target): return result

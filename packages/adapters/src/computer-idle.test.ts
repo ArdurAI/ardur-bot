@@ -275,7 +275,7 @@ describe("background work launch and probe", () => {
       const databaseId = "computer-db-id";
       const providerRef = "provider-ref";
       const launchId = "active";
-      markers.add(`/tmp/ardurbot-background-${databaseId}-run-1-${launchId}`);
+      markers.add(activityMarker(databaseId, "run-1", launchId));
 
       const launched = spawn(
         "bash",
@@ -303,8 +303,8 @@ describe("background work launch and probe", () => {
     "cleans a completed marker without blocking a later launch",
     async () => {
       const markerId = "computer-relaunch-id";
-      const completedMarker = `/tmp/ardurbot-background-${markerId}-run-1-completed`;
-      const activeMarker = `/tmp/ardurbot-background-${markerId}-run-1-active`;
+      const completedMarker = activityMarker(markerId, "run-1", "completed");
+      const activeMarker = activityMarker(markerId, "run-1", "active");
       markers.add(completedMarker);
       markers.add(activeMarker);
       const completed = spawn(
@@ -348,7 +348,7 @@ describe("background work launch and probe", () => {
     "does not run the command when its marker cannot be opened",
     async () => {
       const markerId = "computer-marker-error";
-      const marker = `/tmp/ardurbot-background-${markerId}-run-1-collision`;
+      const marker = activityMarker(markerId, "run-1", "collision");
       const commandRan = `/tmp/ardurbot-background-command-ran-${markerId}`;
       markers.add(marker);
       markers.add(commandRan);
@@ -377,7 +377,7 @@ describe("background work launch and probe", () => {
     "does not follow a pre-existing marker symlink",
     async () => {
       const markerId = "computer-marker-symlink";
-      const marker = `/tmp/ardurbot-background-${markerId}-run-1-collision`;
+      const marker = activityMarker(markerId, "run-1", "collision");
       const commandRan = `/tmp/ardurbot-background-command-ran-${markerId}`;
       markers.add(marker);
       markers.add(commandRan);
@@ -408,7 +408,7 @@ describe("background work launch and probe", () => {
       const computerId = "computer-cancel-id";
       const runId = "run-cancel-1";
       const launchId = "active";
-      const marker = `/tmp/ardurbot-background-${computerId}-${runId}-${launchId}`;
+      const marker = activityMarker(computerId, runId, launchId);
       markers.add(marker);
 
       const launched = spawn(
@@ -438,6 +438,52 @@ describe("background work launch and probe", () => {
       expect(await processExit(cancel)).toBe(0);
       await launchedDone;
       expect(await probeBackgroundWork(computerId)).toBe(1);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "opens its activity marker in TMPDIR so a read-only /tmp does not block the command",
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "ardurbot-background-dir-"));
+      const markerId = "bounded-tmp";
+      const marker = join(directory, `ardurbot-background-${markerId}-run-1-launch`);
+      const leaked = `/tmp/ardurbot-background-${markerId}-run-1-launch`;
+      markers.add(marker);
+      markers.add(leaked);
+      const launched = spawn(
+        "bash",
+        [
+          "-c",
+          BACKGROUND_WORK_LAUNCH,
+          "ardurbot-background-launch",
+          markerId,
+          "run-1",
+          "launch",
+          "printf bounded",
+        ],
+        {
+          stdio: ["ignore", "pipe", "pipe"],
+          env: {
+            ...process.env,
+            HOME: shellHome,
+            TMPDIR: directory,
+            ARDURBOT_BACKGROUND_DIR: "",
+          },
+        },
+      );
+      children.push(launched);
+      let stdout = "";
+      launched.stdout?.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      try {
+        expect(await processExit(launched)).toBe(0);
+        expect(stdout).toBe("bounded");
+        expect(existsSync(marker)).toBe(true);
+        expect(existsSync(leaked)).toBe(false);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
     },
   );
 });
@@ -558,6 +604,14 @@ function idleHarness(
       events: events as unknown as ThreadEvents,
     },
   };
+}
+
+function activityMarker(...parts: string[]) {
+  const directory = (process.env.ARDURBOT_BACKGROUND_DIR || process.env.TMPDIR || "/tmp").replace(
+    /\/+$/,
+    "",
+  );
+  return `${directory}/ardurbot-background-${parts.join("-")}`;
 }
 
 function probeBackgroundWork(markerId: string): Promise<number> {
