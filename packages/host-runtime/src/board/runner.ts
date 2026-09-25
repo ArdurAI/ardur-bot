@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { devNull } from "node:os";
 import path from "node:path";
 import type { BoardRun, BoardRunResult, BoardWorkspace } from "@ardurbot/contracts/board";
 import { BoardError, BoardRunSchema } from "@ardurbot/contracts/board";
-import { getHostEnvironment, resolveHostBinary } from "../host-environment.js";
+import { getHostEnvironment, redactHostStatus, resolveHostBinary } from "../host-environment.js";
 import { validateBoardArgv } from "./argv.js";
 
 export const BOARD_INIT_FLAGS = ["--non-interactive", "--skip-agents", "--skip-hooks", "--stealth"];
@@ -66,6 +66,12 @@ async function exists(file: string) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
+}
+async function hasBoard(beads: string) {
+  return (
+    (await exists(path.join(beads, "metadata.json"))) ||
+    (await exists(path.join(beads, "config.yaml")))
+  );
 }
 async function noLinks(root: string, budget = { remaining: 20_000 }) {
   if (--budget.remaining < 0)
@@ -192,6 +198,7 @@ export class BoardRunner {
         },
         (error, stdout, stderr) => {
           if (!error) return resolve(stdout);
+          const diagnostic = redactHostStatus(stderr);
           const code =
             error.killed || error.name === "AbortError"
               ? "timeout"
@@ -207,7 +214,9 @@ export class BoardRunner {
                 ? "Another write is in progress"
                 : code === "dolt_missing"
                   ? "Dolt is not installed on this computer."
-                  : "Beads could not finish this change. Check the item and its dependencies.";
+                  : diagnostic
+                    ? `Beads reported: ${diagnostic.replace(/[.!?]$/, "")}.`
+                    : "Beads could not finish this change. Check the item and its dependencies.";
           reject(new BoardError({ code, message }));
         },
       );
@@ -250,7 +259,7 @@ export class BoardRunner {
         const workspaces: BoardWorkspace[] = [];
         for (const [index, root] of roots.entries()) {
           signal.throwIfAborted();
-          const initialized = await exists(path.join(root, ".beads"));
+          const initialized = await hasBoard(path.join(root, ".beads"));
           let prefix = request.prefix ?? "board";
           if (initialized) {
             // Discovery never follows a redirect or opens a server-backed database.
@@ -308,8 +317,9 @@ export class BoardRunner {
         async () => {
           signal?.throwIfAborted();
           const beads = path.join(directory, ".beads");
-          const initialized = await exists(beads);
-          if (initialized) await confinedDatabase(beads);
+          const beadsExists = await exists(beads);
+          const initialized = await hasBoard(beads);
+          if (beadsExists) await confinedDatabase(beads);
           const global = [
             "--json",
             "--actor",
@@ -323,6 +333,8 @@ export class BoardRunner {
               return { ok: true, version, path: directory };
             if (initialized) return fail("command_failed", "This folder already has a board.");
             if (!request.prefix) return fail("forbidden", "Choose a board prefix.");
+            await privateDirectory(directory, ".beads");
+            await chmod(beads, 0o700);
             // -C refuses uninitialized folders in 1.2.2; init uses execFile's confined cwd instead.
             await this.execute(
               binary,
@@ -331,6 +343,11 @@ export class BoardRunner {
               env,
               signal,
             );
+            if (!(await exists(path.join(beads, "metadata.json"))))
+              return fail(
+                "command_failed",
+                "Beads reported success but did not create this board.",
+              );
             await this.execute(
               binary,
               [

@@ -16,7 +16,30 @@ if (log) fs.appendFileSync(log, JSON.stringify({ event: "start", argv: args }) +
 setTimeout(() => {
   if (log) fs.appendFileSync(log, JSON.stringify({ event: "end", argv: args }) + "\n");
   if (process.env.BOARD_FIXTURE_BUSY) { process.stderr.write("database is locked by another process"); process.exitCode = 1; return; }
-  if (key === "init") { fs.mkdirSync(process.env.BEADS_DIR, { recursive: true }); process.stdout.write("Initialized"); return; }
+  if (key === "init") {
+    if (process.env.BOARD_FIXTURE_INIT_STDERR) {
+      process.stderr.write(process.env.BOARD_FIXTURE_INIT_STDERR);
+      process.exitCode = 1;
+      return;
+    }
+    let beads = process.env.BEADS_DIR;
+    if (!fs.existsSync(beads)) {
+      let current = process.cwd();
+      while (path.dirname(current) !== current) {
+        const candidate = path.join(current, ".beads");
+        if (fs.existsSync(candidate)) {
+          beads = candidate;
+          break;
+        }
+        current = path.dirname(current);
+      }
+    }
+    fs.mkdirSync(beads, { recursive: true });
+    if (!process.env.BOARD_FIXTURE_INIT_EMPTY)
+      fs.writeFileSync(path.join(beads, "metadata.json"), "{}");
+    process.stdout.write("Initialized");
+    return;
+  }
   if (key === "config") { process.stdout.write("{}"); return; }
   if (key === "export") { process.stdout.write(records.list.map((item) => JSON.stringify(item)).join("\n") + "\n"); return; }
   let value = records[key];

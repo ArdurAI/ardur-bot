@@ -85,6 +85,25 @@ it("initializes only after Settings confirmation and shows the files affected", 
   await act(async () => button(node, "Confirm").click());
   expect(api.start).toHaveBeenCalledWith({ workspaceId: "workspace" });
 });
+it("keeps a failed start open and shows the server sentence beside the action", async () => {
+  api.start.mockRejectedValueOnce(new Error("This folder already has a board."));
+  const node = await render(false);
+  await act(async () => button(node, "Start board").click());
+  await act(async () => button(node, "Confirm").click());
+  expect(node.querySelector('[role="dialog"]')?.textContent).toContain(
+    "This folder already has a board.",
+  );
+  expect(node.textContent).not.toContain("Could not load");
+});
+it("shows a failed save sentence beside the name control", async () => {
+  api.configure.mockRejectedValueOnce(new Error("This name could not be saved."));
+  const node = await render();
+  await act(async () => node.querySelector("form")!.requestSubmit());
+  expect(node.querySelector("form")?.parentElement?.textContent).toContain(
+    "This name could not be saved.",
+  );
+  expect(node.textContent).not.toContain("Could not load");
+});
 it("saves the default and bot allowlist and confirms reversible archive", async () => {
   const node = await render();
   await act(async () => button(node, "Make default").click());

@@ -44,6 +44,7 @@ async function fixture(env: NodeJS.ProcessEnv = {}, timeoutMs?: number) {
   });
   const workspace = { path: path.join(root, "board", "space") };
   await mkdir(path.join(workspace.path, ".beads"), { recursive: true });
+  await writeFile(path.join(workspace.path, ".beads", "metadata.json"), "{}");
   const command = async (argv: string[]) => {
     const result = await runner.run(
       { action: "command", actor: "Owner", workspace: { kind: "space" }, argv },
@@ -182,6 +183,95 @@ it("initializes only an explicit folder with skip flags and no -C before the boa
   );
   expect(init).not.toContain("-C");
   expect(init).not.toContain("--remote");
+});
+it("creates the space board marker before init so an ancestor board cannot capture it", async () => {
+  const f = await fixture();
+  await rm(path.join(f.workspace.path, ".beads"), { recursive: true });
+  await mkdir(path.join(f.root, ".beads"));
+  await writeFile(path.join(f.root, ".beads", ".local_version"), "1.2.2");
+  const result = await f.runner.run(
+    {
+      action: "init",
+      argv: [],
+      actor: "Owner",
+      prefix: "board",
+      workspace: { kind: "space" },
+    },
+    "space",
+  );
+  expect(result.ok).toBe(true);
+  expect(
+    JSON.parse(await readFile(path.join(f.workspace.path, ".beads", "metadata.json"), "utf8")),
+  ).toEqual({});
+  await expect(readFile(path.join(f.root, ".beads", "metadata.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+it("initializes a folder whose .beads directory has no metadata or config", async () => {
+  const f = await fixture();
+  await writeFile(path.join(f.root, ".beads", ".local_version"), "1.2.2").catch(async () => {
+    await mkdir(path.join(f.root, ".beads"));
+    await writeFile(path.join(f.root, ".beads", ".local_version"), "1.2.2");
+  });
+  const result = await f.runner.run(
+    {
+      action: "init",
+      argv: [],
+      actor: "Owner",
+      prefix: "board",
+      workspace: { kind: "folder", path: f.root },
+    },
+    "space",
+  );
+  expect(result.ok).toBe(true);
+  expect(await readFile(path.join(f.root, ".beads", "metadata.json"), "utf8")).toBe("{}");
+});
+it("surfaces the redacted first stderr line when init fails", async () => {
+  const f = await fixture({
+    BOARD_FIXTURE_INIT_STDERR:
+      "Initialization failed for person@example.test token=fixture-secret\nprivate detail",
+  });
+  await rm(path.join(f.workspace.path, ".beads"), { recursive: true });
+  const result = await f.runner.run(
+    {
+      action: "init",
+      argv: [],
+      actor: "Owner",
+      prefix: "board",
+      workspace: { kind: "space" },
+    },
+    "space",
+  );
+  expect(result).toMatchObject({
+    ok: false,
+    problem: {
+      code: "command_failed",
+      message: "Beads reported: Initialization failed for [email] [redacted].",
+    },
+  });
+  expect(JSON.stringify(result)).not.toContain("fixture-secret");
+});
+it("rejects an init that exits successfully without creating metadata", async () => {
+  const f = await fixture({ BOARD_FIXTURE_INIT_EMPTY: "1" });
+  await rm(path.join(f.workspace.path, ".beads"), { recursive: true });
+  expect(
+    await f.runner.run(
+      {
+        action: "init",
+        argv: [],
+        actor: "Owner",
+        prefix: "board",
+        workspace: { kind: "space" },
+      },
+      "space",
+    ),
+  ).toMatchObject({
+    ok: false,
+    problem: {
+      code: "command_failed",
+      message: "Beads reported success but did not create this board.",
+    },
+  });
 });
 
 it("expires queued work without executing it and preserves the queue for the next caller", async () => {
