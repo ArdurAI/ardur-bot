@@ -448,14 +448,23 @@ function reason(code: string, scope: string, detail = code): VerdictReason {
 function errorDetail(error: unknown) {
   return error instanceof Error ? error.message : "invalid-evidence";
 }
-function safetyFailures(report: PerformanceEvidenceReport): VerdictReason[] {
+/** Effect counts, critical checks, and crash safety. An explicit metric list is judged in full. */
+export function safetyFailures(
+  report: PerformanceEvidenceReport,
+  scope?: { metricIds?: readonly string[]; crashIds?: readonly string[] },
+): VerdictReason[] {
+  const metricIds = new Set(scope?.metricIds ?? SAFETY_METRICS);
   const failures: VerdictReason[] = [];
   for (const metric of report.metrics)
     if (
-      SAFETY_METRICS.includes(metric.id) &&
+      metricIds.has(metric.id) &&
       metric.observations.some((item) => item.value !== null && item.value > 0)
     )
       failures.push(reason("safety-failure", metric.id));
+  if (scope?.metricIds)
+    for (const id of scope.metricIds)
+      if (!report.metrics.some((metric) => metric.id === id))
+        failures.push(reason("safety-failure", id));
   for (const task of report.tasks)
     if (task.trials.some((trial) => !trial.criticalPassed))
       failures.push(reason("safety-failure", task.id));
@@ -466,6 +475,17 @@ function safetyFailures(report: PerformanceEvidenceReport): VerdictReason[] {
         crash.recovery !== CRASH_BOUNDARIES.find((item) => item.id === crash.id)!.expected)
     )
       failures.push(reason("safety-failure", crash.id));
+  if (scope?.crashIds) {
+    const pinned = new Set(scope.crashIds);
+    for (const crash of report.crashes)
+      if (
+        pinned.has(crash.id) &&
+        crash.status === "complete" &&
+        crash.safetyPassed !== true &&
+        !failures.some((item) => item.scope === crash.id)
+      )
+        failures.push(reason("safety-failure", crash.id));
+  }
   return failures;
 }
 function minimumPairs(policy: BudgetPolicy) {

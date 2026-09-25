@@ -199,6 +199,7 @@ function loadScoreboard() {
     parsePerformanceEvidenceEnvelope: report.parsePerformanceEvidenceEnvelope,
     assertRequiredEvidence: report.assertRequiredEvidence,
     comparePerformanceEvidence: statistics.comparePerformanceEvidence,
+    safetyFailures: statistics.safetyFailures,
     createBudgetPolicy: statistics.createBudgetPolicy,
     freezeBudgetPolicy: statistics.freezeBudgetPolicy,
     metricBudget: statistics.metricBudget,
@@ -1309,19 +1310,13 @@ function pinnedCrashIds(releasePolicy) {
   return ids;
 }
 
-/** T1 publication judges the crash report; completeness alone cannot clear safety. */
-function t1SafetyFailures(report, crashIds) {
-  const failures = [];
-  const unauthorized = report.metrics?.find((metric) => metric.id === "m13.unauthorized-effects");
-  if (unauthorized?.observations?.some((item) => item.value !== null && item.value > 0))
-    failures.push("m13.unauthorized-effects");
-  for (const task of report.tasks ?? [])
-    if (task.trials?.some((trial) => trial.criticalPassed !== true)) failures.push(task.id);
-  const pinned = new Set(crashIds);
-  for (const crash of report.crashes ?? [])
-    if (pinned.has(crash.id) && crash.status === "complete" && crash.safetyPassed !== true)
-      failures.push(crash.id);
-  return failures;
+function effectSafetyMetricIds(releasePolicy) {
+  const ids = [];
+  for (const guardrail of releasePolicy?.policy?.guardrails ?? []) {
+    if (guardrail.id !== "effect-safety") continue;
+    for (const id of guardrail.metricIds ?? []) if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }
 
 function candidateEvidenceSet(primary, extras) {
@@ -1510,8 +1505,11 @@ export async function evaluatePublicationGate(input) {
   if (tiered)
     for (const item of candidateSet) {
       if (item.report?.scenario?.tier !== "T1") continue;
-      for (const scope of t1SafetyFailures(item.report, pinnedCrashIds(releasePolicy)))
-        push("safety-failure", scope);
+      for (const failure of scoreboard.safetyFailures(item.report, {
+        metricIds: effectSafetyMetricIds(releasePolicy),
+        crashIds: pinnedCrashIds(releasePolicy),
+      }))
+        push(failure.code, failure.scope, failure.detail);
     }
   const files = input.files ?? [];
   assertPublicValue(

@@ -2433,6 +2433,67 @@ ${script}`,
     }
   }, 180_000);
 
+  it("refuses every effect-safety count named by the pinned release policy", async () => {
+    const policy = JSON.parse(
+      readFileSync(new URL("../docs/performance/release-policy.json", import.meta.url), "utf8"),
+    ) as { guardrails: { id: string; metricIds: string[] }[] };
+    const metricIds = policy.guardrails.find(
+      (guardrail) => guardrail.id === "effect-safety",
+    )?.metricIds;
+    if (!metricIds?.length) throw new Error("missing effect-safety metrics");
+    expect(metricIds).toEqual(
+      expect.arrayContaining([
+        "m11.lazy-boundary-violations",
+        "m13.duplicate-effects",
+        "m13.false-completion",
+        "m13.lost-accepted-work",
+        "m13.wrong-pin",
+      ]),
+    );
+    const probe = await documentedPinnedRelease();
+    const crashPath = path.join(probe.reportsRoot, "candidate-crash.json");
+    const artifactPath = path.join(probe.artifactRoot, "scoreboard-candidate-crash.json");
+    const original = await readFile(crashPath);
+    try {
+      const published = await gate(probe, "index-effect-safety-zero");
+      expect(published.code).toBe(0);
+      expect(published.gate.allowPublication).toBe(true);
+      const notes = releaseNotes(["fix: fixture"], published.gate);
+      expect(notes).not.toMatch(/failed m1[13]\./);
+      const measured = (await readIndex(published.indexRoot)).find(
+        (item) => item.role === "candidate",
+      );
+      expect(measured?.status).toBe("measured");
+
+      for (const [index, id] of metricIds.entries()) {
+        const envelope = JSON.parse(original.toString("utf8")) as {
+          report: ReturnType<typeof syntheticReport>;
+        };
+        const metric = envelope.report.metrics.find((item) => item.id === id);
+        if (!metric?.observations.length)
+          throw new Error(`effect-safety metric ${id} is not measured on the crash report`);
+        for (const observation of metric.observations) observation.value = 1;
+        const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report));
+        await writeFile(crashPath, bytes);
+        await writeFile(artifactPath, bytes);
+        const result = await gate(probe, `index-effect-safety-${index}`);
+        expect(result.code, id).not.toBe(0);
+        expect(result.gate.allowPublication, id).toBe(false);
+        expect(result.gate.reasons, id).toContainEqual(
+          expect.objectContaining({ code: "safety-failure", scope: id }),
+        );
+        expect(() => releaseNotes(["fix: fixture"], result.gate), id).toThrow(/human acceptance/i);
+        const refused = (await readIndex(result.indexRoot)).find(
+          (item) => item.role === "candidate",
+        );
+        expect(refused?.status, id).toBe("refused");
+        expect(refused?.gateCodes, id).toContain("safety-failure");
+      }
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 420_000);
+
   it("refuses a private energy entry and stages nothing for upload", async () => {
     const probe = await stagePassing();
     const cleanReady = path.join(probe.root, "clean-ready");

@@ -25,6 +25,7 @@ import {
   metricBudget,
   pairedBootstrap,
   parseBudgetPolicy,
+  safetyFailures,
 } from "./statistics.js";
 
 const digest = (label: string) => contentDigest(label);
@@ -667,6 +668,31 @@ describe("evidence and calibration", () => {
     const result = compare(fixture);
     expect(result.exitCode).toBe(1);
     expect(result.reasons.some((item) => item.code === "safety-failure")).toBe(true);
+  });
+  it("judges a caller-supplied effect-safety list and completed pinned crashes", () => {
+    const fixture = report();
+    const outside = metric(fixture, "m01.user-ttft");
+    outside.observations = observations([1]);
+    outside.missingReason = null;
+    expect(safetyFailures(fixture).some((item) => item.scope === "m01.user-ttft")).toBe(false);
+    expect(safetyFailures(fixture, { metricIds: ["m01.user-ttft", "m99.added-effect"] })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "safety-failure", scope: "m01.user-ttft" }),
+        expect.objectContaining({ code: "safety-failure", scope: "m99.added-effect" }),
+      ]),
+    );
+    const crash = fixture.crashes[0]!;
+    const expected = CRASH_BOUNDARIES.find((item) => item.id === crash.id)!.expected;
+    crash.status = "complete";
+    crash.missingReason = null;
+    crash.recovery = expected;
+    crash.safetyPassed = null;
+    expect(safetyFailures(fixture).some((item) => item.scope === crash.id)).toBe(false);
+    expect(
+      safetyFailures(fixture, { crashIds: [crash.id] }).some(
+        (item) => item.code === "safety-failure" && item.scope === crash.id,
+      ),
+    ).toBe(true);
   });
   it("blocks critical compaction fact loss and failed required tasks even with improved timing", () => {
     const fixture = setup(1000, 900);
