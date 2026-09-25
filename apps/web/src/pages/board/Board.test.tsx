@@ -500,6 +500,98 @@ it("quick-adds in the column and persists filters without another summary reques
   });
   expect(calls.view).toHaveBeenCalledTimes(before);
 });
+it.each([
+  ["edit", "resolves"],
+  ["create", "resolves"],
+  ["edit", "fails"],
+  ["create", "fails"],
+] as const)("keeps a saved %s when the in-flight view %s", async (kind, stale) => {
+  vi.useFakeTimers();
+  const ready = item("ready");
+  const saved = { ...item(kind === "edit" ? "ready" : "saved"), title: "Saved title" };
+  let settle!: () => void;
+  const initial = { ...view([ready]), selected: kind === "edit" ? ready : null };
+  const fresh = {
+    ...view([kind === "edit" ? saved : ready, ...(kind === "create" ? [saved] : [])]),
+    selected: kind === "edit" ? saved : null,
+  };
+  if (kind === "create") {
+    fresh.snapshot = {
+      ...fresh.snapshot,
+      items: [ready, saved],
+      allItems: [ready, saved],
+      readyIds: [ready.id, saved.id],
+    };
+  }
+  calls.view.mockReset();
+  calls.view
+    .mockResolvedValueOnce(initial)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve, reject) => {
+          settle = () =>
+            stale === "resolves"
+              ? resolve({ ...view([ready]), selected: kind === "edit" ? ready : null })
+              : reject(new Error("stale view"));
+        }),
+    )
+    .mockResolvedValue(fresh);
+  try {
+    const node = await render(
+      <Board />,
+      kind === "edit"
+        ? "/app/board?workspace=workspace&item=ready"
+        : "/app/board?workspace=workspace",
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    expect(calls.view).toHaveBeenCalledTimes(2);
+    if (kind === "edit") {
+      calls.update.mockResolvedValue(saved);
+      await act(async () =>
+        [...node.querySelectorAll("button")]
+          .find((button) => button.textContent === "Edit")!
+          .click(),
+      );
+    } else {
+      calls.create.mockResolvedValue(saved);
+      await act(async () =>
+        [...node.querySelectorAll("button")]
+          .find((button) => button.textContent === "New item")!
+          .click(),
+      );
+    }
+    input(node.querySelector<HTMLInputElement>('[role="dialog"] [name="title"]')!, "Saved title");
+    await act(async () =>
+      node
+        .querySelector('[role="dialog"] form')!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await act(async () => settle());
+    await act(async () => undefined);
+    if (kind === "edit") {
+      expect(calls.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "ready",
+          patch: expect.objectContaining({ title: "Saved title" }),
+        }),
+      );
+    } else {
+      expect(calls.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          item: expect.objectContaining({ title: "Saved title" }),
+        }),
+      );
+    }
+    expect(node.querySelector(`[data-board-item="${saved.id}"] span`)?.textContent).toBe(
+      "Saved title",
+    );
+    if (kind === "edit")
+      expect(node.querySelector('[role="dialog"] h2')?.textContent).toBe("Saved title");
+    expect(node.textContent).not.toContain("Could not load Board");
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("shows the selected item from the summary and toggles the per-user follow", async () => {
   calls.view.mockResolvedValue({ ...view(), selected: item("ready") });
   calls.follow.mockResolvedValue({ following: true });

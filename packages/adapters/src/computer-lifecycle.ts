@@ -141,6 +141,52 @@ export class ComputerBusyError extends Error {
   }
 }
 
+/**
+ * Clear control after a fresh boot only when the stored columns are still the
+ * inactive control observed before provider work.
+ *
+ * Preparation can outlast that snapshot's expiry. extendActiveComputerControl
+ * renews the lease, and expireComputerControl keeps controlLeaseId when
+ * provider revocation fails so reconciliation can retry. Either change fails
+ * this compare-and-swap. A non-null lease id is left for that release path.
+ * The activation stamp is preserved explicitly so this cleanup cannot move a
+ * concurrent replacement or idle-suspension fence.
+ */
+async function clearFreshBootControlIfUnchanged(
+  prisma: PrismaClient,
+  computerId: string,
+  activationStamp: Date,
+  observed: {
+    controlHolder: string;
+    controlLeaseExpiresAt: Date | null;
+    controlBotId: string | null;
+    controlRunId: string | null;
+  },
+  controlHolder: "bot" | "none",
+): Promise<void> {
+  await prisma.computer.updateMany({
+    where: {
+      id: computerId,
+      state: "running",
+      provisioningId: null,
+      updatedAt: activationStamp,
+      controlHolder: observed.controlHolder,
+      controlLeaseId: null,
+      controlLeaseExpiresAt: observed.controlLeaseExpiresAt ?? null,
+      controlBotId: observed.controlBotId ?? null,
+      controlRunId: observed.controlRunId ?? null,
+    },
+    data: {
+      controlHolder,
+      controlLeaseId: null,
+      controlLeaseExpiresAt: null,
+      controlBotId: null,
+      controlRunId: null,
+      updatedAt: activationStamp,
+    },
+  });
+}
+
 export { toComputerRef } from "./computer-support.js";
 
 export async function provisionComputer(
@@ -282,6 +328,7 @@ export async function provisionComputer(
   });
   if (claimed.count !== 1) throw new ComputerBusyError();
   let provisioned: ComputerRef | undefined;
+  let bootActivated = false;
   try {
     await onProgress?.("recreating");
     const ref = await deps.sandbox.provision(
@@ -322,7 +369,7 @@ export async function provisionComputer(
       context.botId,
       context,
     );
-    const activeControl = hasActiveComputerControl(existing);
+    const activationStamp = new Date(Math.max(Date.now(), claimStamp.getTime() + 1));
     const activated = await deps.prisma.computer.updateMany({
       where: {
         id: computerId,
@@ -337,22 +384,32 @@ export async function provisionComputer(
         provisioningId: null,
         providerRef: ref.providerRef,
         kind: ref.kind,
-        ...(!reconnecting && !activeControl
-          ? {
-              controlHolder,
-              controlLeaseId: null,
-              controlLeaseExpiresAt: null,
-              controlBotId: null,
-              controlRunId: null,
-            }
-          : {}),
+        updatedAt: activationStamp,
       },
     });
     if (activated.count !== 1) {
       throw new ComputerBusyError();
     }
+    bootActivated = true;
+    const retryingStaleUserControl =
+      reconnecting &&
+      existing.controlHolder === "user" &&
+      existing.controlLeaseId === null &&
+      !hasActiveComputerControl(existing);
+    if (!reconnecting || retryingStaleUserControl) {
+      await clearFreshBootControlIfUnchanged(
+        deps.prisma,
+        computerId,
+        activationStamp,
+        existing,
+        controlHolder,
+      );
+    }
     return ref;
   } catch (error) {
+    // Activation already committed. The failure write below only matches "booting",
+    // so rolling the sandbox back would destroy a computer the row still calls running.
+    if (bootActivated) throw error;
     // A failed reconnect never owns an existing workspace, even if setup failed.
     const rollbackError =
       provisioned && (!reconnecting || provisioned.fresh === true)
