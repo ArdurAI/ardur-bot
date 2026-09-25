@@ -880,13 +880,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "7 days": "7 天",
   "This bot may only run locally — change the pin or the space policy":
     "此 Bot 只能在本地运行 — 请更改固定模型或空间策略",
-<<<<<<< HEAD
-  "Could not load computers.": "无法加载计算机。",
-  "Memory not reported": "未报告内存",
-  "{amount} GB free": "可用 {amount} GB",
-  "Free memory": "可用内存",
-  Unavailable: "不可用",
-=======
   "Auto-import changes": "自动导入更改",
   "Environment values are requested when you connect this server.":
     "连接此服务器时会要求提供环境变量的值。",
@@ -923,5 +916,9 @@ export const ZH_MESSAGES: Record<string, string> = {
     "Ardur Bot 读取此电脑上这些工具的指令、记忆、技能和服务器列表，绝不读取登录信息、令牌或聊天记录。",
   "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only.":
     "绝不读取登录文件（auth.json、credentials 和 oauth_creds.json）、Cookie、令牌、凭据备份、会话记录、聊天历史、history.jsonl、遥测数据和缓存；服务器列表仅保留环境变量名称。",
->>>>>>> dev
+  "Could not load computers.": "无法加载计算机。",
+  "Memory not reported": "未报告内存",
+  "{amount} GB free": "可用 {amount} GB",
+  "Free memory": "可用内存",
+  Unavailable: "不可用",
 };

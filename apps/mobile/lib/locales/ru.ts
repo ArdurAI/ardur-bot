@@ -914,13 +914,6 @@ export const RU_MESSAGES: Record<string, string> = {
   "7 days": "7 дней",
   "This bot may only run locally — change the pin or the space policy":
     "Этот бот может работать только локально — измените закреплённую модель или политику пространства",
-<<<<<<< HEAD
-  "Could not load computers.": "Не удалось загрузить компьютеры.",
-  "Memory not reported": "Память не указана",
-  "{amount} GB free": "Свободно {amount} ГБ",
-  "Free memory": "Свободная память",
-  Unavailable: "Недоступен",
-=======
   "Auto-import changes": "Автоматически импортировать изменения",
   "Environment values are requested when you connect this server.":
     "Значения переменных окружения запрашиваются при подключении этого сервера.",
@@ -957,5 +950,9 @@ export const RU_MESSAGES: Record<string, string> = {
     "Ardur Bot читает инструкции, память, навыки и списки серверов этих инструментов на этом компьютере, но никогда не читает данные входа, токены или историю чатов.",
   "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only.":
     "Файлы входа (auth.json, credentials и oauth_creds.json), файлы cookie, токены, резервные копии учётных данных, записи сеансов, истории чатов, history.jsonl, телеметрия и кэши никогда не читаются; в списках серверов сохраняются только имена переменных окружения.",
->>>>>>> dev
+  "Could not load computers.": "Не удалось загрузить компьютеры.",
+  "Memory not reported": "Память не указана",
+  "{amount} GB free": "Свободно {amount} ГБ",
+  "Free memory": "Свободная память",
+  Unavailable: "Недоступен",
 };
