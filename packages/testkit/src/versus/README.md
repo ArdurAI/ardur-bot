@@ -25,6 +25,52 @@ There is no override that turns fixture results into a qualified live lane. The 
 command retains planning evidence when its revision and budget gates pass. A container/VM
 lane is an explicit future backend, not a claim about the installed native product.
 
+The non-generating qualification command diagnoses native startup and probes the installed
+interpreter with `-I -S` (isolated standard library, without importing Hermes). It also reads
+the explicitly selected local model's metadata and checks for the cached computer image:
+
+```sh
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision <approved-40-hex-revision> --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <approved-64-hex-digest> --quantization Q4_K_M --context-size 32768 --out ./artifacts/versus/qualification
+```
+
+This is a separate `qualification` sidecar mode, because it opens benign loopback listeners and
+launches probe subprocesses. It does not weaken the dry-run guarantees. No arguments prints help;
+there is no option to generate, download, start a container, or bypass a failed gate. Exit 2 means
+qualification is blocked, with schema-3 planning reports, `qualification.json`, and an optional
+`canary-budget.json` retained. The metadata request allowlist is `/api/tags`, `/api/version`, and
+`/api/show`; tags and server version are rechecked to catch concurrent changes. Redirects, paid
+origins, absent tokenizer metadata, digest/quantization drift, and oversized responses fail closed.
+
+The generated canary budget selects task-01 and task-04 with the frozen analysis seed. Its global
+ceiling is four times the per-run ceiling. The 32,768-token context includes output; the request
+output cap remains 2,048. These are declared ceilings, not measured consumption. The W0 fixture's
+stricter deadline still applies. A metadata match cannot prove that Ollama's OpenAI transport
+honored the active context: its [documented context configuration](https://docs.ollama.com/api/openai-compatibility)
+is separate from architectural maximum context. Product tool round trips remain required.
+
+The native diagnosis bisects two startup requirements: literal read access to `/` (without
+recursive access), and the system LibreSSL configuration needed by Apple's curl, including for
+HTTP. It retains the legacy abort, corrected positive controls, signals, profile/command hashes,
+interpreter digest, and separate interpreter canaries. The bounded resource probe attempts a
+16 MiB RSS limit and writes two 4 KiB files under a 4 KiB per-file limit; it never allocates more
+than 64 MiB or writes more than 8 KiB. Per-file limits do not establish an aggregate disk quota.
+The [platform resource contract](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/setrlimit.2.html)
+also scopes CPU limits to individual processes and process counts to a user ID, so those are not
+an invocation-wide process-tree budget. A filesystem/network proof cannot authorize native
+product startup while resource enforcement is only a watchdog. Proofs and their private policy
+bindings are immutable; this check applies at the Hermes adapter boundary as well as the CLI.
+
+Ardur's existing supervisor supplies CPU, memory/swap and pids limits. Its writable root and home
+are not an aggregate disk quota, and the current versus adapter does not admit all native tools
+and descendants through its budget ledger. Live execution remains refused. The smallest next
+backend design reuses an already-cached computer image in a separately labeled Linux container
+cohort, with a read-only root, quota-backed storage or bounded tmpfs, cgroup process-tree limits,
+and a private gateway/broker network. No Docker socket or owner directory belongs in a product
+container. The preflight records the cached image's exact daemon-reported byte count and zero
+image download bytes. Linux Hermes is a different install from the approved native cohort:
+its source/runtime pin and an exact missing-package size manifest must be approved before any
+package acquisition. This command does not resolve or download those packages.
+
 Dry run reads repository/source metadata and a fixed allowlist of Hermes entrypoints, hashes
 the executable, and emits a launch plan, prerequisites, invalid-until-completed budget template,
 and schema-3 reports. It opens no sockets, invokes neither product, starts no database or service,

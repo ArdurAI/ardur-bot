@@ -24,6 +24,7 @@ describe.skipIf(!databaseUrl)("production reply redaction on disposable PostgreS
       const task = getTask("task-23");
       const directory = await mkdtemp(path.join(tmpdir(), "scoreboard-reply-test-"));
       vi.stubEnv("HOME", directory);
+      vi.stubEnv("DATABASE_URL", databaseUrl!);
       const actions: ModelEmulatorResponse[] = [
         ...Object.keys(task.files).map((file, index) => ({
           type: "tool" as const,
