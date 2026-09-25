@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import type {
   AdapterContext,
@@ -69,8 +70,8 @@ function isLiveSuspending(
  * refused a booting one -- so the computer stayed wedged for good and every run on its bot
  * retried forever.
  *
- * Used only when claiming an abandoned "booting" row. End-of-boot writes fence on the claim
- * stamp (updatedAt) instead: fencing them with this predicate too would let a second Team bot
+ * Used only when claiming an abandoned "booting" row. End-of-boot writes fence on the
+ * provisioningId instead: fencing them with this predicate too would let a second Team bot
  * lease that appears mid-provision block both activation and the failure write, leave the row
  * stuck in "booting", and destroy the valid winner's sandbox. A lease that merely expired
  * without being taken still passes, so a slow manual boot that never heartbeats keeps working.
@@ -261,13 +262,15 @@ export async function provisionComputer(
           state: existing.state,
           ...previousRef,
         };
-  // Choose the claim stamp before writing so a concurrent reclaim cannot make us adopt its
-  // updatedAt on a follow-up read (which would let our activation overwrite the newer owner).
+  // Choose the claim token before writing so a concurrent reclaim cannot make us adopt its
+  // identity on a follow-up read. updatedAt still guards stale-claim admission, but ordinary
+  // control renewals/releases also change it and must not invalidate activation or cleanup.
   // Advance past the observed stamp even when Date.now() equals it (same ms or clock skew);
   // otherwise a booting self-transition would leave the CAS token unchanged and a second
   // worker that observed the same stamp could also claim and provision.
   const observedStamp = reclaimStamp ?? suspendStamp ?? existing.updatedAt;
   const claimStamp = new Date(Math.max(Date.now(), observedStamp.getTime() + 1));
+  const provisioningId = randomUUID();
   const claimed = await deps.prisma.computer.updateMany({
     where: {
       id: computerId,
@@ -275,7 +278,7 @@ export async function provisionComputer(
       maintenanceId: existing.maintenanceId ?? null,
       ...(context.botId ? { bots: { some: { id: context.botId, archivedAt: null } } } : {}),
     },
-    data: { state: "booting", updatedAt: claimStamp },
+    data: { state: "booting", updatedAt: claimStamp, provisioningId },
   });
   if (claimed.count !== 1) throw new ComputerBusyError();
   let provisioned: ComputerRef | undefined;
@@ -324,26 +327,23 @@ export async function provisionComputer(
       where: {
         id: computerId,
         state: "booting",
-        updatedAt: claimStamp,
+        provisioningId,
         ...previousRef,
         maintenanceId: existing.maintenanceId ?? null,
         ...(context.botId ? { bots: { some: { id: context.botId, archivedAt: null } } } : {}),
       },
       data: {
         state: "running",
+        provisioningId: null,
         providerRef: ref.providerRef,
         kind: ref.kind,
-        ...(!reconnecting
+        ...(!reconnecting && !activeControl
           ? {
-              controlHolder: activeControl ? "user" : controlHolder,
-              ...(!activeControl
-                ? {
-                    controlLeaseId: null,
-                    controlLeaseExpiresAt: null,
-                    controlBotId: null,
-                    controlRunId: null,
-                  }
-                : {}),
+              controlHolder,
+              controlLeaseId: null,
+              controlLeaseExpiresAt: null,
+              controlBotId: null,
+              controlRunId: null,
             }
           : {}),
       },
@@ -363,12 +363,13 @@ export async function provisionComputer(
         where: {
           id: computerId,
           state: "booting",
-          updatedAt: claimStamp,
+          provisioningId,
           ...previousRef,
           maintenanceId: existing.maintenanceId ?? null,
         },
         data: {
           state: reconnecting ? "running" : "error",
+          provisioningId: null,
           ...(!reconnecting && rollbackError && provisioned
             ? { providerRef: provisioned.providerRef, kind: provisioned.kind }
             : {}),
