@@ -4,6 +4,7 @@ import { ComputerProfileSchema } from "./computer-profiles.js";
 import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "./context.js";
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
+import { RunPlacementSchema } from "./fleet.js";
 import { Id, MemoryScope, RunStatus, RunTriggerSchema, SandboxKind } from "./ids.js";
 import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
@@ -902,6 +903,7 @@ export const RunSchema = z.object({
   runtimeProblem: RuntimeProblemSchema.optional(),
   runtimeInfo: RuntimeInfoSchema.nullable().optional(),
   runtimePin: RuntimePinSchema.nullable().optional(),
+  placement: RunPlacementSchema.nullable().optional(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),
   createdAt: z.string(),

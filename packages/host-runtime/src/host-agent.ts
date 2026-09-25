@@ -28,6 +28,10 @@ import { BoardRunner } from "./board/runner.js";
 import type { HostWire } from "./bridge-wire.js";
 import { hostLostProblem } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { hostCapacity } from "./fleet/capacity.js";
+import { discoverFleet } from "./fleet/discovery.js";
+import { systemFleetProcess } from "./fleet/process.js";
+import { FleetService } from "./fleet/service.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
 import { inspectHostIntegrations } from "./host-integrations.js";
 import { HostMcpServers } from "./host-mcp.js";
@@ -52,11 +56,13 @@ export class HostAgent {
   private seen = new Set<string>();
   private sandbox: DesktopSandboxProvider;
   private roots: string[] = [];
+  private fleet: FleetService;
   private importer?: LocalImportScanner;
   private readonly mcp: HostMcpServers;
   refreshMcp?: () => Promise<void>;
   constructor(
     private readonly config: {
+      token?: string;
       root: string;
       hostRoots: string[];
       mcpServers?: HostMcpRegistration[];
@@ -67,6 +73,7 @@ export class HostAgent {
       "codex-app-server": new CodexAppServerRuntime(),
     },
   ) {
+    this.fleet = new FleetService(config.root, config.token ?? randomUUID());
     this.mcp = new HostMcpServers(config.mcpServers);
     this.sandbox = new DesktopSandboxProvider({
       root: config.root,
@@ -104,6 +111,7 @@ export class HostAgent {
       claude,
       codex,
       environment,
+      capacity: await hostCapacity(),
       integrations,
     };
   }
@@ -162,6 +170,7 @@ export class HostAgent {
     throw new Error("Unexpected host request.");
   }
   close() {
+    void this.fleet.close();
     void this.mcp.close();
     for (const state of this.active.values()) {
       state.abort.abort();
@@ -205,7 +214,33 @@ export class HostAgent {
     };
     try {
       const op = request.operation;
-      if (op.op === "host.health") {
+      if (op.op === "computer.remote.kubeconfig") {
+        const result = await systemFleetProcess.run(
+          "kubectl",
+          [
+            ...(op.path ? ["--kubeconfig", op.path] : []),
+            "--context",
+            op.context,
+            "config",
+            "view",
+            "--flatten",
+            "--raw",
+            "--minify",
+            "--output=json",
+          ],
+          context.signal,
+          undefined,
+          128 * 1024,
+        );
+        if (result.code !== 0) throw new Error("Kubernetes context is unavailable.");
+        await send("result", result.stdout.toString());
+      } else if (op.op === "computer.remote.discover") {
+        await send("result", await discoverFleet());
+      } else if (op.op === "computer.remote.secret") {
+        await send("result", await this.fleet.importSecret(op, context));
+      } else if (op.op === "computer.remote.call") {
+        await this.fleet.call(op, context, send);
+      } else if (op.op === "host.health") {
         await send("result", await this.health());
       } else if (op.op === "board.run") {
         const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(
@@ -243,7 +278,26 @@ export class HostAgent {
           context,
         );
         await confinedHostCwd(computer.providerRef, [this.config.root]);
-        if (op.op === "computer.environment") {
+        if (op.op === "computer.files.export") {
+          const pending = [""];
+          let count = 0;
+          while (pending.length) {
+            for (const file of await this.sandbox.listFiles(computer, pending.pop()!, context)) {
+              if (++count > 10000) throw new Error("Host checkpoint exceeds limit.");
+              if (file.kind === "dir") pending.push(file.path);
+              else {
+                const content = await this.sandbox.readFile(computer, file.path, context, {
+                  maxBytes: HOST_FILE_BYTES,
+                });
+                await send("file", {
+                  path: file.path,
+                  content: Buffer.from(content).toString("base64"),
+                  executable: file.executable,
+                });
+              }
+            }
+          }
+        } else if (op.op === "computer.environment") {
           await send("result", await inspectHostEnvironment());
         } else if (op.op === "computer.exec") {
           if (op.cwd?.split(/[/\\]/u).includes(".."))

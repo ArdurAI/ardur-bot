@@ -1,5 +1,7 @@
 # Packaged host service
 
+For Fleet targets, capacity, placement, transport limits and verification, see [Fleet P1](fleet.md).
+
 The desktop app starts `apps/host-service` as a separate process. Closing its window
 keeps the process with the existing dock/tray lifecycle. Quit stops it. The API and
 worker remain in Compose; the host connects outward to the API and accepts only the

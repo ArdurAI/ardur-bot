@@ -52,6 +52,7 @@ import {
   pathFromDirectoryFd,
   win32NtRelativeAvailable,
 } from "./desktop-sandbox-win32-path.js";
+import { hostCapacity } from "./fleet/capacity.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
 import { verifyHostIntegration } from "./host-integrations.js";
 import { confinedHostCwd, hostCommand } from "./host-policy.js";
@@ -74,6 +75,10 @@ export class DesktopSandboxProvider implements SandboxProvider {
   constructor(
     private readonly opts: { root?: string; hostRoots?: string[]; restricted?: boolean } = {},
   ) {}
+
+  capacity() {
+    return hostCapacity();
+  }
 
   describe() {
     return {

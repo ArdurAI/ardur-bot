@@ -16,6 +16,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
 import {
   type Box,
@@ -68,6 +69,9 @@ interface BoxCommandResult {
 }
 
 export class BoxSandboxProvider implements SandboxProvider {
+  async capacity() {
+    return unknownCapacity();
+  }
   private readonly client: BoxSandboxSdk;
   private readonly desktops = new LinuxDesktop({
     environment: async () => ({

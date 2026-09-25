@@ -1,5 +1,12 @@
 import * as z from "zod";
 import { BoardRunSchema } from "./board.js";
+import { CapacitySnapshotSchema } from "./fleet.js";
+import {
+  RemoteComputerCallSchema,
+  RemoteDiscoverySchema,
+  RemoteKubeconfigSchema,
+  RemoteSecretSchema,
+} from "./fleet-bridge.js";
 import { HostIntegrationSchema } from "./host-integrations.js";
 import { IDE_FILE_BYTES } from "./ide.js";
 import { LocalImportRootsSchema } from "./local-import.js";
@@ -144,77 +151,102 @@ export const HostMcpRegistrationSchema = z.strictObject({
 });
 export type HostMcpRegistration = z.infer<typeof HostMcpRegistrationSchema>;
 const mcpTarget = { serverId: id, revision: z.number().int().positive() };
-export const HostOperationSchema = z.discriminatedUnion("op", [
-  z.strictObject({ op: z.literal("board.run"), request: BoardRunSchema }),
-  z.strictObject({ op: z.literal("import.scan"), roots: LocalImportRootsSchema.optional() }),
-  z.strictObject({
-    op: z.literal("import.read"),
-    scanId: z.string().uuid(),
-    itemId: z.string().uuid(),
-  }),
-  z.strictObject({ op: z.literal("mcp.tools"), ...mcpTarget }),
-  z.strictObject({
-    op: z.literal("mcp.call"),
-    ...mcpTarget,
-    name: z.string().min(1).max(160),
-    args: z.record(z.string(), z.unknown()),
-  }),
-  z.strictObject({ op: z.literal("mcp.status"), ...mcpTarget }),
-  z.strictObject({ op: z.literal("mcp.stop"), ...mcpTarget }),
-  z.strictObject({ op: z.literal("computer.environment"), homeKey: id }),
-  z.strictObject({
-    op: z.literal("computer.exec"),
-    homeKey: id,
-    argv: z.array(z.string().max(4096)).min(1).max(64),
-    hostIntegration: HostIntegrationSchema.pick({ id: true, identity: true, workspace: true })
-      .extend({ identity: z.string().min(1).max(240) })
-      .optional(),
-    cwd: path.optional(),
-    timeoutMs: z.number().int().min(1).max(300_000).optional(),
-  }),
-  z.strictObject({
-    op: z.literal("computer.files.read"),
-    homeKey: id,
-    path,
-    maxBytes: z
-      .number()
-      .int()
-      .min(1)
-      .max(IDE_FILE_BYTES + 1)
-      .optional(),
-    editor: z.literal(true).optional(),
-  }),
-  z.strictObject({
-    op: z.literal("computer.files.write"),
-    homeKey: id,
-    path,
-    content: z
-      .string()
-      .max(Math.ceil(IDE_FILE_BYTES / 3) * 4)
-      .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
-    executable: z.boolean().optional(),
-    editor: z.literal(true).optional(),
-  }),
-  z.strictObject({ op: z.literal("computer.files.list"), homeKey: id, path }),
-  z.strictObject({
-    op: z.literal("computer.lifecycle"),
-    homeKey: id,
-    action: z.enum(["create", "prepare", "sleep", "wake", "destroy", "cwd", "snapshot"]),
-    cwd: path.optional(),
-  }),
-  z.strictObject({ op: z.literal("runtime.turn"), homeKey: id, request: HostTurnSchema }),
-  z.strictObject({ op: z.literal("host.health") }),
-]);
+export const HostOperationSchema = /* @__PURE__ */ (() =>
+  z.discriminatedUnion("op", [
+    z.strictObject({ op: z.literal("board.run"), request: BoardRunSchema }),
+    z.strictObject({ op: z.literal("import.scan"), roots: LocalImportRootsSchema.optional() }),
+    z.strictObject({
+      op: z.literal("import.read"),
+      scanId: z.string().uuid(),
+      itemId: z.string().uuid(),
+    }),
+    RemoteComputerCallSchema,
+    RemoteDiscoverySchema,
+    RemoteSecretSchema,
+    RemoteKubeconfigSchema,
+    z.strictObject({
+      op: z.literal("computer.files.export"),
+      homeKey: id,
+      maintenanceId: id.optional(),
+    }),
+    z.strictObject({
+      op: z.literal("computer.environment"),
+      homeKey: id,
+      maintenanceId: id.optional(),
+    }),
+    z.strictObject({ op: z.literal("mcp.tools"), ...mcpTarget }),
+    z.strictObject({
+      op: z.literal("mcp.call"),
+      ...mcpTarget,
+      name: z.string().min(1).max(160),
+      args: z.record(z.string(), z.unknown()),
+    }),
+    z.strictObject({ op: z.literal("mcp.status"), ...mcpTarget }),
+    z.strictObject({ op: z.literal("mcp.stop"), ...mcpTarget }),
+    z.strictObject({
+      op: z.literal("computer.exec"),
+      homeKey: id,
+      maintenanceId: id.optional(),
+      argv: z.array(z.string().max(4096)).min(1).max(64),
+      hostIntegration: HostIntegrationSchema.pick({ id: true, identity: true, workspace: true })
+        .extend({ identity: z.string().min(1).max(240) })
+        .optional(),
+      cwd: path.optional(),
+      timeoutMs: z.number().int().min(1).max(300_000).optional(),
+    }),
+    z.strictObject({
+      op: z.literal("computer.files.read"),
+      homeKey: id,
+      maintenanceId: id.optional(),
+      path,
+      maxBytes: z
+        .number()
+        .int()
+        .min(1)
+        .max(IDE_FILE_BYTES + 1)
+        .optional(),
+      editor: z.literal(true).optional(),
+    }),
+    z.strictObject({
+      op: z.literal("computer.files.write"),
+      homeKey: id,
+      maintenanceId: id.optional(),
+      path,
+      content: z
+        .string()
+        .max(Math.ceil(IDE_FILE_BYTES / 3) * 4)
+        .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+      executable: z.boolean().optional(),
+      editor: z.literal(true).optional(),
+    }),
+    z.strictObject({
+      op: z.literal("computer.files.list"),
+      homeKey: id,
+      maintenanceId: id.optional(),
+      path,
+    }),
+    z.strictObject({
+      op: z.literal("computer.lifecycle"),
+      homeKey: id,
+      maintenanceId: id.optional(),
+      action: z.enum(["create", "prepare", "sleep", "wake", "destroy", "cwd", "snapshot"]),
+      cwd: path.optional(),
+    }),
+    z.strictObject({ op: z.literal("runtime.turn"), homeKey: id, request: HostTurnSchema }),
+    z.strictObject({ op: z.literal("host.health") }),
+  ]))();
 export type HostOperation = z.infer<typeof HostOperationSchema>;
-export const HostRequestSchema = z.strictObject({
-  v: z.literal(1),
-  type: z.literal("request"),
-  id,
-  scope: HostScopeSchema,
-  operation: HostOperationSchema,
-});
+export const HostRequestSchema = /* @__PURE__ */ (() =>
+  z.strictObject({
+    v: z.literal(1),
+    type: z.literal("request"),
+    id,
+    scope: HostScopeSchema,
+    operation: HostOperationSchema,
+  }))();
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 export const HostHealthSchema = z.strictObject({
+  capacity: CapacitySnapshotSchema.optional(),
   name: z.string().trim().min(1).max(80).optional(),
   platform: z.enum(["darwin", "linux", "win32"]),
   roots: z.array(path).max(32),
@@ -232,53 +264,54 @@ export const HostStatusSchema = z.strictObject({
   health: HostHealthSchema.nullable(),
 });
 export type HostStatus = z.infer<typeof HostStatusSchema>;
-export const HostFrameSchema = z.discriminatedUnion("type", [
-  HostRequestSchema,
-  z.strictObject({ v: z.literal(1), type: z.literal("cancel"), id }),
-  z.strictObject({
-    v: z.literal(1),
-    type: z.literal("ack"),
-    id,
-    seq: z.number().int().nonnegative(),
-  }),
-  z.strictObject({
-    v: z.literal(1),
-    type: z.literal("stream"),
-    id,
-    seq: z.number().int().nonnegative(),
-    channel: z.enum(["stdout", "stderr", "exit", "event", "file", "result"]),
-    data: z.unknown(),
-  }),
-  z.strictObject({
-    v: z.literal(1),
-    type: z.literal("end"),
-    id,
-    problem: RuntimeProblemSchema.optional(),
-  }),
-  z.strictObject({
-    v: z.literal(1),
-    type: z.literal("callback"),
-    id,
-    callId: id,
-    method: z.enum([
-      "authorizeTool",
-      "executeTool",
-      "onToolCompleted",
-      "onRuntimeInfo",
-      "claimSteering",
-    ]),
-    args: z.array(z.unknown()).max(5),
-  }),
-  z.strictObject({
-    v: z.literal(1),
-    type: z.literal("reply"),
-    id,
-    callId: id,
-    value: z.unknown().optional(),
-    failed: z.boolean().optional(),
-  }),
-  z.strictObject({ v: z.literal(1), type: z.literal("health"), health: HostHealthSchema }),
-]);
+export const HostFrameSchema = /* @__PURE__ */ (() =>
+  z.discriminatedUnion("type", [
+    HostRequestSchema,
+    z.strictObject({ v: z.literal(1), type: z.literal("cancel"), id }),
+    z.strictObject({
+      v: z.literal(1),
+      type: z.literal("ack"),
+      id,
+      seq: z.number().int().nonnegative(),
+    }),
+    z.strictObject({
+      v: z.literal(1),
+      type: z.literal("stream"),
+      id,
+      seq: z.number().int().nonnegative(),
+      channel: z.enum(["stdout", "stderr", "exit", "event", "file", "result"]),
+      data: z.unknown(),
+    }),
+    z.strictObject({
+      v: z.literal(1),
+      type: z.literal("end"),
+      id,
+      problem: RuntimeProblemSchema.optional(),
+    }),
+    z.strictObject({
+      v: z.literal(1),
+      type: z.literal("callback"),
+      id,
+      callId: id,
+      method: z.enum([
+        "authorizeTool",
+        "executeTool",
+        "onToolCompleted",
+        "onRuntimeInfo",
+        "claimSteering",
+      ]),
+      args: z.array(z.unknown()).max(5),
+    }),
+    z.strictObject({
+      v: z.literal(1),
+      type: z.literal("reply"),
+      id,
+      callId: id,
+      value: z.unknown().optional(),
+      failed: z.boolean().optional(),
+    }),
+    z.strictObject({ v: z.literal(1), type: z.literal("health"), health: HostHealthSchema }),
+  ]))();
 export type HostFrame = z.infer<typeof HostFrameSchema>;
 export function encodeHostFrame(frame: HostFrame) {
   const data = JSON.stringify(HostFrameSchema.parse(frame));

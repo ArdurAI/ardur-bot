@@ -30,10 +30,12 @@ import { recordRunUsage } from "./run-usage.js";
 
 vi.mock("./runtimes/native-host.js", () => ({ nativeHostOwner: async () => true }));
 
+const fleetComputer = vi.hoisted(() => ({ kind: "desktop" }));
+
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
   acquireComputerExecutionLease: async () => null,
-  provisionComputer: async () => ({ id: "computer-1", kind: "desktop" }),
+  provisionComputer: async () => ({ id: "computer-1", kind: fleetComputer.kind }),
 }));
 
 const reviewMock = vi.fn();
@@ -212,7 +214,7 @@ function fixture({
       findFirstOrThrow: vi.fn(async () => ({
         id: "computer-1",
         scope: "dedicated",
-        kind: "desktop",
+        kind: fleetComputer.kind,
       })),
     },
     instanceIdentity: { findUnique: vi.fn(async () => null) },
@@ -236,7 +238,7 @@ function fixture({
         title: bot.title,
         description: bot.description,
         computerId: "computer-1",
-        computer: { id: "computer-1", scope: "dedicated", kind: "desktop" },
+        computer: { id: "computer-1", scope: "dedicated", kind: fleetComputer.kind },
       })),
       findMany: vi.fn(async () => []),
     },
@@ -376,8 +378,24 @@ function fixture({
 describe("connector read-only metadata and approval enforcement", () => {
   beforeEach(() => {
     reviewMock.mockReset();
+    fleetComputer.kind = "desktop";
   });
 
+  it.each(["ssh", "remote-docker", "kubernetes"])(
+    "retains Ask-first approval on a %s computer",
+    async (kind) => {
+      fleetComputer.kind = kind;
+      const f = fixture({
+        name: "shell",
+        trigger: "webhook",
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "shell" }],
+      });
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+      expect(isApprovalPausedResult(f.results[0])).toBe(true);
+      expect(f.execute).not.toHaveBeenCalled();
+    },
+  );
   describe.each([false, true])("host command catalog = %s", (catalog) => {
     it("asks for a read command despite an allow rule and passes only the bound snapshot after approval", async () => {
       const f = fixture({

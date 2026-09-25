@@ -10,12 +10,16 @@ import type {
   SandboxProvider,
   ScreenRequest,
 } from "@ardurbot/adapter-kit";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 
 export const NO_SANDBOX_MESSAGE =
   "Computers unavailable. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or use e2b, daytona, or box with its API key.";
 
 /** Boots the API without a computer host. Provision and runtime calls fail closed. */
 export class NoneSandboxProvider implements SandboxProvider {
+  async capacity() {
+    return unknownCapacity();
+  }
   constructor(private readonly message = NO_SANDBOX_MESSAGE) {}
 
   describe() {

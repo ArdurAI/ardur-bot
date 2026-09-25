@@ -121,6 +121,9 @@ export function TeamBoardRow({ row, refresh }: { row: TeamRow; refresh: () => Pr
       <details>
         <summary className="flex h-20 cursor-pointer items-center gap-3 px-4">
           <span className="w-28 shrink-0 truncate font-medium">{row.botName}</span>
+          {row.computerName ? (
+            <span className="truncate text-xs text-muted-foreground">{row.computerName}</span>
+          ) : null}
           <span className="min-w-0 flex-1 truncate text-sm">
             <TeamStatus row={row} />
           </span>

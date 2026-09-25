@@ -14,6 +14,8 @@
     "./local-settings": "./src/local-settings.js",
     "./runtime-pins": "./src/runtime-pins.ts",
     "./host-bridge": "./src/host-bridge.ts",
+    "./fleet": "./src/fleet.ts",
+    "./fleet-bridge": "./src/fleet-bridge.ts",
     "./local-import": "./src/local-import.ts",
     "./dashboard": "./src/dashboard.ts",
     "./features": "./src/features.ts",

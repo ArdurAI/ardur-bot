@@ -945,4 +945,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Beads version {version} is not supported yet": "不支持 Beads {version} 版本",
   "The board command timed out.": "看板命令已超时。",
   "Dolt is not installed on this computer.": "此电脑尚未安装 Dolt。",
+  "Could not load computers.": "无法加载计算机。",
+  "Memory not reported": "未报告内存",
+  "{amount} GB free": "可用 {amount} GB",
+  "Free memory": "可用内存",
+  Unavailable: "不可用",
 };

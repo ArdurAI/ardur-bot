@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeAccountSettings } from "../components/account-settings";
 import { useAvatarStyle } from "../components/avatar-style";
 import { BotAvatar } from "../components/bot-avatar";
+import { FleetStatus } from "../components/fleet-status";
 import { HostComputerStatus } from "../components/host-computer-status";
 import { NotificationPreferences } from "../components/notification-preferences";
 import type { MobileBot, MobileMe } from "../lib/api";
@@ -238,6 +239,7 @@ export default function Account() {
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
         <NativeAccountSettings />
+        <FleetStatus />
         <HostComputerStatus />
         <Button
           color={mobileTokens().primary}

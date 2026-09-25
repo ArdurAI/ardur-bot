@@ -1,5 +1,7 @@
 # Computer profiles, Podman, and Kubernetes
 
+For Fleet targets, capacity, placement, transport limits and verification, see [Fleet P1](fleet.md).
+
 Status: implemented for offline verification; live acceptance is still required. No images
 were built or published during this change. The Kubernetes client could not be installed in
 the restricted command environment; complete dependency installation and refresh the lockfile

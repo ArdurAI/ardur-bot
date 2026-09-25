@@ -66,6 +66,11 @@ msgstr "{0} default"
 msgid "{0} documents, {1} revisions"
 msgstr "{0} documents, {1} revisions"
 
+#. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
+#: src/pages/fleet/FleetSettings.tsx
+msgid "{0} GB free"
+msgstr "{0} GB free"
+
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} handling"
@@ -344,6 +349,7 @@ msgstr "Activity"
 #: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/PluginsPage.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
@@ -381,9 +387,13 @@ msgstr "Add an HTTPS server URL."
 msgid "Add another"
 msgstr "Add another"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Add computer connection"
-msgstr "Add computer connection"
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Add as SSH computer"
+msgstr "Add as SSH computer"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Add computer"
+msgstr "Add computer"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Add Executor"
@@ -465,6 +475,7 @@ msgstr "Adding…"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/account/AccountMore.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -835,6 +846,10 @@ msgstr "at {timeSelect}"
 msgid "Attachment"
 msgstr "Attachment"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Authentication"
+msgstr "Authentication"
+
 #: src/pages/MemoryHistory.tsx
 msgid "Author"
 msgstr "Author"
@@ -876,6 +891,7 @@ msgstr "Automated senders will appear after they post here."
 msgid "Automatically start when you log in to your computer."
 msgstr "Automatically start when you log in to your computer."
 
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
 msgstr "Available"
@@ -1103,6 +1119,10 @@ msgstr "by {0}"
 msgid "by you"
 msgstr "by you"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "CA certificate path"
+msgstr "CA certificate path"
+
 #: src/components/Context.tsx
 msgid "Cache hits"
 msgstr "Cache hits"
@@ -1128,6 +1148,7 @@ msgstr "Can't reach the server."
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/PluginsPage.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/import/ImportedServerCredentials.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -1319,10 +1340,6 @@ msgstr "Choose a taught skill"
 msgid "Choose bots and the tools they can use."
 msgstr "Choose bots and the tools they can use."
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Choose context"
-msgstr "Choose context"
-
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
 msgstr "Choose effort"
@@ -1374,10 +1391,18 @@ msgstr "Clear conversation"
 msgid "Clearing…"
 msgstr "Clearing…"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Client certificate path"
+msgstr "Client certificate path"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Client ID"
 msgstr "Client ID"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Client key path"
+msgstr "Client key path"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1536,6 +1561,11 @@ msgstr "Completed"
 msgid "Completion not recorded"
 msgstr "Completion not recorded"
 
+#: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
+msgid "computer"
+msgstr "computer"
+
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1576,9 +1606,10 @@ msgstr "Computer is stopped"
 msgid "Computer use"
 msgstr "Computer use"
 
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/dashboard/panels.ts
+#: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/settings-sections.ts
 msgid "Computers"
 msgstr "Computers"
@@ -1588,6 +1619,7 @@ msgid "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TO
 msgstr "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set SANDBOX_PROVIDER to e2b, daytona, or box with its API key. Recreate the stack after changing .env."
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Computers are unavailable; reconnect and try again."
 msgstr "Computers are unavailable; reconnect and try again."
 
@@ -1699,6 +1731,7 @@ msgstr "Connect Treg"
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1748,14 +1781,14 @@ msgstr "Connection"
 msgid "Connection lost — reconnecting"
 msgstr "Connection lost — reconnecting"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Connection name"
-msgstr "Connection name"
-
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Connection to {0} is still pending. You can close this and check again."
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Connection type"
+msgstr "Connection type"
 
 #: src/pages/dashboard/panels.ts
 msgid "Connections"
@@ -1774,6 +1807,7 @@ msgid "Consolidation uses the review connection and may incur model charges. App
 msgstr "Consolidation uses the review connection and may incur model charges. Approval is required."
 
 #: src/components/Context.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 msgid "Context"
 msgstr "Context"
@@ -1865,6 +1899,10 @@ msgstr "Could not add folder. Try again."
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not add MCP server"
 msgstr "Could not add MCP server"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not add the computer. Check its settings and try again."
+msgstr "Could not add the computer. Check its settings and try again."
 
 #: src/pages/shell/message-cards.tsx
 msgid "Could not approve this server"
@@ -2383,10 +2421,6 @@ msgstr "Could not save that choice"
 msgid "Could not save that voice"
 msgstr "Could not save that voice"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Could not save the connection; check its settings and try again."
-msgstr "Could not save the connection; check its settings and try again."
-
 #: src/pages/shell/message-cards.tsx
 msgid "Could not save this choice"
 msgstr "Could not save this choice"
@@ -2483,6 +2517,10 @@ msgstr "Could not update MCP server."
 msgid "Could not update reaction"
 msgstr "Could not update reaction"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not update the computer. Check the connection and try again."
+msgstr "Could not update the computer. Check the connection and try again."
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not update this computer. Try again."
 msgstr "Could not update this computer. Try again."
@@ -2512,11 +2550,11 @@ msgstr "Couldn't load messaging settings"
 msgid "Couldn't update messaging settings"
 msgstr "Couldn't update messaging settings"
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "CPU limit"
 msgstr "CPU limit"
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "CPU request"
 msgstr "CPU request"
 
@@ -2525,10 +2563,6 @@ msgstr "CPU request"
 #: src/pages/shell/dialogs.tsx
 msgid "Create"
 msgstr "Create"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Create a kind cluster: kind create cluster --name ardurbot"
-msgstr "Create a kind cluster: kind create cluster --name ardurbot"
 
 #. placeholder {0}: bot.name
 #: src/pages/shell/dialogs.tsx
@@ -2905,6 +2939,10 @@ msgstr "Disconnecting…"
 msgid "Discussions"
 msgstr "Discussions"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Disk"
+msgstr "Disk"
+
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/shell/message-cards.tsx
@@ -3069,13 +3107,9 @@ msgstr "Enable"
 msgid "Engage when... Ignore..."
 msgstr "Engage when... Ignore..."
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine"
-msgstr "Engine"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine socket"
-msgstr "Engine socket"
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine endpoint"
+msgstr "Engine endpoint"
 
 #. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
 #: src/pages/ComputerProfilesSettings.tsx
@@ -3365,6 +3399,10 @@ msgstr "Found on this Mac"
 msgid "Free"
 msgstr "Free"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Free memory"
+msgstr "Free memory"
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
 msgid "From folder"
@@ -3530,9 +3568,9 @@ msgstr "Home fingerprint"
 msgid "Home link"
 msgstr "Home link"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Home storage size"
-msgstr "Home storage size"
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Host"
+msgstr "Host"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Host service:"
@@ -3813,6 +3851,10 @@ msgstr "Jev needs a TypeSafe API key."
 msgid "Jira project keys"
 msgstr "Jira project keys"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Jump host"
+msgstr "Jump host"
+
 #: src/pages/Shell.tsx
 msgid "Jump to latest"
 msgstr "Jump to latest"
@@ -3832,6 +3874,10 @@ msgstr "Keep computer awake"
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr "Keep for recovery"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Keep here"
+msgstr "Keep here"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Keep memories"
@@ -3853,19 +3899,15 @@ msgstr "key"
 msgid "Knowledge"
 msgstr "Knowledge"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Kubeconfig contents"
-msgstr "Kubeconfig contents"
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Kubeconfig"
+msgstr "Kubeconfig"
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Kubeconfig path"
 msgstr "Kubeconfig path"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Kubeconfig path on the server"
-msgstr "Kubeconfig path on the server"
-
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Kubernetes context"
 msgstr "Kubernetes context"
 
@@ -3981,10 +4023,6 @@ msgstr "Linear issue"
 msgid "Link a chat app"
 msgstr "Link a chat app"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "List contexts"
-msgstr "List contexts"
-
 #: src/pages/ModelDestinations.tsx
 msgid "Listed hosts"
 msgstr "Listed hosts"
@@ -4001,6 +4039,10 @@ msgstr "Listening"
 #: src/pages/system/SystemDictation.tsx
 msgid "Listening…"
 msgstr "Listening…"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Load"
+msgstr "Load"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Load all connected tools"
@@ -4149,6 +4191,7 @@ msgstr "Manage messaging settings"
 msgid "Manage…"
 msgstr "Manage…"
 
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
 msgstr "Manual"
@@ -4250,7 +4293,7 @@ msgstr "Memory folder on your server"
 msgid "Memory folders: {0} · Notes: {1}"
 msgstr "Memory folders: {0} · Notes: {1}"
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Memory limit"
 msgstr "Memory limit"
 
@@ -4262,12 +4305,16 @@ msgstr "Memory location"
 msgid "Memory location and documents"
 msgstr "Memory location and documents"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Memory not reported"
+msgstr "Memory not reported"
+
 #: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Memory preferences"
 msgstr "Memory preferences"
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Memory request"
 msgstr "Memory request"
 
@@ -4365,6 +4412,10 @@ msgstr "minimal — quickest, for simple tasks"
 #: src/pages/Shell.tsx
 msgid "Minimize bots"
 msgstr "Minimize bots"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Minimum free memory (GB)"
+msgstr "Minimum free memory (GB)"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "minute"
@@ -4469,6 +4520,14 @@ msgstr "More memory"
 msgid "Motion"
 msgstr "Motion"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move"
+msgstr "Move"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move automatically"
+msgstr "Move automatically"
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "Move them to your shared memory."
@@ -4477,6 +4536,20 @@ msgstr "Move them to your shared memory."
 msgid "Move to"
 msgstr "Move to"
 
+#. placeholder {0}: targets.find((target) => target.id === bot.pending?.targetId)?.name ?? t`computer`
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move to {0}?"
+msgstr "Move to {0}?"
+
+#: src/pages/fleet/PlacementNotice.tsx
+msgid "Move to {name}?"
+msgstr "Move to {name}?"
+
+#. placeholder {0}: value.minimumFreeGb
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move when this Mac has under {0} GB free"
+msgstr "Move when this Mac has under {0} GB free"
+
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
 msgstr "My documents"
@@ -4484,6 +4557,7 @@ msgstr "My documents"
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/Auth.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4503,7 +4577,7 @@ msgstr "Name this group"
 msgid "Name this routine"
 msgstr "Name this routine"
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Namespace"
 msgstr "Namespace"
 
@@ -5098,10 +5172,6 @@ msgstr "Or connect an API key"
 msgid "Or paste an API key"
 msgstr "Or paste an API key"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Or paste kubeconfig contents"
-msgstr "Or paste kubeconfig contents"
-
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
 msgstr "Organic"
@@ -5229,6 +5299,10 @@ msgstr "pin"
 msgid "Pin"
 msgstr "Pin"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Placement"
+msgstr "Placement"
+
 #: src/pages/account/AccountTables.tsx
 #: src/pages/settings-sections.ts
 msgid "Platform"
@@ -5253,6 +5327,10 @@ msgstr "Plugins and extensions"
 msgid "Policy version"
 msgstr "Policy version"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Port"
+msgstr "Port"
+
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr "Possible regression — review undo"
@@ -5261,10 +5339,18 @@ msgstr "Possible regression — review undo"
 msgid "POST to"
 msgstr "POST to"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Prefer the most free memory"
+msgstr "Prefer the most free memory"
+
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Preferences"
 msgstr "Preferences"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Preferred computer"
+msgstr "Preferred computer"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Prevent idle sleep while routines are enabled; your display can turn off, and closing the lid still puts the computer to sleep."
@@ -5313,6 +5399,14 @@ msgstr "Privacy"
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "Private"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Private key"
+msgstr "Private key"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Private key path on this computer"
+msgstr "Private key path on this computer"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Private to each bot"
@@ -5601,6 +5695,10 @@ msgstr "Release interrupted computer?"
 msgid "Reload"
 msgstr "Reload"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remote base directory"
+msgstr "Remote base directory"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Remote MCP URL"
 msgstr "Remote MCP URL"
@@ -5818,7 +5916,7 @@ msgstr "Reset your password"
 msgid "Resetting…"
 msgstr "Resetting…"
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr "Resources"
 
@@ -6104,10 +6202,6 @@ msgstr "Save"
 #: src/components/composer/command-description.ts
 msgid "Save a memory note"
 msgstr "Save a memory note"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Save connection"
-msgstr "Save connection"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Save credentials"
@@ -6630,6 +6724,14 @@ msgstr "Speak this reply"
 msgid "Speaking…"
 msgstr "Speaking…"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "SSH agent"
+msgstr "SSH agent"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "SSH machine"
+msgstr "SSH machine"
+
 #: src/pages/LearningCurator.tsx
 msgid "Stale"
 msgstr "Stale"
@@ -6713,13 +6815,17 @@ msgstr "Stopped"
 msgid "Stopping"
 msgstr "Stopping"
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Storage class"
 msgstr "Storage class"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Storage folder"
 msgstr "Storage folder"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Storage size"
+msgstr "Storage size"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Stored encrypted"
@@ -6859,6 +6965,7 @@ msgstr "Terminal is not available on this computer"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Test"
 msgstr "Test"
 
@@ -6958,6 +7065,7 @@ msgstr "this computer"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
@@ -7163,6 +7271,7 @@ msgid "Unassigned"
 msgstr "Unassigned"
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Unavailable"
 msgstr "Unavailable"
 
@@ -7340,6 +7449,10 @@ msgstr "Use this location"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "Use this model"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "User"
+msgstr "User"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

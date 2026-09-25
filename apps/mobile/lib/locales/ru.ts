@@ -981,4 +981,9 @@ export const RU_MESSAGES: Record<string, string> = {
   "Beads version {version} is not supported yet": "Версия Beads {version} пока не поддерживается",
   "The board command timed out.": "Время выполнения команды доски истекло.",
   "Dolt is not installed on this computer.": "На этом компьютере не установлен Dolt.",
+  "Could not load computers.": "Не удалось загрузить компьютеры.",
+  "Memory not reported": "Память не указана",
+  "{amount} GB free": "Свободно {amount} ГБ",
+  "Free memory": "Свободная память",
+  Unavailable: "Недоступен",
 };

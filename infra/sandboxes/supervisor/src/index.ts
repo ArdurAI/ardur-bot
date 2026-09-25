@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import http from "node:http";
+import { cpus, freemem, loadavg, totalmem } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ComputerProfileSchema, computerImage } from "@ardurbot/contracts";
@@ -187,7 +188,21 @@ app.use("/computers*", async (c, next) => {
 app.get("/computers/engine", async (c) => {
   try {
     const [version, info] = await Promise.all([docker.version(), docker.info()]);
-    return c.json(engineFromResponses(version, info));
+    const details = info as { NCPU?: number; MemTotal?: number; OperatingSystem?: string };
+    return c.json({
+      ...engineFromResponses(version, info),
+      version: version.Version,
+      os: details.OperatingSystem ?? "",
+      capacity: {
+        cpuCount: details.NCPU ?? cpus().length,
+        cpuLoad1m: loadavg()[0] ?? null,
+        memoryTotal: details.MemTotal ?? totalmem(),
+        memoryFree: Math.min(freemem(), details.MemTotal ?? totalmem()),
+        diskFree: null,
+        sampledAt: new Date().toISOString(),
+        source: "docker",
+      },
+    });
   } catch (error) {
     const socket =
       c.req.header("x-ardurbot-engine-socket") ??

@@ -79,6 +79,9 @@ export default function TeamScreen() {
               style={[styles.row, { borderColor: tokens.border, backgroundColor: tokens.card }]}
             >
               <Text style={[styles.name, { color: tokens.foreground }]}>{item.name}</Text>
+              {row.computerName ? (
+                <Text style={{ color: tokens.mutedForeground }}>{row.computerName}</Text>
+              ) : null}
               <Text numberOfLines={2} style={{ color: tokens.foreground }}>
                 {item.text}
               </Text>

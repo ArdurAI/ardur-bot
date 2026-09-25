@@ -27,9 +27,15 @@ export function createIdeFiles(deps: Deps) {
   async function hostFile(actor: Actor, operation: HostOperation, signal?: AbortSignal) {
     try {
       const source = await sourceHost(actor);
-      if (source && "path" in operation && operation.op.startsWith("computer.files.")) {
+      if (
+        source &&
+        "path" in operation &&
+        typeof operation.path === "string" &&
+        operation.op.startsWith("computer.files.")
+      ) {
+        const filePath = operation.path;
         const root = source.roots.find((root) => {
-          const relative = path.relative(root, operation.path);
+          const relative = path.relative(root, filePath);
           return (
             relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
           );
@@ -48,7 +54,7 @@ export function createIdeFiles(deps: Deps) {
           traceId: "ide",
           signal: signal ?? new AbortController().signal,
         };
-        const relative = path.relative(root, operation.path);
+        const relative = path.relative(root, filePath);
         if (operation.op === "computer.files.list") {
           const entries = await sourceFiles.listFiles(computer, relative, context);
           return {
@@ -245,7 +251,10 @@ export function createIdeFiles(deps: Deps) {
                 }),
             );
     }
-    const readOnly = entry.size > IDE_FILE_BYTES || bytes.byteLength > IDE_FILE_BYTES;
+    const readOnly =
+      entry.size > IDE_FILE_BYTES ||
+      bytes.byteLength > IDE_FILE_BYTES ||
+      bytes.byteLength < entry.size;
     let content = "";
     let binary = bytes.includes(0);
     if (!binary) {
@@ -311,7 +320,7 @@ export function createIdeFiles(deps: Deps) {
       return {
         saved: false,
         approvalRequired: false,
-        reason: "Read only: file is larger than 2 MB",
+        reason: current.size > IDE_FILE_BYTES ? "Read only: file is larger than 2 MB" : "Read only",
       };
     if (current.version !== input.version)
       return {

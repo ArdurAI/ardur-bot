@@ -66,6 +66,11 @@ msgstr ""
 msgid "{0} documents, {1} revisions"
 msgstr ""
 
+#. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
+#: src/pages/fleet/FleetSettings.tsx
+msgid "{0} GB free"
+msgstr ""
+
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} handling"
@@ -344,6 +349,7 @@ msgstr "गतिविधि"
 #: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/PluginsPage.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
@@ -381,8 +387,12 @@ msgstr "एक HTTPS सर्वर URL दर्ज करें।"
 msgid "Add another"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Add computer connection"
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Add as SSH computer"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Add computer"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -465,6 +475,7 @@ msgstr "जोड़ा जा रहा है…"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/account/AccountMore.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -835,6 +846,10 @@ msgstr "{timeSelect} बजे"
 msgid "Attachment"
 msgstr "अटैचमेंट"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Authentication"
+msgstr ""
+
 #: src/pages/MemoryHistory.tsx
 msgid "Author"
 msgstr ""
@@ -876,6 +891,7 @@ msgstr ""
 msgid "Automatically start when you log in to your computer."
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
 msgstr ""
@@ -1103,6 +1119,10 @@ msgstr ""
 msgid "by you"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "CA certificate path"
+msgstr ""
+
 #: src/components/Context.tsx
 msgid "Cache hits"
 msgstr "कैश हिट"
@@ -1128,6 +1148,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/PluginsPage.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/import/ImportedServerCredentials.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
@@ -1319,10 +1340,6 @@ msgstr ""
 msgid "Choose bots and the tools they can use."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Choose context"
-msgstr ""
-
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
 msgstr ""
@@ -1374,9 +1391,17 @@ msgstr "बातचीत साफ़ करें"
 msgid "Clearing…"
 msgstr "साफ़ किया जा रहा है…"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Client certificate path"
+msgstr ""
+
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Client ID"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Client key path"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
@@ -1536,6 +1561,11 @@ msgstr ""
 msgid "Completion not recorded"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
+msgid "computer"
+msgstr ""
+
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1576,9 +1606,10 @@ msgstr "कंप्यूटर रुका हुआ है"
 msgid "Computer use"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/dashboard/panels.ts
+#: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/settings-sections.ts
 msgid "Computers"
 msgstr "कंप्यूटर"
@@ -1588,6 +1619,7 @@ msgid "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TO
 msgstr "कंप्यूटर बंद हैं। SANDBOX_PROVIDER=docker और SANDBOX_SUPERVISOR_TOKEN सेट करें, या SANDBOX_PROVIDER को e2b, daytona, या box पर सेट कर उसका API key दें। .env बदलने के बाद स्टैक फिर बनाएँ।"
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Computers are unavailable; reconnect and try again."
 msgstr ""
 
@@ -1699,6 +1731,7 @@ msgstr "Treg कनेक्ट करें"
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1748,14 +1781,14 @@ msgstr ""
 msgid "Connection lost — reconnecting"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Connection name"
-msgstr ""
-
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} से कनेक्शन अभी लंबित है। आप इसे बंद करके बाद में जांच सकते हैं।"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Connection type"
+msgstr ""
 
 #: src/pages/dashboard/panels.ts
 msgid "Connections"
@@ -1774,6 +1807,7 @@ msgid "Consolidation uses the review connection and may incur model charges. App
 msgstr ""
 
 #: src/components/Context.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 msgid "Context"
 msgstr "संदर्भ"
@@ -1865,6 +1899,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not add MCP server"
 msgstr "MCP सर्वर जोड़ा नहीं जा सका"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not add the computer. Check its settings and try again."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Could not approve this server"
@@ -2383,10 +2421,6 @@ msgstr "वह विकल्प सहेजा नहीं जा सका"
 msgid "Could not save that voice"
 msgstr "वह आवाज़ सहेजी नहीं जा सकी"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Could not save the connection; check its settings and try again."
-msgstr ""
-
 #: src/pages/shell/message-cards.tsx
 msgid "Could not save this choice"
 msgstr "यह विकल्प सहेजा नहीं जा सका"
@@ -2483,6 +2517,10 @@ msgstr ""
 msgid "Could not update reaction"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not update the computer. Check the connection and try again."
+msgstr ""
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not update this computer. Try again."
 msgstr ""
@@ -2512,11 +2550,11 @@ msgstr ""
 msgid "Couldn't update messaging settings"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "CPU limit"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "CPU request"
 msgstr ""
 
@@ -2525,10 +2563,6 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Create"
 msgstr "बनाएं"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Create a kind cluster: kind create cluster --name ardurbot"
-msgstr ""
 
 #. placeholder {0}: bot.name
 #: src/pages/shell/dialogs.tsx
@@ -2905,6 +2939,10 @@ msgstr "डिस्कनेक्ट हो रहा है…"
 msgid "Discussions"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Disk"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/shell/message-cards.tsx
@@ -3069,12 +3107,8 @@ msgstr ""
 msgid "Engage when... Ignore..."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine"
-msgstr ""
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine socket"
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine endpoint"
 msgstr ""
 
 #. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
@@ -3365,6 +3399,10 @@ msgstr ""
 msgid "Free"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Free memory"
+msgstr ""
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
 msgid "From folder"
@@ -3530,8 +3568,8 @@ msgstr ""
 msgid "Home link"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Home storage size"
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Host"
 msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
@@ -3813,6 +3851,10 @@ msgstr ""
 msgid "Jira project keys"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Jump host"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Jump to latest"
 msgstr "नवीनतम संदेश पर जाएँ"
@@ -3831,6 +3873,10 @@ msgstr ""
 
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Keep here"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -3853,19 +3899,15 @@ msgstr ""
 msgid "Knowledge"
 msgstr "ज्ञान"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Kubeconfig contents"
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Kubeconfig"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Kubeconfig path"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Kubeconfig path on the server"
-msgstr ""
-
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Kubernetes context"
 msgstr ""
 
@@ -3981,10 +4023,6 @@ msgstr ""
 msgid "Link a chat app"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "List contexts"
-msgstr ""
-
 #: src/pages/ModelDestinations.tsx
 msgid "Listed hosts"
 msgstr ""
@@ -4001,6 +4039,10 @@ msgstr ""
 #: src/pages/system/SystemDictation.tsx
 msgid "Listening…"
 msgstr "सुना जा रहा है…"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Load"
+msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Load all connected tools"
@@ -4149,6 +4191,7 @@ msgstr ""
 msgid "Manage…"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
 msgstr ""
@@ -4250,7 +4293,7 @@ msgstr ""
 msgid "Memory folders: {0} · Notes: {1}"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Memory limit"
 msgstr ""
 
@@ -4262,12 +4305,16 @@ msgstr ""
 msgid "Memory location and documents"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Memory not reported"
+msgstr ""
+
 #: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Memory preferences"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Memory request"
 msgstr ""
 
@@ -4364,6 +4411,10 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Minimize bots"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Minimum free memory (GB)"
 msgstr ""
 
 #: src/pages/RoutineSchedule.tsx
@@ -4469,6 +4520,14 @@ msgstr ""
 msgid "Motion"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move automatically"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "उन्हें अपनी साझा मेमोरी में ले जाएं।"
@@ -4477,6 +4536,20 @@ msgstr "उन्हें अपनी साझा मेमोरी मे�
 msgid "Move to"
 msgstr "यहां ले जाएं"
 
+#. placeholder {0}: targets.find((target) => target.id === bot.pending?.targetId)?.name ?? t`computer`
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move to {0}?"
+msgstr ""
+
+#: src/pages/fleet/PlacementNotice.tsx
+msgid "Move to {name}?"
+msgstr ""
+
+#. placeholder {0}: value.minimumFreeGb
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move when this Mac has under {0} GB free"
+msgstr ""
+
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
 msgstr ""
@@ -4484,6 +4557,7 @@ msgstr ""
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/Auth.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4503,7 +4577,7 @@ msgstr "इस समूह को नाम दें"
 msgid "Name this routine"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Namespace"
 msgstr ""
 
@@ -5098,10 +5172,6 @@ msgstr "या एक API कुंजी कनेक्ट करें"
 msgid "Or paste an API key"
 msgstr "या एक API कुंजी पेस्ट करें"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Or paste kubeconfig contents"
-msgstr ""
-
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
 msgstr ""
@@ -5229,6 +5299,10 @@ msgstr ""
 msgid "Pin"
 msgstr "पिन करें"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Placement"
+msgstr ""
+
 #: src/pages/account/AccountTables.tsx
 #: src/pages/settings-sections.ts
 msgid "Platform"
@@ -5253,6 +5327,10 @@ msgstr ""
 msgid "Policy version"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Port"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr ""
@@ -5261,9 +5339,17 @@ msgstr ""
 msgid "POST to"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Prefer the most free memory"
+msgstr ""
+
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Preferences"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Preferred computer"
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -5313,6 +5399,14 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
 msgstr "निजी"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Private key"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Private key path on this computer"
+msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Private to each bot"
@@ -5601,6 +5695,10 @@ msgstr ""
 msgid "Reload"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remote base directory"
+msgstr ""
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Remote MCP URL"
 msgstr ""
@@ -5818,7 +5916,7 @@ msgstr "अपना पासवर्ड रीसेट करें"
 msgid "Resetting…"
 msgstr "रीसेट हो रहा है…"
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""
 
@@ -6103,10 +6201,6 @@ msgstr "सहेजें"
 
 #: src/components/composer/command-description.ts
 msgid "Save a memory note"
-msgstr ""
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Save connection"
 msgstr ""
 
 #: src/pages/import/ImportedServerCredentials.tsx
@@ -6630,6 +6724,14 @@ msgstr "यह उत्तर बोलकर सुनाएं"
 msgid "Speaking…"
 msgstr "बोल रहा है…"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "SSH agent"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "SSH machine"
+msgstr ""
+
 #: src/pages/LearningCurator.tsx
 msgid "Stale"
 msgstr ""
@@ -6713,12 +6815,16 @@ msgstr ""
 msgid "Stopping"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Storage class"
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
 msgid "Storage folder"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Storage size"
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
@@ -6859,6 +6965,7 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Test"
 msgstr "टेस्ट करें"
 
@@ -6958,6 +7065,7 @@ msgstr "यह कंप्यूटर"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
@@ -7163,6 +7271,7 @@ msgid "Unassigned"
 msgstr "असाइन नहीं किया गया"
 
 #: src/components/SoftwareUpdateSection.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Unavailable"
 msgstr ""
 
@@ -7340,6 +7449,10 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "यह मॉडल उपयोग करें"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "User"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

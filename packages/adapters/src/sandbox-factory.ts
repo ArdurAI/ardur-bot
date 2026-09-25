@@ -1,5 +1,6 @@
 import type { SandboxProvider } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings } from "@ardurbot/contracts";
+import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import { BoxSandboxEmulator } from "./box-emulator.js";
 import { BoxSandboxProvider } from "./box-sandbox.js";
 import { DaytonaSandboxEmulator } from "./daytona-emulator.js";
@@ -14,6 +15,7 @@ import { KubernetesSandboxProvider } from "./kubernetes-sandbox.js";
 import { NoneSandboxProvider } from "./none-sandbox.js";
 
 export interface SandboxProviderOptions {
+  hostClient?: Pick<HostClient, "request" | "result" | "health">;
   kubernetes?: { api: KubernetesApi; settings: ComputerConnectionSettings };
   supervisorUrl?: string;
   supervisorToken?: string;

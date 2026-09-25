@@ -3,6 +3,7 @@ import type { RefObject } from "react";
 import { DesktopUpdateSection } from "../components/DesktopUpdates";
 import { SoftwareUpdateSection } from "../components/SoftwareUpdateSection";
 import { ComputerProfilesSettings } from "./ComputerProfilesSettings";
+import { FleetSettings } from "./fleet/FleetSettings";
 import { HostComputerSettings } from "./HostComputerSettings";
 
 export function UsageSettingsPanel({
@@ -42,10 +43,13 @@ export function ComputerSettingsPanel() {
       data-testid="computers-setup-settings"
       className="rounded-xl border border-border px-4 py-4"
     >
-      <h3 className="text-[15px] font-medium text-foreground">
-        <Trans>Computers</Trans>
-      </h3>
-      <HostComputerSettings />
+      <FleetSettings />
+      <details>
+        <summary>
+          <Trans>This computer</Trans>
+        </summary>
+        <HostComputerSettings />
+      </details>
       <ComputerProfilesSettings />
     </div>
   );

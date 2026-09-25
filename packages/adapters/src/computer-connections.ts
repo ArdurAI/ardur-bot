@@ -5,11 +5,16 @@ import type {
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
+import { HostKubernetesSandboxProvider } from "./fleet/remote-kubernetes.js";
+import { RemoteFleetSandbox } from "./fleet/remote-sandbox.js";
+import { localFleetService } from "./fleet/service.js";
 import type { KubeconfigSource } from "./kubernetes-client.js";
 import { createKubernetesApi } from "./kubernetes-client.js";
 import { KubernetesSandboxProvider } from "./kubernetes-sandbox.js";
+import { createHostClient, usesHostBridge } from "./remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "./sandbox-factory.js";
 
 export type ComputerSecretLoader = { load(ciphertext: string, id: string): string };
@@ -33,6 +38,16 @@ export class ComputerConnections {
     if (!provider) {
       provider = (async () => {
         const settings = ComputerConnectionSettingsSchema.parse(row.metadata);
+        if (settings.engine === "kubernetes" && settings.hostSecretId && usesHostBridge())
+          return new HostKubernetesSandboxProvider(
+            id,
+            settings,
+            this.options.hostClient ?? createHostClient(),
+          );
+        if (settings.engine === "ssh" || settings.endpoint || settings.dockerContext)
+          return usesHostBridge()
+            ? new RemoteFleetSandbox(id, settings, this.options.hostClient ?? createHostClient())
+            : localFleetService().provider(id, settings, context.spaceId);
         if (settings.engine !== "kubernetes")
           return new DockerSandboxProvider(
             this.options.supervisorUrl ?? "http://127.0.0.1:7091",
@@ -104,6 +119,15 @@ export class ConnectedSandboxProvider implements SandboxProvider {
     return computer.connectionId
       ? this.connections.resolve(computer.connectionId, context)
       : Promise.resolve(this.fallback);
+  }
+  async capacity(context: AdapterContext) {
+    return this.fallback.capacity?.(context) ?? unknownCapacity();
+  }
+  async targetCapacity(connectionId: string, context: AdapterContext) {
+    return (
+      (await this.connections.resolve(connectionId, context)).capacity?.(context) ??
+      unknownCapacity()
+    );
   }
   async supportsNetworkEgress(computer: ComputerRef, context: AdapterContext) {
     return (

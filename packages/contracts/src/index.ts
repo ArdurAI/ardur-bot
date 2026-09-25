@@ -19,6 +19,8 @@ export * from "./dispatch.js";
 export * from "./domain.js";
 export * from "./events.js";
 export type * from "./features.js";
+export type * from "./fleet.js";
+export type * from "./fleet-bridge.js";
 export type * from "./host-bridge.js";
 export * from "./host-integrations.js";
 export * from "./ide.js";

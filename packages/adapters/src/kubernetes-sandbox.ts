@@ -1,3 +1,10 @@
+import {
+  kubernetesComputerSpec,
+  kubernetesVolumeSpec,
+} from "@ardurbot/host-runtime/fleet/kubernetes-spec";
+
+export { kubernetesComputerSpec } from "@ardurbot/host-runtime/fleet/kubernetes-spec";
+
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type {
@@ -12,8 +19,11 @@ import type {
 } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings } from "@ardurbot/contracts";
 import { computerImage, profileCommandError } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
+import { cachedCapacity } from "@ardurbot/host-runtime/fleet/capacity";
 import { normalizeWorkspacePath } from "./computer-support.js";
+import { kubernetesCapacity } from "./fleet/kubernetes-capacity.js";
 import type { KubernetesApi, KubernetesObject } from "./kubernetes-client.js";
 import { KUBERNETES_FILE_SCRIPT } from "./kubernetes-files.js";
 
@@ -33,57 +43,21 @@ export const KUBERNETES_CAPABILITIES = {
 export function kubernetesComputerName(spaceId: string, botId: string) {
   return `ardurbot-${createHash("sha256").update(`${spaceId}\0${botId}`).digest("hex").slice(0, 32)}`;
 }
-export function kubernetesComputerSpec(
-  name: string,
-  profile: ComputerRef["imageProfile"],
-  settings: ComputerConnectionSettings,
-): KubernetesObject {
-  return {
-    apiVersion: "v1",
-    kind: "Pod",
-    metadata: { name, labels: { "ardurbot.com/computer": name } },
-    spec: {
-      restartPolicy: "Always",
-      automountServiceAccountToken: false,
-      securityContext: {
-        runAsNonRoot: true,
-        runAsUser: 1000,
-        runAsGroup: 1000,
-        fsGroup: 1000,
-        fsGroupChangePolicy: "OnRootMismatch",
-        seccompProfile: { type: "RuntimeDefault" },
-      },
-      containers: [
-        {
-          name: "computer",
-          image: computerImage(profile),
-          imagePullPolicy: "IfNotPresent",
-          command: ["/bin/sleep", "infinity"],
-          workingDir: HOME,
-          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } },
-          resources: {
-            requests: { cpu: settings.cpuRequest, memory: settings.memoryRequest },
-            limits: { cpu: settings.cpuLimit, memory: settings.memoryLimit },
-          },
-          volumeMounts: [
-            { name: "home", mountPath: HOME },
-            { name: "shm", mountPath: "/dev/shm" },
-          ],
-        },
-      ],
-      volumes: [
-        { name: "home", persistentVolumeClaim: { claimName: name } },
-        { name: "shm", emptyDir: { medium: "Memory", sizeLimit: "256Mi" } },
-      ],
-    },
-  };
-}
 
 export class KubernetesSandboxProvider implements SandboxProvider {
   constructor(
     private readonly api: KubernetesApi,
     private readonly settings: ComputerConnectionSettings,
   ) {}
+  readonly capacity = cachedCapacity(async () => {
+    const inventory = await this.api.capacity?.();
+    return inventory
+      ? kubernetesCapacity(inventory.nodes, inventory.pods, inventory.metrics)
+      : unknownCapacity();
+  });
+  async namespaces() {
+    return this.api.namespaces?.() ?? [this.settings.namespace];
+  }
   describe() {
     return {
       id: "kubernetes",
@@ -126,16 +100,7 @@ export class KubernetesSandboxProvider implements SandboxProvider {
     if (!pvc)
       await this.api.create(
         "persistentvolumeclaims",
-        {
-          apiVersion: "v1",
-          kind: "PersistentVolumeClaim",
-          metadata: { name, labels: { "ardurbot.com/computer": name } },
-          spec: {
-            accessModes: ["ReadWriteOnce"],
-            resources: { requests: { storage: this.settings.storageSize } },
-            ...(this.settings.storageClass ? { storageClassName: this.settings.storageClass } : {}),
-          },
-        },
+        kubernetesVolumeSpec(name, this.settings),
         context.signal,
       );
     let pod = await this.owned("pods", name, context.signal);

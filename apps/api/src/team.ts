@@ -46,7 +46,7 @@ export async function teamBoard(prisma: PrismaClient, actor: Actor): Promise<{ r
   const [bots, activeRuns, latestRuns, openCards, latestCards] = await Promise.all([
     prisma.bot.findMany({
       where: { ...scope, archivedAt: null },
-      include: { thread: true },
+      include: { thread: true, computer: true },
       orderBy: { name: "asc" },
     }),
     prisma.run.findMany({
@@ -100,6 +100,17 @@ export async function teamBoard(prisma: PrismaClient, actor: Actor): Promise<{ r
       select: { runId: true, payload: true },
     }),
   ]);
+  const connectionIds = [
+    ...new Set(
+      bots.flatMap((bot) => (bot.computer?.connectionId ? [bot.computer.connectionId] : [])),
+    ),
+  ];
+  const computers = connectionIds.length
+    ? await prisma.connection.findMany({
+        where: { ...scope, id: { in: connectionIds }, connectorId: "computer" },
+        select: { id: true, displayName: true },
+      })
+    : [];
   const rows = bots.map((bot): TeamRow => {
     const ownRuns = runs.filter((run) => run.botId === bot.id);
     const run = ownRuns.find((run) => active.includes(run.status)) ?? ownRuns[0];
@@ -150,6 +161,14 @@ export async function teamBoard(prisma: PrismaClient, actor: Actor): Promise<{ r
     return {
       botId: bot.id,
       botName: bot.name,
+      computerName: bot.computer?.connectionId
+        ? (computers.find((connection) => connection.id === bot.computer?.connectionId)
+            ?.displayName ?? null)
+        : bot.computer?.kind === "desktop"
+          ? "This Mac"
+          : bot.computer
+            ? "Docker on this Mac"
+            : null,
       threadId: bot.thread?.id ?? null,
       groupId: run?.thread?.groupId ?? null,
       cursor: (bot.thread?.nextEventSeq ?? 0) - 1,

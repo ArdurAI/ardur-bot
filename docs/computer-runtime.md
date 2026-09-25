@@ -1,5 +1,7 @@
 # Computer runtime
 
+For Fleet targets, capacity, placement, transport limits and verification, see [Fleet P1](fleet.md).
+
 Ardur Bot keeps the agent runtime and the computer runtime separate:
 
 ```text

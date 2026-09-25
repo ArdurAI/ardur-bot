@@ -31,7 +31,7 @@ export function createCapabilitySettings(deps: Dependencies) {
     actor: Actor,
     botId: string,
   ) {
-    if (computer.kind === "docker") return true;
+    if (computer.kind === "docker" || computer.kind === "remote-docker") return true;
     if (computer.kind !== "kubernetes" || !deps.sandbox.supportsNetworkEgress) return false;
     return deps.sandbox
       .supportsNetworkEgress(

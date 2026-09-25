@@ -100,6 +100,7 @@ import {
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
 import { featuresContract } from "./features.js";
+import { FleetSchema, FleetTargetSchema, PlacementSettingsSchema } from "./fleet.js";
 import { HostStatusSchema } from "./host-bridge.js";
 import {
   IDE_FILE_BYTES,
@@ -274,6 +275,26 @@ function createIdeContract() {
         }),
       )
       .output(z.object({ items: z.array(IdeChangeSchema), nextCursor: Id.nullable() })),
+  };
+}
+
+// Keep Fleet-only construction removable from the browser contracts barrel.
+const fleetContract = /* @__PURE__ */ createFleetContract();
+function createFleetContract() {
+  return {
+    list: oc.output(FleetSchema),
+    discover: oc.output(FleetTargetSchema.array()),
+    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTargetSchema.array()),
+    placement: oc.input(PlacementSettingsSchema).output(PlacementSettingsSchema),
+    bot: oc
+      .input(
+        z.object({
+          botId: Id,
+          moveAutomatically: z.boolean().optional(),
+          decision: z.enum(["accept", "decline"]).optional(),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
   };
 }
 
@@ -601,12 +622,14 @@ export const appContract = {
       )
       .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
   },
+  fleet: fleetContract,
   computer: {
-    engine: oc
-      .input(z.object({ connectionId: Id.nullable() }))
-      .output(
-        z.object({ name: z.enum(["docker", "podman", "kubernetes"]), rootless: z.boolean() }),
-      ),
+    engine: oc.input(z.object({ connectionId: Id.nullable() })).output(
+      z.object({
+        name: z.enum(["docker", "podman", "kubernetes", "ssh"]),
+        rootless: z.boolean(),
+      }),
+    ),
     list: oc.output(
       z.array(z.object({ botId: Id, name: z.string(), status: ComputerStatusSchema })),
     ),

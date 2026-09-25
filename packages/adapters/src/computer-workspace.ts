@@ -53,8 +53,10 @@ export async function restoreComputerWorkspace(
   homeKey: string,
   computer: ComputerRef,
   context: AdapterContext,
+  portableHost = false,
 ): Promise<void> {
-  if (computer.kind === "desktop" && computer.providerRef.startsWith("host:")) return;
+  if (!portableHost && computer.kind === "desktop" && computer.providerRef.startsWith("host:"))
+    return;
   if (computer.kind === "docker" && home instanceof LocalAgentHomeStore) return;
   await sandbox.importWorkspace(computer, home.exportHome(homeKey, context), context);
 }
@@ -99,8 +101,10 @@ export async function checkpointComputerWorkspace(
   homeKey: string,
   computer: ComputerRef,
   context: AdapterContext,
+  portableHost = false,
 ): Promise<string> {
   if (
+    !portableHost &&
     (computer.kind === "docker" ||
       (computer.kind === "desktop" && computer.providerRef.startsWith("host:"))) &&
     home instanceof LocalAgentHomeStore

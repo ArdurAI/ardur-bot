@@ -57,7 +57,7 @@ export async function queueComputerUpdate(
     // The following statement then observes their committed reservation.
     await tx.$queryRaw`SELECT id FROM computers WHERE id = ${computerId} FOR UPDATE`;
     const computer = await tx.computer.findUniqueOrThrow({ where: { id: computerId } });
-    if (action === "update" && !computerSupportsUpdate(computer.kind))
+    if (action === "update" && !configuration && !computerSupportsUpdate(computer.kind))
       throw new Error("Computer update is not available on this device");
     const update = await tx.computerUpdate.create({
       data: { computerId, botId, action, ...(configuration ? { configuration } : {}) },

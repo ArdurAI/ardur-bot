@@ -276,6 +276,9 @@ const MessagingSettingsOverlay = lazy(() =>
 const SettingsOverlay = lazy(() =>
   import("./SettingsOverlay").then((module) => ({ default: module.SettingsOverlay })),
 );
+const PlacementNotice = lazy(() =>
+  import("./fleet/PlacementNotice").then((module) => ({ default: module.PlacementNotice })),
+);
 const PeerMessagesOverlay = lazy(() =>
   import("./PeerMessagesOverlay").then((module) => ({ default: module.PeerMessagesOverlay })),
 );
@@ -1223,6 +1226,7 @@ export function ShellPage({
         if (
           isRunTerminalEvent(event) ||
           event.type === "run.waiting_input" ||
+          event.type === "computer.placement.requested" ||
           event.type === "skill.teaching.stopped"
         ) {
           // waiting_input: reconcile ask cards if a stale post-send refresh raced SSE.
@@ -1307,7 +1311,11 @@ export function ShellPage({
         ) {
           void refreshBots().catch(() => undefined);
         }
-        if (isRunTerminalEvent(event) || event.type === "run.waiting_input") {
+        if (
+          isRunTerminalEvent(event) ||
+          event.type === "run.waiting_input" ||
+          event.type === "computer.placement.requested"
+        ) {
           // waiting_input: reconcile ask cards if a stale post-send refresh raced SSE.
           void refreshGroupThread(groupId).catch(() => undefined);
         }
@@ -3356,6 +3364,15 @@ export function ShellPage({
             ) : null}
           </div>
         </div>
+        {bootstrapMe?.isDeploymentOwner
+          ? currentRuns.map((run) =>
+              run.status === "waiting_input" && run.placement?.status === "pending" ? (
+                <Suspense key={run.id} fallback={null}>
+                  <PlacementNotice run={run} onOpen={() => openSettings("computer")} />
+                </Suspense>
+              ) : null,
+            )
+          : null}
         {!active && !activeGroup && initialBotsLoaded ? (
           <div className="grid flex-1 place-items-center">
             <Button onClick={() => setPanel("create")}>

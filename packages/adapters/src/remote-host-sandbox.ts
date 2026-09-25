@@ -6,6 +6,7 @@ import type {
   PortableFile,
   ProcessEvent,
 } from "@ardurbot/adapter-kit";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import {
   HOST_FILE_BYTES,
   HostEnvironmentSchema,
@@ -26,9 +27,13 @@ export function createHostClient(env: NodeJS.ProcessEnv = process.env) {
 }
 /** Only forwarding lives here. DesktopSandboxProvider inside the host owns execution. */
 export class RemoteHostSandboxProvider extends DesktopSandboxProvider {
-  constructor(private readonly client: HostClient) {
+  constructor(private readonly client: Pick<HostClient, "request" | "result" | "health">) {
     super();
   }
+  override async capacity() {
+    return (await this.client.health())?.capacity ?? unknownCapacity();
+  }
+
   override describe() {
     return { ...super.describe(), capabilities: { ...super.describe().capabilities, pty: false } };
   }
@@ -150,12 +155,27 @@ export class RemoteHostSandboxProvider extends DesktopSandboxProvider {
     );
   }
   // Host workspaces already persist on the host. Never copy them into the container's home store.
-  override async *exportWorkspace(_computer: ComputerRef): AsyncIterable<PortableFile> {}
+  override async *exportWorkspace(
+    computer: ComputerRef,
+    context?: AdapterContext,
+  ): AsyncIterable<PortableFile> {
+    if (!context) throw new Error("An authorized operation is required.");
+    for await (const frame of this.client.request(
+      { op: "computer.files.export", homeKey: computer.botId },
+      context,
+    )) {
+      if (frame.channel !== "file") continue;
+      const file = frame.data as { path: string; content: string; executable?: boolean };
+      yield { ...file, content: Buffer.from(file.content, "base64") };
+    }
+  }
   override async importWorkspace(
-    _computer: ComputerRef,
-    _files: AsyncIterable<PortableFile>,
-    _context: AdapterContext,
-  ) {}
+    computer: ComputerRef,
+    files: AsyncIterable<PortableFile>,
+    context: AdapterContext,
+  ) {
+    for await (const file of files) await this.writeFile(computer, file, context);
+  }
   override async snapshot(computer: ComputerRef, context: AdapterContext) {
     return (await this.lifecycle(computer, "snapshot", context)) as {
       id: string;

@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import { DockerSandboxProvider, kubernetesContexts, snapshotKubeconfig } from "@ardurbot/adapters";
@@ -10,6 +12,8 @@ import {
 import type { PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
 import type { z } from "zod";
+import { importFleetSecret } from "./fleet.js";
+import type { HostBridge } from "./host-bridge.js";
 
 export async function listComputerConnections(prisma: PrismaClient, spaceId: string) {
   const rows = await prisma.connection.findMany({ where: { spaceId, connectorId: "computer" } });
@@ -21,17 +25,42 @@ export async function listComputerConnections(prisma: PrismaClient, spaceId: str
   }));
 }
 export async function saveComputerConnection(
-  deps: { prisma: PrismaClient; secrets: EncryptedSecretStore },
+  deps: { prisma: PrismaClient; secrets: EncryptedSecretStore; hostBridge?: HostBridge },
   raw: z.infer<typeof ComputerConnectionInputSchema>,
   context: AdapterContext,
 ) {
   const input = ComputerConnectionInputSchema.parse(raw);
+  if (input.settings.dockerContext && !input.settings.endpoint)
+    throw new Error("Choose the saved context endpoint.");
   let source = { inline: input.kubeconfig, path: input.kubeconfigPath };
   if (input.settings.engine === "kubernetes") {
+    if (
+      !source.inline &&
+      process.env.ARDURBOT_HOST_BRIDGE === "api" &&
+      deps.hostBridge &&
+      input.settings.context
+    ) {
+      source = {
+        inline: (await deps.hostBridge.fleetResult(
+          {
+            op: "computer.remote.kubeconfig",
+            context: input.settings.context,
+            ...(source.path ? { path: source.path } : {}),
+          },
+          context,
+        )) as string,
+        path: undefined,
+      };
+    } else if (!source.inline && !source.path)
+      source.path = path.join(homedir(), ".kube", "config");
     if (Boolean(source.inline) === Boolean(source.path))
       throw new Error("Choose either a kubeconfig path or its contents.");
     const snapshot = await snapshotKubeconfig(source);
     source = { inline: snapshot.inline, path: snapshot.path };
+    if (process.env.ARDURBOT_HOST_BRIDGE === "api" && source.inline) {
+      const stored = await importFleetSecret(deps, { kubeconfig: source.inline }, context);
+      input.settings.hostSecretId = stored.id;
+    }
     const contexts = await kubernetesContexts(source);
     if (!contexts.some((entry) => entry.name === input.settings.context))
       throw new Error("Choose a Kubernetes context.");
@@ -41,6 +70,20 @@ export async function saveComputerConnection(
     (input.settings.socket && !/^(?:unix:\/\/)?\//.test(input.settings.socket))
   )
     throw new Error("Choose a local engine socket.");
+  if (input.settings.engine === "ssh" && !input.settings.ssh)
+    throw new Error("Choose an SSH host and user.");
+  if (input.privateKeyPath || input.tlsPaths) {
+    const imported = await importFleetSecret(
+      deps,
+      { privateKeyPath: input.privateKeyPath, tlsPaths: input.tlsPaths },
+      context,
+    );
+    input.settings.hostSecretId = imported.id;
+  }
+  if (input.settings.ssh?.authentication === "private-key" && !input.settings.hostSecretId)
+    throw new Error("Choose an SSH key on this computer.");
+  if (input.settings.endpoint?.startsWith("tcp://") && !input.settings.hostSecretId)
+    throw new Error("Choose client TLS certificates on this computer.");
   const secret =
     input.settings.engine === "kubernetes"
       ? await deps.secrets.put(JSON.stringify(source), context)
@@ -103,7 +146,10 @@ export async function computerEngineInfo(
     : null;
   if (connectionId && !row) throw new Error("Computer connection is unavailable.");
   const settings = row ? ComputerConnectionSettingsSchema.parse(row.metadata) : undefined;
+  if (settings?.engine === "ssh") return { name: "ssh" as const, rootless: false };
   if (settings?.engine === "kubernetes") return { name: "kubernetes" as const, rootless: false };
+  if (settings?.endpoint || settings?.dockerContext)
+    return { name: settings.engine as "docker" | "podman", rootless: false };
   const provider = new DockerSandboxProvider(
     deps.env.sandboxSupervisorUrl ?? "http://127.0.0.1:7091",
     deps.env.sandboxSupervisorToken,

@@ -186,6 +186,7 @@ model Member {
 }
 
 model Space {
+  placement Json?
   features SpaceFeature[]
   boardWorkspaces BoardWorkspace[]
   boardCommands BoardCommand[]
@@ -380,6 +381,9 @@ model SpaceVoicePreference {
 }
 
 model Bot {
+  moveAutomatically Boolean @default(false)
+  placementConsent Boolean @default(false)
+  pendingPlacement Json?
   concurrentRuns Int?
   briefs BotBrief[]
   allowedModelDestinations Json?
@@ -616,6 +620,7 @@ model Task {
 }
 
 model Run {
+  placement Json?
   boardWorkspaceId String?
   boardWorkspace BoardWorkspace? @relation(fields: [boardWorkspaceId], references: [id], onDelete: SetNull)
   boardItemId String?
