@@ -28,12 +28,21 @@ it("keeps the host online with 200 registrations and explains only the refused e
     const excess = rows.filter(
       (row) => row.userId === where.userId && row.enabled && !where.id.notIn.includes(row.id),
     );
-    for (const row of excess) Object.assign(row, data);
+    for (const row of excess) {
+      const revision = row.revision + (data.revision?.increment ?? 0);
+      Object.assign(row, data, { revision });
+    }
     return { count: excess.length };
   });
   const prisma = {
     mcpServer: {
-      findMany: vi.fn(async ({ take }) => rows.filter((row) => row.enabled).slice(0, take)),
+      findMany: vi.fn(async ({ take, where }) =>
+        rows
+          .filter((row) =>
+            Object.entries(where).every(([key, value]) => row[key as keyof typeof row] === value),
+          )
+          .slice(0, take),
+      ),
       findFirst: vi.fn(async ({ where }) =>
         rows.find(
           (row) =>
@@ -52,6 +61,8 @@ it("keeps the host online with 200 registrations and explains only the refused e
     load: vi.fn(() => JSON.stringify({ command: "node", args: [], env: {}, cwd: "/fixture" })),
   } as unknown as EncryptedSecretStore;
   mountHostMcpRoutes(app, { prisma, hostBridge, secrets });
+  const settings = createMcpSettings({ prisma, hostBridge, secrets });
+  const before = await settings.config({ userId: "owner", spaceId: "space-a" });
   const request = () =>
     app.request("/api/host-bridge/mcp", { headers: { authorization: "Bearer fixture" } });
   const response = await request();
@@ -71,9 +82,12 @@ it("keeps the host online with 200 registrations and explains only the refused e
   expect(prisma.mcpServer.findMany).toHaveBeenCalledWith(
     expect.objectContaining({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
   );
-  const settings = createMcpSettings({ prisma, hostBridge, secrets });
+  expect(rows.slice(0, 200).every((row) => row.revision === 1)).toBe(true);
+  expect((await settings.config({ userId: "owner", spaceId: "space-a" })).revision).not.toBe(
+    before.revision,
+  );
   for (const row of rows.slice(200)) {
-    expect(row).toMatchObject({ enabled: false, connectionState: "discovery-failed" });
+    expect(row).toMatchObject({ enabled: false, connectionState: "discovery-failed", revision: 2 });
     expect(await settings.logs(row, row.id)).toMatchObject({
       status: "error",
       lastError:
@@ -82,6 +96,7 @@ it("keeps the host online with 200 registrations and explains only the refused e
   }
   expect(hostBridge.result).not.toHaveBeenCalled();
   expect((await request()).status).toBe(200);
+  expect(rows.slice(200).every((row) => row.revision === 2)).toBe(true);
 });
 
 it("delivers launch material only to a paired host, rejecting browser and anonymous requests", async () => {

@@ -53,7 +53,6 @@ import {
   CreateRoutineInput,
   CreateScratchpadItemInput,
   DeploymentSettingsSchema,
-  ExportManifestSchema,
   ExternalConversationPolicySchema,
   GroupDetailSchema,
   GroupSchema,
@@ -156,9 +155,9 @@ import {
   PreferencesPatchSchema,
   UserPreferencesSchema,
 } from "./preferences.js";
-import { AccountExportSchema } from "./privacy.js";
+import { ExportDownloadSchema } from "./privacy.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
-import { RunsListOutputSchema } from "./runs.js";
+import { RoutineRunSchema, RunsListOutputSchema } from "./runs.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
@@ -763,6 +762,7 @@ export const appContract = {
     disconnectProvider: oc.output(z.object({ ok: z.literal(true) })),
   },
   routines: {
+    history: oc.input(z.object({ routineId: Id })).output(z.array(RoutineRunSchema)),
     list: oc.input(botId).output(z.array(RoutineSchema)),
     create: oc.input(CreateRoutineInput).output(RoutineSchema),
     update: oc
@@ -1247,9 +1247,9 @@ export const appContract = {
     ),
   },
   export: {
-    account: oc.output(AccountExportSchema),
+    account: oc.output(ExportDownloadSchema),
     comparison: oc.input(z.object({ id: Id })).output(ComparisonExportSchema),
-    bot: oc.input(botId).output(ExportManifestSchema),
+    bot: oc.input(botId).output(ExportDownloadSchema),
   },
   notifications: {
     activity: oc.output(

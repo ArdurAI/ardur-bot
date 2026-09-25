@@ -392,7 +392,9 @@ export function createMcpSettings(deps: {
         preview.owner.spaceId !== owner.spaceId
       )
         throw new IsolationError();
-      const changed = await deps.prisma.$transaction(
+      // Keep disabled host rows addressable until shutdown is acknowledged. The new revision
+      // invalidates old grants and lets the host refresh its allowlist before handling mcp.stop.
+      const prepared = await deps.prisma.$transaction(
         async (tx) => {
           const lock = `${owner.spaceId}:${owner.userId}`;
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('developer-config'), hashtext(${lock}))`;
@@ -401,62 +403,103 @@ export function createMcpSettings(deps: {
             throw new ORPCError("CONFLICT", {
               message: "The server configuration changed. Reload it and try again.",
             });
-          const editable = rows.filter((row) => !row.managedBy && !row.catalogId);
-          await stopHost(owner, editable);
-          await removeRows(
-            editable.filter((row) => !preview.config.mcpServers[row.slug]),
-            tx,
+          const hosts = rows.filter(
+            (row) => row.placement === "host" && !row.managedBy && !row.catalogId,
           );
-          for (const [slug, server] of Object.entries(preview.config.mcpServers)) {
-            const existing = editable.find((row) => row.slug === slug);
-            const secretId = await store(
-              owner,
-              {
-                command: server.command,
-                args: server.args,
-                env: server.env,
-                secret: server.secret,
-                redactions: preview.redactions[slug] ?? [],
-              },
-              tx,
-            );
-            const data = {
-              ...scope(owner),
-              slug,
-              name: server.name,
-              description: server.description,
-              enabled: server.enabled,
-              placement,
-              transport: "stdio",
-              command: redactMcpText(server.command, [
-                ...(preview.redactions[slug] ?? []),
-                ...Object.values(server.env),
-                ...(server.secret ? [server.secret] : []),
-              ]),
-              args: redactMcpArguments(server.args, [
-                ...(preview.redactions[slug] ?? []),
-                ...Object.values(server.env),
-                ...(server.secret ? [server.secret] : []),
-              ]),
-              env: Object.fromEntries(Object.keys(server.env).map((key) => [key, true])),
-              secretId,
-            };
-            if (existing) {
-              await tx.mcpServer.update({
-                where: { id: existing.id },
-                data: { ...data, revision: { increment: 1 } },
-              });
-              if (existing.secretId)
-                await tx.secret.deleteMany({ where: { ...scope(owner), id: existing.secretId } });
-            } else await tx.mcpServer.create({ data });
-          }
-          return editable;
+          for (const row of hosts)
+            await tx.mcpServer.update({
+              where: { id: row.id },
+              data: { enabled: false, revision: { increment: 1 } },
+            });
+          return {
+            hosts,
+            revision: revision(
+              rows.map((row) =>
+                hosts.includes(row) ? { ...row, revision: row.revision + 1 } : row,
+              ),
+            ),
+          };
         },
         { isolationLevel: "Serializable" },
       );
-      previews(owner).delete(previewId);
-      await Promise.all(changed.map((row) => McpConnector.invalidateConnection(row.id, owner)));
-      return { ok: true as const };
+      try {
+        await stopHost(
+          owner,
+          prepared.hosts.map((row) => ({ ...row, revision: row.revision + 1 })),
+        );
+        const changed = await deps.prisma.$transaction(
+          async (tx) => {
+            const lock = `${owner.spaceId}:${owner.userId}`;
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('developer-config'), hashtext(${lock}))`;
+            const rows = await localRows(owner, tx);
+            if (revision(rows) !== prepared.revision)
+              throw new ORPCError("CONFLICT", {
+                message: "The server configuration changed. Reload it and try again.",
+              });
+            const editable = rows.filter((row) => !row.managedBy && !row.catalogId);
+            await removeRows(
+              editable.filter((row) => !preview.config.mcpServers[row.slug]),
+              tx,
+            );
+            for (const [slug, server] of Object.entries(preview.config.mcpServers)) {
+              const existing = editable.find((row) => row.slug === slug);
+              const secretId = await store(
+                owner,
+                {
+                  command: server.command,
+                  args: server.args,
+                  env: server.env,
+                  secret: server.secret,
+                  redactions: preview.redactions[slug] ?? [],
+                },
+                tx,
+              );
+              const data = {
+                ...scope(owner),
+                slug,
+                name: server.name,
+                description: server.description,
+                enabled: server.enabled,
+                placement,
+                transport: "stdio",
+                command: redactMcpText(server.command, [
+                  ...(preview.redactions[slug] ?? []),
+                  ...Object.values(server.env),
+                  ...(server.secret ? [server.secret] : []),
+                ]),
+                args: redactMcpArguments(server.args, [
+                  ...(preview.redactions[slug] ?? []),
+                  ...Object.values(server.env),
+                  ...(server.secret ? [server.secret] : []),
+                ]),
+                env: Object.fromEntries(Object.keys(server.env).map((key) => [key, true])),
+                secretId,
+              };
+              if (existing) {
+                await tx.mcpServer.update({
+                  where: { id: existing.id },
+                  data: { ...data, revision: { increment: 1 } },
+                });
+                if (existing.secretId)
+                  await tx.secret.deleteMany({ where: { ...scope(owner), id: existing.secretId } });
+              } else await tx.mcpServer.create({ data });
+            }
+            return editable;
+          },
+          { isolationLevel: "Serializable" },
+        );
+        previews(owner).delete(previewId);
+        await Promise.all(changed.map((row) => McpConnector.invalidateConnection(row.id, owner)));
+        return { ok: true as const };
+      } catch (error) {
+        // Restore only this apply's staged rows. Never roll revisions back or overwrite a later edit.
+        for (const row of prepared.hosts)
+          await deps.prisma.mcpServer.updateMany({
+            where: { ...scope(owner), id: row.id, revision: row.revision + 1 },
+            data: { enabled: row.enabled, revision: { increment: 1 } },
+          });
+        throw error;
+      }
     },
   };
 }

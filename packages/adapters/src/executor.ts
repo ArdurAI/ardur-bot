@@ -1458,12 +1458,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
           bot.runtimeExperimental,
         );
         if ("kind" in runtimeSelection) throw new RuntimePinError(runtimeSelection);
-        const accountContext = await loadAccountInstructionContext(deps.prisma, run);
+        const accountContext = messagingChannelRun
+          ? {
+              displayName: "",
+              workType: "" as const,
+              instructions: "",
+              revision: 0,
+              actorId: null,
+              origin: "human-settings" as const,
+            }
+          : await loadAccountInstructionContext(deps.prisma, run);
         accountContext.instructions = redactSecrets(accountContext.instructions, runSecrets);
         accountContext.displayName = redactSecrets(accountContext.displayName, runSecrets);
         const runtime = runtimeSelection.runtime;
         const native =
-          selected.pin.runtimeKind !== "pi" && !comparisonRun
+          selected.pin.runtimeKind !== "pi" && !comparisonRun && !messagingChannelRun
             ? await runtimeSession(deps.prisma, {
                 runId,
                 threadId: run.threadId,
@@ -1654,7 +1663,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         ]);
         const semanticMemoryEnabled = Boolean(semanticMemory) && !messagingChannelRun;
         const groupBrief =
-          !comparisonRun && !thread.externalConversationId && deps.memoryDocuments
+          !comparisonRun &&
+          !messagingChannelRun &&
+          !thread.externalConversationId &&
+          deps.memoryDocuments
             ? await readBrief(deps.memoryDocuments, bot.id, thread.groupId, context)
             : null;
         const contextSettings = await deps.prisma.space.findUnique({
@@ -1751,9 +1763,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const acceptsImages =
           runtime.describe().capabilities.scripted ||
           modelAcceptsImageInput(runModelProvider, runModelId, resolved.acceptsImages);
-        const groupContext = thread.groupId
-          ? await loadGroupContext(deps.prisma, thread.groupId, { id: bot.id, name: bot.name })
-          : undefined;
+        const groupContext =
+          !messagingChannelRun && thread.groupId
+            ? await loadGroupContext(deps.prisma, thread.groupId, { id: bot.id, name: bot.name })
+            : undefined;
         const hasMessagingIdentity = deps.messaging
           ? await deps.messaging.hasIdentity(bot.id)
           : false;

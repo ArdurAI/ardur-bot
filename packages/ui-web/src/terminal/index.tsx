@@ -39,11 +39,21 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
   const query = useRef("");
   const [state, setState] = useState<"opening" | "connecting" | "ready" | "ended">("opening");
   const [attempt, setAttempt] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const admission = useRef<Promise<unknown>>(Promise.resolve());
   const ticketRef = useRef(ticket);
   ticketRef.current = ticket;
   useEffect(() => {
     const host = container.current;
     if (!host) return;
+    const closeSession = closeRef.current;
+    const requestTicket = ticketRef.current;
+    const serialize = <T,>(work: () => Promise<T>) => {
+      const next = admission.current.catch(() => undefined).then(work);
+      admission.current = next.catch(() => undefined);
+      return next;
+    };
+    let connecting = false;
     let disposed = false,
       socket: WebSocket | undefined,
       sessionId: string | undefined,
@@ -123,15 +133,24 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
       attributeFilter: ["data-theme", "class"],
     });
     const connect = async () => {
+      if (disposed || connecting) return;
+      connecting = true;
+      setError(null);
       ready = false;
       terminal.options.disableStdin = true;
       setState(sessionId ? "connecting" : "opening");
       try {
-        const grant = await ticketRef.current(sessionId);
-        if (disposed) {
-          void closeRef.current(grant.sessionId).catch(() => {});
-          return;
-        }
+        const grant = await serialize(async () => {
+          if (disposed) return;
+          const granted = await requestTicket(sessionId);
+          if (disposed) {
+            await closeSession(granted.sessionId);
+            return;
+          }
+          sessionId = granted.sessionId;
+          return granted;
+        });
+        if (!grant || disposed) return;
         sessionId = grant.sessionId;
         currentSession.current = sessionId;
         const url = new URL(grant.path, window.location.origin);
@@ -189,8 +208,13 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
           }, 1_000);
         };
         next.onerror = () => next.close();
-      } catch {
-        if (!disposed) setState("ended");
+      } catch (cause) {
+        if (!disposed) {
+          setError(cause instanceof Error ? cause.message : null);
+          setState("ended");
+        }
+      } finally {
+        connecting = false;
       }
     };
     reconnect.current = () => {
@@ -206,7 +230,7 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
     return () => {
       disposed = true;
       ready = false;
-      if (sessionId) void closeRef.current(sessionId).catch(() => {});
+      if (sessionId) void serialize(() => closeSession(sessionId!)).catch(() => {});
       clearInterval(heartbeat);
       clearTimeout(retry);
       clearTimeout(resize);
@@ -258,7 +282,7 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
         <div role="status" className="flex items-center gap-3 p-3 text-sm text-muted-foreground">
           <span>
             {state === "ended"
-              ? labels.ended
+              ? (error ?? labels.ended)
               : state === "opening"
                 ? labels.opening
                 : labels.connecting}

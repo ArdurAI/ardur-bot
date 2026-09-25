@@ -9,7 +9,7 @@ import { installWin32NativeApi } from "@ardurbot/host-runtime/desktop-sandbox-wi
 import { HostAgent } from "@ardurbot/host-runtime/host-agent";
 import WebSocket from "ws";
 import * as z from "zod";
-import { readHostMcpConfiguration } from "./mcp-configuration.js";
+import { HostMcpAuthorizationError, readHostMcpConfiguration } from "./mcp-configuration.js";
 import { loadWin32NativeAddon } from "./native-addon.js";
 
 // esbuild preserves the CJS bundle's own filename. ESM source mode has no packaged addon.
@@ -32,9 +32,21 @@ let reconnect: ReturnType<typeof setTimeout> | undefined;
 let healthTimer: ReturnType<typeof setInterval> | undefined;
 let mcpTimer: ReturnType<typeof setInterval> | undefined;
 let failures = 0;
+const MCP_CONFIGURATION_GRACE_MS = 60_000;
 const idle = setInterval(() => undefined, 60_000);
 function state(connected: boolean) {
   process.send?.({ type: "host-state", connected });
+}
+async function revokeConfiguration() {
+  stopped = true;
+  configuration = undefined;
+  clearTimeout(reconnect);
+  clearInterval(healthTimer);
+  clearInterval(mcpTimer);
+  agent?.close();
+  socket?.terminate();
+  state(false);
+  await agent?.configureMcp([]);
 }
 async function connect() {
   if (stopped || !configuration) return;
@@ -59,14 +71,21 @@ async function connect() {
     const wire = wsWire(current);
     sendWire = wire;
     const host = agent;
+    let authenticatedAt = Date.now();
     let healthBusy = false;
     let mcpRefresh: Promise<void> | undefined;
     const refreshMcp = async () => {
+      if (stopped) return;
       mcpRefresh ??= (async () => {
         try {
-          await host.configureMcp(await readHostMcpConfiguration(config));
-        } catch {
-          // A failed poll is not a new configuration. Keep the last authenticated set.
+          const registrations = await readHostMcpConfiguration(config);
+          if (stopped) return;
+          await host.configureMcp(registrations);
+          authenticatedAt = Date.now();
+        } catch (error) {
+          if (error instanceof HostMcpAuthorizationError) await revokeConfiguration();
+          else if (Date.now() - authenticatedAt >= MCP_CONFIGURATION_GRACE_MS)
+            await host.configureMcp([]);
         } finally {
           mcpRefresh = undefined;
         }
@@ -114,7 +133,8 @@ async function connect() {
       current.terminate();
       state(false);
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof HostMcpAuthorizationError) await revokeConfiguration();
     state(false);
     agent?.close();
     if (!stopped)

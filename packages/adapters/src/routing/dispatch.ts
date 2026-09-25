@@ -32,17 +32,15 @@ export function admitRoutedDispatch(
     ]);
     if (input.botId && !bots.some((bot) => bot.id === input.botId))
       throw new DeviceRequestError("This bot is unavailable; choose another bot.", 403);
-    const last = defaults.defaultBotId
-      ? await tx.run.findFirst({
-          where: {
-            botId: defaults.defaultBotId,
-            spaceId: grant.spaceId,
-            userId: grant.userId,
-            originDeviceGrantId: grant.id,
-          },
-          orderBy: { createdAt: "desc" },
-        })
-      : null;
+    const last = await tx.run.findFirst({
+      where: {
+        botId: { in: bots.map((bot) => bot.id) },
+        spaceId: grant.spaceId,
+        userId: grant.userId,
+        originDeviceGrantId: grant.id,
+      },
+      orderBy: { createdAt: "desc" },
+    });
     // Room isolation and reply task binding remain owned by admitDispatch, including authorization.
     const target = routeIncoming({
       text: input.text,

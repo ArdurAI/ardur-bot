@@ -64,6 +64,13 @@ export interface PortableFile {
   executable?: boolean;
 }
 
+export interface HomeArchiveFile {
+  path: string;
+  size: number;
+  content: AsyncIterable<Uint8Array>;
+  executable?: boolean;
+}
+
 export interface ComputerRef {
   networkEgress?: boolean;
   imageProfile?: "base" | "developer";

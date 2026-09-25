@@ -15,10 +15,18 @@ vi.mock("../lib/rpc", () => ({
   },
 }));
 vi.mock("@lingui/react/macro", () => ({
-  useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
+  useLingui: () => ({
+    t: (parts: TemplateStringsArray) => parts.join(""),
+    i18n: {
+      _: (descriptor: { message?: string; id: string }) => descriptor.message ?? descriptor.id,
+    },
+  }),
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray) => parts.join(""),
+  msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
+}));
 vi.mock("@ardurbot/ui-web", () => ({
   Label: ({ htmlFor, children }: ComponentProps<"label">) => (
     <label htmlFor={htmlFor}>{children}</label>

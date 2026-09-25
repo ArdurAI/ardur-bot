@@ -6,6 +6,7 @@ import type {
   ThreadMessage,
   ThreadSnapshot,
 } from "@ardurbot/contracts";
+import { RunTriggerSchema } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
   activeThreadRuns,
@@ -26,6 +27,35 @@ import {
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
+  it("admits live context through the subscription filter and updates the matching run", () => {
+    const run = threadRun("run-1");
+    const initial = { ...snapshot([]), run, activeRuns: [run, threadRun("peer")] };
+    const payload = {
+      layers: { stable: 100, brief: 20, summary: 0, messages: 10, recall: 0, message: 30 },
+      recallRan: false,
+      recallCalls: 0,
+      cachedTokens: 0,
+      inputTokens: 100,
+      timeToFirstTokenMs: 12,
+      queueWaitMs: 8,
+      routingRule: "last-active-thread",
+    };
+    const update = event({ type: "run.context", seq: 4, runId: run.id, payload });
+    const next = isThreadSnapshotEvent(update) ? reduceThreadSnapshot(initial, update) : initial;
+    expect(next?.run).toMatchObject({ contextSnapshot: payload });
+    expect(next?.activeRuns?.[1]).toBe(initial.activeRuns[1]);
+    expect(next?.cursor).toBe(4);
+  });
+  it.each(RunTriggerSchema.options)(
+    "preserves the shared trigger %s on live run events",
+    (trigger) => {
+      const next = reduceThreadSnapshot(
+        snapshot([]),
+        event({ type: "run.started", runId: "started", payload: { trigger } }),
+      );
+      expect(next?.run?.trigger).toBe(trigger);
+    },
+  );
   it("shows a committed direct send as queued before its snapshot refresh returns", () => {
     const initial = snapshot([message("user-1", [{ kind: "text", text: "Continue" }], 4)]);
 

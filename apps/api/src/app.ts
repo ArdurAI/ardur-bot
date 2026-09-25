@@ -89,6 +89,7 @@ import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { mountExportRoutes } from "./account-export.js";
 import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
@@ -99,6 +100,7 @@ import { sourceHostStatus } from "./host-status.js";
 import { ensureInstanceIdentity } from "./instance-identity.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { integrationOAuthReturn } from "./integration-oauth-return.js";
+import { createLearningService } from "./learning.js";
 import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
 import { createLegacyChatDispatch, mountMessagingDispatch } from "./messaging-dispatch.js";
 import {
@@ -665,6 +667,24 @@ export async function createApp(
     if (actor) enrichLogContext({ "user.id": actor.userId, "space.id": actor.spaceId });
     return actor;
   });
+  mountExportRoutes(
+    app,
+    {
+      prisma,
+      memory,
+      memoryDocuments,
+      home,
+      artifacts,
+      exportLearning: createLearningService({ prisma, jobs, memoryDocuments, secrets })
+        .exportLearning,
+    },
+    async (c) => {
+      const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
+      return session?.user
+        ? requireMembership(prisma, session.user.id, c.req.query("spaceId")).catch(() => null)
+        : null;
+    },
+  );
   mountWebhookHttpRoutes(app, { prisma, secrets, events, jobs });
   mountMessagingDispatch(app, { prisma, secrets, events, jobs });
   // Shared with stop so a shutdown during retry delays does not restart polling.

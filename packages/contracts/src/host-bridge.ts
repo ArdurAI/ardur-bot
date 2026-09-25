@@ -332,6 +332,7 @@ export const HostRuntimeEventSchema = z.discriminatedUnion("type", [
     delegationId: z.string().optional(),
     inputTokens: z.number().nonnegative(),
     outputTokens: z.number().nonnegative(),
+    cachedTokens: z.number().nonnegative().optional(),
     provider: z.string(),
     model: z.string(),
   }),
