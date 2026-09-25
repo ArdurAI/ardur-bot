@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runTrial } from "./evals/runner.js";
 import { startModelEmulator } from "./model-emulator.js";
 
@@ -66,8 +66,8 @@ describe.skipIf(!databaseAvailable)("eval history accounting", () => {
             },
             timeoutMs: 20_000,
             maxToolCalls,
-            createApp: (composio) =>
-              createApp({
+            createApp: async (composio) => {
+              const handles = await createApp({
                 databaseUrl: process.env.DATABASE_URL!,
                 realtimeDatabaseUrl: process.env.DATABASE_URL!,
                 authUrl: "http://127.0.0.1:5173",
@@ -79,7 +79,11 @@ describe.skipIf(!databaseAvailable)("eval history accounting", () => {
                 signupsEnabled: "true",
                 composio,
                 encryptionKey: "offline-eval-history-encryption-key",
-              }),
+              });
+              // Maintenance must not consume the next scripted conversation turn.
+              vi.spyOn(handles.executor, "refreshBrief").mockResolvedValue(undefined);
+              return handles;
+            },
           },
         );
         expect(result.cleanupFailed).toBe(false);

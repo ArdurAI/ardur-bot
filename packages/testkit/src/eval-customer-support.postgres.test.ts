@@ -1,11 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EVAL_CASES } from "./evals/cases.js";
 import { runTrial } from "./evals/runner.js";
 import { EvalSandboxProvider } from "./evals/sandbox.js";
-import { type ModelEmulatorRequest, startModelEmulator } from "./model-emulator.js";
+import type { ModelEmulatorRequest } from "./model-emulator.js";
+import { startModelEmulator } from "./model-emulator.js";
 
 const databaseAvailable = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
 
@@ -80,9 +81,9 @@ describe.skipIf(!databaseAvailable)("offline Slack customer-support eval", () =>
         },
         timeoutMs: 20_000,
         maxToolCalls: 8,
-        createApp: (composio, messaging) => {
+        createApp: async (composio, messaging) => {
           const sandbox = new EvalSandboxProvider();
-          return createApp({
+          const handles = await createApp({
             sandbox,
             databaseUrl: process.env.DATABASE_URL!,
             realtimeDatabaseUrl: process.env.DATABASE_URL!,
@@ -99,6 +100,9 @@ describe.skipIf(!databaseAvailable)("offline Slack customer-support eval", () =>
             cloudAgentProvider: "none",
             encryptionKey: "offline-customer-eval-encryption-key",
           });
+          // Background brief turns are separate from the finite task conversation.
+          vi.spyOn(handles.executor, "refreshBrief").mockResolvedValue(undefined);
+          return handles;
         },
       });
 
