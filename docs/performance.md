@@ -231,8 +231,12 @@ Workflow artifacts expire after 90 days and are not the historical scoreboard. R
 attached to the GitHub release and kept for the github-release-lifetime of that release. Development
 pushes record every new commit as measured or pending and stay advisory. The release invocation is
 mandatory: `publish` depends on the evidence job, and that job fails closed when the report,
-platform, energy, or digest check is incomplete. Credential-free pull-request runners do not receive
-provider credentials. Live provider evaluation stays explicit and budgeted. Physical release runners
+platform, energy, or digest check is incomplete. The asset assembler merges update feeds and writes
+the cask before the gate. The gate requires the measured installer set to equal the candidate
+report, records every derived publication file, and publication re-hashes that exact flat file set
+before upload. A failed draft creation or upload is cleaned up so the same tag can be retried.
+Credential-free pull-request runners do not receive provider credentials. Live provider evaluation
+stays explicit and budgeted. Physical release runners
 are not provisioned by this workflow; until they upload `scoreboard-reports`, publication stops
 with the missing evidence visible.
 
@@ -253,9 +257,11 @@ the slowest observed frame interval: target **60 fps**, warn below **50 fps** (o
 main-thread frame-scheduling proxy, not a claim about GPU presentation on every display. Missing
 samples or reports are visible warnings, not silently green measurements. Trace archives and
 screenshots are attached to the `shell-performance` artifact for review. The commit workflow is
-advisory. It builds the base revision in its own worktree and keeps the benchmark runner in a
-third worktree. It does not copy candidate production files into the baseline. A baseline without
-a compatible in-tree harness is recorded as pending.
+advisory. It builds the base revision in its own worktree and runs the harness in the base worktree
+against the base build; the candidate uses its own in-tree harness. It does not copy candidate
+production files into the baseline. A baseline without a compatible in-tree harness is recorded as
+pending, and the index uses the budgets job's pending reason rather than replacing it with a generic
+missing-evidence reason.
 
 ## Motion audit
 

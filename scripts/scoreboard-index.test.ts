@@ -15,6 +15,7 @@ import {
   SCOREBOARD_MANIFEST,
   TASK_DEFINITIONS,
 } from "../packages/testkit/src/scoreboard/manifest.ts";
+import { inventoryArtifact } from "../packages/testkit/src/scoreboard/resources/artifacts.ts";
 import {
   createBudgetPolicy,
   freezeBudgetPolicy,
@@ -68,6 +69,7 @@ on:
       common_runner_sha:
       mode:
       gate:
+      release_version:
 concurrency:
   cancel-in-progress: false
 jobs:
@@ -77,10 +79,17 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - run: node scripts/scoreboard-index.mjs release-gate
+      - run: node scripts/desktop-release-assets.mjs version source publication/release-ready
+      - env:
+          SCOREBOARD_ARTIFACTS: publication/release-ready
+        run: node scripts/scoreboard-index.mjs release-gate
   index:
+    needs: budgets
     steps:
-      - run: node scripts/scoreboard-index.mjs index-push
+      - env:
+          SCOREBOARD_HEAD: github.event.pull_request.head.sha
+          SCOREBOARD_PENDING: needs.budgets.outputs.pending_reason
+        run: node scripts/scoreboard-index.mjs index-push
       - run: node scripts/scoreboard-index.mjs baseline-decision
       - run: echo retention-days: 90
       - run: echo Measure current revision and retain traces
@@ -99,7 +108,14 @@ jobs:
     needs: [validate, build, evidence]
     steps:
       - run: node scripts/desktop-release.mjs notes tag scoreboard-publication/gate.json
-      - run: gh release create
+      - run: |
+          trap cleanup EXIT
+          node scripts/scoreboard-index.mjs verify-publication --directory release-ready --gate scoreboard-publication/gate.json
+          node scripts/scoreboard-index.mjs list-upload --directory release-ready
+          gh release delete
+          gh release create
+          created=1
+          gh release upload
 `;
 
 function pending(commit: string, attempt = 1, supersedes: string | null = null) {
@@ -465,7 +481,7 @@ describe("scoreboard index", () => {
       }),
     ).toEqual({
       copyProductionIntoBaseline: false,
-      independentTrees: ["candidate", "base", "runner"],
+      independentTrees: ["candidate", "base"],
       measureBaseline: false,
       pendingReason: "benchmark-runner-incompatible",
     });
@@ -525,6 +541,42 @@ describe("scoreboard index", () => {
       });
       await writeFile(path.join(root, "records.jsonl"), broken);
       await expect(readIndex(root)).rejects.toMatchObject({ code: "corrupt-index" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("lets one writer append when a holder exceeds the stale threshold", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-stale-"));
+    let markHolding: () => void = () => {};
+    const holding = new Promise<void>((resolve) => {
+      markHolding = resolve;
+    });
+    try {
+      const first = appendIndexRecord(root, pending(A), {
+        staleMs: 30,
+        heartbeatMs: 0,
+        timeoutMs: 2000,
+        beforeAppend: () => {
+          markHolding();
+          return new Promise((resolve) => setTimeout(resolve, 180));
+        },
+      });
+      const started = await Promise.race([
+        holding.then(() => "held" as const),
+        new Promise<"not-held">((resolve) => setTimeout(() => resolve("not-held"), 500)),
+      ]);
+      if (started === "held") await new Promise((resolve) => setTimeout(resolve, 50));
+      const second = appendIndexRecord(root, pending(B), {
+        staleMs: 30,
+        heartbeatMs: 0,
+        timeoutMs: 2000,
+      });
+      const settled = await Promise.allSettled([first, second]);
+      const records = await readIndex(root);
+      expect(records).toHaveLength(1);
+      expect(settled.filter((item) => item.status === "fulfilled")).toHaveLength(1);
+      expect(settled.filter((item) => item.status === "rejected")).toHaveLength(1);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -714,9 +766,16 @@ describe("release publication gate", () => {
     );
     expect(notes).toContain("Features: 1 change");
     expect(notes).toContain("Human acceptance is separate and is not granted by this evidence.");
-    expect(notes).toContain("| unknown |");
+    expect(notes).toContain("The scoreboard suite is scoreboard-1.");
+    expect(notes).toContain("These measurements were taken in the release-packaged environment.");
+    expect(notes).toContain("The budget policy is frozen.");
+    expect(notes).toContain(
+      "| m13.wrong-pin | parent | all | exact | 200 | 0 | 0..0 | 0 | within-budget |",
+    );
     expect(notes).toContain("within-budget");
     expect(notes).toContain("Observed samples: 200");
+    expect(notes).toContain("Task success: unknown.");
+    expect(notes).not.toContain("Suite scoreboard-1 (");
     expect(notes).not.toContain("Person");
     expect(notes).not.toContain("secret");
     expect(notes).not.toContain(passing.root);
@@ -788,6 +847,173 @@ describe("release publication gate", () => {
       await rm(tampered.root, { recursive: true, force: true });
     }
   }, 60_000);
+
+  async function stagePassing() {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-probe-"));
+    await cp(passing.artifactRoot, path.join(root, "artifacts"), { recursive: true });
+    await cp(passing.reportsRoot, path.join(root, "reports"), { recursive: true });
+    return {
+      root,
+      artifactRoot: path.join(root, "artifacts"),
+      reportsRoot: path.join(root, "reports"),
+    };
+  }
+
+  async function rewriteCandidate(
+    reportsRoot: string,
+    edit: (report: ReturnType<typeof syntheticReport>) => void,
+  ) {
+    const candidatePath = path.join(reportsRoot, "candidate.json");
+    const envelope = JSON.parse(await readFile(candidatePath, "utf8")) as {
+      report: ReturnType<typeof syntheticReport>;
+    };
+    edit(envelope.report);
+    await writeFile(
+      candidatePath,
+      JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report)),
+    );
+  }
+
+  async function rebindEnergy(
+    reportsRoot: string,
+    target: string,
+    artifactHash: string,
+    platform: "darwin" | "linux" | "win32",
+  ) {
+    const energyPath = path.join(reportsRoot, "energy.json");
+    const entries = JSON.parse(await readFile(energyPath, "utf8")) as { target: string }[];
+    await writeFile(
+      energyPath,
+      JSON.stringify(
+        entries.map((entry) =>
+          entry.target === target ? { target, ...energyPair(artifactHash, platform) } : entry,
+        ),
+      ),
+    );
+  }
+
+  it("accepts derived feeds beside installers and rejects an uploaded byte the gate did not record", async () => {
+    const probe = await stagePassing();
+    try {
+      for (const [directory, target] of TARGETS) {
+        await writeFile(
+          path.join(probe.artifactRoot, directory, "synthetic.blockmap"),
+          `blockmap-${target}`,
+        );
+        await writeFile(
+          path.join(probe.artifactRoot, directory, "latest-feed.yml"),
+          `feed-${target}\n`,
+        );
+      }
+      const result = await gate(probe);
+      expect(result.code).toBe(0);
+      expect(result.gate.allowPublication).toBe(true);
+      expect(
+        result.gate.distributedDigests.some(
+          (file: { name: string }) => file.name === "synthetic.blockmap",
+        ),
+      ).toBe(true);
+      const { verifyPublicationBytes } = await import("./scoreboard-index.mjs");
+      await verifyPublicationBytes(probe.artifactRoot, result.gate);
+      await writeFile(
+        path.join(probe.artifactRoot, "desktop-linux-x64", "latest-feed.yml"),
+        "changed-feed\n",
+      );
+      await expect(verifyPublicationBytes(probe.artifactRoot, result.gate)).rejects.toMatchObject({
+        code: "artifact-digest-mismatch",
+      });
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("accepts energy bound to the zip shipped beside a dmg", async () => {
+    const zipCase = await stagePassing();
+    try {
+      const zipBody = Buffer.from("installer-zip-desktop-darwin-arm64");
+      const zipPath = path.join(zipCase.artifactRoot, "desktop-mac-arm64", "synthetic.zip");
+      await writeFile(zipPath, zipBody);
+      const zipHash = createHash("sha256").update(zipBody).digest("hex");
+      await rewriteCandidate(zipCase.reportsRoot, (report) => {
+        report.artifacts.push({ sha256: zipHash, bytes: zipBody.length, kind: "build" });
+      });
+      await rebindEnergy(zipCase.reportsRoot, "desktop-darwin-arm64", zipHash, "darwin");
+      const zipResult = await gate(zipCase, "index-zip");
+      expect(zipResult.code).toBe(0);
+      expect(
+        zipResult.gate.reasons.some((reason: { code: string }) => reason.code === "missing-energy"),
+      ).toBe(false);
+    } finally {
+      await rm(zipCase.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("accepts energy bound to the installer inventory digest", async () => {
+    const inventoryCase = await stagePassing();
+    try {
+      const dmgPath = path.join(inventoryCase.artifactRoot, "desktop-mac-arm64", "synthetic.dmg");
+      const inventory = await inventoryArtifact(dmgPath);
+      const fileHash = createHash("sha256")
+        .update(await readFile(dmgPath))
+        .digest("hex");
+      expect(inventory.sha256).not.toBe(fileHash);
+      await rebindEnergy(
+        inventoryCase.reportsRoot,
+        "desktop-darwin-arm64",
+        inventory.sha256,
+        "darwin",
+      );
+      const inventoryResult = await gate(inventoryCase, "index-inventory");
+      expect(inventoryResult.code).toBe(0);
+    } finally {
+      await rm(inventoryCase.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses energy bound to an unrelated digest", async () => {
+    const unrelated = await stagePassing();
+    try {
+      await rebindEnergy(
+        unrelated.reportsRoot,
+        "desktop-darwin-arm64",
+        hash("unrelated-energy"),
+        "darwin",
+      );
+      const refused = await gate(unrelated, "index-unrelated");
+      expect(refused.code).not.toBe(0);
+      expect(
+        refused.gate.reasons.some((reason: { code: string }) => reason.code === "missing-energy"),
+      ).toBe(true);
+    } finally {
+      await rm(unrelated.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("records a safety refusal with every gate code instead of a missing-report pending line", async () => {
+    const refusedCase = await stagePassing();
+    try {
+      await rewriteCandidate(refusedCase.reportsRoot, (report) => {
+        for (const metric of report.metrics) {
+          if (metric.id !== "m13.wrong-pin") continue;
+          for (const observation of metric.observations) observation.value = 1;
+        }
+      });
+      const result = await gate(refusedCase, "index-refusal");
+      expect(result.code).toBe(1);
+      const codes = [
+        ...new Set(result.gate.reasons.map((reason: { code: string }) => reason.code)),
+      ].sort();
+      expect(codes).toEqual(expect.arrayContaining(["safety-failure", "budget-regression"]));
+      const records = await readIndex(result.indexRoot);
+      const candidate = records.find((record) => record.role === "candidate");
+      expect(candidate?.status).toBe("refused");
+      expect(candidate?.pendingReason).toBeNull();
+      expect(candidate?.gateCodes).toEqual(codes);
+      expect(records.some((record) => record.pendingReason === "reports-missing")).toBe(false);
+    } finally {
+      await rm(refusedCase.root, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 describe("workflow contracts", () => {
@@ -804,6 +1030,40 @@ describe("workflow contracts", () => {
 
   it("requires the checked-in workflows to index commits and gate publication", () => {
     expect(() => assertWorkflowContracts(performanceYaml, releaseYaml)).not.toThrow();
+    const head = performanceYaml.match(/SCOREBOARD_HEAD:\s*(.+)/)?.[1] ?? "";
+    expect(head).toContain("github.event.pull_request.head.sha");
+    expect(head.indexOf("pull_request.head.sha")).toBeLessThan(head.indexOf("github.sha"));
+    expect(performanceYaml).toContain("needs.budgets.outputs.pending_reason");
+    expect(performanceYaml).not.toContain("performance-runner");
+    expect(releaseYaml).not.toContain("release-ready/*");
+    expect(releaseYaml).toContain("gh release delete");
+    expect(releaseYaml).toContain("verify-publication");
+    expect(releaseYaml.split("\n  publish:\n")[1]).not.toContain("desktop-release-assets.mjs");
+    expect(performanceYaml).toContain("SCOREBOARD_ARTIFACTS: publication/release-ready");
+    expect(docs).not.toContain("third worktree");
+    expect(docs).toContain("harness in the base worktree");
+    expect(docs).toContain("budgets job's pending reason");
+  });
+
+  it("rejects a directory in the upload set and a publish step without draft cleanup", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "scoreboard-upload-"));
+    try {
+      await mkdir(path.join(directory, "scoreboard-evidence"));
+      await writeFile(path.join(directory, "synthetic.dmg"), "bytes");
+      const { publicationFiles } = await import("./scoreboard-index.mjs");
+      await expect(publicationFiles(directory)).rejects.toMatchObject({ code: "upload-directory" });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+    const directoryUpload = goodRelease.replace(
+      "list-upload --directory release-ready",
+      "gh release create release-ready/*",
+    );
+    expect(() => assertWorkflowContracts(goodPerformance, directoryUpload)).toThrow(/directory/);
+    const noCleanup = goodRelease
+      .replace("trap cleanup EXIT\n", "")
+      .replace("gh release delete", "true");
+    expect(() => assertWorkflowContracts(goodPerformance, noCleanup)).toThrow(/draft/);
   });
 
   it("documents where the index lives and how long evidence is kept", () => {

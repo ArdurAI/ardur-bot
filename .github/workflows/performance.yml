@@ -44,6 +44,11 @@ on:
         required: false
         type: string
         default: "1"
+      release_version:
+        description: Desktop version used to assemble release assets
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -59,6 +64,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     continue-on-error: true
+    outputs:
+      pending_reason: ${{ steps.baseline.outputs.pending_reason }}
     env:
       ARDURBOT_ALLOW_DEV_SECRETS: "1"
     steps:
@@ -72,7 +79,8 @@ jobs:
           node-version: 22
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
-      - name: Prepare independent base and runner trees
+      - name: Prepare independent base tree
+        id: baseline
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           RUNNER_SHA: ${{ inputs.common_runner_sha || github.sha }}
@@ -84,11 +92,10 @@ jobs:
           [[ "$RUNNER_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
           base="$RUNNER_TEMP/performance-base"
-          runner="$RUNNER_TEMP/performance-runner"
+          echo "pending_reason=schema-3-evidence-not-produced" >> "$GITHUB_OUTPUT"
           git worktree add --detach "$base" "$BASE_SHA"
-          git worktree add --detach "$runner" "$RUNNER_SHA"
-          if [[ "$base" -ef "$runner" || "$base" -ef "$GITHUB_WORKSPACE" ]]; then
-            echo "Baseline, runner, and candidate trees must be independent." >&2
+          if [[ "$base" -ef "$GITHUB_WORKSPACE" ]]; then
+            echo "Baseline and candidate trees must be independent." >&2
             exit 1
           fi
           decision="$(node scripts/scoreboard-index.mjs baseline-decision --base "$base" --runner-sha "$RUNNER_SHA" --candidate-sha "$GITHUB_SHA" --base-sha "$BASE_SHA")"
@@ -96,6 +103,7 @@ jobs:
             measure) ;;
             pending:*)
               printf '%s\n' "${decision#pending:}" > "$RUNNER_TEMP/base-pending-reason"
+              echo "pending_reason=${decision#pending:}" >> "$GITHUB_OUTPUT"
               echo "::warning title=Performance baseline::${decision}. Candidate production files stay in the candidate tree."
               exit 0
               ;;
@@ -159,7 +167,8 @@ jobs:
 
   index:
     name: Index commit evidence
-    if: github.event_name != 'workflow_call' || inputs.gate != 'required'
+    needs: budgets
+    if: always() && (github.event_name != 'workflow_call' || inputs.gate != 'required')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -177,8 +186,9 @@ jobs:
           SCOREBOARD_EVENT: ${{ github.event_name }}
           SCOREBOARD_BEFORE: ${{ github.event.before }}
           SCOREBOARD_BASE: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
-          SCOREBOARD_HEAD: ${{ inputs.candidate_sha || github.sha }}
+          SCOREBOARD_HEAD: ${{ inputs.candidate_sha || github.event.pull_request.head.sha || github.sha }}
           SCOREBOARD_RUNNER: ${{ inputs.common_runner_sha || github.sha }}
+          SCOREBOARD_PENDING: ${{ needs.budgets.outputs.pending_reason || 'schema-3-evidence-not-produced' }}
           SCOREBOARD_MODE: ${{ inputs.mode || 'commit' }}
           SCOREBOARD_ENVIRONMENT: ${{ inputs.environment || 'ubuntu-24.04-diagnostic' }}
           SCOREBOARD_SUITE: ${{ inputs.suite_version || 'scoreboard-1' }}
@@ -214,11 +224,25 @@ jobs:
         with:
           pattern: scoreboard-reports
           path: scoreboard-reports
+          merge-multiple: true
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
+      - name: Assemble the exact publication files before gating
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
+          node scripts/desktop-release-assets.mjs "$RELEASE_VERSION" release-artifacts publication/release-ready
+          for name in parent candidate fixed-release policy energy; do
+            if [[ -f "scoreboard-reports/${name}.json" ]]; then
+              cp "scoreboard-reports/${name}.json" "publication/release-ready/scoreboard-${name}.json"
+            fi
+          done
       - name: Fail closed without validated measured artifacts
         env:
           SCOREBOARD_CANDIDATE: ${{ inputs.candidate_sha }}
@@ -226,16 +250,16 @@ jobs:
           SCOREBOARD_FIXED: ${{ inputs.fixed_release_sha }}
           SCOREBOARD_RUNNER: ${{ inputs.common_runner_sha }}
           SCOREBOARD_ENVIRONMENT: ${{ inputs.environment }}
-          SCOREBOARD_ARTIFACTS: release-artifacts
+          SCOREBOARD_ARTIFACTS: publication/release-ready
           SCOREBOARD_REPORTS: scoreboard-reports
-          SCOREBOARD_OUTPUT: scoreboard-publication/gate.json
-          SCOREBOARD_INDEX: scoreboard-publication/index
+          SCOREBOARD_OUTPUT: publication/scoreboard-publication/gate.json
+          SCOREBOARD_INDEX: publication/scoreboard-publication/index
         run: node scripts/scoreboard-index.mjs release-gate
       - name: Upload the publication gate
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: scoreboard-publication
-          path: scoreboard-publication
+          path: publication
           retention-days: 90
           if-no-files-found: warn
