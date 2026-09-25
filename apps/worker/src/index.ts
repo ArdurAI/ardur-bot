@@ -284,7 +284,8 @@ async function main() {
   const boardNotifications = createBoardNotificationDelivery({
     prisma,
     notifications: new ExpoPushProvider(dataDir),
-    leadership: createPostgresReconciliationLeadership(pool, { lockId: 2 }),
+    // Lock ids in this namespace: 1 = job reconciler, 2 = messaging receivers, 3 = board notifications.
+    leadership: createPostgresReconciliationLeadership(pool, { lockId: 3 }),
   });
   boardNotifications.start();
   const chatReceivers = createMessagingReceivers({
