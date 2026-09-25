@@ -193,7 +193,12 @@ export class LocalImportScanner {
       const source = candidate.metadata || reportInfo ? undefined : await this.file(candidate.file);
       const metadata = candidate.metadata ?? reportInfo ?? source!.info;
       const raw = candidate.content ?? source?.text ?? "";
-      const content = candidate.reason ? "" : safeText(raw);
+      // Server fields are sanitized by serverDefinition; text redaction can corrupt bindings.
+      const content = candidate.reason
+        ? ""
+        : candidate.server
+          ? JSON.stringify(candidate.server, null, 2)
+          : safeText(raw);
       const size = Buffer.byteLength(content);
       if (size > LOCAL_IMPORT_BYTES || this.bytes + size > MAX_RETAINED_BYTES) {
         this.limited = true;
@@ -323,7 +328,7 @@ export class LocalImportScanner {
           key: `server:${name}`,
           metadata: source.info,
           ...(server
-            ? { server, content: JSON.stringify(server, null, 2) }
+            ? { server }
             : {
                 reason:
                   "This server has unsupported configuration or credential-bearing arguments.",

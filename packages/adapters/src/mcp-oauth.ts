@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isLocalMcpHost } from "@ardurbot/contracts";
-import type { PrismaClient } from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
 import type {
   OAuthClientProvider,
   OAuthDiscoveryState,
@@ -860,9 +860,15 @@ export class McpOAuthBroker {
     }
     if (!pending.provider.tokens()) throw new Error("MCP OAuth authorization failed");
     // Bump the revision so cached runtime sessions rebuild with the fresh tokens.
-    await this.prisma.mcpServer.update({
-      where: { id: pending.serverId },
-      data: { revision: { increment: 1 } },
+    const serverId = pending.serverId;
+    const context = { spaceId: input.spaceId, userId: input.userId };
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockMaterial(tx, serverId, context, true);
+      const server = await tx.mcpServer.update({
+        where: { id: serverId, ...context },
+        data: { revision: { increment: 1 } },
+      });
+      if (server.imported) await this.advanceImportReceipts(tx, serverId, server.revision, context);
     });
     return pending.serverId;
   }
@@ -968,7 +974,7 @@ export class McpOAuthBroker {
       // Serialize every credential rotation across API instances. OAuth
       // providers hold a session snapshot, so merge only their OAuth state
       // into the latest static material after acquiring the lock.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${serverId}))`;
+      await this.lockMaterial(tx, serverId, context, incrementRevision);
       const server = await tx.mcpServer.findFirst({
         where: {
           id: serverId,
@@ -1024,17 +1030,62 @@ export class McpOAuthBroker {
           },
         });
       }
-      await tx.mcpServer.update({
+      const previousSecretId = server.secretId;
+      const saved = await tx.mcpServer.update({
         where: { id: serverId },
         data: {
           secretId: stored?.id ?? null,
           ...(incrementRevision ? { revision: { increment: 1 } } : {}),
         },
       });
-      if (server.secretId && server.secretId !== stored?.id) {
-        await tx.secret.deleteMany({ where: { id: server.secretId } });
+      if (incrementRevision && saved.imported)
+        await this.advanceImportReceipts(tx, serverId, saved.revision, context);
+      if (previousSecretId && previousSecretId !== stored?.id) {
+        await tx.secret.deleteMany({ where: { id: previousSecretId } });
       }
       return stored?.id;
+    });
+  }
+
+  private async lockMaterial(
+    tx: Prisma.TransactionClient,
+    serverId: string,
+    context: ActorRef,
+    incrementRevision: boolean,
+  ) {
+    const owner = { spaceId: context.spaceId, userId: context.userId };
+    if (incrementRevision) {
+      const server = await tx.mcpServer.findFirst({
+        where: { id: serverId, ...owner },
+        select: { imported: true },
+      });
+      if (server?.imported) {
+        const receipt = await tx.localImportRecord.findFirst({
+          where: { targetId: serverId, removedAt: null, config: owner },
+        });
+        // Import and credential setup acquire these locks in this order too.
+        if (receipt)
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`local-import:${receipt.configId}`}, 0))`;
+      }
+    }
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${serverId}))`;
+  }
+
+  private async advanceImportReceipts(
+    tx: Prisma.TransactionClient,
+    serverId: string,
+    revision: number,
+    context: ActorRef,
+  ) {
+    // Connection-cache invalidation preserves import ownership, but never forgives manual edits.
+    await tx.localImportRecord.updateMany({
+      where: {
+        targetId: serverId,
+        targetRevision: revision - 1,
+        removedAt: null,
+        config: { spaceId: context.spaceId, userId: context.userId },
+      },
+      data: { targetRevision: revision },
     });
   }
 

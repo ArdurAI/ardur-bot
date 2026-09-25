@@ -1,15 +1,22 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { BackgroundJob, JobPublisher } from "@ardurbot/adapter-kit";
+import { parseBackgroundJob } from "@ardurbot/adapter-kit";
 import {
   createMemoryLifecycle,
   EncryptedSecretStore,
   LocalImportService,
+  McpOAuthBroker,
 } from "@ardurbot/adapters";
 import { createDb } from "@ardurbot/db";
 import { LocalImportScanner } from "@ardurbot/host-runtime/import/scanner";
+import { RPCHandler } from "@orpc/server/fetch";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { saveImportedServerCredentials } from "./local-import-credentials.js";
+import { LocalImportRequests } from "./local-import-requests.js";
+import type { RouterDeps } from "./router.js";
+import { createRouter } from "./router.js";
 
 const describePostgres =
   process.env.VERIFY_DATABASE === "1" && process.env.DATABASE_URL
@@ -216,5 +223,118 @@ describePostgres("local import receipts, journal and credentials (PostgreSQL)", 
     expect(history[2]!.deletedAt).not.toBeNull();
     expect(history[2]!.imported).toMatchObject({ tool: "claude-code" });
     expect((await service.status(owner)).autoImport).toBe(false);
+  });
+  it("accepts full actors through every import RPC and preserves receipts through OAuth and Undo", async () => {
+    await file(
+      ".codex/config.toml",
+      '[mcp_servers.remote]\nurl = "https://mcp.example.test/mcp"\nbearer_token_env_var = "ACCESS_TOKEN"\n',
+    );
+    let requests: LocalImportRequests;
+    requests = new LocalImportRequests({
+      enqueue: async (job: BackgroundJob) => {
+        const parsed = parseBackgroundJob(job.name, job.payload);
+        if (parsed.name !== "local-import.run") throw new Error("Unexpected fixture job.");
+        const response = await service.run(owner, parsed.payload.action);
+        requests.complete(parsed.payload.requestId, response);
+      },
+    } as JobPublisher);
+    const handler = new RPCHandler(
+      createRouter({
+        prisma: db.prisma,
+        secrets,
+        localImportRequests: requests,
+        env: { webOrigin: "https://app.example.test" },
+      } as unknown as RouterDeps),
+    );
+    const call = async (method: string, input: unknown) => {
+      const { response } = await handler.handle(
+        new Request(`https://app.example.test/rpc/localImport/${method}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ json: input }),
+        }),
+        {
+          prefix: "/rpc",
+          context: { actor: { ...owner, email: "owner@example.test", isDeploymentOwner: true } },
+        },
+      );
+      expect(response?.status).toBe(200);
+    };
+    await call("status", {});
+    await call("run", { action: "scan" });
+    const manifest = (await service.status(owner)).manifest!;
+    await call("run", {
+      action: "import",
+      scanId: manifest.scanId,
+      tool: "codex",
+      categories: ["servers"],
+    });
+    await call("configure", { autoImport: true, selection: { codex: ["servers"] } });
+    expect((await service.status(owner)).selection).toEqual({ codex: ["servers"] });
+    const server = await db.prisma.mcpServer.findFirstOrThrow({ where: owner });
+    await call("credentials", {
+      serverId: server.id,
+      env: { ACCESS_TOKEN: "fixture-owned-value" },
+      headers: {},
+    });
+    const before = await db.prisma.mcpServer.findUniqueOrThrow({ where: { id: server.id } });
+    const material = await secrets.put(
+      JSON.stringify({
+        oauth: {
+          authorizationRevision: before.revision,
+          redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+          codeVerifier: "fixture-verifier",
+          clientInformation: { client_id: "fixture-client" },
+          discoveryState: {
+            authorizationServerUrl: "https://auth.example.test",
+            resourceMetadata: {
+              resource: server.endpoint,
+              authorization_servers: ["https://auth.example.test"],
+            },
+            authorizationServerMetadata: {
+              issuer: "https://auth.example.test",
+              authorization_endpoint: "https://auth.example.test/authorize",
+              token_endpoint: "https://auth.example.test/token",
+              response_types_supported: ["code"],
+              grant_types_supported: ["authorization_code"],
+            },
+          },
+        },
+      }),
+      { ...owner, operationId: "fixture", traceId: "fixture", signal: AbortSignal.timeout(10_000) },
+    );
+    await db.prisma.mcpOAuthSession.create({
+      data: {
+        id: material.id,
+        ...owner,
+        serverId: server.id,
+        endpoint: server.endpoint!,
+        redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+        oauthCiphertext: material.ciphertext,
+      },
+    });
+    const broker = new McpOAuthBroker(db.prisma, secrets, {
+      fetch: async () => Response.json({ access_token: "fixture-access", token_type: "bearer" }),
+      resolveHostname: async () => [{ address: "203.0.113.10", family: 4 }],
+    });
+    await broker.complete({
+      ...owner,
+      sessionId: material.id,
+      state: material.id,
+      code: "fixture-code",
+    });
+    await broker.disconnect({ ...owner, serverId: server.id });
+    const after = await db.prisma.mcpServer.findUniqueOrThrow({ where: { id: server.id } });
+    expect(after.revision).toBe(before.revision + 2);
+    expect(
+      (
+        await db.prisma.localImportRecord.findFirstOrThrow({
+          where: { targetId: server.id, config: owner },
+        })
+      ).targetRevision,
+    ).toBe(after.revision);
+    await call("run", { action: "undo", tool: "codex" });
+    expect(await db.prisma.mcpServer.count({ where: owner })).toBe(0);
+    expect(await db.prisma.secret.count({ where: owner })).toBe(0);
   });
 });

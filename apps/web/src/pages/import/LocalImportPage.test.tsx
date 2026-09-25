@@ -123,6 +123,26 @@ it("scans automatically on first open and gives a retry action on host failure",
   expect(node.textContent).not.toContain("private diagnostic");
   expect(button(node, "Re-scan").disabled).toBe(false);
 });
+it("keeps the first import's selection when enabling automatic import without reopening", async () => {
+  let status = { ...localImportStatusFixture };
+  fake.status.mockImplementation(async () => status);
+  fake.run.mockImplementation(async (action) => {
+    status = {
+      ...status,
+      importedAt: "2026-09-24T12:00:00.000Z",
+      selection: { [action.tool]: action.categories },
+    };
+    return {};
+  });
+  fake.configure.mockResolvedValue({});
+  const node = await render();
+  await act(async () => button(node, "Import all").click());
+  await act(async () => (node.querySelector('[role="switch"]') as HTMLInputElement).click());
+  expect(fake.configure).toHaveBeenLastCalledWith({
+    autoImport: true,
+    selection: { "claude-code": ["instructions", "memories", "skills", "servers"] },
+  });
+});
 it("sends only newly entered credentials and clears the password field after save", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   fake.credentials.mockResolvedValue({ ok: true });
@@ -169,4 +189,30 @@ it("persists a category change immediately when automatic import is enabled", as
   const node = await render();
   await act(async () => (node.querySelector("#claude-code-skills") as HTMLInputElement).click());
   expect(fake.configure).toHaveBeenCalledWith({ selection: { "claude-code": ["memories"] } });
+});
+
+it("persists the displayed selection when enabling automatic import and restores it on reopen", async () => {
+  let status = {
+    ...localImportStatusFixture,
+    autoImport: false,
+    importedAt: "2026-09-24T12:00:00.000Z",
+    selection: { "claude-code": ["memories", "skills"] },
+  };
+  fake.status.mockImplementation(async () => status);
+  fake.configure.mockImplementation(async (input) => {
+    status = { ...status, ...input };
+    return status;
+  });
+  const node = await render();
+  await act(async () => (node.querySelector("#claude-code-memories") as HTMLInputElement).click());
+  expect(fake.configure).not.toHaveBeenCalled();
+  await act(async () => (node.querySelector("#local-import-auto") as HTMLInputElement).click());
+  expect(fake.configure).toHaveBeenLastCalledWith({
+    autoImport: true,
+    selection: { "claude-code": ["skills"] },
+  });
+  const reopened = await render();
+  expect((reopened.querySelector("#local-import-auto") as HTMLInputElement).checked).toBe(true);
+  expect((reopened.querySelector("#claude-code-memories") as HTMLInputElement).checked).toBe(false);
+  expect((reopened.querySelector("#claude-code-skills") as HTMLInputElement).checked).toBe(true);
 });

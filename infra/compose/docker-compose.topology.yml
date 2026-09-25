@@ -141,7 +141,9 @@ services:
   worker:
     image: ${TOPOLOGY_APP_IMAGE:-ardurbot/app:topology}
     command: ["pnpm", "--filter", "@ardurbot/worker", "start"]
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      API_INTERNAL_URL: http://api:3100
     volumes:
       - appdata:/data
     depends_on:
