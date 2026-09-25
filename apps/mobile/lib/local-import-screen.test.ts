@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { LocalImportStatusSchema } from "@ardurbot/contracts/local-import";
 import {
   localImportFixture,
   localImportServerFixture,
@@ -10,6 +11,8 @@ import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import LocalImport from "../app/import";
+
+type LocalImportStatus = ReturnType<typeof LocalImportStatusSchema.parse>;
 
 const fake = vi.hoisted(() => ({
   status: vi.fn(),
@@ -86,6 +89,76 @@ vi.mock("react-native", () => ({
       onChange: () => onValueChange(!value),
     }),
 }));
+it("persists displayed categories when enabling automatic import and restores them on reopen", async () => {
+  vi.clearAllMocks();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let status: LocalImportStatus = {
+    ...localImportStatusFixture,
+    autoImport: false,
+    importedAt: "2026-09-24T12:00:00.000Z",
+    selection: { "claude-code": ["memories", "skills"] },
+  };
+  fake.status.mockImplementation(async () => status);
+  fake.configure.mockImplementation(async (input) => {
+    status = { ...status, ...input };
+    return status;
+  });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const control = (label: string) =>
+    node.querySelector(`[aria-label="${label}"]`) as HTMLInputElement;
+  try {
+    await act(async () => root.render(createElement(LocalImport)));
+    await act(async () => control("Claude Code Memories").click());
+    expect(fake.configure).not.toHaveBeenCalled();
+    await act(async () => control("Auto-import changes").click());
+    expect(fake.configure).toHaveBeenLastCalledWith({
+      autoImport: true,
+      selection: { "claude-code": ["skills"] },
+    });
+    await act(async () => root.render(null));
+    await act(async () => root.render(createElement(LocalImport)));
+    expect(control("Auto-import changes").checked).toBe(true);
+    expect(control("Claude Code Memories").checked).toBe(false);
+    expect(control("Claude Code Skills").checked).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("keeps the first import's selection when enabling automatic import without reopening", async () => {
+  vi.clearAllMocks();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let status: LocalImportStatus = { ...localImportStatusFixture };
+  fake.status.mockImplementation(async () => status);
+  fake.run.mockImplementation(async (action) => {
+    status = {
+      ...status,
+      importedAt: "2026-09-24T12:00:00.000Z",
+      selection: { [action.tool]: action.categories },
+    };
+    return {};
+  });
+  fake.configure.mockResolvedValue({});
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () => root.render(createElement(LocalImport)));
+    await act(async () =>
+      [...node.querySelectorAll("button")]
+        .find((button) => button.textContent === "Import all")!
+        .click(),
+    );
+    await act(async () =>
+      (node.querySelector('[aria-label="Auto-import changes"]') as HTMLInputElement).click(),
+    );
+    expect(fake.configure).toHaveBeenLastCalledWith({
+      autoImport: true,
+      selection: { "claude-code": ["instructions", "memories", "skills", "servers"] },
+    });
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 it("renders the host manifest with native category selection, preview, import and undo", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   let imported = false;

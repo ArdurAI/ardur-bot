@@ -210,10 +210,9 @@ import { speaker } from "../lib/tts";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
-import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
-import { CompareStart } from "./CompareStart";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
+import { DashboardPage } from "./dashboard/DashboardPage";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
 import type { RoutineDraftState } from "./RoutineEditor";
@@ -251,11 +250,20 @@ import {
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { SidebarSettings } from "./shell/sidebar-settings";
 import { SystemDictation } from "./system/SystemDictation";
-import { TeamBoard } from "./TeamBoard";
 import { WindowChrome } from "./WindowChrome";
+
+const TeamBoard = lazy(() =>
+  import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
+);
 
 const ProjectBoard = lazy(() =>
   import("./board/Board").then((module) => ({ default: module.Board })),
+);
+const ActivityList = lazy(() =>
+  import("./ActivityList").then((module) => ({ default: module.ActivityList })),
+);
+const CompareStart = lazy(() =>
+  import("./CompareStart").then((module) => ({ default: module.CompareStart })),
 );
 const BotContextMenu = lazy(() =>
   import("./BotContextMenu").then((module) => ({ default: module.BotContextMenu })),
@@ -326,11 +334,19 @@ function readCollapsedSidebarSections(userId: string | null | undefined): Set<st
   }
 }
 
-export function ShellPage({ team = false, board = false }: { team?: boolean; board?: boolean }) {
+export function ShellPage({
+  team = false,
+  board = false,
+  dashboard = false,
+}: {
+  team?: boolean;
+  board?: boolean;
+  dashboard?: boolean;
+}) {
   const TaskPage = board ? ProjectBoard : TeamBoard;
   const { t } = useLingui();
-  const teamView = useRef(team || board);
-  teamView.current = team || board;
+  const teamView = useRef(team || board || dashboard);
+  teamView.current = team || board || dashboard;
   const { botId, groupId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -484,6 +500,10 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const [pickerInfoTopic, setPickerInfoTopic] = useState<"group" | "space" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    if (dashboard) setMobileSidebarOpen(false);
+  }, [dashboard]);
 
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 768px)");
@@ -654,7 +674,9 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
 
   const inGroup = Boolean(groupId);
   const active =
-    team || board || inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
+    team || board || dashboard || inGroup
+      ? undefined
+      : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
   computerOpenRef.current = computerOpen;
@@ -762,6 +784,7 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
         setInitialBotsLoaded(true);
         botsRefreshApplied.current = request;
         if (
+          !teamView.current &&
           includeArchived &&
           list.length === 0 &&
           archived?.length === 0 &&
@@ -1674,9 +1697,12 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
   );
   const shellReady =
     initialBotsLoaded &&
-    (inGroup
-      ? Boolean(activeGroup && activeSnapshot)
-      : bots.length === 0 || Boolean(active && activeSnapshot));
+    (dashboard ||
+      team ||
+      board ||
+      (inGroup
+        ? Boolean(activeGroup && activeSnapshot)
+        : bots.length === 0 || Boolean(active && activeSnapshot)));
   const refreshThreadRef = useRef(refreshThread);
   refreshThreadRef.current = refreshThread;
   const refreshGroupThreadRef = useRef(refreshGroupThread);
@@ -2510,9 +2536,10 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
     <div
       data-testid="shell-root"
       data-ready={shellReady}
-      className="relative flex h-full min-w-0 overflow-hidden bg-background text-foreground/90"
+      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background text-foreground/90"
       onTouchStartCapture={(event) => {
         if (
+          dashboard ||
           mobileSidebarOpen ||
           event.touches.length !== 1 ||
           window.matchMedia("(min-width: 768px)").matches
@@ -2569,7 +2596,7 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
           className="absolute inset-y-0 end-0 start-[min(calc(100%-48px),316px)] z-30 bg-overlay md:hidden"
         />
       ) : null}
-      {!mobileSidebarOpen ? (
+      {!mobileSidebarOpen && !dashboard ? (
         <div
           data-testid="mobile-sidebar-swipe-edge"
           aria-hidden="true"
@@ -2580,7 +2607,7 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
         data-testid="bots-sidebar"
         data-collapsed={botsSidebarCollapsed ? "true" : "false"}
         inert={botsSidebarCollapsed && !mobileSidebarOpen ? true : undefined}
-        className={`absolute inset-y-0 start-0 z-40 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,opacity] motion-reduce:transition-none md:static md:z-auto md:translate-x-0 ${
+        className={`${dashboard ? "hidden" : "flex"} absolute inset-y-0 start-0 z-40 w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,opacity] motion-reduce:transition-none md:static md:z-auto md:translate-x-0 ${
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
         } ${
           botsSidebarCollapsed
@@ -2697,6 +2724,7 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
             </Popover>
           </div>
         </div>
+
         <InputGroup
           data-testid="sidebar-search"
           className="mx-2.5 mb-3 w-auto rounded-xl bg-card dark:bg-input border border-border text-muted-foreground focus-within:border-ring"
@@ -2722,13 +2750,21 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
           ) : (
             <>
               {activityMode ? (
-                <ActivityList
-                  onOpenRun={(run) => {
-                    setMobileSidebarOpen(false);
-                    if (run.groupId) navigate(`/app/g/${run.groupId}`);
-                    else navigate(`/app/${run.botId}`);
-                  }}
-                />
+                <Suspense
+                  fallback={
+                    <div className="px-2.5 py-2 text-[13px] text-muted-foreground/80">
+                      <Trans>Loading activity…</Trans>
+                    </div>
+                  }
+                >
+                  <ActivityList
+                    onOpenRun={(run) => {
+                      setMobileSidebarOpen(false);
+                      if (run.groupId) navigate(`/app/g/${run.groupId}`);
+                      else navigate(`/app/${run.botId}`);
+                    }}
+                  />
+                </Suspense>
               ) : null}
               {sidebarGroups.map((group) => {
                 const collapsed = Boolean(group.title) && collapsedSidebarSections.has(group.key);
@@ -3185,13 +3221,29 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
         }}
       />
 
+      {dashboard ? (
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <DashboardPage
+            key={bootstrapMe?.spaceId}
+            scope={bootstrapMe ? `${userId}:${bootstrapMe.spaceId}` : ""}
+            spaceId={bootstrapMe?.spaceId}
+            openSettings={(section) =>
+              section === "messaging" ? setMessagingSettingsOpen(true) : openSettings(section)
+            }
+          />
+        </main>
+      ) : null}
       {team || board ? (
         <main
           aria-hidden={mobileSidebarOpen || undefined}
           inert={mobileSidebarOpen}
           className="flex min-w-0 flex-1 flex-col bg-background"
         >
-          <Suspense fallback={<div className="h-full bg-background" />}>
+          <Suspense
+            fallback={
+              <div className="m-4 h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+            }
+          >
             <TaskPage
               bots={bots}
               key={bootstrapMe?.spaceId}
@@ -3216,7 +3268,7 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
       <main
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
-        className={`${team || board ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
+        className={`${team || board || dashboard ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
           <div className="flex min-w-0 items-center gap-2">
@@ -4419,7 +4471,32 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
   );
 
   return (
-    <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "robot"}>{shell}</AvatarStyleProvider>
+    <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "robot"}>
+      <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+        <header className="app-drag relative z-20 flex h-12 shrink-0 items-center gap-3 border-b border-border px-3">
+          <WindowChrome navigation />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="app-no-drag"
+            aria-label={t`Search`}
+            onClick={() => setCommandPaletteOpen(true)}
+          >
+            <Search size={17} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="app-no-drag ms-auto shrink-0"
+            aria-label={t`Settings`}
+            onClick={() => openSettings("general")}
+          >
+            <Settings size={17} />
+          </Button>
+        </header>
+        {shell}
+      </div>
+    </AvatarStyleProvider>
   );
 }
 
@@ -5369,18 +5446,26 @@ export const Composer = memo(function Composer({
         </Suspense>
       ) : null}
       {comparisonBotId ? (
-        <CompareStart
-          botId={comparisonBotId}
-          text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
-          files={pendingAttachments.map((item) => item.file)}
-          disabled={disabled || sending}
-          onCreated={() => {
-            setDraft("");
-            setSelectedSkill(null);
-            setSelectedMentions([]);
-            for (const item of pendingAttachments) onRemoveAttachment(item);
-          }}
-        />
+        <Suspense
+          fallback={
+            <Button type="button" variant="ghost" size="sm" disabled>
+              <Trans>Compare with…</Trans>
+            </Button>
+          }
+        >
+          <CompareStart
+            botId={comparisonBotId}
+            text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
+            files={pendingAttachments.map((item) => item.file)}
+            disabled={disabled || sending}
+            onCreated={() => {
+              setDraft("");
+              setSelectedSkill(null);
+              setSelectedMentions([]);
+              for (const item of pendingAttachments) onRemoveAttachment(item);
+            }}
+          />
+        </Suspense>
       ) : null}
       <div className="relative h-8">
         <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">

@@ -71,6 +71,7 @@ export function CommandPalette({
   useEffect(() => {
     if (!open) return;
     function onKey(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.repeat) {
         return;
       }

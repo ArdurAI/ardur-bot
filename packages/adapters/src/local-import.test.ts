@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { MemoryDocumentStore } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { LocalImportScanner } from "@ardurbot/host-runtime/import/scanner";
 import type { JournalDocument } from "@ardurbot/memory";
 import { JournalDocumentStore, MemoryService } from "@ardurbot/memory";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalImportService } from "./local-import.js";
+import { McpOAuthBroker } from "./mcp-oauth.js";
+import { MarkdownFiles } from "./memory/markdown-files.js";
+import { ObsidianDocumentStore } from "./memory/obsidian-store.js";
+import { EncryptedSecretStore } from "./secrets.js";
 
 type Row = Record<string, unknown>;
 type Query = { where?: Row; data?: Row; create?: Row; update?: Row };
@@ -27,6 +32,8 @@ function matches(row: Row, where: Row = {}): boolean {
       const filter = expected as Row;
       if ("not" in filter) return actual !== filter.not;
       if ("lte" in filter) return (actual as Date) <= (filter.lte as Date);
+      if ("lt" in filter) return (actual as Date) < (filter.lt as Date);
+      if ("gte" in filter) return (actual as Date) >= (filter.gte as Date);
       if ("equals" in filter)
         return String(actual).toLowerCase() === String(filter.equals).toLowerCase();
       return matches(actual as Row, filter);
@@ -91,8 +98,8 @@ function table(defaults: Row = {}) {
     }),
   };
 }
-async function fixture() {
-  const home = await mkdtemp(path.join(tmpdir(), "import-service-"));
+async function fixture(options: { obsidian?: boolean } = {}) {
+  const home = await realpath(await mkdtemp(path.join(tmpdir(), "import-service-")));
   homes.push(home);
   const file = async (name: string, content: string) => {
     const target = path.join(home, name);
@@ -109,7 +116,7 @@ async function fixture() {
     '{"mcpServers":{"search":{"command":"node","args":["server.js"],"env":{"API_KEY":"fixture-secret"}}}}',
   );
   let journal: JournalDocument[] = [];
-  const store = new JournalDocumentStore(
+  let store: MemoryDocumentStore = new JournalDocumentStore(
     {
       transaction: async (_access, action) => {
         const next = structuredClone(journal);
@@ -120,6 +127,20 @@ async function fixture() {
     },
     "fixture",
   );
+  const restartVault = () => {
+    store = new ObsidianDocumentStore({
+      files: new MarkdownFiles(path.join(home, "vault")),
+      quarantine: new MarkdownFiles(path.join(home, "quarantine")),
+      spaceId: owner.spaceId,
+      ownerUserId: owner.userId,
+      exclusive: async (action) => action(),
+    });
+  };
+  if (options.obsidian) {
+    await mkdir(path.join(home, "vault"));
+    await mkdir(path.join(home, "quarantine"));
+    restartVault();
+  }
   const documents = new MemoryService({
     enqueue: vi.fn(async () => undefined),
     open: async (context, action) =>
@@ -133,12 +154,13 @@ async function fixture() {
     importedAt: null,
     lastRefreshAt: null,
   });
-  const records = table({ removedAt: null, documentId: null });
+  const records = table({ removedAt: null, documentId: null, config: owner });
   const skills = table();
   const servers = table({ revision: 1, secretId: null });
   const secrets = table();
   const oauthSessions = table();
   const assignments = table();
+  let failCommit = false;
   const prisma = {
     localImportConfig: config,
     localImportRecord: records,
@@ -155,7 +177,12 @@ async function fixture() {
       const before = tables.map((table) => structuredClone(table.rows));
       const oldJournal = structuredClone(journal);
       try {
-        return await action(prisma);
+        const result = await action(prisma);
+        if (failCommit) {
+          failCommit = false;
+          throw new Error("Fixture database commit failed.");
+        }
+        return result;
       } catch (error) {
         for (const [i, table] of tables.entries())
           table.rows.splice(0, table.rows.length, ...before[i]!);
@@ -197,11 +224,261 @@ async function fixture() {
     assignments,
     config,
     documents,
+    restartVault,
+    failNextCommit: () => {
+      failCommit = true;
+    },
     journal: () => journal,
   };
 }
 
 describe("local import lifecycle", () => {
+  const memoryContext = () => ({
+    ...owner,
+    operationId: "fixture",
+    traceId: "fixture",
+    signal: AbortSignal.timeout(60_000),
+  });
+  it.each([
+    ["receipt", "memories"],
+    ["commit", "memories"],
+    ["receipt", "skills"],
+    ["commit", "skills"],
+  ] as const)(
+    "recovers real Obsidian writes after a %s failure importing %s and restart",
+    async (failure, category) => {
+      const f = await fixture({ obsidian: true });
+      const manifest = await f.scan();
+      const action = {
+        action: "import",
+        scanId: manifest.scanId,
+        tool: "claude-code",
+        categories: [category],
+      } as const;
+      // The database rolls back; the real vault deliberately does not participate in it.
+      if (failure === "receipt")
+        f.records.upsert.mockRejectedValueOnce(new Error("Fixture receipt failed."));
+      else f.failNextCommit();
+      await expect(
+        f.service.run(owner, { ...action, categories: [...action.categories] }),
+      ).rejects.toThrow(/Fixture/);
+      expect(f.records.rows).toHaveLength(0);
+      const before = await f.documents.list({ scope: "user" }, memoryContext());
+      expect(before.items).toHaveLength(1);
+      f.restartVault();
+      const result = await f.service.run(owner, { ...action, categories: [...action.categories] });
+      expect(result.result).toMatchObject({ created: 1, conflicts: 0 });
+      const after = await f.documents.list({ scope: "user" }, memoryContext());
+      expect(after.items).toHaveLength(1);
+      expect(after.items.find((doc) => doc.id === before.items[0]!.id)?.revision).toBe(1);
+      expect(f.records.rows).toHaveLength(1);
+      expect(f.skills.rows).toHaveLength(category === "skills" ? 1 : 0);
+      expect(
+        (await f.service.run(owner, { ...action, categories: [...action.categories] })).result,
+      ).toMatchObject({ unchanged: 1, created: 0 });
+      expect(
+        (await f.service.run(owner, { action: "undo", tool: "claude-code" })).result,
+      ).toMatchObject({ removed: 1, conflicts: 0 });
+      expect((await f.documents.list({ scope: "user" }, memoryContext())).items).toHaveLength(0);
+    },
+  );
+  it("recovers a durable Obsidian update without creating another revision", async () => {
+    const f = await fixture({ obsidian: true });
+    await f.importAll();
+    const receipt = f.records.rows.find((row) => row.category === "memories")!;
+    await f.file(
+      ".claude/projects/example/memory/fact.md",
+      "Remember the revised offline command.",
+    );
+    const manifest = await f.scan();
+    f.records.upsert.mockRejectedValueOnce(new Error("Fixture receipt failed."));
+    const action = { action: "import", scanId: manifest.scanId, categories: ["memories"] } as const;
+    await expect(
+      f.service.run(owner, { ...action, categories: [...action.categories] }),
+    ).rejects.toThrow("Fixture receipt failed.");
+    expect(f.records.rows.find((row) => row.id === receipt.id)?.targetRevision).toBe(1);
+    f.restartVault();
+    expect(
+      (await f.service.run(owner, { ...action, categories: [...action.categories] })).result,
+    ).toMatchObject({ updated: 1, conflicts: 0 });
+    expect((await f.documents.read(String(receipt.documentId), memoryContext()))?.revision).toBe(2);
+    expect(
+      (await f.service.run(owner, { action: "undo", tool: "claude-code" })).result,
+    ).toMatchObject({ removed: 3, conflicts: 0 });
+  });
+  it("preserves an intervening manual edit to an unreceipted Obsidian note", async () => {
+    const f = await fixture({ obsidian: true });
+    const manifest = await f.scan();
+    const action = { action: "import", scanId: manifest.scanId, categories: ["memories"] } as const;
+    f.records.upsert.mockRejectedValueOnce(new Error("Fixture receipt failed."));
+    await expect(
+      f.service.run(owner, { ...action, categories: [...action.categories] }),
+    ).rejects.toThrow("Fixture receipt failed.");
+    const head = (await f.documents.list({ scope: "user" }, memoryContext())).items[0]!;
+    await f.documents.commit(
+      {
+        id: head.id,
+        scope: "user",
+        path: head.path,
+        content: "Keep this manual correction.",
+        expectedRevision: head.revision,
+      },
+      memoryContext(),
+    );
+    f.restartVault();
+    expect(
+      (await f.service.run(owner, { ...action, categories: [...action.categories] })).result,
+    ).toMatchObject({ conflicts: 1 });
+    expect((await f.documents.read(head.id, memoryContext()))?.content).toBe(
+      "Keep this manual correction.",
+    );
+    expect(f.records.rows).toHaveLength(0);
+  });
+  async function authorizeImportedServer(f: Awaited<ReturnType<typeof fixture>>) {
+    const server = f.servers.rows[0]!;
+    const secrets = new EncryptedSecretStore("fixture-oauth-encryption-material");
+    const stored = await secrets.put(
+      JSON.stringify({
+        oauth: {
+          authorizationRevision: server.revision,
+          redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+          codeVerifier: "fixture-verifier",
+          clientInformation: { client_id: "fixture-client" },
+          discoveryState: {
+            authorizationServerUrl: "https://auth.example.test",
+            resourceMetadata: {
+              resource: server.endpoint,
+              authorization_servers: ["https://auth.example.test"],
+            },
+            authorizationServerMetadata: {
+              issuer: "https://auth.example.test",
+              authorization_endpoint: "https://auth.example.test/authorize",
+              token_endpoint: "https://auth.example.test/token",
+              response_types_supported: ["code"],
+              grant_types_supported: ["authorization_code"],
+            },
+          },
+        },
+      }),
+      { ...owner, operationId: "fixture", traceId: "fixture", signal: AbortSignal.timeout(10_000) },
+    );
+    await f.oauthSessions.create({
+      data: {
+        ...owner,
+        id: stored.id,
+        serverId: server.id,
+        endpoint: server.endpoint,
+        redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+        oauthCiphertext: stored.ciphertext,
+      },
+    });
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      expect(new URL(request.url).pathname).toBe("/token");
+      expect(new URLSearchParams(await request.text()).get("code_verifier")).toBe(
+        "fixture-verifier",
+      );
+      return Response.json({ access_token: "fixture-access", token_type: "bearer" });
+    });
+    const broker = new McpOAuthBroker(f.prisma as unknown as PrismaClient, secrets, {
+      fetch,
+      resolveHostname: async () => [{ address: "203.0.113.10", family: 4 }],
+    });
+    await broker.complete({
+      ...owner,
+      sessionId: stored.id,
+      state: stored.id,
+      code: "fixture-code",
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    return broker;
+  }
+  it.each(["update", "undo", "disconnect"])(
+    "keeps imported receipts current after real OAuth completion and %s",
+    async (next) => {
+      const f = await fixture();
+      await f.file(
+        ".claude/settings.json",
+        JSON.stringify({ mcpServers: { remote: { url: "https://mcp.example.test/mcp" } } }),
+      );
+      await f.importAll();
+      const broker = await authorizeImportedServer(f);
+      const server = f.servers.rows[0]!;
+      expect(server.revision).toBe(2);
+      expect(f.records.rows.find((row) => row.targetId === server.id)?.targetRevision).toBe(2);
+      expect(server.secretId).toEqual(expect.any(String));
+      expect(f.secrets.rows).toHaveLength(1);
+      if (next === "update") {
+        await f.file(
+          ".claude/settings.json",
+          JSON.stringify({ mcpServers: { remote: { url: "https://mcp.example.test/changed" } } }),
+        );
+        expect((await f.importAll()).result).toMatchObject({ updated: 1, conflicts: 0 });
+        expect(f.servers.rows[0]).toMatchObject({
+          endpoint: "https://mcp.example.test/changed",
+          secretId: null,
+        });
+      } else {
+        if (next === "disconnect") {
+          await broker.disconnect({ ...owner, serverId: String(server.id) });
+          expect(f.records.rows.find((row) => row.targetId === server.id)?.targetRevision).toBe(3);
+        }
+        expect(
+          (await f.service.run(owner, { action: "undo", tool: "claude-code" })).result,
+        ).toMatchObject({ removed: 3, conflicts: 0 });
+        expect(f.servers.rows).toHaveLength(0);
+      }
+      expect(f.secrets.rows).toHaveLength(0);
+    },
+  );
+  it("does not forgive a manual server definition edit when OAuth completes", async () => {
+    const f = await fixture();
+    await f.file(
+      ".claude/settings.json",
+      JSON.stringify({ mcpServers: { remote: { url: "https://mcp.example.test/mcp" } } }),
+    );
+    await f.importAll();
+    f.servers.rows[0]!.revision = 2;
+    f.servers.rows[0]!.description = "Manual definition change";
+    await authorizeImportedServer(f);
+    expect(f.records.rows.find((row) => row.category === "servers")?.targetRevision).toBe(1);
+    expect(
+      (await f.service.run(owner, { action: "undo", tool: "claude-code" })).result,
+    ).toMatchObject({ removed: 2, conflicts: 1 });
+    expect(f.servers.rows[0]).toMatchObject({ description: "Manual definition change" });
+  });
+  it("previews and imports bearer environment bindings from the canonical sanitized server", async () => {
+    const f = await fixture();
+    await f.file(
+      ".codex/config.toml",
+      '[mcp_servers.remote]\nurl = "https://example.test/mcp"\nbearer_token_env_var = "ACCESS_TOKEN"\n[mcp_servers.remote.env]\nACCESS_TOKEN = "discard-source-credential"\n[mcp_servers.remote.http_headers]\nAuthorization = "discard-header-credential"\n',
+    );
+    const manifest = await f.scan();
+    const item = manifest.items.find(
+      (item) => item.tool === "codex" && item.category === "servers",
+    )!;
+    const read = f.scanner.read(manifest.scanId, item.id);
+    expect(read.content).toBe(JSON.stringify(read.server, null, 2));
+    expect(JSON.stringify(read)).not.toMatch(/discard-source-credential|discard-header-credential/);
+    expect(read.server?.headerEnv).toEqual({
+      Authorization: { name: "ACCESS_TOKEN", bearer: true },
+    });
+    expect(
+      (await f.service.run(owner, { action: "preview", scanId: manifest.scanId, itemId: item.id }))
+        .preview,
+    ).toEqual(read);
+    const result = await f.service.run(owner, {
+      action: "import",
+      scanId: manifest.scanId,
+      tool: "codex",
+      categories: ["servers"],
+    });
+    expect(result.result).toMatchObject({ created: 1, conflicts: 0 });
+    expect(f.servers.rows[0]).toMatchObject({
+      env: { ACCESS_TOKEN: true },
+      headers: { Authorization: { name: "ACCESS_TOKEN", bearer: true } },
+    });
+  });
   it("revokes credentials, pending OAuth and prior tool approval when a server definition changes", async () => {
     const f = await fixture();
     await f.importAll();

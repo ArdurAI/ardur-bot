@@ -5,6 +5,7 @@ import { IntegrationSetup } from "../components/integrations/IntegrationSetup";
 import { desktopBridge } from "../lib/desktop";
 import { rpc } from "../lib/rpc";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
+import { OpenToSetting } from "./shell/OpenToSetting";
 
 export function LocalSettingsPage() {
   const [section, setSection] = useState<"models" | "integrations" | null>(null);
@@ -32,6 +33,7 @@ export function LocalSettingsPage() {
         <h1 className="text-2xl font-medium">
           <Trans>Local Server Settings</Trans>
         </h1>
+        <OpenToSetting />
         {!hasLocalSettings ? (
           <p role="alert">
             <Trans>Open local settings from the desktop app on the server’s computer.</Trans>

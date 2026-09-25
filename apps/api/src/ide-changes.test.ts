@@ -101,6 +101,7 @@ describe("IDE change history", () => {
         expect.objectContaining({ kind: "fake" }),
         undefined,
         expect.objectContaining({ botId: "bot" }),
+        { activate: false },
       );
     },
   );
@@ -118,6 +119,17 @@ describe("IDE change history", () => {
       }),
     );
     await expect(f.changes(actor, { ...input, until: "2026-01-04T00:00:00Z" })).rejects.toThrow();
+  });
+  it("returns stored file snapshots when the provider cannot resolve its home", async () => {
+    const f = fixture();
+    f.findMany.mockResolvedValue([
+      event("stored", "saved.txt"),
+      command("command", "/home/ardurbot"),
+    ]);
+    f.resolveCommandCwd.mockRejectedValue(new Error("Computer is unavailable"));
+    await expect(f.changes(actor, input)).resolves.toMatchObject({
+      items: [{ id: "stored", path: "saved.txt" }],
+    });
   });
   it("maps host absolute paths and excludes neighbors and relative paths with unknown roots", async () => {
     const f = fixture("host");

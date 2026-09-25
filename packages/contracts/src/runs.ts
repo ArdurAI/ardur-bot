@@ -11,12 +11,18 @@ export const RunActivityRowSchema = z.object({
   groupId: Id.nullable(),
   groupName: z.string().nullable(),
   threadId: Id,
+  approvalTarget: z
+    .object({ botId: Id, threadId: Id, groupId: Id.nullable() })
+    .nullable()
+    .optional(),
   externalThread: z.boolean().optional(),
   status: RunStatus,
   trigger: RunTriggerSchema,
   notificationsEnabled: z.boolean(),
   promptSnippet: z.string(),
   updatedAt: z.string(),
+  startedAt: z.string().nullable().optional(),
+  createdAt: z.string().optional(),
 });
 export type RunActivityRow = z.infer<typeof RunActivityRowSchema>;
 

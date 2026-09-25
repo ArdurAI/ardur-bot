@@ -45,7 +45,7 @@ const hasUpdates = (context: SettingsContext) =>
 /** Replace one entry when a page lands; no shell switch or eager page import is needed. */
 // biome-ignore format: One registration per line keeps independent settings streams easy to merge.
 export const settingsSections: SettingsRegistration[] = [
-  { id: "general", searchLabels: [msg`Theme`, msg`Chat font`, msg`Motion`, msg`Notifications`, msg`Trusted folders`], group: "Settings", label: msg`General`, icon: Settings, component: lazy(() => import("./settings/GeneralSettings")), available: always },
+  { id: "general", searchLabels: [msg`Open to`, msg`Theme`, msg`Chat font`, msg`Motion`, msg`Notifications`, msg`Trusted folders`], group: "Settings", label: msg`General`, icon: Settings, component: lazy(() => import("./settings/GeneralSettings")), available: always },
   { id: "account", searchLabels: [msg`Password`, msg`Full name`, msg`What should your bots call you?`, msg`Avatar`, msg`Language`, msg`Email`, msg`Local devices`, msg`Active sessions`, msg`Advanced`], group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./account/AccountSettings")), available: always },
   { id: "privacy", searchLabels: [msg`Export data`, msg`Export memory`, msg`Uploaded files`, msg`Memory preferences`, msg`Learning consent`], group: "Settings", label: msg`Privacy`, icon: Shield, component: lazy(() => import("./settings/PrivacySettings")), available: always },
   { id: "capabilities", group: "Settings", label: msg`Capabilities`, icon: Sparkles, component: lazy(() => import("./capabilities/CapabilitiesSettings")), available: always },

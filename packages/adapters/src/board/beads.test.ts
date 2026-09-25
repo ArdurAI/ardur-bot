@@ -3,6 +3,7 @@ import { BoardPatchSchema } from "@ardurbot/contracts/board";
 import { afterEach, describe, expect, it } from "vitest";
 import { BeadsBoardProvider, parseBeadsItem } from "./beads.js";
 import { boardFixture } from "./test-fixture.js";
+import { boardToolSchemas } from "./tools.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -14,6 +15,16 @@ async function fixture() {
   return f;
 }
 describe("Beads provider using a recorded executable", () => {
+  it("rejects assignee-filtered claiming before invoking Beads and excludes it from the tool contract", async () => {
+    const f = await fixture();
+    const filter = { label: "backend", assignee: "bot:builder" };
+    await expect(f.provider.claim(filter, "bot:builder")).rejects.toMatchObject({
+      issues: [expect.objectContaining({ code: "unrecognized_keys", keys: ["assignee"] })],
+    });
+    expect(f.requests).toHaveLength(0);
+    expect(boardToolSchemas.board_claim.safeParse({ filter }).success).toBe(false);
+    expect(boardToolSchemas.board_ready.safeParse({ filter }).success).toBe(true);
+  });
   it("parses ready, blocked, list, search and both dependency shapes", async () => {
     const f = await fixture();
     expect((await f.provider.ready())[0]).toMatchObject({

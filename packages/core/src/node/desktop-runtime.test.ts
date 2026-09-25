@@ -30,11 +30,11 @@ const env = {
   portStart: 6100,
 };
 
-function fixture() {
+function fixture(timeout = 5000) {
   const root = mkdtempSync(path.join(tmpdir(), "desktop-runtime-test-"));
   roots.push(root);
-  const run = (script: string, failLifecycle = false) =>
-    spawnSync(
+  const run = (script: string, failLifecycle = false) => {
+    const result = spawnSync(
       "bash",
       [
         "-eu",
@@ -48,8 +48,11 @@ function fixture() {
             .replaceAll("/tmp/ardurbot", root),
         ].join("\n"),
       ],
-      { encoding: "utf8", timeout: 5000 },
+      { encoding: "utf8", timeout },
     );
+    expect(result.error, result.stderr).toBeUndefined();
+    return result;
+  };
   const ensure = (bot: string, lease = "run:1", fail = false) =>
     run(managedDesktopCommand(bot, lease, env, `view-${bot}`), fail);
   const release = (bot: string, lease = "run:1", fail = false) =>
@@ -59,7 +62,8 @@ function fixture() {
 
 describe("shared Linux desktop lifecycle", () => {
   it("allocates live slots past 1000 bots, keeps assignments across callers, and rejects stale leases", () => {
-    const f = fixture();
+    // This case scans real files and needs room for filesystem contention in the full suite.
+    const f = fixture(15_000);
     expect(f.ensure("a").stdout).toContain("ARDURBOT_DESKTOP=0:view-a");
     expect(f.ensure("b").stdout).toContain("ARDURBOT_DESKTOP=1:view-b");
     expect(f.ensure("a", "new:2").stdout).toContain("ARDURBOT_DESKTOP=0:view-a");
@@ -72,7 +76,7 @@ describe("shared Linux desktop lifecycle", () => {
     expect(f.release("a", "new:2").status).toBe(0);
     expect(f.ensure("c").stdout).toContain("ARDURBOT_DESKTOP=0:view-c");
     expect(f.ensure("b").stdout).toContain("ARDURBOT_DESKTOP=1:view-b");
-  });
+  }, 60_000);
 
   it("reserves failed startup and teardown slots until a successful retry", () => {
     const f = fixture();

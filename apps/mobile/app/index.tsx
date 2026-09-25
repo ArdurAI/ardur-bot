@@ -449,6 +449,9 @@ export default function Home() {
           <Text style={styles.profileInitials}>{initials}</Text>
         </CircleButton>
         <View style={styles.headerActions}>
+          <CircleButton accessibilityLabel={t("Overview")} onPress={() => router.push("/overview")}>
+            <NativeSymbol ios="square.grid.2x2" android="grid-outline" size={17} />
+          </CircleButton>
           <CircleButton accessibilityLabel={t("Board")} onPress={() => router.push("/board")}>
             <NativeSymbol ios="rectangle.3.group" android="list-outline" size={17} />
           </CircleButton>

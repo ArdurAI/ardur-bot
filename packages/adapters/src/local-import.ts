@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { MemoryConflictError } from "@ardurbot/adapter-kit";
 import type { Actor } from "@ardurbot/contracts";
 import type {
   ImportedProvenance,
@@ -63,7 +64,9 @@ export async function assertLocalImportOwner(
 ) {
   const [deployment, member] = await Promise.all([
     prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
-    prisma.spaceMember.findUnique({ where: { spaceId_userId: owner } }),
+    prisma.spaceMember.findUnique({
+      where: { spaceId_userId: { spaceId: owner.spaceId, userId: owner.userId } },
+    }),
   ]);
   if (deployment?.ownerUserId !== owner.userId || member?.role !== "owner")
     throw new IsolationError();
@@ -352,9 +355,8 @@ export class LocalImportService {
               if (
                 prior &&
                 (!head ||
-                  head.revision !== prior.targetRevision ||
-                  (!prior.removedAt && head.deletedAt) ||
-                  (prior.removedAt && !head.deletedAt))
+                  (head.revision === prior.targetRevision &&
+                    ((!prior.removedAt && head.deletedAt) || (prior.removedAt && !head.deletedAt))))
               )
                 return "conflicts" as const;
               // A changed source that shared a document splits off instead of changing another source.
@@ -368,6 +370,7 @@ export class LocalImportService {
                     id: { not: prior.id },
                   },
                 }));
+              if (shared && head?.revision !== prior?.targetRevision) return "conflicts" as const;
               let content = value.content;
               let skillName = "";
               let description = "";
@@ -401,7 +404,7 @@ export class LocalImportService {
                 }
                 content = buildSkillMd({ ...parsed, name: skillName });
               }
-              const doc = await documents.commit(
+              const doc = await this.commitImportedDocument(
                 {
                   ...(!shared && head ? { id: head.id } : {}),
                   scope: "user",
@@ -410,10 +413,11 @@ export class LocalImportService {
                       ? head.path
                       : `${item.category === "skills" ? "skills" : `imported/${item.category}`}/${item.tool}-${item.sourcePathHash}${shared ? `-${item.contentHash}` : ""}.md`,
                   content,
-                  expectedRevision: !shared && head ? head.revision : 0,
+                  expectedRevision: !shared && head ? prior!.targetRevision : 0,
                 },
                 context,
               );
+              if (!doc) return "conflicts" as const;
               scheduled = doc;
               documentId = doc.id;
               targetRevision = doc.revision;
@@ -467,6 +471,49 @@ export class LocalImportService {
     if (scheduled) await documents.schedule(scheduled, contextFor(owner));
     return result;
   }
+
+  private async commitImportedDocument(
+    input: Parameters<MemoryService["commit"]>[0],
+    context: MemoryOperationContext,
+  ) {
+    const documents = this.deps.documents;
+    try {
+      return await documents.commit(input, context);
+    } catch (error) {
+      if (!(error instanceof MemoryConflictError)) throw error;
+      // File-backed stores commit before the SQL receipt. Reuse that exact write on retry,
+      // including after a restart, without adopting intervening edits or another source.
+      let head = input.id ? await documents.read(input.id, context) : null;
+      if (!input.id) {
+        let cursor: string | undefined;
+        do {
+          const page = await documents.list(
+            { scope: "user", includeDeleted: true, cursor, limit: 100 },
+            context,
+          );
+          head = page.items.find((doc) => doc.path === input.path) ?? null;
+          cursor = page.nextCursor ?? undefined;
+        } while (!head && cursor);
+      }
+      const source = context.imported;
+      return head &&
+        source &&
+        !head.deletedAt &&
+        head.revision === input.expectedRevision + 1 &&
+        head.path === input.path &&
+        head.content === input.content &&
+        head.scopeKey.kind === "user" &&
+        head.scopeKey.spaceId === context.spaceId &&
+        head.scopeKey.userId === context.userId &&
+        head.imported?.tool === source.tool &&
+        head.imported.sourcePathHash === source.sourcePathHash &&
+        head.imported.contentHash === source.contentHash &&
+        head.imported.kind === source.kind
+        ? head
+        : null;
+    }
+  }
+
   private async undo(owner: ImportOwner, configId: string, tool: LocalImportTool) {
     const result = counts();
     const rows = await this.deps.prisma.localImportRecord.findMany({

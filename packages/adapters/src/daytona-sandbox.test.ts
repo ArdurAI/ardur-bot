@@ -1,5 +1,11 @@
+import type { ComputerRef } from "@ardurbot/adapter-kit";
+import { CommandEventPayloadSchema } from "@ardurbot/contracts";
+import type { AppendEventInput, PrismaClient } from "@ardurbot/db";
 import type { Sandbox } from "@daytona/sdk";
+import { SandboxState } from "@daytona/sdk";
 import { describe, expect, it, vi } from "vitest";
+import { createCommandRecording } from "./command-recording.js";
+import { loadRunCommandReplay } from "./command-replay.js";
 import { DaytonaSandboxProvider, type DaytonaSandboxSdk } from "./daytona-sandbox.js";
 import { desktopCommandResponder } from "./linux-desktop.test-support.js";
 
@@ -12,6 +18,67 @@ const context = {
 };
 
 describe("DaytonaSandboxProvider", () => {
+  it("resolves history metadata without starting a stopped computer", async () => {
+    const fixture = daytonaFixture({ state: "stopped" });
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    await expect(
+      provider.resolveCommandCwd(
+        { id: "daytona-box", botId: "bot", kind: "daytona", providerRef: "daytona-box" },
+        undefined,
+        context,
+        { activate: false },
+      ),
+    ).resolves.toBeNull();
+    expect(fixture.start).not.toHaveBeenCalled();
+    expect(fixture.sandbox.getUserHomeDir).not.toHaveBeenCalled();
+    expect(fixture.executeCommand).not.toHaveBeenCalled();
+  });
+  it("records the resolved cwd before executing on a stopped computer", async () => {
+    const fixture = daytonaCommandFixture("stopped");
+    await expect(fixture.invoke()).resolves.toMatchObject({ stdout: "hello\n", code: 0 });
+    expect(fixture.events[0]).toMatchObject({
+      type: "command.intent",
+      payload: {
+        block: { cwd: "/home/daytona/ardurbot-home/project", rerunDisabledReason: null },
+        replay: { request: { command: "echo hello", cwd: "project" } },
+      },
+    });
+    expect(fixture.start).toHaveBeenCalledWith(120);
+    expect(fixture.executeCommand).toHaveBeenCalledWith(
+      "'echo' 'hello'",
+      "/home/daytona/ardurbot-home/project",
+      undefined,
+      300,
+    );
+  });
+  it("resolves a recorded command for replay after its computer stops", async () => {
+    const fixture = daytonaCommandFixture("started");
+    await fixture.invoke();
+    await fixture.provider.stop(fixture.computer, context);
+    fixture.sandbox.state = SandboxState.STOPPED;
+
+    const prisma = {
+      event: { findFirst: vi.fn(async () => fixture.events[0]) },
+      run: { findFirst: vi.fn(async () => ({ id: "original-run" })) },
+    } as unknown as PrismaClient;
+    await expect(
+      loadRunCommandReplay({
+        prisma,
+        run: {
+          commandReplayId: CommandEventPayloadSchema.parse(fixture.events[0]!.payload).block
+            .commandId,
+          userId: context.userId,
+          spaceId: context.spaceId,
+          botId: "bot",
+        },
+        storedComputer: fixture.storedComputer,
+        computer: fixture.computer,
+        sandbox: fixture.provider,
+        context,
+      }),
+    ).resolves.toMatchObject({ request: { command: "echo hello", cwd: "project" } });
+    expect(fixture.start).toHaveBeenCalledWith(120);
+  });
   it("preserves desktop command output in failures", async () => {
     const fixture = daytonaFixture();
     const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
@@ -322,6 +389,50 @@ describe("DaytonaSandboxProvider", () => {
     expect(provider.describe().capabilities.multiScreen).toBe(true);
   });
 });
+
+function daytonaCommandFixture(state: string) {
+  const fixture = daytonaFixture({ state });
+  const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+  const computer: ComputerRef = {
+    id: "daytona-box",
+    botId: "bot",
+    kind: "daytona",
+    providerRef: "daytona-box",
+  };
+  const storedComputer = {
+    id: "computer",
+    scope: "dedicated",
+    homeKey: "home",
+    kind: "daytona",
+    providerRef: "daytona-box",
+  };
+  const events: AppendEventInput[] = [];
+  const recording = createCommandRecording({
+    events: {
+      append: vi.fn(async (event: AppendEventInput) => {
+        events.push(structuredClone(event));
+        return {
+          ...event,
+          id: `event-${events.length}`,
+          seq: events.length,
+          createdAt: new Date().toISOString(),
+        };
+      }),
+    },
+    sandbox: provider,
+    computer,
+    storedComputer,
+    context: { ...context, botId: "bot", runId: "original-run" },
+    threadId: "thread",
+    attemptId: "attempt",
+    secrets: [],
+  });
+  const invoke = () =>
+    recording.invoke("shell", { command: "echo hello", cwd: "project" }, "execution", () =>
+      recording.execute("execution", ["echo", "hello"], "project", {}),
+    );
+  return { ...fixture, provider, computer, storedComputer, events, invoke };
+}
 
 function daytonaFixture(options: { id?: string; state?: string; prepareFails?: boolean } = {}) {
   const files = new Map<string, Buffer>();

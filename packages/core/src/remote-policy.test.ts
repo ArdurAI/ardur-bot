@@ -16,6 +16,37 @@ const authority = {
 };
 const now = 1_000_000;
 describe("remote execution ceiling", () => {
+  it.each(["board_ready", "board_show"])("allows %s with ordinary authority", (tool) => {
+    expect(classifyRemoteTool(tool)).toBe("ordinary");
+    expect(
+      checkRemoteTool({
+        tool,
+        authority: { ...authority, device: ["dispatch", "ordinary"] },
+        revoked: false,
+        lastPresenceAt: null,
+        now,
+      }),
+    ).toEqual({ allowed: true });
+  });
+  it.each([
+    "board_create",
+    "board_update",
+    "board_claim",
+    "board_close",
+    "board_comment",
+    "board_link",
+  ])("keeps %s outside ordinary authority", (tool) => {
+    expect(classifyRemoteTool(tool)).toBe("consequential");
+    expect(
+      checkRemoteTool({
+        tool,
+        authority: { ...authority, device: ["dispatch", "ordinary"] },
+        revoked: false,
+        lastPresenceAt: now,
+        now,
+      }).allowed,
+    ).toBe(false);
+  });
   it.each(["home", "space", "bot", "user", "device"] as const)(
     "intersects the %s policy even when every other policy allows",
     (layer) => {
