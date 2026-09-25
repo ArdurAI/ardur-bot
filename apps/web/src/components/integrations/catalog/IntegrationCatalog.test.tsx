@@ -464,7 +464,7 @@ describe("Settings integration catalog", () => {
     expect(resultConnect("Figma")).toBeDefined();
   });
 
-  it("routes a normalized built-in URL through its catalog connection", async () => {
+  it("keeps a directory query on a built-in path as a custom server", async () => {
     api.list.mockResolvedValue({
       catalog: [
         {
@@ -493,16 +493,17 @@ describe("Settings integration catalog", () => {
         },
       ],
     });
+    createdServers();
     await mount();
     await click(button("Find apps"));
     await fill("Search apps", "notion");
     await click(button("Search integrations.sh"));
-    expect(container.textContent).toContain("Notion");
-    await click(resultConnect("Notion")!);
-    expect(api.connect).toHaveBeenCalledWith(
-      expect.objectContaining({ catalogId: "notion", authKind: "oauth" }),
+    expect(resultConnect("Notion")).toBeUndefined();
+    await click(resultConnect("Community Notion listing")!);
+    expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: "https://mcp.notion.com/mcp/?source=directory" }),
     );
-    expect(api.create).not.toHaveBeenCalled();
+    expect(api.connect).not.toHaveBeenCalled();
   });
 
   it("asks for a bearer value and discovers without starting OAuth", async () => {
@@ -912,6 +913,229 @@ describe("Settings integration catalog", () => {
       }),
     );
   });
+
+  it("keeps a custom server that is waiting for sign-in or was cancelled", async () => {
+    const polls: Array<() => void> = [];
+    const setInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, ms?: number) => {
+      if (ms !== 5000) return setInterval(handler, ms);
+      polls.push(handler);
+      return 0;
+    }) as typeof window.setInterval);
+    const pending = customServer("pending", "Pending server", "not-connected");
+    const declined = customServer("declined", "Declined server", "cancelled");
+    api.servers.mockResolvedValue([pending, declined]);
+    await mount();
+    for (const name of ["Pending server", "Declined server"]) {
+      const row = serverRow(name);
+      expect(row?.textContent).toContain("Needs sign-in");
+      expect(row?.textContent).toContain("Reconnect");
+      expect(row?.textContent).toContain("Manage");
+      expect(row?.textContent).toContain("Delete");
+    }
+    await act(async () => polls[0]!());
+    expect(serverRow("Pending server")).toBeDefined();
+    expect(serverRow("Declined server")).toBeDefined();
+    await click(button("Delete", serverRow("Pending server")!));
+    expect(api.remove).not.toHaveBeenCalled();
+    await click(button("Confirm delete", serverRow("Pending server")!));
+    expect(api.remove).toHaveBeenCalledExactlyOnceWith({ id: "pending" });
+  });
+
+  it("matches a built-in app only when the query is empty or the catalog query", async () => {
+    const atlassian = "https://mcp.atlassian.com/v2/mcp?tools=all";
+    const aws = "https://aws-mcp.us-east-1.api.aws/mcp?oauth=initialize";
+    api.list.mockResolvedValue({
+      catalog: [
+        remoteApp("atlassian", "Atlassian", atlassian),
+        remoteApp("aws", "AWS", aws),
+        remoteApp("boards", "Boards", "https://boards.example.test/mcp?b=1&a=2"),
+      ],
+      connections: [],
+    });
+    api.connect.mockResolvedValue({
+      connection: { ...connected, state: "connected" },
+      authorizationUrl: null,
+      sessionId: null,
+    });
+    createdServers();
+    await openResults([
+      listing("Jira tools", "https://mcp.atlassian.com/v2/mcp?tools=jira"),
+      listing("All tools", atlassian),
+      listing("AWS other", "https://aws-mcp.us-east-1.api.aws/mcp?oauth=start"),
+      listing("AWS init", aws),
+    ]);
+    await click(resultConnect("Jira tools")!);
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ endpoint: "https://mcp.atlassian.com/v2/mcp?tools=jira" }),
+    );
+    expect(api.connect).not.toHaveBeenCalled();
+    await click(resultConnect("Atlassian")!);
+    expect(api.connect).toHaveBeenCalledWith(expect.objectContaining({ catalogId: "atlassian" }));
+    await click(resultConnect("AWS other")!);
+    expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: "https://aws-mcp.us-east-1.api.aws/mcp?oauth=start",
+      }),
+    );
+    await click(resultConnect("AWS")!);
+    expect(api.connect).toHaveBeenCalledWith(expect.objectContaining({ catalogId: "aws" }));
+
+    const details = container.querySelector("details")!;
+    await fill("Server URL", "https://mcp.atlassian.com/v2/mcp");
+    expect(details.textContent).toContain("Atlassian");
+    await fill("Server URL", "https://MCP.atlassian.com/v2/mcp/?tools=all");
+    expect(details.textContent).toContain("Atlassian");
+    await fill("Server URL", "https://aws-mcp.us-east-1.api.aws/mcp");
+    expect(details.textContent).toContain("AWS");
+    await fill("Server URL", "https://boards.example.test/mcp?a=2&b=1");
+    expect(details.textContent).toContain("Boards");
+    await fill("Server URL", "https://mcp.atlassian.com/v2/mcp?tools=jira");
+    expect(details.textContent).not.toContain("Atlassian");
+    await fill("Server URL", "https://boards.example.test/mcp?a=2&b=3");
+    expect(details.textContent).not.toContain("Boards");
+    const creates = api.create.mock.calls.length;
+    await click(button("Connect", details));
+    expect(api.create.mock.calls.length).toBe(creates + 1);
+    expect(api.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ endpoint: "https://boards.example.test/mcp?a=2&b=3" }),
+    );
+  });
+
+  it("lists a custom server whose query differs from the built-in app", async () => {
+    api.list.mockResolvedValue({
+      catalog: [
+        remoteApp("atlassian", "Atlassian", "https://mcp.atlassian.com/v2/mcp?tools=all"),
+        remoteApp("aws", "AWS", "https://aws-mcp.us-east-1.api.aws/mcp?oauth=initialize"),
+      ],
+      connections: [],
+    });
+    api.servers.mockResolvedValue([
+      customServer("jira", "Jira only", "connected", "https://mcp.atlassian.com/v2/mcp?tools=jira"),
+      customServer(
+        "all",
+        "All tools custom",
+        "connected",
+        "https://mcp.atlassian.com/v2/mcp?tools=all",
+      ),
+      customServer("bare", "Bare path", "connected", "https://mcp.atlassian.com/v2/mcp"),
+      customServer(
+        "aws-other",
+        "AWS other account",
+        "connected",
+        "https://aws-mcp.us-east-1.api.aws/mcp?oauth=start",
+      ),
+    ]);
+    await mount();
+    expect(container.textContent).toContain("Jira only");
+    expect(container.textContent).toContain("AWS other account");
+    expect(container.textContent).not.toContain("All tools custom");
+    expect(container.textContent).not.toContain("Bare path");
+  });
+
+  it("reports a rejected token on a mixed or bearer listing and keeps the server", async () => {
+    const added = createdServers();
+    api.oauth.mockImplementationOnce(async (serverId: string) => {
+      const server = added.find((entry) => entry.id === serverId)!;
+      server.connectionState = "needs-sign-in";
+      server.lastError = "Needs sign-in (oauth_unavailable).";
+      throw new Error("fake-provider-response");
+    });
+    api.tools.mockImplementation(async ({ serverId }: { serverId: string }) => {
+      const server = added.find((entry) => entry.id === serverId)!;
+      server.connectionState = "needs-sign-in";
+      server.lastError = "Needs sign-in (invalid_token).";
+      throw new Error("rejected");
+    });
+    await openResults([
+      listing("Either", "https://either.example.test/mcp", {
+        type: "mixed",
+        headerName: null,
+        note: null,
+      }),
+      listing("Bearer", "https://bearer.example.test/mcp", bearer),
+    ]);
+    await click(resultConnect("Either")!);
+    expect(container.textContent).not.toContain(
+      "That token was not accepted. Check it and try again.",
+    );
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(api.remove).toHaveBeenCalledWith({ id: "created-1" });
+    await fill("Credential", "synthetic-token");
+    await click(resultConnect("Either")!);
+    const kept = added.find((entry) => entry.id === "created-2");
+    expect(kept).toMatchObject({
+      connectionState: "needs-sign-in",
+      lastError: "Needs sign-in (invalid_token).",
+    });
+    expect(api.remove).not.toHaveBeenCalledWith({ id: "created-2" });
+    expect(api.update).not.toHaveBeenCalled();
+    const either = resultBlock("Either");
+    expect(either?.textContent).toContain("That token was not accepted. Check it and try again.");
+    expect(container.textContent).not.toContain("Could not connect or load integrations.");
+    expect(either?.querySelector<HTMLInputElement>('[aria-label="Credential"]')?.value).toBe(
+      "synthetic-token",
+    );
+
+    await click(resultConnect("Bearer")!);
+    await fill("Credential", "synthetic-bearer");
+    await click(resultConnect("Bearer")!);
+    expect(added.find((entry) => entry.id === "created-3")).toMatchObject({
+      connectionState: "needs-sign-in",
+      lastError: "Needs sign-in (invalid_token).",
+    });
+    expect(api.remove).not.toHaveBeenCalledWith({ id: "created-3" });
+    expect(resultBlock("Bearer")?.textContent).toContain(
+      "That token was not accepted. Check it and try again.",
+    );
+  });
+
+  it("clears a load error after a poll or sign-in broadcast succeeds", async () => {
+    const polls: Array<() => void> = [];
+    const setInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, ms?: number) => {
+      if (ms !== 5000) return setInterval(handler, ms);
+      polls.push(handler);
+      return 0;
+    }) as typeof window.setInterval);
+    api.servers.mockRejectedValueOnce(new Error("offline"));
+    await mount();
+    expect(container.textContent).toContain("Could not connect or load integrations.");
+    api.servers.mockResolvedValue([
+      customServer(
+        "recovered",
+        "Recovered server",
+        "connected",
+        "https://recovered.example.test/mcp",
+      ),
+    ]);
+    await act(async () => polls[0]!());
+    expect(container.textContent).toContain("Recovered server");
+    expect(container.textContent).not.toContain("Could not connect or load integrations.");
+
+    api.servers.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => {
+      broadcast.onmessage?.(new MessageEvent("message"));
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Could not connect or load integrations."),
+    );
+    api.servers.mockResolvedValue([
+      customServer(
+        "recovered",
+        "Recovered server",
+        "connected",
+        "https://recovered.example.test/mcp",
+      ),
+    ]);
+    await act(async () => {
+      broadcast.onmessage?.(new MessageEvent("message"));
+    });
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("Recovered server");
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+    });
+  });
 });
 
 const publicResult = {
@@ -1000,6 +1224,34 @@ function resultConnect(name: string) {
   return [...(label?.parentElement?.querySelectorAll("button") ?? [])].find(
     (node) => node.textContent === "Connect",
   );
+}
+
+function resultBlock(name: string) {
+  const label = [...container.querySelectorAll("span")].find((node) => node.textContent === name);
+  return label?.parentElement?.parentElement ?? undefined;
+}
+
+function serverRow(name: string) {
+  return [...container.querySelectorAll("tbody tr")].find((entry) =>
+    entry.textContent?.includes(name),
+  );
+}
+
+function remoteApp(id: string, name: string, endpoint: string): IntegrationDescriptor {
+  return { ...catalog[0]!, id, name, vendor: id, endpoint };
+}
+
+function customServer(id: string, name: string, connectionState: string, endpoint?: string) {
+  return {
+    id,
+    name,
+    endpoint: endpoint ?? `https://${id}.example.test/mcp`,
+    transport: "streamable_http",
+    enabled: true,
+    oauthStatus: "none",
+    connectionState,
+    catalogId: null,
+  };
 }
 
 async function fill(label: string, value: string) {

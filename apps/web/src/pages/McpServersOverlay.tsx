@@ -37,6 +37,7 @@ import { McpDiagnostics } from "./customize/McpDiagnostics";
 import { ImportedServerCredentials } from "./import/ImportedServerCredentials";
 
 function oauthStatusText(server: McpServer): string | null {
+  if (server.connectionState === "discovery-failed") return null;
   if (server.oauthStatus === "connected") return t`OAuth connected`;
   if (server.oauthStatus === "reconnect") return t`OAuth expired`;
   return server.hasSecret ? t`credential saved` : null;
@@ -85,7 +86,7 @@ export function McpServersOverlay({
     return () => onBusyChange?.(false);
   }, [saving, defaultsBusy, editing, oauthPending, onBusyChange]);
 
-  async function refresh() {
+  async function refresh(): Promise<McpServer[]> {
     const [nextServers, nextBots, assignments] = await Promise.all([
       rpc.mcp.servers.list(),
       rpc.bots.list(),
@@ -102,6 +103,7 @@ export function McpServersOverlay({
         ]),
       ),
     );
+    return nextServers;
   }
 
   useEffect(() => {
@@ -213,8 +215,15 @@ export function McpServersOverlay({
     try {
       const result = await connectMcpOauth(server.id);
       if (result !== "cancelled") setOauthPending(null);
-      await refresh();
+      const listed = await refresh();
       if (result === "connected") return;
+      if (result === "discovery-failed") {
+        setError(
+          listed.find((item) => item.id === server.id)?.lastError?.trim() ||
+            t`Could not load this account’s tools.`,
+        );
+        return;
+      }
       if (result === "already_connected") {
         setError(t`This server is already connected. Disconnect it first to authorize again.`);
         return;
@@ -288,7 +297,7 @@ export function McpServersOverlay({
             bots={bots}
             assignments={botAssignments}
             onClose={() => setReviewing(null)}
-            onSaved={refresh}
+            onSaved={() => refresh().then(() => undefined)}
           />
         ) : null}
         {!embedded ? (
@@ -521,7 +530,10 @@ export function McpServersOverlay({
                             </Trans>
                           </p>
                         ) : null}
-                        <ImportedServerCredentials server={server} onSaved={refresh} />
+                        <ImportedServerCredentials
+                          server={server}
+                          onSaved={() => refresh().then(() => undefined)}
+                        />
                         {statusText ? (
                           <p
                             className={`mt-2 text-[11px] ${server.oauthStatus === "reconnect" ? "text-warning" : "text-muted-foreground"}`}

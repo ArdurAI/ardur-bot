@@ -6,11 +6,16 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn() }));
+const oauth = vi.hoisted(() => vi.fn());
 vi.mock("../lib/rpc", () => ({
   rpc: {
     mcp: { servers: fake, assignments: { all: async () => [] } },
     bots: { list: async () => [] },
   },
+}));
+vi.mock("../lib/mcp-connect", () => ({
+  MCP_OAUTH_CHANNEL: "ardurbot-mcp-oauth",
+  connectMcpOauth: oauth,
 }));
 vi.mock("@lingui/core/macro", () => ({
   t: (parts: TemplateStringsArray, ...values: unknown[]) =>
@@ -129,4 +134,34 @@ it("keeps a failed add editable and lets the user cancel without creating a serv
   await click("Cancel");
   expect(container.querySelector("#mcp-name")).toBeNull();
   expect(fake.create).toHaveBeenCalledOnce();
+});
+
+it("shows a recorded discovery failure instead of a connected label", async () => {
+  const server = {
+    id: "reports",
+    name: "Reports",
+    transport: "streamable_http",
+    oauthStatus: "none",
+    connectionState: "not-connected",
+    endpoint: "https://tools.example.test/mcp",
+    enabled: true,
+    catalogId: null,
+    lastError: null,
+  } as McpServer;
+  fake.list.mockResolvedValue([server]);
+  oauth.mockImplementation(async () => {
+    fake.list.mockResolvedValue([
+      {
+        ...server,
+        oauthStatus: "connected",
+        connectionState: "discovery-failed",
+        lastError: "Could not reach this integration. Try again.",
+      },
+    ]);
+    return "discovery-failed";
+  });
+  const container = await mount();
+  await click("Connect OAuth");
+  expect(container.textContent).toContain("Could not reach this integration. Try again.");
+  expect(container.textContent).not.toContain("OAuth connected");
 });

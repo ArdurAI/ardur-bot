@@ -6,7 +6,8 @@ export type RemoteMcpCredential = { value: string; headerName?: string | null };
 /**
  * Connects a remote MCP server and trusts only the connection state the API recorded.
  * "mixed" servers try browser sign-in first and return "needs-credential" when the server
- * offers none. "cancelled" means the person stopped browser sign-in.
+ * offers none. A token the server rejects returns "credential-rejected" and leaves the
+ * server and its stored error in place. "cancelled" means the person stopped browser sign-in.
  */
 export async function connectRemoteMcp(input: {
   name: string;
@@ -14,7 +15,7 @@ export async function connectRemoteMcp(input: {
   botId?: string;
   auth?: "none" | "oauth" | "mixed";
   credential?: RemoteMcpCredential;
-}): Promise<{ serverId: string } | "cancelled" | "needs-credential"> {
+}): Promise<{ serverId: string } | "cancelled" | "needs-credential" | "credential-rejected"> {
   const endpoint = input.endpoint.trim();
   const value = input.credential?.value.trim();
   const headerName = input.credential?.headerName;
@@ -54,9 +55,14 @@ export async function connectRemoteMcp(input: {
   let failed = false;
   let failure: unknown;
   let cancelled = false;
+  let discoveryFailed = false;
   try {
     if (value || input.auth === "none") await rpc.mcp.servers.tools({ serverId: server.id });
-    else cancelled = (await connectMcpOauth(server.id)) === "cancelled";
+    else {
+      const oauth = await connectMcpOauth(server.id);
+      cancelled = oauth === "cancelled";
+      discoveryFailed = oauth === "discovery-failed";
+    }
   } catch (error) {
     failed = true;
     failure = error;
@@ -64,11 +70,13 @@ export async function connectRemoteMcp(input: {
   const state = (await rpc.mcp.servers.list()).find(
     (candidate) => candidate.id === server.id,
   )?.connectionState;
-  if (!failed && !cancelled && state === "connected") {
+  if (!failed && !cancelled && !discoveryFailed && state === "connected") {
     if (input.botId) await rpc.mcp.assignments.approve({ botId: input.botId, serverId: server.id });
     return { serverId: server.id };
   }
-  const needsCredential = failed && input.auth === "mixed" && state === "needs-sign-in";
+  // The first prompt has no token yet. A token the server refused stays stored with the server.
+  if (value && failed && state === "needs-sign-in") return "credential-rejected";
+  const needsCredential = !value && failed && input.auth === "mixed" && state === "needs-sign-in";
   if (needsCredential || (cancelled && state !== "needs-sign-in")) {
     if (!existing) {
       try {
@@ -84,16 +92,31 @@ export async function connectRemoteMcp(input: {
     : new Error("Could not connect this server. Check its configuration and try again.");
 }
 
-/** Matches built-in apps, whose listings may add tracking query strings. */
-export function normalizedEndpoint(value: string): string {
+function endpointIdentity(value: string): { originPath: string; query: string } {
   const url = new URL(value);
+  url.searchParams.sort();
   const path = url.pathname.replace(/\/+$/, "") || "/";
-  return `${url.protocol}//${url.host}${path}`;
+  return { originPath: `${url.protocol}//${url.host}${path}`, query: url.search };
+}
+
+/**
+ * A built-in app matches when scheme, host and path match and the address query is empty
+ * or equal, after sorting, to the catalog endpoint's query. Any other query is a custom server.
+ */
+export function matchesCatalogEndpoint(candidate: string, catalogEndpoint: string): boolean {
+  try {
+    const left = endpointIdentity(candidate);
+    const right = endpointIdentity(catalogEndpoint);
+    return (
+      left.originPath === right.originPath && (left.query === "" || left.query === right.query)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** The query can select a different account or workspace, so reuse compares all of it. */
 export function serverEndpointKey(value: string): string {
-  const url = new URL(value);
-  url.searchParams.sort();
-  return `${normalizedEndpoint(value)}${url.search}`;
+  const identity = endpointIdentity(value);
+  return `${identity.originPath}${identity.query}`;
 }

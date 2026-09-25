@@ -8,7 +8,8 @@ export type McpOauthResult =
   | "connected"
   | "cancelled"
   | "already_connected"
-  | "authorization_not_requested";
+  | "authorization_not_requested"
+  | "discovery-failed";
 
 /** Run the browser OAuth popup flow for an MCP server: request an
  * authorization URL, open the popup, and wait until the callback page
@@ -27,7 +28,8 @@ export async function connectMcpOauth(serverId: string): Promise<McpOauthResult>
     const state = (await rpc.mcp.servers.list()).find(
       (server) => server.id === serverId,
     )?.connectionState;
-    if (state === "connected" || state === "discovery-failed") return "connected";
+    if (state === "connected") return "connected";
+    if (state === "discovery-failed") return "discovery-failed";
     if (state === "needs-sign-in" || state === "cancelled") return "cancelled";
     return null;
   });

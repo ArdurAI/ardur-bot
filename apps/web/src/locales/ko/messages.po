@@ -2294,6 +2294,8 @@ msgid "Could not load the server configuration."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -7177,6 +7179,10 @@ msgstr ""
 msgid "That shortcut is already in use; choose another."
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
+msgid "That token was not accepted. Check it and try again."
+msgstr ""
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API가 다시 작동하지 않습니다. 이 페이지를 새로 고침하세요."
@@ -7302,10 +7308,12 @@ msgid "This server cannot be assigned without a bot."
 msgstr "연결할 Bot이 없어 이 서버를 배정할 수 없습니다."
 
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "This server did not request browser authorization."
 msgstr "이 서버는 브라우저 인증을 요청하지 않았습니다."
 
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "이 서버는 이미 연결되어 있습니다. 다시 인증하려면 먼저 연결을 해제하세요."
 

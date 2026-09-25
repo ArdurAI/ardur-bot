@@ -2294,6 +2294,8 @@ msgid "Could not load the server configuration."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -7177,6 +7179,10 @@ msgstr ""
 msgid "That shortcut is already in use; choose another."
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
+msgid "That token was not accepted. Check it and try again."
+msgstr "Этот токен не принят. Проверьте его и попробуйте снова."
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API не вернулся. Обновите эту страницу."
@@ -7302,10 +7308,12 @@ msgid "This server cannot be assigned without a bot."
 msgstr "Этот сервер невозможно назначить без бота."
 
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "This server did not request browser authorization."
 msgstr "Этот сервер не запрашивал авторизацию браузера."
 
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "Этот сервер уже подключен. Сначала отключите его, чтобы авторизоваться снова."
 

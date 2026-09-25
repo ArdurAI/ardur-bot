@@ -120,4 +120,23 @@ describe("MCP browser consent", () => {
     expect(await result).toBe("cancelled");
     expect(popup.close).toHaveBeenCalledOnce();
   });
+  it("reports discovery-failed instead of a completed sign-in", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    list.mockResolvedValue([
+      {
+        id: "connection",
+        oauthStatus: "connected",
+        connectionState: "discovery-failed",
+        lastError: "Could not reach this integration. Try again.",
+      },
+    ]);
+    const result = connectMcpOauth("connection");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await result).toBe("discovery-failed");
+    expect(popup.close).toHaveBeenCalledOnce();
+  });
 });

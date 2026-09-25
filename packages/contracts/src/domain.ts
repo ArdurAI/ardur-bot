@@ -740,6 +740,7 @@ export const McpServerSchema = z.object({
   managedId: z.string().nullable().optional(),
   placement: z.enum(["worker", "host"]).optional(),
   connectionState: z.string().optional(),
+  lastError: z.string().nullable().optional(),
   id: Id,
   spaceId: Id,
   slug: z.string(),

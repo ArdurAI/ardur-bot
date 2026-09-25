@@ -15,7 +15,7 @@ import type { CatalogTab } from "../../../pages/customize/CustomizeControls";
 import { CustomizeToolbar } from "../../../pages/customize/CustomizeControls";
 import { connectorRows } from "../../../pages/customize/connector-rows";
 import { IntegrationTable } from "../../../pages/customize/IntegrationTable";
-import { connectRemoteMcp, normalizedEndpoint } from "../connect-remote-mcp";
+import { connectRemoteMcp, matchesCatalogEndpoint } from "../connect-remote-mcp";
 import { DirectMcpSearch } from "../DirectMcpSearch";
 import { IntegrationDetails } from "../manage/IntegrationDetails";
 
@@ -65,6 +65,7 @@ export function IntegrationCards({
           if (!active || !value) return;
           setData(value.catalog);
           setRemoteServers(value.servers);
+          setError(false);
         })
         .catch(() => {
           if (active) setError(true);
@@ -291,8 +292,12 @@ export function IntegrationCards({
           if (!entry) {
             const server = remoteServers.find((item) => item.id === row.id);
             if (!server) return null;
+            const shown = customServers.find((item) => item.id === server.id);
             return (
               <div className="mt-2 flex flex-wrap gap-2">
+                {shown?.connectionState === "needs-sign-in" ? (
+                  <p className="w-full text-sm text-muted-foreground">{t`Needs sign-in`}</p>
+                ) : null}
                 {row.status === "reconnect" ? (
                   <Button
                     variant="outline"
@@ -529,25 +534,13 @@ async function readLatestIntegrationPage(requests: PageRequests) {
  */
 function customServerRows(data: IntegrationCatalogList, servers: McpServer[]): McpServer[] {
   const known = new Set(data.connections.map((row) => row.id));
-  const builtInEndpoints = new Set(
-    data.catalog.flatMap((entry) => {
-      if (!entry.endpoint) return [];
-      try {
-        return [normalizedEndpoint(entry.endpoint)];
-      } catch {
-        return [];
-      }
-    }),
-  );
   return servers.flatMap((server) => {
-    let builtIn = false;
-    if (server.endpoint) {
-      try {
-        builtIn = builtInEndpoints.has(normalizedEndpoint(server.endpoint));
-      } catch {
-        builtIn = false;
-      }
-    }
+    const endpoint = server.endpoint;
+    const builtIn = endpoint
+      ? data.catalog.some(
+          (entry) => !!entry.endpoint && matchesCatalogEndpoint(endpoint, entry.endpoint),
+        )
+      : false;
     if (known.has(server.id) || server.catalogId || builtIn) return [];
     const state = liveRemoteState(server);
     if (!state) return [];
@@ -564,7 +557,12 @@ function liveRemoteState(server: McpServer): IntegrationConnection["state"] | nu
   if (server.transport !== "streamable_http" && server.transport !== "sse") return null;
   if (!server.enabled) return null;
   if (server.connectionState === "connected") return "connected";
-  if (server.oauthStatus === "reconnect" || server.connectionState === "needs-sign-in")
+  if (
+    server.oauthStatus === "reconnect" ||
+    server.connectionState === "needs-sign-in" ||
+    server.connectionState === "not-connected" ||
+    server.connectionState === "cancelled"
+  )
     return "needs-sign-in";
   if (server.connectionState === "discovery-failed") return "discovery-failed";
   return null;

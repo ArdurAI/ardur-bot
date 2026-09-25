@@ -7,7 +7,7 @@ import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useState } from "react";
 import { rpc } from "../../lib/rpc";
-import { connectRemoteMcp, normalizedEndpoint } from "./connect-remote-mcp";
+import { connectRemoteMcp, matchesCatalogEndpoint } from "./connect-remote-mcp";
 
 type Target = {
   name: string;
@@ -38,6 +38,7 @@ export function DirectMcpSearch({
   const [connected, setConnected] = useState<string[]>([]);
   // A credential belongs to the one result it was typed for.
   const [credential, setCredential] = useState<{ endpoint: string; value: string } | null>(null);
+  const [rejectedEndpoint, setRejectedEndpoint] = useState<string | null>(null);
   const remoteResults = [
     ...new Map(
       results.flatMap((result) =>
@@ -81,17 +82,22 @@ export function DirectMcpSearch({
 
   async function connect(target: Target, token: string) {
     const auth = target.surface?.auth;
-    if (credential && credential.endpoint !== target.endpoint) setCredential(null);
+    if (credential && credential.endpoint !== target.endpoint) {
+      setCredential(null);
+      setRejectedEndpoint(null);
+    }
     if (
       !target.descriptor &&
       (auth?.type === "bearer" || auth?.type === "header") &&
       !token.trim()
     ) {
       setCredential({ endpoint: target.endpoint, value: "" });
+      setRejectedEndpoint(null);
       return;
     }
     setBusy(true);
     setError(null);
+    setRejectedEndpoint(null);
     try {
       if (target.descriptor) {
         if (await onConnectCatalog?.(target.descriptor))
@@ -105,6 +111,11 @@ export function DirectMcpSearch({
         auth: auth?.type === "none" ? "none" : auth?.type === "mixed" ? "mixed" : "oauth",
         credential: token.trim() ? { value: token, headerName: auth?.headerName } : undefined,
       });
+      if (outcome === "credential-rejected") {
+        setCredential({ endpoint: target.endpoint, value: token });
+        setRejectedEndpoint(target.endpoint);
+        return;
+      }
       if (outcome === "needs-credential") {
         setCredential({ endpoint: target.endpoint, value: "" });
         return;
@@ -169,6 +180,11 @@ export function DirectMcpSearch({
               }
             />
           ) : null}
+          {rejectedEndpoint === result.endpoint ? (
+            <p className="text-sm text-destructive" role="alert">
+              {t`That token was not accepted. Check it and try again.`}
+            </p>
+          ) : null}
         </div>
       ))}
       {searched && !remoteResults.length ? (
@@ -197,6 +213,11 @@ export function DirectMcpSearch({
             value={urlToken}
             onChange={(event) => setUrlToken(event.target.value)}
           />
+          {rejectedEndpoint === endpoint.trim() ? (
+            <p className="text-sm text-destructive" role="alert">
+              {t`That token was not accepted. Check it and try again.`}
+            </p>
+          ) : null}
           <Button
             disabled={busy || !endpoint.trim()}
             onClick={() =>
@@ -234,17 +255,7 @@ function matchingDescriptor(
   catalog: IntegrationDescriptor[],
   endpoint: string,
 ): IntegrationDescriptor | undefined {
-  try {
-    const normalized = normalizedEndpoint(endpoint);
-    return catalog.find((descriptor) => {
-      if (!descriptor.endpoint) return false;
-      try {
-        return normalizedEndpoint(descriptor.endpoint) === normalized;
-      } catch {
-        return false;
-      }
-    });
-  } catch {
-    return undefined;
-  }
+  return catalog.find(
+    (descriptor) => !!descriptor.endpoint && matchesCatalogEndpoint(endpoint, descriptor.endpoint),
+  );
 }
