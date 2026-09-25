@@ -1,7 +1,8 @@
-import type { AdapterContext, MemoryCommitRequest } from "@ardurbot/adapter-kit";
+import type { AdapterContext, MemoryAccess, MemoryCommitRequest } from "@ardurbot/adapter-kit";
 import { createDb, type PrismaClient } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MarkdownMemoryStore } from "./index.js";
+import { PostgresDocumentStore } from "./postgres-store.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =
@@ -76,6 +77,82 @@ describePostgres("memory commits (PostgreSQL)", () => {
       include: { revisions: { orderBy: { revision: "asc" } } },
     });
   }
+
+  it("keeps a legacy seed and its first edit atomic, then imports the exported history into empty storage", async () => {
+    const seed = await prisma.memoryDocument.create({
+      data: {
+        spaceId: context.spaceId,
+        userId: context.userId,
+        scope: "user",
+        path: "legacy-seed.md",
+        content: "Original memory",
+        revision: 1,
+      },
+    });
+    const access: MemoryAccess = { ...context, botIds: ["memory-commit-bot"] };
+    const edit = () =>
+      prisma.$transaction(async (tx) => {
+        const documents = new PostgresDocumentStore(tx);
+        const original = (await documents.read(seed.id, access))!;
+        await documents.commit(
+          {
+            id: seed.id,
+            scopeKey: original.scopeKey,
+            path: seed.path,
+            content: "Edited memory",
+            expectedRevision: 1,
+            author: { kind: "user", userId: context.userId },
+            delivery: original.delivery,
+          },
+          access,
+        );
+      });
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const documents = new PostgresDocumentStore(tx);
+        const original = (await documents.read(seed.id, access))!;
+        await documents.commit(
+          {
+            id: seed.id,
+            scopeKey: original.scopeKey,
+            path: seed.path,
+            content: "Rolled back",
+            expectedRevision: 1,
+            author: { kind: "user", userId: context.userId },
+            delivery: original.delivery,
+          },
+          access,
+        );
+        throw new Error("Rollback fixture");
+      }),
+    ).rejects.toThrow("Rollback fixture");
+    expect(await document(seed.path)).toMatchObject({
+      revision: 1,
+      content: "Original memory",
+      revisions: [],
+    });
+    await edit();
+    const bundle = await prisma.$transaction((tx) =>
+      new PostgresDocumentStore(tx).exportBundle(access),
+    );
+    const exported = bundle.documents.find((doc) => doc.id === seed.id)!;
+    expect(exported.revisions.map(({ revision, content }) => ({ revision, content }))).toEqual([
+      { revision: 1, content: "Original memory" },
+      { revision: 2, content: "Edited memory" },
+    ]);
+    await prisma.memoryDocument.delete({ where: { id: seed.id } });
+    await prisma.$transaction((tx) =>
+      new PostgresDocumentStore(tx).importBundle(
+        { ...bundle, documents: [exported] },
+        { status: "delivered", generation: 0, provider: null },
+        access,
+      ),
+    );
+    expect((await document(seed.path)).revisions.map(({ content }) => content)).toEqual([
+      "Original memory",
+      "Edited memory",
+    ]);
+  });
 
   it.each(["user", "bot"] as const)(
     "retries overlapping %s saves with fresh revisions and matching history",

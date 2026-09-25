@@ -57,4 +57,4 @@ export const IdeChangeSchema = /* @__PURE__ */ (() =>
   }))();
 export type IdeChange = z.infer<typeof IdeChangeSchema>;
 
-export { ideHandoffText } from "./ide-handoff.js";
+export { IDE_SELECTION_CHARS, ideHandoffText } from "./ide-handoff.js";

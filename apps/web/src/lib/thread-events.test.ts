@@ -6,6 +6,7 @@ import type {
   ThreadMessage,
   ThreadSnapshot,
 } from "@ardurbot/contracts";
+import { RunTriggerSchema } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
   activeThreadRuns,
@@ -26,6 +27,16 @@ import {
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
+  it.each(RunTriggerSchema.options)(
+    "preserves the shared trigger %s on live run events",
+    (trigger) => {
+      const next = reduceThreadSnapshot(
+        snapshot([]),
+        event({ type: "run.started", runId: "started", payload: { trigger } }),
+      );
+      expect(next?.run?.trigger).toBe(trigger);
+    },
+  );
   it("shows a committed direct send as queued before its snapshot refresh returns", () => {
     const initial = snapshot([message("user-1", [{ kind: "text", text: "Continue" }], 4)]);
 

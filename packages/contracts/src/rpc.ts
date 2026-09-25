@@ -16,6 +16,13 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
 } from "./computer-connections.js";
+import {
+  BriefSchema,
+  ConcurrentRunsSchema,
+  ContextBudgetsSchema,
+  ContextMetricsSchema,
+  ContextSettingsSchema,
+} from "./context.js";
 import { customizationContract } from "./customization.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
@@ -46,7 +53,6 @@ import {
   CreateRoutineInput,
   CreateScratchpadItemInput,
   DeploymentSettingsSchema,
-  ExportManifestSchema,
   ExternalConversationPolicySchema,
   GroupDetailSchema,
   GroupSchema,
@@ -149,9 +155,9 @@ import {
   PreferencesPatchSchema,
   UserPreferencesSchema,
 } from "./preferences.js";
-import { AccountExportSchema } from "./privacy.js";
+import { ExportDownloadSchema } from "./privacy.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
-import { RunsListOutputSchema } from "./runs.js";
+import { RoutineRunSchema, RunsListOutputSchema } from "./runs.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
@@ -226,7 +232,9 @@ function createIdeContract() {
     roots: oc.output(z.array(IdeRootSchema)),
     list: oc
       .input(z.object({ rootId: Id, path: IdePathSchema.default("") }))
-      .output(z.array(IdeEntrySchema)),
+      .output(
+        z.object({ entries: z.array(IdeEntrySchema), hiddenCount: z.number().int().nonnegative() }),
+      ),
     read: oc.input(z.object({ rootId: Id, path: IdePathSchema.min(1) })).output(IdeFileSchema),
     save: oc
       .input(
@@ -302,6 +310,36 @@ export const appContract = {
     setDispatch: oc
       .input(z.object({ enabled: z.boolean() }))
       .output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+  },
+  metrics: {
+    context: oc
+      .input(z.object({ botId: Id.optional(), groupId: Id.optional() }))
+      .output(ContextMetricsSchema),
+  },
+  context: {
+    settings: oc.input(z.object({ botId: Id })).output(ContextSettingsSchema),
+    configure: oc
+      .input(
+        z.object({
+          budgets: ContextBudgetsSchema.optional(),
+          concurrentRuns: ConcurrentRunsSchema.optional(),
+          coordinatorBotId: Id.nullable().optional(),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+  },
+  briefs: {
+    list: oc.input(z.object({ botId: Id, groupId: Id.optional() })).output(z.array(BriefSchema)),
+    update: oc
+      .input(
+        z.object({
+          botId: Id,
+          groupId: Id.nullable().optional(),
+          content: z.string().max(6000),
+          expectedRevision: z.number().int().nonnegative(),
+        }),
+      )
+      .output(z.object({ revision: z.number().int().positive() })),
   },
   spaces: {
     list: oc.output(SpaceNavigationSchema),
@@ -724,6 +762,7 @@ export const appContract = {
     disconnectProvider: oc.output(z.object({ ok: z.literal(true) })),
   },
   routines: {
+    history: oc.input(z.object({ routineId: Id })).output(z.array(RoutineRunSchema)),
     list: oc.input(botId).output(z.array(RoutineSchema)),
     create: oc.input(CreateRoutineInput).output(RoutineSchema),
     update: oc
@@ -1208,9 +1247,9 @@ export const appContract = {
     ),
   },
   export: {
-    account: oc.output(AccountExportSchema),
+    account: oc.output(ExportDownloadSchema),
     comparison: oc.input(z.object({ id: Id })).output(ComparisonExportSchema),
-    bot: oc.input(botId).output(ExportManifestSchema),
+    bot: oc.input(botId).output(ExportDownloadSchema),
   },
   notifications: {
     activity: oc.output(

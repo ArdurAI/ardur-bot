@@ -75,6 +75,7 @@ import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { NativeCommandBlock } from "../components/command-block";
+import { MobileRunContext } from "../components/context-section";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -581,6 +582,10 @@ function Thread() {
                 run={snap?.run?.botId === currentBot.id ? snap.run : null}
               />
             ) : null}
+            <MobileRunContext
+              snapshot={(snap?.contextRun ?? snap?.run)?.contextSnapshot}
+              routingRule={(snap?.contextRun ?? snap?.run)?.routingRule}
+            />
           </View>
         </Pressable>
       ),

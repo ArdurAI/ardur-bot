@@ -3,7 +3,7 @@ import { UNSAFE_NavigationContext } from "react-router-dom";
 import { desktopBridge } from "../../lib/desktop";
 import { setPopstateGuard } from "../../lib/navigation-guard";
 
-export function useUnsavedChanges(dirty: boolean, label: string) {
+export function useUnsavedChanges(dirty: boolean, label: string, saving = false) {
   const { navigator } = useContext(UNSAFE_NavigationContext);
   useLayoutEffect(() => {
     if (!dirty) return;
@@ -15,12 +15,12 @@ export function useUnsavedChanges(dirty: boolean, label: string) {
     };
     // Link and useNavigate consult this same object, including callers outside the IDE.
     const guardedPush: typeof push = (...args) => {
-      if (restoring || !window.confirm(label)) return;
+      if (restoring || saving || !window.confirm(label)) return;
       push(...args);
       remember();
     };
     const guardedReplace: typeof replace = (...args) => {
-      if (restoring || !window.confirm(label)) return;
+      if (restoring || saving || !window.confirm(label)) return;
       replace(...args);
       remember();
     };
@@ -29,7 +29,7 @@ export function useUnsavedChanges(dirty: boolean, label: string) {
     const pop = (event: PopStateEvent) => {
       const previousIndex: unknown = current.state?.idx;
       const nextIndex: unknown = window.history.state?.idx;
-      if (!restoring && window.confirm(label)) {
+      if (!restoring && !saving && window.confirm(label)) {
         remember();
         return;
       }
@@ -58,7 +58,7 @@ export function useUnsavedChanges(dirty: boolean, label: string) {
       if (navigator.replace === guardedReplace) navigator.replace = replace;
       stop();
     };
-  }, [dirty, label, navigator]);
+  }, [dirty, label, navigator, saving]);
   useEffect(() => {
     void desktopBridge()
       ?.window.setUnsavedChanges?.(dirty)

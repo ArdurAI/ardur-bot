@@ -129,9 +129,9 @@ function fixture(
             else {
               if (mode === "usage")
                 for (const total of [
-                  { inputTokens: 10, outputTokens: 5 },
-                  { inputTokens: 10, outputTokens: 5 },
-                  { inputTokens: 30, outputTokens: 8 },
+                  { inputTokens: 10, outputTokens: 5, cachedInputTokens: 4 },
+                  { inputTokens: 10, outputTokens: 5, cachedInputTokens: 4 },
+                  { inputTokens: 30, outputTokens: 8, cachedInputTokens: 14 },
                 ])
                   send({
                     method: "thread/tokenUsage/updated",
@@ -283,14 +283,31 @@ it("does not start a comparison when the native skill inventory cannot be isolat
   expect(f.messages.some((message) => message.method === "thread/start")).toBe(false);
   expect(f.messages.some((message) => message.method === "turn/start")).toBe(false);
 });
-it("counts cumulative comparison usage once across repeated notifications and model calls", async () => {
-  const f = fixture("usage");
-  f.request.controlledComparison = true;
-  expect((await f.collect()).filter((event) => event.type === "usage")).toEqual([
-    { type: "usage", provider: "openai-codex", model: "model", inputTokens: 10, outputTokens: 5 },
-    { type: "usage", provider: "openai-codex", model: "model", inputTokens: 20, outputTokens: 3 },
-  ]);
-});
+it.each([false, true])(
+  "counts cumulative fresh-session usage once (comparison=%s)",
+  async (comparison) => {
+    const f = fixture("usage");
+    f.request.controlledComparison = comparison;
+    expect((await f.collect()).filter((event) => event.type === "usage")).toEqual([
+      {
+        type: "usage",
+        provider: "openai-codex",
+        model: "model",
+        inputTokens: 10,
+        outputTokens: 5,
+        cachedTokens: 4,
+      },
+      {
+        type: "usage",
+        provider: "openai-codex",
+        model: "model",
+        inputTokens: 20,
+        outputTokens: 3,
+        cachedTokens: 10,
+      },
+    ]);
+  },
+);
 
 describe("Codex availability", () => {
   it("accepts 0.156.1 through the protocol and reports sign-in and models", async () => {

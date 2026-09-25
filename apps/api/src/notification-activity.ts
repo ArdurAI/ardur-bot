@@ -22,6 +22,13 @@ export async function notificationActivity(prisma: PrismaClient, actor: Actor) {
         originDeviceGrantId: true,
         status: true,
         updatedAt: true,
+        completedAt: true,
+        attempts: {
+          where: { finishedAt: { not: null } },
+          orderBy: [{ finishedAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { finishedAt: true },
+        },
         bot: { select: { name: true, notifyOnFinish: true } },
         thread: { select: { groupId: true } },
       },
@@ -41,6 +48,7 @@ export async function notificationActivity(prisma: PrismaClient, actor: Actor) {
       category,
       status: row.status as NotificationActivity["status"],
       updatedAt: row.updatedAt.toISOString(),
+      occurredAt: (row.completedAt ?? row.attempts[0]?.finishedAt ?? row.updatedAt).toISOString(),
       enabled:
         (row.thread.groupId !== null || row.bot.notifyOnFinish) &&
         preferences.notifications[category],

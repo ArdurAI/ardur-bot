@@ -1,6 +1,7 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { Bot, Comparison, ComparisonParticipant, ComparisonResult } from "@ardurbot/contracts";
-import { runtimeEffortLabel, TEAM_REFRESH_MS } from "@ardurbot/core";
+import { runtimeNames } from "@ardurbot/contracts";
+import { formatModelPin, runtimeEffortLabel, TEAM_REFRESH_MS } from "@ardurbot/core";
 import {
   Button,
   Checkbox,
@@ -176,7 +177,15 @@ export function ComparePanel({ id, onClose }: { id: string; onClose: () => void 
                   >
                     {bots.map((bot) => (
                       <NativeSelectOption key={bot.id} value={bot.id}>
-                        {bot.name} · {bot.modelProvider} · {bot.modelId} · {bot.thinkingLevel}
+                        {[
+                          bot.name,
+                          formatModelPin(
+                            { provider: bot.modelProvider, modelId: bot.modelId },
+                            bot.thinkingLevel,
+                          ),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </NativeSelectOption>
                     ))}
                   </NativeSelect>
@@ -278,11 +287,12 @@ export function ComparisonPin({
   return (
     <div className="text-sm text-muted-foreground">
       <p>
-        {pin.provider} · {pin.modelId} ·{" "}
-        {runtimeEffortLabel(pin, result?.provenance, t`requested`) ?? <Trans>Not reported</Trans>}
+        {formatModelPin(pin, runtimeEffortLabel(pin, result?.provenance, t`requested`)) || (
+          <Trans>Not reported</Trans>
+        )}
       </p>
       <details>
-        <summary>{pin.runtimeKind}</summary>
+        <summary>{runtimeNames[pin.runtimeKind]}</summary>
         <p>
           {computer.kind} · {computer.id}
         </p>

@@ -56,6 +56,9 @@ export type ResolvedPin = {
   thinkingLevel: ThinkingLevel;
 };
 
+export const MODEL_LOCALITY_DENIED_MESSAGE =
+  "This bot may only run locally — change the pin or the space policy";
+
 export const RuntimeProblemSchema = z.object({
   kind: z.literal("problem"),
   code: z.enum([

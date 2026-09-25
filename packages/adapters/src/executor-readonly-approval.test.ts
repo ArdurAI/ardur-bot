@@ -1,3 +1,9 @@
+// Admission is verified separately; these fixtures isolate tool policy and replay.
+vi.mock("./context/concurrency.js", () => ({
+  claimBotRun: (prisma: unknown, input: { claim: (tx: unknown) => Promise<unknown> }) =>
+    input.claim(prisma),
+}));
+
 import type {
   AdapterContext,
   AgentRunRequest,
@@ -127,6 +133,7 @@ function fixture({
   const effects: Effect[] = [];
   const results: unknown[] = [];
   const run = {
+    createdAt: new Date("2026-09-24T12:00:00Z"),
     id: "run-1",
     botId: "bot-1",
     threadId: "thread-1",

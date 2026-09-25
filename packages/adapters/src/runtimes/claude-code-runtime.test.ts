@@ -239,7 +239,14 @@ it("retains reported token usage without inventing cost", () => {
       modelUsage: { [pin.modelId!]: { inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 2 } },
     }),
   ).toEqual([
-    { type: "usage", provider: "anthropic", model: pin.modelId, inputTokens: 12, outputTokens: 5 },
+    {
+      type: "usage",
+      provider: "anthropic",
+      model: pin.modelId,
+      inputTokens: 12,
+      outputTokens: 5,
+      cachedTokens: 2,
+    },
     { type: "done" },
   ]);
 });

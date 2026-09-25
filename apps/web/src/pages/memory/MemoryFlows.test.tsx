@@ -164,6 +164,7 @@ describe("memory proposal entry points", () => {
     );
   });
   it.each([
+    ["This bot may only run locally — change the pin or the space policy", true],
     [
       "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
       true,

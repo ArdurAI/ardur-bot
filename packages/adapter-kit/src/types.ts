@@ -64,6 +64,13 @@ export interface PortableFile {
   executable?: boolean;
 }
 
+export interface HomeArchiveFile {
+  path: string;
+  size: number;
+  content: AsyncIterable<Uint8Array>;
+  executable?: boolean;
+}
+
 export interface ComputerRef {
   networkEgress?: boolean;
   imageProfile?: "base" | "developer";
@@ -268,6 +275,7 @@ export interface MemoryCommitRequest {
   botId?: string;
   path: string;
   content: string;
+  expectedRevision?: number;
   sourceRunId?: string;
   sourceThreadId?: string;
 }
@@ -421,6 +429,7 @@ export interface AgentRunRequest {
   sourceMessageId?: string | null;
   prompt: string;
   instructions: string;
+  stablePrefix?: string;
   history: Array<{ id?: string; role: "user" | "assistant" | "system"; content: string }>;
   currentTurnImages?: AgentInputImage[];
   /** Explicit model-only mode; an empty array retains legacy built-in tools. */
@@ -504,6 +513,8 @@ export type AgentRuntimeEvent =
   | { type: "takeover"; reason: string }
   | {
       type: "usage";
+      reported?: boolean;
+      cachedTokens?: number;
       delegationId?: string;
       inputTokens: number;
       outputTokens: number;
@@ -566,6 +577,7 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "briefs.maintain": { runId?: string };
   "learning.curate": { spaceId?: string; requestedBy?: string; requestId?: string };
   "learning.review": {
     runId: string;
