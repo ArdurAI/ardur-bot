@@ -279,6 +279,11 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
             summarize: async (current) => {
               let text = "";
               const attemptId = randomUUID();
+              // IDs and links from this runtime invocation share the same namespace.
+              const namespaceRequestId = (requestId: string) =>
+                createHash("sha256")
+                  .update(JSON.stringify([attemptId, requestId]))
+                  .digest("hex");
               let sequence = 0;
               for await (const event of resolved.runtime.run(
                 {
@@ -321,9 +326,11 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
                       ? {
                           ...event.request,
                           // Runtime IDs may repeat across separate maintenance invocations.
-                          requestId: createHash("sha256")
-                            .update(JSON.stringify([attemptId, event.request.requestId]))
-                            .digest("hex"),
+                          requestId: namespaceRequestId(event.request.requestId),
+                          parentRequestId:
+                            event.request.parentRequestId === null
+                              ? null
+                              : namespaceRequestId(event.request.parentRequestId),
                           purpose: "summary",
                         }
                       : {

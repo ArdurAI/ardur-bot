@@ -3,6 +3,8 @@ vi.mock("./context/concurrency.js", () => ({
   claimBotRun: (prisma: unknown, input: { claim: (tx: unknown) => Promise<unknown> }) =>
     input.claim(prisma),
 }));
+// Ledger transactions have disposable-PostgreSQL coverage; this fixture isolates approval policy.
+vi.mock("./run-usage.js", () => ({ recordRunUsage: vi.fn(async () => null) }));
 
 import type {
   AdapterContext,
@@ -24,6 +26,7 @@ import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
 import { catalogEntries, resolveCatalogCall } from "./lazy-tool-catalog.js";
 import { approvalRequestRoute } from "./remote-execution.js";
+import { recordRunUsage } from "./run-usage.js";
 
 vi.mock("./runtimes/native-host.js", () => ({ nativeHostOwner: async () => true }));
 
@@ -346,11 +349,26 @@ function fixture({
       calls = next;
     },
     async run() {
+      vi.mocked(recordRunUsage).mockClear();
       run.status = "queued";
       await executor.continueRun(run.id, "worker-1");
       expect(runtimeRun).toHaveBeenCalled();
       expect(prisma.attempt.update).not.toHaveBeenCalled();
       expect(finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+      expect(recordRunUsage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: run.id }),
+        expect.objectContaining({
+          request: expect.objectContaining({
+            purpose: "main",
+            categories: expect.objectContaining({ logicalInput: null, output: null }),
+            collection: expect.objectContaining({
+              scope: "runtime-call",
+              availability: "unavailable",
+            }),
+          }),
+        }),
+      );
     },
   };
 }
