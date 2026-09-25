@@ -13,8 +13,40 @@ const api = vi.hoisted(() => ({
   configure: vi.fn(),
   start: vi.fn(),
   bots: vi.fn(),
+  upkeep: vi.fn(async () => ({ enabled: true })),
+  setUpkeep: vi.fn(async ({ enabled }: { enabled: boolean }) => ({ enabled })),
+  learning: vi.fn(async () => ({
+    enabled: false,
+    consolidationEnabled: false,
+    reviewerPin: null,
+    budgets: {
+      botDailyTokens: 30000,
+      spaceDailyTokens: 150000,
+      maxProposals: 3,
+      timeoutMs: 30000,
+      maxOutputTokens: 2000,
+      maxOutputChars: 12000,
+    },
+    destination: {
+      runtimeKind: "pi",
+      provider: "openai",
+      modelId: "reviewer",
+      effort: "medium",
+      credentialId: "cred",
+      revision: 1,
+    },
+    canConfigure: true,
+  })),
+  enableLearning: vi.fn(),
 }));
-vi.mock("../../lib/rpc", () => ({ rpc: { board: api, bots: { list: api.bots } } }));
+vi.mock("../../lib/rpc", () => ({
+  selectedSpaceId: () => "space",
+  rpc: {
+    board: api,
+    bots: { list: api.bots },
+    learning: { settings: api.learning, configure: api.enableLearning },
+  },
+}));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
@@ -28,6 +60,22 @@ vi.mock("@ardurbot/ui-web", () => ({
   Dialog: ({ open, children }: { open: boolean; children: ReactNode }) => (open ? children : null),
   DialogContent: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
   DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+  Switch: ({
+    checked,
+    onCheckedChange,
+    ...props
+  }: ComponentProps<"button"> & {
+    checked?: boolean;
+    onCheckedChange?: (value: boolean) => void;
+  }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onCheckedChange?.(!checked)}
+      {...props}
+    />
+  ),
 }));
 const roots: ReturnType<typeof createRoot>[] = [];
 afterEach(async () => {
@@ -226,5 +274,19 @@ it("shows a server sentence and hides a browser fetch failure", async () => {
   await act(async () => node.querySelector("form")!.requestSubmit());
   expect(node.querySelector("form")?.parentElement?.textContent).toContain(
     "This name could not be saved.",
+  );
+});
+it("saves board upkeep and enables learning through the existing configure call", async () => {
+  api.enableLearning.mockResolvedValue({ ...(await api.learning()), enabled: true });
+  const node = await render();
+  await act(async () => node.querySelector<HTMLButtonElement>('[role="switch"]')!.click());
+  expect(api.setUpkeep).toHaveBeenCalledWith({ enabled: false });
+  await act(async () => button(node, "Enable").click());
+  expect(api.enableLearning).toHaveBeenCalledWith(
+    expect.objectContaining({
+      enabled: true,
+      reviewerPin: expect.objectContaining({ modelId: "reviewer" }),
+    }),
+    { context: { spaceId: "space" } },
   );
 });

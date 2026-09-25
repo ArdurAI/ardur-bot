@@ -1113,6 +1113,11 @@ msgstr "Bots act without asking by default. Add an exception only when you want 
 msgid "Bots are working"
 msgstr "Bots are working"
 
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Bots keep the board and memory current"
+msgstr "Bots keep the board and memory current"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr "Brain label"
@@ -3159,6 +3164,7 @@ msgstr "Effort: not applicable"
 msgid "Email"
 msgstr "Email"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3388,6 +3394,10 @@ msgstr "Failures"
 #: src/pages/LearningObservation.tsx
 msgid "Feedback corrections"
 msgstr "Feedback corrections"
+
+#: src/pages/board/FiledBy.tsx
+msgid "Filed by {name}"
+msgstr "Filed by {name}"
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
@@ -4075,6 +4085,19 @@ msgstr "Learning inbox"
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
 msgstr "Learning is off for this space."
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Learning review"
+msgstr "Learning review"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is off"
+msgstr "Learning review is off"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is on"
+msgstr "Learning review is on"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -4898,6 +4921,10 @@ msgstr "No remote MCP servers found"
 #: src/pages/SpaceSearch.tsx
 msgid "No results"
 msgstr "No results"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "No reviewer model yet."
+msgstr "No reviewer model yet."
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
@@ -6161,6 +6188,10 @@ msgstr "Review tools before your bots can use this account."
 #: src/pages/LearningInbox.tsx
 msgid "Reviewer"
 msgstr "Reviewer"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Reviewer: {reviewer}"
+msgstr "Reviewer: {reviewer}"
 
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."

@@ -5364,6 +5364,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           return { ok: true as const };
         }),
       ),
+      upkeep: authed.board.upkeep.handler(({ context }) =>
+        boardCall(() => board.service.upkeep(context.actor)),
+      ),
+      setUpkeep: authed.board.setUpkeep.handler(({ context, input }) =>
+        boardCall(() => board.service.setUpkeep(context.actor, input.enabled)),
+      ),
     },
     team: {
       board: authed.team.board.handler(({ context }) => teamBoard(deps.prisma, context.actor)),

@@ -80,6 +80,15 @@ it("refuses executable, workspace and file-output flags even on an otherwise all
   ])
     expect(() => validateBoardArgv(argv)).toThrow();
   expect(validateBoardArgv(["create", "--title", "; $(echo literal)"])).toEqual({ write: true });
+  expect(() =>
+    validateBoardArgv(["update", "board-a", "--set-metadata", "ardur_run_id=run;touch"]),
+  ).toThrow();
+  expect(validateBoardArgv(["update", "board-a", "--set-metadata", "ardur_run_id=run-1"])).toEqual({
+    write: true,
+  });
+  expect(
+    validateBoardArgv(["update", "board-a", "--set-metadata", "ardur_filed_by=Builder"]),
+  ).toEqual({ write: true });
 });
 it("serializes all workspace operations including concurrent writes", async () => {
   const f = await fixture({ BOARD_FIXTURE_DELAY: "20" });
