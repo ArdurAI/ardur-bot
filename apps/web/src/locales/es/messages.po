@@ -1093,11 +1093,8 @@ msgstr "No se puede alcanzar el servidor."
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/PluginsPage.tsx
-<<<<<<< HEAD
 #: src/pages/fleet/FleetSettings.tsx
-=======
 #: src/pages/import/ImportedServerCredentials.tsx
->>>>>>> dev
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -4128,17 +4125,13 @@ msgstr ""
 msgid "Memory folder on your server"
 msgstr ""
 
-<<<<<<< HEAD
-#: src/pages/fleet/FleetSettings.tsx
-=======
 #. placeholder {0}: source.memoryFolders
 #. placeholder {1}: source.counts.memories
 #: src/pages/import/LocalImportPage.tsx
 msgid "Memory folders: {0} · Notes: {1}"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
->>>>>>> dev
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Memory limit"
 msgstr ""
 
@@ -5981,17 +5974,10 @@ msgstr "Guardar"
 msgid "Save a memory note"
 msgstr ""
 
-<<<<<<< HEAD
-=======
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Save connection"
-msgstr ""
-
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Save credentials"
 msgstr ""
 
->>>>>>> dev
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
