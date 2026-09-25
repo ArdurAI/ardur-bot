@@ -4,7 +4,6 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { Check } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useState } from "react";
 import { rpc } from "../../lib/rpc";
-import { connectRemoteMcp } from "./connect-remote-mcp";
 
 const DirectMcpSearch = lazy(() =>
   import("./DirectMcpSearch").then((module) => ({ default: module.DirectMcpSearch })),
@@ -227,6 +226,7 @@ export function IntegrationSetup({
             disabled={busy || !endpoint.trim()}
             onClick={() =>
               void run(async () => {
+                const { connectRemoteMcp } = await import("./connect-remote-mcp");
                 const outcome = await connectRemoteMcp({
                   name: "Executor",
                   endpoint,
@@ -246,7 +246,9 @@ export function IntegrationSetup({
                         ? t`Sign-in was declined. Reconnect to try again.`
                         : outcome === "needs-sign-in"
                           ? t`Sign-in did not finish. Try again.`
-                          : t`Could not finish sign-in. Try again.`,
+                          : outcome === "replaced"
+                            ? t`This sign-in window was replaced by a newer one.`
+                            : t`Could not finish sign-in. Try again.`,
                 );
               })
             }

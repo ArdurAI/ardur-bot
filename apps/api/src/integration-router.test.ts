@@ -254,7 +254,7 @@ describe("integration RPC boundaries", () => {
       spaceId: actor.spaceId,
       userId: actor.userId,
     });
-    expect(capture).toHaveBeenCalledWith(actor, "server");
+    expect(capture).toHaveBeenCalledWith(actor, "server", "session");
     capture.mockClear();
     f.oauth.complete.mockRejectedValueOnce(new Error("fake-sensitive-oauth-response"));
     const response = await f.request("mcp/oauth/complete", input);

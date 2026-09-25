@@ -12,6 +12,7 @@ export function mcpServerDto(
     managedId?: string | null;
     placement?: string;
     connectionState?: string;
+    pendingOauthSessionId?: string | null;
     lastError?: string | null;
     id: string;
     spaceId: string;
@@ -59,6 +60,7 @@ export function mcpServerDto(
     managedId: row.managedId ?? null,
     placement: row.placement === "host" ? "host" : "worker",
     connectionState: row.connectionState ?? "not-connected",
+    pendingOauthSessionId: row.pendingOauthSessionId ?? null,
     lastError: row.lastError ?? null,
     envKeys,
     headerKeys,

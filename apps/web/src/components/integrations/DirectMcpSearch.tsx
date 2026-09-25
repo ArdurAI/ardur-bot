@@ -39,7 +39,7 @@ export function DirectMcpSearch({
   // A credential belongs to the one result it was typed for.
   const [credential, setCredential] = useState<{ endpoint: string; value: string } | null>(null);
   const [rejectedEndpoint, setRejectedEndpoint] = useState<string | null>(null);
-  const [declined, setDeclined] = useState(false);
+  const [notice, setNotice] = useState<"declined" | "unfinished" | "replaced" | null>(null);
   const remoteResults = [
     ...new Map(
       results.flatMap((result) =>
@@ -96,10 +96,22 @@ export function DirectMcpSearch({
       setRejectedEndpoint(null);
       return;
     }
+    const catalogToken = target.descriptor?.authKind === "token";
+    const catalogMixed = Boolean(target.descriptor) && auth?.type === "mixed";
+    if (
+      (catalogToken || catalogMixed) &&
+      !token.trim() &&
+      credential?.endpoint !== target.endpoint
+    ) {
+      setCredential({ endpoint: target.endpoint, value: "" });
+      setRejectedEndpoint(null);
+      setNotice(null);
+      return;
+    }
     setBusy(true);
     setError(null);
     setRejectedEndpoint(null);
-    setDeclined(false);
+    setNotice(null);
     try {
       if (target.descriptor) {
         const typedToken = target.descriptor.authKind === "oauth" ? "" : token.trim();
@@ -124,7 +136,15 @@ export function DirectMcpSearch({
         return;
       }
       if (outcome === "cancelled") {
-        setDeclined(true);
+        setNotice("declined");
+        return;
+      }
+      if (outcome === "needs-sign-in") {
+        setNotice("unfinished");
+        return;
+      }
+      if (outcome === "replaced") {
+        setNotice("replaced");
         return;
       }
       if (typeof outcome !== "object") {
@@ -167,7 +187,13 @@ export function DirectMcpSearch({
             <span className="min-w-0 truncate">{result.name}</span>
             <Button
               variant="outline"
-              disabled={busy || connected.includes(result.endpoint)}
+              disabled={
+                busy ||
+                connected.includes(result.endpoint) ||
+                (result.descriptor?.authKind === "token" &&
+                  credential?.endpoint === result.endpoint &&
+                  !credential.value.trim())
+              }
               onClick={() =>
                 void connect(
                   result,
@@ -231,7 +257,11 @@ export function DirectMcpSearch({
             </p>
           ) : null}
           <Button
-            disabled={busy || !endpoint.trim()}
+            disabled={
+              busy ||
+              !endpoint.trim() ||
+              (typedDescriptor?.authKind === "token" && !urlToken.trim())
+            }
             onClick={() =>
               void connect(
                 {
@@ -247,9 +277,17 @@ export function DirectMcpSearch({
           </Button>
         </div>
       </details>
-      {declined ? (
+      {notice === "declined" ? (
         <p className="text-sm text-muted-foreground">
           {t`Sign-in was declined. Reconnect to try again.`}
+        </p>
+      ) : null}
+      {notice === "unfinished" ? (
+        <p className="text-sm text-muted-foreground">{t`Sign-in did not finish. Try again.`}</p>
+      ) : null}
+      {notice === "replaced" ? (
+        <p className="text-sm text-muted-foreground">
+          {t`This sign-in window was replaced by a newer one.`}
         </p>
       ) : null}
       {error ? (

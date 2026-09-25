@@ -1,37 +1,35 @@
 import { desktopBridge } from "./desktop";
+import type { McpOauthResult } from "./mcp-oauth-channel";
+import { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
 import { rpc } from "./rpc";
 
-export const MCP_OAUTH_CHANNEL = "ardurbot-mcp-oauth";
-const MCP_OAUTH_TIMEOUT_MS = 10 * 60 * 1000;
+export type { McpOauthResult };
+export { MCP_OAUTH_CHANNEL };
 
-export type McpOauthResult =
-  | "connected"
-  | "needs-sign-in"
-  | "cancelled"
-  | "sign-in-failed"
-  | "already_connected"
-  | "authorization_not_requested";
+const MCP_OAUTH_TIMEOUT_MS = 10 * 60 * 1000;
+const POPUP_CLOSED_GRACE_MS = 1_500;
+const DECLINED_WHILE_CONNECTED = "Sign-in was declined.";
 
 /** A post-consent failure is stored as "discovery-failed" and reported as "sign-in-failed". */
-function recordedOauthOutcome(state: string | undefined): McpOauthResult | null {
-  if (state === "connected") return "connected";
-  if (state === "discovery-failed") return "sign-in-failed";
-  if (state === "cancelled") return "cancelled";
-  if (state === "needs-sign-in") return "needs-sign-in";
+function recordedOauthOutcome(server: {
+  connectionState?: string;
+  lastError?: string | null;
+}): McpOauthResult | null {
+  if (server.connectionState === "connected") {
+    if (!server.lastError) return "connected";
+    if (server.lastError === DECLINED_WHILE_CONNECTED) return "cancelled";
+    return "sign-in-failed";
+  }
+  if (server.connectionState === "discovery-failed") return "sign-in-failed";
+  if (server.connectionState === "cancelled") return "cancelled";
+  if (server.connectionState === "needs-sign-in") return "needs-sign-in";
   return null;
 }
 
 /** Run the browser OAuth popup flow for an MCP server: request an
- * authorization URL, open the popup, and wait until the callback page
- * broadcasts completion or the API records the sign-in's outcome.
- *
- * The BroadcastChannel (not window.opener) is the completion signal because
- * provider login pages with COOP sever the opener link. An unchanged
- * revision is the previous attempt, not this one. */
+ * authorization URL, open the popup, and wait until this attempt's pending
+ * session id is cleared or replaced. */
 export async function connectMcpOauth(serverId: string): Promise<McpOauthResult> {
-  const baseline = (await rpc.mcp.servers.list()).find(
-    (server) => server.id === serverId,
-  )?.revision;
   const started = await rpc.mcp.oauth.begin({
     serverId,
     redirectUri: `${window.location.origin}/api/oauth/done`,
@@ -39,8 +37,10 @@ export async function connectMcpOauth(serverId: string): Promise<McpOauthResult>
   if (started.status !== "authorization_required") return started.status;
   return waitForMcpOauth(started.authorizationUrl, undefined, started.sessionId, async () => {
     const server = (await rpc.mcp.servers.list()).find((item) => item.id === serverId);
-    if (!server || (baseline !== undefined && server.revision === baseline)) return null;
-    return recordedOauthOutcome(server.connectionState);
+    if (!server) return null;
+    if (server.pendingOauthSessionId === started.sessionId) return null;
+    if (server.pendingOauthSessionId) return "replaced";
+    return recordedOauthOutcome(server);
   });
 }
 
@@ -67,17 +67,20 @@ export async function waitForMcpOauth(
   return await new Promise<McpOauthResult>((resolve) => {
     const channel = new BroadcastChannel(MCP_OAUTH_CHANNEL);
     let settled = false;
+    let polling = false;
+    let closedFor = 0;
     let pollTimer = 0;
+    let closedTimer = 0;
     let timeoutTimer = 0;
     const finish = (result: McpOauthResult) => {
       if (settled) return;
       settled = true;
       window.clearInterval(pollTimer);
+      window.clearInterval(closedTimer);
       window.clearTimeout(timeoutTimer);
       channel.close();
       resolve(result);
     };
-    let polling = false;
     pollTimer = window.setInterval(() => {
       if (!outcome || polling) return;
       polling = true;
@@ -93,6 +96,15 @@ export async function waitForMcpOauth(
           polling = false;
         });
     }, 1000);
+    closedTimer = window.setInterval(() => {
+      if (!popup || settled) return;
+      if (!popup.closed) {
+        closedFor = 0;
+        return;
+      }
+      closedFor += 200;
+      if (closedFor >= POPUP_CLOSED_GRACE_MS) finish("needs-sign-in");
+    }, 200);
     timeoutTimer = window.setTimeout(() => {
       popup?.close();
       // The person closed the window or never finished. That is not a decline.
@@ -102,7 +114,13 @@ export async function waitForMcpOauth(
       const data = event.data as { type?: string; sessionId?: string } | null;
       if (data?.type !== "mcp-oauth-complete" || (sessionId && data.sessionId !== sessionId))
         return;
-      finish("connected");
+      if (!outcome) {
+        finish("connected");
+        return;
+      }
+      void outcome().then((result) => {
+        if (result) finish(result);
+      });
     };
   });
 }

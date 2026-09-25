@@ -224,6 +224,14 @@ export function McpServersOverlay({
         );
         return;
       }
+      if (result === "replaced") {
+        setError(t`This sign-in window was replaced by a newer one.`);
+        return;
+      }
+      if (result === "needs-sign-in") {
+        setError(t`Sign-in did not finish. Try again.`);
+        return;
+      }
       if (result === "already_connected") {
         setError(t`This server is already connected. Disconnect it first to authorize again.`);
         return;

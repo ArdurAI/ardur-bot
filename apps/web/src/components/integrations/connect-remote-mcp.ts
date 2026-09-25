@@ -9,7 +9,8 @@ export type RemoteMcpOutcome =
   | "needs-sign-in"
   | "needs-credential"
   | "credential-rejected"
-  | "sign-in-failed";
+  | "sign-in-failed"
+  | "replaced";
 
 /**
  * Connects a remote MCP server and trusts only the connection state the API recorded.
@@ -18,6 +19,7 @@ export type RemoteMcpOutcome =
  * A token the server rejects returns "credential-rejected". "cancelled" means the
  * person declined. "needs-sign-in" means the popup closed or never finished.
  * "sign-in-failed" means token exchange or discovery failed after consent.
+ * "replaced" means a newer sign-in window took over this attempt.
  */
 export async function connectRemoteMcp(input: {
   name: string;
@@ -74,7 +76,12 @@ export async function connectRemoteMcp(input: {
   }
   // A declined, unfinished, or failed sign-in is the attempt's outcome even when an
   // older "connected" row is still what the list shows.
-  if (oauth === "cancelled" || oauth === "needs-sign-in" || oauth === "sign-in-failed")
+  if (
+    oauth === "cancelled" ||
+    oauth === "needs-sign-in" ||
+    oauth === "sign-in-failed" ||
+    oauth === "replaced"
+  )
     return oauth;
   const state = (await rpc.mcp.servers.list()).find(
     (candidate) => candidate.id === server.id,

@@ -43,6 +43,9 @@ describe("MCP browser consent", () => {
       authorizationUrl: "https://auth.example.test/authorize",
       sessionId: "ours",
     });
+    list.mockResolvedValue([
+      { id: "connection", connectionState: "connected", pendingOauthSessionId: null },
+    ]);
     const result = connectMcpOauth("connection");
     await vi.advanceTimersByTimeAsync(0);
     let settled = false;
@@ -145,13 +148,19 @@ describe("MCP browser consent", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(await result).toBe("needs-sign-in");
   });
-  it("does not treat a connected server as this attempt until its revision changes", async () => {
+  it("does not resolve a re-authorization when the token is stored, only after discovery clears the session", async () => {
     begin.mockResolvedValue({
       status: "authorization_required",
       authorizationUrl: "https://auth.example.test/authorize",
       sessionId: "ours",
     });
-    const server = { id: "connection", connectionState: "connected", revision: 4 };
+    const server = {
+      id: "connection",
+      connectionState: "connected",
+      revision: 4,
+      pendingOauthSessionId: "ours" as string | null,
+      lastError: null as string | null,
+    };
     list.mockImplementation(async () => [server]);
     const result = connectMcpOauth("connection");
     let settled = false;
@@ -160,10 +169,106 @@ describe("MCP browser consent", () => {
     });
     await vi.advanceTimersByTimeAsync(3000);
     expect(settled).toBe(false);
-    expect(server).toMatchObject({ connectionState: "connected", revision: 4 });
     server.revision = 5;
     await vi.advanceTimersByTimeAsync(1000);
+    expect(settled).toBe(false);
+    server.pendingOauthSessionId = null;
+    await vi.advanceTimersByTimeAsync(1000);
     expect(await result).toBe("connected");
+  });
+  it("reports a failed re-authorization after discovery while the connection stays recorded", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    const server = {
+      id: "connection",
+      connectionState: "connected",
+      revision: 5,
+      pendingOauthSessionId: "ours" as string | null,
+      lastError: null as string | null,
+    };
+    list.mockImplementation(async () => [server]);
+    const result = connectMcpOauth("connection");
+    let settled: string | null = null;
+    void result.then((value) => {
+      settled = value;
+    });
+    server.revision = 6;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(settled).toBeNull();
+    server.pendingOauthSessionId = null;
+    server.lastError = "Could not reach this integration. Try again.";
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(settled).toBe("sign-in-failed");
+    await result;
+  });
+  it("does not let a replaced window resolve the newer attempt", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    const server = {
+      id: "connection",
+      connectionState: "not-connected",
+      revision: 4,
+      pendingOauthSessionId: "newer",
+    };
+    list.mockImplementation(async () => [server]);
+    const result = connectMcpOauth("connection");
+    let settled: string | null = null;
+    void result.then((value) => {
+      settled = value;
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(settled).toBe("replaced");
+  });
+  it("does not resolve the newer attempt when an older decline is recorded beside it", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    const server = {
+      id: "connection",
+      connectionState: "not-connected",
+      revision: 4,
+      pendingOauthSessionId: "ours" as string | null,
+      lastError: null as string | null,
+    };
+    list.mockImplementation(async () => [server]);
+    const result = connectMcpOauth("connection");
+    let settled = false;
+    void result.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    server.connectionState = "cancelled";
+    server.revision = 9;
+    server.lastError = "Could not complete sign-in. Connect again.";
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(settled).toBe(false);
+    server.pendingOauthSessionId = null;
+    server.connectionState = "connected";
+    server.lastError = null;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await result).toBe("connected");
+  });
+  it("returns needs-sign-in within two seconds of the popup closing", async () => {
+    const result = waitForMcpOauth(
+      "https://auth.example.test/authorize",
+      popup as unknown as Window,
+      "ours",
+    );
+    let settled: string | null = null;
+    void result.then((value) => {
+      settled = value;
+    });
+    popup.closed = true;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(settled).toBe("needs-sign-in");
   });
   it("leaves a connected server connected when the popup closes without a callback", async () => {
     begin.mockResolvedValue({
@@ -171,7 +276,12 @@ describe("MCP browser consent", () => {
       authorizationUrl: "https://auth.example.test/authorize",
       sessionId: "ours",
     });
-    const server = { id: "connection", connectionState: "connected", revision: 4 };
+    const server = {
+      id: "connection",
+      connectionState: "connected",
+      revision: 4,
+      pendingOauthSessionId: "ours",
+    };
     list.mockImplementation(async () => [server]);
     const result = connectMcpOauth("connection");
     await vi.advanceTimersByTimeAsync(600_000);

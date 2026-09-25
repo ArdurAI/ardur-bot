@@ -3853,9 +3853,19 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               spaceId: context.actor.spaceId,
               userId: context.actor.userId,
             });
-            if (serverId) await integrations.capture(context.actor, serverId);
+            if (serverId) await integrations.capture(context.actor, serverId, input.sessionId);
             return { ok: true as const };
           } catch {
+            if (mcpOAuth.recordAttemptFailure) {
+              await mcpOAuth
+                .recordAttemptFailure({
+                  sessionId: input.sessionId,
+                  spaceId: context.actor.spaceId,
+                  userId: context.actor.userId,
+                  kind: "failed",
+                })
+                .catch(() => undefined);
+            }
             throw new ORPCError("BAD_REQUEST", {
               message: "Could not complete authorization. Try connecting again.",
             });

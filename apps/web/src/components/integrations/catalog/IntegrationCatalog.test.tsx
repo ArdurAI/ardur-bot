@@ -645,6 +645,50 @@ describe("Settings integration catalog", () => {
     expect(button("Reconnect")).toBeDefined();
   });
 
+  it("opens the credential field when Reconnect follows a rejected token", async () => {
+    const onOpenMcp = vi.fn();
+    api.servers.mockResolvedValue([
+      {
+        id: "rejected-token",
+        name: "Rejected token",
+        endpoint: "https://rejected.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "none",
+        hasSecret: true,
+        connectionState: "needs-sign-in",
+        lastError: "Needs sign-in (invalid_token).",
+        catalogId: null,
+      },
+    ]);
+    await act(async () => root.render(<IntegrationCatalog onOpenMcp={onOpenMcp} />));
+    await click(button("Reconnect"));
+    expect(onOpenMcp).toHaveBeenCalledExactlyOnceWith("rejected-token");
+    expect(api.oauth).not.toHaveBeenCalled();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it("opens the credential field when a server offers no browser sign-in", async () => {
+    const onOpenMcp = vi.fn();
+    api.servers.mockResolvedValue([
+      {
+        id: "no-browser",
+        name: "No browser",
+        endpoint: "https://nobrowser.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "reconnect",
+        connectionState: "needs-sign-in",
+        lastError: "Needs sign-in (oauth_unavailable).",
+        catalogId: null,
+      },
+    ]);
+    await act(async () => root.render(<IntegrationCatalog onOpenMcp={onOpenMcp} />));
+    await click(button("Reconnect"));
+    expect(onOpenMcp).toHaveBeenCalledExactlyOnceWith("no-browser");
+    expect(api.oauth).not.toHaveBeenCalled();
+  });
+
   it("offers Reconnect, Manage, and a confirmed Delete for a failed custom server", async () => {
     const onOpenMcp = vi.fn();
     api.servers.mockResolvedValue([
@@ -829,6 +873,62 @@ describe("Settings integration catalog", () => {
     );
     expect(api.oauth).toHaveBeenCalledExactlyOnceWith("created-1");
     expect(api.tools).not.toHaveBeenCalled();
+  });
+
+  it("asks for a GitHub token before connecting and shows the API sentence", async () => {
+    const github = {
+      ...catalog[0]!,
+      authKind: "token" as const,
+      endpoint: "https://api.githubcopilot.com/mcp/",
+    };
+    api.list.mockImplementation(async () => ({ catalog: [github], connections: [] }));
+    api.catalogSearch.mockResolvedValue({
+      enabled: true,
+      results: [listing("GitHub directory", "https://api.githubcopilot.com/mcp/")],
+    });
+    api.connect.mockRejectedValue(new Error("Enter a valid token."));
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "GitHub");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("GitHub")!);
+    expect(api.connect).not.toHaveBeenCalled();
+    expect(container.querySelector('[aria-label="Credential"]')).not.toBeNull();
+    expect(resultConnect("GitHub")?.disabled).toBe(true);
+    expect(container.textContent).not.toContain("Could not connect or load integrations.");
+    await fill("Credential", "synthetic-token");
+    await click(resultConnect("GitHub")!);
+    expect(api.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: "github", authKind: "token", token: "synthetic-token" }),
+    );
+    expect(container.textContent).toContain("Enter a valid token.");
+    expect(container.textContent).not.toContain("Could not connect or load integrations.");
+  });
+
+  it("re-enables Connect when sign-in does not finish", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    createdServers();
+    api.oauth.mockResolvedValue("needs-sign-in");
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "Figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain("Sign-in did not finish. Try again.");
+    expect(resultConnect("Figma")?.disabled).toBe(false);
+  });
+
+  it("shows the replaced-window sentence and leaves Connect available", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    createdServers();
+    api.oauth.mockResolvedValue("replaced");
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "Figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain("This sign-in window was replaced by a newer one.");
+    expect(resultConnect("Figma")?.disabled).toBe(false);
   });
 
   it("starts the catalog flow with a token typed beside a built-in URL", async () => {

@@ -425,6 +425,11 @@ function oauthFetch(
 
 export class McpOAuthBroker {
   private readonly pending = new Map<string, Pending>();
+  /** Tokens that were working before this attempt, so a failed exchange can put them back. */
+  private readonly priorConnectedMaterial = new Map<
+    string,
+    { at: number; material: OAuthMaterial }
+  >();
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -517,44 +522,106 @@ export class McpOAuthBroker {
       const pending = this.pending.get(input.state);
       if (pending) this.discardPending(input.state, pending);
       await this.prisma.mcpOAuthSession.deleteMany({ where: { id: input.state, ...actor } });
-      const material = this.read(session.oauthCiphertext, session.id);
-      if (material.oauth?.authorizationRevision !== undefined) {
-        await this.prisma.mcpServer.updateMany({
-          where: {
-            id: session.serverId,
-            ...actor,
-            enabled: true,
-            connectionState: "awaiting-consent",
-            revision: material.oauth.authorizationRevision,
-          },
-          data: {
-            connectionState: input.error === "access_denied" ? "cancelled" : "discovery-failed",
-            consentStartedAt: null,
-            lastError: "Could not complete sign-in. Connect again.",
-          },
-        });
-      }
-      // Custom servers wait in "not-connected" while their sign-in is pending.
-      // A decline is "cancelled". Any other post-consent failure is "discovery-failed"
-      // (the same stored state catalog rows use) so callers can show lastError.
-      // The revision bump is this attempt's outcome, not the row's previous one.
-      // A server that is still "connected" is left alone: closing the popup writes nothing.
-      await this.prisma.mcpServer.updateMany({
-        where: {
-          id: session.serverId,
-          ...actor,
-          enabled: true,
-          catalogId: null,
-          connectionState: "not-connected",
-        },
-        data: {
-          connectionState: input.error === "access_denied" ? "cancelled" : "discovery-failed",
-          lastError: "Could not complete sign-in. Connect again.",
-          revision: { increment: 1 },
-        },
+      await this.recordAttemptFailure({
+        serverId: session.serverId,
+        sessionId: input.state,
+        ...actor,
+        kind: input.error === "access_denied" ? "declined" : "failed",
       });
       throw new Error("MCP OAuth sign-in failed");
     }
+  }
+
+  /**
+   * Record this attempt's outcome only when it is still the server's pending session.
+   * A connected server keeps that state when the person declined or the previous tokens
+   * were written back. Closing a popup never calls this.
+   */
+  async recordAttemptFailure(input: {
+    serverId?: string;
+    sessionId: string;
+    spaceId: string;
+    userId: string;
+    kind: "declined" | "failed";
+  }): Promise<void> {
+    const actor = { spaceId: input.spaceId, userId: input.userId };
+    const current = await this.prisma.mcpServer.findFirst({
+      where: {
+        ...(input.serverId ? { id: input.serverId } : {}),
+        ...actor,
+        enabled: true,
+        pendingOauthSessionId: input.sessionId,
+      },
+    });
+    if (!current || current.pendingOauthSessionId !== input.sessionId) return;
+    const declined = input.kind === "declined";
+    const kept =
+      current.connectionState === "connected" &&
+      (await this.restorePriorConnected(current.id, input.sessionId, actor));
+    const keepConnection = current.connectionState === "connected" && (declined || kept);
+    await this.prisma.mcpServer.updateMany({
+      where: {
+        id: current.id,
+        ...actor,
+        enabled: true,
+        pendingOauthSessionId: input.sessionId,
+      },
+      data: {
+        connectionState: keepConnection
+          ? "connected"
+          : current.connectionState === "connected"
+            ? "needs-sign-in"
+            : declined
+              ? "cancelled"
+              : "discovery-failed",
+        consentStartedAt: null,
+        lastError: keepConnection
+          ? declined
+            ? "Sign-in was declined."
+            : "Could not complete sign-in. Connect again."
+          : current.connectionState === "connected"
+            ? "Needs sign-in."
+            : "Could not complete sign-in. Connect again.",
+        pendingOauthSessionId: null,
+      },
+    });
+  }
+
+  discardPriorConnected(sessionId: string): void {
+    this.priorConnectedMaterial.delete(sessionId);
+  }
+
+  /** Put the pre-attempt tokens back. Returns false when this instance has no snapshot. */
+  async restorePriorConnected(
+    serverId: string,
+    sessionId: string,
+    context: ActorRef,
+  ): Promise<boolean> {
+    const prior = this.priorConnectedMaterial.get(sessionId);
+    if (!prior?.material.oauth?.tokens) return false;
+    const current = await this.prisma.mcpServer.findFirst({
+      where: {
+        id: serverId,
+        ...context,
+        enabled: true,
+        pendingOauthSessionId: sessionId,
+      },
+    });
+    if (!current || current.pendingOauthSessionId !== sessionId) {
+      this.priorConnectedMaterial.delete(sessionId);
+      return false;
+    }
+    const stored = await this.replaceMaterial(
+      serverId,
+      prior.material,
+      context,
+      true,
+      undefined,
+      undefined,
+      sessionId,
+    );
+    this.priorConnectedMaterial.delete(sessionId);
+    return stored !== undefined;
   }
 
   private async refreshMaterial(
@@ -884,6 +951,33 @@ export class McpOAuthBroker {
       },
     });
     if (consumed.count !== 1) throw new Error("MCP OAuth session is invalid or expired");
+    const context = { spaceId: input.spaceId, userId: input.userId };
+    const current = await this.prisma.mcpServer.findFirst({
+      where: { id: pending.serverId, ...context, enabled: true },
+    });
+    if (
+      typeof current?.pendingOauthSessionId === "string" &&
+      current.pendingOauthSessionId !== input.sessionId
+    ) {
+      throw new Error("MCP OAuth session is invalid or expired");
+    }
+    if (current?.connectionState === "connected" && current.secretId && current.endpoint) {
+      const loaded = await this.loadMaterial(
+        {
+          id: pending.serverId,
+          endpoint: current.endpoint,
+          secretId: current.secretId,
+          revision: current.revision,
+        },
+        context,
+      );
+      if (loaded.material.oauth?.tokens) {
+        this.priorConnectedMaterial.set(input.sessionId, {
+          at: Date.now(),
+          material: structuredClone(loaded.material),
+        });
+      }
+    }
     const endpoint = new URL(pending.endpoint);
     const networkFetch = oauthFetch(pending.endpoint, this.network);
     const transport = new StreamableHTTPClientTransport(endpoint, {
@@ -897,9 +991,9 @@ export class McpOAuthBroker {
       await networkFetch.close().catch(() => undefined);
     }
     if (!pending.provider.tokens()) throw new Error("MCP OAuth authorization failed");
-    // Bump the revision so cached runtime sessions rebuild with the fresh tokens.
+    // Token commit rebuilds cached sessions. It does not record the attempt:
+    // connectionState and the pending session id stay until discovery finishes.
     const serverId = pending.serverId;
-    const context = { spaceId: input.spaceId, userId: input.userId };
     await this.prisma.$transaction(async (tx) => {
       await this.lockMaterial(tx, serverId, context, true);
       const server = await tx.mcpServer.update({
@@ -913,6 +1007,9 @@ export class McpOAuthBroker {
 
   private async sweepExpiredPending(): Promise<void> {
     const cutoff = Date.now() - PENDING_TTL_MS;
+    for (const [sessionId, prior] of this.priorConnectedMaterial) {
+      if (prior.at < cutoff) this.priorConnectedMaterial.delete(sessionId);
+    }
     for (const [sessionId, pending] of this.pending) {
       if (pending.createdAt < cutoff) {
         this.discardPending(sessionId, pending);
@@ -1007,6 +1104,7 @@ export class McpOAuthBroker {
     incrementRevision: boolean,
     expectedEndpoint?: string | null,
     expectedRevision?: number,
+    expectedPendingSessionId?: string,
   ): Promise<string | undefined> {
     return this.prisma.$transaction(async (tx) => {
       // Serialize every credential rotation across API instances. OAuth
@@ -1020,10 +1118,16 @@ export class McpOAuthBroker {
           userId: context.userId,
           ...(expectedEndpoint !== undefined ? { enabled: true } : {}),
           ...(expectedRevision !== undefined ? { revision: expectedRevision } : {}),
+          ...(expectedPendingSessionId !== undefined
+            ? { pendingOauthSessionId: expectedPendingSessionId }
+            : {}),
         },
         select: { endpoint: true, secretId: true },
       });
-      if (!server) throw new Error("MCP server is unavailable");
+      if (!server) {
+        if (expectedPendingSessionId !== undefined) return undefined;
+        throw new Error("MCP server is unavailable");
+      }
       if (expectedEndpoint !== undefined && server.endpoint !== expectedEndpoint) {
         throw new Error("MCP server endpoint changed during authorization; reconnect this server");
       }

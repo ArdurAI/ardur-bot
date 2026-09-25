@@ -1276,6 +1276,7 @@ model McpServer {
   oauthSessions McpOAuthSession[]
   catalogId     String?
   connectionState String          @default("not-connected")
+  pendingOauthSessionId String?
   consentStartedAt DateTime?
   lastCheckedAt DateTime?
   lastSuccessAt DateTime?

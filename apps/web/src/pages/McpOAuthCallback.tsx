@@ -2,7 +2,7 @@ import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
+import { MCP_OAUTH_CHANNEL } from "../lib/mcp-oauth-channel";
 import { rpc } from "../lib/rpc";
 
 // The window.open name set by the OAuth popup flow. Providers whose login

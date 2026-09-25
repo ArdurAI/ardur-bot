@@ -9,7 +9,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { connectIntegration } from "../../../lib/connect-integration";
 import { refreshIntegrationCatalog } from "../../../lib/integration-catalog-query";
-import { MCP_OAUTH_CHANNEL } from "../../../lib/mcp-connect";
+import { MCP_OAUTH_CHANNEL } from "../../../lib/mcp-oauth-channel";
 import { rpc } from "../../../lib/rpc";
 import type { CatalogTab } from "../../../pages/customize/CustomizeControls";
 import { CustomizeToolbar } from "../../../pages/customize/CustomizeControls";
@@ -36,7 +36,7 @@ export function IntegrationCards({
   const [remoteServers, setRemoteServers] = useState<McpServer[]>([]);
   const [selected, setSelected] = useState<string | null>(reconnectId ?? null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"load" | "token" | "replaced" | null>(null);
   const [tokenFor, setTokenFor] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [hosts, setHosts] = useState<Record<string, string>>({});
@@ -55,7 +55,7 @@ export function IntegrationCards({
     if (!value) return;
     setData(value.catalog);
     setRemoteServers(value.servers);
-    setError(false);
+    setError(null);
   };
   useEffect(() => {
     let active = true;
@@ -65,10 +65,10 @@ export function IntegrationCards({
           if (!active || !value) return;
           setData(value.catalog);
           setRemoteServers(value.servers);
-          setError(false);
+          setError(null);
         })
         .catch(() => {
-          if (active) setError(true);
+          if (active) setError("load");
         });
     };
     load();
@@ -96,7 +96,7 @@ export function IntegrationCards({
     suppliedToken?: string,
   ): Promise<boolean> {
     setBusy(descriptor.id);
-    setError(false);
+    setError(null);
     try {
       const current = await connectIntegration(descriptor, connection, {
         authKind,
@@ -117,8 +117,9 @@ export function IntegrationCards({
       await refresh();
       if (current.state === "connected") setSelected(current.id);
       return current.state === "connected";
-    } catch {
-      setError(true);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "";
+      setError(message === "Enter a valid token." ? "token" : "load");
       return false;
     } finally {
       setBusy(null);
@@ -129,13 +130,18 @@ export function IntegrationCards({
   }
   async function reconnectCustom(server: McpServer) {
     if (!server.endpoint) return;
+    if (reconnectUsesCredential(server)) {
+      onOpenMcp?.(server.id);
+      return;
+    }
     setBusy(server.id);
-    setError(false);
+    setError(null);
     try {
-      await connectRemoteMcp({ name: server.name, endpoint: server.endpoint });
+      const outcome = await connectRemoteMcp({ name: server.name, endpoint: server.endpoint });
       await refresh();
+      if (outcome === "replaced") setError("replaced");
     } catch {
-      setError(true);
+      setError("load");
     } finally {
       setBusy(null);
     }
@@ -147,12 +153,12 @@ export function IntegrationCards({
     }
     setConfirmingDelete(null);
     setBusy(server.id);
-    setError(false);
+    setError(null);
     try {
       await rpc.mcp.servers.remove({ id: server.id });
       await refresh();
     } catch {
-      setError(true);
+      setError("load");
     } finally {
       setBusy(null);
     }
@@ -163,7 +169,7 @@ export function IntegrationCards({
       popup.current?.close();
       await refresh();
     } catch {
-      setError(true);
+      setError("load");
     } finally {
       setBusy(null);
     }
@@ -248,7 +254,7 @@ export function IntegrationCards({
             try {
               await refresh();
             } catch {
-              setError(true);
+              setError("load");
             }
           }}
         />
@@ -262,10 +268,16 @@ export function IntegrationCards({
       />
       {error ? (
         <div role="alert">
-          <p className="text-sm text-destructive">{t`Could not connect or load integrations.`}</p>
+          <p className="text-sm text-destructive">
+            {error === "token"
+              ? t`Enter a valid token.`
+              : error === "replaced"
+                ? t`This sign-in window was replaced by a newer one.`
+                : t`Could not connect or load integrations.`}
+          </p>
           <Button
             variant="outline"
-            onClick={() => void refresh().catch(() => setError(true))}
+            onClick={() => void refresh().catch(() => setError("load"))}
           >{t`Try again`}</Button>
         </div>
       ) : null}
@@ -553,6 +565,16 @@ function customServerRows(data: IntegrationCatalogList, servers: McpServer[]): M
         : { ...server, enabled: true, oauthStatus: "reconnect", connectionState: state },
     ];
   });
+}
+
+function reconnectUsesCredential(server: McpServer): boolean {
+  const recorded = server.lastError ?? "";
+  if (recorded.includes("invalid_token") || recorded.includes("oauth_unavailable")) return true;
+  return (
+    server.oauthStatus === "none" &&
+    server.hasSecret === true &&
+    server.connectionState === "needs-sign-in"
+  );
 }
 
 function liveRemoteState(server: McpServer): IntegrationConnection["state"] | null {

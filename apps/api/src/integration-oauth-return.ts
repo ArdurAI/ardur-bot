@@ -31,7 +31,7 @@ export function integrationOAuthReturn(
           ? { error: denied === "access_denied" ? "access_denied" : "authorization_failed" }
           : { code }),
       });
-      await integrations.capture(result, result.serverId);
+      await integrations.capture(result, result.serverId, state);
       const server = await integrations.owned(result, result.serverId);
       id = server.id;
       if (server.connectionState === "connected") {

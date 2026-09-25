@@ -3214,6 +3214,10 @@ msgstr ""
 msgid "Enter a valid destination and save again."
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Enter a valid token."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -6772,7 +6776,9 @@ msgstr ""
 msgid "Sign up"
 msgstr "가입하기"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Sign-in did not finish. Try again."
 msgstr ""
@@ -7350,6 +7356,14 @@ msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "This service needs client registration before you can connect."
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "This sign-in window was replaced by a newer one."
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx

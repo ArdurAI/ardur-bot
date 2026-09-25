@@ -84,6 +84,14 @@ it("does not approve a bot when tool discovery failed", async () => {
   expect(container.textContent).not.toContain("Connected. Review tools in MCP settings.");
 });
 
+it("says a replaced sign-in window was replaced and does not approve the bot", async () => {
+  api.oauth.mockResolvedValue("replaced");
+  const container = await mount();
+  await click("Authorize");
+  expect(api.approve).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("This sign-in window was replaced by a newer one.");
+});
+
 it("says sign-in was declined and does not approve the bot", async () => {
   api.oauth.mockResolvedValue("cancelled");
   const container = await mount();

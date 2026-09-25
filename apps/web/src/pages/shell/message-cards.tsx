@@ -7,7 +7,6 @@ import { useEffect, useRef, useState } from "react";
 import { BuiCard, SuccessPop } from "../../components/ai/primitives";
 import { type ArtifactTarget, decodeArtifactBase64 } from "../../lib/artifact-open";
 import { chartViewport } from "../../lib/chart-viewport";
-import { connectMcpOauth } from "../../lib/mcp-connect";
 import { rpc } from "../../lib/rpc";
 
 export function ChoiceCard({
@@ -355,6 +354,7 @@ export function McpApprovalCard({
     setError(null);
     try {
       if (needsOAuth) {
+        const { connectMcpOauth } = await import("../../lib/mcp-connect");
         const result = await connectMcpOauth(serverId);
         if (result !== "connected") {
           let recorded = "";
@@ -369,16 +369,18 @@ export function McpApprovalCard({
             }
           }
           setError(
-            result === "cancelled"
-              ? t`Sign-in was declined.`
-              : result === "needs-sign-in"
-                ? t`Sign-in did not finish. Try again.`
-                : recorded ||
-                  (result === "already_connected"
-                    ? t`This server is already connected. Disconnect it first to authorize again.`
-                    : result === "authorization_not_requested"
-                      ? t`This server did not request browser authorization.`
-                      : t`Could not load this account’s tools.`),
+            result === "replaced"
+              ? t`This sign-in window was replaced by a newer one.`
+              : result === "cancelled"
+                ? t`Sign-in was declined.`
+                : result === "needs-sign-in"
+                  ? t`Sign-in did not finish. Try again.`
+                  : recorded ||
+                    (result === "already_connected"
+                      ? t`This server is already connected. Disconnect it first to authorize again.`
+                      : result === "authorization_not_requested"
+                        ? t`This server did not request browser authorization.`
+                        : t`Could not load this account’s tools.`),
           );
           setState("pending");
           return;

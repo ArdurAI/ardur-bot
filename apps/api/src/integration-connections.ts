@@ -198,19 +198,22 @@ export class IntegrationConnections {
       throw error;
     }
     if (started.status !== "authorization_required") await this.capture(actor, input.serverId);
-    else if (!server.catalogId && server.connectionState !== "connected")
-      // A server that is not connected yet can drop its previous result. A connected
-      // server stays connected until this attempt records an outcome; the client
-      // tells the attempts apart by revision.
+    // The session id is this attempt. A server that is not connected yet can drop its
+    // previous result. A connected server stays connected until discovery records the outcome.
+    else
       await this.prisma.mcpServer.updateMany({
         where: {
           id: server.id,
           spaceId: actor.spaceId,
           userId: actor.userId,
           enabled: true,
-          revision: server.revision,
         },
-        data: { connectionState: "not-connected", revision: { increment: 1 } },
+        data: {
+          pendingOauthSessionId: started.sessionId,
+          ...(!server.catalogId && server.connectionState !== "connected"
+            ? { connectionState: "not-connected" }
+            : {}),
+        },
       });
     return started;
   }
@@ -363,6 +366,11 @@ export class IntegrationConnections {
           where: { id: server.id },
           data: { connectionState: "discovery-failed" },
         });
+      } else {
+        await this.prisma.mcpServer.update({
+          where: { id: server.id },
+          data: { pendingOauthSessionId: started.sessionId },
+        });
       }
       return {
         connection: connectionDto(await this.owned(actor, server.id)),
@@ -388,7 +396,7 @@ export class IntegrationConnections {
     }
   }
 
-  async capture(actor: Owner, id: string): Promise<void> {
+  async capture(actor: Owner, id: string, oauthSessionId?: string): Promise<void> {
     const server = await this.owned(actor, id);
     if (!server.enabled) return;
     try {
@@ -415,6 +423,7 @@ export class IntegrationConnections {
             userId: actor.userId,
             enabled: true,
             revision: server.revision,
+            ...(oauthSessionId ? { pendingOauthSessionId: oauthSessionId } : {}),
           },
           data: {
             manifest,
@@ -423,12 +432,14 @@ export class IntegrationConnections {
             lastCheckedAt: new Date(),
             lastSuccessAt: new Date(),
             lastError: null,
+            ...(oauthSessionId ? { pendingOauthSessionId: null } : {}),
             ...(changed
               ? { spaceAllowedTools: [], spaceToolPolicies: {}, revision: { increment: 1 } }
               : {}),
           },
         });
         if (!captured.count) return;
+        if (oauthSessionId) this.oauth.discardPriorConnected(oauthSessionId);
         if (!changed) return;
         // A refreshed manifest never silently inherits grants to an older tool definition.
         await tx.botMcpServer.updateMany({
@@ -439,14 +450,22 @@ export class IntegrationConnections {
       });
       await McpConnector.invalidateConnection(id, actor);
     } catch (error) {
-      await this.recordFailure(actor, server, error);
+      await this.recordFailure(actor, server, error, oauthSessionId);
       if (!server.catalogId)
         throw new Error("Could not connect this server. Check its configuration and try again.");
     }
   }
 
-  private async recordFailure(actor: Owner, server: McpServer, error: unknown) {
+  private async recordFailure(
+    actor: Owner,
+    server: McpServer,
+    error: unknown,
+    oauthSessionId?: string,
+  ) {
     const message = integrationFailure(error);
+    const kept = oauthSessionId
+      ? await this.oauth.restorePriorConnected(server.id, oauthSessionId, actor)
+      : false;
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${server.id}))`;
       const where = {
@@ -454,10 +473,14 @@ export class IntegrationConnections {
         spaceId: actor.spaceId,
         userId: actor.userId,
         enabled: true,
-        revision: server.revision,
+        ...(oauthSessionId
+          ? { pendingOauthSessionId: oauthSessionId }
+          : { revision: server.revision }),
       };
       const current = await tx.mcpServer.findFirst({ where });
-      if (!current || current.revision !== server.revision) return;
+      if (!current) return;
+      if (oauthSessionId && current.pendingOauthSessionId !== oauthSessionId) return;
+      if (!oauthSessionId && current.revision !== server.revision) return;
       // A rejected older token must not invalidate a successful concurrent refresh.
       if (
         error instanceof McpReauthorizationRequiredError &&
@@ -465,21 +488,29 @@ export class IntegrationConnections {
         current.connectionState === "connected"
       )
         return;
+      const wasConnected =
+        server.connectionState === "connected" || current.connectionState === "connected";
+      const keep = kept && wasConnected;
+      const needsSignIn = message.startsWith("Needs sign-in");
+      const droppedReauth = Boolean(oauthSessionId) && wasConnected && !keep && !needsSignIn;
       await tx.mcpServer.updateMany({
         where,
         data: {
-          // A catalog health check keeps its connection through a failed read; a custom
-          // server shows the result of the discovery the owner just ran.
-          ...(message.startsWith("Needs sign-in")
-            ? { connectionState: "needs-sign-in" }
-            : current.connectionState === "connected" && server.catalogId
-              ? {}
-              : { connectionState: "discovery-failed" }),
+          // A catalog health check keeps its connection through a failed read. A failed
+          // re-authorization keeps it too when the previous tokens were written back.
+          ...(keep
+            ? { connectionState: "connected" }
+            : needsSignIn || droppedReauth
+              ? { connectionState: "needs-sign-in" }
+              : current.connectionState === "connected" && server.catalogId
+                ? {}
+                : { connectionState: "discovery-failed" }),
           lastCheckedAt: new Date(),
-          lastError: message,
+          lastError: droppedReauth ? "Needs sign-in." : message,
+          ...(oauthSessionId ? { pendingOauthSessionId: null } : {}),
           recentErrors: [
             ...(Array.isArray(current.recentErrors) ? current.recentErrors : []),
-            { at: new Date().toISOString(), message },
+            { at: new Date().toISOString(), message: droppedReauth ? "Needs sign-in." : message },
           ].slice(-10),
         },
       });

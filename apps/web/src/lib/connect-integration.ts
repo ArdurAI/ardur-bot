@@ -1,6 +1,6 @@
 import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/contracts";
 import { desktopBridge } from "./desktop";
-import { MCP_OAUTH_CHANNEL } from "./mcp-connect";
+import { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
 import { rpc } from "./rpc";
 
 /** Polling survives browser-profile changes and providers that sever the popup opener. */
