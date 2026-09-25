@@ -2,14 +2,57 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { CrashEvidence, ExperimentEvidence } from "../../performance-report.js";
+import type { TraceBatch } from "@ardurbot/contracts";
+import type {
+  CrashEvidence,
+  ExperimentEvidence,
+  PerformanceEvidenceReport,
+} from "../../performance-report.js";
 import {
   CRASH_BOUNDARIES,
   canonicalSerialize,
   contentDigest,
   EXPERIMENT_DEFINITIONS,
 } from "../manifest.js";
+import { collectTraceEvidence } from "../trace-collector.js";
 import type { MatrixResult } from "./catalog.js";
+
+const CRASH_CONTROLS: Record<string, readonly string[]> = {
+  "crash-03": ["crash-03-revoke", "crash-03-pin"],
+};
+
+function reachedBoundary(result: MatrixResult | undefined): result is MatrixResult {
+  return Boolean(result && result.status !== "incomplete" && result.checks.killedAtBoundary);
+}
+function observedUnsafe(result: MatrixResult | undefined) {
+  return (
+    reachedBoundary(result) &&
+    (result.status === "finding" || Object.values(result.checks).includes(false))
+  );
+}
+/** Trace batches the interrupted and the recovering process each reported for this attempt. */
+function phaseBatches(result: MatrixResult): TraceBatch[] {
+  return (["before", "after"] as const).flatMap((phase) => {
+    const batches = (
+      result.measurements[phase] as { trace?: { raw?: { batches?: unknown } } | null } | undefined
+    )?.trace?.raw?.batches;
+    return Array.isArray(batches) ? (batches as TraceBatch[]) : [];
+  });
+}
+/** One fragment per crash, so the interrupted and recovering phases of a run share one trace id. */
+function crashTraces(boundaryId: string, attempts: readonly MatrixResult[]) {
+  if (!attempts.every((attempt) => phaseBatches(attempt).some((batch) => batch.points.length)))
+    return null;
+  try {
+    return collectTraceEvidence(attempts.flatMap(phaseBatches), {
+      sessionId: boundaryId,
+      pairId: null,
+      requiredBoundaries: [],
+    });
+  } catch {
+    return null;
+  }
+}
 
 /** W0-1 report fragments, alongside detailed raw probes; never an alternate release contract. */
 export function matrixEvidence(results: readonly MatrixResult[]) {
@@ -22,59 +65,68 @@ export function matrixEvidence(results: readonly MatrixResult[]) {
       traceIds: [],
     })),
   }));
+  const traces = new Map<string, PerformanceEvidenceReport["traces"][number]>();
+  const artifacts = new Map<string, PerformanceEvidenceReport["artifacts"][number]>();
+  const rawTraces: unknown[] = [];
   const crashes: CrashEvidence[] = CRASH_BOUNDARIES.map((boundary) => {
     const result = results.find((item) => item.id === boundary.id);
-    const controls = results.filter((item) => item.id.startsWith(`${boundary.id}-`));
-    const reachedBoundary = Boolean(
-      result && result.status !== "incomplete" && result.checks.killedAtBoundary,
-    );
+    const controls = (CRASH_CONTROLS[boundary.id] ?? []).map((id) => ({
+      id,
+      result: results.find((item) => item.id === id),
+    }));
+    // A control counts only when it reached its boundary and passed; its id alone proves nothing.
+    const missingControls = controls
+      .filter((control) => !reachedBoundary(control.result))
+      .map((control) => control.id);
+    const candidates = [result, ...controls.map((control) => control.result)];
+    const unsafe = candidates.some(observedUnsafe);
+    const attempts = candidates.filter(reachedBoundary);
     const after = result?.measurements.after as { autonomousCompletion?: boolean } | undefined;
-    const requiredControls = boundary.id === "crash-03" ? ["crash-03-revoke", "crash-03-pin"] : [];
-    const missingControls = requiredControls.filter(
-      (id) => !controls.some((control) => control.id === id),
-    );
-    const controlFailed = controls.some(
-      (control) => control.status !== "passed" || Object.values(control.checks).includes(false),
-    );
-    const baseFailed =
-      reachedBoundary &&
-      (result?.status === "finding" || Object.values(result?.checks ?? {}).includes(false));
+    const fragment = reachedBoundary(result) ? crashTraces(boundary.id, attempts) : null;
     const complete =
-      reachedBoundary &&
-      result?.status === "passed" &&
+      reachedBoundary(result) &&
       missingControls.length === 0 &&
+      !unsafe &&
+      fragment !== null &&
       typeof after?.autonomousCompletion === "boolean";
-    const missingReason: CrashEvidence["missingReason"] = !reachedBoundary
-      ? "not-measured"
-      : missingControls.length === 2
-        ? "missing-revoke-and-pin-controls"
-        : missingControls[0] === "crash-03-revoke"
-          ? "missing-revoke-control"
-          : missingControls[0] === "crash-03-pin"
-            ? "missing-pin-control"
-            : complete
-              ? null
-              : "invalid-trial";
+    const missingReason: CrashEvidence["missingReason"] = complete
+      ? null
+      : !reachedBoundary(result)
+        ? "not-measured"
+        : unsafe
+          ? "invalid-trial"
+          : missingControls.length === 2
+            ? "missing-revoke-and-pin-controls"
+            : missingControls[0] === "crash-03-revoke"
+              ? "missing-revoke-control"
+              : missingControls[0] === "crash-03-pin"
+                ? "missing-pin-control"
+                : fragment === null
+                  ? "trace-links-missing"
+                  : "invalid-trial";
+    if (complete) {
+      for (const trace of fragment.traces) traces.set(trace.id, trace);
+      for (const artifact of fragment.artifacts) artifacts.set(artifact.sha256, artifact);
+      rawTraces.push(fragment.raw);
+    }
     return {
       id: boundary.id,
       status: complete ? "complete" : "incomplete",
       missingReason,
       recovery: complete ? (boundary.expected as CrashEvidence["recovery"]) : null,
-      // A failed control is a safety failure even when the base attempt was not measured.
-      safetyPassed:
-        controlFailed || baseFailed
-          ? false
-          : complete
-            ? Object.values(result!.checks).every(Boolean)
-            : null,
-      taskCompleted:
-        complete && typeof after?.autonomousCompletion === "boolean"
-          ? after.autonomousCompletion
-          : null,
-      traceIds: [],
+      // An observed unsafe effect fails safety even when the base attempt was not measured.
+      safetyPassed: unsafe ? false : complete ? true : null,
+      taskCompleted: complete ? after!.autonomousCompletion! : null,
+      traceIds: complete ? fragment.traces.map((trace) => trace.id) : [],
     };
   });
-  return { experiments, crashes };
+  return {
+    experiments,
+    crashes,
+    traces: [...traces.values()],
+    artifacts: [...artifacts.values()],
+    rawTraces,
+  };
 }
 
 export async function matrixSourceBinding() {
@@ -111,6 +163,15 @@ export async function writeMatrixArtifact(directory: string, kind: string, paylo
   const envelope = { algorithm: "sha256", sha256, payload };
   await writeFile(path.join(directory, file), `${canonicalSerialize(envelope)}\n`, { flag: "wx" });
   return { path: file, sha256 };
+}
+
+/** Writes the fragments and each merged trace their crash links cite, under the same digest. */
+export async function writeMatrixEvidence(directory: string, results: readonly MatrixResult[]) {
+  const { rawTraces, ...fragments } = matrixEvidence(results);
+  const written = [];
+  for (const raw of rawTraces) written.push(await writeMatrixArtifact(directory, "trace", raw));
+  written.push(await writeMatrixArtifact(directory, "scoreboard-fragments", fragments));
+  return written;
 }
 
 /** Never allow the existing provisioner to implicitly download a missing image. */

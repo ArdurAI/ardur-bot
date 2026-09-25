@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { MatrixResult } from "../experiments/catalog.js";
 import {
-  matrixEvidence,
   requireCachedMatrixImages,
   writeMatrixArtifact,
+  writeMatrixEvidence,
 } from "../experiments/evidence.js";
 import { CRASH_BOUNDARIES } from "../manifest.js";
 import { provisionReplayPostgres } from "../replay/postgres.js";
@@ -29,8 +29,7 @@ describe.skipIf(process.env.SCOREBOARD_MATRIX_POSTGRES !== "1")(
     afterAll(async () => {
       try {
         const directory = process.env.SCOREBOARD_MATRIX_REPORT_DIR;
-        if (directory)
-          await writeMatrixArtifact(directory, "scoreboard-fragments", matrixEvidence(results));
+        if (directory) await writeMatrixEvidence(directory, results);
       } finally {
         await postgres?.close();
       }

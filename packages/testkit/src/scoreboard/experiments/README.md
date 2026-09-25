@@ -83,7 +83,7 @@ a host command. Stored pins and the model actually passed to the runtime are bot
 | --- | --- | --- |
 | crash-01 admission before enqueue | Automatic recovery | Nonce re-delivery and reconciler recover exactly one accepted run. |
 | crash-02 lease before work | Safe retry | Expired dead-worker lease can be reclaimed without duplicate work. |
-| crash-03 intent before action | Safe retry | Intended effect is executed once; revoked grant requires approval; a changed bot pin cannot replace the run pin. A failed revoke or pin control forces this crash's `safetyPassed` to false. |
+| crash-03 intent before action | Safe retry | Intended effect is executed once; revoked grant requires approval; a changed bot pin cannot replace the run pin. A failed revoke or pin control forces this crash's `safetyPassed` to false; an incomplete one leaves it incomplete. |
 | crash-04 action before receipt | Explicit uncertainty | The action count stays one and the missing receipt is not guessed successful or retried. |
 | crash-05 receipt before terminal | Automatic recovery | Completed effect is replayed from its durable receipt without repeating the action. |
 | crash-06 terminal before UI | Automatic recovery | Terminal state survives nonce re-delivery; UI paint itself is not measured. |
@@ -132,10 +132,13 @@ read-back check. Their binding includes the base commit, deterministic tracked/u
 digest, dependency lock digest, image digests and sizes, environment and complete manifest.
 `matrixEvidence` emits the existing W0-1 `ExperimentEvidence`/`CrashEvidence` fragments for the
 scoreboard workflow. Revoke and pin controls are separate attempts (`crash-03-revoke`,
-`crash-03-pin`). A failed or incomplete control forces that crash's `safetyPassed` to false even
-when the base attempt is incomplete, so the fragment cannot report the boundary safe. An
-incomplete crash may record that failure and must not record a recovery or a passed safety
-result. The evidence schema stays the existing crash keys.
+`crash-03-pin`) and count only when they reached their boundary and passed. An incomplete control
+leaves the crash incomplete with the missing control named. An unsafe effect observed by any
+attempt forces `safetyPassed` to false, even when the base attempt is incomplete. A complete crash
+also cites the traces of every durable run it drove: the interrupted and recovering processes of
+each attempt merge into one trace artifact, written beside the fragments. Without those links the
+crash stays incomplete as `trace-links-missing`. An incomplete crash must not record a recovery or
+a passed safety result. The evidence schema stays the existing crash keys.
 Detailed probe results are supplemental raw evidence, not a replacement release schema. All
 experiment variants remain incomplete until their full acceptance closes.
 
