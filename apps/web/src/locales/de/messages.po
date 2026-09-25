@@ -444,7 +444,7 @@ msgstr "Remote-MCP-Server hinzufügen"
 msgid "Add server"
 msgstr "Server hinzufügen"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Add server URL"
 msgstr ""
 
@@ -1113,6 +1113,11 @@ msgstr "Bots handeln standardmäßig ohne Nachfrage. Füge nur dann eine Ausnahm
 msgid "Bots are working"
 msgstr "Bots arbeiten"
 
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Bots keep the board and memory current"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1717,6 +1722,7 @@ msgid "Confluence space keys or IDs"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -1769,6 +1775,7 @@ msgid "Connect Treg"
 msgstr "Treg verbinden"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -2032,11 +2039,13 @@ msgstr ""
 msgid "Could not complete the update. Try again."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Could not complete this action."
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
@@ -3155,6 +3164,7 @@ msgstr ""
 msgid "Email"
 msgstr "E-Mail"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3385,12 +3395,20 @@ msgstr ""
 msgid "Feedback corrections"
 msgstr ""
 
+#: src/pages/board/FiledBy.tsx
+msgid "Filed by {name}"
+msgstr ""
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Find apps"
 msgstr ""
 
 #: src/pages/shell/terminal-session.tsx
@@ -4066,6 +4084,19 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
+msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Learning review"
+msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is off"
+msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is on"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -4881,7 +4912,7 @@ msgstr "Keine Anbieter gefunden."
 msgid "No ready work"
 msgstr "Keine bereiten Aufgaben"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "No remote MCP servers found"
 msgstr ""
 
@@ -4890,6 +4921,10 @@ msgstr ""
 #: src/pages/SpaceSearch.tsx
 msgid "No results"
 msgstr "Keine Ergebnisse"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "No reviewer model yet."
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
@@ -6154,6 +6189,10 @@ msgstr ""
 msgid "Reviewer"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Reviewer: {reviewer}"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."
 msgstr ""
@@ -6421,7 +6460,7 @@ msgstr ""
 msgid "Search"
 msgstr "Suchen"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Search apps"
 msgstr "Apps suchen"
@@ -6438,7 +6477,7 @@ msgstr ""
 msgid "Search integrations"
 msgstr ""
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Search integrations.sh"
 msgstr ""
 
@@ -6571,6 +6610,7 @@ msgstr ""
 msgid "Server name"
 msgstr "Servername"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/components/OllamaSettings.tsx
 #: src/pages/customize/DeveloperPage.tsx

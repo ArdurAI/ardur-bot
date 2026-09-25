@@ -561,6 +561,7 @@ export async function evaluateRemoteExecution(
       allowed: false as const,
       reason: "This device is no longer allowed to run work.",
       action: "Approve on your Mac" as const,
+      kind: "authority" as const,
     };
   const decision = checkRemoteTool({
     tool,

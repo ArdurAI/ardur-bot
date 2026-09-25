@@ -91,7 +91,9 @@ spend and review audits. The local-first user can keep the review on a compatibl
 
 ## Review, apply, and undo
 
-Open Settings → Memory & Skills → Learning on web or desktop. In a bot's panel, open
+Open Settings → Memory & Skills → Learning on web or desktop. Settings → Customize →
+Boards also shows whether learning review is on, the reviewer model, and Enable.
+Enable uses the same configure call. The default stays off. In a bot's panel, open
 Learning for that bot's suggestions. Mobile has Learning in account settings and in the bot
 settings. A space member can review their own proposals; only the space owner sees the space
 learning switch. The collapsed cards show content and scope. Details reveals the server diff,

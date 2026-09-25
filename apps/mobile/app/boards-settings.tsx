@@ -1,3 +1,4 @@
+import type { SpaceLearningConfig } from "@ardurbot/contracts";
 import type { BoardConfiguration, BoardProblem, BoardWorkspace } from "@ardurbot/contracts/board";
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
@@ -15,6 +16,7 @@ import {
 import { rpc } from "../lib/api";
 import { hasPairedDevice } from "../lib/dispatch";
 import { useI18n } from "../lib/i18n";
+import { enableLearningReview, loadLearningSettings } from "../lib/learning";
 import { useMobileTokens } from "../lib/native";
 
 export default function BoardsSettings() {
@@ -29,16 +31,22 @@ export default function BoardsSettings() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [owner, setOwner] = useState(false);
+  const [upkeep, setUpkeep] = useState(true);
+  const [learning, setLearning] = useState<SpaceLearningConfig | null>(null);
   const board = boards.find((row) => row.id === selected) ?? boards[0];
   useEffect(() => setName(board?.name ?? ""), [board?.id, board?.name]);
   async function load() {
-    const [result, bots] = await Promise.all([
+    const [result, bots, upkeepResult, learningResult] = await Promise.all([
       rpc<{ workspaces: BoardWorkspace[]; problem: BoardProblem | null }>("board/workspaces", {}),
       rpc<{ id: string; name: string }[]>("bots/list"),
+      rpc<{ enabled: boolean }>("board/upkeep", {}).catch(() => ({ enabled: true })),
+      loadLearningSettings().catch(() => null),
     ]);
     setBoards(result.workspaces);
     setBots(bots);
     setProblem(result.problem);
+    setUpkeep(upkeepResult.enabled);
+    setLearning(learningResult);
     setLoaded(true);
   }
   async function bootstrap() {
@@ -116,6 +124,41 @@ export default function BoardsSettings() {
       ) : null}
       {owner ? (
         <>
+          <Text style={[styles.heading, foreground]}>
+            {t("Bots keep the board and memory current")}
+          </Text>
+          <Switch
+            accessibilityLabel={t("Bots keep the board and memory current")}
+            value={upkeep}
+            disabled={busy}
+            onValueChange={(enabled) =>
+              void work(async () => {
+                const saved = await rpc<{ enabled: boolean }>("board/setUpkeep", { enabled });
+                setUpkeep(saved.enabled);
+              })
+            }
+          />
+          <Text style={foreground}>
+            {learning?.enabled ? t("Learning review is on") : t("Learning review is off")}
+          </Text>
+          <Text style={foreground}>
+            {learning?.destination?.modelId
+              ? t("Reviewer: {model}", { model: learning.destination.modelId })
+              : t("No reviewer model yet.")}
+          </Text>
+          {!learning?.enabled ? (
+            <Button
+              title={t("Enable")}
+              disabled={busy || !learning?.canConfigure || !learning.destination}
+              onPress={() =>
+                learning
+                  ? void work(async () => {
+                      setLearning(await enableLearningReview(learning));
+                    })
+                  : undefined
+              }
+            />
+          ) : null}
           <Text style={[styles.heading, foreground]}>{t("Beads")}</Text>
           <Text style={foreground}>
             {problem?.code === "not_installed"

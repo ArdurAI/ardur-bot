@@ -5,14 +5,20 @@ import type {
   BoardRun,
   BoardRunResult,
   BoardWorkspace,
+  WorkItem,
 } from "@ardurbot/contracts/board";
-import { BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
-import type { PrismaClient } from "@ardurbot/db";
-import { observeBoardItems } from "@ardurbot/db";
+import { BoardDeniedError, BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
+import { observeBoardItems, Prisma, type PrismaClient } from "@ardurbot/db";
 import { BoardRunner } from "@ardurbot/host-runtime/board/runner";
 import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
+import {
+  RUN_FILING_CAP,
+  RUN_FILING_LIMIT,
+  SPACE_FILING_CAP,
+  SPACE_FILING_LIMIT,
+} from "./upkeep.js";
 
 export type BoardScope = {
   userId: string;
@@ -131,12 +137,79 @@ export class BoardService {
     });
     if (!row || (!row.initialized && !options.allowUninitialized))
       throw new BoardError({ code: "no_board", message: "This folder has no board" });
-    if (scope.botId && !row.allowAllBots && !row.allowedBotIds.includes(scope.botId))
-      throw new BoardError({
-        code: "forbidden",
-        message: "This bot is not allowed on this board.",
-      });
+    if (scope.botId && !boardAdmits(row, scope.botId)) throw new BoardDeniedError();
     return { ...row, ...this.present(row) };
+  }
+  async botBoardChoices(scope: BoardScope) {
+    await this.actor(scope);
+    let dispatched: string | null = null;
+    if (scope.botId && scope.runId) {
+      const run = await this.options.prisma.run.findFirst({
+        where: {
+          id: scope.runId,
+          spaceId: scope.spaceId,
+          userId: scope.userId,
+          botId: scope.botId,
+        },
+        select: { boardWorkspaceId: true },
+      });
+      dispatched = run?.boardWorkspaceId ?? null;
+    }
+    const rows = await this.options.prisma.boardWorkspace.findMany({
+      where: {
+        spaceId: scope.spaceId,
+        ownerUserId: scope.userId,
+        enabled: true,
+        initialized: true,
+      },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    });
+    const admitted = rows.filter((row) => boardAdmits(row, scope.botId));
+    const implicitId =
+      (dispatched && rows.some((row) => row.id === dispatched) ? dispatched : null) ??
+      rows.find((row) => row.isDefault)?.id ??
+      rows[0]?.id ??
+      null;
+    return {
+      admitted,
+      implicitAdmitted: Boolean(implicitId && admitted.some((row) => row.id === implicitId)),
+    };
+  }
+  async attachFilingTargets(
+    scope: { spaceId: string; userId: string },
+    items: Iterable<WorkItem | null | undefined>,
+  ) {
+    const targets = [...items].filter((item): item is WorkItem => Boolean(item?.filedBy));
+    const runIds = [
+      ...new Set(targets.flatMap((item) => (item.filedBy ? [item.filedBy.runId] : []))),
+    ];
+    if (runIds.length === 0) return;
+    const rows = await this.options.prisma.$queryRaw<
+      Array<{ runId: string; groupId: string | null; messageId: string | null }>
+    >(Prisma.sql`
+      SELECT r.id AS "runId", t."groupId" AS "groupId", (
+        SELECT m.id FROM messages m
+        WHERE m."runId" = r.id AND m.role = 'bot'
+        ORDER BY m.seq ASC
+        LIMIT 1
+      ) AS "messageId"
+      FROM runs r
+      INNER JOIN threads t ON t.id = r."threadId"
+      WHERE r."spaceId" = ${scope.spaceId}
+        AND r."userId" = ${scope.userId}
+        AND r.id IN (${Prisma.join(runIds)})
+    `);
+    const byRun = new Map(rows.map((row) => [row.runId, row]));
+    for (const item of targets) {
+      const filing = item.filedBy;
+      if (!filing) continue;
+      const row = byRun.get(filing.runId);
+      item.filedBy = {
+        ...filing,
+        groupId: row?.groupId ?? null,
+        messageId: row?.messageId ?? null,
+      };
+    }
   }
   private present(row: {
     id: string;
@@ -291,4 +364,56 @@ export class BoardService {
     if (!run.boardCloseWhenDone || !item.closeWhenDone)
       throw new BoardError({ code: "forbidden", message: "Closing this item is a human action." });
   }
+  async upkeep(scope: BoardScope) {
+    await this.actor(scope);
+    const row = await this.options.prisma.space.findUnique({
+      where: { id: scope.spaceId },
+      select: { botUpkeep: true },
+    });
+    return { enabled: row?.botUpkeep !== false };
+  }
+  async setUpkeep(scope: BoardScope, enabled: boolean) {
+    if (scope.botId)
+      throw new BoardError({ code: "forbidden", message: "Configure this board in Settings." });
+    await this.actor(scope);
+    const saved = await this.options.prisma.space.update({
+      where: { id: scope.spaceId },
+      data: { botUpkeep: enabled },
+      select: { botUpkeep: true },
+    });
+    return { enabled: saved.botUpkeep };
+  }
+  /** Holds the space row across the title check, reservation and host create. */
+  async withFilingLock<T>(
+    scope: BoardScope,
+    work: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return this.options.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT id FROM spaces WHERE id = ${scope.spaceId} FOR UPDATE`;
+        return work(tx);
+      },
+      { maxWait: 15_000, timeout: 15_000 },
+    );
+  }
+  async reserveBotFiling(scope: BoardScope, tx: Prisma.TransactionClient) {
+    if (!scope.runId) return { ok: false as const, message: RUN_FILING_LIMIT };
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const runCount = await tx.botBoardFiling.count({
+      where: { spaceId: scope.spaceId, runId: scope.runId },
+    });
+    if (runCount >= RUN_FILING_CAP) return { ok: false as const, message: RUN_FILING_LIMIT };
+    const hourCount = await tx.botBoardFiling.count({
+      where: { spaceId: scope.spaceId, createdAt: { gte: since } },
+    });
+    if (hourCount >= SPACE_FILING_CAP) return { ok: false as const, message: SPACE_FILING_LIMIT };
+    const row = await tx.botBoardFiling.create({
+      data: { spaceId: scope.spaceId, runId: scope.runId },
+    });
+    return { ok: true as const, id: row.id };
+  }
+}
+
+function boardAdmits(row: { allowAllBots: boolean; allowedBotIds: string[] }, botId?: string) {
+  return !botId || row.allowAllBots || row.allowedBotIds.includes(botId);
 }
