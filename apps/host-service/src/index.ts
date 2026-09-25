@@ -1,6 +1,6 @@
 import path from "node:path";
 import {
-  HOST_FRAME_BYTES,
+  HOST_WRITE_FRAME_BYTES,
   HostMcpRegistrationSchema,
   hostSocketUrl,
 } from "@ardurbot/contracts/host-bridge";
@@ -50,7 +50,7 @@ async function connect() {
     await agent.configureMcp(await readHostMcpConfiguration(config));
     socket = new WebSocket(hostSocketUrl(config.apiUrl), {
       headers: { authorization: `Bearer ${config.token}` },
-      maxPayload: HOST_FRAME_BYTES,
+      maxPayload: HOST_WRITE_FRAME_BYTES,
       perMessageDeflate: false,
       handshakeTimeout: 5000,
       followRedirects: false,

@@ -52,6 +52,7 @@ describe("desktop preload bridge", () => {
     expect(Object.keys(bridge.window).sort()).toEqual([
       "close",
       "minimize",
+      "setUnsavedChanges",
       "state",
       "toggleMaximize",
     ]);

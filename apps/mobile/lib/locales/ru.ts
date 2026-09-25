@@ -10,6 +10,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Open bot settings": "Открыть настройки бота",
   "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.":
     "Чтобы использовать подписку Claude, выберите «Запускается на → Claude Code» в настройках бота.",
+  "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.":
+    "Проверка памяти через Claude Code или Codex пока недоступна; импортируйте память или отредактируйте документ напрямую.",
   Select: "Выбрать",
   Engineering: "Разработка",
   Design: "Дизайн",

@@ -603,7 +603,8 @@ app.get("/computers/:id/files", async (c) => {
         "target, limit = sys.argv[1], int(sys.argv[2])",
         "with open(target, 'rb') as source:",
         "  content = source.read() if limit < 0 else source.read(limit + 1)",
-        "if limit >= 0 and len(content) > limit: sys.exit(42)",
+        "if limit >= 0 and len(content) > limit and sys.argv[3] != 'preview': sys.exit(42)",
+        "if limit >= 0: content = content[:limit]",
         "sys.stdout.write(base64.b64encode(content).decode())",
       ].join("\n");
       const result = await runContainerCommand(container, [
@@ -612,6 +613,7 @@ app.get("/computers/:id/files", async (c) => {
         script,
         target,
         String(maxBytes ?? -1),
+        c.req.query("preview") === "1" ? "preview" : "read",
       ]);
       if (result.code === 42) {
         return c.json({ error: `computer file exceeds ${maxBytes} bytes` }, 413);

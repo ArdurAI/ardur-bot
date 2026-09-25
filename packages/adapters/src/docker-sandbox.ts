@@ -471,13 +471,13 @@ export class DockerSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     filePath: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     const path = normalizeWorkspacePath(filePath);
     const maxBytes = options?.maxBytes;
     const res = await fetch(
       this.url(
-        `/computers/${computer.id}/files?path=${encodeURIComponent(path)}&mode=read${maxBytes === undefined ? "" : `&maxBytes=${maxBytes}`}`,
+        `/computers/${computer.id}/files?path=${encodeURIComponent(path)}&mode=read${maxBytes === undefined ? "" : `&maxBytes=${maxBytes}`}${options?.preview ? "&preview=1" : ""}`,
       ),
       { headers: this.headers(context, computer.botId), signal: context.signal },
     );

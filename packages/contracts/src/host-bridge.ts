@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { HostIntegrationSchema } from "./host-integrations.js";
+import { IDE_FILE_BYTES } from "./ide.js";
 import {
   RuntimeAvailabilitySchema,
   RuntimeInfoSchema,
@@ -11,6 +12,8 @@ export const HOST_BRIDGE_VERSION = 1;
 export const HOST_FRAME_BYTES = 256 * 1024;
 export const HOST_TOTAL_BYTES = 8 * 1024 * 1024;
 export const HOST_FILE_BYTES = 128 * 1024;
+// Only explicit owner editor writes may carry a larger request. Stream frames keep their limit.
+export const HOST_WRITE_FRAME_BYTES = Math.ceil(IDE_FILE_BYTES / 3) * 4 + 8192;
 export const HOST_IN_FLIGHT = 4;
 export const HOST_WINDOW = 8;
 export const HOST_TOOLS = [
@@ -163,7 +166,13 @@ export const HostOperationSchema = z.discriminatedUnion("op", [
     op: z.literal("computer.files.read"),
     homeKey: id,
     path,
-    maxBytes: z.number().int().min(1).max(HOST_FILE_BYTES).optional(),
+    maxBytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(IDE_FILE_BYTES + 1)
+      .optional(),
+    editor: z.literal(true).optional(),
   }),
   z.strictObject({
     op: z.literal("computer.files.write"),
@@ -171,9 +180,10 @@ export const HostOperationSchema = z.discriminatedUnion("op", [
     path,
     content: z
       .string()
-      .max(Math.ceil(HOST_FILE_BYTES / 3) * 4)
+      .max(Math.ceil(IDE_FILE_BYTES / 3) * 4)
       .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
     executable: z.boolean().optional(),
+    editor: z.literal(true).optional(),
   }),
   z.strictObject({ op: z.literal("computer.files.list"), homeKey: id, path }),
   z.strictObject({
@@ -262,14 +272,23 @@ export const HostFrameSchema = z.discriminatedUnion("type", [
 export type HostFrame = z.infer<typeof HostFrameSchema>;
 export function encodeHostFrame(frame: HostFrame) {
   const data = JSON.stringify(HostFrameSchema.parse(frame));
-  if (new TextEncoder().encode(data).byteLength > HOST_FRAME_BYTES)
+  if (new TextEncoder().encode(data).byteLength > frameLimit(frame))
     throw new Error("Host frame too large.");
   return data;
 }
 export function decodeHostFrame(data: string): HostFrame {
-  if (new TextEncoder().encode(data).byteLength > HOST_FRAME_BYTES)
-    throw new Error("Host frame too large.");
-  return HostFrameSchema.parse(JSON.parse(data));
+  const size = new TextEncoder().encode(data).byteLength;
+  if (size > HOST_WRITE_FRAME_BYTES) throw new Error("Host frame too large.");
+  const frame = HostFrameSchema.parse(JSON.parse(data));
+  if (size > frameLimit(frame)) throw new Error("Host frame too large.");
+  return frame;
+}
+function frameLimit(frame: HostFrame) {
+  return frame.type === "request" &&
+    frame.operation.op === "computer.files.write" &&
+    frame.operation.editor
+    ? HOST_WRITE_FRAME_BYTES
+    : HOST_FRAME_BYTES;
 }
 export function hostSocketUrl(apiUrl: string, internal = false) {
   const url = new URL(apiUrl);

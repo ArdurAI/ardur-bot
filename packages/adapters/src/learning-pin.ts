@@ -3,6 +3,7 @@ import { RuntimePinError, RuntimePinSchema, runtimePinProblem } from "@ardurbot/
 import type { PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential } from "@ardurbot/db";
 import { resolveModelKey } from "./executor.js";
+import type { BotPinFields } from "./pin-resolution.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 
@@ -39,11 +40,12 @@ export async function resolveReviewerPin(
   scope: { spaceId: string; userId: string },
   pin: RuntimePin,
   knownSecrets: string[],
+  bot: BotPinFields | null = null,
 ) {
   return resolveRunModelPin({
     prisma: deps.prisma,
     scope,
-    bot: null,
+    bot,
     snapshot: pin,
     scripted: false,
     loadKey: async (credential, requested) => {
