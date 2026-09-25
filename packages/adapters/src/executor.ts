@@ -246,6 +246,7 @@ import {
   selectCompactedHistory,
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
+import { hostCommandApprovalMatches } from "./host-integration-tools.js";
 import { integrationApprovalDetailsForCall } from "./integration-access.js";
 import { integrationCatalog } from "./integration-catalog.js";
 import {
@@ -300,6 +301,7 @@ import {
 } from "./plot-tool.js";
 import { classifyProviderError } from "./provider-error.js";
 import {
+  approvalRequestRoute,
   bindDeviceApproval,
   DispatchStopRequested,
   enforceRemoteExecution,
@@ -2086,6 +2088,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               !connectorCall.route.resourceId &&
               connectorCall.route.toolName === CATALOG_EXECUTE,
           );
+          const requestedArgs = onCatalogExecuteRoute ? args.arguments : args;
           const approvedReplay = approvedCatalogReplay(
             approvedEffectReplays,
             name,
@@ -2272,6 +2275,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             context,
             args,
             deps.secretStore,
+            deps.sandbox,
           );
           if (integrationDetails?.secrets) runSecrets.push(...integrationDetails.secrets);
           const integrationApproval = integrationDetails?.approval;
@@ -2281,6 +2285,34 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 integrationDetails?.denial ??
                 "This tool is no longer granted. Review tools in Settings.",
             };
+          const hostCommand = integrationDetails?.integration?.hostCommand;
+          if (
+            !hostCommand &&
+            (integrationDetails?.integration?.hostCommandRequired ||
+              approvalRequestRoute(nextApprovedRequest)?.hostCommand)
+          )
+            return { error: "This command changed or has no bound approval. Review it again." };
+          if (hostCommand) {
+            if (
+              nextApprovedTool &&
+              (!hostCommandApprovalMatches(
+                approvalRequestRoute(nextApprovedRequest)?.hostCommand,
+                hostCommand,
+              ) ||
+                stableJsonValue(requestedArgs) !== stableJsonValue(args))
+            )
+              return { error: "This command changed or has no bound approval. Review it again." };
+            const route = approvalRequestRoute(effectRequest);
+            if (!route) return { error: "The command's approval route is unavailable. Try again." };
+            // Both catalog and direct envelopes carry the same unredacted execution snapshot.
+            const catalog = catalogApprovalDetails(effectRequest, CATALOG_APPROVAL_TOOL);
+            effectRequest = catalog
+              ? catalogApprovalRequest(catalog.toolName, catalog.args, CATALOG_APPROVAL_TOOL, {
+                  ...route,
+                  hostCommand,
+                })
+              : boundDirectApprovalRequest({ ...route, hostCommand }, args, CATALOG_APPROVAL_TOOL);
+          }
           const viaConnector = !BUILTIN_AGENT_TOOL_NAMES.has(name);
           const requiresUnattendedApproval =
             integrationApproval !== "allow" &&
@@ -2356,11 +2388,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const occurrence =
             name === "request_secret"
               ? 0
-              : nextMutatingEffectOccurrence(replayEffectToolName, args);
+              : nextMutatingEffectOccurrence(
+                  replayEffectToolName,
+                  hostCommand ? { args, hostCommand } : args,
+                );
+          const approvalArgs = hostCommand ? { args, hostCommand } : args;
           const effectKey =
             usesApprovalKey && occurrence === 0
-              ? approvalEffectKey(runId, replayEffectToolName, args)
-              : toolEffectIdempotencyKey(runId, replayEffectToolName, args, occurrence);
+              ? approvalEffectKey(runId, replayEffectToolName, approvalArgs)
+              : toolEffectIdempotencyKey(runId, replayEffectToolName, approvalArgs, occurrence);
           // Connector read-only hints must not bypass approval, review, or replay decisions.
           const applied = READ_ONLY_AGENT_TOOLS.has(name)
             ? undefined
@@ -2521,6 +2557,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
             from: "approved" | "intended",
           ): Promise<unknown | undefined> => {
             if (!(await enforceCeiling())) return pauseForApproval();
+            if (
+              hostCommand &&
+              !hostCommandApprovalMatches(
+                approvalRequestRoute(applied!.effect.request)?.hostCommand,
+                hostCommand,
+              )
+            )
+              return { error: "This command changed or has no bound approval. Review it again." };
             if (from === "approved")
               await revalidateDeviceApprovalExecution(deps.prisma, applied!.effect.id, runId, name);
             const claim = from === "approved" ? claimApprovedEffect : claimIntendedEffect;
@@ -3982,7 +4026,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             let result: unknown = { error: `unknown tool ${name}` };
             for await (const event of deps.connector.execute(
               { ...connectorCall, tool: name, args, executionId: effectKey },
-              context,
+              { ...context, ...(hostCommand ? { hostCommandApproval: hostCommand } : {}) },
             )) {
               if (event.type === "result") {
                 result = event.data;

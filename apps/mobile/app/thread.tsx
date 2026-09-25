@@ -70,6 +70,7 @@ import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-co
 import { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppConnectCard } from "../components/AppConnectCard";
+import { ApprovalPreview } from "../components/ApprovalPreview";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
@@ -2748,7 +2749,10 @@ const MessageBubble = memo(function MessageBubble({
             paddingVertical: 14,
           }}
         >
-          {askBlock.text ? (
+          {askBlock.preformatted ? (
+            <ApprovalPreview text={askBlock.text} detail={askBlock.detail} />
+          ) : null}
+          {askBlock.text && !askBlock.preformatted ? (
             <Text
               {...actionProps}
               style={{ color: tokens.foreground, fontSize: 15.5, lineHeight: 23 }}
@@ -2756,7 +2760,7 @@ const MessageBubble = memo(function MessageBubble({
               {askBlock.text}
             </Text>
           ) : null}
-          {askBlock.detail ? (
+          {askBlock.detail && !askBlock.preformatted ? (
             <Text
               {...(askBlock.text ? {} : actionProps)}
               style={{

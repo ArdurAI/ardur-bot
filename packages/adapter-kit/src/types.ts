@@ -7,9 +7,11 @@ import type {
   RuntimeProblem,
   SandboxKind,
 } from "@ardurbot/contracts";
-import type { HostIntegrationId } from "@ardurbot/contracts/host-integrations";
+import type { HostCommandApproval, HostIntegrationId } from "@ardurbot/contracts/host-integrations";
 
 export interface AdapterContext {
+  /** Supplied by the executor only after claiming the exact approved host command. */
+  hostCommandApproval?: HostCommandApproval;
   toolAccessMode?: "when-needed" | "all";
   operationId: string;
   traceId: string;

@@ -74,6 +74,24 @@ function processStub(error?: string, code: number | null = 0) {
   return child;
 }
 it.each([false, true])(
+  "refuses a host command whose approved cwd now resolves elsewhere (%s)",
+  async (restricted) => {
+    const { execute, home } = await fixture(restricted);
+    const target = path.join(home, "target");
+    const approved = path.join(home, "approved");
+    await mkdir(target);
+    await symlink(target, approved);
+    await expect(
+      execute({
+        argv: ["gh", "issue", "list"],
+        cwd: approved,
+        hostIntegration: { id: "github", identity: "fixture-account", workspace: null },
+      }),
+    ).rejects.toThrow("working directory changed");
+    expect(fake.spawn).not.toHaveBeenCalled();
+  },
+);
+it.each([false, true])(
   "uses the same owner PATH and filtered environment in dev and bridge modes (%s)",
   async (restricted) => {
     const { execute, root } = await fixture(restricted);

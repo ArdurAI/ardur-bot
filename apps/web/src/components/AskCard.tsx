@@ -88,15 +88,29 @@ export function AskCard({
       data-testid={secretInput ? "secret-ask-card" : undefined}
       className="max-w-[74%] rounded-2xl border border-border bg-card px-5 py-4"
     >
-      <div className="text-[15.5px] leading-[1.5] text-foreground">
-        <ChatMarkdown>{block.text}</ChatMarkdown>
-      </div>
+      {block.preformatted && !secretInput ? (
+        <details open className="text-foreground">
+          <summary className="cursor-pointer text-sm">
+            <Trans>Details</Trans>
+          </summary>
+          <pre
+            dir="ltr"
+            className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.7]"
+          >
+            {[block.text, block.detail].filter(Boolean).join("\n")}
+          </pre>
+        </details>
+      ) : (
+        <div className="text-[15.5px] leading-[1.5] text-foreground">
+          <ChatMarkdown>{block.text}</ChatMarkdown>
+        </div>
+      )}
       {secretInput && block.credential ? (
         <div className="mt-2 break-all text-[13px] text-muted-foreground">
           {block.credential.origin}
         </div>
       ) : null}
-      {block.detail && !secretInput ? (
+      {block.detail && !secretInput && !block.preformatted ? (
         <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.7] text-muted-foreground">
           {block.detail}
         </pre>

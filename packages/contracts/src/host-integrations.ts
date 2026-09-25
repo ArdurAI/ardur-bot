@@ -49,6 +49,19 @@ export const HostIntegrationSchema = z.object({
 });
 export type HostIntegration = z.infer<typeof HostIntegrationSchema>;
 
+/** Unredacted execution inputs retained only in the bound approval request. */
+export const HostCommandApprovalSchema = HostIntegrationSchema.pick({
+  id: true,
+  identity: true,
+  workspace: true,
+}).extend({
+  identity: z.string().min(1),
+  argv: z.array(z.string()).min(2),
+  cwd: z.string().min(1),
+  computerId: z.string().min(1),
+});
+export type HostCommandApproval = z.infer<typeof HostCommandApprovalSchema>;
+
 export function hostIntegration(id: string) {
   return Object.hasOwn(HOST_INTEGRATIONS, id)
     ? HOST_INTEGRATIONS[id as HostIntegrationId]
