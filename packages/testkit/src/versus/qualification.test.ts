@@ -106,6 +106,34 @@ describe("non-generating live prerequisites", () => {
     await expect(inspectLocalRoute(expected, f.transport)).rejects.toThrow("digest drift");
     expect(f.requests).toHaveLength(1);
   });
+  it.each([undefined, null, false, true, 0, [], {}, "", " ", "0.1\n", "0/1", "v".repeat(81)])(
+    "rejects an unobserved or invalid server version %j before model details",
+    async (version) => {
+      const f = fixture();
+      f.responses[1] = { version };
+      f.responses[4] = { version };
+      await expect(inspectLocalRoute(expected, f.transport)).rejects.toThrow("serverVersion");
+      expect(f.requests.map(({ url }) => new URL(url).pathname)).toEqual([
+        "/api/tags",
+        "/api/version",
+      ]);
+    },
+  );
+  it.each(["0.0.0-test", "v1.2.3_rc-1", "v".repeat(80)])(
+    "retains the exact permitted version %s and requires its recheck to match",
+    async (version) => {
+      const f = fixture();
+      f.responses[1] = { version };
+      f.responses[4] = { version };
+      expect((await inspectLocalRoute(expected, f.transport)).budget.model.serverVersion).toBe(
+        version,
+      );
+      const changed = fixture();
+      changed.responses[1] = { version };
+      changed.responses[4] = { version: null };
+      await expect(inspectLocalRoute(expected, changed.transport)).rejects.toThrow("version drift");
+    },
+  );
   it.each(["quantization", "context", "tokenizer", "tag-race", "server-race"])(
     "refuses %s without inventing a route pin",
     async (change) => {
