@@ -29,6 +29,26 @@ function commandAsk(argv: string[], secrets: string[] = []) {
 }
 
 describe("buildApprovalAskBlock", () => {
+  it.each(["", "+", "-", ".", "(", "'", '"', "\n", "\n+", "+.-"])(
+    "redacts credentials after prefix %j in commands and array details",
+    (prefix) => {
+      const token = `eyJ${"x".repeat(24)}.${"y".repeat(16)}.${"z".repeat(30)}`;
+      for (const value of [
+        "postgres://example:placeholder@example.test/db",
+        "https://example:placeholder@example.test/path",
+        "API_KEY=placeholder",
+        token,
+      ]) {
+        const argument = `${prefix}${value}`;
+        const command = commandAsk(["gh", "issue", "create", "--body", argument]);
+        const array = buildApprovalAskBlock("effect", "write_file", { values: [argument] }, []);
+        for (const block of [command, array]) {
+          expect(JSON.stringify(block)).not.toContain("placeholder");
+          expect(JSON.stringify(block)).not.toContain(token);
+        }
+      }
+    },
+  );
   it("bounds redaction of repeated JWT prefixes in a large argument", () => {
     const value = "eyJ-".repeat(32 * 1024);
     const start = performance.now();

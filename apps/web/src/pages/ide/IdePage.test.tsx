@@ -185,6 +185,86 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("IDE page", () => {
+  it("preserves mounted nested folders and their expansion while refreshed rows load", async () => {
+    api.list.mockImplementation(async ({ path }) => ({
+      hiddenCount: 0,
+      entries:
+        path === ""
+          ? [{ path: "src", kind: "dir", size: 0 }]
+          : path === "src"
+            ? [{ path: "src/nested", kind: "dir", size: 0 }]
+            : [{ path: "src/nested/old.txt", kind: "file", size: 1 }],
+    }));
+    await click("src");
+    await click("nested");
+    const nested = host.querySelector('[role="treeitem"][aria-label="nested"]');
+    expect(nested?.getAttribute("aria-expanded")).toBe("true");
+    let finish!: (value: unknown) => void;
+    api.list.mockImplementation(({ path }) =>
+      path === "src"
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : Promise.resolve({
+            hiddenCount: 0,
+            entries:
+              path === ""
+                ? [{ path: "src", kind: "dir", size: 0 }]
+                : [{ path: "src/nested/new.txt", kind: "file", size: 1 }],
+          }),
+    );
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    await tick();
+    expect(host.querySelector('[role="treeitem"][aria-label="nested"]')).toBe(nested);
+    await act(async () =>
+      finish({
+        hiddenCount: 0,
+        entries: [{ path: "src/nested", kind: "dir", size: 0 }],
+      }),
+    );
+    expect(nested?.getAttribute("aria-expanded")).toBe("true");
+    expect(button("new.txt")).toBeDefined();
+    expect(button("old.txt")).toBeUndefined();
+    expect(api.changes).not.toHaveBeenCalled();
+  });
+  it("replaces an open Quick Open scan without duplicate or deleted results", async () => {
+    const entries = Array.from({ length: 60 }, (_, index) => ({
+      path: `file-${index}.txt`,
+      kind: "file",
+      size: 1,
+    }));
+    api.list.mockResolvedValue({ hiddenCount: 0, entries });
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    await tick();
+    await click("Open");
+    const options = () =>
+      [...host.querySelectorAll('[role="option"]')].map((node) => node.textContent);
+    expect(options()).toHaveLength(60);
+    const refreshed = [...entries.slice(1), { path: "created.txt", kind: "file", size: 1 }];
+    api.list.mockResolvedValue({ hiddenCount: 0, entries: refreshed });
+    for (let refresh = 0; refresh < 3; refresh++) {
+      await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+      await tick();
+      expect(options()).toEqual(refreshed.map(({ path }) => path));
+      expect(new Set(options()).size).toBe(60);
+    }
+    await click("created.txt");
+    expect(api.read).toHaveBeenLastCalledWith({ rootId: "root", path: "created.txt" });
+  });
+  it("discards a directory's expansion when it becomes a file at the same path", async () => {
+    await click("src");
+    expect(button("main.ts")).toBeDefined();
+    api.list.mockResolvedValue({
+      hiddenCount: 0,
+      entries: [{ path: "src", kind: "file", size: 1 }],
+    });
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    await tick();
+    expect(host.querySelectorAll('[role="treeitem"]')).toHaveLength(1);
+    expect(host.querySelector('[role="treeitem"]')?.hasAttribute("aria-expanded")).toBe(false);
+    await click("src");
+    expect(api.read).toHaveBeenLastCalledWith({ rootId: "root", path: "src" });
+  });
   it("refreshes the tree and Quick Open after shell file changes with Changes closed", async () => {
     expect(button("readme.md")).toBeDefined();
     api.list.mockResolvedValue({
