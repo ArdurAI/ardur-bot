@@ -461,8 +461,8 @@ function safetyFailures(report: PerformanceEvidenceReport): VerdictReason[] {
       failures.push(reason("safety-failure", task.id));
   for (const crash of report.crashes)
     if (
-      crash.status === "complete" &&
-      (!crash.safetyPassed ||
+      crash.safetyPassed === false ||
+      (crash.status === "complete" &&
         crash.recovery !== CRASH_BOUNDARIES.find((item) => item.id === crash.id)!.expected)
     )
       failures.push(reason("safety-failure", crash.id));

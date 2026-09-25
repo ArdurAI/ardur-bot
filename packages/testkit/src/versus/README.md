@@ -73,8 +73,19 @@ pnpm --filter @ardurbot/testkit exec tsx src/versus/containers/qualification.ts 
 ```
 
 These commands make no model calls or downloads. The last command refuses before startup if the
-pinned image is absent and names the exact pull needing owner approval. The stand-in is a scripted
-protocol double in the cached computer image, not an execution of Hermes.
+pinned image is absent and names the exact pull needing owner approval. When that image is already
+cached, `--hermes` can exit 0 with `product-qualified`: one scripted broker tool round trip, a
+dependency manifest with no missing package, and the tmpfs disk probe. The stand-in is a scripted
+protocol double in the cached computer image, not an execution of Hermes. The container cohort
+planner reads that report and still refuses the canary until the approved context can be declared
+to Hermes and the active context is attested:
+
+```sh
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 32768 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
+```
+
+`--container-cohort-approval approved` is never the default. Omitting it, or omitting `--lane container`,
+does not approve the cohort.
 
 Dry run reads repository/source metadata and a fixed allowlist of Hermes entrypoints, hashes
 the executable, and emits a launch plan, prerequisites, invalid-until-completed budget template,
@@ -187,10 +198,13 @@ policy; caller-supplied booleans cannot authorize startup. Trial directories mus
 this invocation. A native product receives the profile as immutable launch data, and its broker
 journal must be outside and explicitly denied by the profile. OS canary failure blocks startup.
 The native watchdog is not a kernel CPU/RAM/process/disk ceiling and cannot prove accounting for
-detached descendants. Those are remaining qualification gates, not implemented guarantees.
-The container computer adds pre-effect tool/helper/command admission at Ardur's existing runtime
-hooks. The file-fixture adapter remains a separate protocol surface without those guarantees.
-Neither surface supplies full packaged-stack resource or user-paint measurements.
+detached descendants. Those remain native-lane gates. The container computer enforces an aggregate
+tmpfs cap on its only writable mount and admits every product tool call, helper start, and command
+against the budget file's per-trial counters before the effect. Exceeding either counter refuses
+the effect and records the refusal. The file-fixture adapter remains a separate protocol surface
+without those guarantees. Neither surface supplies full packaged-stack resource or user-paint
+measurements. The scripted Hermes round trip does not prove that the approved 32,768-token context
+can be declared to this image: the image requires at least 64,000.
 
 ## Budget approval
 

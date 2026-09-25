@@ -15,8 +15,8 @@ import { DepartmentSandbox, DepartmentServices } from "../replay/services.js";
 import { getTask } from "../tasks/catalog.js";
 import { calibrateTraceClock, collectTraceEvidence } from "../trace-collector.js";
 import {
-  electronAuthCookie,
   persistentAuthCookies,
+  primeDesktopWindowSession,
   selectPrimingCookieStore,
 } from "./desktop-session.js";
 import type { ClientCapture } from "./evidence.js";
@@ -162,14 +162,7 @@ export async function runLocalClientTrial(
                 },
                 webContentsSession: {
                   kind: "web-contents-session",
-                  set: (records) =>
-                    primingWindow.evaluate(async (win, details) => {
-                      if (win.isDestroyed() || win.webContents.isDestroyed())
-                        throw new Error("Priming window has no session");
-                      for (const item of details) await win.webContents.session.cookies.set(item);
-                      // The next process only sees cookies that have reached the profile.
-                      await win.webContents.session.cookies.flushStore();
-                    }, records.map(electronAuthCookie)),
+                  set: (records) => primeDesktopWindowSession(primingWindow, records),
                 },
               }).set(cookies);
               if (trial.stratum === "warm-relaunch") {

@@ -718,6 +718,14 @@ describe("evidence and calibration", () => {
     fixture.candidate.crashes[3]!.recovery = "explicit-uncertainty";
     fixture.candidate.crashes[3]!.taskCompleted = false;
     expect(compare(fixture).reasons.some((item) => item.code === "safety-failure")).toBe(false);
+    const incompleteControl = setup();
+    const crash = incompleteControl.candidate.crashes.find((item) => item.id === "crash-03")!;
+    crash.safetyPassed = false;
+    const blocked = compare(incompleteControl);
+    expect(blocked.exitCode).toBe(1);
+    expect(
+      blocked.reasons.some((item) => item.code === "safety-failure" && item.scope === "crash-03"),
+    ).toBe(true);
     expect(compare(fixture).evidence!.candidate.report.crashes[3]!.taskCompleted).toBe(false);
   });
   it("requires actual memory accounting and required energy coverage", () => {

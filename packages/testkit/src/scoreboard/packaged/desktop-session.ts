@@ -66,6 +66,38 @@ export function electronAuthCookie(cookie: PersistentAuthCookie): ElectronAuthCo
   };
 }
 
+export interface PrimingElectronWindow {
+  isDestroyed(): boolean;
+  webContents: {
+    isDestroyed(): boolean;
+    session: {
+      cookies: {
+        set(cookie: ElectronAuthCookie): Promise<void>;
+        flushStore(): Promise<void>;
+      };
+    };
+  };
+}
+
+/** Persist synthetic auth on the window partition, then flush it before the priming process quits. */
+export async function primeDesktopWindowSession(
+  primingWindow: {
+    evaluate(
+      pageFunction: (win: PrimingElectronWindow, cookies: ElectronAuthCookie[]) => Promise<void>,
+      cookies: ElectronAuthCookie[],
+    ): Promise<unknown>;
+  },
+  cookies: readonly PersistentAuthCookie[],
+): Promise<void> {
+  await primingWindow.evaluate(async (win, details) => {
+    if (win.isDestroyed() || win.webContents.isDestroyed())
+      throw new Error("Priming window has no session");
+    for (const item of details) await win.webContents.session.cookies.set(item);
+    // The next process only sees cookies that have reached the profile.
+    await win.webContents.session.cookies.flushStore();
+  }, cookies.map(electronAuthCookie));
+}
+
 /** The default browser context is not the per-origin persist partition. */
 export function selectPrimingCookieStore(stores: {
   browserContext: PrimingCookieStore;

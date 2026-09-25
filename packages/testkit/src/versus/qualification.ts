@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -12,6 +12,12 @@ import {
   requireValue,
   validateModelMetadataLabel,
 } from "./budget.js";
+import {
+  HERMES_CONTAINER_REVISION,
+  HERMES_IMAGE,
+  HERMES_MINIMUM_CONTEXT_TOKENS,
+} from "./containers/policy.js";
+import { inspectImage } from "./containers/session.js";
 import { writeEvidence } from "./evidence.js";
 import { createTrialDirectory, destroyOwnedDirectory, prepareEnvironment } from "./isolation.js";
 import { diagnoseNativeIsolation } from "./native-diagnostics.js";
@@ -144,6 +150,11 @@ const HELP = `Non-generating versus qualification preflight
 
 pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision <40-hex> --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 32768 --out ./artifacts/versus/qualification
 
+Container cohort planning uses the same metadata checks and writes canary-budget.json.
+It does not start a product, a container, or inference. Approval is never implied:
+
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 32768 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
+
 Optional: --hermes-executable <path> --hermes-source <path>
 Runs benign OS/interpreter probes and reads local model/Docker metadata only.
 Never starts either product, a container, or inference. Failed qualification exits 2.
@@ -160,6 +171,9 @@ export function parseQualificationArguments(args: string[]) {
     "--out",
     "--hermes-executable",
     "--hermes-source",
+    "--lane",
+    "--container-cohort-approval",
+    "--container-report",
   ];
   const options: Record<string, string> = {};
   for (let i = 0; i < args.length; i += 2) {
@@ -175,11 +189,118 @@ export function parseQualificationArguments(args: string[]) {
     allowed.slice(0, 7).every((key) => options[key]),
     "Explicit qualification identity and output required",
   );
+  if (options["--lane"])
+    requireValue(options["--lane"] === "container", "Unknown qualification lane");
+  if (options["--container-cohort-approval"])
+    requireValue(
+      options["--container-cohort-approval"] === "approved",
+      "Container cohort approval must be the explicit value approved",
+    );
+  requireValue(
+    options["--lane"] === "container" ||
+      (!options["--container-cohort-approval"] && !options["--container-report"]),
+    "Container cohort flags require --lane container",
+  );
   requireValue(
     /^[a-f0-9]{40}$/.test(options["--expected-hermes-revision"]!),
     "Expected revision requires forty hex characters",
   );
   return options;
+}
+
+function gate(report: Record<string, unknown> | null, name: string) {
+  const checks = report?.checks;
+  if (!Array.isArray(checks)) return null;
+  const found = checks.find((item) => record(item).name === name);
+  return found ? record(found) : null;
+}
+function counterSatisfied(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const counter = value as {
+    nextRefused?: boolean;
+    admitted?: number;
+    cap?: number;
+    effectAfterRefusal?: boolean;
+  };
+  return (
+    counter.nextRefused === true &&
+    counter.effectAfterRefusal === false &&
+    typeof counter.cap === "number" &&
+    counter.admitted === counter.cap
+  );
+}
+/** Planning decision only. It does not start a container or a model request. */
+export function assessContainerCohort(input: {
+  approval: string | undefined;
+  report: Record<string, unknown> | null;
+  routeContext: number | null;
+  architectureMaximum: number | null;
+}) {
+  const failures: string[] = [];
+  const disk = gate(input.report, "aggregate-disk-cap");
+  const diskEvidence =
+    disk?.evidence && typeof disk.evidence === "object" ? record(disk.evidence) : null;
+  const admission = gate(input.report, "tool-and-descendant-admission");
+  const admissionEvidence =
+    admission?.evidence && typeof admission.evidence === "object"
+      ? record(admission.evidence)
+      : null;
+  const descendants =
+    admissionEvidence?.descendants && typeof admissionEvidence.descendants === "object"
+      ? record(admissionEvidence.descendants)
+      : null;
+  const product = gate(input.report, "product-tool-round-trip");
+  const manifest = gate(input.report, "dependency-manifest");
+  const manifestEvidence =
+    manifest?.evidence && typeof manifest.evidence === "object" ? record(manifest.evidence) : null;
+  const gates = {
+    approval: input.approval === "approved",
+    aggregateDisk:
+      disk?.passed === true &&
+      diskEvidence?.mechanism === "tmpfs-size" &&
+      typeof diskEvidence.capBytes === "number" &&
+      diskEvidence.containerAlive === true,
+    toolAndDescendantAdmission:
+      admission?.passed === true &&
+      counterSatisfied(admissionEvidence?.toolCalls) &&
+      counterSatisfied(descendants?.helpers) &&
+      counterSatisfied(descendants?.commands),
+    productToolRoundTrip:
+      product?.passed === true &&
+      input.report?.realModelCalls === 0 &&
+      input.report?.imagePulls === 0 &&
+      input.report?.packageDownloads === 0,
+    dependencyManifest:
+      manifest?.passed === true &&
+      manifestEvidence?.missingBytes === 0 &&
+      Array.isArray(manifestEvidence?.missingPackages) &&
+      manifestEvidence.missingPackages.length === 0,
+    contextPin:
+      input.routeContext !== null &&
+      input.architectureMaximum !== null &&
+      input.routeContext >= HERMES_MINIMUM_CONTEXT_TOKENS &&
+      input.architectureMaximum >= HERMES_MINIMUM_CONTEXT_TOKENS,
+  };
+  if (!gates.approval) failures.push("Container cohort approval is absent");
+  if (!input.report) failures.push("Container qualification report is absent");
+  if (!gates.aggregateDisk) failures.push("Aggregate disk cap is not qualified");
+  if (!gates.toolAndDescendantAdmission)
+    failures.push("Tool and descendant budget admission is not qualified");
+  if (!gates.productToolRoundTrip) failures.push("Hermes product tool round trip is not qualified");
+  if (!gates.dependencyManifest) failures.push("Hermes dependency manifest is incomplete");
+  if (input.routeContext === null || input.routeContext < HERMES_MINIMUM_CONTEXT_TOKENS)
+    failures.push(
+      `Hermes refuses a declared context below ${HERMES_MINIMUM_CONTEXT_TOKENS}; the approved shared context is ${input.routeContext ?? "unobserved"}`,
+    );
+  if (
+    input.architectureMaximum === null ||
+    input.architectureMaximum < HERMES_MINIMUM_CONTEXT_TOKENS
+  )
+    failures.push(
+      `Observed model architecture maximum ${input.architectureMaximum ?? "unobserved"} is below the Hermes minimum ${HERMES_MINIMUM_CONTEXT_TOKENS}`,
+    );
+  failures.push("The OpenAI transport does not attest the active context");
+  return { ready: failures.length === 0, failures, gates };
 }
 
 export async function runQualification(args: string[]) {
@@ -196,10 +317,17 @@ export async function runQualification(args: string[]) {
     source: options["--hermes-source"],
     expectedRevision: options["--expected-hermes-revision"],
   });
-  requireValue(
-    hermes.identity.revisionMatches && hermes.executable && hermes.source,
-    "Installed Hermes revision mismatch or source unavailable; no probe started",
-  );
+  const containerLane = options["--lane"] === "container";
+  if (!containerLane)
+    requireValue(
+      hermes.identity.revisionMatches && hermes.executable && hermes.source,
+      "Installed Hermes revision mismatch or source unavailable; no probe started",
+    );
+  else
+    requireValue(
+      options["--expected-hermes-revision"] === HERMES_CONTAINER_REVISION,
+      "Container cohort requires the pinned Linux Hermes revision",
+    );
   const build = await inspectBuild();
   const trial = await createTrialDirectory(tmpdir());
   const outside = await createTrialDirectory(tmpdir());
@@ -214,15 +342,24 @@ export async function runQualification(args: string[]) {
   } | null = null;
   try {
     try {
-      native = await diagnoseNativeIsolation({
-        trial,
-        outside,
-        source: hermes.source,
-        executable: hermes.executable,
-      });
+      if (
+        !(containerLane && !hermes.identity.revisionMatches) &&
+        hermes.executable &&
+        hermes.source
+      )
+        native = await diagnoseNativeIsolation({
+          trial,
+          outside,
+          source: hermes.source,
+          executable: hermes.executable,
+        });
     } catch (error) {
       failures.push(
-        sanitize(`Native diagnostics: ${String(error)}`, [trial.root, outside.root, hermes.source]),
+        sanitize(`Native diagnostics: ${String(error)}`, [
+          trial.root,
+          outside.root,
+          hermes.source ?? "",
+        ]),
       );
     }
     try {
@@ -279,20 +416,62 @@ export async function runQualification(args: string[]) {
     await destroyOwnedDirectory(outside);
     await destroyOwnedDirectory(trial);
   }
-  failures.push(
-    "Native hard process-tree CPU/RAM/pids and aggregate disk enforcement is unqualified; a sampling watchdog cannot issue a product launch proof",
-    "Ardur container provider has CPU/memory/pids controls, but aggregate disk enforcement and complete tool/descendant budget admission are unqualified",
-    "Both product tool round trips and the effective shared context remain unqualified; metadata is not inference qualification",
-  );
+  let containerCohort: Record<string, unknown> | null = null;
+  if (containerLane) {
+    let pinnedImage: { id: string; revision: string | null } | null = null;
+    try {
+      const image = await inspectImage(HERMES_IMAGE);
+      requireValue(image.revision === HERMES_CONTAINER_REVISION, "Hermes image revision drift");
+      pinnedImage = image;
+    } catch (error) {
+      failures.push(sanitize(String(error)));
+    }
+    let containerReport: Record<string, unknown> | null = null;
+    if (options["--container-report"]) {
+      try {
+        const text = await readFile(options["--container-report"], "utf8");
+        requireValue(text.length <= 8 * 1024 * 1024, "Container report exceeds byte cap");
+        containerReport = record(JSON.parse(text));
+      } catch (error) {
+        failures.push(sanitize(`Container report: ${String(error)}`));
+      }
+    }
+    const assessment = assessContainerCohort({
+      approval: options["--container-cohort-approval"],
+      report: containerReport,
+      routeContext: route?.budget.contextSize ?? null,
+      architectureMaximum: typeof route?.maximumContext === "number" ? route.maximumContext : null,
+    });
+    failures.push(...assessment.failures);
+    containerCohort = {
+      lane: "separately-labeled-Linux-container-cohort",
+      approval: options["--container-cohort-approval"] === "approved" ? "approved" : "absent",
+      image: HERMES_IMAGE,
+      imageDigest: pinnedImage?.id ?? null,
+      sourceRevision: HERMES_CONTAINER_REVISION,
+      nativeInterpreter: hermes.identity.revisionMatches
+        ? "matches-pinned-revision"
+        : "different-cohort",
+      gates: assessment.gates,
+      ready: assessment.ready,
+    };
+  } else
+    failures.push(
+      "Native hard process-tree CPU/RAM/pids and aggregate disk enforcement is unqualified; a sampling watchdog cannot issue a product launch proof",
+      "This preflight does not run the container lane. Container disk, admission and the scripted Hermes tool round trip are reported only by the container qualification command.",
+      "The shared-model tool round trip and the effective context remain unqualified; metadata is not inference qualification",
+    );
+  const ready = containerCohort?.ready === true;
   const qualification = {
     version: 1,
-    status: "blocked",
+    status: ready ? "planned" : "blocked",
     productLaunches: 0,
     modelCalls: 0,
     canaryRuns: 0,
     native,
     route,
     computer,
+    ...(containerCohort ? { containerCohort } : {}),
     failures,
     ardur: {
       ordinaryRpc: "see-separate-T0-RPC-self-test",
@@ -338,8 +517,10 @@ export async function runQualification(args: string[]) {
     isolation: native,
     protocolResults: qualification,
   });
-  console.log("Qualification retained; product launches: 0; model calls: 0; canary blocked.");
-  return 2;
+  console.log(
+    `Qualification retained; product launches: 0; model calls: 0; canary ${ready ? "planned" : "blocked"}.`,
+  );
+  return ready ? 0 : 2;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href)
   runQualification(process.argv.slice(2))
