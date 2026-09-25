@@ -36,6 +36,17 @@ function missingRemoteKey(provider: "e2b" | "daytona" | "box", envName: string):
   );
 }
 
+/** Providers for connectionless computers whose kind is not the deployment default. */
+export function sandboxProvidersForKeys(
+  opts: SandboxProviderOptions,
+): NonNullable<SandboxProviderOptions["providers"]> {
+  const providers: NonNullable<SandboxProviderOptions["providers"]> = {};
+  if (opts.e2bApiKey?.trim()) providers.e2b = () => createSandboxProvider("e2b", opts);
+  if (opts.daytonaApiKey?.trim()) providers.daytona = () => createSandboxProvider("daytona", opts);
+  if (opts.boxApiKey?.trim()) providers.box = () => createSandboxProvider("box", opts);
+  return providers;
+}
+
 export function createSandboxProvider(kind: string, opts: SandboxProviderOptions): SandboxProvider {
   switch (kind) {
     case "none":

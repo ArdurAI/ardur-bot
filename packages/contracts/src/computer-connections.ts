@@ -60,7 +60,7 @@ export const ComputerConfigurationSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema,
   connectionId: z.string().nullable(),
-  /** Move onto This Mac: kind desktop, no connection. Distinct from a null deployment default. */
+  /** Refused until verified migration can move a computer onto This Mac. */
   thisMac: z.literal(true).optional(),
   confirmed: z.boolean().default(false),
 });

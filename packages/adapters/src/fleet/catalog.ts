@@ -92,15 +92,7 @@ export class FleetCatalog {
   ): Promise<{ source: SandboxProvider; target: SandboxProvider }> {
     const source = await this.resolveComputer(computer, context);
     if (configuration.targetId === undefined) {
-      if (configuration.thisMac) {
-        if (!computer.connectionId && computer.kind === "desktop")
-          return { source, target: source };
-        // Settings already confirmed this move onto This Mac.
-        return {
-          source,
-          target: await this.resolveComputer({ kind: "desktop" }, context),
-        };
-      }
+      if (configuration.thisMac) throw new Error("This Mac is not available.");
       if (
         configuration.connectionId === undefined ||
         configuration.connectionId === computer.connectionId

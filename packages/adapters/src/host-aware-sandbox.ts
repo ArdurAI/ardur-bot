@@ -26,7 +26,7 @@ import {
   usesHostBridge,
 } from "./remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "./sandbox-factory.js";
-import { createSandboxProvider } from "./sandbox-factory.js";
+import { createSandboxProvider, sandboxProvidersForKeys } from "./sandbox-factory.js";
 
 export function sandboxKindForBot(envKind: string, computerHost: string | null | undefined) {
   if (envKind === "docker" && computerHost === "this-mac") return "desktop";
@@ -59,7 +59,7 @@ export function createRunSandbox(
       ? new ConnectedSandboxProvider(
           selected,
           new ComputerConnections(opts.prisma, opts.secrets, opts),
-          { docker, host, providers: opts.providers },
+          { docker, host, providers: { ...sandboxProvidersForKeys(opts), ...opts.providers } },
         )
       : selected;
   if (kind !== "docker" || !opts.prisma) return primary;

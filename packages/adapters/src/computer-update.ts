@@ -7,6 +7,7 @@ import { scheduleComputerSleep } from "./computer-idle.js";
 import {
   ComputerBusyError,
   computerSupportsUpdate,
+  connectionlessConfigurationUnchanged,
   replaceComputer,
 } from "./computer-lifecycle.js";
 import type { FleetCatalog } from "./fleet/catalog.js";
@@ -144,6 +145,10 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
     const configuration = update.configuration
       ? ComputerReplacementConfigurationSchema.parse(update.configuration)
       : undefined;
+    if (connectionlessConfigurationUnchanged(update.computer, configuration)) {
+      await finishUpdate(deps.prisma, updateId, update.computerId, "completed");
+      return;
+    }
     const routing = await deps.fleet.resolveReplacementRouting(
       update.computer,
       configuration ?? {},

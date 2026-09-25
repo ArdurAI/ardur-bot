@@ -59,8 +59,8 @@ describe("computer connection settings", () => {
       where: { id: "foreign", spaceId: "space", connectorId: "computer" },
     });
   });
-  it("accepts This Mac only while that choice is on", async () => {
-    const findUnique = vi.fn(async () => ({ computerHost: "docker" }));
+  it("rejects This Mac so an older client cannot move a computer onto it", async () => {
+    const findUnique = vi.fn(async () => ({ computerHost: "this-mac" }));
     const prisma = { deploymentSettings: { findUnique } } as unknown as PrismaClient;
     await expect(
       validateComputerConfiguration(prisma, "space", {
@@ -71,16 +71,7 @@ describe("computer connection settings", () => {
         confirmed: true,
       }),
     ).rejects.toThrow("This Mac is not available.");
-    findUnique.mockResolvedValueOnce({ computerHost: "this-mac" });
-    await expect(
-      validateComputerConfiguration(prisma, "space", {
-        botId: "bot",
-        imageProfile: "base",
-        connectionId: null,
-        thisMac: true,
-        confirmed: true,
-      }),
-    ).resolves.toMatchObject({ thisMac: true, connectionId: null });
+    expect(findUnique).not.toHaveBeenCalled();
   });
   it("stores a generic engine socket without a credential or provider-specific variable", async () => {
     const create = vi.fn(async ({ data }) => ({ id: "connection", ...data }));

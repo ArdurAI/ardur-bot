@@ -650,6 +650,36 @@ function isUniqueConstraintError(error: unknown) {
 
 export type ComputerReplaceMode = "recover" | "reset" | "update";
 
+/** A null connection that stays null is not an engine move and must not rebuild the computer. */
+export function connectionlessConfigurationUnchanged(
+  computer: {
+    connectionId?: string | null;
+    imageProfile?: string | null;
+    networkEgress?: boolean | null;
+  },
+  configuration?: {
+    connectionId?: string | null;
+    imageProfile?: "base" | "developer";
+    networkEgress?: boolean;
+    targetId?: string;
+    thisMac?: boolean;
+  },
+) {
+  if (!configuration || configuration.thisMac || configuration.targetId !== undefined) return false;
+  if (configuration.connectionId !== null || computer.connectionId) return false;
+  if (
+    configuration.imageProfile !== undefined &&
+    configuration.imageProfile !== (computer.imageProfile ?? "base")
+  )
+    return false;
+  if (
+    configuration.networkEgress !== undefined &&
+    configuration.networkEgress !== computer.networkEgress
+  )
+    return false;
+  return true;
+}
+
 export function computerSupportsUpdate(kind: string): boolean {
   return kind !== "desktop";
 }
@@ -756,6 +786,17 @@ export async function replaceComputer(
     if (activeBootRun) throw new ComputerBusyError();
   }
 
+  if (connectionlessConfigurationUnchanged(existing, configuration))
+    return existing.providerRef
+      ? toComputerRef(existing)
+      : {
+          id: existing.id,
+          botId: existing.homeKey,
+          kind: existing.kind as ComputerRef["kind"],
+          providerRef: existing.providerRef ?? "",
+          connectionId: existing.connectionId,
+          imageProfile: (existing.imageProfile ?? "base") as ComputerRef["imageProfile"],
+        };
   // A router destroys the computer just loaded. A precomputed source can still name the engine
   // from before a Settings move finished.
   const sourceSandbox = isComputerRouter(deps.sandbox)

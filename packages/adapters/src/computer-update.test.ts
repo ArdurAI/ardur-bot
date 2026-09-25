@@ -36,7 +36,8 @@ function fixture(status = "queued") {
     computer: {
       id: "computer-1",
       kind: "fake",
-      connectionId: null,
+      imageProfile: "base" as "base" | "developer",
+      connectionId: null as string | null,
       providerRef: "computer-ref",
       scope: "team",
       spaceId: "space",
@@ -180,6 +181,24 @@ describe("profile replacement intent", () => {
         configuration: { imageProfile: "developer", connectionId: "engine-1", confirmed: true },
       },
     });
+  });
+  it("does not suspend or recreate a connectionless computer for a null connection", async () => {
+    const { row, deps, computer } = fixture();
+    row.computer.kind = "docker";
+    row.computer.connectionId = null;
+    row.computer.imageProfile = "base";
+    row.configuration = { imageProfile: "base", connectionId: null, confirmed: true };
+    await performComputerUpdate(deps, row.id);
+    expect(replacement).not.toHaveBeenCalled();
+    expect(computer.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ state: "suspending" }) }),
+    );
+    expect(row.computer).toMatchObject({
+      kind: "docker",
+      connectionId: null,
+      providerRef: "computer-ref",
+    });
+    expect(row.status).toBe("completed");
   });
   it("updates a connectionless Docker computer through its owning provider", async () => {
     const { row, deps, fleet, routing } = fixture();

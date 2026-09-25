@@ -56,6 +56,7 @@ import {
   resolveSandboxProvider,
   ScriptedAgentRuntime,
   SpaceMemoryProviderResolver,
+  sandboxProvidersForKeys,
 } from "@ardurbot/adapters";
 import { resolveEncryptionKey, resolveSupervisorToken } from "@ardurbot/core";
 import {
@@ -108,6 +109,14 @@ async function main() {
     daytonaTarget: process.env.DAYTONA_TARGET,
     boxApiKey: process.env.BOX_API_KEY,
     boxApiUrl: process.env.BOX_API_URL ?? process.env.BOX_BASE_URL,
+    providers: sandboxProvidersForKeys({
+      e2bApiKey: process.env.E2B_API_KEY,
+      daytonaApiKey: process.env.DAYTONA_API_KEY,
+      daytonaApiUrl: process.env.DAYTONA_API_URL,
+      daytonaTarget: process.env.DAYTONA_TARGET,
+      boxApiKey: process.env.BOX_API_KEY,
+      boxApiUrl: process.env.BOX_API_URL ?? process.env.BOX_BASE_URL,
+    }),
     dataDir,
     prisma,
     secrets,

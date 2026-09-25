@@ -22,7 +22,24 @@ import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
 
 type Connection = { id: string; name: string; settings: ComputerConnectionSettings };
-const THIS_MAC = "host";
+
+function hostPlatform() {
+  if (typeof window !== "undefined" && window.ardurbotDesktop?.platform)
+    return window.ardurbotDesktop.platform;
+  return typeof navigator !== "undefined" ? navigator.platform : "";
+}
+
+function engineLabel(engine: string) {
+  if (engine === "desktop" || engine === "host")
+    return /mac/i.test(hostPlatform()) ? "This Mac" : "This computer";
+  if (engine === "podman") return "Podman";
+  if (engine === "kubernetes") return "Kubernetes";
+  if (engine === "docker" || engine === "remote-docker") return "Docker";
+  if (engine === "e2b") return "E2B";
+  if (engine === "daytona") return "Daytona";
+  if (engine === "box") return "Box";
+  return engine;
+}
 
 export function ComputerProfilesSettings() {
   const { t } = useLingui();
@@ -30,17 +47,14 @@ export function ComputerProfilesSettings() {
     { botId: string; name: string; status: ComputerStatus }[]
   >([]);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [thisMac, setThisMac] = useState(false);
   const [error, setError] = useState("");
   async function refresh() {
-    const [computers, connections, deployment] = await Promise.all([
+    const [computers, connections] = await Promise.all([
       rpc.computer.list(),
       rpc.computer.connections(),
-      rpc.deployment.get().catch(() => null),
     ]);
     setComputers(computers);
     setConnections(connections);
-    setThisMac(deployment?.computerHost === "this-mac");
   }
   useEffect(() => {
     const reload = () =>
@@ -61,7 +75,6 @@ export function ComputerProfilesSettings() {
           key={computer.status.computerId}
           {...computer}
           connections={connections}
-          thisMac={thisMac}
           onChanged={refresh}
         />
       ))}
@@ -69,32 +82,27 @@ export function ComputerProfilesSettings() {
   );
 }
 
-function savedConnection(status: ComputerStatus, thisMac: boolean) {
-  if (status.connectionId) return status.connectionId;
-  return thisMac && status.kind === "desktop" ? THIS_MAC : "";
-}
-
 export function ComputerProfile({
   botId,
   name,
   status,
   connections,
-  thisMac = false,
   onChanged,
 }: {
   botId: string;
   name: string;
   status: ComputerStatus;
   connections: Connection[];
-  thisMac?: boolean;
   onChanged: () => Promise<void>;
 }) {
   const { t } = useLingui();
+  const locked = !status.connectionId;
+  const savedConnectionId = status.connectionId ?? "";
   const [profile, setProfile] = useState<ComputerProfileId>(status.imageProfile ?? "base");
-  const [connectionId, setConnectionId] = useState(savedConnection(status, thisMac));
+  const [connectionId, setConnectionId] = useState(savedConnectionId);
   useEffect(() => {
-    setConnectionId(savedConnection(status, thisMac));
-  }, [status.connectionId, status.kind, thisMac]);
+    setConnectionId(status.connectionId ?? "");
+  }, [status.connectionId, status.kind]);
   const [confirm, setConfirm] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -105,11 +113,10 @@ export function ComputerProfile({
     connectionId: string;
     name: string;
   } | null>(null);
-  const choosingHost = connectionId === THIS_MAC;
   useEffect(() => {
-    if (choosingHost) {
+    if (locked) {
       setEngineError("");
-      setDetectedEngine({ connectionId, name: "This Mac" });
+      setDetectedEngine(null);
       return;
     }
     let active = true;
@@ -133,12 +140,13 @@ export function ComputerProfile({
     return () => {
       active = false;
     };
-  }, [choosingHost, connectionId, engineRefresh]);
-  const engine =
-    detectedEngine?.connectionId === connectionId
+  }, [locked, connectionId, engineRefresh]);
+  const engine = locked
+    ? status.kind
+    : detectedEngine?.connectionId === connectionId
       ? detectedEngine.name
       : (connection?.settings.engine ?? status.kind);
-  const supported = ["docker", "podman", "kubernetes", "remote-docker"].includes(engine);
+  const supported = ["docker", "podman", "kubernetes", "remote-docker", "desktop"].includes(engine);
   async function save() {
     setPending(true);
     setError("");
@@ -146,8 +154,7 @@ export function ComputerProfile({
       await rpc.computer.configure({
         botId,
         imageProfile: profile,
-        connectionId: choosingHost ? null : connectionId || null,
-        ...(choosingHost ? { thisMac: true as const } : {}),
+        connectionId: locked ? null : connectionId || null,
         confirmed: true,
       });
       setConfirm(false);
@@ -158,20 +165,12 @@ export function ComputerProfile({
       setPending(false);
     }
   }
+  const label = engineLabel(engine);
   return (
     <section className="space-y-3 rounded-xl border border-border p-4">
       <h4>{status.mode === "team" ? t`Team Computer` : name}</h4>
       <p className="text-sm text-muted-foreground">
-        <Trans>
-          Engine:{" "}
-          {engine === "podman"
-            ? "Podman"
-            : engine === "kubernetes"
-              ? "Kubernetes"
-              : engine === "docker"
-                ? "Docker"
-                : engine}
-        </Trans>
+        <Trans>Engine: {label}</Trans>
       </p>
       {engineError ? (
         <div role="alert" className="text-sm text-destructive">
@@ -189,24 +188,31 @@ export function ComputerProfile({
           id={`connection-${botId}`}
           aria-label={t`Connection`}
           value={connectionId}
-          disabled={pending}
+          disabled={pending || locked}
           onChange={(event) => setConnectionId(event.target.value)}
         >
-          <NativeSelectOption value="">
-            <Trans>Deployment default</Trans>
-          </NativeSelectOption>
-          {thisMac ? (
-            <NativeSelectOption value={THIS_MAC}>
-              <Trans>This Mac</Trans>
+          {locked ? (
+            <NativeSelectOption value="">{label}</NativeSelectOption>
+          ) : (
+            <NativeSelectOption value="">
+              <Trans>Deployment default</Trans>
             </NativeSelectOption>
-          ) : null}
-          {connections.map((entry) => (
-            <NativeSelectOption key={entry.id} value={entry.id}>
-              {entry.name}
-            </NativeSelectOption>
-          ))}
+          )}
+          {locked
+            ? null
+            : connections.map((entry) => (
+                <NativeSelectOption key={entry.id} value={entry.id}>
+                  {entry.name}
+                </NativeSelectOption>
+              ))}
         </NativeSelect>
       </label>
+      {locked ? (
+        <p className="text-sm text-muted-foreground">
+          {/* biome-ignore format: one catalog sentence */}
+          <Trans>Moving this computer between engines is not available yet. Add a connection to move it to another machine.</Trans>
+        </p>
+      ) : null}
       {supported ? (
         <>
           <label htmlFor={`profile-${botId}`} className="block space-y-1">
@@ -235,17 +241,18 @@ export function ComputerProfile({
               <Trans>Screen and terminal: Not available on this computer</Trans>
             </p>
           ) : null}
-          <p className="text-sm text-muted-foreground">
-            <Trans>Developer is a larger download and uses more disk space.</Trans>
-          </p>
+          {engine === "desktop" ? null : (
+            <p className="text-sm text-muted-foreground">
+              <Trans>Developer is a larger download and uses more disk space.</Trans>
+            </p>
+          )}
         </>
       ) : null}
       <Button
         disabled={
           pending ||
           status.state === "booting" ||
-          (profile === (status.imageProfile ?? "base") &&
-            connectionId === savedConnection(status, thisMac))
+          (profile === (status.imageProfile ?? "base") && connectionId === savedConnectionId)
         }
         onClick={() => setConfirm(true)}
       >

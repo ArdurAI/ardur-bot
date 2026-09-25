@@ -59,8 +59,10 @@ Automatic moves are paused across engines: until verified migration lands, a mov
 same kind of computer, such as between Docker engines or between Linux machines. Moving work to
 another engine remains the goal. It waits because today's move removes the old computer before
 the new one has accepted the workspace. Verified migration will start the destination, import and
-verify the workspace, point the computer at it, and only then remove the old one. A person can
-still move a computer between engines in Settings, by choosing another connection or This Mac while that choice is on.
+verify the workspace, point the computer at it, and only then remove the old one. Moving a
+connectionless computer between Docker and This Mac is not available until that migration lands.
+Settings shows the engine the computer runs on. A computer that already has a connection can move
+to another saved connection, or back to the deployment engine.
 
 `placeRunComputer` runs before the first computer execution lease and before tool effects. It
 never moves an existing run snapshot. A first move pauses for that bot's consent unless `Move
@@ -81,7 +83,8 @@ This Mac uses the host, and E2B, Daytona, Box, and Kubernetes use that kind's pr
 chosen when the computer is created: This Mac when that choice is on and there is no connection,
 otherwise the deployment default. Changing This Mac or the deployment default does not move a
 computer that already has a kind, including one whose machine is missing after a failed reset or
-update.
+update. Settings shows that saved engine. It does not move a connectionless computer between
+Docker and This Mac; that waits for verified migration.
 
 Moves reserve the computer using the existing maintenance record, save a checkpoint with the old
 connection, destroy the old computer, then provision and restore with the new connection. The

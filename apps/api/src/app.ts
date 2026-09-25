@@ -65,6 +65,7 @@ import {
   ScriptedAgentRuntime,
   SmtpEmailProvider,
   SpaceMemoryProviderResolver,
+  sandboxProvidersForKeys,
   toTeamChatInbound,
 } from "@ardurbot/adapters";
 import { blockedAuthPaths, createAuth } from "@ardurbot/auth";
@@ -260,6 +261,14 @@ export async function createApp(
       daytonaTarget: env.daytonaTarget,
       boxApiKey: env.boxApiKey,
       boxApiUrl: env.boxApiUrl,
+      providers: sandboxProvidersForKeys({
+        e2bApiKey: env.e2bApiKey,
+        daytonaApiKey: env.daytonaApiKey,
+        daytonaApiUrl: env.daytonaApiUrl,
+        daytonaTarget: env.daytonaTarget,
+        boxApiKey: env.boxApiKey,
+        boxApiUrl: env.boxApiUrl,
+      }),
       dataDir: env.dataDir,
       prisma,
       secrets,

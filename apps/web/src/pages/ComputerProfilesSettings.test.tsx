@@ -122,33 +122,102 @@ it("shows unavailable controls from Kubernetes capability flags", async () => {
   await act(async () => root.unmount());
 });
 
-it("moves a connectionless computer to This Mac only while that choice is on", async () => {
+it("keeps a connectionless computer on its engine and does not offer deployment default", async () => {
   const element = document.createElement("div");
   document.body.append(element);
   const root = createRoot(element);
-  const render = (thisMac: boolean) =>
+  await act(async () =>
     root.render(
       <ComputerProfile
         botId="bot"
         name="Builder"
         status={status}
-        connections={[]}
-        thisMac={thisMac}
+        connections={[
+          { id: "engine", name: "Other machine", settings: { engine: "podman" } as never },
+        ]}
         onChanged={async () => {}}
       />,
-    );
-  await act(async () => render(false));
-  expect(
-    [...element.querySelectorAll("option")].some((option) => option.textContent === "This Mac"),
-  ).toBe(false);
-  await act(async () => render(true));
+    ),
+  );
+  const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  expect(connection.disabled).toBe(true);
+  expect([...connection.options].map((option) => option.textContent)).toEqual(["Docker"]);
+  expect(element.textContent).toContain("Engine: Docker");
+  expect(element.textContent).not.toContain("Deployment default");
+  expect(element.textContent).toContain(
+    "Moving this computer between engines is not available yet. Add a connection to move it to another machine.",
+  );
+  expect(api.engine).not.toHaveBeenCalled();
+  await act(async () => root.unmount());
+});
+
+it("shows a desktop computer as this computer when This Mac is off and keeps an image change there", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={{ ...status, kind: "desktop" }}
+        connections={[]}
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  expect(element.textContent).toMatch(/This Mac|This computer/);
+  expect(element.textContent).not.toContain("Deployment default");
+  expect(element.textContent).not.toContain("Engine: Docker");
+  expect(element.textContent).toContain(
+    "Moving this computer between engines is not available yet. Add a connection to move it to another machine.",
+  );
+  expect(api.engine).not.toHaveBeenCalled();
+  const select = element.querySelector<HTMLSelectElement>('[aria-label="Image profile"]')!;
+  await act(async () => {
+    select.value = "developer";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  await act(async () => button("Apply").click());
+  await act(async () => button("Continue").click());
+  expect(api.configure).toHaveBeenCalledWith({
+    botId: "bot",
+    imageProfile: "developer",
+    connectionId: null,
+    confirmed: true,
+  });
+  await act(async () => root.unmount());
+});
+
+it("still moves a connected computer to another saved connection or the deployment default", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={{ ...status, connectionId: "engine" }}
+        connections={[
+          { id: "engine", name: "Local", settings: { engine: "docker" } as never },
+          { id: "remote", name: "Remote", settings: { engine: "podman" } as never },
+        ]}
+        onChanged={async () => {}}
+      />,
+    ),
+  );
   const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
   expect([...connection.options].map((option) => option.textContent)).toEqual([
     "Deployment default",
-    "This Mac",
+    "Local",
+    "Remote",
   ]);
+  expect(element.textContent).not.toContain("Moving this computer between engines");
   await act(async () => {
-    connection.value = "host";
+    connection.value = "remote";
     connection.dispatchEvent(new Event("change", { bubbles: true }));
   });
   const button = (name: string) =>
@@ -158,11 +227,9 @@ it("moves a connectionless computer to This Mac only while that choice is on", a
   expect(api.configure).toHaveBeenCalledWith({
     botId: "bot",
     imageProfile: "base",
-    connectionId: null,
-    thisMac: true,
+    connectionId: "remote",
     confirmed: true,
   });
-  expect(api.engine).not.toHaveBeenCalledWith({ connectionId: "host" });
   await act(async () => root.unmount());
 });
 
@@ -178,8 +245,8 @@ it("keeps a stopped engine quiet until Retry and clears its reason after recover
       <ComputerProfile
         botId="bot"
         name="Builder"
-        status={{ ...status }}
-        connections={[]}
+        status={{ ...status, connectionId: "engine" }}
+        connections={[{ id: "engine", name: "Local", settings: { engine: "docker" } as never }]}
         onChanged={async () => {}}
       />,
     );

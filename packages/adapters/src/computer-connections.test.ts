@@ -60,7 +60,7 @@ describe("saved computer connections", () => {
         id: "computer",
         providerRef: "ref",
         botId: "bot",
-        kind: "daytona",
+        kind: "fake",
         connectionId,
       };
       const routed = connectionId ? connectedCwd : fallbackCwd;

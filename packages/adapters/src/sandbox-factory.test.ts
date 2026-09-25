@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NO_SANDBOX_MESSAGE } from "./none-sandbox.js";
-import { createSandboxProvider } from "./sandbox-factory.js";
+import { createSandboxProvider, sandboxProvidersForKeys } from "./sandbox-factory.js";
 
 const ctx = {
   operationId: "op",
@@ -41,6 +41,19 @@ describe("createSandboxProvider", () => {
       createSandboxProvider("e2b", {}).provision({ botId: "b", homePath: "/tmp" }, ctx),
     ).rejects.toThrow(/E2B_API_KEY/);
     expect(createSandboxProvider("box", { boxApiKey: "test-box-key" }).describe().id).toBe("box");
+  });
+
+  it("registers E2B, Daytona, and Box only when their keys are set", () => {
+    expect(sandboxProvidersForKeys({})).toEqual({});
+    const providers = sandboxProvidersForKeys({
+      e2bApiKey: "e2b-test",
+      daytonaApiKey: "daytona-test",
+      boxApiKey: "box-test",
+    });
+    expect(providers.e2b!().describe().id).toBe("e2b");
+    expect(providers.daytona!().describe().id).toBe("daytona");
+    expect(providers.box!().describe().id).toBe("box");
+    expect(sandboxProvidersForKeys({ e2bApiKey: "  " }).e2b).toBeUndefined();
   });
 
   it("throws on unknown provider", () => {
