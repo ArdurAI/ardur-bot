@@ -122,10 +122,10 @@ export async function runCli(args: string[]) {
           `Hermes revision mismatch: expected ${hermes.identity.expectedRevision}, actual ${hermes.identity.actualRevision ?? "unavailable"}.`,
         ]),
     "Owner approval of endpoint, model digest/quantization/template/tokenizer and the complete finite budget file is required for live execution.",
-    "Native product launch must pass filesystem, child, symlink, egress and hidden-grader canaries for its exact dependency closure.",
+    "The container release cohort requires its pinned Hermes image and final product/model qualification; stand-in probes do not qualify Hermes.",
     "Hard process-tree resource ceilings and detached-child accounting are not qualified on the native macOS lane.",
-    "Ardur controlled-computer/MCP equivalence and all auxiliary routes require isolation qualification beyond the W0-5 file fixture.",
-    "W0-3 versus usage qualification and W0-4 full timing/paint collection remain incomplete; exact token/cost or UI superiority is unavailable.",
+    "The container computer and pre-effect admission have explicit T0 gates; actual product/model settings and auxiliary routes still require final qualification.",
+    "W0-3 and W0-4 collectors are landed; versus usage and full cross-product timing/paint coverage remain unqualified.",
     "The candidate model has not passed a tool round trip on both products. Metadata discovery alone cannot qualify it.",
   ];
   const launchPlan = {
@@ -213,7 +213,7 @@ export async function runCli(args: string[]) {
   });
   if (options.mode === "live") {
     console.error(
-      "Live refused before product/provider startup: native resource confinement, Ardur controlled-computer qualification, and auxiliary-route attribution are incomplete. Planning evidence was retained.",
+      "Live refused before product/provider startup: the pinned container release and shared-model/auxiliary-route qualification remain incomplete. Planning evidence was retained.",
     );
     return 2;
   }

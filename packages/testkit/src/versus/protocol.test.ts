@@ -104,6 +104,20 @@ describe("Hermes stateful protocol", () => {
     expect(output.reply).toBe("Saved café.\n\nFinal artifact saved.");
     expect(output.protocolError).toBeNull();
   });
+  it.each(["unrecognized arguments", "invalid choice", "no such option"])(
+    "keeps valid assistant discussion of %s and still detects a failing CLI exit",
+    (phrase) => {
+      for (const exitCode of [0, 2]) {
+        const output = new HermesOutput(emit);
+        output.push(
+          Buffer.from(`╭─⚕ Hermes──╮\n  The parser reported ${phrase}.\n╰────────────╯\n`),
+        );
+        output.end(exitCode);
+        expect(output.reply).toBe(`The parser reported ${phrase}.`);
+        expect(output.protocolError).toBe(exitCode === 0 ? null : "unsupported-flags");
+      }
+    },
+  );
   it("preserves a leaking reply for grading and refuses missing or truncated reply frames", () => {
     const leaking = new HermesOutput(emit);
     leaking.push(Buffer.from("╭─⚕ Hermes──╮\n  synthetic-private-sentinel\n╰────────────╯\n"));

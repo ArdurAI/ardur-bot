@@ -20,7 +20,7 @@ import { contentDigest } from "../manifest.js";
 import type { Json, TaskContract } from "../tasks/catalog.js";
 import type { TaskVariant } from "../tasks/variants.js";
 import { taskMaterial } from "../tasks/variants.js";
-import type { DepartmentSandbox, DepartmentServices } from "./services.js";
+import type { DepartmentServices } from "./services.js";
 import { initializeFixtureDatabase } from "./services.js";
 
 export interface ProductionApp {
@@ -34,6 +34,9 @@ export interface ProductionApp {
 }
 
 export const FIXTURE_ENCRYPTION_KEY = "scoreboard-synthetic-encryption-key";
+export interface ReplaySandbox extends SandboxProvider {
+  snapshotFiles(homeKey: string, botId: string): Promise<Record<string, string>>;
+}
 const origin = "http://127.0.0.1:5173";
 
 export async function fixtureRpc<T>(
@@ -59,7 +62,7 @@ export async function runProductionTask(options: {
   dataDir: string;
   modelBaseUrl: string;
   services: DepartmentServices;
-  sandbox: DepartmentSandbox;
+  sandbox: ReplaySandbox;
   variant?: TaskVariant;
   createApp: () => Promise<ProductionApp>;
   model?: { id: string; maxTokens: number; contextWindow: number };
