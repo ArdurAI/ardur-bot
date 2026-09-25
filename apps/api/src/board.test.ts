@@ -1,6 +1,6 @@
 import { BoardService } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { WorkItemSchema } from "@ardurbot/contracts/board";
+import { BoardError, WorkItemSchema } from "@ardurbot/contracts/board";
 import { afterEach, expect, it, vi } from "vitest";
 import { createBoard } from "./board.js";
 import type { RouterDeps } from "./router.js";
@@ -124,6 +124,26 @@ it("serves one whole-board snapshot with at most one selected item and no per-it
   expect(provider.ready).toHaveBeenCalledTimes(1);
   expect(provider.blocked).toHaveBeenCalledTimes(1);
   expect(provider.show).toHaveBeenCalledTimes(1);
+});
+it("preserves the snapshot and reports only the selected-item failure for a stale deep link", async () => {
+  const { board, provider, prisma, item } = fixture();
+  vi.spyOn(BoardService.prototype, "configured").mockResolvedValue([
+    { id: "workspace", initialized: true, enabled: true, allowAllBots: true } as never,
+  ]);
+  Object.assign(prisma, { boardFollow: { findMany: vi.fn(async () => []) } });
+  Object.assign(prisma.bot, { findMany: vi.fn(async () => []) });
+  provider.show.mockRejectedValue(
+    new BoardError({ code: "command_failed", message: "Item not found" }),
+  );
+  const result = await board.view(actor, { workspaceId: "workspace", itemId: "deleted" });
+  expect(result.snapshot.items).toEqual([item]);
+  expect(result.selected).toBeNull();
+  expect(result.problem).toBeNull();
+  expect(result).toMatchObject({ selectionProblem: { code: "command_failed" } });
+  provider.show.mockClear();
+  const cleared = await board.view(actor, { workspaceId: "workspace" });
+  expect(cleared.snapshot.items).toEqual([item]);
+  expect(provider.show).not.toHaveBeenCalled();
 });
 it("persists only the acting user's follow and authorizes before reading or writing it", async () => {
   const { board, prisma } = fixture();

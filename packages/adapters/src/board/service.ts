@@ -105,7 +105,7 @@ export class BoardService {
       hostRoots: registration?.userId === scope.userId ? registration.hostRoots : [],
     }).run(request, scope.spaceId, scope.signal);
   }
-  async workspace(scope: BoardScope, id?: string) {
+  async workspace(scope: BoardScope, id?: string, options: { allowUninitialized?: boolean } = {}) {
     await this.actor(scope);
     if (!id && scope.botId && scope.runId) {
       const run = await this.options.prisma.run.findFirst({
@@ -125,10 +125,11 @@ export class BoardService {
         spaceId: scope.spaceId,
         ownerUserId: scope.userId,
         enabled: true,
+        ...(!id && !options.allowUninitialized ? { initialized: true } : {}),
       },
       ...(!id ? { orderBy: [{ isDefault: "desc" as const }, { createdAt: "asc" as const }] } : {}),
     });
-    if (!row?.initialized)
+    if (!row || (!row.initialized && !options.allowUninitialized))
       throw new BoardError({ code: "no_board", message: "This folder has no board" });
     if (scope.botId && !row.allowAllBots && !row.allowedBotIds.includes(scope.botId))
       throw new BoardError({

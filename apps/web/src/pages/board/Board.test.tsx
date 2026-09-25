@@ -74,12 +74,14 @@ function item(id: string, status = "open"): WorkItem {
     closeWhenDone: false,
   };
 }
-async function render(children: ReactNode) {
+async function render(children: ReactNode, path = "/") {
   const node = document.createElement("div");
   document.body.append(node);
   const root = createRoot(node);
   roots.push(root);
-  await act(async () => root.render(<MemoryRouter>{children}</MemoryRouter>));
+  await act(async () =>
+    root.render(<MemoryRouter initialEntries={[path]}>{children}</MemoryRouter>),
+  );
   return node;
 }
 it("preserves precise dates on unrelated edits and allows clearing or changing a date", async () => {
@@ -341,6 +343,128 @@ it("removes the previous board's editing controls while the next workspace loads
   expect(node.textContent).not.toContain("No board");
   await act(async () => resolve({ ...view(), workspaces, workspaceId: "folder" }));
   expect(node.querySelectorAll('[aria-label="New item"]')).toHaveLength(5);
+});
+it.each(["succeeds", "fails"])(
+  "refreshes the selected board after an earlier board's pending mutation %s",
+  async (outcome) => {
+    const workspaces = [workspace, { ...workspace, id: "folder", name: "Folder" }];
+    calls.view.mockImplementation(async ({ workspaceId }) => ({
+      ...view([item(workspaceId === "folder" ? "folder-item" : "ready")]),
+      workspaces,
+      workspaceId: workspaceId ?? "workspace",
+    }));
+    let complete!: () => void;
+    calls.update.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          complete = () =>
+            outcome === "succeeds" ? resolve() : reject(new Error("command refused"));
+        }),
+    );
+    const node = await render(<Board />);
+    const drop = (id: string) => {
+      const event = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "dataTransfer", { value: { getData: () => id } });
+      node.querySelector('[data-board-column="in_progress"]')!.dispatchEvent(event);
+    };
+    await act(async () => drop("ready"));
+    await act(async () => {
+      const select = node.querySelector<HTMLSelectElement>('select[aria-label="Board"]')!;
+      select.value = "folder";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => complete());
+    expect(node.querySelector('[data-board-item="folder-item"]')).not.toBeNull();
+    expect(node.querySelector('[data-board-item="ready"]')).toBeNull();
+    expect(calls.view).toHaveBeenLastCalledWith(
+      { workspaceId: "folder", itemId: undefined },
+      expect.anything(),
+    );
+    await act(async () => drop("folder-item"));
+    expect(calls.update).toHaveBeenLastCalledWith({
+      workspaceId: "folder",
+      id: "folder-item",
+      patch: { status: "in_progress", deferUntil: null },
+    });
+  },
+);
+it("does not restore an edited item after switching boards while the save is pending", async () => {
+  const workspaces = [workspace, { ...workspace, id: "folder", name: "Folder" }];
+  calls.view.mockResolvedValueOnce({ ...view(), workspaces, selected: item("ready") });
+  let loadFolder!: (result: ReturnType<typeof view>) => void;
+  calls.view.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        loadFolder = resolve;
+      }),
+  );
+  let save!: (item: WorkItem) => void;
+  calls.update.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        save = resolve;
+      }),
+  );
+  const node = await render(<Board />, "/app/board?workspace=workspace&item=ready");
+  await act(async () =>
+    [...node.querySelectorAll("button")].find((button) => button.textContent === "Edit")!.click(),
+  );
+  await act(async () =>
+    node
+      .querySelector('[role="dialog"] form')!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await act(async () => {
+    const select = node.querySelector<HTMLSelectElement>('select[aria-label="Board"]')!;
+    select.value = "folder";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => save(item("ready")));
+  expect(node.querySelector('[role="dialog"]')).toBeNull();
+  await act(async () =>
+    loadFolder({ ...view([item("folder-item")]), workspaces, workspaceId: "folder" }),
+  );
+  expect(node.querySelector('[data-board-item="folder-item"]')).not.toBeNull();
+});
+it("opens the requested graph item without reloading the prior selection", async () => {
+  calls.view.mockImplementation(async ({ itemId }) => ({
+    ...view(),
+    selected: itemId ? item(itemId) : null,
+  }));
+  const node = await render(<Board />);
+  await act(async () => {
+    const select = node.querySelector<HTMLSelectElement>('select[aria-label="View"]')!;
+    select.value = "graph";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () =>
+    node
+      .querySelector<SVGGElement>('g[role="button"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true })),
+  );
+  expect(node.querySelector('[role="dialog"] h2')?.textContent).toBe("ready");
+  expect(calls.view).toHaveBeenLastCalledWith(
+    { workspaceId: "workspace", itemId: "ready" },
+    expect.anything(),
+  );
+});
+it("keeps cards visible and clears an unavailable item selection", async () => {
+  calls.view.mockImplementation(async ({ itemId }) => ({
+    ...view(),
+    selectionProblem: itemId ? { code: "command_failed", message: "Item not found" } : null,
+  }));
+  const node = await render(<Board />, "/app/board?workspace=workspace&item=deleted");
+  expect(node.querySelector('[data-board-item="ready"]')).not.toBeNull();
+  const close = [...node.querySelectorAll<HTMLButtonElement>('[role="alert"] button')].find(
+    (button) => button.textContent === "Close",
+  );
+  expect(close).toBeDefined();
+  await act(async () => close!.click());
+  expect(calls.view).toHaveBeenLastCalledWith(
+    { workspaceId: "workspace", itemId: undefined },
+    expect.anything(),
+  );
+  expect(node.querySelector('[role="alert"]')).toBeNull();
 });
 function input(node: HTMLInputElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(node, value);

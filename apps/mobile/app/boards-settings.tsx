@@ -41,8 +41,12 @@ export default function BoardsSettings() {
     setProblem(result.problem);
     setLoaded(true);
   }
-  useEffect(() => {
-    void (async () => {
+  async function bootstrap() {
+    setBusy(true);
+    setLoaded(false);
+    setOwner(false);
+    setError(false);
+    try {
       if (await hasPairedDevice()) {
         setLoaded(true);
         return;
@@ -51,7 +55,14 @@ export default function BoardsSettings() {
       setOwner(me.isDeploymentOwner);
       if (me.isDeploymentOwner) await load();
       else setLoaded(true);
-    })().catch(() => setError(true));
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  useEffect(() => {
+    void bootstrap();
   }, []);
   async function work(action: () => Promise<unknown>) {
     if (busy || !owner) return;
@@ -67,7 +78,22 @@ export default function BoardsSettings() {
     }
   }
   const configure = (patch: BoardConfiguration) =>
-    board && work(() => rpc("board/configure", { workspaceId: board.id, patch }));
+    board &&
+    work(() =>
+      rpc("board/configure", {
+        workspaceId: board.id,
+        patch: {
+          ...patch,
+          ...(patch.allowedBotIds
+            ? {
+                allowedBotIds: patch.allowedBotIds.filter((id) =>
+                  bots.some((bot) => bot.id === id),
+                ),
+              }
+            : {}),
+        },
+      }),
+    );
   const foreground = { color: tokens.foreground };
   return (
     <ScrollView
@@ -82,7 +108,7 @@ export default function BoardsSettings() {
           <Text accessibilityRole="alert" style={{ color: tokens.destructive }}>
             {t("Could not load Board; retry.")}
           </Text>
-          <Button title={t("Retry")} onPress={() => void work(load)} />
+          <Button title={t("Retry")} disabled={busy} onPress={() => void bootstrap()} />
         </View>
       ) : null}
       {loaded && !owner ? (

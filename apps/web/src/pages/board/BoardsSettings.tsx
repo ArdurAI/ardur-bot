@@ -49,7 +49,22 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
     }
   }
   const configure = (patch: BoardConfiguration) =>
-    board && work(() => rpc.board.configure({ workspaceId: board.id, patch }));
+    board &&
+    work(() =>
+      rpc.board.configure({
+        workspaceId: board.id,
+        patch: {
+          ...patch,
+          ...(patch.allowedBotIds
+            ? {
+                allowedBotIds: patch.allowedBotIds.filter((id) =>
+                  bots.some((bot) => bot.id === id),
+                ),
+              }
+            : {}),
+        },
+      }),
+    );
   return (
     <div className="space-y-4">
       {!loaded && !error ? (
