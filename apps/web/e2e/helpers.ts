@@ -133,6 +133,7 @@ export async function openUserSettings(
     | "privacy"
     | "models"
     | "memory"
+    | "import"
     | "voice"
     | "usage"
     | "computer"

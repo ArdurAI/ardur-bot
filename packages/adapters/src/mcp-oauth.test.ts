@@ -784,7 +784,8 @@ describe("MCP setup with an existing access token", () => {
   );
 });
 
-describe("catalog OAuth revocation fences", () => {
+describe.each(["catalog", "imported"])("%s OAuth revocation fences", (source) => {
+  const origin = source === "catalog" ? { catalogId: "github" } : { imported: { tool: "codex" } };
   it("rejects a restored OAuth callback from an older connection revision", async () => {
     const sessions = oauthSessionStore();
     sessions.findFirst.mockResolvedValue({
@@ -804,7 +805,7 @@ describe("catalog OAuth revocation fences", () => {
           id: "server",
           endpoint: "https://example.test/mcp",
           enabled: true,
-          catalogId: "github",
+          ...origin,
           revision: 2,
         })),
       },
@@ -836,7 +837,7 @@ describe("catalog OAuth revocation fences", () => {
         id: "server",
         endpoint: "https://example.test/mcp",
         secretId: null,
-        catalogId: "github",
+        ...origin,
         revision: 1,
       },
       { spaceId: "space", userId: "owner" },

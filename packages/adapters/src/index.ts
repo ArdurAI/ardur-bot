@@ -84,6 +84,7 @@ export * from "./learning-outcomes.js";
 export * from "./learning-pin.js";
 export * from "./learning-queue.js";
 export * from "./learning-review.js";
+export * from "./local-import.js";
 export * from "./mcp-connector.js";
 export * from "./mcp-emulator.js";
 export * from "./mcp-oauth.js";

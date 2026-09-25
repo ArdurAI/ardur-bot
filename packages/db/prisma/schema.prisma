@@ -22,6 +22,7 @@ model AiDataConsent {
 }
 
 model User {
+  localImportConfigs LocalImportConfig[]
   preferences UserPreferences?
   aiDataConsents AiDataConsent[]
   id                          String                       @id
@@ -186,6 +187,7 @@ model Member {
 
 model Space {
   features SpaceFeature[]
+  localImportConfigs LocalImportConfig[]
   contextBudgets Json?
   concurrentRuns Int @default(3)
   coordinatorBotId String?
@@ -857,6 +859,7 @@ model TaughtSkill {
 /// The Pi runtime already understands this format; we persist and inject them.
 /// Distinct from TaughtSkill (demo/record playbooks).
 model AgentSkill {
+  imported    Json?
   enabled     Boolean @default(true)
   pluginId    String?
   plugin      PluginInstall? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
@@ -964,6 +967,7 @@ model MemoryRevision {
   sourceThreadId String?
   commitId       String?
   learning       Json?
+  imported       Json?
   authorKind     String @default("runtime")
   authorUserId   String?
   authorBotId    String?
@@ -1222,6 +1226,7 @@ model Secret {
 }
 
 model McpServer {
+  imported      Json?
   pluginId      String?
   plugin        PluginInstall? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
   managedBy     String?
@@ -2119,6 +2124,48 @@ model SpaceFeature {
 
   @@id([spaceId, feature])
   @@map("space_features")
+}
+
+model LocalImportConfig {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roots Json @default("{}")
+  manifest Json?
+  autoImport Boolean @default(false)
+  selection Json @default("{}")
+  importedAt DateTime?
+  lastRefreshAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  records LocalImportRecord[]
+
+  @@unique([spaceId, userId])
+  @@index([autoImport, lastRefreshAt])
+  @@map("local_import_configs")
+}
+
+model LocalImportRecord {
+  id String @id @default(cuid())
+  configId String
+  config LocalImportConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  tool String
+  category String
+  relativePath String
+  sourcePathHash String
+  contentHash String
+  modifiedAt DateTime
+  importedAt DateTime @default(now())
+  targetId String
+  targetRevision Int
+  documentId String?
+  removedAt DateTime?
+
+  @@unique([configId, tool, sourcePathHash])
+  @@index([configId, targetId, removedAt])
+  @@map("local_import_records")
 }
 
 model BotBrief {

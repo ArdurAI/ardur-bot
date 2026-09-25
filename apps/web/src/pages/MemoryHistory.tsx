@@ -1,4 +1,5 @@
 import type { MemoryDocumentHead, MemoryHistoryRevision } from "@ardurbot/contracts";
+import { LOCAL_IMPORT_TOOL_NAMES } from "@ardurbot/contracts/local-import";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
@@ -104,6 +105,11 @@ export function MemoryHistory({
       ) : null}
       {selected ? (
         <>
+          {selected.imported ? (
+            <p className="text-xs text-muted-foreground">
+              <Trans>Imported from {LOCAL_IMPORT_TOOL_NAMES[selected.imported.tool]}</Trans>
+            </p>
+          ) : null}
           {selected.gitSync ? (
             <p className="text-xs text-muted-foreground">
               {selected.gitSync.status === "pushed"

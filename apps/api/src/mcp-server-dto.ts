@@ -1,9 +1,11 @@
 import type { McpServer } from "@ardurbot/contracts";
 import { SpaceToolPoliciesSchema } from "@ardurbot/contracts";
+import { ImportedProvenanceSchema } from "@ardurbot/contracts/local-import";
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 
 export function mcpServerDto(
   row: {
+    imported?: unknown;
     catalogId?: string | null;
     spaceToolPolicies?: unknown;
     managedBy?: string | null;
@@ -36,7 +38,9 @@ export function mcpServerDto(
     row.env && typeof row.env === "object" && !Array.isArray(row.env) ? Object.keys(row.env) : [];
   const headerKeys =
     row.headers && typeof row.headers === "object" && !Array.isArray(row.headers)
-      ? Object.keys(row.headers)
+      ? Object.entries(row.headers)
+          .filter(([, value]) => !row.imported || !value || typeof value !== "object")
+          .map(([key]) => key)
       : [];
   return {
     spaceToolPolicies: SpaceToolPoliciesSchema.safeParse(row.spaceToolPolicies).data ?? {},
@@ -57,6 +61,7 @@ export function mcpServerDto(
     envKeys,
     headerKeys,
     hasSecret: row.secretId !== null,
+    ...(row.imported ? { imported: ImportedProvenanceSchema.parse(row.imported) } : {}),
     oauthStatus,
     enabled: row.enabled,
     revision: row.revision,

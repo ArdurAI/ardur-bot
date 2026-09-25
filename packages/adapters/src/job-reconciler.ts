@@ -104,6 +104,7 @@ export function createJobReconciler(
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileMemory?: () => Promise<void>;
+    reconcileLocalImport?: () => Promise<void>;
     reconcileBriefs?: () => Promise<void>;
   },
   options: { intervalMs?: number; batchSize?: number } = {},
@@ -128,6 +129,7 @@ export function createJobReconciler(
           deps.reconcileCloudAgents,
           deps.reconcileComputerUpdates,
           deps.reconcileMemory,
+          deps.reconcileLocalImport,
           async () => {
             if (!deps.reconcileBriefs || Date.now() < nextBriefMaintenanceAt) return;
             await deps.reconcileBriefs();

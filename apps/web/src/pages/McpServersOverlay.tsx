@@ -1,4 +1,5 @@
 import type { Bot, BotMcpServer, McpServer, McpTransport } from "@ardurbot/contracts";
+import { LOCAL_IMPORT_TOOL_NAMES } from "@ardurbot/contracts/local-import";
 import { deriveMcpSlug } from "@ardurbot/core";
 import {
   Badge,
@@ -33,6 +34,7 @@ import { rpc } from "../lib/rpc";
 import { McpConfigEditor } from "./customize/McpConfigEditor";
 import { McpDefaults } from "./customize/McpDefaults";
 import { McpDiagnostics } from "./customize/McpDiagnostics";
+import { ImportedServerCredentials } from "./import/ImportedServerCredentials";
 
 function oauthStatusText(server: McpServer): string | null {
   if (server.oauthStatus === "connected") return t`OAuth connected`;
@@ -504,6 +506,14 @@ export function McpServersOverlay({
                         <p className="mt-1 text-xs text-muted-foreground">
                           {server.endpoint ?? server.command ?? server.slug}
                         </p>
+                        {server.imported ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            <Trans>
+                              Imported from {LOCAL_IMPORT_TOOL_NAMES[server.imported.tool]}
+                            </Trans>
+                          </p>
+                        ) : null}
+                        <ImportedServerCredentials server={server} onSaved={refresh} />
                         {statusText ? (
                           <p
                             className={`mt-2 text-[11px] ${server.oauthStatus === "reconnect" ? "text-warning" : "text-muted-foreground"}`}
