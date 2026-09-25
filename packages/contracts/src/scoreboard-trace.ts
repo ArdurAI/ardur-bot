@@ -41,6 +41,8 @@ export interface TracePoint {
   boundary: TraceBoundary;
   attempt?: number;
   operationId?: string;
+  /** One logical provider call across HTTP retries; operationId still identifies an attempt. */
+  requestId?: string;
   outcome?: TraceOutcome;
   /** Requested schedule delay; never inferred from another process's wall clock. */
   scheduledMs?: number;

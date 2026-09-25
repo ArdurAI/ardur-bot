@@ -4299,7 +4299,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 operationId: executionId,
                 outcome: isToolPauseResult(result)
                   ? "uncertain"
-                  : isFailedToolResult(result)
+                  : toolResultError(result) !== undefined
                     ? "failed"
                     : "success",
               });

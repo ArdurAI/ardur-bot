@@ -383,20 +383,25 @@ export function ShellPage({
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [snapshot, setSnapshot] = useState<ThreadSnapshot | null>(null);
+  const cancelTracePaint = useRef<(() => void) | undefined>(undefined);
   useEffect(() => {
     if (!globalThis.__ardurTrace) return;
     let cancelled = false;
-    let dispose: (() => void) | undefined;
     void import("../lib/scoreboard-trace")
       .then(({ paintThreadTrace }) => {
-        if (!cancelled) dispose = paintThreadTrace(snapshot);
+        if (!cancelled) cancelTracePaint.current = paintThreadTrace(snapshot);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
-      dispose?.();
     };
   }, [snapshot]);
+  useEffect(
+    () => () => {
+      cancelTracePaint.current?.();
+    },
+    [snapshot?.threadId],
+  );
   const snapshotRef = useRef<ThreadSnapshot | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const pendingAttachmentsRef = useRef(pendingAttachments);

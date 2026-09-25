@@ -27,6 +27,7 @@ import { createRunExecutor } from "./executor.js";
 import { catalogEntries, resolveCatalogCall } from "./lazy-tool-catalog.js";
 import { approvalRequestRoute } from "./remote-execution.js";
 import { recordRunUsage } from "./run-usage.js";
+import { startScoreboardTrace } from "./scoreboard-trace.js";
 
 vi.mock("./runtimes/native-host.js", () => ({ nativeHostOwner: async () => true }));
 
@@ -380,6 +381,39 @@ describe("connector read-only metadata and approval enforcement", () => {
     reviewMock.mockReset();
     fleetComputer.kind = "desktop";
   });
+
+  it.each([
+    {
+      result: { isError: true, content: [{ type: "text", text: "Synthetic MCP failure" }] },
+      outcome: "failed",
+    },
+    { result: { isError: true, content: [] }, outcome: "failed" },
+    { result: { details: { error: { message: "Synthetic wrapped failure" } } }, outcome: "failed" },
+    {
+      result: { isError: false, content: [{ type: "text", text: "Synthetic success" }] },
+      outcome: "success",
+    },
+  ])(
+    "traces returned connector result $outcome without changing its payload",
+    async ({ result, outcome }) => {
+      const f = fixture({ integration: true, name: "synthetic_get_item" });
+      f.grant.server.spaceToolPolicies = { synthetic_get_item: "allow" };
+      f.execute.mockImplementation(async function* () {
+        yield { type: "result", data: result };
+      });
+      const trace = startScoreboardTrace();
+      try {
+        await f.run();
+        expect(f.execute).toHaveBeenCalledOnce();
+        expect(f.results).toEqual([result]);
+        expect(
+          trace.snapshot().points.filter((point) => point.boundary === "tool.finished"),
+        ).toEqual([expect.objectContaining({ operationId: "call-1", outcome })]);
+      } finally {
+        trace.stop();
+      }
+    },
+  );
 
   it.each(["ssh", "remote-docker", "kubernetes"])(
     "retains Ask-first approval on a %s computer",

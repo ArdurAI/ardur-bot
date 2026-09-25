@@ -184,6 +184,10 @@ describe("Pi requests through real HTTP/SSE and SDK retry policy", () => {
       expect(points.filter((p) => p.boundary === "wait.quota")).toHaveLength(
         status === 429 ? 1 : 0,
       );
+      const starts = points.filter((p) => p.boundary === "provider.started");
+      expect(starts[0]!.requestId).toEqual(expect.any(String));
+      expect(new Set(points.map((p) => p.requestId)).size).toBe(1);
+      expect(starts[0]!.operationId).not.toBe(starts[1]!.operationId);
       server.assertComplete();
       const usage = events.filter((event) => event.type === "usage");
       expect(totals(usage).tokens).toBe(160);

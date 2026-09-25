@@ -92,12 +92,27 @@ export function traceDuration(
   end: TracePoint | undefined,
   calibrations: readonly TraceCalibration[] = [],
 ): TraceDuration {
+  const bounds = durationBounds(start, end, calibrations);
+  if (bounds.lowerMs !== null && bounds.lowerMs < 0)
+    return missing(
+      start?.processId === end?.processId
+        ? "reversed-boundaries"
+        : "clock-uncertainty-or-reversed-boundaries",
+    );
+  return bounds;
+}
+
+/** Signed bounds are needed for publication acknowledgements that can follow acquisition. */
+function durationBounds(
+  start: TracePoint | undefined,
+  end: TracePoint | undefined,
+  calibrations: readonly TraceCalibration[],
+): TraceDuration {
   if (!start || !end) return missing("boundary-not-observed");
   if (![start.at, end.at].every((at) => Number.isFinite(at) && at >= 0))
     return missing("invalid-clock");
   if (start.traceId !== end.traceId) return missing("different-traces");
-  if (start.processId === end.processId)
-    return end.at < start.at ? missing("reversed-boundaries") : exact(end.at - start.at);
+  if (start.processId === end.processId) return exact(end.at - start.at);
   const transform = (point: TracePoint) => {
     const calibration = calibrations.find(
       (c) => c.processId === point.processId && point.at >= c.validFrom && point.at <= c.validUntil,
@@ -115,7 +130,7 @@ export function traceDuration(
   if (a.clock !== b.clock) return missing("clock-not-calibrated");
   const lower = b.lower - a.upper,
     upper = b.upper - a.lower;
-  if (lower < 0 || upper < lower) return missing("clock-uncertainty-or-reversed-boundaries");
+  if (upper < lower) return missing("clock-uncertainty-or-reversed-boundaries");
   return { value: (lower + upper) / 2, lowerMs: lower, upperMs: upper, reason: null };
 }
 
@@ -129,6 +144,7 @@ function validateBatches(batches: readonly TraceBatch[]) {
     "boundary",
     "attempt",
     "operationId",
+    "requestId",
     "outcome",
     "scheduledMs",
   ]);
@@ -152,7 +168,7 @@ function validateBatches(batches: readonly TraceBatch[]) {
         p.at < 0 ||
         !Number.isSafeInteger(p.sequence) ||
         p.sequence < 0 ||
-        ![p.traceId, p.processId, p.operationId ?? "none"].every((id) =>
+        ![p.traceId, p.processId, p.operationId ?? "none", p.requestId ?? "none"].every((id) =>
           /^[a-zA-Z0-9_:-]{1,128}$/.test(id),
         ) ||
         (p.attempt !== undefined && (!Number.isSafeInteger(p.attempt) || p.attempt < 0)) ||
@@ -237,20 +253,20 @@ export function deriveTrace(
   const lease = first("lease.acquired");
   const enqueued = first("job.enqueued");
   const queueUpper = traceDuration(eligible, lease, calibrations);
-  const queueLower = traceDuration(
+  const acknowledgedToLease = durationBounds(
     enqueued && eligible && enqueued.processId === eligible.processId
       ? { ...enqueued, at: Math.max(enqueued.at, eligible.at) }
       : undefined,
     lease,
     calibrations,
   );
+  const queueLower =
+    acknowledgedToLease.lowerMs === null ? null : Math.max(0, acknowledgedToLease.lowerMs);
   const queueWait: TraceDuration =
-    queueUpper.value !== null &&
-    queueLower.value !== null &&
-    queueLower.lowerMs! <= queueUpper.upperMs!
+    queueUpper.value !== null && queueLower !== null && queueLower <= queueUpper.upperMs!
       ? {
-          value: (queueLower.lowerMs! + queueUpper.upperMs!) / 2,
-          lowerMs: queueLower.lowerMs,
+          value: (queueLower + queueUpper.upperMs!) / 2,
+          lowerMs: queueLower,
           upperMs: queueUpper.upperMs,
           reason: null,
         }
@@ -307,7 +323,13 @@ export function deriveTrace(
             e.processId === p.processId &&
             e.at > p.at &&
             (p.boundary === "wait.quota"
-              ? e.boundary === "provider.started"
+              ? e.boundary === "provider.started" &&
+                p.requestId !== undefined &&
+                e.requestId === p.requestId &&
+                p.operationId !== undefined &&
+                e.operationId !== undefined &&
+                e.operationId !== p.operationId &&
+                e.attempt === p.attempt
               : e.boundary === "lease.acquired"),
         )
         .sort((a, b) => a.at - b.at)[0];
@@ -371,6 +393,7 @@ export function collectTraceEvidence(
       traceId: scrub(p.traceId),
       processId: scrub(p.processId),
       ...(p.operationId ? { operationId: scrub(p.operationId) } : {}),
+      ...(p.requestId ? { requestId: scrub(p.requestId) } : {}),
     })),
   }));
   const calibrations = (options.calibrations ?? []).map((c) => ({
@@ -423,8 +446,8 @@ export function collectTraceEvidence(
           expected,
           observed: traces.filter((t) => !dropped && t.metrics[id]!.value !== null).length,
         },
-        observations: traces.map((t, index) => ({
-          id: `trace-observation-${index}-${id}`,
+        observations: traces.map((t) => ({
+          id: `trace-observation-${contentDigest([options.sessionId, options.pairId, t.traceId, id])}`,
           sessionId: options.sessionId,
           pairId: options.pairId,
           traceId: t.traceId,

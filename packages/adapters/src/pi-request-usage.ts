@@ -143,7 +143,11 @@ export function observePiUsage(
   const begin = (http: boolean) => {
     if (active && !active.finished) {
       if (active.http)
-        traceCurrent("provider.finished", { operationId: active.operationId, outcome: "failed" });
+        traceCurrent("provider.finished", {
+          requestId,
+          operationId: active.operationId,
+          outcome: "failed",
+        });
       emit(active.collector.finish("failed"));
       active.finished = true;
     }
@@ -171,7 +175,7 @@ export function observePiUsage(
       transport: false,
       text: false,
     };
-    if (http) traceCurrent("provider.started", { operationId: active.operationId });
+    if (http) traceCurrent("provider.started", { requestId, operationId: active.operationId });
     emit(collector.start());
     return active;
   };
@@ -179,6 +183,7 @@ export function observePiUsage(
     if (active && !active.finished) {
       if (active.http)
         traceCurrent("provider.finished", {
+          requestId,
           operationId: active.operationId,
           outcome: outcome === "unknown" ? "uncertain" : outcome,
         });
@@ -202,7 +207,7 @@ export function observePiUsage(
         (payload) => {
           if (!current.transport) {
             current.transport = true;
-            traceCurrent("provider.transport", { operationId: current.operationId });
+            traceCurrent("provider.transport", { requestId, operationId: current.operationId });
           }
           const counts = piWireUsage(model.api, payload);
           if (!counts) return;
@@ -216,15 +221,20 @@ export function observePiUsage(
       );
       // Error bodies may still supply totals; any later snapshot keeps this failed outcome.
       if (!response.ok) {
-        traceCurrent("provider.finished", { operationId: current.operationId, outcome: "failed" });
+        traceCurrent("provider.finished", {
+          requestId,
+          operationId: current.operationId,
+          outcome: "failed",
+        });
         if (response.status === 429)
-          traceCurrent("wait.quota", { operationId: current.operationId });
+          traceCurrent("wait.quota", { requestId, operationId: current.operationId });
         emit(current.collector.finish("failed"));
         current.finished = true;
       }
       return observed;
     } catch (error) {
       traceCurrent("provider.finished", {
+        requestId,
         operationId: current.operationId,
         outcome: options.signal?.aborted ? "cancelled" : "failed",
       });
@@ -240,7 +250,7 @@ export function observePiUsage(
       for await (const event of source) {
         if (event.type === "text_delta" && event.delta && active?.http && !active.text) {
           active.text = true;
-          traceCurrent("provider.text", { operationId: active.operationId });
+          traceCurrent("provider.text", { requestId, operationId: active.operationId });
         }
         if (event.type === "done" || event.type === "error") {
           const message = event.type === "done" ? event.message : event.error;

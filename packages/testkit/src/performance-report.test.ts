@@ -1007,6 +1007,37 @@ describe("evidence contract regressions", () => {
 });
 
 describe("production trace fragments", () => {
+  it("combines independently collected paired trials without duplicate observation IDs", () => {
+    const fragments = [0, 1].map((pair) => {
+      const buffer = createTraceBuffer({ processId: `worker-${pair}`, now: () => 10 });
+      buffer.record(`run-${pair}`, "client.submitted", undefined, 0);
+      buffer.record(`run-${pair}`, "terminal.committed", { outcome: "success" });
+      return collectTraceEvidence([buffer.snapshot()], {
+        sessionId: "session-1",
+        pairId: `pair-${pair}`,
+        requiredBoundaries: [],
+      });
+    });
+    const report = evidence();
+    report.artifacts.push(...fragments.flatMap((fragment) => fragment.artifacts));
+    report.traces = fragments.flatMap((fragment) => fragment.traces);
+    report.metrics = report.metrics.map((metric) => {
+      const parts = fragments.flatMap((fragment) =>
+        fragment.metrics.filter((part) => part.id === metric.id),
+      );
+      if (!parts.length) return metric;
+      return {
+        ...parts[0]!,
+        observations: parts.flatMap((part) => part.observations),
+        coverage: {
+          expected: parts.length,
+          observed: parts.reduce((sum, part) => sum + part.coverage.observed, 0),
+        },
+      };
+    });
+    expect(() => parsePerformanceEvidenceReport(report, "paired-trace-fragments")).not.toThrow();
+  });
+
   it("merges measured and missing trace metrics into schema 3 without replacing its registry", () => {
     const buffer = createTraceBuffer({ processId: "fixture-worker", now: () => 10 });
     buffer.record("fixture-run", "admission.started", undefined, 0);

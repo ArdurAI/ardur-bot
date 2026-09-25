@@ -164,6 +164,50 @@ describe("client trace", () => {
     expect(clientTraceSnapshot()!.points.map((p) => p.boundary)).toEqual(["client.received"]);
   });
 
+  it("uses the event cursor and message identity after a persisted snapshot wins the race", () => {
+    globalThis.__ardurTrace = { capacity: 20 };
+    const tick = frames();
+    receiveTraceEvent(
+      event("thread.message.created", 100, { messageId: "message-a", role: "bot" }),
+    );
+    const refreshed = snapshot(100);
+    refreshed.messages[0]!.seq = 2;
+    paintThreadTrace(refreshed);
+    tick();
+    tick();
+    expect(clientTraceSnapshot()!.points.at(-1)!.boundary).toBe("client.text.painted");
+  });
+
+  it("does not mistake an older message from the same run for the pending durable message", () => {
+    globalThis.__ardurTrace = { capacity: 20 };
+    const tick = frames();
+    receiveTraceEvent(
+      event("thread.message.created", 10, { messageId: "new-message", role: "bot" }),
+    );
+    paintThreadTrace(snapshot(100));
+    tick();
+    tick();
+    expect(clientTraceSnapshot()!.points.map((p) => p.boundary)).toEqual(["client.received"]);
+  });
+
+  it("keeps the two-frame observation pending through compatible committed snapshots", () => {
+    globalThis.__ardurTrace = { capacity: 20 };
+    const tick = frames();
+    receiveTraceEvent(event("thread.progress", 1, { text: "content", streaming: true }));
+    paintThreadTrace(snapshot(1));
+    tick();
+    const latest = snapshot(2);
+    latest.messages = [];
+    paintThreadTrace(latest);
+    tick();
+    expect(clientTraceSnapshot()!.points.map((p) => p.boundary)).toEqual(["client.received"]);
+    paintThreadTrace(snapshot(3));
+    tick();
+    paintThreadTrace(snapshot(4));
+    tick();
+    expect(clientTraceSnapshot()!.points.at(-1)!.boundary).toBe("client.text.painted");
+  });
+
   it("has a bounded buffer and preserves subscription errors", async () => {
     globalThis.__ardurTrace = { capacity: 1 };
     await traceRpc(["threads", "send"], async () => ({ runId: "run-a" }));

@@ -58,7 +58,7 @@ export const tokenEvent = {
   createdAt,
   payload: { text: "First fixture token" },
 };
-export async function installPerformanceFixture(page: Page, trace = false) {
+export async function installPerformanceFixture(page: Page, trace = false, manualTrace = false) {
   let sent = false;
   const snapshot = (index: number) => ({
     botId: bots[index]!.id,
@@ -103,7 +103,7 @@ export async function installPerformanceFixture(page: Page, trace = false) {
     },
   ];
   await page.addInitScript(
-    ({ tokenEvent, trace }) => {
+    ({ tokenEvent, trace, manualTrace }) => {
       const original = window.fetch.bind(window);
       const observeToken = () => {
         const observer = new MutationObserver(() => {
@@ -125,6 +125,14 @@ export async function installPerformanceFixture(page: Page, trace = false) {
       document.addEventListener("DOMContentLoaded", observeToken, { once: true });
       const streams = new Set<ReadableStreamDefaultController<Uint8Array>>();
       const encoder = new TextEncoder();
+      if (manualTrace)
+        window.addEventListener("fixture:product-event", (event) => {
+          const productEvent = (event as CustomEvent).detail;
+          for (const stream of streams)
+            stream.enqueue(
+              encoder.encode(`event: message\ndata: ${JSON.stringify({ json: productEvent })}\n\n`),
+            );
+        });
       window.fetch = async (input, init) => {
         const request = new Request(input, init);
         if (new URL(request.url).pathname === "/rpc/threads/subscribe") {
@@ -158,7 +166,7 @@ export async function installPerformanceFixture(page: Page, trace = false) {
             stream.enqueue(
               encoder.encode(`event: message\ndata: ${JSON.stringify({ json: tokenEvent })}\n\n`),
             );
-          if (trace)
+          if (trace && !manualTrace)
             setTimeout(() => {
               for (const stream of streams) {
                 for (const event of [
@@ -209,6 +217,7 @@ export async function installPerformanceFixture(page: Page, trace = false) {
         ? { ...tokenEvent, payload: { ...tokenEvent.payload, streaming: true } }
         : tokenEvent,
       trace,
+      manualTrace,
     },
   );
   await page.route("**/api/auth/get-session", (route) =>

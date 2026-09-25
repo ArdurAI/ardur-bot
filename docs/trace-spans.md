@@ -38,6 +38,9 @@ trace entries, derived operation intervals, waiting intervals, coverage, and reg
 fragments. Merge those fragments into the existing report's complete registries; do not replace
 the report with a subset. Supply one trace per paired trial so pair identities are unambiguous.
 Consumers including the versus harness can use this interface without changing the executor.
+Observation IDs are opaque digests of session, pair, trace and metric identities. Independent paired
+trial fragments can be combined without restarting an observation counter. Public collector function
+signatures remain unchanged for fault-load and packaged-resource consumers.
 
 Only fixed boundary names, opaque identities, sequence numbers, monotonic times, attempt numbers,
 outcomes and requested schedule delays are accepted. No tool names, prompts, arguments, result
@@ -59,9 +62,17 @@ Steering and approval replies do not overwrite the original admission timestamps
 successful enqueue acknowledgement; `GraphileJobWorkerHost` records dequeue. Eligibility falls
 within the publication request/response boundary after the requested schedule delay. Queue duration
 therefore retains lower and upper bounds. Failed publication never records a successful enqueue.
+If a worker acquires the job before the publisher observes its acknowledgement, the lower bound is
+zero and the submission-to-lease upper bound remains valid. Missing or uncalibrated clocks still
+produce an unknown interval.
 Capacity waiting begins at a rejected concurrency claim. Approval waiting begins at the existing
 pause result. Quota waiting begins at an observed HTTP 429. Waiting is retained in total elapsed
 time; partial waits are unknown, not zero. Poll intervals are not used to invent queue durations.
+The optional `TracePoint.requestId` preserves the logical provider request across retries, while
+`operationId` identifies each HTTP attempt and `attempt` remains the run lease attempt. Quota waits
+close only at another HTTP attempt of that request in the same process and lease attempt. Older
+version-1 batches without `requestId` remain readable, but their quota waits stay unknown. This is
+an additive trace-field change; raw-artifact consumers must allow and scrub the new opaque field.
 
 [`createRunExecutor`](../packages/adapters/src/executor.ts) records acquired leases, context readiness,
 runtime activity, raw text, first safe text after the streaming redactor, durable progress, and each
@@ -108,10 +119,13 @@ before the receipt. Repeated sends into an existing run do not create a new turn
 
 [`paintThreadTrace`](../apps/web/src/lib/scoreboard-trace.ts) is called from the committed Shell
 snapshot. Text requires a streamed/durable-content event, corresponding nonempty rendered content,
-a nonempty DOM box intersecting the viewport, visible style and a visible document. Placeholders,
+a nonempty DOM box intersecting the viewport and every overflow clipping ancestor, visible style
+and a visible document. Persisted message sequence numbers are independent of event sequences;
+event consumption uses the snapshot cursor, and durable messages are matched by message/run identity. Placeholders,
 offscreen responses and tool activity do not qualify. A
-terminal event requires the matching thread cursor to have committed. Stale renders cancel their
-callbacks. The two-frame convention matches the existing
+terminal event requires the matching thread cursor to have committed. Compatible commits keep each
+pending two-frame observation and revalidate the latest snapshot. Changing threads or unmounting
+cancels pending callbacks. The two-frame convention matches the existing
 [`markAfterPaint`](../apps/web/src/lib/performance.ts); it measures an opportunity to paint, not GPU
 presentation. Hidden tabs can pause animation callbacks, as described by
 [the browser API](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame).
@@ -149,7 +163,8 @@ evidence. This is an instrumentation toggle comparison on one revision, not a pa
 claim. The ordinary single-trial mode does not provision infrastructure itself.
 
 ```sh
-pnpm exec vitest run packages/testkit/src/scoreboard/trace-production.postgres.test.ts
+VERIFY_DATABASE=1 DATABASE_URL="$SCOREBOARD_TEST_DATABASE_URL" \
+  pnpm exec vitest run packages/testkit/src/scoreboard/trace-production.postgres.test.ts
 ```
 
 No new dependency, schema change, migration, provider setting, Dashboard or release policy is added.

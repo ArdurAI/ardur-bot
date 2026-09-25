@@ -11,6 +11,7 @@ interface PendingPaint {
   traceId: string;
   threadId: string;
   seq: number;
+  messageId?: string;
   outcome?: TraceOutcome;
 }
 interface ClientTrace {
@@ -117,6 +118,9 @@ export function receiveTraceEvent(event: ProductEvent) {
     traceId: event.runId,
     threadId: event.threadId,
     seq: event.seq,
+    ...(event.type === "thread.message.created" && typeof event.payload.messageId === "string"
+      ? { messageId: event.payload.messageId }
+      : {}),
     ...(outcome ? { outcome } : {}),
   });
 }
@@ -145,51 +149,127 @@ export async function traceRpc(
   })();
 }
 
-/** Called from the committed React snapshot, then checked after two frame opportunities. */
+function visible(element: Element | null): boolean {
+  if (!element) return false;
+  const rect = element.getBoundingClientRect();
+  let left = Math.max(0, rect.left),
+    right = Math.min(innerWidth, rect.right);
+  let top = Math.max(0, rect.top),
+    bottom = Math.min(innerHeight, rect.bottom);
+  for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) {
+    const style = getComputedStyle(ancestor);
+    if (style.visibility !== "visible" || style.opacity === "0") return false;
+    if (ancestor !== element) {
+      const clip = ancestor.getBoundingClientRect();
+      const scaleX = (ancestor as HTMLElement).offsetWidth
+        ? clip.width / (ancestor as HTMLElement).offsetWidth
+        : 1;
+      const scaleY = (ancestor as HTMLElement).offsetHeight
+        ? clip.height / (ancestor as HTMLElement).offsetHeight
+        : 1;
+      if (/auto|scroll|hidden|clip/.test(style.overflowX)) {
+        const edge = clip.left + ancestor.clientLeft * scaleX;
+        left = Math.max(left, edge);
+        right = Math.min(right, edge + ancestor.clientWidth * scaleX);
+      }
+      if (/auto|scroll|hidden|clip/.test(style.overflowY)) {
+        const edge = clip.top + ancestor.clientTop * scaleY;
+        top = Math.max(top, edge);
+        bottom = Math.min(bottom, edge + ancestor.clientHeight * scaleY);
+      }
+    }
+    if (right <= left || bottom <= top) return false;
+  }
+  return true;
+}
+
+interface PaintObservation {
+  trace: Required<ClientTrace>;
+  snapshot: ThreadSnapshot;
+  frames: Map<PendingPaint, number>;
+  cancel: () => void;
+}
+let painting: PaintObservation | undefined;
+
+/** Compatible commits share pending per-run checks; callbacks always inspect the latest commit. */
 export function paintThreadTrace(snapshot: ThreadSnapshot | null): (() => void) | undefined {
   const trace = state();
-  if (!trace || !snapshot || document.visibilityState !== "visible") return;
-  let frame = requestAnimationFrame(() => {
-    frame = requestAnimationFrame(() => {
-      if (globalThis.__ardurTrace !== trace || document.visibilityState !== "visible") return;
-      for (const [id, pending] of trace.text) {
-        if (pending.threadId !== snapshot.threadId || pending.seq > snapshot.cursor) continue;
-        const message = snapshot.messages.find(
-          (m) =>
-            m.runId === id &&
-            m.role === "bot" &&
-            m.seq >= pending.seq &&
-            m.blocks.some(
-              (b) =>
-                (b.kind === "text" || (b.kind === "progress" && !b.activity)) &&
-                b.text.trim().length > 0,
-            ),
-        );
-        if (!message) continue;
-        const element = document.querySelector(`[data-message-id="${CSS.escape(message.id)}"]`);
-        const rect = element?.getBoundingClientRect();
+  if (
+    painting &&
+    (!snapshot || painting.trace !== trace || painting.snapshot.threadId !== snapshot.threadId)
+  )
+    painting.cancel();
+  if (!trace || !snapshot) return;
+  if (!painting) {
+    const observation: PaintObservation = {
+      trace,
+      snapshot,
+      frames: new Map(),
+      cancel: () => {
+        for (const frame of observation.frames.values()) cancelAnimationFrame(frame);
+        observation.frames.clear();
+        if (painting === observation) painting = undefined;
+      },
+    };
+    painting = observation;
+  }
+  const observation = painting;
+  observation.snapshot = snapshot;
+  if (document.visibilityState === "visible") {
+    for (const [pendingMap, boundary] of [
+      [trace.text, "client.text.painted"],
+      [trace.terminal, "client.terminal.painted"],
+    ] as const) {
+      for (const [id, pending] of pendingMap) {
         if (
-          !element ||
-          !rect ||
-          rect.width <= 0 ||
-          rect.height <= 0 ||
-          rect.bottom <= 0 ||
-          rect.right <= 0 ||
-          rect.top >= innerHeight ||
-          rect.left >= innerWidth ||
-          getComputedStyle(element).visibility !== "visible" ||
-          getComputedStyle(element).opacity === "0"
+          pending.threadId !== snapshot.threadId ||
+          pending.seq > snapshot.cursor ||
+          observation.frames.has(pending)
         )
           continue;
-        point(id, "client.text.painted");
-        trace.text.delete(id);
+        observation.frames.set(
+          pending,
+          requestAnimationFrame(() => {
+            observation.frames.set(
+              pending,
+              requestAnimationFrame(() => {
+                observation.frames.delete(pending);
+                if (
+                  painting !== observation ||
+                  globalThis.__ardurTrace !== trace ||
+                  document.visibilityState !== "visible"
+                )
+                  return;
+                const latest = observation.snapshot;
+                if (pending.threadId !== latest.threadId || pending.seq > latest.cursor) return;
+                if (boundary === "client.text.painted") {
+                  const message = latest.messages.find(
+                    (m) =>
+                      m.runId === id &&
+                      m.role === "bot" &&
+                      (pending.messageId === undefined || m.id === pending.messageId) &&
+                      m.blocks.some(
+                        (b) =>
+                          (b.kind === "text" || (b.kind === "progress" && !b.activity)) &&
+                          b.text.trim().length > 0,
+                      ),
+                  );
+                  if (
+                    !message ||
+                    !visible(
+                      document.querySelector(`[data-message-id="${CSS.escape(message.id)}"]`),
+                    )
+                  )
+                    return;
+                }
+                point(id, boundary, performance.now(), pending.outcome);
+                pendingMap.delete(id);
+              }),
+            );
+          }),
+        );
       }
-      for (const [id, pending] of trace.terminal) {
-        if (pending.threadId !== snapshot.threadId || pending.seq > snapshot.cursor) continue;
-        point(id, "client.terminal.painted", performance.now(), pending.outcome);
-        trace.terminal.delete(id);
-      }
-    });
-  });
-  return () => cancelAnimationFrame(frame);
+    }
+  }
+  return observation.cancel;
 }

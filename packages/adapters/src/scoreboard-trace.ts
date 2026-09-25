@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { TraceBatch, TraceBoundary, TracePoint } from "@ardurbot/contracts";
 import { TRACE_BOUNDARIES } from "@ardurbot/contracts";
 
-type Detail = Pick<TracePoint, "attempt" | "operationId" | "outcome" | "scheduledMs">;
+type Detail = Pick<TracePoint, "attempt" | "operationId" | "requestId" | "outcome" | "scheduledMs">;
 const boundaries = new Set<string>(TRACE_BOUNDARIES);
 const opaque = (value: unknown): value is string =>
   typeof value === "string" && /^[a-zA-Z0-9_:-]{1,128}$/.test(value);
@@ -39,6 +39,7 @@ export function createTraceBuffer(
           !opaque(traceId) ||
           !boundaries.has(boundary) ||
           (detail.operationId !== undefined && !opaque(detail.operationId)) ||
+          (detail.requestId !== undefined && !opaque(detail.requestId)) ||
           (detail.attempt !== undefined &&
             (!Number.isSafeInteger(detail.attempt) || detail.attempt < 0)) ||
           (detail.scheduledMs !== undefined &&
@@ -75,6 +76,7 @@ export function createTraceBuffer(
           boundary,
           ...(detail.attempt === undefined ? {} : { attempt: detail.attempt }),
           ...(detail.operationId === undefined ? {} : { operationId: detail.operationId }),
+          ...(detail.requestId === undefined ? {} : { requestId: detail.requestId }),
           ...(detail.outcome === undefined ? {} : { outcome: detail.outcome }),
           ...(detail.scheduledMs === undefined ? {} : { scheduledMs: detail.scheduledMs }),
         });
