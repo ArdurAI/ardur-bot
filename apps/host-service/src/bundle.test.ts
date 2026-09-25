@@ -37,6 +37,11 @@ it("builds one relocatable JavaScript file without server modules or workspace i
     expect(
       Object.keys(metadata.inputs).some((file) => /prisma|pi-runtime|pi-ai|koffi/i.test(file)),
     ).toBe(false);
+    expect(
+      Object.keys(metadata.inputs).some((file) =>
+        file.endsWith("host-runtime/src/board/runner.ts"),
+      ),
+    ).toBe(true);
     const source = await readFile(file, "utf8");
     expect(source).not.toMatch(/(?:require\(|from\s*)["'][^"']*(?:@ardurbot|\.ts["'])/);
     expect(Buffer.byteLength(source)).toBeLessThan(1_500_000);

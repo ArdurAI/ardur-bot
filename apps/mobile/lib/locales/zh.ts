@@ -916,4 +916,20 @@ export const ZH_MESSAGES: Record<string, string> = {
     "Ardur Bot 读取此电脑上这些工具的指令、记忆、技能和服务器列表，绝不读取登录信息、令牌或聊天记录。",
   "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only.":
     "绝不读取登录文件（auth.json、credentials 和 oauth_creds.json）、Cookie、令牌、凭据备份、会话记录、聊天历史、history.jsonl、遥测数据和缓存；服务器列表仅保留环境变量名称。",
+  Board: "看板",
+  Ready: "可开始",
+  Blocks: "阻塞",
+  "Blocked by": "被以下事项阻塞",
+  "Acceptance criteria": "验收标准",
+  "Could not load Board; retry.": "无法加载看板，请重试。",
+  "Beads is not installed on this computer": "此电脑未安装 Beads",
+  "This folder has no board": "此文件夹没有看板",
+  "Another write is in progress": "另一项写入正在进行",
+  "The board is unavailable. Check this computer and its registered folders.":
+    "看板不可用，请检查此电脑及已注册的文件夹。",
+  "Open the desktop app to use this board.": "请打开桌面应用以使用此看板。",
+  "This board is only available to this computer's owner.": "此看板仅对此电脑的所有者开放。",
+  "Beads version {version} is not supported yet": "不支持 Beads {version} 版本",
+  "The board command timed out.": "看板命令已超时。",
+  "Dolt is not installed on this computer.": "此电脑尚未安装 Dolt。",
 };

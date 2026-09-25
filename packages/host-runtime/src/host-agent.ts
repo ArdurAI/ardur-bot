@@ -24,6 +24,7 @@ import {
   HostRuntimeEventSchema,
 } from "@ardurbot/contracts/host-bridge";
 import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
+import { BoardRunner } from "./board/runner.js";
 import type { HostWire } from "./bridge-wire.js";
 import { hostLostProblem } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
@@ -206,6 +207,17 @@ export class HostAgent {
       const op = request.operation;
       if (op.op === "host.health") {
         await send("result", await this.health());
+      } else if (op.op === "board.run") {
+        const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(
+          op.request,
+          request.scope.spaceId,
+          state.abort.signal,
+        );
+        if (result.ok && result.stdout) {
+          for (let offset = 0; offset < result.stdout.length; offset += 24 * 1024)
+            await send("stdout", result.stdout.slice(offset, offset + 24 * 1024));
+          await send("result", { ...result, stdout: undefined });
+        } else await send("result", result);
       } else if (op.op === "import.scan" || op.op === "import.read") {
         this.importer ??= await createLocalImportScanner(this.roots);
         const result =

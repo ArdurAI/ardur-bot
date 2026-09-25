@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  appContract,
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
@@ -24,6 +23,7 @@ import {
   UpdateGroupInput,
   usableModelId,
 } from "./index.js";
+import { appContract } from "./rpc.js";
 
 describe("contracts", () => {
   it("accepts structured live activity progress", () => {
