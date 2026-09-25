@@ -25,6 +25,7 @@ import {
   ContextSettingsSchema,
 } from "./context.js";
 import { customizationContract } from "./customization.js";
+import { dashboardContract, RoutineOverviewSchema, UsageSummarySchema } from "./dashboard.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
 import {
@@ -98,6 +99,7 @@ import {
   VoiceStatusSchema,
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
+import { featuresContract } from "./features.js";
 import { FleetSchema, FleetTargetSchema, PlacementSettingsSchema } from "./fleet.js";
 import { HostStatusSchema } from "./host-bridge.js";
 import {
@@ -297,6 +299,8 @@ function createFleetContract() {
 }
 
 export const appContract = {
+  features: featuresContract,
+  dashboard: dashboardContract,
   board: boardContract,
   localImport: {
     credentials: oc
@@ -630,7 +634,14 @@ export const appContract = {
       z.array(z.object({ botId: Id, name: z.string(), status: ComputerStatusSchema })),
     ),
     connections: oc.output(
-      z.array(z.object({ id: Id, name: z.string(), settings: ComputerConnectionSettingsSchema })),
+      z.array(
+        z.object({
+          id: Id,
+          name: z.string(),
+          status: z.string().optional(),
+          settings: ComputerConnectionSettingsSchema,
+        }),
+      ),
     ),
     connect: oc
       .input(ComputerConnectionInputSchema)
@@ -820,6 +831,7 @@ export const appContract = {
     disconnectProvider: oc.output(z.object({ ok: z.literal(true) })),
   },
   routines: {
+    overview: oc.output(RoutineOverviewSchema),
     history: oc.input(z.object({ routineId: Id })).output(z.array(RoutineRunSchema)),
     list: oc.input(botId).output(z.array(RoutineSchema)),
     create: oc.input(CreateRoutineInput).output(RoutineSchema),
@@ -1296,13 +1308,7 @@ export const appContract = {
   },
   usage: {
     list: oc.output(z.array(UsageRecordSchema)),
-    summary: oc.output(
-      z.object({
-        inputTokens: z.number(),
-        outputTokens: z.number(),
-        runs: z.number(),
-      }),
-    ),
+    summary: oc.output(UsageSummarySchema),
   },
   export: {
     account: oc.output(ExportDownloadSchema),

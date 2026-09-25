@@ -4960,19 +4960,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
             run.trigger === "bot_message"
               ? botMessageOutcomeFromMidTurn(text, midTurnUserTexts)
               : null;
-          if (run.boardItemId)
-            await finishBoardRun(
-              deps,
-              {
-                userId: run.userId,
-                spaceId: run.spaceId,
-                botId: run.botId,
-                runId,
-                signal: context.signal,
-              },
-              text,
-              true,
-            ).catch(() => getLogger().warn("Board outcome could not be recorded."));
           const completed = await deps.events.finalizeRun({
             spaceId: run.spaceId,
             threadId: thread.id,
@@ -4987,6 +4974,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             markUnread: !run.delegationId && completionMarksUnread(run.trigger, text),
           });
           if (!completed) return;
+          if (run.boardItemId)
+            await finishBoardRun(
+              deps,
+              {
+                userId: run.userId,
+                spaceId: run.spaceId,
+                botId: run.botId,
+                runId,
+                signal: context.signal,
+              },
+              text,
+            ).catch(() => getLogger().warn("Board outcome could not be recorded."));
           if (completed.continuationRunId) {
             await deps.jobs
               .enqueue(runContinueJob(completed.continuationRunId))
@@ -5028,19 +5027,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
             error instanceof Error ? error.message : String(error),
             runSecrets,
           );
-          if (run.boardItemId)
-            await finishBoardRun(
-              deps,
-              {
-                userId: run.userId,
-                spaceId: run.spaceId,
-                botId: run.botId,
-                runId,
-                signal: context.signal,
-              },
-              message,
-              false,
-            ).catch(() => getLogger().warn("Board outcome could not be recorded."));
           const failed = await deps.events.finalizeRun({
             spaceId: run.spaceId,
             threadId: thread.id,
@@ -5056,6 +5042,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ...(error instanceof RuntimePinError ? { runtimeProblem: error.problem } : {}),
           });
           if (!failed) return;
+          if (run.boardItemId)
+            await finishBoardRun(
+              deps,
+              {
+                userId: run.userId,
+                spaceId: run.spaceId,
+                botId: run.botId,
+                runId,
+                signal: context.signal,
+              },
+              message,
+            ).catch(() => getLogger().warn("Board outcome could not be recorded."));
           if (failed.continuationRunId) {
             await deps.jobs
               .enqueue(runContinueJob(failed.continuationRunId))

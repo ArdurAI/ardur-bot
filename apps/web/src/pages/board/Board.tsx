@@ -187,7 +187,7 @@ export function Board({
       {error ? (
         <div role="alert" className="my-2 text-destructive">
           {error}{" "}
-          <Button variant="ghost" onClick={() => void act(refresh)}>
+          <Button variant="ghost" onClick={() => void act(workspace ? refresh : loadWorkspaces)}>
             <Trans>Retry</Trans>
           </Button>
         </div>

@@ -94,8 +94,10 @@ async function privateDirectory(root: string, ...parts: string[]) {
 }
 async function confinedDatabase(beads: string) {
   await noLinks(beads);
-  if (await exists(path.join(beads, "redirect")))
-    return fail("forbidden", "Board files must stay in this folder.");
+  // Prefix routes can open another database even with BEADS_DIR and BD_DB fixed.
+  for (const name of ["redirect", "routes.jsonl"])
+    if (await exists(path.join(beads, name)))
+      return fail("forbidden", "Board files must stay in this folder.");
   for (const name of ["metadata.json", "config.json"]) {
     if (!(await exists(path.join(beads, name)))) continue;
     const metadata: Record<string, unknown> = JSON.parse(

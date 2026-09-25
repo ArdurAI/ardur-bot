@@ -108,6 +108,9 @@ export const BoardFilterSchema = z.object({
   status: z.enum(BOARD_STATUSES).optional(),
 });
 export type BoardFilter = z.infer<typeof BoardFilterSchema>;
+// Beads 1.2.x cannot combine ready --claim with --assignee. Claim assigned items by ID.
+export const BoardClaimFilterSchema = BoardFilterSchema.omit({ assignee: true }).strict();
+export type BoardClaimFilter = z.infer<typeof BoardClaimFilterSchema>;
 export const BoardCreateSchema = z.object({
   title: text.min(1).max(500),
   description: text.optional(),

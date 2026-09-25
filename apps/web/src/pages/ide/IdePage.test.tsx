@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { MessageDescriptor } from "@lingui/core";
 import type { ComponentProps, ReactNode, Ref } from "react";
 import { act, useImperativeHandle, useRef } from "react";
 import { createRoot } from "react-dom/client";
@@ -29,6 +30,12 @@ vi.mock("@lingui/react/macro", () => {
     parts.reduce((s, p, i) => s + p + (values[i] ?? ""), "");
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };
 });
+vi.mock("@lingui/core/macro", () => ({
+  msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
+}));
+vi.mock("@lingui/react", () => ({
+  useLingui: () => ({ i18n: { _: (value: MessageDescriptor) => value.message ?? value.id } }),
+}));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({
     size: _size,
@@ -164,7 +171,7 @@ beforeEach(async () => {
       <BrowserRouter>
         <Routes>
           <Route path="/app/ide" element={<IdePage />} />
-          <Route path="/app" element={<p>Bots page</p>} />
+          <Route path="/app/bots" element={<p>Bots page</p>} />
         </Routes>
       </BrowserRouter>,
     ),
@@ -222,7 +229,7 @@ describe("IDE page", () => {
     await click("Close readme.md");
     await act(async () => {
       computer.dispatchEvent(new Event("change", { bubbles: true }));
-      host.querySelector<HTMLAnchorElement>('a[href="/app"]')!.click();
+      host.querySelector<HTMLAnchorElement>('a[href="/app/bots"]')!.click();
     });
     expect(window.confirm).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe("/app/ide");
@@ -317,16 +324,27 @@ describe("IDE page", () => {
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
     await act(async () => {
-      host.querySelector<HTMLAnchorElement>('a[href="/app"]')!.click();
+      host.querySelector<HTMLAnchorElement>('a[href="/app/bots"]')!.click();
     });
     await tick();
     expect(window.location.pathname).toBe("/app/ide");
+    await act(async () =>
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "2",
+          ctrlKey: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    expect(window.location.pathname).toBe("/app/ide");
+    expect(host.querySelector("textarea[data-editor]")).not.toBeNull();
     vi.mocked(window.confirm).mockReturnValue(true);
     await act(async () => {
-      host.querySelector<HTMLAnchorElement>('a[href="/app"]')!.click();
+      host.querySelector<HTMLAnchorElement>('a[href="/app/bots"]')!.click();
     });
     await tick();
-    expect(window.location.pathname).toBe("/app");
+    expect(window.location.pathname).toBe("/app/bots");
   });
   it("shows a read-only large file and never mounts a binary file", async () => {
     api.read.mockResolvedValue({

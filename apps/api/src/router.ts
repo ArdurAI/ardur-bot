@@ -110,6 +110,7 @@ import { appContract } from "@ardurbot/contracts/rpc";
 import {
   ACTIVE_RUN_STATUSES,
   AttachmentValidationError,
+  connectionOverview,
   containsSecret,
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
@@ -190,7 +191,9 @@ import {
 import { createContextService } from "./context.js";
 import type { RouterContext } from "./customization-routes.js";
 import { createCustomizationRoutes } from "./customization-routes.js";
+import { routineOverview, usageSummary } from "./dashboard.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
+import { listSpaceFeatures, setSpaceFeature } from "./features.js";
 import {
   fleetBotPreference,
   fleetDiscover,
@@ -572,6 +575,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     prisma: deps.prisma,
     documents: deps.memoryDocuments!,
   });
+  const importOwner = ({ spaceId, userId }: Actor) => ({ spaceId, userId });
 
   const authed = os.use(async ({ context, next }) => {
     if (!context.actor) throw new ORPCError("UNAUTHORIZED");
@@ -2631,20 +2635,24 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     localImport: {
       credentials: authed.localImport.credentials.handler(async ({ context, input }) => {
-        await assertLocalImportOwner(deps.prisma, context.actor);
-        return saveImportedServerCredentials(deps.prisma, deps.secrets, context.actor, input);
+        const owner = importOwner(context.actor);
+        await assertLocalImportOwner(deps.prisma, owner);
+        return saveImportedServerCredentials(deps.prisma, deps.secrets, owner, input);
       }),
-      status: authed.localImport.status.handler(({ context }) => localImport.status(context.actor)),
+      status: authed.localImport.status.handler(({ context }) =>
+        localImport.status(importOwner(context.actor)),
+      ),
       configure: authed.localImport.configure.handler(({ context, input }) =>
-        localImport.configure(context.actor, input),
+        localImport.configure(importOwner(context.actor), input),
       ),
       run: authed.localImport.run.handler(async ({ context, input }) => {
-        await assertLocalImportOwner(deps.prisma, context.actor);
+        const owner = importOwner(context.actor);
+        await assertLocalImportOwner(deps.prisma, owner);
         if (!deps.localImportRequests)
           throw new ORPCError("SERVICE_UNAVAILABLE", {
             message: "The import worker is unavailable.",
           });
-        return deps.localImportRequests.run(context.actor, input);
+        return deps.localImportRequests.run(owner, input);
       }),
     },
     memory: {
@@ -2783,6 +2791,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
     },
     routines: {
+      overview: authed.routines.overview.handler(({ context }) =>
+        routineOverview(deps.prisma, context.actor),
+      ),
       history: authed.routines.history.handler(({ context, input }) =>
         routineHistory(deps.prisma, context.actor, input.routineId),
       ),
@@ -5164,18 +5175,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           createdAt: row.createdAt.toISOString(),
         }));
       }),
-      summary: authed.usage.summary.handler(async ({ context }) => {
-        const result = await deps.prisma.usageRecord.aggregate({
-          where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
-          _sum: { inputTokens: true, outputTokens: true },
-          _count: { _all: true },
-        });
-        return {
-          inputTokens: result._sum.inputTokens ?? 0,
-          outputTokens: result._sum.outputTokens ?? 0,
-          runs: result._count._all,
-        };
-      }),
+      summary: authed.usage.summary.handler(({ context }) =>
+        usageSummary(deps.prisma, context.actor),
+      ),
     },
     export: {
       comparison: authed.export.comparison.handler(({ context, input }) =>
@@ -5225,6 +5227,53 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       list: authed.comparisons.list.handler(({ context }) => comparisons.list(context.actor)),
       merge: authed.comparisons.merge.handler(({ context, input }) =>
         comparisons.merge(context.actor, input),
+      ),
+    },
+    dashboard: {
+      connections: authed.dashboard.connections.handler(async ({ context }) => {
+        const actor = context.actor;
+        const scope = { userId: actor.userId, spaceId: actor.spaceId };
+        const [catalog, servers, devices, identities] = await Promise.all([
+          integrations.list(actor),
+          deps.prisma.mcpServer.findMany({ where: scope, orderBy: { name: "asc" } }),
+          deps.prisma.deviceGrant.findMany({
+            where: scope,
+            select: { id: true, deviceName: true, kind: true, revokedAt: true },
+          }),
+          deps.prisma.messagingIdentity.findMany({ where: scope, select: { id: true } }),
+        ]);
+        const channels = identities.length
+          ? await deps.prisma.messagingChannelMember.findMany({
+              where: { identityId: { in: identities.map((identity) => identity.id) } },
+              include: { channel: { include: { members: ACTIVE_CHANNEL_MEMBERS } } },
+              orderBy: { updatedAt: "desc" },
+            })
+          : [];
+        return connectionOverview({
+          integrations: catalog,
+          servers: await Promise.all(
+            servers.map(async (server) => ({
+              id: server.id,
+              name: server.name,
+              enabled: server.enabled,
+              oauthStatus: await mcpOAuth.statusFor(server, actor),
+            })),
+          ),
+          devices: devices.map((device) => ({
+            ...device,
+            kind: device.kind === "channel" ? ("channel" as const) : ("device" as const),
+            revokedAt: device.revokedAt?.toISOString() ?? null,
+          })),
+          channels: channels.map((channel) => messagingChannelDto(channel)),
+        });
+      }),
+    },
+    features: {
+      list: authed.features.list.handler(({ context }) =>
+        listSpaceFeatures(deps.prisma, context.actor),
+      ),
+      set: authed.features.set.handler(({ context, input }) =>
+        setSpaceFeature(deps.prisma, context.actor, input),
       ),
     },
     board: {

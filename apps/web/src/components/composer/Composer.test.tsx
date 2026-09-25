@@ -33,6 +33,7 @@ vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@lingui/core/macro", () => ({
+  msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
   t: (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
 }));

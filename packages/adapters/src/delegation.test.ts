@@ -120,3 +120,33 @@ it("blocks a recipient connector its requester lacks after route resolution", as
     }),
   ).toContain("outside the requester's connector grant");
 });
+it.each(["board_ready", "board_show"])(
+  "permits delegated %s with ordinary authority",
+  async (tool) => {
+    const prisma = {
+      run: {
+        findUniqueOrThrow: vi.fn(async () => ({
+          id: "run",
+          taskId: "task",
+          spaceId: "space",
+          delegationId: "handoff",
+        })),
+      },
+      delegationRoot: { findUnique: vi.fn(async () => null) },
+      remoteAuthorityPolicy: { findMany: vi.fn(async () => [{ scopes: ["ordinary"] }]) },
+      delegation: {
+        findUniqueOrThrow: vi.fn(async () => ({
+          status: "running",
+          deadlineAt: new Date(Date.now() + 60_000),
+          usedTokens: 0,
+          reservedTokens: 100,
+          requesterBotId: "requester",
+          actingBotId: "worker",
+          authority: { scopes: ["ordinary"], connectors: [] },
+        })),
+      },
+    } as unknown as PrismaClient;
+    expect(await checkDelegationExecution(prisma, "run", tool)).toBeUndefined();
+    expect(await checkDelegationExecution(prisma, "run", "board_update")).toContain("permission");
+  },
+);

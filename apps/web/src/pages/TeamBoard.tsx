@@ -9,6 +9,7 @@ import { decodeArtifactBase64, downloadArtifactBytes } from "../lib/artifact-ope
 import { rpc } from "../lib/rpc";
 import { ComparisonList } from "./ComparePanel";
 import { CompareStart } from "./CompareStart";
+import { useThreadRefresh } from "./dashboard/use-thread-refresh";
 
 export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
   const [rows, setRows] = useState<TeamRow[]>([]);
@@ -42,35 +43,7 @@ export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
       clearInterval(timer);
     };
   }, [refresh]);
-  const subscriptionRows = useRef(rows);
-  subscriptionRows.current = rows;
-  const subscriptions = rows
-    .filter((row) => row.threadId)
-    .map((row) => row.botId)
-    .sort()
-    .join(",");
-  useEffect(() => {
-    const abort = new AbortController();
-    for (const botId of subscriptions.split(",")) {
-      const row = subscriptionRows.current.find((item) => item.botId === botId);
-      if (!row?.threadId) continue;
-      void (async () => {
-        try {
-          const events = await rpc.threads.subscribe(
-            { botId: row.botId, cursor: row.cursor },
-            { signal: abort.signal },
-          );
-          for await (const _event of events) {
-            if (abort.signal.aborted) break;
-            void refresh();
-          }
-        } catch {
-          /* The foreground refresh remains available. */
-        }
-      })();
-    }
-    return () => abort.abort();
-  }, [subscriptions, refresh]);
+  useThreadRefresh(rows, refresh);
   const list = useRef<HTMLDivElement>(null);
   const positions = useRef(new Map<string, number>());
   useLayoutEffect(() => {

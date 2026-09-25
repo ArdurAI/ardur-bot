@@ -26,7 +26,6 @@ export async function reconcileBoardOutcomes(deps: { prisma: PrismaClient; dataD
         deps,
         { userId: run.userId, spaceId: run.spaceId, botId: run.botId, runId: run.id },
         outcome,
-        run.status === "completed",
       );
     } catch {
       // Preserve the pending marker and rotate this row behind other pending outcomes.

@@ -3,6 +3,61 @@ import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { activityNotificationsEnabled, activityPromptSnippet, listSpaceRuns } from "./runs.js";
 
+it.each([null, "group"])(
+  "routes delegated approvals to the scoped coordinator thread (%s)",
+  async (groupId) => {
+    const actor = { userId: "owner", spaceId: "space" } as Actor;
+    const findRoots = vi.fn(async () => [
+      {
+        rootTaskId: "root",
+        coordinatorBotId: "coordinator",
+        coordinatorThreadId: "coordinator-thread",
+      },
+    ]);
+    const findThreads = vi.fn(async () => [{ id: "coordinator-thread", groupId }]);
+    const prisma = {
+      userPreferences: { findUnique: vi.fn(async () => null) },
+      run: {
+        findMany: vi.fn(async () => [
+          {
+            id: "worker-run",
+            botId: "worker",
+            threadId: "worker-thread",
+            taskId: "child",
+            delegationId: "handoff",
+            delegationRootTaskId: "root",
+            status: "waiting_input",
+            trigger: "bot_message",
+            task: { prompt: "Review" },
+            bot: { name: "Worker", notifyOnFinish: false },
+            thread: { groupId: null },
+            updatedAt: new Date("2026-09-24T00:00:00Z"),
+          },
+        ]),
+      },
+      delegation: { findMany: vi.fn(async () => []) },
+      delegationRoot: { findMany: findRoots },
+      thread: { findMany: findThreads },
+    } as unknown as PrismaClient;
+    const [run] = await listSpaceRuns(prisma, actor, "active");
+    expect(run).toMatchObject({
+      runId: "worker-run",
+      threadId: "worker-thread",
+      approvalTarget: {
+        botId: "coordinator",
+        threadId: "coordinator-thread",
+        groupId,
+      },
+    });
+    expect(findRoots).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { ...actor, rootTaskId: { in: ["root"] } } }),
+    );
+    expect(findThreads).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { ...actor, id: { in: ["coordinator-thread"] } } }),
+    );
+  },
+);
+
 describe("run activity copy", () => {
   it("presents structured agent messages instead of their internal wake prompt", () => {
     expect(

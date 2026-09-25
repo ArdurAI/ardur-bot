@@ -224,7 +224,10 @@ export default function LocalImport() {
               disabled={busy}
               onValueChange={(autoImport) =>
                 void work(async () => {
-                  await localImport.configure({ autoImport });
+                  await localImport.configure({
+                    autoImport,
+                    selection: { ...status.selection, ...selected },
+                  });
                 })
               }
             />

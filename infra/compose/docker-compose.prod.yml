@@ -108,6 +108,7 @@ services:
     env_file:
       - ../../.env
     environment:
+      API_INTERNAL_URL: http://api:3100
       BETTER_AUTH_SECRET: ""
       NODE_ENV: production
       DATABASE_URL: postgres://${POSTGRES_USER:-ardurbot}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-ardurbot}

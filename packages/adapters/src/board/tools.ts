@@ -1,6 +1,7 @@
 import type { ConnectorTool } from "@ardurbot/adapter-kit";
 import {
   BOARD_LINK_TYPES,
+  BoardClaimFilterSchema,
   BoardCreateSchema,
   BoardError,
   BoardFilterSchema,
@@ -21,7 +22,7 @@ export const boardToolSchemas = {
   board_update: item.extend({ patch: BoardPatchSchema.omit({ closeWhenDone: true }) }),
   board_claim: workspace.extend({
     id: BoardItemIdSchema.optional(),
-    filter: BoardFilterSchema.optional(),
+    filter: BoardClaimFilterSchema.optional(),
   }),
   board_close: workspace.extend({
     ids: z.array(BoardItemIdSchema).min(1).max(50),
@@ -36,11 +37,12 @@ export const boardToolSchemas = {
 };
 const descriptions: Record<keyof typeof boardToolSchemas, string> = {
   board_ready:
-    "List open work without active blockers on this computer. Omit workspaceId for the space board.",
+    "List open work without active blockers on this computer. Omit workspaceId for this run's dispatched board, or the space board otherwise.",
   board_show: "Read a board item, acceptance criteria, dependencies and comments.",
   board_create: "Create a work item. Dependencies identify prerequisites for the new item.",
   board_update: "Update a work item on this computer's board.",
-  board_claim: "Atomically claim an item, or the first ready item matching a filter, as this bot.",
+  board_claim:
+    "Atomically claim an item, or the first ready item matching a filter, as this bot. Filters cannot include assignee; claim assigned items by ID.",
   board_close: "Close work items with a reason when asked to close them.",
   board_comment: "Record an outcome or question on a work item.",
   board_link: "Link from a dependent item to its prerequisite; blocks means from is blocked by to.",
@@ -97,12 +99,11 @@ export async function executeBoardTool(
     }
   }
 }
-/** Called while the run lease is still active, through the same scoped host authorization. */
+/** Deliver only persisted terminal outcomes, through the scoped host outcome authorization. */
 export async function finishBoardRun(
   deps: { prisma: PrismaClient; dataDir?: string },
   scope: BoardScope & { runId: string },
   outcome: string,
-  completed: boolean,
 ) {
   const run = await deps.prisma.run.findUnique({ where: { id: scope.runId } });
   if (!run?.boardItemId || !run.boardWorkspaceId || run.boardCommentedAt) return;
@@ -111,6 +112,8 @@ export async function finishBoardRun(
       code: "forbidden",
       message: "This board is not available in this space.",
     });
+  if (!["completed", "failed", "cancelled"].includes(run.status)) return;
+  const completed = run.status === "completed";
   const service = new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" });
   const provider = await service.provider(scope, run.boardWorkspaceId);
   const item = await provider.show(run.boardItemId);

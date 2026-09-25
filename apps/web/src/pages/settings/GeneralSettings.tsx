@@ -12,6 +12,7 @@ import { rpc } from "../../lib/rpc";
 import { AccountLanguage } from "../account/AccountLanguage";
 import { SettingsSupportLinks } from "../settings-support-links";
 import type { SettingsPageProps } from "../settings-types";
+import { OpenToSetting } from "../shell/OpenToSetting";
 
 export default function GeneralSettings({
   navigate,
@@ -124,6 +125,7 @@ export default function GeneralSettings({
   ] as const;
   return (
     <div className="space-y-5">
+      <OpenToSetting />
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
