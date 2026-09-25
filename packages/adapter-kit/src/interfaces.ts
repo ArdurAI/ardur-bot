@@ -36,6 +36,7 @@ import type {
   ConnectorEvent,
   ConnectorTool,
   ControlLeaseRef,
+  HomeArchiveFile,
   MemoryCapabilities,
   MemoryCommitRequest,
   MemoryExportRequest,
@@ -284,6 +285,11 @@ export interface AgentHomeStore {
   commit(botId: string, src: string, context: AdapterContext): Promise<string>;
   restore(botId: string, revision: string, dest: string, context: AdapterContext): Promise<void>;
   exportHome(botId: string, context: AdapterContext): AsyncIterable<PortableFile>;
+  streamHome?(
+    homeKey: string,
+    context: AdapterContext,
+    exclude: (path: string) => boolean,
+  ): AsyncIterable<HomeArchiveFile>;
   readFile(
     botId: string,
     path: string,

@@ -35,6 +35,7 @@ const OnboardingPage = lazy(() =>
 const WelcomePage = lazy(() =>
   import("./pages/Welcome").then((module) => ({ default: module.WelcomePage })),
 );
+const NotFoundPage = lazy(() => import("./pages/NotFound"));
 
 export function App() {
   if (window.location.pathname === LOCAL_SETTINGS_PAGE) return <LocalSettingsPage />;
@@ -137,6 +138,7 @@ function SessionApp() {
             path="/app/:botId"
             element={user ? <ShellPage /> : <Navigate to="/sign-in" replace />}
           />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </div>

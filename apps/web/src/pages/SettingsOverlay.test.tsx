@@ -9,6 +9,7 @@ const fake = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn(), capabilities: vi
 vi.mock("../lib/rpc", () => ({
   rpc: {
     preferences: fake,
+    updater: { status: async () => ({ installKind: "source" }) },
     capabilities: {
       settings: async () => ({
         settings: {
@@ -32,7 +33,19 @@ vi.mock("./AccountSettingsOverlay", () => ({
   ComputerSettingsPanel: () => <div>This computer folders</div>,
   UpdatesSettingsPanel: () => <div>Update content</div>,
 }));
-vi.mock("./account/AccountSettings", () => ({ default: () => <div>Account content</div> }));
+vi.mock("./account/AccountSettings", async () => {
+  const { SettingsRow } = await import("../components/SettingsRow");
+  return {
+    default: () => (
+      <div>
+        Account content
+        <SettingsRow label="Password" content={<input aria-label="Current password" />}>
+          <span />
+        </SettingsRow>
+      </div>
+    ),
+  };
+});
 vi.mock("./MemorySettingsOverlay", () => ({
   MemorySettingsOverlay: () => <div>Existing memory and skills</div>,
 }));
@@ -263,4 +276,16 @@ it("keeps storage and provider settings reachable from Memory without another di
       .click(),
   );
   await waitForSettings(() => container.textContent!.includes("Generate memory from chats"));
+});
+
+it("finds Password from General before Account mounts and focuses the matching row", async () => {
+  const container = await render();
+  await changeInput(container.querySelector<HTMLInputElement>('input[type="search"]')!, "password");
+  const account = container.querySelector<HTMLButtonElement>(
+    '[data-testid="settings-nav-account"]',
+  );
+  expect(account).not.toBeNull();
+  await act(async () => account!.click());
+  await waitForSection(() => !!container.querySelector('[aria-label="Current password"]'));
+  expect(document.activeElement).toBe(container.querySelector('[aria-label="Current password"]'));
 });

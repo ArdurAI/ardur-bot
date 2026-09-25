@@ -25,7 +25,12 @@ export function AccountMore({
       ) : null}
       {isDeploymentOwner ? (
         <SettingsRow label={t`Server integrations`}>
-          <Button variant="outline" render={<Link to="/integrations/setup" />}>{t`Manage`}</Button>
+          <Button
+            nativeButton={false}
+            role="link"
+            variant="outline"
+            render={<Link to="/integrations/setup" />}
+          >{t`Manage`}</Button>
         </SettingsRow>
       ) : null}
       <SettingsRow

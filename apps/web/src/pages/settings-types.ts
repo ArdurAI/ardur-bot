@@ -20,7 +20,12 @@ export type SettingsSection =
   | "mcp"
   | "plugins"
   | "updates";
-export type SettingsContext = { desktop: boolean; isDeploymentOwner: boolean };
+export type SettingsContext = {
+  desktop: boolean;
+  isDeploymentOwner: boolean;
+  desktopUpdates?: boolean;
+  serverUpdates?: boolean;
+};
 export type SettingsPageProps = {
   email?: string | null;
   name: string;

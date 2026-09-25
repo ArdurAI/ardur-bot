@@ -158,7 +158,7 @@ import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { implement, ORPCError } from "@orpc/server";
 import { createAccountService } from "./account.js";
-import { exportAccountData, exportBotData } from "./account-export.js";
+import { exportDownload } from "./account-export.js";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
@@ -168,6 +168,7 @@ import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
 import { createCapabilitySettings } from "./capability-settings.js";
 import { createCommandRoutes } from "./command-routes.js";
 import { createComparisons } from "./comparisons.js";
+import { releaseMaintenanceControl } from "./computer-maintenance.js";
 import {
   computerEngineInfo,
   listComputerConnections,
@@ -207,6 +208,7 @@ import {
   startOnboarding,
 } from "./onboarding.js";
 import { createRemoteDevices } from "./remote-devices.js";
+import { routineHistory } from "./routine-history.js";
 import { listSpaceRuns } from "./runs.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
 import { querySpaceSearch } from "./search.js";
@@ -1953,7 +1955,14 @@ export function createRouter(deps: RouterDeps) {
         );
         if (!configuration.connectionId && !["docker", "kubernetes"].includes(bot.computer.kind))
           throw new ORPCError("BAD_REQUEST", { message: "Choose a computer connection first." });
-        return queueComputerUpdate(deps, bot.computer.id, bot.id, "update", configuration);
+        try {
+          await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
+          return await queueComputerUpdate(deps, bot.computer.id, bot.id, "update", configuration);
+        } catch (error) {
+          if (error instanceof ComputerBusyError)
+            throw new ORPCError("CONFLICT", { message: "Computer is busy" });
+          throw error;
+        }
       }),
       status: authed.computer.status.handler(async ({ context, input }) =>
         computerStatus(deps, context.actor, input.botId),
@@ -2073,6 +2082,7 @@ export function createRouter(deps: RouterDeps) {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
         try {
+          await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
           return await queueComputerUpdate(deps, bot.computer.id, bot.id, "recover");
         } catch (error) {
           if (error instanceof ComputerBusyError)
@@ -2091,6 +2101,7 @@ export function createRouter(deps: RouterDeps) {
             message: "Computer update is not available on this device",
           });
         try {
+          await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
           return await queueComputerUpdate(deps, bot.computer.id, bot.id);
         } catch (error) {
           if (error instanceof ComputerBusyError)
@@ -2687,6 +2698,9 @@ export function createRouter(deps: RouterDeps) {
       ),
     },
     routines: {
+      history: authed.routines.history.handler(({ context, input }) =>
+        routineHistory(deps.prisma, context.actor, input.routineId),
+      ),
       list: authed.routines.list.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
         return listRoutinesDto(deps, context.actor, input.botId);
@@ -5038,16 +5052,11 @@ export function createRouter(deps: RouterDeps) {
       comparison: authed.export.comparison.handler(({ context, input }) =>
         comparisons.export(context.actor, input.id),
       ),
-      bot: authed.export.bot.handler(({ context, input }) =>
-        exportBotData(
-          { ...deps, exportLearning: learning.exportLearning },
-          context.actor,
-          input.botId,
-        ),
-      ),
-      account: authed.export.account.handler(({ context }) =>
-        exportAccountData({ ...deps, exportLearning: learning.exportLearning }, context.actor),
-      ),
+      bot: authed.export.bot.handler(async ({ context, input }) => {
+        await repos.getBot(context.actor, input.botId);
+        return exportDownload(context.actor, input.botId);
+      }),
+      account: authed.export.account.handler(({ context }) => exportDownload(context.actor)),
     },
 
     notifications: {
@@ -5472,6 +5481,7 @@ async function runComputerReplace(
   const manualRunId = `${mode}:${randomUUID()}`;
   let lease: ComputerExecutionLease | null;
   try {
+    await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
     lease = await acquireComputerExecutionLease(deps.prisma, {
       computerId: bot.computer.id,
       runId: manualRunId,

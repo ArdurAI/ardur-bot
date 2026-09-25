@@ -5,6 +5,7 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePreferences } from "../../components/PreferencesProvider";
 import { SettingsRow } from "../../components/SettingsRow";
+import { approvalPolicyCopy } from "../../lib/approval-policy-copy";
 import { requestBrowserNotificationPermission } from "../../lib/browser-notifications";
 import { desktopBridge } from "../../lib/desktop";
 import { rpc } from "../../lib/rpc";
@@ -17,7 +18,7 @@ export default function GeneralSettings({
   isDeploymentOwner,
   onBusyChange,
 }: SettingsPageProps) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const { preferences, ready, update, reload } = usePreferences();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -210,10 +211,7 @@ export default function GeneralSettings({
             <Trans>Tasks</Trans>
           </h3>
           {isDeploymentOwner ? (
-            <SettingsRow
-              label={t`Trusted folders`}
-              description={t`Bots may read and write here; consequential actions still ask`}
-            >
+            <SettingsRow label={t`Trusted folders`} description={i18n._(approvalPolicyCopy)}>
               {folders !== null ? (
                 <span className="text-sm text-muted-foreground">{folders}</span>
               ) : null}

@@ -96,7 +96,10 @@ import { assertNoDockerTerminals } from "./terminal-process.js";
 loadRootEnv();
 
 // Preserve Dockerode's existing DOCKER_HOST/TLS configuration for the default engine.
-const defaultEngineSocket = process.env.DOCKER_HOST ? undefined : discoverEngineSocket();
+const defaultEngineSocket =
+  process.env.DOCKER_HOST && !process.env.DOCKER_SOCKET && !process.env.CONTAINER_HOST
+    ? undefined
+    : await discoverEngineSocket();
 const defaultDocker = new Docker(defaultEngineSocket ? { socketPath: defaultEngineSocket } : {});
 const engineScope = new AsyncLocalStorage<Docker>();
 const engines = new Map<string, Docker>();

@@ -279,6 +279,10 @@ msgstr "{0} 작업 메뉴"
 msgid "Actions for space"
 msgstr ""
 
+#: src/lib/approval-policy-copy.ts
+msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr "활성"
@@ -289,6 +293,7 @@ msgstr "현재 모델"
 
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/settings-sections.ts
 msgid "Active sessions"
 msgstr ""
 
@@ -414,6 +419,7 @@ msgstr "추가 중…"
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineSchedule.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
 msgid "Advanced"
 msgstr "고급 설정"
@@ -785,6 +791,7 @@ msgid "Available after the routine is saved"
 msgstr "루틴을 저장한 후 사용할 수 있습니다"
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "Avatar"
 msgstr ""
 
@@ -805,6 +812,10 @@ msgstr "뒤로"
 
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 msgid "Back to capabilities"
+msgstr ""
+
+#: src/pages/NotFound.tsx
+msgid "Back to home"
 msgstr ""
 
 #: src/pages/memory/MemorySettings.tsx
@@ -918,10 +929,6 @@ msgstr "Bot은 기본적으로 묻지 않고 작업합니다. 먼저 확인하�
 msgid "Bots are working"
 msgstr "봇 작업 중"
 
-#: src/pages/settings/GeneralSettings.tsx
-msgid "Bots may read and write here; consequential actions still ask"
-msgstr ""
-
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -995,7 +1002,7 @@ msgid "cancelled"
 msgstr "취소됨"
 
 #: src/components/AskCard.tsx
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
@@ -1054,6 +1061,7 @@ msgstr "채팅 앱"
 msgid "Chat bot"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Chat font"
 msgstr ""
@@ -1917,6 +1925,10 @@ msgstr ""
 msgid "Could not load plugins"
 msgstr ""
 
+#: src/pages/RoutineHistory.tsx
+msgid "Could not load run history."
+msgstr ""
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
@@ -1965,10 +1977,6 @@ msgstr "음성 설정을 불러오지 못했습니다."
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
-#: src/pages/LocalSettings.tsx
-msgid "Could not open local settings. Start the local server and create its owner account, then try again."
-msgstr ""
-
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Could not pair this account. Check its settings and try again."
 msgstr ""
@@ -1979,6 +1987,10 @@ msgstr "샘플 음성을 재생하지 못했습니다."
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not prepare the import. Try again."
+msgstr ""
+
+#: src/pages/LocalSettings.tsx
+msgid "Could not reach the local server. Start it and try again."
 msgstr ""
 
 #: src/pages/account/AccountSignIn.tsx
@@ -2621,7 +2633,7 @@ msgstr ""
 msgid "Don’t have an account?"
 msgstr "계정이 없나요?"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "완료"
@@ -2696,6 +2708,7 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
+#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "이메일"
 
@@ -2829,6 +2842,7 @@ msgstr "내보내기"
 msgid "Export block"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
@@ -2837,6 +2851,7 @@ msgstr ""
 msgid "Export JSON"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export memory"
 msgstr ""
@@ -2866,7 +2881,7 @@ msgstr ""
 msgid "failed"
 msgstr "실패"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "실패"
@@ -2953,6 +2968,7 @@ msgid "Free"
 msgstr "무료"
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "Full name"
 msgstr ""
 
@@ -3327,6 +3343,7 @@ msgid "Kubernetes context"
 msgstr ""
 
 #: src/pages/account/AccountLanguage.tsx
+#: src/pages/settings-sections.ts
 msgid "Language"
 msgstr "언어"
 
@@ -3365,6 +3382,7 @@ msgstr ""
 msgid "Learning"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
@@ -3494,6 +3512,7 @@ msgstr ""
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/RoutineHistory.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
@@ -3511,6 +3530,7 @@ msgstr "로컬 접근을 허용하면 Bot이 묻지 않고 명령을 실행할 �
 
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/settings-sections.ts
 msgid "Local devices"
 msgstr ""
 
@@ -3665,6 +3685,7 @@ msgstr ""
 msgid "Memory location and documents"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Memory preferences"
 msgstr ""
@@ -3853,6 +3874,7 @@ msgstr ""
 msgid "More memory"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Motion"
 msgstr ""
@@ -3899,7 +3921,7 @@ msgstr ""
 msgid "Needs approval"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Needs input"
 msgstr "입력 필요"
 
@@ -3907,7 +3929,7 @@ msgstr "입력 필요"
 msgid "Needs reconnection"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Needs takeover"
 msgstr "인수 필요"
 
@@ -4006,10 +4028,6 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
-#: src/components/ApprovalRulesSettings.tsx
-msgid "No exceptions. Actions run automatically."
-msgstr "별도 확인 규칙이 없습니다. 작업이 자동으로 실행됩니다."
-
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
 msgstr "아직 그룹 채팅이 없습니다."
@@ -4072,6 +4090,7 @@ msgid "No results"
 msgstr "검색 결과가 없습니다"
 
 #: src/pages/RoutineEditor.tsx
+#: src/pages/RoutineHistory.tsx
 msgid "No runs yet"
 msgstr "아직 실행 기록이 없습니다"
 
@@ -4177,6 +4196,7 @@ msgstr "아직 기억한 내용이 없습니다"
 msgid "Nothing to review."
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -4303,6 +4323,10 @@ msgstr "전체 창으로 열기"
 msgid "Open links in built-in browser"
 msgstr ""
 
+#: src/pages/LocalSettings.tsx
+msgid "Open local settings from the desktop app on the server’s computer."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "메뉴 열기"
@@ -4398,6 +4422,10 @@ msgstr ""
 msgid "Other model…"
 msgstr "다른 모델 직접 입력…"
 
+#: src/pages/NotFound.tsx
+msgid "Page not found"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
 msgstr "PagerDuty 인시던트"
@@ -4425,6 +4453,7 @@ msgstr "보류"
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
+#: src/pages/settings-sections.ts
 msgid "Password"
 msgstr "비밀번호"
 
@@ -4636,7 +4665,7 @@ msgstr ""
 msgid "Pushed"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
@@ -5046,6 +5075,7 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
+#: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
@@ -5192,7 +5222,7 @@ msgstr "실행 시간은 미래여야 합니다."
 msgid "running"
 msgstr "실행 중"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
@@ -5733,7 +5763,7 @@ msgstr ""
 msgid "Start recording"
 msgstr "작업 녹화 시작"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Starting"
 msgstr "시작 중"
 
@@ -5949,6 +5979,7 @@ msgstr ""
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Theme"
 msgstr ""
@@ -6130,6 +6161,7 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg 토큰"
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
 msgstr ""
@@ -6264,6 +6296,7 @@ msgstr "업데이트 중…"
 msgid "Upload"
 msgstr "업로드"
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Uploaded files"
 msgstr ""
@@ -6402,6 +6435,7 @@ msgid "What should this routine do each time it runs?"
 msgstr "이 루틴이 실행될 때마다 무엇을 해야 하나요?"
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "What should your bots call you?"
 msgstr ""
 

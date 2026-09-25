@@ -33,18 +33,21 @@ export type SettingsRegistration = {
   label: MessageDescriptor;
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   component: LazyExoticComponent<ComponentType<SettingsPageProps>>;
+  searchLabels?: MessageDescriptor[];
   available: (context: SettingsContext) => boolean;
 };
 export const always = () => true;
 export const desktopOnly = (context: SettingsContext) => context.desktop;
 export const ownerOnly = (context: SettingsContext) => context.isDeploymentOwner;
+const hasUpdates = (context: SettingsContext) =>
+  context.desktopUpdates === true || (context.isDeploymentOwner && context.serverUpdates === true);
 
 /** Replace one entry when a page lands; no shell switch or eager page import is needed. */
 // biome-ignore format: One registration per line keeps independent settings streams easy to merge.
 export const settingsSections: SettingsRegistration[] = [
-  { id: "general", group: "Settings", label: msg`General`, icon: Settings, component: lazy(() => import("./settings/GeneralSettings")), available: always },
-  { id: "account", group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./account/AccountSettings")), available: always },
-  { id: "privacy", group: "Settings", label: msg`Privacy`, icon: Shield, component: lazy(() => import("./settings/PrivacySettings")), available: always },
+  { id: "general", searchLabels: [msg`Theme`, msg`Chat font`, msg`Motion`, msg`Notifications`, msg`Trusted folders`], group: "Settings", label: msg`General`, icon: Settings, component: lazy(() => import("./settings/GeneralSettings")), available: always },
+  { id: "account", searchLabels: [msg`Password`, msg`Full name`, msg`What should your bots call you?`, msg`Avatar`, msg`Language`, msg`Email`, msg`Local devices`, msg`Active sessions`, msg`Advanced`], group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./account/AccountSettings")), available: always },
+  { id: "privacy", searchLabels: [msg`Export data`, msg`Export memory`, msg`Uploaded files`, msg`Memory preferences`, msg`Learning consent`], group: "Settings", label: msg`Privacy`, icon: Shield, component: lazy(() => import("./settings/PrivacySettings")), available: always },
   { id: "capabilities", group: "Settings", label: msg`Capabilities`, icon: Sparkles, component: lazy(() => import("./capabilities/CapabilitiesSettings")), available: always },
   { id: "memory", group: "Settings", label: msg`Memory`, icon: Brain, component: lazy(() => import("./memory/MemorySettings")), available: always },
   { id: "models", group: "Settings", label: msg`Models`, icon: Cpu, component: lazy(() => import("./settings/ModelsSection")), available: always },
@@ -60,5 +63,5 @@ export const settingsSections: SettingsRegistration[] = [
   { id: "integrations", group: "Customize", label: msg`Integrations`, icon: Plug, component: lazy(() => import("./settings/IntegrationsSection")), available: always },
   { id: "mcp", group: "Customize", label: msg`MCP`, icon: Plug, component: lazy(() => import("./settings/McpSection")), available: always },
   { id: "plugins", group: "Customize", label: msg`Plugins`, icon: Blocks, component: lazy(() => import("./settings/PluginsSection")), available: always },
-  { id: "updates", group: "Platform", label: msg`Updates`, icon: CloudDownload, component: lazy(() => import("./AccountSettingsOverlay").then((m) => ({ default: m.UpdatesSettingsPanel }))), available: always },
+  { id: "updates", group: "Platform", label: msg`Updates`, icon: CloudDownload, component: lazy(() => import("./AccountSettingsOverlay").then((m) => ({ default: m.UpdatesSettingsPanel }))), available: hasUpdates },
 ];

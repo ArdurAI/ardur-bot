@@ -1027,7 +1027,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
     const poll = window.setInterval(() => {
       if (botsRefreshInFlight.current > 0) return;
       refreshVisibleBots();
-    }, 3_000);
+    }, 5_000);
     return () => {
       cancelled = true;
       window.clearTimeout(refreshTimer);
@@ -3601,16 +3601,11 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                   await refreshBots();
                 }}
                 onExport={async () => {
-                  const manifest = await rpc.export.bot({ botId: active.id });
-                  const blob = new Blob([JSON.stringify(manifest, null, 2)], {
-                    type: "application/json",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `${active.name.toLowerCase().replace(/\s+/g, "-")}-export.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
+                  const { path } = await rpc.export.bot({ botId: active.id });
+                  const anchor = document.createElement("a");
+                  anchor.href = path;
+                  anchor.download = "bot-v2.tar.gz";
+                  anchor.click();
                 }}
                 onClear={() => setClearTarget({ kind: "bot", chat: active })}
               />

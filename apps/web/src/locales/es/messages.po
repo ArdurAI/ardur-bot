@@ -279,6 +279,10 @@ msgstr "Acciones para {0}"
 msgid "Actions for space"
 msgstr ""
 
+#: src/lib/approval-policy-copy.ts
+msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr "Activo"
@@ -289,6 +293,7 @@ msgstr "Modelo activo"
 
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/settings-sections.ts
 msgid "Active sessions"
 msgstr ""
 
@@ -414,6 +419,7 @@ msgstr "Agregando…"
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineSchedule.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
 msgid "Advanced"
 msgstr "Avanzado"
@@ -785,6 +791,7 @@ msgid "Available after the routine is saved"
 msgstr "Disponible después de guardar la rutina"
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "Avatar"
 msgstr ""
 
@@ -805,6 +812,10 @@ msgstr "Atrás"
 
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 msgid "Back to capabilities"
+msgstr ""
+
+#: src/pages/NotFound.tsx
+msgid "Back to home"
 msgstr ""
 
 #: src/pages/memory/MemorySettings.tsx
@@ -918,10 +929,6 @@ msgstr "Los bots actúan sin preguntar de forma predeterminada. Agrega una excep
 msgid "Bots are working"
 msgstr "Los bots están trabajando"
 
-#: src/pages/settings/GeneralSettings.tsx
-msgid "Bots may read and write here; consequential actions still ask"
-msgstr ""
-
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -995,7 +1002,7 @@ msgid "cancelled"
 msgstr "cancelado"
 
 #: src/components/AskCard.tsx
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
@@ -1054,6 +1061,7 @@ msgstr "Apps de chat"
 msgid "Chat bot"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Chat font"
 msgstr ""
@@ -1917,6 +1925,10 @@ msgstr ""
 msgid "Could not load plugins"
 msgstr ""
 
+#: src/pages/RoutineHistory.tsx
+msgid "Could not load run history."
+msgstr ""
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
@@ -1965,10 +1977,6 @@ msgstr "No se pudo cargar la configuración de voz"
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
-#: src/pages/LocalSettings.tsx
-msgid "Could not open local settings. Start the local server and create its owner account, then try again."
-msgstr ""
-
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Could not pair this account. Check its settings and try again."
 msgstr ""
@@ -1979,6 +1987,10 @@ msgstr "No se pudo reproducir un clip de prueba"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not prepare the import. Try again."
+msgstr ""
+
+#: src/pages/LocalSettings.tsx
+msgid "Could not reach the local server. Start it and try again."
 msgstr ""
 
 #: src/pages/account/AccountSignIn.tsx
@@ -2621,7 +2633,7 @@ msgstr ""
 msgid "Don’t have an account?"
 msgstr "¿No tienes una cuenta?"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Listo"
@@ -2696,6 +2708,7 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
+#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "Correo"
 
@@ -2829,6 +2842,7 @@ msgstr "Exportar"
 msgid "Export block"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
@@ -2837,6 +2851,7 @@ msgstr ""
 msgid "Export JSON"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export memory"
 msgstr ""
@@ -2866,7 +2881,7 @@ msgstr ""
 msgid "failed"
 msgstr "fallido"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "Falló"
@@ -2953,6 +2968,7 @@ msgid "Free"
 msgstr "Gratis"
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "Full name"
 msgstr ""
 
@@ -3327,6 +3343,7 @@ msgid "Kubernetes context"
 msgstr ""
 
 #: src/pages/account/AccountLanguage.tsx
+#: src/pages/settings-sections.ts
 msgid "Language"
 msgstr "Idioma"
 
@@ -3365,6 +3382,7 @@ msgstr ""
 msgid "Learning"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
@@ -3494,6 +3512,7 @@ msgstr ""
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/RoutineHistory.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
@@ -3511,6 +3530,7 @@ msgstr "El acceso local permite que los bots ejecuten comandos sin preguntar. Ev
 
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/settings-sections.ts
 msgid "Local devices"
 msgstr ""
 
@@ -3665,6 +3685,7 @@ msgstr ""
 msgid "Memory location and documents"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Memory preferences"
 msgstr ""
@@ -3853,6 +3874,7 @@ msgstr ""
 msgid "More memory"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Motion"
 msgstr ""
@@ -3899,7 +3921,7 @@ msgstr ""
 msgid "Needs approval"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Needs input"
 msgstr "Necesita entrada"
 
@@ -3907,7 +3929,7 @@ msgstr "Necesita entrada"
 msgid "Needs reconnection"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Needs takeover"
 msgstr "Necesita toma de control"
 
@@ -4006,10 +4028,6 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
-#: src/components/ApprovalRulesSettings.tsx
-msgid "No exceptions. Actions run automatically."
-msgstr "Sin excepciones. Las acciones se ejecutan automáticamente."
-
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
 msgstr "Aún no hay chats de grupo."
@@ -4072,6 +4090,7 @@ msgid "No results"
 msgstr "Sin resultados"
 
 #: src/pages/RoutineEditor.tsx
+#: src/pages/RoutineHistory.tsx
 msgid "No runs yet"
 msgstr "Aún no hay ejecuciones"
 
@@ -4177,6 +4196,7 @@ msgstr "Aún no hay recuerdos"
 msgid "Nothing to review."
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -4303,6 +4323,10 @@ msgstr "Abrir en ventana completa"
 msgid "Open links in built-in browser"
 msgstr ""
 
+#: src/pages/LocalSettings.tsx
+msgid "Open local settings from the desktop app on the server’s computer."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "Abrir navegación"
@@ -4398,6 +4422,10 @@ msgstr ""
 msgid "Other model…"
 msgstr "Otro modelo…"
 
+#: src/pages/NotFound.tsx
+msgid "Page not found"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
 msgstr "Incidente de PagerDuty"
@@ -4425,6 +4453,7 @@ msgstr "Aparcar"
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
+#: src/pages/settings-sections.ts
 msgid "Password"
 msgstr "Contraseña"
 
@@ -4636,7 +4665,7 @@ msgstr ""
 msgid "Pushed"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
@@ -5046,6 +5075,7 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
+#: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
@@ -5192,7 +5222,7 @@ msgstr "La hora de ejecución debe ser en el futuro."
 msgid "running"
 msgstr "en ejecución"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Running"
@@ -5733,7 +5763,7 @@ msgstr ""
 msgid "Start recording"
 msgstr "Iniciar grabación"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Starting"
 msgstr "Iniciando"
 
@@ -5949,6 +5979,7 @@ msgstr ""
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Theme"
 msgstr ""
@@ -6130,6 +6161,7 @@ msgstr ""
 msgid "Treg token"
 msgstr "Token de Treg"
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
 msgstr ""
@@ -6264,6 +6296,7 @@ msgstr "Actualizando…"
 msgid "Upload"
 msgstr "Subir"
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Uploaded files"
 msgstr ""
@@ -6402,6 +6435,7 @@ msgid "What should this routine do each time it runs?"
 msgstr "¿Qué debe hacer esta rutina cada vez que se ejecute?"
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "What should your bots call you?"
 msgstr ""
 
