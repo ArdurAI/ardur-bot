@@ -1,9 +1,10 @@
 import type { OutcomeObservation } from "../../scoreboard/graders/outcome.js";
 import { isOwnedReplayDatabase } from "../../scoreboard/replay/postgres.js";
-import type { ProductionApp } from "../../scoreboard/replay/production.js";
+import type { ProductionApp, ReplaySandbox } from "../../scoreboard/replay/production.js";
 import { fixtureRpc, runProductionTask } from "../../scoreboard/replay/production.js";
-import type { DepartmentSandbox, DepartmentServices } from "../../scoreboard/replay/services.js";
+import type { DepartmentServices } from "../../scoreboard/replay/services.js";
 import { requireValue } from "../budget.js";
+import type { ContainerComputer } from "../containers/computer.js";
 import { assertOwnedTrial } from "../isolation.js";
 import type { TrialArtifacts, TrialContext, VersusAdapter } from "./types.js";
 
@@ -24,7 +25,8 @@ export class ArdurAdapter implements VersusAdapter {
       databaseUrl: string;
       dataDir: string;
       services: DepartmentServices;
-      sandbox: DepartmentSandbox;
+      sandbox: ReplaySandbox;
+      container?: ContainerComputer;
       createApp: () => Promise<ProductionApp>;
       mode: "scripted-provider" | "live";
       preapproveConsent?: boolean;
@@ -47,12 +49,20 @@ export class ArdurAdapter implements VersusAdapter {
       queue: "graphile",
       database: "disposable-postgresql",
       transport: this.options.mode,
-      computer: "W0-5-real-files-shell-denied",
-      codingQualification: "not-supported-by-file-fixture",
+      computer: this.options.container
+        ? "linux-cgroup-v2-confined-computer"
+        : "W0-5-real-files-shell-denied",
+      codingQualification: this.options.container
+        ? "controller-admitted-commands; unadmitted forks denied"
+        : "not-supported-by-file-fixture",
       usage: "W0-3-landed-versus-coverage-unqualified",
-      spans: "incomplete-W0-4",
-      toolBudget: "broker-only; native pre-effect accounting unqualified",
-      descendantBudget: "native collector unqualified",
+      spans: "W0-4-landed-versus-coverage-unqualified",
+      toolBudget: this.options.container
+        ? "pre-effect-runtime-admission"
+        : "broker-only; native pre-effect accounting unqualified",
+      descendantBudget: this.options.container
+        ? "pre-effect-helper-and-command-admission; kernel fork denial"
+        : "native collector unqualified",
     };
   }
   async prepare(context: TrialContext) {
@@ -69,9 +79,17 @@ export class ArdurAdapter implements VersusAdapter {
       "Ardur requires invocation-owned disposable database",
     );
     requireValue(
-      this.options.mode === "scripted-provider",
+      this.options.mode === "scripted-provider" || this.options.container,
       "Live Ardur computer/auxiliary-route confinement must be qualified before using this fixture adapter",
     );
+    if (this.options.container) {
+      requireValue(
+        this.options.sandbox === this.options.container,
+        "Container proof does not bind selected computer",
+      );
+      await this.options.container.session.assertReady();
+      this.options.container.admission.bindModel(context.providerUrl, context.budget.model.id);
+    }
     this.context = context;
   }
   async submit() {
@@ -98,7 +116,11 @@ export class ArdurAdapter implements VersusAdapter {
           maxTokens: context.budget.maxOutputTokens,
           contextWindow: context.budget.contextSize,
         },
-        createApp: this.options.createApp,
+        createApp: async () => {
+          const handles = await this.options.createApp();
+          this.options.container?.admission.install(handles.runtime);
+          return handles;
+        },
         control: {
           signal: this.control.signal,
           preapproveConsent: this.options.preapproveConsent,
@@ -193,6 +215,7 @@ export class ArdurAdapter implements VersusAdapter {
           boundary: "persisted-agent-tool-called-event",
           observedAfterRun: true,
           preEffectBudgetAdmission: false,
+          preEffectEvidence: this.options.container ? "see-effect-broker-events" : "unqualified",
         });
       for (const effect of this.observation?.effects ?? [])
         context.emit("effect-receipt", "application-database", {
