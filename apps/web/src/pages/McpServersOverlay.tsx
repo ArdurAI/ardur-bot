@@ -51,10 +51,12 @@ export function McpServersOverlay({
   onClose,
   embedded = false,
   onBusyChange,
+  focusServerId,
 }: {
   onClose: () => void;
   embedded?: boolean;
   onBusyChange?(busy: boolean): void;
+  focusServerId?: string;
 }) {
   const { t } = useLingui();
   const [adding, setAdding] = useState(false);
@@ -107,6 +109,12 @@ export function McpServersOverlay({
       setError(err instanceof Error ? err.message : t`Could not load MCP servers`),
     );
   }, []);
+  useEffect(() => {
+    if (!focusServerId || !servers.some((server) => server.id === focusServerId)) return;
+    const card = document.getElementById(`mcp-server-${focusServerId}`);
+    card?.scrollIntoView({ block: "center" });
+    card?.focus();
+  }, [focusServerId, servers]);
 
   useEffect(() => {
     // BroadcastChannel instead of window.opener messaging: provider login
@@ -495,7 +503,7 @@ export function McpServersOverlay({
                 servers.map((server) => {
                   const statusText = oauthStatusText(server);
                   return (
-                    <Card key={server.id} size="sm">
+                    <Card key={server.id} id={`mcp-server-${server.id}`} tabIndex={-1} size="sm">
                       <CardContent>
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-foreground">{server.name}</span>

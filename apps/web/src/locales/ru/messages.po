@@ -272,6 +272,7 @@ msgstr ""
 msgid "Access token"
 msgstr "Токен доступа"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "Токен доступа (необязательно)"
@@ -2045,13 +2046,13 @@ msgstr "Не удалось завершить обновление. Попро�
 msgid "Could not complete this action."
 msgstr ""
 
-#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
 msgstr "Не удалось подключиться"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
 
@@ -2487,6 +2488,10 @@ msgstr "Не удалось сохранить этот выбор."
 msgid "Could not search catalog"
 msgstr "Не удалось выполнить поиск по каталогу"
 
+#: src/components/integrations/DirectMcpSearch.tsx
+msgid "Could not search integrations."
+msgstr "Не удалось найти интеграции."
+
 #: src/pages/Auth.tsx
 msgid "Could not send reset email"
 msgstr "Не удалось отправить электронное письмо для сброса"
@@ -2680,6 +2685,7 @@ msgstr ""
 msgid "Creating…"
 msgstr "Создание…"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "Учётные данные"
@@ -5721,6 +5727,7 @@ msgstr ""
 msgid "Recheck"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -5860,6 +5867,7 @@ msgid "Remote setup"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/SkillsPage.tsx
@@ -6108,6 +6116,7 @@ msgid "Restricted"
 msgstr ""
 
 #: src/components/Context.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -6125,7 +6134,7 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Retry"
-msgstr ""
+msgstr "Повторить"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx

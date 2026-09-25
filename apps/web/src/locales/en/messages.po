@@ -272,6 +272,7 @@ msgstr "Accepted"
 msgid "Access token"
 msgstr "Access token"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "Access token (optional)"
@@ -2045,13 +2046,13 @@ msgstr "Could not complete the update. Try again."
 msgid "Could not complete this action."
 msgstr "Could not complete this action."
 
-#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
 msgstr "Could not connect"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Could not connect or load integrations."
 msgstr "Could not connect or load integrations."
 
@@ -2487,6 +2488,10 @@ msgstr "Could not save this choice"
 msgid "Could not search catalog"
 msgstr "Could not search catalog"
 
+#: src/components/integrations/DirectMcpSearch.tsx
+msgid "Could not search integrations."
+msgstr "Could not search integrations."
+
 #: src/pages/Auth.tsx
 msgid "Could not send reset email"
 msgstr "Could not send reset email"
@@ -2680,6 +2685,7 @@ msgstr "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, 
 msgid "Creating…"
 msgstr "Creating…"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "Credential"
@@ -5721,6 +5727,7 @@ msgstr "Recent errors"
 msgid "Recheck"
 msgstr "Recheck"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -5860,6 +5867,7 @@ msgid "Remote setup"
 msgstr "Remote setup"
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/SkillsPage.tsx
@@ -6108,6 +6116,7 @@ msgid "Restricted"
 msgstr "Restricted"
 
 #: src/components/Context.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx

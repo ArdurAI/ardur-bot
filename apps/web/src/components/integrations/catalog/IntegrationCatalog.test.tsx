@@ -11,6 +11,8 @@ const api = vi.hoisted(() => ({
   servers: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  remove: vi.fn(),
+  tools: vi.fn(),
   approve: vi.fn(),
   connect: vi.fn(),
   grants: vi.fn(),
@@ -34,7 +36,13 @@ vi.mock("../../../lib/rpc", () => ({
     computer: { list: api.computers },
     capabilities: { catalogSearch: api.catalogSearch },
     mcp: {
-      servers: { list: api.servers, create: api.create, update: api.update },
+      servers: {
+        list: api.servers,
+        create: api.create,
+        update: api.update,
+        remove: api.remove,
+        tools: api.tools,
+      },
       assignments: { approve: api.approve },
     },
   },
@@ -184,6 +192,7 @@ const connected: IntegrationConnection = {
 let connections: IntegrationConnection[];
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+let broadcast: { onmessage: ((event: MessageEvent) => void) | null };
 beforeEach(() => {
   vi.clearAllMocks();
   connections = [];
@@ -192,6 +201,9 @@ beforeEach(() => {
     "BroadcastChannel",
     class {
       onmessage = null;
+      constructor() {
+        broadcast = this;
+      }
       close() {}
     },
   );
@@ -226,6 +238,8 @@ beforeEach(() => {
   });
   api.consent.mockResolvedValue("connected");
   api.oauth.mockResolvedValue("connected");
+  api.remove.mockResolvedValue({ ok: true });
+  api.tools.mockResolvedValue({ capturedAt: "", serverVersion: null, account: null, tools: [] });
   api.catalogSearch.mockResolvedValue({ enabled: true, results: [] });
   api.revoke.mockImplementation(async () => {
     connections = [{ ...connected, state: "not-connected", manifest: null }];
@@ -448,6 +462,244 @@ describe("Settings integration catalog", () => {
     await click(button("Search integrations.sh"));
     expect(api.catalogSearch).toHaveBeenCalledWith({ query: "Figma", usePublicCatalog: true });
     expect(resultConnect("Figma")).toBeDefined();
+  });
+
+  it("routes a normalized built-in URL through its catalog connection", async () => {
+    api.list.mockResolvedValue({
+      catalog: [
+        {
+          ...catalog[0]!,
+          id: "notion",
+          name: "Notion",
+          endpoint: "https://mcp.notion.com/mcp",
+        },
+      ],
+      connections: [],
+    });
+    api.catalogSearch.mockResolvedValue({
+      enabled: true,
+      results: [
+        {
+          ...publicResult,
+          name: "Community Notion listing",
+          surfaces: [
+            {
+              kind: "mcp",
+              slug: "notion",
+              source: "https://mcp.notion.com/mcp/?source=directory",
+              auth: null,
+            },
+          ],
+        },
+      ],
+    });
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "notion");
+    await click(button("Search integrations.sh"));
+    expect(container.textContent).toContain("Notion");
+    await click(resultConnect("Notion")!);
+    expect(api.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: "notion", authKind: "oauth" }),
+    );
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it("asks for a bearer value and discovers without starting OAuth", async () => {
+    const added: Array<Record<string, unknown>> = [];
+    api.catalogSearch.mockResolvedValue({
+      enabled: true,
+      results: [
+        {
+          ...publicResult,
+          surfaces: [
+            {
+              ...publicResult.surfaces[0]!,
+              auth: { type: "bearer", headerName: null, note: null },
+            },
+          ],
+        },
+      ],
+    });
+    api.create.mockImplementation(async (input: { name: string; endpoint: string }) => {
+      const server = {
+        id: "bearer-server",
+        name: input.name,
+        endpoint: input.endpoint,
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "none",
+        connectionState: "not-connected",
+        catalogId: null,
+      };
+      added.push(server);
+      return server;
+    });
+    api.tools.mockImplementation(async () => {
+      added[0]!.connectionState = "connected";
+      return { capturedAt: "", serverVersion: null, account: null, tools: [] };
+    });
+    api.servers.mockImplementation(async () => added);
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.querySelector('[aria-label="Credential"]')).not.toBeNull();
+    await fill("Credential", "synthetic-test-value");
+    await click(resultConnect("Figma")!);
+    expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({ secret: "synthetic-test-value" }),
+    );
+    expect(api.tools).toHaveBeenCalledWith({ serverId: "bearer-server" });
+    expect(api.oauth).not.toHaveBeenCalled();
+  });
+
+  it("removes a newly created server when browser sign-in is cancelled", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    api.create.mockResolvedValue({
+      id: "cancelled-server",
+      name: "Figma",
+      endpoint: "https://mcp.figma.example.test/mcp",
+      transport: "streamable_http",
+      enabled: true,
+      oauthStatus: "none",
+      connectionState: "not-connected",
+      catalogId: null,
+    });
+    api.oauth.mockResolvedValueOnce("cancelled");
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(api.remove).toHaveBeenCalledWith({ id: "cancelled-server" });
+  });
+
+  it("does not report authorization-not-requested when discovery failed", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    api.create.mockResolvedValue({
+      id: "failed-server",
+      name: "Figma",
+      endpoint: "https://mcp.figma.example.test/mcp",
+      transport: "streamable_http",
+      enabled: true,
+      oauthStatus: "none",
+      connectionState: "not-connected",
+      catalogId: null,
+    });
+    api.oauth.mockResolvedValueOnce("authorization_not_requested");
+    let serverLists = 0;
+    api.servers.mockImplementation(async () => {
+      serverLists += 1;
+      return serverLists < 3
+        ? []
+        : [
+            {
+              id: "failed-server",
+              name: "Figma",
+              endpoint: "https://mcp.figma.example.test/mcp",
+              transport: "streamable_http",
+              enabled: true,
+              oauthStatus: "none",
+              connectionState: "discovery-failed",
+              catalogId: null,
+            },
+          ];
+    });
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain("Could not connect or load integrations.");
+    expect(container.textContent).not.toContain("Connected");
+  });
+
+  it("keeps a custom connected row after remounting with no linked in-memory state", async () => {
+    api.servers.mockResolvedValue([
+      {
+        id: "persisted-server",
+        name: "Persisted server",
+        endpoint: "https://custom.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "none",
+        connectionState: "connected",
+        catalogId: null,
+      },
+    ]);
+    await mount();
+    expect(container.textContent).toContain("Persisted server");
+    expect(container.textContent).toContain("Connected");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount();
+    expect(container.textContent).toContain("Persisted server");
+    expect(container.textContent).toContain("Connected");
+  });
+
+  it("offers Reconnect, Manage, and Remove for a failed custom server", async () => {
+    const onOpenMcp = vi.fn();
+    api.servers.mockResolvedValue([
+      {
+        id: "failed-custom",
+        name: "Failed custom server",
+        endpoint: "https://failed.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "reconnect",
+        connectionState: "discovery-failed",
+        catalogId: null,
+      },
+    ]);
+    await act(async () => root.render(<IntegrationCatalog onOpenMcp={onOpenMcp} />));
+    expect(button("Reconnect")).toBeDefined();
+    await click(button("Manage"));
+    expect(onOpenMcp).toHaveBeenCalledWith("failed-custom");
+    await click(button("Remove"));
+    expect(api.remove).toHaveBeenCalledWith({ id: "failed-custom" });
+  });
+
+  it("ignores an older server-list response that resolves after a refresh", async () => {
+    let resolveOld!: (value: Array<Record<string, unknown>>) => void;
+    const old = new Promise<Array<Record<string, unknown>>>((resolve) => {
+      resolveOld = resolve;
+    });
+    api.servers
+      .mockImplementationOnce(() => old)
+      .mockResolvedValueOnce([
+        {
+          id: "new-server",
+          name: "Newest server",
+          endpoint: "https://new.example.test/mcp",
+          transport: "streamable_http",
+          enabled: true,
+          oauthStatus: "none",
+          connectionState: "connected",
+          catalogId: null,
+        },
+      ]);
+    await act(async () => root.render(<IntegrationCatalog />));
+    await act(async () => {
+      broadcast.onmessage?.(new MessageEvent("message"));
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain("Newest server"));
+    await act(async () => resolveOld([]));
+    expect(container.textContent).toContain("Newest server");
+  });
+
+  it("shows a plain search failure with Retry and hides the handler message", async () => {
+    api.catalogSearch.mockRejectedValueOnce(new Error("Integration catalog returned HTTP 503"));
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "notion");
+    await click(button("Search integrations.sh"));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Could not search integrations.",
+    );
+    expect(container.textContent).not.toContain("HTTP 503");
+    expect(button("Retry")).toBeDefined();
   });
 
   it("connecting a public catalog result refreshes the table", async () => {

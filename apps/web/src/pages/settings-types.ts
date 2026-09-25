@@ -45,5 +45,5 @@ export type SettingsPageProps = {
   onMemoryConfigChange: (config: SpaceMemoryConfig | null) => void;
   onClose: () => void;
   onBusyChange: (busy: boolean) => void;
-  navigate: (section: SettingsSection) => void;
+  navigate: (section: SettingsSection, initialItem?: string) => void;
 };

@@ -28,6 +28,7 @@ export function SettingsOverlay({
   const { t, i18n } = useLingui();
   const panelRef = useRef<HTMLDivElement>(null);
   const [section, setSection] = useState<SettingsSection>(initialSection);
+  const [initialItem, setInitialItem] = useState<string | undefined>(props.initialIntegration);
   const [busy, setBusy] = useState(false);
   const [targetLabel, setTargetLabel] = useState<string | null>(null);
   const [serverUpdates, setServerUpdates] = useState(false);
@@ -64,7 +65,7 @@ export function SettingsOverlay({
   );
   const Page = active.component;
   useEffect(() => setSection(initialSection), [initialSection]);
-  function navigate(next: SettingsSection) {
+  function navigate(next: SettingsSection, item?: string) {
     if (busy) return;
     const registration = available.find((item) => item.id === next);
     const match =
@@ -72,6 +73,7 @@ export function SettingsOverlay({
       registration?.searchLabels?.find((label) => matchesSetting(i18n._(label), search.query));
     setTargetLabel(match ? i18n._(match) : null);
     search.setQuery("");
+    setInitialItem(item);
     setSection(next);
   }
   function close() {
@@ -178,6 +180,7 @@ export function SettingsOverlay({
                   <Page
                     key={active.id}
                     {...props}
+                    initialIntegration={initialItem}
                     onClose={close}
                     onBusyChange={setBusy}
                     navigate={navigate}
