@@ -103,6 +103,8 @@ export function ingestClientCapture(
     capture.reset.stateRestored !== true
   )
     throw new Error("Startup requires an independent state/profile reset");
+  if (capture.reset.cache !== capture.trial.stratum)
+    throw new Error("Startup reset does not match the planned stratum");
   if (capture.client === "mobile" && capture.physicalDevice !== true)
     throw new Error("Mobile acceptance requires a physical device");
   if (typeof capture.physicalDevice !== "boolean") throw new Error("Missing device classification");
@@ -125,6 +127,13 @@ export function ingestClientCapture(
     requiredBoundaries: [...LOCAL_TRACE_BOUNDARIES, ...CLIENT_TRACE_BOUNDARIES],
     calibrations: capture.calibrations,
   });
+  const terminalOutcome = trace.derived.length === 1 ? trace.derived[0]!.outcome : "uncertain";
+  if (
+    capture.outcome === "success" &&
+    capture.startup["working-turn"] !== null &&
+    terminalOutcome !== "success"
+  )
+    throw new Error("A successful working turn requires a successful terminal trace");
   // Do not export raw runtime IDs. The trace collector's artifact contains scrubbed identities.
   const { batches: _batches, calibrations: _calibrations, ...safe } = capture;
   const raw = canonicalSerialize({ ...safe, traceHash: trace.artifacts[0]!.sha256 });

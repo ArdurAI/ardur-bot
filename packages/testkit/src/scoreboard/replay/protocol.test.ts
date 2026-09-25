@@ -182,6 +182,24 @@ describe("strict replay", () => {
       await server.close();
     }
   });
+  it("keeps virtual-display variables and drops provider credentials", () => {
+    expect(
+      credentialFreeEnvironment({
+        PATH: "/bin",
+        DISPLAY: ":99",
+        XAUTHORITY: "xvfb-authority",
+        WAYLAND_DISPLAY: "wayland-9",
+        OPENAI_API_KEY: "synthetic",
+        DATABASE_URL: "untrusted",
+        NODE_OPTIONS: "untrusted",
+      }),
+    ).toEqual({
+      PATH: "/bin",
+      DISPLAY: ":99",
+      XAUTHORITY: "xvfb-authority",
+      WAYLAND_DISPLAY: "wayland-9",
+    });
+  });
   it("removes credentials and refuses non-loopback egress", async () => {
     expect(
       credentialFreeEnvironment({

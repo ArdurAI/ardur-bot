@@ -29,6 +29,13 @@ export interface SampleAttempt {
   status: "measured" | "failed" | "missed";
 }
 
+function isCollectorAbort(error: unknown, signal: AbortSignal): boolean {
+  if (error === signal.reason) return true;
+  return (
+    typeof error === "object" && error !== null && "name" in error && error.name === "AbortError"
+  );
+}
+
 /** Absolute scheduling retains missed slots; a slow sampler never overlaps itself or hides load. */
 export async function collectResourceProfile(options: {
   profile: ResourceProfile;
@@ -55,6 +62,7 @@ export async function collectResourceProfile(options: {
   let work: Promise<void> | undefined;
   let workRunning = false;
   let workloadFailures = 0;
+  let collectorStopped = false;
   let failures = 0,
     missed = 0,
     attempts = 0;
@@ -71,7 +79,10 @@ export async function collectResourceProfile(options: {
         workRunning = true;
         work = options
           .mixedWork(workSignal)
-          .catch(() => {
+          .catch((error: unknown) => {
+            // Ending the window aborts leftover work. That cancellation is not a failed sample.
+            if (collectorStopped && !options.signal.aborted && isCollectorAbort(error, workSignal))
+              return;
             workloadFailures++;
           })
           .finally(() => {
@@ -97,6 +108,7 @@ export async function collectResourceProfile(options: {
       attempts++;
     }
   } finally {
+    collectorStopped = !options.signal.aborted;
     workload.abort();
     await work;
   }

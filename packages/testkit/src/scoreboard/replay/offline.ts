@@ -1,6 +1,6 @@
 import { Socket } from "node:net";
 
-/** CLI-only environment, deliberately omitting every provider and application credential. */
+/** CLI-only environment. Provider credentials stay out; a virtual display is not a credential. */
 export function credentialFreeEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const allowed = [
     "PATH",
@@ -14,6 +14,9 @@ export function credentialFreeEnvironment(source: NodeJS.ProcessEnv): NodeJS.Pro
     "DOCKER_CONTEXT",
     "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE",
     "TESTCONTAINERS_HOST_OVERRIDE",
+    "DISPLAY",
+    "XAUTHORITY",
+    "WAYLAND_DISPLAY",
   ];
   return Object.fromEntries(
     allowed.flatMap((key) => (source[key] === undefined ? [] : [[key, source[key]!]])),
