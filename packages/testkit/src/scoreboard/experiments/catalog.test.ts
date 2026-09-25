@@ -28,7 +28,8 @@ describe("matrix selection and evidence", () => {
       },
     ]);
     expect(failed.crashes[3]).toMatchObject({
-      status: "complete",
+      status: "incomplete",
+      missingReason: "invalid-trial",
       safetyPassed: false,
       recovery: null,
       taskCompleted: null,
@@ -47,6 +48,21 @@ describe("matrix selection and evidence", () => {
     };
     const crash03 = (results: Parameters<typeof matrixEvidence>[0]) =>
       matrixEvidence(results).crashes.find((row) => row.id === "crash-03");
+    expect(crash03([passed])).toMatchObject({
+      status: "incomplete",
+      missingReason: "missing-revoke-and-pin-controls",
+      safetyPassed: null,
+    });
+    expect(crash03([passed, { ...passed, id: "crash-03-revoke" }])).toMatchObject({
+      status: "incomplete",
+      missingReason: "missing-pin-control",
+      safetyPassed: null,
+    });
+    expect(crash03([passed, { ...passed, id: "crash-03-pin" }])).toMatchObject({
+      status: "incomplete",
+      missingReason: "missing-revoke-control",
+      safetyPassed: null,
+    });
     expect(
       crash03([
         passed,

@@ -221,6 +221,9 @@ export const MISSING_REASONS = [
   "cancelled-before-usage",
   "infrastructure-unavailable",
   "invalid-trial",
+  "missing-revoke-control",
+  "missing-pin-control",
+  "missing-revoke-and-pin-controls",
   "redacted",
   "unknown",
 ] as const;

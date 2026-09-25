@@ -24,6 +24,7 @@ import {
   parsePerformanceEvidenceReport,
   readPerformanceReport,
 } from "./performance-report.js";
+import { matrixEvidence } from "./scoreboard/experiments/evidence.js";
 import {
   CRASH_BOUNDARIES,
   contentDigest,
@@ -629,6 +630,22 @@ describe("request usage attribution", () => {
 });
 
 describe("task, experiment and recovery evidence", () => {
+  it("accepts a measured crash finding emitted by the matrix evidence adapter", () => {
+    const report = evidence();
+    report.crashes = matrixEvidence([
+      {
+        id: "crash-04",
+        experiment: "O9",
+        tier: "T1",
+        status: "finding",
+        checks: { killedAtBoundary: true, noDuplicateEffect: false },
+        measurements: {},
+        coverage: [],
+        gaps: [],
+      },
+    ]).crashes;
+    expect(() => parsePerformanceEvidenceReport(report, "matrix-finding")).not.toThrow();
+  });
   it("preserves task failures separately from evidence completeness", () => {
     const report = evidence();
     const task = report.tasks[0]!;

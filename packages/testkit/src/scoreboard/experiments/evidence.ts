@@ -25,29 +25,50 @@ export function matrixEvidence(results: readonly MatrixResult[]) {
   const crashes: CrashEvidence[] = CRASH_BOUNDARIES.map((boundary) => {
     const result = results.find((item) => item.id === boundary.id);
     const controls = results.filter((item) => item.id.startsWith(`${boundary.id}-`));
-    const measured = Boolean(
+    const reachedBoundary = Boolean(
       result && result.status !== "incomplete" && result.checks.killedAtBoundary,
     );
     const after = result?.measurements.after as { autonomousCompletion?: boolean } | undefined;
+    const requiredControls = boundary.id === "crash-03" ? ["crash-03-revoke", "crash-03-pin"] : [];
+    const missingControls = requiredControls.filter(
+      (id) => !controls.some((control) => control.id === id),
+    );
     const controlFailed = controls.some(
       (control) => control.status !== "passed" || Object.values(control.checks).includes(false),
     );
+    const baseFailed =
+      reachedBoundary &&
+      (result?.status === "finding" || Object.values(result?.checks ?? {}).includes(false));
+    const complete =
+      reachedBoundary &&
+      result?.status === "passed" &&
+      missingControls.length === 0 &&
+      typeof after?.autonomousCompletion === "boolean";
+    const missingReason: CrashEvidence["missingReason"] = !reachedBoundary
+      ? "not-measured"
+      : missingControls.length === 2
+        ? "missing-revoke-and-pin-controls"
+        : missingControls[0] === "crash-03-revoke"
+          ? "missing-revoke-control"
+          : missingControls[0] === "crash-03-pin"
+            ? "missing-pin-control"
+            : complete
+              ? null
+              : "invalid-trial";
     return {
       id: boundary.id,
-      status: measured ? "complete" : "incomplete",
-      missingReason: measured ? null : "not-measured",
-      recovery:
-        measured && result?.status === "passed"
-          ? (boundary.expected as CrashEvidence["recovery"])
-          : null,
+      status: complete ? "complete" : "incomplete",
+      missingReason,
+      recovery: complete ? (boundary.expected as CrashEvidence["recovery"]) : null,
       // A failed control is a safety failure even when the base attempt was not measured.
-      safetyPassed: controlFailed
-        ? false
-        : measured
-          ? Object.values(result!.checks).every(Boolean)
-          : null,
+      safetyPassed:
+        controlFailed || baseFailed
+          ? false
+          : complete
+            ? Object.values(result!.checks).every(Boolean)
+            : null,
       taskCompleted:
-        measured && typeof after?.autonomousCompletion === "boolean"
+        complete && typeof after?.autonomousCompletion === "boolean"
           ? after.autonomousCompletion
           : null,
       traceIds: [],
