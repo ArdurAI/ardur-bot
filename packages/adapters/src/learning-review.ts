@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { AgentRunRequest, AgentRuntime, BackgroundJobPayloads } from "@ardurbot/adapter-kit";
+import type {
+  AgentRunRequest,
+  AgentRuntime,
+  AgentUsage,
+  BackgroundJobPayloads,
+} from "@ardurbot/adapter-kit";
 import type {
   LearningCandidate,
   LearningProposal,
@@ -25,6 +30,7 @@ import {
 export { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 
 import { learningSecrets } from "./learning-redaction.js";
+import { accountRuntimeUsage, ObservedUsageTotals } from "./runtime-usage.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { skillDocumentContext } from "./skill-documents.js";
 
@@ -45,6 +51,7 @@ Skill content must be SKILL.md with name and description frontmatter. Do not inc
 Do not propose changes to protected or imported documents. Return no other text.`;
 
 export interface LearningReviewDependencies {
+  recordUsage?: (sourceRunId: string, usage: AgentUsage) => Promise<void>;
   prisma: PrismaClient;
   runtime: AgentRuntime;
   memoryDocuments?: MemoryService;
@@ -362,6 +369,7 @@ export async function reviewLearning(
       },
     };
     const controller = new AbortController();
+    const usageTotals = new ObservedUsageTotals();
     let output = "";
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
@@ -374,17 +382,27 @@ export async function reviewLearning(
       await Promise.race([
         timeout,
         (async () => {
-          for await (const event of deps.runtime.run(request, {
-            ...skillDocumentContext(scope),
-            signal: controller.signal,
-          })) {
+          for await (const event of accountRuntimeUsage(
+            deps.runtime.run(request, {
+              ...skillDocumentContext(scope),
+              signal: controller.signal,
+            }),
+            {
+              provider: request.model.provider,
+              model: request.model.id,
+              purpose: "detached-learning",
+              signal: controller.signal,
+              record: async (usage) => {
+                await deps.recordUsage?.(run.id, usage);
+                usageTotals.observe(usage);
+                usageSeen = usageTotals.reported;
+                tokens = usageTotals.tokens;
+              },
+            },
+          )) {
             if (controller.signal.aborted) throw new Error("Review stopped.");
             if (event.type === "tool" || event.type === "ask" || event.type === "takeover")
               throw new Error("Review attempted a tool.");
-            if (event.type === "usage") {
-              usageSeen = true;
-              tokens += event.inputTokens + event.outputTokens;
-            }
             if (event.type === "text") output += event.text;
             if (event.type === "done" && !output) output = event.text ?? "";
             if (output.length > config.maxOutputChars) {

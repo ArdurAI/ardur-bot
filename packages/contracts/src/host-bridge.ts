@@ -10,6 +10,7 @@ import {
 import { HostIntegrationSchema } from "./host-integrations.js";
 import { IDE_FILE_BYTES } from "./ide.js";
 import { LocalImportRootsSchema } from "./local-import.js";
+import { RequestUsageObservationSchema } from "./request-usage.js";
 import {
   RuntimeAvailabilitySchema,
   RuntimeInfoSchema,
@@ -375,6 +376,8 @@ export const HostRuntimeEventSchema = z.discriminatedUnion("type", [
     inputTokens: z.number().nonnegative(),
     outputTokens: z.number().nonnegative(),
     cachedTokens: z.number().nonnegative().optional(),
+    reported: z.boolean().optional(),
+    request: RequestUsageObservationSchema.optional(),
     provider: z.string(),
     model: z.string(),
   }),

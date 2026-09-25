@@ -1,6 +1,7 @@
 import type {
   AgentHomeStore,
   AgentRuntime,
+  AgentUsage,
   BackgroundJobHandlers,
   JobPublisher,
   MessagingSurface,
@@ -26,6 +27,7 @@ import type { LocalImportJobOptions } from "./local-import-jobs.js";
 import { createLocalImportJobs } from "./local-import-jobs.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
+import { recordRunUsage } from "./run-usage.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { expireTaughtSkillTeaching } from "./teaching-session.js";
 
@@ -47,6 +49,10 @@ export function createBackgroundJobHandlers(deps: {
   cloudAgent?: CloudAgentConnection | null;
   dataDir?: string;
 }): BackgroundJobHandlers {
+  const recordUsage = async (sourceRunId: string, usage: AgentUsage) => {
+    const run = await deps.prisma.run.findUniqueOrThrow({ where: { id: sourceRunId } });
+    await recordRunUsage(deps, run, usage);
+  };
   const deliverMessaging = async (runId?: string) => {
     if (!deps.messaging) return;
     await deliverMessagingOutbound(
@@ -80,6 +86,7 @@ export function createBackgroundJobHandlers(deps: {
           runtime: deps.runtime,
           secretStore: deps.secretStore,
           memoryDocuments: deps.memoryDocuments,
+          recordUsage,
         },
         payload,
       ),
@@ -176,12 +183,14 @@ export function createBackgroundJobHandlers(deps: {
           jobs: deps.jobs,
           memoryProviders: deps.memoryProviders,
           deploymentModelKey: deps.deploymentModelKey,
+          recordUsage,
           ...(deps.executor.resolveModel ? { resolveModel: deps.executor.resolveModel } : {}),
           ...(deps.executor.resolveCompactionRuntime
             ? { resolveRuntime: deps.executor.resolveCompactionRuntime }
             : {}),
         },
         payload.threadId,
+        payload.sourceRunId,
       );
     },
   };

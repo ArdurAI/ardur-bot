@@ -5,7 +5,9 @@ import type {
   AgentRunRequest,
   AgentRuntime,
   AgentRuntimeEvent,
+  UsageOutcome,
 } from "@ardurbot/adapter-kit";
+import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import type { RuntimeAvailability, RuntimePin } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
@@ -160,7 +162,32 @@ export class ClaudeStreamParser {
   effortAttested = false;
   effortAttestationReason: string | null = "Claude Code does not report the applied effort";
   sessionId?: string;
-  constructor(private readonly pin: RuntimePin) {}
+  private readonly usage: RequestUsageCollector;
+  private usageFinished = false;
+  private pendingUsage: AgentRuntimeEvent[] = [];
+  constructor(private readonly pin: RuntimePin) {
+    this.usage = new RequestUsageCollector({
+      provider: "anthropic",
+      model: pin.modelId!,
+      mappingVersion: "claude-result-v1",
+      scope: "native-turn",
+      inputSemantics: "additive-cache-categories",
+      limitations: ["native-request-detail-unavailable"],
+    });
+  }
+  startUsage() {
+    return usageEvent(this.usage.start());
+  }
+  drainUsage() {
+    return this.pendingUsage.splice(0);
+  }
+  finishUsage(outcome: Exclude<UsageOutcome, "started">) {
+    if (!this.usageFinished) {
+      this.pendingUsage.push(usageEvent(this.usage.finish(outcome)));
+      this.usageFinished = true;
+    }
+    return this.drainUsage();
+  }
   private model(model: unknown) {
     if (model !== this.pin.modelId) {
       this.initialized = false;
@@ -211,8 +238,22 @@ export class ClaudeStreamParser {
     if (value.type === "assistant")
       this.model((value.message as { model?: string } | undefined)?.model);
     if (value.type === "result") {
+      if (this.usageFinished) return [];
       this.effort(value);
-      if (value.is_error || value.subtype !== "success" || !this.initialized)
+      const usage = value.modelUsage as Record<string, unknown> | undefined;
+      if (usage && typeof usage === "object" && this.initialized) {
+        for (const model of Object.keys(usage)) this.model(model);
+        const tokens = usage[this.pin.modelId!] as Record<string, unknown> | undefined;
+        if (tokens && typeof tokens === "object")
+          this.usage.snapshot({
+            input: tokens.inputTokens,
+            output: tokens.outputTokens,
+            cacheRead: tokens.cacheReadInputTokens,
+            cacheWrite: tokens.cacheCreationInputTokens,
+          });
+      }
+      if (value.is_error || value.subtype !== "success" || !this.initialized) {
+        this.pendingUsage.push(...this.finishUsage("failed"));
         throw new RuntimePinError(
           runtimePinProblem(
             this.pin,
@@ -220,7 +261,7 @@ export class ClaudeStreamParser {
             "Claude Code could not finish this run — connect it or change the pin.",
           ),
         );
-      const usage = value.modelUsage as Record<string, unknown> | undefined;
+      }
       if (!usage || !Object.keys(usage).length)
         throw new RuntimePinError(
           runtimePinProblem(
@@ -231,36 +272,7 @@ export class ClaudeStreamParser {
         );
       for (const model of Object.keys(usage)) this.model(model);
       this.finished = true;
-      const events: AgentRuntimeEvent[] = [];
-      for (const [model, entry] of Object.entries(usage)) {
-        const tokens = entry as {
-          inputTokens?: number;
-          outputTokens?: number;
-          cacheReadInputTokens?: number;
-          cacheCreationInputTokens?: number;
-        };
-        if (
-          Number.isSafeInteger(tokens.inputTokens) &&
-          Number.isSafeInteger(tokens.outputTokens) &&
-          tokens.inputTokens! >= 0 &&
-          tokens.outputTokens! >= 0
-        )
-          events.push({
-            type: "usage",
-            provider: "anthropic",
-            model,
-            inputTokens:
-              tokens.inputTokens! +
-              (tokens.cacheReadInputTokens ?? 0) +
-              (tokens.cacheCreationInputTokens ?? 0),
-            outputTokens: tokens.outputTokens!,
-            ...(Number.isSafeInteger(tokens.cacheReadInputTokens) &&
-            tokens.cacheReadInputTokens! >= 0
-              ? { cachedTokens: tokens.cacheReadInputTokens }
-              : {}),
-          });
-      }
-      return [...events, { type: "done" }];
+      return [...this.finishUsage("success"), { type: "done" }];
     }
     if (value.type === "error")
       throw new RuntimePinError(
@@ -335,6 +347,7 @@ export class ClaudeCodeRuntime implements AgentRuntime {
       (event) => queue.push(event),
       () => {
         paused = true;
+        for (const event of parser.finishUsage("cancelled")) queue.push(event);
         queue.end();
         child?.kill("SIGTERM");
       },
@@ -359,6 +372,10 @@ export class ClaudeCodeRuntime implements AgentRuntime {
         effortAttestationReason: parser.effortAttestationReason,
       });
     const abort = () => {
+      for (const event of parser.finishUsage(
+        context?.signal?.reason?.name === "TimeoutError" ? "timed-out" : "cancelled",
+      ))
+        queue.push(event);
       queue.end();
       child?.kill("SIGTERM");
     };
@@ -371,12 +388,14 @@ export class ClaudeCodeRuntime implements AgentRuntime {
         request.nativeCwd,
       );
       this.running.set(request.runId, child);
+      queue.push(parser.startUsage());
       child.stderr.resume();
       const exited = new Promise<number | null>((resolve) => {
         child!.once("close", resolve);
         child!.once("error", () => resolve(-1));
       });
-      child.once("error", () =>
+      child.once("error", () => {
+        for (const event of parser.finishUsage("failed")) queue.push(event);
         queue.end(
           new RuntimePinError(
             runtimePinProblem(
@@ -385,8 +404,8 @@ export class ClaudeCodeRuntime implements AgentRuntime {
               "Claude Code could not start — connect it or change the pin.",
             ),
           ),
-        ),
-      );
+        );
+      });
       context?.signal?.addEventListener("abort", abort, { once: true });
       if (context?.signal?.aborted) abort();
       reader = (async () => {
@@ -423,6 +442,8 @@ export class ClaudeCodeRuntime implements AgentRuntime {
           queue.end();
         } catch (error) {
           parser.initialized = false;
+          for (const event of [...parser.drainUsage(), ...parser.finishUsage("failed")])
+            queue.push(event);
           let failure = error;
           if (error instanceof RuntimePinError && error.problem.code === "pin-effort-unsupported")
             try {

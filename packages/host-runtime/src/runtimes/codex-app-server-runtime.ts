@@ -10,6 +10,7 @@ import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-
 import * as z from "zod";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
+import { CodexUsageCollector } from "./codex-usage.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
@@ -255,14 +256,31 @@ export class CodexAppServerRuntime implements AgentRuntime {
     let paused = false;
     let pinValid = false;
     let finished = false;
-    let reportedInputTokens = 0;
-    let reportedCachedTokens = 0;
-    let reportedOutputTokens = 0;
+    const usage = new CodexUsageCollector(
+      pin.provider!,
+      pin.modelId!,
+      Boolean(request.nativeSession?.sessionId),
+    );
+    let usageStarted = false;
+    let usageFinished = false;
+    let interrupted = false;
+    let usageBarrier: RpcMessage | undefined;
+    let completionHandled = false;
     let reader: Promise<void> | undefined;
     let steering: ReturnType<typeof setInterval> | undefined;
     const interrupt = async () => {
+      interrupted = true;
       if (threadId && turnId)
         await rpc.request("turn/interrupt", { threadId, turnId }).catch(() => undefined);
+      if (usageStarted && !usageFinished) {
+        queue.push(
+          usage.finish(
+            context?.signal?.reason?.name === "TimeoutError" ? "timed-out" : "cancelled",
+            false,
+          ),
+        );
+        usageFinished = true;
+      }
       queue.end();
     };
     const abort = () => {
@@ -279,6 +297,14 @@ export class CodexAppServerRuntime implements AgentRuntime {
       () => pinValid && !paused && !context?.signal?.aborted,
     );
     rpc.onMessage = (message) => {
+      if (
+        !usageStarted &&
+        request.nativeSession?.sessionId &&
+        message.method === "thread/tokenUsage/updated" &&
+        message.params?.threadId === request.nativeSession.sessionId
+      ) {
+        usage.seed((message.params.tokenUsage as { total?: unknown } | undefined)?.total);
+      }
       if (message.method === "model/rerouted") {
         pinValid = false;
         queue.end(problem("pin-model-unknown", "Codex rerouted the pinned model."));
@@ -390,7 +416,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
       await request.onRuntimeInfo?.({ runtimeKind: "codex-app-server", sessionId: threadId });
       context?.signal?.addEventListener("abort", abort, { once: true });
       if (context?.signal?.aborted) return;
-      reader = (async () => {
+      const readEvents = async () => {
         try {
           for await (const event of rpc.events) {
             const params = event.params ?? {};
@@ -425,59 +451,52 @@ export class CodexAppServerRuntime implements AgentRuntime {
               continue;
             }
             if (params.threadId && params.threadId !== threadId) continue;
-            if (!request.nativeSession?.sessionId && event.method === "thread/tokenUsage/updated") {
-              // Fresh sessions start at zero. `last` is context usage,
-              // whereas changes in `total` account for every model call once.
-              const usage = (
-                params.tokenUsage as
-                  | {
-                      total?: {
-                        inputTokens?: number;
-                        outputTokens?: number;
-                        cachedInputTokens?: number;
-                      };
-                    }
-                  | undefined
-              )?.total;
-              if (
-                usage &&
-                Number.isSafeInteger(usage.inputTokens) &&
-                Number.isSafeInteger(usage.outputTokens) &&
-                usage.inputTokens! >= reportedInputTokens &&
-                usage.outputTokens! >= reportedOutputTokens &&
-                (usage.inputTokens! > reportedInputTokens ||
-                  usage.outputTokens! > reportedOutputTokens)
-              ) {
-                const cachedTokens =
-                  Number.isSafeInteger(usage.cachedInputTokens) &&
-                  usage.cachedInputTokens! >= reportedCachedTokens &&
-                  usage.cachedInputTokens! <= usage.inputTokens!
-                    ? usage.cachedInputTokens! - reportedCachedTokens
-                    : undefined;
-                queue.push({
-                  type: "usage",
-                  provider: pin.provider!,
-                  model: pin.modelId!,
-                  inputTokens: usage.inputTokens! - reportedInputTokens,
-                  outputTokens: usage.outputTokens! - reportedOutputTokens,
-                  ...(cachedTokens === undefined ? {} : { cachedTokens }),
-                });
-                if (cachedTokens !== undefined) reportedCachedTokens += cachedTokens;
-                reportedInputTokens = usage.inputTokens!;
-                reportedOutputTokens = usage.outputTokens!;
-              }
+            if (params.turnId && params.turnId !== turnId) continue;
+            if (event.method === "thread/tokenUsage/updated" && params.threadId === threadId) {
+              const measured = usage.update(
+                (params.tokenUsage as { total?: unknown } | undefined)?.total,
+              );
+              if (measured) queue.push(measured);
             }
             if (event.method === "item/agentMessage/delta" && typeof params.delta === "string")
               queue.push({ type: "text", text: params.delta });
             if (event.method === "turn/completed") {
-              const turn = params.turn as { status: string };
-              if (turn.status !== "completed" && !paused && !context?.signal?.aborted)
+              const turn = params.turn as { id?: string; status: string };
+              if (turn.id && turn.id !== turnId) continue;
+              if (completionHandled) continue;
+              completionHandled = true;
+              // The read response is an ordered protocol fence. Drain queued final usage before
+              // ending this stream; it is not a claim about future server notifications.
+              const verified = await rpc
+                .request("thread/read", { threadId, includeTurns: false })
+                .then(
+                  () => true,
+                  () => false,
+                );
+              usageBarrier = { params: { status: turn.status, verified } };
+              rpc.events.push(usageBarrier);
+              continue;
+            }
+            if (event === usageBarrier) {
+              const status = params.status;
+              queue.push(
+                usage.finish(
+                  status === "completed"
+                    ? "success"
+                    : status === "interrupted"
+                      ? "cancelled"
+                      : "failed",
+                  params.verified === true,
+                ),
+              );
+              usageFinished = true;
+              if (status !== "completed" && !paused && !context?.signal?.aborted)
                 throw problem(
                   "runtime-unavailable",
                   "Codex stopped before completing this run — connect it or change the pin.",
                 );
               finished = true;
-              if (!paused && turn.status === "completed") queue.push({ type: "done" });
+              if (!paused && status === "completed") queue.push({ type: "done" });
               queue.end();
               break;
             }
@@ -489,6 +508,10 @@ export class CodexAppServerRuntime implements AgentRuntime {
           }
         } catch (error) {
           pinValid = false;
+          if (!usageFinished && usageStarted) {
+            queue.push(usage.finish(interrupted ? "cancelled" : "failed", false));
+            usageFinished = true;
+          }
           if (!finished && !paused && !context?.signal?.aborted)
             queue.end(
               error instanceof RuntimePinError
@@ -496,8 +519,10 @@ export class CodexAppServerRuntime implements AgentRuntime {
                 : problem("runtime-unavailable", "Codex app-server unavailable"),
             );
         }
-      })();
+      };
       const history = request.nativeSession?.sessionId ? "" : JSON.stringify(request.history);
+      usageStarted = true;
+      queue.push(usage.start());
       const turn = await rpc
         .request<{ turn: { id: string } }>("turn/start", {
           threadId,
@@ -532,6 +557,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
           );
         });
       turnId = turn.turn.id;
+      reader = readEvents();
       let steeringBusy = false;
       const seen: string[] = [];
       if (request.claimSteering)
@@ -562,6 +588,10 @@ export class CodexAppServerRuntime implements AgentRuntime {
         }, 500);
       yield* queue;
     } catch (error) {
+      if (usageStarted && !usageFinished) {
+        yield usage.finish(interrupted ? "cancelled" : "failed", false);
+        usageFinished = true;
+      }
       if (error instanceof RuntimePinError) throw error;
       throw problem("runtime-unavailable", "Codex app-server unavailable");
     } finally {

@@ -332,7 +332,7 @@ it("accounts for exactly one bounded brief call on the changed-fact fixture", as
     f.recordUsage.mock.calls[0]?.[1].request?.attemptId,
   );
 });
-it("preserves identified brief observations on replay and namespaces real maintenance attempts", async () => {
+it("joins brief parents, children and retries after namespacing and preserves replay identity", async () => {
   const f = fixture();
   const request: NonNullable<AgentUsage["request"]> = {
     requestId: "provider-request",
@@ -362,14 +362,20 @@ it("preserves identified brief observations on replay and namespaces real mainte
     }),
     abort: async () => undefined,
     async *run() {
-      for (let i = 0; i < 2; i++)
+      const child = {
+        ...request,
+        requestId: "provider-child",
+        parentRequestId: request.requestId,
+      };
+      const retry = { ...child, attemptId: "retry-attempt", purpose: "retry" as const };
+      for (const observation of [request, request, child, retry])
         yield {
           type: "usage",
           provider: "fixture",
           model: "pinned",
           inputTokens: 100,
           outputTokens: 50,
-          request,
+          request: observation,
         };
       yield { type: "done", text: "## Goal\nCoordinate\n## Open items\nReview task card" };
     },
@@ -383,9 +389,18 @@ it("preserves identified brief observations on replay and namespaces real mainte
   expect(f.recordUsage.mock.calls[1]![1]).toEqual(first);
   expect(first.request).toEqual({ ...request, purpose: "summary", requestId: expect.any(String) });
   expect(first.request!.requestId).not.toBe(request.requestId);
+  const child = f.recordUsage.mock.calls[2]![1].request!;
+  const retry = f.recordUsage.mock.calls[3]![1].request!;
+  expect(child.parentRequestId).toBe(first.request!.requestId);
+  expect(child.requestId).not.toBe("provider-child");
+  expect(retry).toEqual({ ...child, attemptId: "retry-attempt" });
   f.run.thread.nextMessageSeq++;
   await refreshRunBrief(f.deps, "run");
-  expect(f.recordUsage.mock.calls[2]![1].request!.requestId).not.toBe(first.request!.requestId);
+  const nextParent = f.recordUsage.mock.calls[4]![1].request!;
+  const nextChild = f.recordUsage.mock.calls[6]![1].request!;
+  expect(nextParent.requestId).not.toBe(first.request!.requestId);
+  expect(nextChild.requestId).not.toBe(child.requestId);
+  expect(nextChild.parentRequestId).toBe(nextParent.requestId);
 });
 it.each([false, true])(
   "distinguishes unreported brief usage from measured zero (reported=%s)",

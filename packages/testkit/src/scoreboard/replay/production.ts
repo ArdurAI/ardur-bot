@@ -10,6 +10,7 @@ import {
   LocalAgentHomeStore,
   SpaceMemoryProviderResolver,
 } from "@ardurbot/adapters";
+import { MessageBlock } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { createPool, createThreadEvents, createThreadMessage } from "@ardurbot/db";
 import { sessionCookieHeader } from "../../index.js";
@@ -207,6 +208,18 @@ export async function runProductionTask(options: {
       select: { payload: true },
     });
     const toolNames = events.map((event) => (event.payload as { name?: string }).name ?? "unknown");
+    const messages = await handles.prisma.message.findMany({
+      where: { runId, role: "bot" },
+      orderBy: { seq: "asc" },
+      select: { blocks: true },
+    });
+    const reply = messages
+      .flatMap((message) =>
+        MessageBlock.array()
+          .parse(message.blocks)
+          .flatMap((block) => (block.kind === "text" ? [block.text] : [])),
+      )
+      .join("\n\n");
     const usage = await handles.prisma.usageRecord.findMany({
       where: { runId },
       select: {
@@ -229,6 +242,7 @@ export async function runProductionTask(options: {
     };
     const observation: OutcomeObservation = {
       result,
+      reply,
       files,
       state: await services.snapshot(),
       effects: await services.effects(),
