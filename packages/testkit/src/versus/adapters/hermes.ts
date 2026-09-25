@@ -11,7 +11,7 @@ import type { Budget } from "../budget.js";
 import { requireValue } from "../budget.js";
 import type { IsolationProof, NativePolicy } from "../isolation.js";
 import {
-  assertIsolation,
+  assertNativeProductIsolation,
   assertOwnedTrial,
   nativeProfile,
   prepareEnvironment,
@@ -328,7 +328,7 @@ export class HermesAdapter implements VersusAdapter {
     await assertOwnedTrial(context.workspace, context.stateDirectory);
     const inspected = await inspectHermes(this.options);
     requireValue(inspected.identity.revisionMatches, "Hermes revision mismatch");
-    assertIsolation(this.options.proof, this.options.policy);
+    assertNativeProductIsolation(this.options.proof, this.options.policy);
     const journal = path.resolve(this.options.broker.options.journal);
     requireValue(
       !journal.startsWith(`${this.options.policy.root}/`) &&
@@ -401,7 +401,7 @@ export class HermesAdapter implements VersusAdapter {
     this.control = new AbortController();
     this.reason = "not-submitted";
     this.reply = null;
-    assertIsolation(this.options.proof, this.options.policy);
+    assertNativeProductIsolation(this.options.proof, this.options.policy);
     this.started = performance.now();
     const child = spawn(
       "/usr/bin/sandbox-exec",
