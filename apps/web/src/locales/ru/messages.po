@@ -12,18 +12,6 @@ msgstr ""
 "Last-Translator: \n"
 "Language-Team: \n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
-"POT-Creation-Date: 2026-09-07 14:00+0700\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"X-Generator: @lingui/cli\n"
-"Language: ru\n"
-"Project-Id-Version: ardurbot-web\n"
-"Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: \n"
-"Last-Translator: \n"
-"Language-Team: \n"
-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
 #: src/pages/shell/bot-panel.tsx
 msgid " — May not be available on your plan"
@@ -439,7 +427,7 @@ msgstr "Добавлен"
 msgid "Adding…"
 msgstr "Добавление…"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -459,6 +447,7 @@ msgid "Advanced..."
 msgstr "Расширенные..."
 
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/ide/diff.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
@@ -484,6 +473,7 @@ msgid "All categories"
 msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/integrations/manage/ToolPermissions.tsx
 msgid "Allow"
 msgstr ""
 
@@ -730,6 +720,15 @@ msgstr "Аргументы"
 msgid "Artifacts"
 msgstr ""
 
+#: src/components/integrations/manage/ToolPermissions.tsx
+msgid "Ask"
+msgstr ""
+
+#: src/pages/ide/dialogs.tsx
+#: src/pages/ide/IdePage.tsx
+msgid "Ask a bot"
+msgstr ""
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -886,6 +885,7 @@ msgid "Bearer token (optional)"
 msgstr ""
 
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/ide/diff.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
@@ -895,6 +895,14 @@ msgstr ""
 #: src/pages/system/DispatchSetting.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Beta"
+msgstr ""
+
+#: src/pages/ide/IdePage.tsx
+msgid "Binary file"
+msgstr ""
+
+#: src/components/integrations/manage/ToolPermissions.tsx
+msgid "Block"
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
@@ -956,6 +964,8 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/ide/dialogs.tsx
+#: src/pages/ide/IdePage.tsx
 msgid "Bots"
 msgstr ""
 
@@ -1029,7 +1039,7 @@ msgstr "Не удаётся связаться с сервером."
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
@@ -1112,6 +1122,11 @@ msgstr ""
 
 #: src/components/composer/command-description.ts
 msgid "Change this bot’s pin"
+msgstr ""
+
+#: src/pages/ide/changes.tsx
+#: src/pages/ide/IdePage.tsx
+msgid "Changes"
 msgstr ""
 
 #: src/pages/account/AccountSignIn.tsx
@@ -1254,10 +1269,6 @@ msgstr ""
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Claude subscriptions are not supported here yet; use an API key."
-msgstr ""
-
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
 msgstr "Очистить"
@@ -1276,10 +1287,12 @@ msgstr "Очистить диалог"
 msgid "Clearing…"
 msgstr "Очистка…"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Client ID"
 msgstr "ID клиента"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Client secret"
 msgstr "Секрет клиента"
@@ -1292,6 +1305,11 @@ msgstr "Секрет клиента"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Close"
 msgstr "Закрыть"
+
+#. placeholder {0}: basename(current.path)
+#: src/pages/ide/IdePage.tsx
+msgid "Close {0}"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "Close chart"
@@ -1385,7 +1403,6 @@ msgstr "Цвет"
 msgid "Color {color}"
 msgstr "Цвет {color}"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Coming soon"
 msgstr "Скоро"
@@ -1420,7 +1437,7 @@ msgstr ""
 msgid "Completion not recorded"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -1525,7 +1542,7 @@ msgstr ""
 msgid "Confluence space keys or IDs"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -1565,6 +1582,10 @@ msgstr "Подключите MCP-сервер «{name}»"
 msgid "Connect OAuth"
 msgstr "Подключить OAuth"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Connect remote account"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
 msgstr "Подключите этого провайдера, чтобы использовать его в качестве своей личной модели."
@@ -1572,10 +1593,6 @@ msgstr "Подключите этого провайдера, чтобы исп�
 #: src/pages/PluginsOverlay.tsx
 msgid "Connect Treg"
 msgstr "Подключить Treg"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Connect your account."
-msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1625,7 +1642,7 @@ msgstr "Подключение…"
 msgid "Connection"
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Connection lost — reconnecting"
 msgstr ""
 
@@ -1798,6 +1815,7 @@ msgstr ""
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "Не удалось проверить статус преподавания. Обновите вид, чтобы продолжить."
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not check this computer."
 msgstr ""
@@ -1836,8 +1854,7 @@ msgstr ""
 msgid "Could not connect"
 msgstr "Не удалось подключиться"
 
-#: src/components/composer/ComposerMenu.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
 
@@ -2066,7 +2083,7 @@ msgstr ""
 msgid "Could not load the server configuration."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -2314,6 +2331,10 @@ msgstr "Не удалось отправить этот ответ"
 msgid "Could not take control"
 msgstr "Не смог взять под контроль"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Could not test this integration."
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not update"
 msgstr "Не удалось обновить"
@@ -2392,10 +2413,6 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Create a section and move {0} into it."
 msgstr "Создайте раздел и переместите в него {0}."
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Create a token"
-msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Create account"
@@ -2637,6 +2654,7 @@ msgstr "Описание"
 msgid "Design"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Desktop"
 msgstr ""
@@ -3108,7 +3126,7 @@ msgstr ""
 msgid "Find a destination"
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Find in terminal"
 msgstr ""
 
@@ -3122,7 +3140,7 @@ msgstr "Найти модели"
 msgid "Finding…"
 msgstr "Поиск…"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr ""
 
@@ -3132,7 +3150,7 @@ msgstr ""
 msgid "Finish signing in at <0>{0}</0>. The final page may not load; paste its URL or code here."
 msgstr "Завершите вход на странице <0>{0}</0>. Если последняя страница не загрузится, вставьте сюда её URL или код."
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Finish signing in in your browser."
 msgstr ""
 
@@ -3219,16 +3237,12 @@ msgstr ""
 msgid "Git URL"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "GitLab host"
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
 msgid "Grant"
-msgstr ""
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Grant only the repositories and permissions this bot needs."
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -3354,6 +3368,10 @@ msgstr "Как проверить"
 #: src/pages/Shell.tsx
 msgid "I’m done"
 msgstr "Готово"
+
+#: src/pages/ide/IdePage.tsx
+msgid "IDE"
+msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Idle"
@@ -3544,6 +3562,10 @@ msgstr "изолированный"
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
 msgstr "Его диалог, файлы и задачи будут безвозвратно удалены. Созданные им боты останутся в вашем списке."
 
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Jev needs a TypeSafe API key."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Jira project keys"
 msgstr ""
@@ -3612,6 +3634,10 @@ msgstr "Язык"
 msgid "Last check"
 msgstr ""
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Last checked"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
 msgstr ""
@@ -3620,6 +3646,11 @@ msgstr ""
 msgid "Last seen"
 msgstr ""
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Last successful call"
+msgstr ""
+
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Last used"
 msgstr ""
@@ -3724,6 +3755,7 @@ msgstr ""
 msgid "Load earlier messages"
 msgstr "Загрузить более ранние сообщения"
 
+#: src/pages/ide/changes.tsx
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Load more"
 msgstr ""
@@ -3833,7 +3865,7 @@ msgstr ""
 msgid "Make sure nothing is still running on this computer."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -3966,6 +3998,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Memory request"
+msgstr ""
+
+#: src/pages/memory/MemoryComposer.tsx
+msgid "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly."
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -4211,6 +4247,14 @@ msgstr "Требуется ввод данных"
 msgid "Needs reconnection"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Needs sign-in"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Needs sign-in on this computer"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "Needs takeover"
 msgstr "Требуется передача управления"
@@ -4262,7 +4306,7 @@ msgid "New space"
 msgstr "Новое пространство"
 
 #: src/pages/account/AccountTables.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Next"
 msgstr ""
 
@@ -4440,12 +4484,20 @@ msgstr ""
 msgid "Not available on this computer"
 msgstr ""
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Not checked"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
 msgstr "Не подключено"
 
 #: src/pages/LearningObservation.tsx
 msgid "Not enough runs to tell"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not found on this computer"
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -4462,6 +4514,7 @@ msgid "Not now"
 msgstr "Не сейчас"
 
 #: src/components/ThreadCommandBlock.tsx
+#: src/pages/ide/diff.tsx
 msgid "Not recorded"
 msgstr ""
 
@@ -4480,6 +4533,10 @@ msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
+msgstr ""
+
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Not used"
 msgstr ""
 
 #: src/pages/settings/PluginsSection.tsx
@@ -4588,6 +4645,8 @@ msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/ide/IdePage.tsx
+#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -4598,7 +4657,7 @@ msgstr "Открыть"
 msgid "Open {0}"
 msgstr "Открыть {0}"
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Open a new terminal"
 msgstr ""
 
@@ -4610,11 +4669,15 @@ msgstr ""
 msgid "Open Ardur Bot"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Open bot settings"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Open documentation"
 msgstr ""
 
@@ -4654,6 +4717,10 @@ msgstr ""
 msgid "Open terminal"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Open the desktop app to check this computer."
+msgstr ""
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Open the desktop app to manage extensions."
 msgstr ""
@@ -4676,6 +4743,7 @@ msgid "Opening chat…"
 msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Opening terminal"
 msgstr ""
 
@@ -4797,6 +4865,11 @@ msgstr "Вставьте свой ключ API"
 msgid "Paused"
 msgstr "Приостановлено"
 
+#. placeholder {0}: tool.id
+#: src/components/integrations/manage/ToolPermissions.tsx
+msgid "Permission for {0}"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Personal"
 msgstr ""
@@ -4876,7 +4949,7 @@ msgid "Preview migration"
 msgstr ""
 
 #: src/pages/account/AccountTables.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Previous"
 msgstr ""
 
@@ -4987,6 +5060,10 @@ msgstr "В очереди"
 msgid "Quick access shortcut"
 msgstr ""
 
+#: src/pages/ide/dialogs.tsx
+msgid "Quick open"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Quote"
 msgstr ""
@@ -5001,6 +5078,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Read"
+msgstr ""
+
+#: src/pages/ide/IdePage.tsx
+msgid "Read only: file is larger than 2 MB"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -5032,13 +5113,17 @@ msgstr ""
 msgid "Recent"
 msgstr "Недавние"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Recent errors"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "Recheck"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Reconnect"
 msgstr ""
 
@@ -5136,6 +5221,7 @@ msgstr ""
 msgid "Rejected"
 msgstr ""
 
+#: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
 msgid "Release"
 msgstr "Освободить управление"
@@ -5150,6 +5236,14 @@ msgstr "Освободить прерванный компьютер?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Remote MCP URL"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Remote setup"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
@@ -5453,7 +5547,6 @@ msgstr ""
 msgid "Review saved copy"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/customize/McpDefaults.tsx
@@ -5461,7 +5554,6 @@ msgstr ""
 msgid "Review tools"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Review tools before your bots can use this account."
 msgstr ""
@@ -5620,6 +5712,7 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/ide/IdePage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/ModelDestinations.tsx
@@ -5643,6 +5736,7 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
+#: src/pages/ide/IdePage.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Saved"
 msgstr "Сохранено"
@@ -5704,6 +5798,10 @@ msgstr "Скажите что-нибудь. После паузы сообщен
 msgid "Say yes or no, or answer in a sentence."
 msgstr "Скажите «да» или «нет» или ответьте предложением."
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Scopes"
+msgstr ""
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Screen"
 msgstr ""
@@ -5739,7 +5837,7 @@ msgstr "Искать ботов и переключать диалоги"
 msgid "Search by domain"
 msgstr "Поиск по домену"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Search integrations"
 msgstr ""
 
@@ -5876,7 +5974,7 @@ msgstr "URL-адрес сервера"
 msgid "Session actions"
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Session ended — open a new terminal"
 msgstr ""
 
@@ -5982,10 +6080,6 @@ msgstr "Войти в Ardur Bot"
 msgid "Sign in to use quick access."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Sign in with GitHub"
-msgstr ""
-
 #: src/pages/account/AccountTables.tsx
 msgid "Sign out"
 msgstr ""
@@ -5999,12 +6093,16 @@ msgstr "Зарегистрироваться"
 msgid "Sign-in expired. Connect Codex again."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Sign-in timed out."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Signed in on this computer as {identity}"
 msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
@@ -6251,10 +6349,12 @@ msgstr ""
 msgid "System"
 msgstr "Системная"
 
+#: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
 msgstr ""
 
+#: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control to open a terminal"
 msgstr ""
@@ -6314,7 +6414,9 @@ msgstr "Teams не настроен"
 msgid "Tell your bot what to change or remove"
 msgstr ""
 
+#: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Terminal"
 msgstr ""
 
@@ -6322,10 +6424,12 @@ msgstr ""
 msgid "Terminal could not open; try again"
 msgstr ""
 
+#: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal is not available on this computer"
 msgstr ""
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
@@ -6359,7 +6463,7 @@ msgstr "API не вернулся. Обновите эту страницу."
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
 
@@ -6381,6 +6485,9 @@ msgid "Thinking"
 msgstr "рассуждение"
 
 #: src/components/ThreadCommandBlock.tsx
+#: src/pages/ide/dialogs.tsx
+#: src/pages/ide/IdePage.tsx
+#: src/pages/ide/terminal.tsx
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -6420,8 +6527,10 @@ msgstr ""
 msgid "this computer"
 msgstr "этот компьютер"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/HostComputerSettings.tsx
+#: src/pages/ide/IdePage.tsx
 msgid "This computer"
 msgstr ""
 
@@ -6482,7 +6591,7 @@ msgstr ""
 msgid "This server is managed by an extension"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "This service needs client registration before you can connect."
 msgstr ""
 
@@ -6515,6 +6624,10 @@ msgstr ""
 msgid "Title"
 msgstr "Заголовок"
 
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
+msgstr ""
+
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "К:"
@@ -6544,6 +6657,7 @@ msgstr ""
 msgid "Tool sources"
 msgstr "Источники инструментов"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Tools"
 msgstr "Инструменты"
@@ -6572,7 +6686,7 @@ msgstr "Токен Treg"
 msgid "Trusted folders"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -6638,6 +6752,10 @@ msgstr "Отсоединить"
 #: src/pages/BotContextMenu.tsx
 msgid "Unpin"
 msgstr "Открепить"
+
+#: src/pages/ide/IdePage.tsx
+msgid "Unsaved changes"
+msgstr ""
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -6737,13 +6855,17 @@ msgstr "Используйте {hostLabel}"
 msgid "Use a found model"
 msgstr "Использовать найденную модель"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"
 msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
 msgstr "Использовать рекомендации по умолчанию"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Use for bots on this computer"
+msgstr ""
 
 #: src/pages/system/SystemPage.tsx
 msgid "Use recommended"
@@ -6758,10 +6880,6 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "Используйте эту модель"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Use your GitLab host"
-msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
@@ -6817,6 +6935,7 @@ msgstr "Ожидание…"
 msgid "We'll provide a prompt you can use to fetch the memory from your other account."
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Web"
 msgstr ""
@@ -6934,6 +7053,10 @@ msgstr ""
 msgid "Working…"
 msgstr "Выполняется…"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Workspace"
+msgstr ""
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr ""
@@ -6966,10 +7089,6 @@ msgstr "Вы можете закрыть это окно."
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "Вы управляете"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Your account is connected."
-msgstr ""
 
 #. placeholder {0}: state.storage.path
 #: src/pages/system/SystemPage.tsx

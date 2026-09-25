@@ -23,6 +23,8 @@ import { SharedCommandPage, SharedCommandSignIn } from "./pages/SharedCommand";
 import { ShellPage } from "./pages/Shell";
 import { QuickComposer } from "./pages/system/QuickComposer";
 
+const IdePage = lazy(() => import("./pages/ide/IdePage"));
+
 const AuthPage = lazy(() =>
   import("./pages/Auth").then((module) => ({ default: module.AuthPage })),
 );
@@ -123,6 +125,10 @@ function SessionApp() {
                 <Navigate to="/sign-in?next=/integrations/setup" replace />
               )
             }
+          />
+          <Route
+            path="/app/ide"
+            element={user ? <IdePage /> : <Navigate to="/sign-in" replace />}
           />
           <Route
             path="/app/team"

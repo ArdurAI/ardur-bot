@@ -149,3 +149,15 @@ describe("LocalAgentHomeStore path containment", () => {
     expect(await readFile(path.join(store.pathFor("bot-2"), "nested/run"))).toEqual(bytes);
   });
 });
+
+it("previews a stopped computer home with bounded UTF-8 reads and explicit binary detection", async () => {
+  const { store, home } = await fixture();
+  await writeFile(path.join(home, "large.txt"), "abcdef");
+  expect(await store.readFile("bot-1", "large.txt", context, { maxBytes: 4, preview: true })).toBe(
+    "abcd",
+  );
+  await writeFile(path.join(home, "binary.bin"), Buffer.from([255, 254, 1]));
+  await expect(
+    store.readFile("bot-1", "binary.bin", context, { maxBytes: 4, preview: true }),
+  ).rejects.toThrow("Binary file");
+});

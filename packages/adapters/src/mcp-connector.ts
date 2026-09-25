@@ -4,6 +4,7 @@ import type {
   ConnectorEvent,
   ConnectorProvider,
   ConnectorTool,
+  SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { IntegrationResourceKind } from "@ardurbot/contracts";
 import { IntegrationManifestSchema, isLocalMcpHost } from "@ardurbot/contracts";
@@ -14,7 +15,18 @@ import { getLogger } from "@ardurbot/logging";
 import { catalogToolPrefix } from "./approval-effect.js";
 import { redactConnectorPayload, sanitizeConnectorError } from "./connector-safety.js";
 import { appendToolCompletionAudit } from "./executor.js";
+import {
+  executeHostIntegration,
+  hostIntegrationComputer,
+  hostIntegrationTools,
+} from "./host-integration-tools.js";
 import { grantedMcpTools, integrationResourceDenial } from "./integration-access.js";
+import { integrationIdentity, integrationIdentityCall } from "./integration-identity.js";
+import {
+  integrationFailure,
+  retryIntegrationRead,
+  transientIntegrationError,
+} from "./integration-lifecycle.js";
 import { captureIntegrationManifest, inputSchemaDigest } from "./integration-manifest.js";
 import { resourceChoices, resourceSearchTools } from "./integration-resources.js";
 import {
@@ -27,7 +39,7 @@ import {
   resolveCatalogCall,
 } from "./lazy-tool-catalog.js";
 import type { McpOAuthBroker, OAuthMaterial } from "./mcp-oauth.js";
-import { oauthMaterialSecrets } from "./mcp-oauth.js";
+import { McpReauthorizationRequiredError, oauthMaterialSecrets } from "./mcp-oauth.js";
 import { McpSession } from "./mcp-transport.js";
 import type { McpHostClient, McpSessionPort } from "./remote-host-mcp.js";
 import { RemoteHostMcpSession } from "./remote-host-mcp.js";
@@ -36,6 +48,20 @@ import type { EncryptedSecretStore } from "./secrets.js";
 
 type SessionEntry = { session: McpSessionPort; revision: number; material: OAuthMaterial };
 type PendingSession = { revision: number; promise: Promise<McpSessionPort> };
+
+function connectionError(error: unknown, server: McpServer, material?: OAuthMaterial): unknown {
+  if (
+    server.catalogId &&
+    !material?.oauth &&
+    Object.keys(material?.headers ?? {}).some((key) => key.toLowerCase() === "authorization") &&
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    error.code === 401
+  )
+    return new McpReauthorizationRequiredError(server.id, "refresh_unavailable");
+  return error;
+}
 
 /** Runtime MCP connector. Authorization is re-checked against the bot assignment on every call. */
 /**
@@ -101,6 +127,7 @@ export class McpConnector implements ConnectorProvider {
     private readonly prisma: PrismaClient,
     private readonly secrets: EncryptedSecretStore,
     private readonly options: {
+      sandbox?: SandboxProvider;
       hostMcp?: McpHostClient;
       stdioEnabled?: boolean;
       allowedCommands?: string[];
@@ -170,6 +197,29 @@ export class McpConnector implements ConnectorProvider {
             ).length
           )
             return [];
+          if (assignment.server.transport === "host-cli") {
+            if (!(await hostIntegrationComputer(this.prisma, context))) return [];
+            const granted = new Set(
+              grantedMcpTools(
+                assignment,
+                hostIntegrationTools.map((tool) => tool.name),
+              ),
+            );
+            return hostIntegrationTools
+              .filter((tool) => granted.has(tool.name))
+              .map((tool) => ({
+                name: `mcp__${assignment.server.slug}__${tool.name}`,
+                description: tool.description,
+                inputSchema: tool.inputSchema,
+                route: {
+                  connectorId: "mcp",
+                  resourceId: assignment.serverId,
+                  resourceRevision: assignment.server.revision,
+                  toolName: tool.name,
+                  catalogGroup: assignment.server.slug,
+                },
+              }));
+          }
           const session = await this.sessionFor(assignment.server, context);
           const listed = await session.listTools({ signal: context.signal });
           reportAllowlistDrift(assignment, listed.tools, context);
@@ -186,7 +236,7 @@ export class McpConnector implements ConnectorProvider {
             .filter(
               (tool) =>
                 granted.has(tool.name) &&
-                (!assignment.server.catalogId ||
+                ((!assignment.server.catalogId && !assignment.server.manifest) ||
                   (manifest.success &&
                     manifest.data.tools.some(
                       (captured) =>
@@ -310,7 +360,8 @@ export class McpConnector implements ConnectorProvider {
     if (
       !assignment ||
       !grantedMcpTools(assignment, [call.route.toolName]).length ||
-      (assignment.server.catalogId && call.route.resourceRevision !== assignment.server.revision)
+      ((assignment.server.catalogId || assignment.server.manifest) &&
+        call.route.resourceRevision !== assignment.server.revision)
     ) {
       await this.evict(`${call.route.resourceId} ${context.spaceId} ${context.userId}`);
       yield { type: "error", message: "MCP tool is not assigned to this bot" };
@@ -323,9 +374,22 @@ export class McpConnector implements ConnectorProvider {
     let sentWrite = false;
     const sessionKey = this.sessionKey(assignment.server, context);
     try {
+      if (assignment.server.transport === "host-cli") {
+        sentWrite = call.route.toolName === "execute_command";
+        yield* executeHostIntegration(
+          this.prisma,
+          this.options.sandbox,
+          assignment.server,
+          call.route.toolName,
+          call.args,
+          context,
+        );
+        await this.recordHealth(assignment.server, true);
+        return;
+      }
       const session = await this.sessionFor(assignment.server, context);
       material = this.sessions.get(sessionKey)?.material;
-      if (assignment.server.catalogId) {
+      if (assignment.server.catalogId || assignment.server.manifest) {
         const manifest = IntegrationManifestSchema.parse(assignment.server.manifest);
         const listed = await session.listTools({ signal: context.signal });
         const live = listed.tools.find((tool) => tool.name === call.route?.toolName);
@@ -365,12 +429,21 @@ export class McpConnector implements ConnectorProvider {
                 (typeof value !== "string" || !/^(get|list|search|find|read|fetch)$/i.test(value)),
             )),
       );
-      const result = await session.callTool(call.route.toolName, call.args, {
-        signal: context.signal,
-      });
+      const toolName = call.route.toolName;
+      const execute = () =>
+        session.callTool(toolName, call.args, {
+          signal: context.signal,
+        });
+      const result =
+        assignment.server.catalogId && !sentWrite
+          ? await retryIntegrationRead(execute, context.signal)
+          : await execute();
       const secrets = material ? oauthMaterialSecrets(material) : [];
+      await this.recordHealth(assignment.server, !result.isError);
       yield { type: "result", data: redactConnectorPayload(result, secrets) };
     } catch (error) {
+      const failure = connectionError(error, assignment.server, material);
+      await this.recordHealth(assignment.server, false, failure);
       // A thrown call means the transport or auth broke; drop the session so the next call reconnects.
       const secrets = material ? oauthMaterialSecrets(material) : [];
       await this.evict(sessionKey);
@@ -378,9 +451,50 @@ export class McpConnector implements ConnectorProvider {
         type: "error",
         message: sentWrite
           ? "Delivery could not be confirmed"
-          : sanitizeConnectorError(error, secrets),
+          : sanitizeConnectorError(failure, secrets),
         ...(sentWrite ? { uncertain: true } : {}),
       };
+    }
+  }
+
+  private async recordHealth(server: McpServer, success: boolean, error?: unknown) {
+    if (!server.catalogId) return;
+    try {
+      const where = { id: server.id, revision: server.revision, enabled: true };
+      if (success) {
+        await this.prisma.mcpServer.updateMany({
+          where,
+          data: { lastUsedAt: new Date(), lastSuccessAt: new Date(), lastError: null },
+        });
+      } else {
+        const message = integrationFailure(error);
+        await this.prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${server.id}))`;
+          const current = await tx.mcpServer.findFirst({ where });
+          if (!current) return;
+          if (
+            error instanceof McpReauthorizationRequiredError &&
+            current.secretId !== server.secretId &&
+            current.connectionState === "connected"
+          )
+            return;
+          await tx.mcpServer.updateMany({
+            where,
+            data: {
+              lastError: message,
+              ...(error instanceof McpReauthorizationRequiredError
+                ? { connectionState: "needs-sign-in" }
+                : {}),
+              recentErrors: [
+                ...(Array.isArray(current.recentErrors) ? current.recentErrors : []),
+                { at: new Date().toISOString(), message },
+              ].slice(-10),
+            },
+          });
+        });
+      }
+    } catch {
+      /* Telemetry must not replay an already completed effect. */
     }
   }
 
@@ -389,11 +503,26 @@ export class McpConnector implements ConnectorProvider {
     const session = await this.sessionFor(server, context);
     const listed = await session.listTools({ signal: context.signal });
     const material = this.sessions.get(this.sessionKey(server, context))?.material;
-    return captureIntegrationManifest(
-      listed.tools,
-      session.serverVersion(),
-      material ? oauthMaterialSecrets(material) : [],
-    );
+    const secrets = material ? oauthMaterialSecrets(material) : [];
+    const manifest = captureIntegrationManifest(listed.tools, session.serverVersion(), secrets);
+    const identityCall = integrationIdentityCall(server.catalogId, listed.tools);
+    if (identityCall) {
+      try {
+        Object.assign(
+          manifest,
+          integrationIdentity(
+            await session.callTool(identityCall.name, identityCall.args, {
+              signal: context.signal,
+            }),
+            secrets,
+          ),
+        );
+      } catch {
+        /* Tool health is independent of optional profile scopes. */
+      }
+    }
+    manifest.scopes = material?.oauth?.tokens?.scope?.split(/\s+/).filter(Boolean) ?? [];
+    return manifest;
   }
 
   async resourceTools(server: McpServer, kind: IntegrationResourceKind, context: AdapterContext) {
@@ -482,7 +611,10 @@ export class McpConnector implements ConnectorProvider {
     }
     if (existing) await this.evict(sessionKey);
 
-    const promise = this.connectSession(server, context).then(({ session, material }) => {
+    const promise = retryIntegrationRead(
+      () => this.connectSession(server, context),
+      context.signal,
+    ).then(({ session, material }) => {
       this.sessions.set(sessionKey, { session, revision: server.revision, material });
       return session;
     });
@@ -599,7 +731,12 @@ export class McpConnector implements ConnectorProvider {
       // to every caller waiting on the same pending connect, and none of them can see
       // the secrets: the session never reached `sessions`. Sanitizing per caller would
       // cover only whoever looked first.
-      if (!material) throw error;
+      const failure = connectionError(error, server, material);
+      if (!material || failure instanceof McpReauthorizationRequiredError) throw failure;
+      if (transientIntegrationError(error))
+        throw Object.assign(new Error("Could not reach this integration. Try again."), {
+          code: "ECONNRESET",
+        });
       throw new Error(sanitizeConnectorError(error, oauthMaterialSecrets(material)));
     }
   }

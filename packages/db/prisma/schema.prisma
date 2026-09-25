@@ -1213,6 +1213,12 @@ model McpServer {
   oauthSessions McpOAuthSession[]
   catalogId     String?
   connectionState String          @default("not-connected")
+  consentStartedAt DateTime?
+  lastCheckedAt DateTime?
+  lastSuccessAt DateTime?
+  lastUsedAt DateTime?
+  lastError     String?
+  recentErrors  Json              @default("[]")
   manifest      Json?
   spaceAllowedTools Json          @default("[]")
   spaceToolPolicies Json          @default("{}")
@@ -1220,6 +1226,7 @@ model McpServer {
 
   @@unique([spaceId, userId, slug])
   @@index([spaceId, userId])
+  @@index([enabled, lastCheckedAt])
   @@map("mcp_servers")
 }
 

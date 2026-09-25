@@ -1,11 +1,11 @@
 import type { IntegrationDescriptor } from "@ardurbot/contracts";
-import { IntegrationDescriptorSchema } from "@ardurbot/contracts";
+import { hostIntegration, IntegrationDescriptorSchema } from "@ardurbot/contracts";
 
 const common = {
   transport: "remote-http",
   authKind: "oauth",
   requiredInputs: [],
-  verifiedAt: "2026-09-23",
+  verifiedAt: "2026-09-24",
   serverVersion: null,
   placement: "backend",
   defaultAllowedTools: [],
@@ -52,7 +52,7 @@ export const integrationCatalog: readonly IntegrationDescriptor[] = [
     vendor: "atlassian",
     available: true,
     riskClass: "collaboration",
-    endpoint: "https://mcp.atlassian.com/v2/mcp",
+    endpoint: "https://mcp.atlassian.com/v2/mcp?tools=all",
     docsUrl:
       "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/",
   },
@@ -67,10 +67,29 @@ export const integrationCatalog: readonly IntegrationDescriptor[] = [
     apiVersion: "2026-03-11",
     docsUrl: "https://developers.notion.com/guides/mcp/get-started-with-mcp",
   },
+  {
+    ...common,
+    id: "linear",
+    name: "Linear",
+    vendor: "linear",
+    available: true,
+    riskClass: "collaboration",
+    endpoint: "https://mcp.linear.app/mcp",
+    docsUrl: "https://linear.app/docs/mcp",
+  },
+  {
+    ...common,
+    id: "aws",
+    name: "AWS",
+    vendor: "aws",
+    available: true,
+    riskClass: "infrastructure",
+    endpoint: "https://aws-mcp.us-east-1.api.aws/mcp?oauth=initialize",
+    docsUrl: "https://docs.aws.amazon.com/agent-toolkit/latest/userguide/oauth-authentication.html",
+  },
   ...[
     ["jenkins", "Jenkins", "https://www.jenkins.io/doc/"],
     ["kubernetes", "Kubernetes", "https://kubernetes.io/docs/"],
-    ["aws", "AWS", "https://docs.aws.amazon.com/"],
     ["google-cloud", "Google Cloud", "https://cloud.google.com/docs"],
     ["azure", "Azure", "https://learn.microsoft.com/azure/"],
   ].map(([id, name, docsUrl]) => ({
@@ -79,10 +98,21 @@ export const integrationCatalog: readonly IntegrationDescriptor[] = [
     name,
     vendor: id,
     docsUrl,
-    available: false,
+    available: true,
+    transport: "host-cli",
+    placement: "computer-runner",
     riskClass: "infrastructure",
+    ...(id === "azure"
+      ? { remoteDocsUrl: "https://learn.microsoft.com/azure/developer/azure-mcp-server/overview" }
+      : {}),
   })),
-].map(validateIntegrationDescriptor);
+].map((entry) => {
+  const host = hostIntegration(entry.id!);
+  return validateIntegrationDescriptor({
+    ...entry,
+    ...(host ? { hostCli: { command: host.command, installUrl: host.installUrl } } : {}),
+  });
+});
 
 export function integrationById(id: string): IntegrationDescriptor | undefined {
   return integrationCatalog.find((entry) => entry.id === id);
@@ -92,6 +122,13 @@ export function connectableIntegration(id: string, host?: string): IntegrationDe
   const descriptor = integrationById(id);
   if (!descriptor?.available) throw new Error("This integration is not available yet.");
   if (!host) return validateIntegrationDescriptor(descriptor);
+  if (id === "azure")
+    return validateIntegrationDescriptor({
+      ...descriptor,
+      transport: "remote-http",
+      placement: "backend",
+      endpoint: host,
+    });
   if (id !== "gitlab") throw new Error("This integration does not support a custom host.");
   const url = new URL(host);
   if (url.pathname !== "/" || url.search || url.hash || url.username || url.password) {

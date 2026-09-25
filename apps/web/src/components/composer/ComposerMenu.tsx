@@ -15,7 +15,6 @@ import {
 } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
-import { connectIntegration } from "../../lib/connect-integration";
 import {
   refreshIntegrationCatalog,
   subscribeIntegrationCatalog,
@@ -94,24 +93,12 @@ export default function ComposerMenu(props: ComposerMenuProps) {
       active = false;
     };
   }, [props.open, integrations.connections, props.onError, t]);
-  async function selectConnector(
-    descriptor: IntegrationDescriptor,
-    connection: IntegrationConnection,
-  ) {
+  function selectConnector(descriptor: IntegrationDescriptor, connection: IntegrationConnection) {
     if (connection.state === "connected") {
       props.onMention({ kind: "mcp", id: connection.id, name: descriptor.name });
       return;
     }
-    if (descriptor.authKind === "token" || connection.state === "needs-client-registration") {
-      props.onManage(connection.id);
-      return;
-    }
-    try {
-      await connectIntegration(descriptor, connection);
-      await refreshIntegrationCatalog();
-    } catch {
-      props.onError(t`Could not connect or load integrations.`);
-    }
+    props.onManage(connection.id);
   }
   return (
     <DropdownMenuContent

@@ -85,6 +85,7 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
       ipcRenderer.invoke("desktop.localSettings.request", pathname, body),
   },
   window: {
+    setUnsavedChanges: (dirty) => ipcRenderer.invoke("desktop.window.unsaved", dirty),
     close: () => ipcRenderer.invoke("desktop.window.close"),
     minimize: () => ipcRenderer.invoke("desktop.window.minimize"),
     toggleMaximize: () => ipcRenderer.invoke("desktop.window.toggleMaximize"),
@@ -95,6 +96,18 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
     check: () => ipcRenderer.invoke("desktop.update.check"),
     download: () => ipcRenderer.invoke("desktop.update.download"),
     install: () => ipcRenderer.invoke("desktop.update.install"),
+  },
+  integrations: {
+    open: (url) => ipcRenderer.invoke("desktop.integrations.open", url),
+    focus: () => ipcRenderer.invoke("desktop.integrations.focus"),
+    onReturn: (listener) => {
+      const handler = (_event, id) => {
+        if (typeof id === "string") listener(id);
+      };
+      ipcRenderer.on("desktop.integrations.return", handler);
+      void ipcRenderer.invoke("desktop.integrations.ready").catch(() => undefined);
+      return () => ipcRenderer.off("desktop.integrations.return", handler);
+    },
   },
   oauth: {
     open: (url) => ipcRenderer.invoke("desktop.oauth.open", url),

@@ -5,6 +5,7 @@ import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
+import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
@@ -639,6 +640,7 @@ export const ActionApprovalRuleSchema = z.object({
 export type ActionApprovalRule = z.infer<typeof ActionApprovalRuleSchema>;
 
 export const ActionAutoReviewSettingsSchema = z.object({
+  configurationWarning: z.literal("jev-key-missing").optional(),
   enabled: z.boolean(),
   checkerAvailable: z.boolean(),
 });
@@ -722,6 +724,7 @@ export const McpServerConfigInput = z.discriminatedUnion("transport", [
 export type McpServerConfigInput = z.infer<typeof McpServerConfigInput>;
 
 export const McpServerSchema = z.object({
+  spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
   catalogId: z.string().nullable().optional(),
   managedBy: z.enum(["extension", "plugin"]).nullable().optional(),
   managedId: z.string().nullable().optional(),
@@ -732,7 +735,7 @@ export const McpServerSchema = z.object({
   slug: z.string(),
   name: z.string(),
   description: z.string(),
-  transport: McpTransportSchema,
+  transport: z.union([McpTransportSchema, z.literal("host-cli")]),
   endpoint: z.string().url().nullable(),
   command: z.string().nullable(),
   args: z.array(z.string()),

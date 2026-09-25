@@ -8,6 +8,7 @@ import type {
   AgentRuntime,
   ComputerRef,
 } from "@ardurbot/adapter-kit";
+import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import type {
   HostFrame,
   HostHealth,
@@ -27,6 +28,7 @@ import type { HostWire } from "./bridge-wire.js";
 import { hostLostProblem } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import { inspectHostIntegrations } from "./host-integrations.js";
 import { HostMcpServers } from "./host-mcp.js";
 import { confinedHostCwd } from "./host-policy.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
@@ -84,10 +86,11 @@ export class HostAgent {
   async health(): Promise<HostHealth> {
     const cwd = await confinedHostCwd(this.config.root, [this.config.root]);
     const start: NativeSpawn = (binary, args) => spawnNative(binary, args, cwd);
-    const [claude, codex, environment] = await Promise.all([
+    const [claude, codex, environment, integrations] = await Promise.all([
       probeClaude(start),
       probeCodex(start),
       inspectHostEnvironment(getHostEnvironment(), false),
+      inspectHostIntegrations(),
     ]);
     return {
       platform: process.platform as HostHealth["platform"],
@@ -97,6 +100,7 @@ export class HostAgent {
       claude,
       codex,
       environment,
+      integrations,
     };
   }
   async receive(frame: HostFrame) {
@@ -224,7 +228,11 @@ export class HostAgent {
         } else if (op.op === "computer.files.read") {
           const target = this.fileTarget(computer, op.path);
           const bytes = await this.sandbox.readFile(target.computer, target.path, context, {
-            maxBytes: op.maxBytes ?? HOST_FILE_BYTES,
+            maxBytes: Math.min(
+              op.maxBytes ?? HOST_FILE_BYTES,
+              op.editor ? IDE_FILE_BYTES + 1 : HOST_FILE_BYTES,
+            ),
+            preview: op.editor === true,
           });
           for (let offset = 0; offset < bytes.length; offset += 32 * 1024)
             await send(
@@ -233,7 +241,8 @@ export class HostAgent {
             );
         } else if (op.op === "computer.files.write") {
           const content = Buffer.from(op.content, "base64");
-          if (content.byteLength > HOST_FILE_BYTES) throw new Error("Host file too large.");
+          if (content.byteLength > (op.editor ? IDE_FILE_BYTES : HOST_FILE_BYTES))
+            throw new Error("Host file too large.");
           const target = this.fileTarget(computer, op.path);
           await this.sandbox.writeFile(target.computer, {
             path: target.path,

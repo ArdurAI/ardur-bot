@@ -17,8 +17,9 @@ export async function exportBotData(
   deps: ExportDeps,
   actor: Actor,
   botId: string,
+  options: { includeArchived?: boolean } = {},
 ): Promise<ExportManifest> {
-  const bot = await createRepos(deps.prisma).getBot(actor, botId);
+  const bot = await createRepos(deps.prisma).getBot(actor, botId, options);
   const context = { ...memoryContext(actor), operationId: "export", traceId: "export" };
   const [memory, routines, history, files] = await Promise.all([
     deps.memory.read({ scope: "bot", botId }, context),
@@ -76,7 +77,8 @@ export async function exportAccountData(deps: ExportDeps, actor: Actor) {
       orderBy: { id: "asc" },
     });
     const exportedBots = [];
-    for (const bot of bots) exportedBots.push(await exportBotData(deps, access, bot.id));
+    for (const bot of bots)
+      exportedBots.push(await exportBotData(deps, access, bot.id, { includeArchived: true }));
     const rows = await deps.prisma.artifact.findMany({
       where: { ...uploadedFilesWhere(actor.userId), spaceId: space.id },
       select: { ...uploadedFileSelect, storageKey: true },

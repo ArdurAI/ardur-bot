@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  autoReviewConfigurationWarning,
   autoReviewMinConfidence,
   autoReviewTimeoutMs,
   buildAutoReviewPrompt,
@@ -10,6 +11,32 @@ import {
   resolveAutoReviewChecker,
   resolveAutoReviewProviderKind,
 } from "./auto-review.js";
+
+describe("Auto Review configuration warning", () => {
+  it.each([undefined, "", "  "])("reports an explicitly selected Jev without a key: %s", (key) => {
+    const env = {
+      ARDURBOT_AUTO_REVIEW_PROVIDER: " JeV ",
+      TYPESAFE_API_KEY: key,
+      ARDURBOT_LOCAL_MODELS: "fixture-model",
+    };
+    expect(autoReviewConfigurationWarning(env)).toBe("jev-key-missing");
+    expect(resolveAutoReviewProviderKind(env)).toBe("llm");
+    expect(resolveAutoReviewChecker(env)).toEqual({ provider: "local", model: "fixture-model" });
+    expect(isAutoReviewCheckerConfigured({ env })).toBe(true);
+  });
+  it("does not warn for a configured Jev or an unselected provider", () => {
+    expect(
+      autoReviewConfigurationWarning({
+        ARDURBOT_AUTO_REVIEW_PROVIDER: "jev",
+        TYPESAFE_API_KEY: "fixture-key",
+      }),
+    ).toBeUndefined();
+    expect(autoReviewConfigurationWarning({})).toBeUndefined();
+    expect(
+      autoReviewConfigurationWarning({ ARDURBOT_AUTO_REVIEW_PROVIDER: "scripted" }),
+    ).toBeUndefined();
+  });
+});
 
 describe("resolveAutoReviewChecker", () => {
   it("prefers explicit env overrides", () => {

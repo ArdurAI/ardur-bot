@@ -796,6 +796,65 @@ it("approves a user import with its kind and requires approval before deleting a
   });
 });
 
+it.each([undefined, "profile"] as const)(
+  "preserves citations when applying a proposal with category %s",
+  async (documentKind) => {
+    const f = fixture();
+    const references = ["https://sources.example.test/original"];
+    const head = await f.service.commit(
+      {
+        scope: "bot",
+        path: "notes/cited.md",
+        content: "Use paragraphs.",
+        kind: "topic",
+        references,
+        expectedRevision: 0,
+      },
+      f.context,
+    );
+    const proposal = await f.proposal(undefined, {
+      target: { documentId: head.id },
+      expectedBaseRevision: head.revision,
+      documentKind,
+    });
+    await f.apply.approve(proposal.id, actor);
+    expect(await f.service.read(head.id, f.context)).toMatchObject({
+      content: "Use numbered steps.",
+      references,
+      kind: documentKind ?? "topic",
+    });
+    expect(
+      (await f.service.exportBundle(f.context)).documents[0]?.revisions.at(-1)?.references,
+    ).toEqual(references);
+  },
+);
+
+it("preserves current citations when undoing a category change", async () => {
+  const f = fixture();
+  const p = await f.proposal("Use paragraphs.", { documentKind: "profile" });
+  await f.apply.approve(p.id, actor);
+  const head = (await f.service.read(p.target.documentId!, f.context))!;
+  const references = ["https://sources.example.test/later"];
+  await f.service.commit(
+    {
+      id: head.id,
+      scope: "bot",
+      path: head.path,
+      content: head.content,
+      kind: head.kind,
+      references,
+      expectedRevision: head.revision,
+    },
+    f.context,
+  );
+  await f.apply.revert(p.id, actor);
+  expect(await f.service.read(head.id, f.context)).toMatchObject({
+    content: "Use paragraphs.",
+    kind: "topic",
+    references,
+  });
+});
+
 it("undoes an approved category edit without overwriting later category changes", async () => {
   const f = fixture();
   f.db.reviewExecution.findFirst.mockResolvedValue({

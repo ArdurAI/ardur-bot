@@ -277,7 +277,21 @@ export default defineConfig(({ mode }) => {
         configurePreviewServer: (server) => attachNovncProxy(server, screenProxySecret(), api),
       },
     ],
-    build: { manifest: true },
+    build: {
+      manifest: true,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: "ide-codemirror",
+                test: /(?:@codemirror|@lezer|style-mod|w3c-keyname|crelt)/,
+              },
+            ],
+          },
+        },
+      },
+    },
     server: {
       host: "127.0.0.1",
       port: webPort,

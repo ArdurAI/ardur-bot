@@ -5,6 +5,7 @@ import {
   LearningBudgetsSchema,
   LearningProposalSchema,
   MEMORY_INTENT_POLICY,
+  MEMORY_REVIEW_UNAVAILABLE_MESSAGE,
   MemoryDraftsSchema,
   MemoryIntentInputSchema,
 } from "@ardurbot/contracts";
@@ -18,7 +19,6 @@ import { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 import { learningHash } from "./learning-records.js";
 import { learningSecrets } from "./learning-redaction.js";
 import { hasBotPin, requestedBotPin } from "./pin-resolution.js";
-import { nativeHostOwner } from "./runtimes/native-host.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { skillDocumentContext } from "./skill-documents.js";
 
@@ -112,8 +112,19 @@ export async function proposeMemoryIntent(
       : hasBotPin(bot)
         ? requestedBotPin(bot)
         : await reviewerDestination(deps.prisma, scope, null);
-  if (pin.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, actor.userId)))
-    throw new Error("This runtime is unavailable for this account.");
+  // Native host dispatch requires a running Run; this bounded review owns only a ReviewExecution.
+  if (pin.runtimeKind !== "pi") throw new Error(MEMORY_REVIEW_UNAVAILABLE_MESSAGE);
+  const resolved =
+    input.intent === "edit"
+      ? await (deps.resolvePin ?? resolveReviewerPin)(deps, scope, pin, knownSecrets, bot).catch(
+          () => {
+            throw new Error(
+              "Could not prepare memory changes. Check the coordinator model and try again.",
+            );
+          },
+        )
+      : null;
+  if (resolved?.kind === "problem") throw new Error(resolved.reason);
   const reservation =
     input.intent === "import"
       ? 0
@@ -158,15 +169,8 @@ export async function proposeMemoryIntent(
   let usageSeen = input.intent === "import";
   try {
     let drafts = importedMemoryDrafts(text);
-    if (input.intent === "edit") {
+    if (input.intent === "edit" && resolved) {
       if (!deps.runtime) throw new Error("The coordinator runtime is unavailable.");
-      const resolved = await (deps.resolvePin ?? resolveReviewerPin)(
-        deps,
-        scope,
-        pin,
-        knownSecrets,
-      );
-      if (resolved.kind === "problem") throw new Error(resolved.reason);
       const controller = new AbortController();
       let output = "";
       let timer: ReturnType<typeof setTimeout> | undefined;

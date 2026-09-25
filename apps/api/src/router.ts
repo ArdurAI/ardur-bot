@@ -34,6 +34,7 @@ import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
+  autoReviewConfigurationWarning,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
   CodexConnections,
@@ -99,6 +100,7 @@ import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
   appContract,
+  IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
@@ -187,8 +189,10 @@ import { createCustomizationRoutes } from "./customization-routes.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
+import { createIdeChanges } from "./ide-changes.js";
+import { createIdeFiles } from "./ide-files.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
-import { IntegrationConnections } from "./integration-connections.js";
+import { connectionDto, IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
 import { mcpServerDto } from "./mcp-server-dto.js";
@@ -443,6 +447,7 @@ export interface RouterDeps {
   integrationSettings?: IntegrationProviderSettings;
   composio?: ComposioProvider;
   mcpOAuth?: McpOAuthBroker;
+  integrationConnections?: IntegrationConnections;
   connectors: ConnectorRegistry;
   remoteConnectors?: RemoteConnectorDependencies;
   artifacts: ArtifactStore;
@@ -516,18 +521,25 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
-  const integrations = new IntegrationConnections(
-    deps.prisma,
-    mcpOAuth,
-    deps.secrets,
-    deps.env.webOrigin,
-    deps.remoteConnectors,
-    {
-      stdioEnabled: deps.env.mcpStdioEnabled,
-      allowedCommands: deps.env.mcpStdioAllowedCommands,
-      hostMcp: deps.hostBridge,
-    },
-  );
+  const integrations =
+    deps.integrationConnections ??
+    new IntegrationConnections(
+      deps.prisma,
+      mcpOAuth,
+      deps.secrets,
+      deps.env.webOrigin,
+      deps.remoteConnectors,
+      {
+        stdioEnabled: deps.env.mcpStdioEnabled,
+        allowedCommands: deps.env.mcpStdioAllowedCommands,
+        hostMcp: deps.hostBridge,
+      },
+      async (actor) =>
+        (
+          (await sourceHostStatus(deps.prisma, actor.userId, deps.env.sandboxProvider)) ??
+          (await deps.hostBridge?.status(actor.userId))
+        )?.health?.integrations ?? [],
+    );
   const groupRepos = createGroupRepos(deps.prisma);
   const taughtSkills = createTaughtSkillsService({
     memoryDocuments: deps.memoryDocuments,
@@ -548,6 +560,8 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
 
   const systemSettings = createSystemSettings(deps.prisma);
   const commands = createCommandRoutes(deps);
+  const ide = createIdeFiles(deps);
+  const ideChanges = createIdeChanges(deps, ide);
   return os.router({
     ...createCustomizationRoutes(deps),
     account: {
@@ -600,6 +614,19 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       start: authed.channelPairing.start.handler(({ context, input }) =>
         channelPairing.start(context.actor, input),
       ),
+    },
+    ide: {
+      roots: authed.ide.roots.handler(({ context }) => ide.roots(context.actor)),
+      list: authed.ide.list.handler(({ context, input }) =>
+        ide.list(context.actor, input, context.signal),
+      ),
+      read: authed.ide.read.handler(({ context, input }) =>
+        ide.read(context.actor, input, context.signal),
+      ),
+      save: authed.ide.save.handler(({ context, input }) =>
+        ide.save(context.actor, input, context.signal),
+      ),
+      changes: authed.ide.changes.handler(({ context, input }) => ideChanges(context.actor, input)),
     },
     terminal: {
       close: authed.terminal.close.handler(
@@ -2544,7 +2571,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     memory: {
       propose: authed.memory.propose.handler(({ context, input }) =>
-        proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+        memoryRpc(() =>
+          proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+        ),
       ),
       remember: authed.memory.remember.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
@@ -3291,6 +3320,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     integrations: {
+      status: authed.integrations.status.handler(async ({ context, input }) => {
+        await integrations.expireConsent(context.actor);
+        return connectionDto(await integrations.owned(context.actor, input.connectionId));
+      }),
       resourceTools: authed.integrations.resourceTools.handler(({ context, input }) =>
         integrations.resourceTools(context.actor, input.connectionId, input.kind),
       ),
@@ -3320,9 +3353,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     mcp: {
       servers: {
-        tools: authed.mcp.servers.tools.handler(({ context, input }) =>
-          integrations.tools(context.actor, input.serverId),
+        permissions: authed.mcp.servers.permissions.handler(({ context, input }) =>
+          integrations.assign(context.actor, { ...input, connectionId: input.serverId }, "mcp"),
         ),
+        tools: authed.mcp.servers.tools.handler(async ({ context, input }) => {
+          await integrations.capture(context.actor, input.serverId);
+          return IntegrationManifestSchema.parse(
+            (await integrations.owned(context.actor, input.serverId)).manifest,
+          );
+        }),
         list: authed.mcp.servers.list.handler(async ({ context }) => {
           const rows = await deps.prisma.mcpServer.findMany({
             where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
@@ -3704,7 +3743,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       oauth: {
         begin: authed.mcp.oauth.begin.handler(async ({ context, input }) => {
           try {
-            const expectedRedirect = new URL("/mcp/oauth/callback", deps.env.webOrigin).toString();
+            const expectedRedirect = new URL("/api/oauth/done", deps.env.webOrigin).toString();
             if (new URL(input.redirectUri).toString() !== expectedRedirect) {
               throw new Error("MCP OAuth redirect URI is not allowed");
             }
@@ -5413,7 +5452,11 @@ async function loadAutoReviewSettings(deps: RouterDeps, actor: Actor) {
   ]);
   const enabled = preference?.enabled ?? deploymentAutoReviewDefault(process.env);
   const checkerAvailable = environmentAvailable || Boolean(credential);
-  return { enabled, checkerAvailable };
+  return {
+    enabled,
+    checkerAvailable,
+    configurationWarning: autoReviewConfigurationWarning(process.env),
+  };
 }
 
 async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {

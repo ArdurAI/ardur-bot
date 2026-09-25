@@ -11,8 +11,8 @@ import { Button, Checkbox, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../../../lib/rpc";
+import { ToolPermissions as ToolPicker } from "../manage/ToolPermissions";
 import { ResourcePicker } from "./ResourcePicker";
-import { ToolPicker } from "./ToolPicker";
 
 export function IntegrationManage({
   descriptor,
@@ -53,11 +53,22 @@ export function IntegrationManage({
     setError(false);
     setLoading(true);
     try {
-      const [bots, grants] = await Promise.all([
+      const [bots, grants, computers] = await Promise.all([
         rpc.bots.list(),
         rpc.integrations.grants({ connectionId: connection.id }),
+        connection.transport === "host-cli" ? rpc.computer.list() : Promise.resolve([]),
       ]);
-      setBots(bots.filter((bot) => !bot.archivedAt));
+      const localBots = new Set(
+        computers
+          .filter((computer) => computer.status.kind === "desktop")
+          .map((computer) => computer.botId),
+      );
+      setBots(
+        bots.filter(
+          (bot) =>
+            !bot.archivedAt && (connection.transport !== "host-cli" || localBots.has(bot.id)),
+        ),
+      );
       setGrants(grants);
       setSpaceToolPolicies(connection.spaceToolPolicies);
       setBotIds(grants.map((grant) => grant.botId));
@@ -140,7 +151,7 @@ export function IntegrationManage({
         <dt className="text-muted-foreground">{t`Account`}</dt>
         <dd>{connection.manifest?.account ?? t`Account details are unavailable.`}</dd>
         <dt className="text-muted-foreground">{t`Runs on`}</dt>
-        <dd>{descriptor.placement === "backend" ? t`Server` : t`Computer`}</dd>
+        <dd>{connection.transport === "host-cli" ? t`This computer` : t`Server`}</dd>
       </dl>
       <a
         href={descriptor.docsUrl}
