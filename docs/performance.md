@@ -224,7 +224,8 @@ tasks and hardware-class labels.
 
 Commit object bytes are retained for 180 days. An object stays while any record inside that
 window, commit or release, references its digest. A release record also keeps its object after
-the window. Pruning removes only bytes that fail both of those checks, writes an expiry record
+the window. The index job runs `prune` after it appends the new lines and before it uploads the
+chain. Pruning removes only bytes that fail both of those checks, writes an expiry record
 first, and leaves the original line in place.
 A pending record is never deleted to hide an earlier measurement. A later rejection is a new line;
 the measured line remains.
@@ -289,8 +290,14 @@ satisfies the guardrail:
 | memory | T2 startup strata report |
 | energy | T2 startup strata report |
 
-Startup sample floors are read from the T2 report. A set that contains only that report records
-`mandatory-evidence-unknown` for recovery, with the detail `missing T1 durable crash report`.
+Startup sample floors are read from the T2 report. The statistical verdict compares
+`parent.json`, `candidate.json`, and `fixed-release.json` using only the T2 requirements: startup
+floors, latency, bundles, memory, and energy binding. Crash boundaries are not part of that
+comparison. They are required of `candidate-crash.json` alone. Recovery does not compare a parent
+or fixed-release crash report, because the guardrail checks that the candidate completed each
+pinned boundary. A set that contains only the T2 report records `mandatory-evidence-unknown` for
+recovery, with the detail `missing T1 durable crash report: candidate-crash.json`.
+Live cache-hit ratios stay on an explicit T3 run. They are not required of the T1 crash report.
 Release notes render each guardrail summary from the report that satisfied that guardrail and
 name that report. Recovery and task lines come from the T1 crash report, not from the T2 startup
 report. The publication directory receives every report in the set, the gate hashes those bytes

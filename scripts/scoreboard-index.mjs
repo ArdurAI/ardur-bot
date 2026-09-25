@@ -198,6 +198,10 @@ function loadScoreboard() {
     parsePerformanceEvidenceEnvelope: report.parsePerformanceEvidenceEnvelope,
     assertRequiredEvidence: report.assertRequiredEvidence,
     comparePerformanceEvidence: statistics.comparePerformanceEvidence,
+    createBudgetPolicy: statistics.createBudgetPolicy,
+    freezeBudgetPolicy: statistics.freezeBudgetPolicy,
+    metricBudget: statistics.metricBudget,
+    METRIC_DEFINITIONS: manifest.METRIC_DEFINITIONS,
     packagedCoverage: plan.packagedCoverage,
     RELEASE_TARGETS: plan.RELEASE_TARGETS,
     STARTUP_STRATA: plan.STARTUP_STRATA,
@@ -1285,6 +1289,63 @@ function candidateEvidenceSet(primary, extras) {
   return reports;
 }
 
+const LIVE_ONLY_METRIC_IDS = new Set(["m05.cache-token-hit", "m05.cache-request-hit"]);
+
+function selectionForTier(selection, tier) {
+  if (tier === "T3") return selection;
+  return {
+    ...selection,
+    metricIds: selection.metricIds.filter((id) => !LIVE_ONLY_METRIC_IDS.has(id)),
+  };
+}
+
+/** T2 comparison drops crash boundaries and metrics with no reviewed declaration. */
+function deriveT2Policy(scoreboard, policy, releasePolicy) {
+  const t2Ids = [];
+  for (const guardrail of releasePolicy.policy.guardrails) {
+    if (GUARDRAIL_REPORTS[guardrail.id]?.tier !== "T2") continue;
+    for (const id of guardrail.metricIds) if (!t2Ids.includes(id)) t2Ids.push(id);
+  }
+  const declared = [];
+  const undeclaredIds = [];
+  for (const id of t2Ids) {
+    if (!policy.required.metricIds.includes(id)) continue;
+    const definition = scoreboard.METRIC_DEFINITIONS.find((item) => item.id === id);
+    if (!definition) continue;
+    if (scoreboard.metricBudget(definition, policy).kind === "undeclared") undeclaredIds.push(id);
+    else declared.push(id);
+  }
+  const proposed = scoreboard.createBudgetPolicy(
+    {
+      metricIds: declared,
+      taskIds: [],
+      experimentIds: [],
+      crashBoundaryIds: [],
+      usage: false,
+    },
+    {
+      mode: policy.mode,
+      environmentHash: policy.environmentHash,
+      scenario: policy.scenario,
+      seed: policy.analysis.seed,
+      resamples: policy.analysis.resamples,
+      nominalQueue: policy.declarations?.nominalQueue,
+      retainedSessionGrowthBytes: policy.declarations?.retainedSessionGrowthBytes,
+      toolTerminationDeadlineMs: policy.declarations?.toolTerminationDeadlineMs,
+    },
+  );
+  if (!policy.calibration) return { policy: proposed, metricIds: declared, undeclaredIds };
+  return {
+    policy: scoreboard.freezeBudgetPolicy(
+      proposed,
+      policy.calibration.reports,
+      policy.calibration.frozenAt,
+    ),
+    metricIds: declared,
+    undeclaredIds,
+  };
+}
+
 const SUMMARY_FROM_GUARDRAIL = {
   taskSummary: "deterministic-tasks",
   safetySummary: "effect-safety",
@@ -1323,6 +1384,9 @@ export async function evaluatePublicationGate(input) {
   if (!releasePolicy) push("release-policy-unpinned", "release-policy");
   let verdict = null;
   let candidateReport = null;
+  let tiered = false;
+  let tierMetricIds = null;
+  const undeclaredIds = [];
   if (!input.parent || !input.candidate || !input.fixedRelease || !input.policy) {
     push("reports-missing", "reports");
   } else {
@@ -1331,19 +1395,41 @@ export async function evaluatePublicationGate(input) {
       !suppliedPolicyMatches(releasePolicy.policy, input.policy, scoreboard.canonicalSerialize)
     )
       push("release-policy-mismatch", "release-policy");
-    verdict = scoreboard.comparePerformanceEvidence({
-      policy: input.policy,
-      parent: input.parent,
-      candidate: input.candidate,
-      fixedRelease: input.fixedRelease,
-    });
-    for (const reason of verdict.reasons)
+    const crashesRequired = (input.policy.policy?.required?.crashBoundaryIds?.length ?? 0) > 0;
+    const compareTiers =
+      input.candidate.report?.scenario?.tier === "T2" && crashesRequired && releasePolicy;
+    if (compareTiers) {
+      try {
+        const derived = deriveT2Policy(scoreboard, input.policy.policy, releasePolicy);
+        tiered = true;
+        tierMetricIds = derived.metricIds;
+        undeclaredIds.push(...derived.undeclaredIds);
+        verdict = scoreboard.comparePerformanceEvidence({
+          policy: derived.policy,
+          parent: input.parent,
+          candidate: input.candidate,
+          fixedRelease: input.fixedRelease,
+        });
+      } catch (error) {
+        push("invalid-policy", "policy", error instanceof Error ? error.message : "invalid-policy");
+      }
+    } else
+      verdict = scoreboard.comparePerformanceEvidence({
+        policy: input.policy,
+        parent: input.parent,
+        candidate: input.candidate,
+        fixedRelease: input.fixedRelease,
+      });
+    for (const reason of verdict?.reasons ?? [])
       push(
         reason.code,
         reason.scope,
         reason.code === "undeclared-budget" ? UNDECLARED_PUBLICATION_NOTE : reason.detail,
       );
-    candidateReport = verdict.evidence?.candidate.report ?? null;
+    candidateReport = verdict?.evidence?.candidate.report ?? null;
+    if (tiered)
+      for (const id of undeclaredIds)
+        push("undeclared-budget", `candidate:${id}`, UNDECLARED_PUBLICATION_NOTE);
   }
   const candidateSet = candidateEvidenceSet(input.candidateEvidence, input.candidateReports);
   const satisfiedBy = new Map();
@@ -1354,14 +1440,18 @@ export async function evaluatePublicationGate(input) {
         ? candidateSet.filter((item) => item.report.scenario?.tier === requirement.tier)
         : candidateSet;
       if (requirement && !pool.length) {
-        push("mandatory-evidence-unknown", id, `missing ${requirement.label}`);
+        const reportName = requirement.tier === "T1" ? "candidate-crash.json" : "candidate.json";
+        push("mandatory-evidence-unknown", id, `missing ${requirement.label}: ${reportName}`);
         continue;
       }
       let satisfied = false;
       let detail;
       for (const item of pool) {
         try {
-          scoreboard.assertRequiredEvidence(item.report, selection);
+          scoreboard.assertRequiredEvidence(
+            item.report,
+            selectionForTier(selection, item.report.scenario?.tier),
+          );
           satisfied = true;
           satisfiedBy.set(id, item);
           break;
@@ -1425,10 +1515,14 @@ export async function evaluatePublicationGate(input) {
     )
       push("release-commit-mismatch", "reports");
     if (candidateReport.scenario.tier === "T0") push("tier-not-releasable", "scenario");
-    const floor = scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs;
-    const requiredIds = Array.isArray(input.policy?.policy?.required?.metricIds)
-      ? input.policy.policy.required.metricIds
-      : [];
+    const floor = tiered
+      ? scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseStartupObservationsPerStratum
+      : scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs;
+    const requiredIds = tiered
+      ? tierMetricIds
+      : Array.isArray(input.policy?.policy?.required?.metricIds)
+        ? input.policy.policy.required.metricIds
+        : [];
     const counts = requiredIds.map(
       (id) => candidateReport.metrics.find((metric) => metric.id === id)?.observations.length ?? 0,
     );
@@ -1492,8 +1586,11 @@ export async function evaluatePublicationGate(input) {
     if (!unique.some((item) => item.code === reason.code && item.scope === reason.scope))
       unique.push(reason);
   }
-  const releaseEligible = verdict?.releaseEligible === true;
-  const allowPublication = releaseEligible && unique.length === 0;
+  const blockers = unique.filter((reason) => !(tiered && reason.code === "undeclared-budget"));
+  const releaseEligible = tiered
+    ? verdict?.releaseEligible === true && blockers.length === 0
+    : verdict?.releaseEligible === true;
+  const allowPublication = tiered ? releaseEligible : releaseEligible && unique.length === 0;
   const exitCode = allowPublication
     ? 0
     : unique.some((reason) => FAILURE_EXIT_CODES.has(reason.code)) || verdict?.exitCode === 1
@@ -2502,6 +2599,18 @@ export function assertWorkflowContracts(performanceText, releaseText) {
     "node scripts/scoreboard-index.mjs prior-index",
     "index restores via prior-index",
   );
+  requireText(
+    index,
+    "node scripts/scoreboard-index.mjs prune",
+    "index prunes expired commit objects",
+  );
+  if (
+    index.indexOf("node scripts/scoreboard-index.mjs prune") <
+    index.indexOf("node scripts/scoreboard-index.mjs index-push")
+  )
+    errors.push("prune runs before append");
+  if (index.indexOf("node scripts/scoreboard-index.mjs prune") > index.indexOf("upload-artifact"))
+    errors.push("prune runs after upload");
   if (index.includes("workflow_runs[0]")) errors.push("index trusts the newest run");
   if (index.includes("github.head_ref")) errors.push("index restores a pull request branch");
   requireText(
@@ -2720,6 +2829,15 @@ async function main(argv) {
     process.stdout.write(`present=${present}\n`);
     return;
   }
+  if (command === "prune") {
+    const now = args.now ? new Date(args.now) : new Date();
+    const result = await pruneCommitObjects(
+      args.root || env("SCOREBOARD_ROOT") || SCOREBOARD_INDEX_RELATIVE_PATH,
+      now,
+    );
+    process.stdout.write(`${JSON.stringify({ removed: result.removed })}\n`);
+    return;
+  }
   if (command === "check-workflows") {
     assertWorkflowContracts(
       await readFile(".github/workflows/performance.yml", "utf8"),
@@ -2729,7 +2847,7 @@ async function main(argv) {
   }
   fail(
     "invalid-argument",
-    "Expected baseline-decision, restore-index, prior-index, index-push, stage-reports, release-gate, report-artifact, verify-publication, list-upload, or check-workflows.",
+    "Expected baseline-decision, restore-index, prior-index, index-push, prune, stage-reports, release-gate, report-artifact, verify-publication, list-upload, or check-workflows.",
   );
 }
 

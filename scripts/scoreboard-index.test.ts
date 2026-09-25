@@ -121,6 +121,7 @@ jobs:
           SCOREBOARD_HEAD: github.event.pull_request.head.sha
           SCOREBOARD_PENDING: needs.budgets.outputs.pending_reason
         run: node scripts/scoreboard-index.mjs index-push
+      - run: node scripts/scoreboard-index.mjs prune
       - uses: actions/upload-artifact@v4
         with:
           name: \${{ steps.prior.outputs.artifact_name }}
@@ -506,6 +507,201 @@ async function writeReleaseCase(count: number, withEnergy: boolean) {
   return { root, artifactRoot, reportsRoot };
 }
 
+const TIER_GUARDRAILS = {
+  T1: new Set([
+    "effect-safety",
+    "deterministic-tasks",
+    "recovery",
+    "prompt-tokens",
+    "cache-compaction",
+  ]),
+  T2: new Set(["latency", "absolute-targets", "bundle", "memory", "energy"]),
+} as const;
+
+function pinnedReleasePolicy() {
+  const bytes = readFileSync(new URL("../docs/performance/release-policy.json", import.meta.url));
+  return {
+    bytes,
+    policy: JSON.parse(bytes.toString("utf8")) as {
+      budget: {
+        required: {
+          metricIds: string[];
+          taskIds: string[];
+          experimentIds: string[];
+          crashBoundaryIds: string[];
+          usage: boolean;
+        };
+        declarations: {
+          nominalQueue: boolean;
+          retainedSessionGrowthBytes: number | null;
+          toolTerminationDeadlineMs: number | null;
+        };
+        seed: number;
+        resamples: number;
+      };
+      guardrails: { id: string; metricIds: string[] }[];
+    },
+  };
+}
+
+function guardrailMetricIds(
+  policy: ReturnType<typeof pinnedReleasePolicy>["policy"],
+  tier: "T1" | "T2",
+) {
+  return [
+    ...new Set(
+      policy.guardrails
+        .filter((guardrail) => TIER_GUARDRAILS[tier].has(guardrail.id))
+        .flatMap((guardrail) => guardrail.metricIds),
+    ),
+  ];
+}
+
+function metricFixtureValue(id: string) {
+  if (id.startsWith("m13.") || id === "m11.lazy-boundary-violations") return 0;
+  return 1;
+}
+
+function fillMetric(report: ReturnType<typeof syntheticReport>, id: string, count: number) {
+  const metric = report.metrics.find((item) => item.id === id);
+  if (!metric) throw new Error(`missing metric ${id}`);
+  metric.missingReason = null;
+  metric.applicability = "applicable";
+  metric.coverage = { expected: count, observed: count };
+  metric.observations = Array.from({ length: count }, (_, index) => ({
+    id: `obs-${id.replaceAll(".", "-")}-${index}`,
+    sessionId: `session-${index}`,
+    pairId: `pair-${index}`,
+    traceId: "trace-01",
+    outcome: "success" as const,
+    value: metricFixtureValue(id),
+    missingReason: null,
+    provenance: { kind: "measured" as const, sourceHash: hash("raw") },
+  }));
+}
+
+function usageRequest() {
+  const category = (value: number) => ({
+    value,
+    missingReason: null,
+    provenance: { kind: "counted" as const, sourceHash: hash("raw") },
+  });
+  return {
+    requestId: "request-01",
+    turnId: "turn-01",
+    attemptId: "attempt-01",
+    parentRequestId: null,
+    purpose: "main" as const,
+    routeId: "route-01",
+    traceId: "trace-01",
+    outcome: "success" as const,
+    inputSemantics: "total-with-cache-subsets" as const,
+    reasoningSemantics: "subset-of-output" as const,
+    requestHash: hash("request"),
+    usageRequestHash: hash("request"),
+    counter: { mode: "request-delta" as const, epochId: "epoch-01", sequence: 0 },
+    categories: {
+      logicalInput: category(100),
+      uncachedInput: category(60),
+      cacheReadInput: category(30),
+      cacheWriteInput: category(10),
+      output: category(50),
+      reasoning: category(20),
+    },
+  };
+}
+
+/** Real pinned policy, T2 parent/candidate/fixed-release, and a T1 candidate-crash.json. */
+async function documentedPinnedRelease() {
+  const staged = await writeReleaseCase(
+    SCOREBOARD_MANIFEST.samplePlan.releaseStartupObservationsPerStratum,
+    true,
+  );
+  const pinned = pinnedReleasePolicy();
+  await writeFile(path.join(staged.root, "release-policy.json"), pinned.bytes);
+  const startupPairs = SCOREBOARD_MANIFEST.samplePlan.releaseStartupObservationsPerStratum;
+  const t2Ids = guardrailMetricIds(pinned.policy, "T2");
+  const names = ["parent.json", "candidate.json", "fixed-release.json"] as const;
+  const written = new Map<string, ReturnType<typeof syntheticReport>>();
+  for (const name of names) {
+    const envelope = JSON.parse(await readFile(path.join(staged.reportsRoot, name), "utf8")) as {
+      report: ReturnType<typeof syntheticReport>;
+    };
+    const report = envelope.report;
+    report.scenario.tier = "T2";
+    for (const id of t2Ids) fillMetric(report, id, startupPairs);
+    written.set(name, report);
+    const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(report));
+    await writeFile(path.join(staged.reportsRoot, name), bytes);
+    if (name === "candidate.json")
+      await writeFile(path.join(staged.artifactRoot, "scoreboard-candidate.json"), bytes);
+  }
+  const parent = written.get("parent.json")!;
+  const calibrationA = structuredClone(parent);
+  calibrationA.id = "calibration-a";
+  calibrationA.createdAt = "2026-01-01T00:00:00.000Z";
+  const calibrationB = structuredClone(calibrationA);
+  calibrationB.id = "calibration-b";
+  calibrationB.createdAt = "2026-01-02T00:00:00.000Z";
+  const evidencePolicy = createBudgetPolicy(pinned.policy.budget.required, {
+    mode: "release",
+    environmentHash: parent.environmentHash,
+    scenario: parent.scenario,
+    seed: pinned.policy.budget.seed,
+    resamples: pinned.policy.budget.resamples,
+    ...pinned.policy.budget.declarations,
+  });
+  evidencePolicy.policy.calibration = {
+    frozenAt: "2026-01-03T00:00:00.000Z",
+    reports: [
+      createPerformanceEvidenceEnvelope(calibrationA),
+      createPerformanceEvidenceEnvelope(calibrationB),
+    ],
+  };
+  evidencePolicy.sha256 = contentDigest(evidencePolicy.policy);
+  await writeFile(path.join(staged.reportsRoot, "policy.json"), JSON.stringify(evidencePolicy));
+  const crash = structuredClone(written.get("candidate.json")!);
+  crash.id = "candidate-crash-report";
+  crash.scenario.tier = "T1";
+  for (const id of guardrailMetricIds(pinned.policy, "T1")) {
+    if (id === "m05.cache-token-hit" || id === "m05.cache-request-hit") continue;
+    fillMetric(crash, id, 1);
+  }
+  for (const crashRow of crash.crashes) {
+    const expected = CRASH_BOUNDARIES.find((boundary) => boundary.id === crashRow.id)!.expected;
+    crashRow.status = "complete";
+    crashRow.missingReason = null;
+    crashRow.recovery = expected;
+    crashRow.safetyPassed = true;
+    crashRow.taskCompleted = expected !== "explicit-uncertainty";
+    crashRow.traceIds = ["trace-01"];
+  }
+  for (const task of crash.tasks) {
+    task.status = "complete";
+    task.missingReason = null;
+    task.fixtureHash = hash("fixture");
+    task.graderHash = hash("grader");
+    task.trials = [
+      {
+        id: `trial-${task.id}`,
+        sessionId: "session-1",
+        pairId: `pair-${task.id}`,
+        traceId: "trace-01",
+        outcome: "success",
+        passed: true,
+        criticalPassed: true,
+        withinDeadline: true,
+      },
+    ];
+  }
+  crash.usage = [usageRequest()];
+  crash.usageCoverage = { expected: 1, observed: 1 };
+  const crashBytes = JSON.stringify(createPerformanceEvidenceEnvelope(crash));
+  await writeFile(path.join(staged.reportsRoot, "candidate-crash.json"), crashBytes);
+  await writeFile(path.join(staged.artifactRoot, "scoreboard-candidate-crash.json"), crashBytes);
+  return staged;
+}
+
 async function gate(
   caseRoot: Awaited<ReturnType<typeof writeReleaseCase>>,
   indexName = "index",
@@ -852,6 +1048,61 @@ describe("scoreboard index", () => {
       await expect(readFile(path.join(dropped, "objects", first.objectDigest!))).rejects.toThrow();
     } finally {
       await rm(dropped, { recursive: true, force: true });
+    }
+  });
+
+  it("prunes expired commit objects from the prune command and keeps an in-window run", async () => {
+    const indexJob =
+      performanceYaml.split("\n  index:\n")[1]?.split("\n  release-gate:\n")[0] ?? "";
+    const appendAt = indexJob.indexOf("node scripts/scoreboard-index.mjs index-push");
+    const pruneAt = indexJob.indexOf("node scripts/scoreboard-index.mjs prune");
+    const uploadAt = indexJob.lastIndexOf("actions/upload-artifact");
+    expect(appendAt).toBeGreaterThan(-1);
+    expect(pruneAt).toBeGreaterThan(appendAt);
+    expect(uploadAt).toBeGreaterThan(pruneAt);
+
+    const pruneAtInstant = async (indexedAt: string, now: string) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-prune-command-"));
+      const record = await appendIndexRecord(root, {
+        ...pending(A),
+        status: "measured",
+        indexedAt,
+        envelope: syntheticReport(
+          1,
+          indexedAt.startsWith("2020") ? "expired-report" : "current-report",
+        ),
+      });
+      const ran = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "prune", "--root", root, "--now", now],
+        { cwd: repo, encoding: "utf8" },
+      );
+      return { root, record, ran };
+    };
+    const expired = await pruneAtInstant("2020-01-01T00:00:00.000Z", "2026-09-25T00:00:00.000Z");
+    const current = await pruneAtInstant("2026-09-01T00:00:00.000Z", "2026-09-25T00:00:00.000Z");
+    try {
+      expect(expired.ran.status).toBe(0);
+      const expiredRecords = await readIndex(expired.root);
+      expect(
+        expiredRecords.some(
+          (record) =>
+            record.status === "expired" && record.expiresRecord === expired.record.recordHash,
+        ),
+      ).toBe(true);
+      await expect(
+        readFile(path.join(expired.root, "objects", expired.record.objectDigest!)),
+      ).rejects.toThrow();
+      expect(current.ran.status).toBe(0);
+      expect((await readIndex(current.root)).some((record) => record.status === "expired")).toBe(
+        false,
+      );
+      expect(
+        await readFile(path.join(current.root, "objects", current.record.objectDigest!)),
+      ).toBeInstanceOf(Buffer);
+    } finally {
+      await rm(expired.root, { recursive: true, force: true });
+      await rm(current.root, { recursive: true, force: true });
     }
   });
 
@@ -1865,7 +2116,7 @@ describe("release publication gate", () => {
         expect.objectContaining({
           code: "mandatory-evidence-unknown",
           scope: "recovery",
-          detail: "missing T1 durable crash report",
+          detail: "missing T1 durable crash report: candidate-crash.json",
         }),
       ]);
     } finally {
@@ -1873,6 +2124,70 @@ describe("release publication gate", () => {
       await rm(startupOnly.root, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("publishes a documented T2 trio beside the T1 crash report under the pinned policy", async () => {
+    const pinned = pinnedReleasePolicy();
+    expect(createHash("sha256").update(pinned.bytes).digest("hex")).toBe(RELEASE_POLICY_SHA256);
+    const probe = await documentedPinnedRelease();
+    try {
+      const result = await gate(probe, "index-pinned-tiers");
+      expect(result.code).toBe(0);
+      expect(result.gate.allowPublication).toBe(true);
+      expect(result.gate.releaseEligible).toBe(true);
+      expect(codes(result.gate)).not.toContain("invalid-policy");
+      expect(codes(result.gate)).not.toContain("incomplete-evidence");
+      expect(codes(result.gate)).not.toContain("mandatory-evidence-unknown");
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("names the missing T1 crash report and refuses a short T2 startup floor", async () => {
+    const missing = await documentedPinnedRelease();
+    const shortStartup = await documentedPinnedRelease();
+    try {
+      await rm(path.join(missing.reportsRoot, "candidate-crash.json"));
+      await rm(path.join(missing.artifactRoot, "scoreboard-candidate-crash.json"));
+      const withoutCrash = await gate(missing, "index-pinned-no-crash");
+      expect(withoutCrash.gate.allowPublication).toBe(false);
+      expect(withoutCrash.gate.reasons).toContainEqual(
+        expect.objectContaining({
+          code: "mandatory-evidence-unknown",
+          scope: "recovery",
+          detail: expect.stringContaining("candidate-crash.json"),
+        }),
+      );
+
+      const candidatePath = path.join(shortStartup.reportsRoot, "candidate.json");
+      const envelope = JSON.parse(await readFile(candidatePath, "utf8")) as {
+        report: ReturnType<typeof syntheticReport>;
+      };
+      for (const metric of envelope.report.metrics) {
+        if (!metric.id.startsWith("m09.")) continue;
+        metric.observations = metric.observations.filter((observation) => {
+          const pairId = observation.pairId ?? "";
+          if (!pairId.startsWith("process-cold-os-warm-")) return true;
+          return Number(pairId.slice("process-cold-os-warm-".length)) < 10;
+        });
+        metric.coverage = {
+          expected: metric.observations.length,
+          observed: metric.observations.length,
+        };
+      }
+      const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report));
+      await writeFile(candidatePath, bytes);
+      await writeFile(path.join(shortStartup.artifactRoot, "scoreboard-candidate.json"), bytes);
+      const refused = await gate(shortStartup, "index-pinned-short-startup");
+      expect(refused.code).not.toBe(0);
+      expect(refused.gate.allowPublication).toBe(false);
+      expect(codes(refused.gate)).toContain("insufficient-startup-samples");
+      expect(codes(refused.gate)).not.toContain("incomplete-evidence");
+      expect(codes(refused.gate)).not.toContain("mandatory-evidence-unknown");
+    } finally {
+      await rm(missing.root, { recursive: true, force: true });
+      await rm(shortStartup.root, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   it("renders recovery and tasks from the T1 crash report and publishes both reports", async () => {
     const paired = await stagePassing();

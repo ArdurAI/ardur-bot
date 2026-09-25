@@ -226,6 +226,10 @@ jobs:
           SCOREBOARD_FIXED: ${{ inputs.fixed_release_sha }}
           SCOREBOARD_ROOT: .context/performance/scoreboard-index
         run: node scripts/scoreboard-index.mjs index-push
+      - name: Drop commit objects outside the retention window
+        env:
+          SCOREBOARD_ROOT: .context/performance/scoreboard-index
+        run: node scripts/scoreboard-index.mjs prune
       - name: Upload the index transport copy
         if: always() && steps.prior.outputs.artifact_name != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
