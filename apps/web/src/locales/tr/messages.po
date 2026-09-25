@@ -181,13 +181,13 @@ msgstr ""
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{records} usage records"
+msgstr "{records} kullanım kaydı"
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} kaldı · bot yalnızca izliyor"
-
-#: src/pages/dashboard/UsagePanel.tsx
-msgid "{requests} requests"
-msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."

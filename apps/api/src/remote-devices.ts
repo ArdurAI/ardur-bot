@@ -191,6 +191,7 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "team/board",
   "runs/list",
   "dashboard/connections",
+  "dashboard/now",
   "usage/summary",
   "board/workspaces",
   "board/snapshot",
