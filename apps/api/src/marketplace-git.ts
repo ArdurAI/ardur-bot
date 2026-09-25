@@ -2,8 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { GitTransport, validateGitRemote } from "@ardurbot/adapters";
-import type { BundleFile } from "../../desktop/src/extensions/files.js";
-import { bundlePath, validateBundleFiles } from "../../desktop/src/extensions/files.js";
+import type { BundleFile } from "@ardurbot/contracts/bundles/files";
+import { bundlePath, validateBundleFiles } from "@ardurbot/contracts/bundles/files";
 
 /** Uses the memory transport's isolated Git configuration, with no hooks or checkout filters. */
 export async function fetchMarketplaceGit(

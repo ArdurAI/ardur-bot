@@ -1,3 +1,4 @@
+import { listAgentSkillRecords } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { buildSkillMd } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
@@ -21,6 +22,7 @@ function savedSkill(name: string, source = "user") {
     description: "Saved review recipe",
     content: buildSkillMd({ name, description: "Saved review recipe", body: "Saved steps" }),
     source,
+    componentKind: "skill",
     enabled: true,
     createdAt: new Date(0),
     updatedAt: new Date(0),
@@ -28,9 +30,19 @@ function savedSkill(name: string, source = "user") {
 }
 
 function setup(rows: ReturnType<typeof savedSkill>[] = []) {
-  type Where = { id?: string; spaceId: string; userId: string; source?: string };
+  type Where = {
+    id?: string;
+    spaceId: string;
+    userId: string;
+    source?: string;
+    componentKind?: { not: string };
+  };
   const matches = (row: ReturnType<typeof savedSkill>, where: Where) =>
-    Object.entries(where).every(([key, value]) => row[key as keyof typeof row] === value);
+    Object.entries(where).every(([key, value]) =>
+      key === "componentKind" && typeof value === "object"
+        ? row.componentKind !== value.not
+        : row[key as keyof typeof row] === value,
+    );
   const agentSkill = {
     findMany: vi.fn(async ({ where }: { where: Where }) =>
       rows.filter((row) => matches(row, where)),
@@ -51,16 +63,43 @@ function setup(rows: ReturnType<typeof savedSkill>[] = []) {
       return { count: 1 };
     }),
   };
+  const documents = memoryServiceFixture(actor).service;
   return {
     agentSkill,
-    service: createAgentSkillsService(
-      { agentSkill } as unknown as PrismaClient,
-      memoryServiceFixture(actor).service,
-    ),
+    documents,
+    service: createAgentSkillsService({ agentSkill } as unknown as PrismaClient, documents),
   };
 }
 
 describe("built-in skill precedence in the API", () => {
+  it("hides automatic plugin instructions from selectable catalogs while retaining runtime instructions", async () => {
+    const rows = [
+      {
+        ...savedSkill("fixture:instructions", "plugin"),
+        id: "instructions",
+        componentKind: "instructions",
+      },
+      { ...savedSkill("fixture:review", "plugin"), id: "command", componentKind: "command" },
+      { ...savedSkill("fixture:skill", "plugin"), id: "skill" },
+    ];
+    const { service, agentSkill, documents } = setup(rows);
+    for (const catalog of [await service.list(actor), await service.listWithContent(actor)]) {
+      expect(catalog.map((row) => row.id)).not.toContain("instructions");
+      expect(catalog.map((row) => row.id)).toEqual(expect.arrayContaining(["command", "skill"]));
+    }
+    const runtime = await listAgentSkillRecords(
+      { agentSkill } as unknown as PrismaClient,
+      actor,
+      documents,
+    );
+    expect(runtime).toContainEqual(
+      expect.objectContaining({
+        id: "instructions",
+        componentKind: "instructions",
+        content: expect.stringContaining("Saved steps"),
+      }),
+    );
+  });
   it.each(["interrogate", " Interrogate "])(
     "keeps %j listed, readable and mutable",
     async (name) => {

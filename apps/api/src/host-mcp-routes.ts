@@ -16,10 +16,32 @@ export function mountHostMcpRoutes(
     const rows = await deps.prisma.mcpServer.findMany({
       where: { userId: registration.userId, placement: "host", transport: "stdio", enabled: true },
       include: { secret: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: 201,
     });
-    if (rows.length > 200) return c.json({ error: "Too many local servers." }, 409);
-    const servers = rows.map((row) => {
+    const accepted = rows.slice(0, 200);
+    if (rows.length > 200)
+      await deps.prisma.mcpServer.updateMany({
+        where: {
+          userId: registration.userId,
+          placement: "host",
+          transport: "stdio",
+          enabled: true,
+          id: { notIn: accepted.map((row) => row.id) },
+        },
+        data: {
+          enabled: false,
+          connectionState: "discovery-failed",
+          diagnostics: {
+            status: "error",
+            lastError:
+              "This computer supports up to 200 local servers. Disable another server, then enable this one.",
+            lines: [],
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      });
+    const servers = accepted.map((row) => {
       if (!row.secret || row.secret.userId !== row.userId || row.secret.spaceId !== row.spaceId)
         throw new Error("Local server configuration is unavailable.");
       const material = JSON.parse(deps.secrets.load(row.secret.ciphertext, row.secret.id));

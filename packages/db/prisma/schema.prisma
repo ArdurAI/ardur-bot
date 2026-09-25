@@ -48,6 +48,8 @@ model User {
   createdSpaces               Space[]                      @relation("SpaceCreator")
   botSecrets BotSecret[]
   agentSecrets               AgentSecret[]
+  customizationMarketplaces  CustomizationMarketplace[]
+  pluginInstalls             PluginInstall[]
 
   @@unique([email])
   @@map("user")
@@ -2006,6 +2008,7 @@ model CustomizationMarketplace {
   spaceId   String
   space     Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   source    String
   manifest  Json
@@ -2022,6 +2025,7 @@ model PluginInstall {
   spaceId       String
   space         Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   userId        String
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
   name          String
   marketplaceId String?
   source        String

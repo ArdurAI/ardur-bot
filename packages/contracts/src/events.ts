@@ -117,6 +117,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     text: z.string(),
     approvalEffectId: Id.optional(),
     detail: z.string().optional(),
+    /** Exact approval text: render verbatim, with expandable full contents. */
+    preformatted: z.boolean().optional(),
     input: z.enum(["text", "secret"]).optional(),
     /** Why the secret is needed; drives field label on the masked card. */
     purpose: SecretAskPurpose.optional(),

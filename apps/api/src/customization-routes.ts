@@ -1,9 +1,9 @@
 import { McpOAuthBroker } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { customizationContract } from "@ardurbot/contracts";
+import { readBundleZip } from "@ardurbot/contracts/bundles/zip";
 import type { Router } from "@orpc/server";
 import { implement, ORPCError } from "@orpc/server";
-import { readBundleZip } from "../../desktop/src/extensions/zip.js";
 import { uploadedBundle } from "./customization-files.js";
 import { createCustomizationPlugins } from "./customization-plugins.js";
 import { createCustomizationSkills, customizationCatalog } from "./customization-skills.js";

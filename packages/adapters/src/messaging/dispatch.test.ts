@@ -129,7 +129,7 @@ function fixture() {
     jobs: jobs as unknown as JobPublisher,
     events: events as unknown as ThreadEvents,
   });
-  return { tx, dispatch, jobs, events, binding };
+  return { tx, dispatch, jobs, events, binding, ask };
 }
 describe("chat Dispatch actions", () => {
   it("runs nothing for an unpaired group sender", async () => {
@@ -191,6 +191,21 @@ describe("chat Dispatch actions", () => {
     expect(f.tx.deviceAuditEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ type: "remote.consequential.blocked" }),
     });
+  });
+  it("retains the complete host command preview while requiring approval on a trusted device", async () => {
+    const f = fixture();
+    calls.route.mockReturnValue({ toolName: "execute_command" });
+    Object.assign(f.ask, {
+      preformatted: true,
+      text: `'gh' 'issue' 'create' '--body' '${"x".repeat(6000)} tail'`,
+      detail: "Identity: fixture-account\nWorking directory: '/workspace'\n[redacted]",
+    });
+    await f.dispatch.notifications(installation);
+    expect(calls.enqueue.mock.calls[0]?.[1].card).toEqual({
+      text: `${f.ask.text}\n${f.ask.detail}\n${CHAT_COPY.stronger}`,
+    });
+    await f.dispatch.consume(installation, { ...event, action: `allow:${f.binding.nonce}` });
+    expect(f.events.answerRunInput).not.toHaveBeenCalled();
   });
   it("reuses the P1 bound validator for a scoped once-only answer", async () => {
     const f = fixture();

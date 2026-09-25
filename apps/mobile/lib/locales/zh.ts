@@ -858,6 +858,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Taught skill": "教授的技能",
   Web: "网络",
   "by you": "由你创建",
+  "by {author}": "由 {author} 创建",
+  "From a plugin": "来自插件",
   Coordinator: "协调者",
   None: "无",
   Brief: "简报",

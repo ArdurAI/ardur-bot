@@ -46,6 +46,18 @@ describe("mobile i18n", () => {
     resetI18nForTests("zh-CN");
     expect(t("Not a real string")).toBe("Not a real string");
   });
+  it("translates customization provenance and preserves the actual author", async () => {
+    const { resetI18nForTests, t } = await import("./i18n");
+    for (const [locale, plugin, author] of [
+      ["en", "From a plugin", "by Fixture publisher"],
+      ["zh-CN", "来自插件", "由 Fixture publisher 创建"],
+      ["ru", "Из плагина", "автор: Fixture publisher"],
+    ] as const) {
+      resetI18nForTests(locale);
+      expect(t("From a plugin")).toBe(plugin);
+      expect(t("by {author}", { author: "Fixture publisher" })).toBe(author);
+    }
+  });
   it("translates the requested effort suffix on every supported mobile locale", async () => {
     const { resetI18nForTests, t } = await import("./i18n");
     for (const [locale, expected] of [

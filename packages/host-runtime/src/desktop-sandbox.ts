@@ -218,6 +218,8 @@ export class DesktopSandboxProvider implements SandboxProvider {
     }
     const { env } = await getHostEnvironment();
     if (request.hostIntegration) {
+      if (cwd !== request.cwd)
+        throw new Error("The command's working directory changed. Review it again.");
       await verifyHostIntegration(request.hostIntegration, request.argv);
       context.signal.throwIfAborted();
     }
