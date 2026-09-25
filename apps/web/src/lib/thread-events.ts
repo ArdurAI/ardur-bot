@@ -257,6 +257,7 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
     event.type === "thread.message.updated" ||
     event.type === "thread.message.reaction" ||
     event.type === "run.started" ||
+    event.type === "run.context" ||
     event.type === "run.waiting_input" ||
     event.type === "computer.takeover.requested" ||
     isRunTerminalEvent(event)
