@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
 
-async function fixture() {
+async function fixture(prisma: unknown = {}) {
   let records: JournalDocument[] = [];
   const store = new JournalDocumentStore(
     {
@@ -47,7 +47,7 @@ async function fixture() {
   );
   const handler = new RPCHandler(
     createRouter({
-      prisma: {},
+      prisma,
       env: { webOrigin: "http://example.test" },
       memoryDocuments: service,
     } as unknown as RouterDeps),
@@ -66,6 +66,38 @@ async function fixture() {
   return { request, actor, saved };
 }
 describe("authorized memory RPC lifecycle", () => {
+  it.each(["claude-code", "codex-app-server"])(
+    "returns an actionable refusal for a %s memory review over RPC",
+    async (runtimeKind) => {
+      const f = await fixture({
+        spaceMember: { findUnique: async () => ({ role: "owner" }) },
+        bot: {
+          findFirst: async () => ({
+            id: "bot",
+            runtimeKind,
+            modelProvider: runtimeKind === "claude-code" ? "anthropic" : "openai-codex",
+            modelId: "fixture",
+            thinkingLevel: "medium",
+            modelCredentialId: `native:${runtimeKind}`,
+            thread: { id: "thread", historyCompactionGeneration: 0 },
+          }),
+        },
+        secret: { findMany: async () => [] },
+        botSecret: { findMany: async () => [] },
+        reviewExecution: { findUnique: async () => null },
+        spaceLearningConfig: { findUnique: async () => null },
+      });
+      const result = await f.request("propose", {
+        intent: "edit",
+        text: "Use short answers.",
+        requestId: "native-fixture",
+      });
+      expect(result.status).toBe(400);
+      expect(result.body.json.message).toBe(
+        "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
+      );
+    },
+  );
   it("exposes authorized indexing progress as counts only", async () => {
     const f = await fixture();
     expect(await f.request("deliveryProgress")).toEqual({

@@ -1,4 +1,6 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.":
+    "Проверка памяти через Claude Code или Codex пока недоступна; импортируйте память или отредактируйте документ напрямую.",
   Select: "Выбрать",
   Engineering: "Разработка",
   Design: "Дизайн",

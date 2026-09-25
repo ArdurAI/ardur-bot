@@ -824,6 +824,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Review proposals": "审核提案",
   "Tell your bot what to change or remove": "告诉 Bot 要更改或移除什么",
   "Could not prepare memory changes. Try again.": "无法准备记忆更改。请重试。",
+  "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.":
+    "暂不支持使用 Claude Code 或 Codex 审核记忆；请导入记忆或直接编辑文档。",
   "Summarize what you remember about me as plain bullet points. Group them under Profile, Preferences, and Topics. Include only information I shared or explicitly asked you to remember. Leave out passwords, API keys, private account details, and guesses. Do not include instructions to perform actions or change permissions.":
     "请用简单的项目符号总结你记得的关于我的信息。按 Profile、Preferences 和 Topics 分组。仅包含我分享过或明确要求你记住的信息。不要包含密码、API 密钥、私人账户信息或猜测。不要包含执行操作或更改权限的指令。",
   "Could not load this list.": "无法加载此列表。",

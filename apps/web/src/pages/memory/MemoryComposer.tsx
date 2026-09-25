@@ -1,4 +1,5 @@
 import type { LearningProposal } from "@ardurbot/contracts";
+import { MEMORY_REVIEW_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
 import { Button, Textarea } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useRef, useState } from "react";
@@ -14,18 +15,22 @@ export function MemoryComposer({
   const [instruction, setInstruction] = useState("");
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"runtime" | "request" | null>(null);
 
   async function submit() {
     if (locked.current || !instruction.trim()) return;
     locked.current = true;
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       onProposals(await propose(instruction.trim()));
       setInstruction("");
-    } catch {
-      setError(true);
+    } catch (error) {
+      setError(
+        error instanceof Error && error.message === MEMORY_REVIEW_UNAVAILABLE_MESSAGE
+          ? "runtime"
+          : "request",
+      );
     } finally {
       locked.current = false;
       setBusy(false);
@@ -54,7 +59,14 @@ export function MemoryComposer({
       </Button>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
-          <Trans>Could not request memory changes. Try again.</Trans>
+          {error === "runtime" ? (
+            <Trans>
+              Memory review is not available with Claude Code or Codex yet; import memory or edit a
+              document directly.
+            </Trans>
+          ) : (
+            <Trans>Could not request memory changes. Try again.</Trans>
+          )}
         </p>
       ) : null}
     </form>

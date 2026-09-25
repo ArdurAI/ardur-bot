@@ -390,9 +390,11 @@ function createWindow(url: string, partition: string | null) {
     }
   });
   win.once("closed", () => {
-    clearTimeout(warmWindowTimer);
-    hostService?.windowClosed();
-    if (mainWindow === win) mainWindow = null;
+    if (mainWindow === win) {
+      clearTimeout(warmWindowTimer);
+      mainWindow = null;
+      hostService?.windowClosed();
+    }
   });
   markOnce("rk:main:window-created");
   if (win.isVisible()) markOnce("rk:main:window-shown");
@@ -992,8 +994,8 @@ function abandonPendingAppSwitch(
   pendingPreviousWindow = null;
   if (previous !== null && !previous.isDestroyed()) {
     const failed = mainWindow;
-    if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     mainWindow = previous;
+    if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;
     // If setup was already closed (e.g. during a slow write), make the restored
