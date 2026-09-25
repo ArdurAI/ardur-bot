@@ -2395,12 +2395,15 @@ describeJourneys("required product journeys", () => {
       skillId: skill.id,
     });
     expect(testRun.runId).toBeTruthy();
-    await waitFor(
+    const tested = await waitFor(
       app,
       cookie,
       bot.id,
-      (snap) => !snap.run || ["completed", "failed", "cancelled"].includes(snap.run.status),
+      (snap) =>
+        snap.contextRun?.id === testRun.runId &&
+        ["completed", "failed", "cancelled"].includes(snap.contextRun.status),
     );
+    expect(tested.contextRun).toMatchObject({ id: testRun.runId, status: "completed" });
     await sendAndWait(app, cookie, bot.id, "run Export weekly CRM list");
     const messages = (await rpc<Snap>(app, cookie, "threads/get", { botId: bot.id })).messages;
     const botText = JSON.stringify(messages);
@@ -2798,6 +2801,7 @@ type Snap = {
     blocks: Array<{ kind?: string; status?: string; answer?: string; actions?: unknown[] }>;
   }>;
   run: { id: string; status: string } | null;
+  contextRun?: { id: string; status: string } | null;
   activeRuns?: Array<{ id: string; status: string }>;
 };
 

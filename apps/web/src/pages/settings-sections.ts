@@ -62,6 +62,7 @@ export const settingsSections: SettingsRegistration[] = [
   { id: "skills", group: "Customize", label: msg`Skills`, icon: BookOpen, component: lazy(() => import("./customize/SkillsPage")), available: always },
   { id: "import", group: "Customize", label: msg`Import`, icon: CloudDownload, component: lazy(() => import("./import/LocalImportPage").then((m) => ({ default: m.LocalImportPage }))), available: ownerOnly },
   { id: "integrations", group: "Customize", label: msg`Integrations`, icon: Plug, component: lazy(() => import("./settings/IntegrationsSection")), available: always },
+  { id: "boards", group: "Customize", label: msg`Boards`, searchLabels: [msg`Default board`, msg`Beads`, msg`Registered folders`, msg`Allowed bots`], icon: Blocks, component: lazy(() => import("./board/BoardsSettings")), available: ownerOnly },
   { id: "mcp", group: "Customize", label: msg`MCP`, icon: Plug, component: lazy(() => import("./settings/McpSection")), available: always },
   { id: "plugins", group: "Customize", label: msg`Plugins`, icon: Blocks, component: lazy(() => import("./customize/PluginsPage")), available: always },
   { id: "updates", group: "Platform", label: msg`Updates`, icon: CloudDownload, component: lazy(() => import("./AccountSettingsOverlay").then((m) => ({ default: m.UpdatesSettingsPanel }))), available: hasUpdates },

@@ -47,6 +47,9 @@ function fixture() {
     name: "Board",
     enabled: true,
     initialized: true,
+    isDefault: true,
+    allowAllBots: true,
+    allowedBotIds: [],
   });
   const run = vi.spyOn(BoardService.prototype, "run").mockResolvedValue({ ok: true, stdout: "[]" });
   return { row, prisma, deps, run };

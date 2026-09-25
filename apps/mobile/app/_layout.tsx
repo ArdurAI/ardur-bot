@@ -8,6 +8,7 @@ import { AvatarStyleProvider } from "../components/avatar-style";
 import { ComputerUpdateProgress } from "../components/computer-update-progress";
 import { currentApiBase, loadApiBase, loadSessionToken, selectedSpaceId } from "../lib/api";
 import { loadAppearancePreference, mobileTokens } from "../lib/appearance";
+import { useBoardNotifications } from "../lib/board-notifications";
 import { bootstrapI18n, useI18n } from "../lib/i18n";
 import {
   configureForegroundNotifications,
@@ -20,6 +21,7 @@ configureForegroundNotifications();
 export default function Layout() {
   const { t } = useI18n();
   const [ready, setReady] = useState(false);
+  useBoardNotifications(ready);
   const resolved = useResolvedAppearance();
   const navigationTheme = useMemo(() => {
     const tokens = mobileTokens();

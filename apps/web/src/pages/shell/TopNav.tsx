@@ -7,11 +7,18 @@ import { currentTopNavId, topNavShortcut, useTopNavItems } from "./top-nav";
 export function TopNav() {
   const items = useTopNavItems();
   const { i18n } = useLingui();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const activeId = currentTopNavId(pathname, items);
   const current = items.find((item) => item.id === activeId);
-  const title = current ? `${i18n._(current.label)} — Ardur Bot` : "Ardur Bot";
+  const board =
+    pathname === "/app/board" ||
+    (pathname === "/app" && new URLSearchParams(search).get("view") === "board");
+  const title = board
+    ? `${i18n._(msg`Board`)} — Ardur Bot`
+    : current
+      ? `${i18n._(current.label)} — Ardur Bot`
+      : "Ardur Bot";
   useEffect(() => {
     document.title = title;
   }, [title]);

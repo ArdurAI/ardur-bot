@@ -51,6 +51,7 @@ model User {
   agentSecrets               AgentSecret[]
   customizationMarketplaces  CustomizationMarketplace[]
   pluginInstalls             PluginInstall[]
+  boardFollows               BoardFollow[]
 
   @@unique([email])
   @@map("user")
@@ -1058,6 +1059,7 @@ model Computer {
   kind                    String
   providerRef             String?
   state                   String                   @default("stopped")
+  provisioningId          String?
   controlHolder           String                   @default("none")
   controlLeaseId          String?
   controlLeaseExpiresAt   DateTime?
@@ -2150,13 +2152,53 @@ model BoardWorkspace {
   path String
   prefix String
   enabled Boolean @default(true)
+  name String?
+  initialized Boolean @default(true)
+  isDefault Boolean @default(false)
+  allowAllBots Boolean @default(true)
+  allowedBotIds String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   runs Run[]
+  follows BoardFollow[]
 
   @@unique([spaceId, path])
   @@index([spaceId, enabled])
   @@map("board_workspaces")
+}
+
+model BoardFollow {
+  id String @id @default(cuid())
+  workspaceId String
+  workspace BoardWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  itemId String
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status String
+  assignee String?
+  commentCount Int
+  version Int @default(0)
+  createdAt DateTime @default(now())
+  notifications BoardNotification[]
+
+  @@unique([workspaceId, itemId, userId])
+  @@index([userId])
+  @@map("board_follows")
+}
+
+model BoardNotification {
+  id String @id @default(cuid())
+  followId String
+  follow BoardFollow @relation(fields: [followId], references: [id], onDelete: Cascade)
+  version Int
+  title String
+  changes String[]
+  createdAt DateTime @default(now())
+  deliveredAt DateTime?
+
+  @@unique([followId, version])
+  @@index([deliveredAt, createdAt])
+  @@map("board_notifications")
 }
 
 // Short-lived source-mode RPC transport. The board itself remains in Beads.

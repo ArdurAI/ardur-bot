@@ -345,6 +345,7 @@ msgstr "Active sessions"
 msgid "Activity"
 msgstr "Activity"
 
+#: src/pages/board/BoardColumns.tsx
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/McpConfigEditor.tsx
@@ -513,6 +514,7 @@ msgid "Agents:"
 msgstr "Agents:"
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/board/BoardsSettings.tsx
 msgid "All bots"
 msgstr "All bots"
 
@@ -588,6 +590,11 @@ msgstr "Allow the assistant to directly interact with apps, data, and tools on y
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
 msgstr "Allow writing"
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Allowed bots"
+msgstr "Allowed bots"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Allowed destination"
@@ -743,10 +750,19 @@ msgstr "Approved by"
 msgid "Archive"
 msgstr "Archive"
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Archive board"
+msgstr "Archive board"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Archive board?"
+msgstr "Archive board?"
+
 #: src/pages/Shell.tsx
 msgid "archived"
 msgstr "archived"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/Shell.tsx
 msgid "Archived"
 msgstr "Archived"
@@ -950,6 +966,11 @@ msgstr "Base revision"
 msgid "Base URL"
 msgstr "Base URL"
 
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Beads"
+msgstr "Beads"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Bearer token"
@@ -985,6 +1006,8 @@ msgid "Block link copied."
 msgstr "Block link copied."
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
+#: src/pages/dashboard/WorkPanel.tsx
 msgid "Blocked"
 msgstr "Blocked"
 
@@ -1003,10 +1026,23 @@ msgid "Blocks"
 msgstr "Blocks"
 
 #: src/pages/board/Board.tsx
-#: src/pages/Shell.tsx
-#: src/pages/shell/board-nav.ts
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/shell/TopNav.tsx
 msgid "Board"
 msgstr "Board"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Board files will be kept."
+msgstr "Board files will be kept."
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Board status"
+msgstr "Board status"
+
+#: src/pages/settings-sections.ts
+msgid "Boards"
+msgstr "Boards"
 
 #: src/pages/dashboard/ComputersPanel.tsx
 msgid "Booting"
@@ -1143,6 +1179,7 @@ msgstr "Can't reach the server."
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
@@ -1606,6 +1643,7 @@ msgstr "Computer is stopped"
 msgid "Computer use"
 msgstr "Computer use"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/fleet/FleetSettings.tsx
@@ -1642,6 +1680,10 @@ msgstr "Configure {name}"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Configured by deployment"
 msgstr "Configured by deployment"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Confirm"
+msgstr "Confirm"
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1728,6 +1770,7 @@ msgstr "Connect Treg"
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
@@ -2117,6 +2160,7 @@ msgstr "Could not import these documents. Check scopes and conflicts, then previ
 msgid "Could not install connector"
 msgstr "Could not install connector"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load"
@@ -2130,6 +2174,10 @@ msgstr "Could not load account settings. Try again."
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not load approval rules"
 msgstr "Could not load approval rules"
+
+#: src/pages/board/Board.tsx
+msgid "Could not load Board; retry."
+msgstr "Could not load Board; retry."
 
 #: src/pages/IntegrationSetup.tsx
 msgid "Could not load bots. Reload to try again."
@@ -2612,7 +2660,7 @@ msgstr "Created"
 msgid "Created by you"
 msgstr "Created by you"
 
-#: src/pages/board/Board.tsx
+#: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 
@@ -2718,6 +2766,7 @@ msgstr "Decline"
 msgid "default"
 msgstr "default"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Default"
@@ -2727,6 +2776,11 @@ msgstr "Default"
 #: src/pages/shell/bot-panel.tsx
 msgid "Default ({0})"
 msgstr "Default ({0})"
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Default board"
+msgstr "Default board"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
@@ -2741,6 +2795,7 @@ msgid "Defer until"
 msgstr "Defer until"
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
 msgid "Deferred"
 msgstr "Deferred"
 
@@ -2945,6 +3000,7 @@ msgstr "Disk"
 
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Dismiss"
 msgstr "Dismiss"
@@ -3004,6 +3060,7 @@ msgstr "Don’t have an account?"
 
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Done"
@@ -3379,9 +3436,17 @@ msgstr "Flag unexpected actions"
 msgid "Flags"
 msgstr "Flags"
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Folder board"
+msgstr "Folder board"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Folder inside your home"
 msgstr "Folder inside your home"
+
+#: src/pages/board/Board.tsx
+msgid "Follow"
+msgstr "Follow"
 
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
@@ -3568,6 +3633,10 @@ msgstr "Home fingerprint"
 msgid "Home link"
 msgstr "Home link"
 
+#: src/pages/board/Board.tsx
+msgid "Hooked"
+msgstr "Hooked"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Host"
 msgstr "Host"
@@ -3674,6 +3743,8 @@ msgid "Imported from {0}"
 msgstr "Imported from {0}"
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
+#: src/pages/dashboard/WorkPanel.tsx
 msgid "In progress"
 msgstr "In progress"
 
@@ -3743,6 +3814,7 @@ msgid "Install {name}"
 msgstr "Install {name}"
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardsSettings.tsx
 msgid "Install Beads"
 msgstr "Install Beads"
 
@@ -3834,6 +3906,10 @@ msgstr "Isolated"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Item preview"
 msgstr "Item preview"
+
+#: src/pages/board/Board.tsx
+msgid "Item updated"
+msgstr "Item updated"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Items edited after import were kept."
@@ -4161,6 +4237,10 @@ msgstr "Log out of all devices"
 #: src/lib/thinking-level-options.ts
 msgid "low — quick, with a little checking"
 msgstr "low — quick, with a little checking"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Make default"
+msgstr "Make default"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Make sure nothing is still running on this computer."
@@ -4557,6 +4637,7 @@ msgstr "My documents"
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/Auth.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
@@ -4636,6 +4717,7 @@ msgid "New group"
 msgstr "New group"
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "New item"
 msgstr "New item"
@@ -4683,6 +4765,10 @@ msgstr "no auth"
 #: src/pages/PluginsOverlay.tsx
 msgid "No authentication"
 msgstr "No authentication"
+
+#: src/pages/board/Board.tsx
+msgid "No board"
+msgstr "No board"
 
 #: src/pages/shell/command-palette.tsx
 msgid "No bots"
@@ -4789,6 +4875,11 @@ msgstr "No proposals"
 msgid "No providers found."
 msgstr "No providers found."
 
+#: src/pages/dashboard/panels.ts
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "No ready work"
+msgstr "No ready work"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "No remote MCP servers found"
 msgstr "No remote MCP servers found"
@@ -4866,6 +4957,7 @@ msgstr "Not available on this computer"
 msgid "Not checked"
 msgstr "Not checked"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -4891,6 +4983,10 @@ msgstr "Not granted"
 #: src/pages/PluginsOverlay.tsx
 msgid "Not in the plugin catalog"
 msgstr "Not in the plugin catalog"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Not initialized"
+msgstr "Not initialized"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
@@ -5197,6 +5293,10 @@ msgstr "Other files"
 msgid "Other model…"
 msgstr "Other model…"
 
+#: src/pages/dashboard/DashboardPage.tsx
+msgid "Overview"
+msgstr "Overview"
+
 #: src/components/Context.tsx
 msgid "Owner edited recently"
 msgstr "Owner edited recently"
@@ -5298,6 +5398,10 @@ msgstr "pin"
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Pin"
+
+#: src/pages/board/Board.tsx
+msgid "Pinned"
+msgstr "Pinned"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Placement"
@@ -5549,6 +5653,9 @@ msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr "Reads can run without asking once you allow them. Writes always ask."
 
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardColumns.tsx
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
 msgstr "Ready"
 
@@ -5660,6 +5767,10 @@ msgstr "Reduce animation in streaming responses and other interface elements."
 msgid "Reduced"
 msgstr "Reduced"
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Refresh"
+msgstr "Refresh"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Refresh view"
 msgstr "Refresh view"
@@ -5667,6 +5778,11 @@ msgstr "Refresh view"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Refreshing…"
 msgstr "Refreshing…"
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Registered folders"
+msgstr "Registered folders"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -5937,6 +6053,7 @@ msgstr "Restart the desktop app to update it."
 msgid "Restart to update"
 msgstr "Restart to update"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/Shell.tsx
 msgid "Restore"
@@ -5957,6 +6074,7 @@ msgstr "Restricted"
 #: src/components/Context.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
@@ -6183,6 +6301,7 @@ msgstr "Sans"
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/DevicesSettings.tsx
@@ -6364,6 +6483,10 @@ msgstr "Select output"
 msgid "Select the text to copy it."
 msgstr "Select the text to copy it."
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Selected bots"
+msgstr "Selected bots"
+
 #: src/pages/ide/dialogs.tsx
 msgid "Selection shortened to 32,000 characters."
 msgstr "Selection shortened to 32,000 characters."
@@ -6467,6 +6590,11 @@ msgstr "Session ended — open a new terminal"
 #: src/pages/HostComputerSettings.tsx
 msgid "Set up"
 msgstr "Set up"
+
+#: src/pages/board/Board.tsx
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "Set up a board"
+msgstr "Set up a board"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Set up credentials"
@@ -6679,6 +6807,10 @@ msgstr "Source folder for {name}"
 msgid "Source revision"
 msgstr "Source revision"
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Space board"
+msgstr "Space board"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"
 msgstr "Space default"
@@ -6740,13 +6872,17 @@ msgstr "Stale"
 msgid "Standard"
 msgstr "Standard"
 
-#: src/pages/board/Board.tsx
-msgid "Start a board in this folder"
-msgstr "Start a board in this folder"
-
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr "Start a new chat"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Start board"
+msgstr "Start board"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Start board?"
+msgstr "Start board?"
 
 #: src/pages/CompareStart.tsx
 msgid "Start comparison"
@@ -6774,6 +6910,7 @@ msgstr "Starting"
 msgid "Starting…"
 msgstr "Starting…"
 
+#: src/pages/board/Board.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Status"
 msgstr "Status"
@@ -7076,10 +7213,6 @@ msgstr "This computer"
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "This file is not valid UTF-8 Markdown."
 
-#: src/pages/board/Board.tsx
-msgid "This folder has no board"
-msgstr "This folder has no board"
-
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
 msgstr "This folder is managed by the server."
@@ -7279,6 +7412,7 @@ msgstr "Unavailable"
 msgid "unclassified"
 msgstr "unclassified"
 
+#: src/pages/board/Board.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Undo"
@@ -7288,6 +7422,10 @@ msgstr "Undo"
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Undone"
 msgstr "Undone"
+
+#: src/pages/board/Board.tsx
+msgid "Unfollow"
+msgstr "Unfollow"
 
 #: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -7615,6 +7753,14 @@ msgstr "Who the user is and the professional domain"
 #: src/pages/LearningObservation.tsx
 msgid "Window"
 msgstr "Window"
+
+#: src/pages/dashboard/panels.ts
+msgid "Work"
+msgstr "Work"
+
+#: src/pages/board/BoardColumns.tsx
+msgid "Work items"
+msgstr "Work items"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/TeamBoard.tsx

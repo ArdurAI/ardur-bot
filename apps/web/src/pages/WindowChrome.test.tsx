@@ -35,7 +35,6 @@ it.each(["darwin", "win32", "linux", "browser"])(
     expect(Array.from(node.querySelectorAll("nav a"), (link) => link.textContent)).toEqual([
       "Dashboard",
       "Bots",
-      "Board",
       "IDE",
     ]);
     expect(Boolean(node.querySelector('[aria-hidden="true"]'))).toBe(os === "darwin");
@@ -44,7 +43,7 @@ it.each(["darwin", "win32", "linux", "browser"])(
   },
 );
 
-it("registers all four destinations before a direct IDE load and navigates with shortcuts", async () => {
+it("registers all three destinations before a direct IDE load and navigates with shortcuts", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const node = document.createElement("div");
   const root = createRoot(node);
@@ -64,8 +63,7 @@ it("registers all four destinations before a direct IDE load and navigates with 
   for (const [key, label, path] of [
     ["1", "Dashboard", "/app"],
     ["2", "Bots", "/app/bots"],
-    ["3", "Board", "/app/board"],
-    ["4", "IDE", "/app/ide"],
+    ["3", "IDE", "/app/ide"],
   ]) {
     await act(async () =>
       window.dispatchEvent(
@@ -79,5 +77,22 @@ it("registers all four destinations before a direct IDE load and navigates with 
     expect(node.querySelector("output")?.textContent).toBe(path);
     expect(document.title).toBe(`${label} — Ardur Bot`);
   }
+  await act(async () => root.unmount());
+});
+
+it("keeps Board deep links inside Dashboard while naming the active view", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/app/board?workspace=space-board&item=task-1"]}>
+        <WindowChrome navigation />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.querySelector('[aria-current="page"]')?.textContent).toBe("Dashboard");
+  expect(document.title).toBe("Board — Ardur Bot");
+  expect(node.querySelectorAll("nav a")).toHaveLength(3);
   await act(async () => root.unmount());
 });

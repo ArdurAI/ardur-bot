@@ -18,6 +18,7 @@ export type SettingsSection =
   | "developer"
   | "skills"
   | "integrations"
+  | "boards"
   | "mcp"
   | "plugins"
   | "updates";

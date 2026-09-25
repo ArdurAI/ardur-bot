@@ -50,10 +50,22 @@ test("Board route shows dependencies across five columns", async ({ page }, test
       },
     }),
   );
-  await page.route("**/rpc/board/snapshot", (route) =>
-    route.fulfill({ json: { json: { items, readyIds: ["board-0"], blockedIds: ["board-2"] } } }),
+  await page.route("**/rpc/board/view", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          workspaces: [{ id: "board", name: "Board", enabled: true, initialized: true }],
+          workspaceId: "board",
+          snapshot: { items, readyIds: ["board-0"], blockedIds: ["board-2"] },
+          selected: null,
+          followingIds: [],
+          bots: [],
+          problem: null,
+        },
+      },
+    }),
   );
-  await page.getByRole("button", { name: "Board", exact: true }).click();
+  await page.goto("/app/board");
   await expect(page).toHaveURL(/\/app\/board$/);
   await expect(page.locator("[data-board-column]")).toHaveCount(5);
   await expect(page.locator('[data-board-column="ready"]')).toContainText("Prepare schema");

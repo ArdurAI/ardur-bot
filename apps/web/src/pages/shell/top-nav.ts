@@ -53,7 +53,7 @@ export function topNavShortcut(
   return /^[1-4]$/.test(digit) ? available[Number(digit) - 1] : undefined;
 }
 export function currentTopNavId(pathname: string, available: readonly TopNavItem[]) {
-  if (pathname === "/app") return "dashboard";
+  if (pathname === "/app" || pathname === "/app/board") return "dashboard";
   const exact = available.find((item) => item.to.split("?")[0] === pathname);
   return exact?.id ?? "bots";
 }

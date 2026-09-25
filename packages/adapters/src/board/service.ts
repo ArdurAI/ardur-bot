@@ -1,9 +1,16 @@
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
-import type { BoardRun, BoardRunResult, BoardWorkspace } from "@ardurbot/contracts/board";
+import type {
+  BoardConfiguration,
+  BoardRun,
+  BoardRunResult,
+  BoardWorkspace,
+} from "@ardurbot/contracts/board";
 import { BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
 import type { PrismaClient } from "@ardurbot/db";
+import { observeBoardItems } from "@ardurbot/db";
 import { BoardRunner } from "@ardurbot/host-runtime/board/runner";
+import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
 
@@ -112,32 +119,103 @@ export class BoardService {
       });
       id = run?.boardWorkspaceId ?? undefined;
     }
-    let row = await this.options.prisma.boardWorkspace.findFirst({
+    const row = await this.options.prisma.boardWorkspace.findFirst({
       where: {
-        ...(id ? { id } : { kind: "space" }),
+        ...(id ? { id } : {}),
         spaceId: scope.spaceId,
         ownerUserId: scope.userId,
         enabled: true,
       },
+      ...(!id ? { orderBy: [{ isDefault: "desc" as const }, { createdAt: "asc" as const }] } : {}),
     });
-    if (!row && !id) {
-      const discovered = await this.workspaces(scope);
-      if (discovered.problem) throw new BoardError(discovered.problem);
-      row = await this.options.prisma.boardWorkspace.findFirst({
-        where: { kind: "space", spaceId: scope.spaceId, ownerUserId: scope.userId, enabled: true },
+    if (!row?.initialized)
+      throw new BoardError({ code: "no_board", message: "This folder has no board" });
+    if (scope.botId && !row.allowAllBots && !row.allowedBotIds.includes(scope.botId))
+      throw new BoardError({
+        code: "forbidden",
+        message: "This bot is not allowed on this board.",
       });
-    }
-    if (!row) throw new BoardError({ code: "no_board", message: "This folder has no board" });
+    return { ...row, ...this.present(row) };
+  }
+  private present(row: {
+    id: string;
+    kind: string;
+    path: string;
+    prefix: string;
+    name: string | null;
+    enabled: boolean;
+    initialized: boolean;
+    isDefault: boolean;
+    allowAllBots: boolean;
+    allowedBotIds: string[];
+  }): BoardWorkspace {
     return {
       ...row,
       kind: row.kind as "space" | "folder",
-      name: row.kind === "space" ? "Board" : path.basename(row.path),
-      initialized: true,
-    } satisfies BoardWorkspace;
+      name: row.name ?? (row.kind === "space" ? "Board" : path.basename(row.path)),
+    };
+  }
+  async configured(scope: BoardScope) {
+    await this.actor(scope);
+    return (
+      await this.options.prisma.boardWorkspace.findMany({
+        where: { spaceId: scope.spaceId, ownerUserId: scope.userId },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      })
+    ).map((row) => this.present(row));
+  }
+  async configure(scope: BoardScope, id: string, patch: BoardConfiguration) {
+    await this.actor(scope);
+    if (scope.botId)
+      throw new BoardError({ code: "forbidden", message: "Configure this board in Settings." });
+    const row = await this.options.prisma.boardWorkspace.findFirst({
+      where: { id, spaceId: scope.spaceId, ownerUserId: scope.userId },
+    });
+    if (!row) throw new BoardError({ code: "forbidden", message: "This board is unavailable." });
+    if (patch.isDefault && (!row.initialized || !(patch.enabled ?? row.enabled)))
+      throw new BoardError({
+        code: "no_board",
+        message: "Start this board before making it the default.",
+      });
+    if (patch.allowedBotIds?.length) {
+      const count = await this.options.prisma.bot.count({
+        where: {
+          id: { in: [...new Set(patch.allowedBotIds)] },
+          spaceId: scope.spaceId,
+          userId: scope.userId,
+          archivedAt: null,
+        },
+      });
+      if (count !== new Set(patch.allowedBotIds).size)
+        throw new BoardError({ code: "forbidden", message: "A selected bot is unavailable." });
+    }
+    const saved = await this.options.prisma.$transaction(async (tx) => {
+      // Serialize default changes within this space, including concurrent Settings saves.
+      await tx.$queryRaw`SELECT id FROM spaces WHERE id = ${scope.spaceId} FOR UPDATE`;
+      if (patch.isDefault)
+        await tx.boardWorkspace.updateMany({
+          where: { spaceId: scope.spaceId, ownerUserId: scope.userId, isDefault: true },
+          data: { isDefault: false },
+        });
+      return tx.boardWorkspace.update({
+        where: { id },
+        data: { ...patch, ...(patch.enabled === false ? { isDefault: false } : {}) },
+      });
+    });
+    return this.present(saved);
   }
   async provider(scope: BoardScope, id?: string) {
     const [workspace, actor] = await Promise.all([this.workspace(scope, id), this.actor(scope)]);
-    return new BeadsBoardProvider({ workspace, actor, run: (request) => this.run(request, scope) });
+    return new BeadsBoardProvider({
+      workspace,
+      actor,
+      run: (request) => this.run(request, scope),
+      observe: (items) =>
+        observeBoardItems(this.options.prisma, workspace.id, items).catch((error) => {
+          // A notification failure cannot turn a successful Beads write into a failed item edit.
+          getLogger().error("board follow observation", error);
+        }),
+    });
   }
   async workspaces(scope: BoardScope) {
     const actor = await this.actor(scope);
@@ -160,39 +238,26 @@ export class BoardService {
           kind: found.kind,
           path: found.path,
           prefix: found.prefix,
+          initialized: found.initialized,
         },
-        update: found.initialized ? { prefix: found.prefix } : {},
+        update: {
+          initialized: found.initialized,
+          ...(found.initialized ? { prefix: found.prefix } : {}),
+        },
       });
-      let initialized = found.initialized;
-      if (found.kind === "space" && !initialized && row.enabled) {
-        const started = await this.run(
-          {
-            action: "init",
-            workspaceId: row.id,
-            workspace: { kind: "space" },
-            prefix: row.prefix,
-            actor,
-            argv: [],
-          },
-          scope,
-        );
-        if (!started.ok) return { workspaces, problem: started.problem };
-        initialized = true;
-      }
-      workspaces.push({
-        ...found,
-        id: row.id,
-        prefix: row.prefix,
-        enabled: row.enabled,
-        initialized,
-      });
+      workspaces.push(this.present(row));
     }
     return { workspaces, problem: null };
   }
   async start(scope: BoardScope, id: string) {
     if (scope.botId)
       throw new BoardError({ code: "forbidden", message: "Start this board from the app." });
-    const workspace = await this.workspace(scope, id);
+    await this.actor(scope);
+    const row = await this.options.prisma.boardWorkspace.findFirst({
+      where: { id, spaceId: scope.spaceId, ownerUserId: scope.userId, enabled: true },
+    });
+    if (!row) throw new BoardError({ code: "forbidden", message: "This board is unavailable." });
+    const workspace = this.present(row);
     const result = await this.run(
       {
         action: "init",
@@ -206,7 +271,12 @@ export class BoardService {
       scope,
     );
     if (!result.ok) throw new BoardError(result.problem);
-    return workspace;
+    await this.options.prisma.boardWorkspace.update({ where: { id }, data: { initialized: true } });
+    const existing = await this.options.prisma.boardWorkspace.findFirst({
+      where: { spaceId: scope.spaceId, ownerUserId: scope.userId, isDefault: true, enabled: true },
+    });
+    if (!existing) return this.configure(scope, id, { isDefault: true });
+    return { ...workspace, initialized: true };
   }
   async assertBotMayClose(scope: BoardScope, workspaceId: string | undefined, ids: string[]) {
     if (!scope.botId || !scope.runId) return;

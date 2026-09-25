@@ -105,7 +105,7 @@ describe("computer provisioning", () => {
             maintenanceId: null,
             id: "computer-1",
             state: "booting",
-            updatedAt: expect.any(Date),
+            provisioningId: expect.any(String),
             providerRef: "provider-1",
             kind: "cloud",
             bots: { some: { id: "bot-1", archivedAt: null } },
@@ -261,7 +261,7 @@ describe("computer provisioning", () => {
         where: Record<string, unknown>;
         data: Record<string, unknown>;
       }) => {
-        const matches = ["id", "state", "providerRef", "kind", "updatedAt"].every(
+        const matches = ["id", "state", "providerRef", "kind", "updatedAt", "provisioningId"].every(
           (key) => !(key in where) || where[key] === row[key as keyof typeof row],
         );
         if (!matches) return { count: 0 };
@@ -476,7 +476,7 @@ describe("computer provisioning", () => {
         where: Record<string, unknown>;
         data: Record<string, unknown>;
       }) => {
-        const matches = ["id", "state", "providerRef", "kind", "updatedAt"].every(
+        const matches = ["id", "state", "providerRef", "kind", "updatedAt", "provisioningId"].every(
           (key) => !(key in where) || where[key] === row[key as keyof typeof row],
         );
         if (!matches) return { count: 0 };
@@ -503,11 +503,11 @@ describe("computer provisioning", () => {
         "computer-1",
         context,
       );
-      const claimData = updateMany.mock.calls[0]?.[0]?.data as { updatedAt?: Date };
-      const activationWhere = updateMany.mock.calls[1]?.[0]?.where as { updatedAt?: Date };
-      expect(claimData.updatedAt).toBeInstanceOf(Date);
-      expect(activationWhere.updatedAt).toEqual(claimData.updatedAt);
-      // Stamp must come from the claim write, not a follow-up read that a concurrent reclaim could win.
+      const claimData = updateMany.mock.calls[0]?.[0]?.data as { provisioningId?: string };
+      const activationWhere = updateMany.mock.calls[1]?.[0]?.where as { provisioningId?: string };
+      expect(claimData.provisioningId).toEqual(expect.any(String));
+      expect(activationWhere.provisioningId).toBe(claimData.provisioningId);
+      // The token comes from our claim write, not a follow-up read of a newer owner.
       expect(findUniqueOrThrow).toHaveBeenCalledTimes(1);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -535,7 +535,7 @@ describe("computer provisioning", () => {
         where: Record<string, unknown>;
         data: Record<string, unknown>;
       }) => {
-        const matches = ["id", "state", "providerRef", "kind", "updatedAt"].every(
+        const matches = ["id", "state", "providerRef", "kind", "updatedAt", "provisioningId"].every(
           (key) => !(key in where) || where[key] === row[key as keyof typeof row],
         );
         if (!matches) return { count: 0 };
@@ -582,12 +582,12 @@ describe("computer provisioning", () => {
       );
       const claim = updateMany.mock.calls[0]?.[0] as {
         where: { updatedAt?: Date };
-        data: { updatedAt?: Date };
+        data: { updatedAt?: Date; provisioningId?: string };
       };
-      const activationWhere = updateMany.mock.calls[1]?.[0]?.where as { updatedAt?: Date };
+      const activationWhere = updateMany.mock.calls[1]?.[0]?.where as { provisioningId?: string };
       expect(claim.where.updatedAt).toEqual(observed);
       expect(claim.data.updatedAt?.getTime()).toBe(observed.getTime() + 1);
-      expect(activationWhere.updatedAt).toEqual(claim.data.updatedAt);
+      expect(activationWhere.provisioningId).toBe(claim.data.provisioningId);
       expect(row.state).toBe("running");
     } finally {
       now.mockRestore();
@@ -734,7 +734,7 @@ describe("computer provisioning", () => {
         where: Record<string, unknown>;
         data: Record<string, unknown>;
       }) => {
-        const matches = ["id", "state", "providerRef", "kind", "updatedAt"].every(
+        const matches = ["id", "state", "providerRef", "kind", "updatedAt", "provisioningId"].every(
           (key) => !(key in where) || where[key] === row[key as keyof typeof row],
         );
         if (!matches) return { count: 0 };
@@ -860,9 +860,9 @@ describe("computer provisioning", () => {
             state: "booting",
             providerRef: "provider-1",
             kind: "box",
-            updatedAt: expect.any(Date),
+            provisioningId: expect.any(String),
           },
-          data: { state: "running" },
+          data: { state: "running", provisioningId: null },
         });
         expect(original).toMatchObject({
           state: "running",
@@ -1002,10 +1002,15 @@ describe("computer provisioning", () => {
             state: "booting",
             providerRef: "provider-1",
             kind: "box",
-            updatedAt: expect.any(Date),
+            provisioningId: expect.any(String),
             bots: { some: { id: "bot-1", archivedAt: null } },
           },
-          data: { state: "running", providerRef: next.providerRef, kind: next.kind },
+          data: {
+            state: "running",
+            provisioningId: null,
+            providerRef: next.providerRef,
+            kind: next.kind,
+          },
         });
         expect(destroy).not.toHaveBeenCalled();
         expect(stop).not.toHaveBeenCalled();
@@ -1198,10 +1203,11 @@ describe("computer provisioning", () => {
           state: "booting",
           providerRef: null,
           kind: "e2b",
-          updatedAt: expect.any(Date),
+          provisioningId: expect.any(String),
         },
         data: {
           state: "error",
+          provisioningId: null,
           providerRef: "new-provider-1",
           kind: "e2b",
         },

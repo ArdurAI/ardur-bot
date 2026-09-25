@@ -13,6 +13,7 @@ import { getDashboardPanels } from "./panels";
 
 const api = vi.hoisted(() => ({
   team: vi.fn(),
+  work: vi.fn(),
   now: vi.fn(),
   runs: vi.fn(),
   thread: vi.fn(),
@@ -31,6 +32,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../../lib/rpc", () => ({
   rpc: {
     team: { board: api.team },
+    board: { work: api.work },
     runs: { list: api.runs },
     threads: { get: api.thread, answer: api.answer, subscribe: api.subscribe },
     host: { status: api.host },
@@ -98,6 +100,7 @@ beforeEach(() => {
   api.routines.mockResolvedValue({ next: [], recent: [] });
   api.usage.mockResolvedValue(summary);
   api.learning.mockResolvedValue({ pendingCount: 0, proposals: [] });
+  api.work.mockResolvedValue({ workspace: null, ready: 0, inProgress: 0, blocked: 0, items: [] });
   api.features.mockResolvedValue([{ feature: "governance", state: "unavailable" }]);
   node = document.createElement("div");
   document.body.append(node);
@@ -118,9 +121,9 @@ async function renderPage(scope = "viewer:space") {
   );
   await vi.waitFor(() => expect(node.querySelectorAll('[aria-busy="true"]').length).toBe(0));
 }
-it("loads seven independent lazy panels and renders honest empty states", async () => {
+it("loads eight independent lazy panels and renders honest empty states", async () => {
   await renderPage();
-  expect(node.querySelectorAll("[data-panel]").length).toBe(7);
+  expect(node.querySelectorAll("[data-panel]").length).toBe(8);
   for (const text of [
     "Nothing running",
     "This computer",
@@ -171,11 +174,16 @@ it.each([1, 12, 100])("bounds persistent requests with %s bot threads", async (c
 });
 it("paints the layout before bootstrap without starting unscoped panel requests", async () => {
   await act(async () =>
-    root.render(<DashboardPage scope="" openSettings={actions.openSettings} />),
+    root.render(
+      <MemoryRouter>
+        <DashboardPage scope="" openSettings={actions.openSettings} />
+      </MemoryRouter>,
+    ),
   );
   expect(node.querySelector("h1")?.textContent).toBe("Dashboard");
   expect(Array.from(node.querySelectorAll("h2"), (heading) => heading.textContent)).toEqual([
     "Now",
+    "Work",
     "Computers",
     "Connections",
     "Routines",
@@ -183,7 +191,7 @@ it("paints the layout before bootstrap without starting unscoped panel requests"
     "Learning",
     "Governance",
   ]);
-  expect(node.querySelectorAll('[aria-busy="true"]')).toHaveLength(7);
+  expect(node.querySelectorAll('[aria-busy="true"]')).toHaveLength(8);
   for (const request of Object.values(api)) expect(request).not.toHaveBeenCalled();
   await renderPage();
   expect(node.querySelector('[aria-busy="true"]')).toBeNull();
@@ -616,4 +624,24 @@ it("labels aggregate usage as records rather than provider requests", async () =
   await renderPage();
   expect(node.querySelector('[data-panel="usage"]')?.textContent).toContain("2 usage records");
   expect(node.querySelector('[data-panel="usage"]')?.textContent).not.toContain("requests");
+});
+
+it("shows default-board work and item links without adding subscriptions", async () => {
+  api.work.mockResolvedValue({
+    workspace: { id: "planning", name: "Planning" },
+    ready: 2,
+    inProgress: 1,
+    blocked: 3,
+    items: [{ id: "work-1", title: "Next work" }],
+  });
+  await renderPage();
+  const panel = node.querySelector('[data-panel="work"]')!;
+  expect(panel.textContent).toContain("Ready: 2");
+  expect(panel.textContent).toContain("In progress: 1");
+  expect(panel.textContent).toContain("Blocked: 3");
+  expect(panel.querySelector('a[href*="item=work-1"]')?.getAttribute("href")).toBe(
+    "/app/board?workspace=planning&item=work-1",
+  );
+  expect(api.work).toHaveBeenCalledTimes(1);
+  expect(api.subscribe).not.toHaveBeenCalled();
 });

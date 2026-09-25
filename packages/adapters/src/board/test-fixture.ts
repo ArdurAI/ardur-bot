@@ -30,6 +30,9 @@ export async function boardFixture(overrides: NodeJS.ProcessEnv = {}, timeoutMs?
     path: path.join(root, "board", "space"),
     prefix: "board",
     enabled: true,
+    isDefault: true,
+    allowAllBots: true,
+    allowedBotIds: [],
     initialized: true,
   };
   await mkdir(path.join(workspace.path, ".beads"), { recursive: true });

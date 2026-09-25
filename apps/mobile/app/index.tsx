@@ -449,17 +449,29 @@ export default function Home() {
           <Text style={styles.profileInitials}>{initials}</Text>
         </CircleButton>
         <View style={styles.headerActions}>
-          <CircleButton accessibilityLabel={t("Overview")} onPress={() => router.push("/overview")}>
+          <CircleButton
+            accessibilityLabel={t("Dashboard")}
+            onPress={() => router.push("/overview")}
+          >
             <NativeSymbol ios="square.grid.2x2" android="grid-outline" size={17} />
           </CircleButton>
-          <CircleButton accessibilityLabel={t("Board")} onPress={() => router.push("/board")}>
-            <NativeSymbol ios="rectangle.3.group" android="list-outline" size={17} />
+          <CircleButton
+            accessibilityLabel={t("Bots")}
+            active={!activityMode}
+            onPress={() => {
+              setActivityMode(false);
+              void saveActivityMode(false);
+            }}
+          >
+            <NativeSymbol
+              ios="bubble.left.and.bubble.right"
+              android="chatbubbles-outline"
+              size={17}
+            />
           </CircleButton>
-          {bots.length >= 2 ? (
-            <CircleButton accessibilityLabel={t("Team")} onPress={() => router.push("/team")}>
-              <NativeSymbol ios="person.3" android="people-outline" size={17} />
-            </CircleButton>
-          ) : null}
+          <CircleButton accessibilityLabel={t("Files")} onPress={() => router.push("/ide")}>
+            <NativeSymbol ios="folder" android="folder-outline" size={17} />
+          </CircleButton>
           <CircleButton
             accessibilityLabel={t("Activity")}
             active={activityMode}
