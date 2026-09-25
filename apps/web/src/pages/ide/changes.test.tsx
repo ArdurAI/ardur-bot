@@ -50,6 +50,69 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("Changes refresh", () => {
+  it.each([null, "older-cursor"])(
+    "keeps a missing interval reachable after a disjoint head replaces exhausted cursor %s",
+    async (oldCursor) => {
+      const page = (high: number, count: number) =>
+        Array.from({ length: count }, (_, index) => change(String(high - index)));
+      api.changes.mockResolvedValueOnce({ items: page(200, 2), nextCursor: "old-page" });
+      await render();
+      api.changes.mockResolvedValueOnce({ items: page(198, 1), nextCursor: oldCursor });
+      await act(async () => result.more!());
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      api.changes.mockResolvedValueOnce({ items: page(600, 200), nextCursor: "gap-1" });
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+      await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+      expect(result.items.map(({ id }) => id)).toContain("198");
+      expect(result.more).toBeDefined();
+      api.changes.mockResolvedValueOnce({ items: page(400, 200), nextCursor: "gap-2" });
+      await act(async () => result.more!());
+      expect(api.changes).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "gap-1" }));
+      expect(result.items.map(({ id }) => id)).toEqual(page(600, 403).map(({ id }) => id));
+      api.changes.mockResolvedValueOnce({ items: page(200, 3), nextCursor: oldCursor });
+      await act(async () => result.more!());
+      expect(api.changes).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "gap-2" }));
+      expect(result.items.map(({ id }) => id)).toEqual(page(600, 403).map(({ id }) => id));
+      expect(Boolean(result.more)).toBe(oldCursor !== null);
+    },
+  );
+  it("does not let an old in-flight page close a newly discovered gap", async () => {
+    await render();
+    let resolve!: (page: { items: IdeChange[]; nextCursor: null }) => void;
+    api.changes.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    let pending!: Promise<void>;
+    await act(async () => {
+      pending = result.more!();
+    });
+    api.changes.mockResolvedValueOnce({ items: [change("new")], nextCursor: "gap" });
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => {
+      resolve({ items: [change("older")], nextCursor: null });
+      await pending;
+    });
+    expect(result.more).toBeDefined();
+    api.changes.mockResolvedValueOnce({ items: [change("first")], nextCursor: "page-2" });
+    await act(async () => result.more!());
+    expect(api.changes).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "gap" }));
+  });
+  it("retains pagination through an unchanged head with no matching changes", async () => {
+    api.changes.mockResolvedValue({ items: [], nextCursor: "page-2" });
+    await render();
+    api.changes.mockResolvedValueOnce({ items: [change("older")], nextCursor: "page-3" });
+    await act(async () => result.more!());
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await act(async () => result.more!());
+    expect(api.changes).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "page-3" }));
+  });
   it("invalidates file listings after commands or runs without diffs, including with the drawer closed", async () => {
     api.changes.mockResolvedValue({ items: [], nextCursor: null });
     await render();
