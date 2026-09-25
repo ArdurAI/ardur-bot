@@ -32,7 +32,7 @@ export function FileTree({
     <div role="tree" aria-label="IDE" className="min-h-0 flex-1 overflow-auto py-2 text-sm">
       {entries.map((entry) => (
         <TreeEntry
-          key={entry.path}
+          key={`${entry.kind}:${entry.path}`}
           entry={entry}
           depth={0}
           list={list}
@@ -62,9 +62,8 @@ function TreeEntry({
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<IdeEntry[] | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => setChildren(null), [list]);
   useEffect(() => {
-    if (!expanded || children) return;
+    if (!expanded) return;
     let live = true;
     setBusy(true);
     void list(entry.path)
@@ -74,7 +73,6 @@ function TreeEntry({
       .catch((error) => {
         if (live) {
           onError(error);
-          setExpanded(false);
         }
       })
       .finally(() => {
@@ -83,7 +81,7 @@ function TreeEntry({
     return () => {
       live = false;
     };
-  }, [expanded, children, entry.path, list, onError]);
+  }, [expanded, entry.path, list, onError]);
   const open = () => (entry.kind === "dir" ? setExpanded((value) => !value) : onOpen(entry.path));
   return (
     <div
@@ -146,7 +144,7 @@ function TreeEntry({
         <fieldset className="m-0 min-w-0 border-0 p-0">
           {children.map((child) => (
             <TreeEntry
-              key={child.path}
+              key={`${child.kind}:${child.path}`}
               entry={child}
               depth={depth + 1}
               list={list}

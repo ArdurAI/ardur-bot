@@ -2,12 +2,23 @@ import { describe, expect, it } from "vitest";
 import { looksLikeChatSecret } from "./messaging-actions.js";
 
 describe("chat credential detection", () => {
-  it.each(["x", "x-", "SECRET_", "eyJ-"])("bounds scanning of long %s tokens", (token) => {
-    const value = token.repeat(Math.ceil((128 * 1024) / token.length));
-    const start = performance.now();
-    expect(looksLikeChatSecret(value)).toBe(false);
-    expect(performance.now() - start).toBeLessThan(1000);
-  });
+  it.each(["", "+", "-", ".", "(", "'", '"', "\n", "\n+", "123", "+.-"])(
+    "rejects a credential URL after prefix %j",
+    (prefix) => {
+      expect(looksLikeChatSecret(`${prefix}postgres://example:placeholder@example.test/db`)).toBe(
+        true,
+      );
+    },
+  );
+  it.each(["x", "x-", "+.-", "123", "SECRET_", "eyJ-"])(
+    "bounds scanning of long %s tokens",
+    (token) => {
+      const value = token.repeat(Math.ceil((128 * 1024) / token.length));
+      const start = performance.now();
+      expect(looksLikeChatSecret(value)).toBe(false);
+      expect(performance.now() - start).toBeLessThan(1000);
+    },
+  );
   it.each([
     "password=placeholder",
     "API_KEY=placeholder",
