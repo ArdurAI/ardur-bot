@@ -174,6 +174,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
       "bots/list": [bot],
       "bots/get": bot,
       "team/board": { rows: [] },
+      "board/workspaces": { workspaces: [], problem: null },
       "host/status": { configured: false, connected: false, roots: [], health: null },
       "routines/overview": { next: [], recent: [] },
       "usage/summary": {
@@ -313,7 +314,10 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   await page.keyboard.press("Control+1");
   await expect(page.getByTestId("dashboard")).toBeVisible();
   await page.keyboard.press("Control+3");
-  await expect(page).toHaveURL(/\/app\/team$/);
-  await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/board$/);
+  await expect(page.getByRole("heading", { name: "Board", exact: true })).toBeVisible();
   await expect(page).toHaveTitle("Board — Ardur Bot");
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  await page.goto("/app/team");
+  await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
 });

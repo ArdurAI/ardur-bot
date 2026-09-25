@@ -8,6 +8,7 @@ import type {
 } from "./types.js";
 
 const payloadSchemas = {
+  "board.run": z.object({ requestId: z.string().min(1) }),
   "local-import.run": LocalImportJobSchema,
   "local-import.refresh": z.strictObject({}),
   "briefs.maintain": z.object({ runId: z.string().min(1).optional() }).strict(),

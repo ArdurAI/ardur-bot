@@ -65,6 +65,35 @@ function fixture() {
   return { app, deps, grant, read, signed, call, tx };
 }
 describe("isolated device routes", () => {
+  it.each(["board/workspaces", "board/snapshot", "board/show"])(
+    "allows the signed read-only Board procedure %s",
+    async (procedure) => {
+      const f = fixture();
+      expect(
+        (await f.call(f.signed("rpc", { procedure, input: { workspaceId: "workspace" } }))).status,
+      ).toBe(200);
+      expect(f.read).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: "owner", spaceId: "space" }),
+        procedure,
+        { workspaceId: "workspace" },
+      );
+    },
+  );
+  it.each([
+    "board/create",
+    "board/update",
+    "board/claim",
+    "board/close",
+    "board/comment",
+    "board/link",
+    "board/start",
+    "board/send",
+    "board/export",
+  ])("refuses Board writes from a read-only phone: %s", async (procedure) => {
+    const f = fixture();
+    expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).toBe(403);
+    expect(f.read).not.toHaveBeenCalled();
+  });
   it("reads the same user and space thread through a signed grant", async () => {
     const f = fixture();
     const response = await f.call(

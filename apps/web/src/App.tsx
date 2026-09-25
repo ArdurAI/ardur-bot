@@ -129,6 +129,10 @@ function SessionApp() {
             }
           />
           <Route
+            path="/app/board"
+            element={user ? <ShellPage board /> : <Navigate to="/sign-in" replace />}
+          />
+          <Route
             path="/app/ide"
             element={user ? <IdePage /> : <Navigate to="/sign-in" replace />}
           />

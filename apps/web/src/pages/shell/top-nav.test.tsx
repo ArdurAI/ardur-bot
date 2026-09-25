@@ -53,7 +53,7 @@ it("orders available registrations, omits unavailable routes, and updates after 
     registerTopNavItem({
       id: "board",
       label: { id: "Board" },
-      to: "/app/team",
+      to: "/app/board",
       order: 30,
       available: () => true,
     }),
@@ -86,7 +86,7 @@ it("routes shortcuts in available registration order and reflects bot deep links
     registerTopNavItem({
       id: "board",
       label: { id: "Board" },
-      to: "/app/team",
+      to: "/app/board",
       order: 30,
       available: true,
     }),
@@ -102,7 +102,7 @@ it("routes shortcuts in available registration order and reflects bot deep links
   for (const [key, title, path] of [
     ["1", "Dashboard", "/app"],
     ["2", "Bots", "/app/bots"],
-    ["3", "Board", "/app/team"],
+    ["3", "Board", "/app/board"],
   ]) {
     const event = new KeyboardEvent("keydown", { key, ctrlKey: true, cancelable: true });
     await act(async () => window.dispatchEvent(event));
@@ -129,4 +129,20 @@ it("ignores modified and repeated shortcuts and preserves legacy bot selection",
   expect(
     topNavShortcut(new KeyboardEvent("keydown", { code: "Digit1", metaKey: true }), [item]),
   ).toBe(item);
+});
+
+it("registers the landed Board page for the third shortcut", async () => {
+  await import("./board-nav");
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/app"]}>
+        <View />
+      </MemoryRouter>,
+    ),
+  );
+  await act(async () =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "3", ctrlKey: true })),
+  );
+  expect(node.querySelector("output")?.textContent).toBe("/app/board");
+  expect(document.title).toBe("Board — Ardur Bot");
 });

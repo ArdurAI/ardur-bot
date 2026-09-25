@@ -182,3 +182,64 @@ test("idle spaces polling waits at least five seconds between reads", async ({ p
   // Request dispatch and browser scheduling may vary by a few milliseconds.
   expect(reads.at(-1)! - reads.at(-2)!).toBeGreaterThanOrEqual(4900);
 });
+
+test("Board loads on navigation while the shell stays visible and supports direct links", async ({
+  page,
+}) => {
+  await installPerformanceFixture(page);
+  await page.route("**/rpc/board/workspaces", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          workspaces: [
+            {
+              id: "fixture-board",
+              kind: "space",
+              name: "Board",
+              path: "/fixture/board",
+              prefix: "board",
+              enabled: true,
+              initialized: true,
+            },
+          ],
+          problem: null,
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/board/snapshot", (route) =>
+    route.fulfill({ json: { json: { items: [], readyIds: [], blockedIds: [] } } }),
+  );
+  const boardScript = /\/assets\/Board-[^/]+\.js$/;
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    if (boardScript.test(request.url())) requests.push(request.url());
+  });
+  let release: () => void = () => undefined;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(boardScript, async (route) => {
+    await pending;
+    await route.continue();
+  });
+  try {
+    await page.goto("/app/fixture-bot-0");
+    await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+    expect(requests).toHaveLength(0);
+    const loading = page.waitForRequest(boardScript);
+    await page.getByRole("button", { name: "Board", exact: true }).click();
+    await loading;
+    await expect(page.getByTestId("bots-sidebar")).toBeVisible();
+    await expect(page.locator("[data-board-column]")).toHaveCount(0);
+    release();
+    await expect(page).toHaveURL(/\/app\/board$/);
+    await expect(page.locator("[data-board-column]")).toHaveCount(5);
+    expect(requests).toHaveLength(1);
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/board$/);
+    await expect(page.locator("[data-board-column]")).toHaveCount(5);
+  } finally {
+    release();
+  }
+});

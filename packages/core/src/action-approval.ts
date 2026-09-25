@@ -36,6 +36,8 @@ const APPROVAL_REQUIRED_BUILTIN_TOOLS = new Set([
 const EXPLICIT_APPROVAL_BUILTIN_TOOLS = new Set(["create_space"]);
 
 const UNATTENDED_SAFE_BUILTIN_TOOLS = new Set([
+  "board_ready",
+  "board_show",
   "browser_snapshot",
   "cloud_agent_status",
   "computer_observe",

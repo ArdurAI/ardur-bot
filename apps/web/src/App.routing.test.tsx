@@ -18,15 +18,25 @@ vi.mock("./components/PreferencesProvider", () => ({
 }));
 vi.mock("./pages/system/QuickComposer", () => ({ QuickComposer: () => null }));
 vi.mock("./pages/Shell", () => ({
-  ShellPage: ({ dashboard, team }: { dashboard?: boolean; team?: boolean }) => {
+  ShellPage: ({
+    dashboard,
+    team,
+    board,
+  }: {
+    dashboard?: boolean;
+    team?: boolean;
+    board?: boolean;
+  }) => {
     const params = useParams();
     return (
       <output>
         {dashboard
           ? "dashboard"
           : team
-            ? "board"
-            : `bots:${params.botId ?? params.groupId ?? "list"}`}
+            ? "team"
+            : board
+              ? "board"
+              : `bots:${params.botId ?? params.groupId ?? "list"}`}
       </output>
     );
   },
@@ -67,7 +77,8 @@ it.each([
   ["/app/bots", "bots:list"],
   ["/app/bot-id?m=message", "bots:bot-id"],
   ["/app/g/group-id", "bots:group-id"],
-  ["/app/team", "board"],
+  ["/app/team", "team"],
+  ["/app/board", "board"],
 ])("preserves %s", async (path, expected) => {
   await act(async () =>
     root.render(

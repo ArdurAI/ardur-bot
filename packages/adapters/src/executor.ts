@@ -167,6 +167,8 @@ import {
   resolveAutoReviewProviderKind,
 } from "./auto-review.js";
 import { createAutoReviewProvider } from "./auto-review-factory.js";
+import { BoardService } from "./board/service.js";
+import { BOARD_TOOL_NAMES, executeBoardTool, finishBoardRun } from "./board/tools.js";
 import { attachedImageArtifactIds, resolveUpdateBotAvatar } from "./bot-avatar.js";
 import { loadBotMessageContext, messageBot, returnBotMessageOutcome } from "./bot-messages.js";
 import {
@@ -392,6 +394,8 @@ import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
 
 const modelCredentialLocks = new Map<string, Promise<void>>();
 const READ_ONLY_AGENT_TOOLS = new Set([
+  "board_ready",
+  "board_show",
   "computer_observe",
   "list_files",
   "read_file",
@@ -3710,6 +3714,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 args: redactTaskValue(args, runSecrets),
               }),
             );
+          if (BOARD_TOOL_NAMES.has(name)) {
+            return finish(
+              await executeBoardTool(
+                new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" }),
+                {
+                  userId: run.userId,
+                  spaceId: run.spaceId,
+                  botId: run.botId,
+                  runId,
+                  signal: context.signal,
+                },
+                name,
+                args,
+              ),
+            );
+          }
           if (name === "reject_delegation")
             return finish(
               await rejectTask(
@@ -4901,6 +4921,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
             run.trigger === "bot_message"
               ? botMessageOutcomeFromMidTurn(text, midTurnUserTexts)
               : null;
+          if (run.boardItemId)
+            await finishBoardRun(
+              deps,
+              {
+                userId: run.userId,
+                spaceId: run.spaceId,
+                botId: run.botId,
+                runId,
+                signal: context.signal,
+              },
+              text,
+              true,
+            ).catch(() => getLogger().warn("Board outcome could not be recorded."));
           const completed = await deps.events.finalizeRun({
             spaceId: run.spaceId,
             threadId: thread.id,
@@ -4956,6 +4989,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
             error instanceof Error ? error.message : String(error),
             runSecrets,
           );
+          if (run.boardItemId)
+            await finishBoardRun(
+              deps,
+              {
+                userId: run.userId,
+                spaceId: run.spaceId,
+                botId: run.botId,
+                runId,
+                signal: context.signal,
+              },
+              message,
+              false,
+            ).catch(() => getLogger().warn("Board outcome could not be recorded."));
           const failed = await deps.events.finalizeRun({
             spaceId: run.spaceId,
             threadId: thread.id,

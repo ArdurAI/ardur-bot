@@ -258,6 +258,9 @@ const TeamBoard = lazy(() =>
   import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
 );
 
+const ProjectBoard = lazy(() =>
+  import("./board/Board").then((module) => ({ default: module.Board })),
+);
 const BotContextMenu = lazy(() =>
   import("./BotContextMenu").then((module) => ({ default: module.BotContextMenu })),
 );
@@ -329,14 +332,17 @@ function readCollapsedSidebarSections(userId: string | null | undefined): Set<st
 
 export function ShellPage({
   team = false,
+  board = false,
   dashboard = false,
 }: {
   team?: boolean;
+  board?: boolean;
   dashboard?: boolean;
 }) {
+  const TaskPage = board ? ProjectBoard : TeamBoard;
   const { t } = useLingui();
-  const teamView = useRef(team);
-  teamView.current = team || dashboard;
+  const teamView = useRef(team || board || dashboard);
+  teamView.current = team || board || dashboard;
   const { botId, groupId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -664,7 +670,9 @@ export function ShellPage({
 
   const inGroup = Boolean(groupId);
   const active =
-    team || dashboard || inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
+    team || board || dashboard || inGroup
+      ? undefined
+      : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
   computerOpenRef.current = computerOpen;
@@ -1687,6 +1695,7 @@ export function ShellPage({
     initialBotsLoaded &&
     (dashboard ||
       team ||
+      board ||
       (inGroup
         ? Boolean(activeGroup && activeSnapshot)
         : bots.length === 0 || Boolean(active && activeSnapshot)));
@@ -2602,6 +2611,17 @@ export function ShellPage({
             : "md:w-[316px]"
         }`}
       >
+        <Button
+          variant="ghost"
+          className="m-2"
+          aria-pressed={board}
+          onClick={() => {
+            navigate("/app/board");
+            setMobileSidebarOpen(false);
+          }}
+        >
+          <Trans>Board</Trans>
+        </Button>
         {bots.length >= 2 ? (
           <Button
             variant="ghost"
@@ -3201,7 +3221,7 @@ export function ShellPage({
           />
         </main>
       ) : null}
-      {team ? (
+      {team || board ? (
         <main
           aria-hidden={mobileSidebarOpen || undefined}
           inert={mobileSidebarOpen}
@@ -3212,7 +3232,8 @@ export function ShellPage({
               <div className="m-4 h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
             }
           >
-            <TeamBoard
+            <TaskPage
+              bots={bots}
               key={bootstrapMe?.spaceId}
               navigation={
                 <Button
@@ -3235,7 +3256,7 @@ export function ShellPage({
       <main
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
-        className={`${team || dashboard ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
+        className={`${team || board || dashboard ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
           <div className="flex min-w-0 items-center gap-2">
