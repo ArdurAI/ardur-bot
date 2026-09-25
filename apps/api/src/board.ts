@@ -1,6 +1,13 @@
 import { BoardService, requestBoardCommand } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import type { BoardFilter, BoardSnapshot, BoardView, BoardWork } from "@ardurbot/contracts/board";
+import type {
+  BoardFilter,
+  BoardProblem,
+  BoardSnapshot,
+  BoardView,
+  BoardWork,
+  WorkItem,
+} from "@ardurbot/contracts/board";
 import { BoardError, BoardPatchSchema, boardColumn } from "@ardurbot/contracts/board";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import { ORPCError } from "@orpc/server";
@@ -49,6 +56,7 @@ export function createBoard(deps: RouterDeps) {
         workspaceId: workspace?.id ?? null,
         snapshot: { items: [], readyIds: [], blockedIds: [] },
         selected: null,
+        selectionProblem: null,
         followingIds: [],
         bots: [],
         problem: null,
@@ -57,9 +65,19 @@ export function createBoard(deps: RouterDeps) {
       try {
         // One browser request for the whole view, with at most one selected-item read.
         const snapshot = await board.snapshot(actor, { workspaceId: workspace.id });
-        const selected = input.itemId
-          ? await (await service.provider(actor, workspace.id)).show(input.itemId)
-          : null;
+        let selected: WorkItem | null = null;
+        let selectionProblem: BoardProblem | null = null;
+        if (input.itemId) {
+          try {
+            selected = await (await service.provider(actor, workspace.id)).show(input.itemId);
+          } catch (error) {
+            if (error instanceof BoardError && error.problem.code === "forbidden") throw error;
+            selectionProblem =
+              error instanceof BoardError
+                ? error.problem
+                : { code: "command_failed", message: "Could not load" };
+          }
+        }
         const [follows, bots] = await Promise.all([
           deps.prisma.boardFollow.findMany({
             where: { workspaceId: workspace.id, userId: actor.userId },
@@ -79,6 +97,7 @@ export function createBoard(deps: RouterDeps) {
           ...empty,
           snapshot,
           selected,
+          selectionProblem,
           followingIds: follows.map((row) => row.itemId),
           bots,
         };

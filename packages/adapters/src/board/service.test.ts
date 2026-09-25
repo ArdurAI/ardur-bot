@@ -234,6 +234,22 @@ it("rejects bot access outside the configured board allowlist", async () => {
   workspace.allowedBotIds.push(scope.botId);
   await expect(service.workspace(scope, "workspace")).resolves.toMatchObject({ id: "workspace" });
 });
+it("uses an initialized folder as the default when the space board has not been started", async () => {
+  const { service, prisma, workspace } = fixture();
+  const rows = [
+    { ...workspace, initialized: false, isDefault: false },
+    { ...workspace, id: "folder", kind: "folder", path: "/fixture/project", isDefault: false },
+  ];
+  prisma.boardWorkspace.findFirst.mockImplementation(async (input?: unknown) => {
+    const { where } = input as { where: Record<string, unknown> };
+    return (
+      rows.find((row) =>
+        Object.entries(where).every(([key, value]) => row[key as keyof typeof row] === value),
+      ) ?? (null as never)
+    );
+  });
+  expect(await service.workspace(scope)).toMatchObject({ id: "folder", initialized: true });
+});
 it("discovers uninitialized boards without creating their Beads files", async () => {
   const { prisma, service, workspace } = fixture();
   const uninitialized = { ...workspace, initialized: false, name: "Board" };

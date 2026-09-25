@@ -69,6 +69,7 @@ export function Board({
   const [workspaces, setWorkspaces] = useState<BoardWorkspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [problem, setProblem] = useState<BoardProblem | null>(null);
+  const [selectionProblem, setSelectionProblem] = useState<BoardProblem | null>(null);
   const [snapshot, setSnapshot] = useState(empty);
   const [filter, setFilter] = useState<BoardFilter>(
     () => BoardFilterSchema.safeParse(saved.filter).data ?? {},
@@ -103,6 +104,8 @@ export function Board({
     }
   }, [storageKey, filter, search, botFilter]);
   const epoch = useRef(0);
+  const selection = useRef({ requestedWorkspace, itemId, spaceId });
+  selection.current = { requestedWorkspace, itemId, spaceId };
   const catalog = snapshot.allItems ?? snapshot.items;
   const workspace = workspaces.find((row) => row.id === workspaceId);
   useEffect(() => {
@@ -114,6 +117,7 @@ export function Board({
     setEditing(false);
     setExportPath("");
     setProblem(null);
+    setSelectionProblem(null);
     setError("");
   }, [requestedWorkspace]);
   const refresh = useCallback(async () => {
@@ -121,10 +125,11 @@ export function Board({
     const abort = controller.current;
     if (!abort || abort.signal.aborted) return;
     const ticket = epoch.current;
+    const current = selection.current;
     const request = rpc.board
       .view(
-        { workspaceId: requestedWorkspace, itemId },
-        { signal: abort.signal, context: { spaceId } },
+        { workspaceId: current.requestedWorkspace, itemId: current.itemId },
+        { signal: abort.signal, context: { spaceId: current.spaceId } },
       )
       .then((result) => {
         if (abort.signal.aborted || ticket !== epoch.current) return;
@@ -132,6 +137,7 @@ export function Board({
         setWorkspaceId(result.workspaceId ?? "");
         setSnapshot(result.snapshot);
         setSelected(result.selected);
+        setSelectionProblem(result.selectionProblem ?? null);
         setFollowingIds(result.followingIds);
         setBots(result.bots);
         setProblem(result.problem);
@@ -139,7 +145,7 @@ export function Board({
         setLoaded(true);
       })
       .catch(() => {
-        if (!abort.signal.aborted) {
+        if (!abort.signal.aborted && ticket === epoch.current) {
           setError(t`Could not load Board; retry.`);
           setLoaded(true);
         }
@@ -149,7 +155,7 @@ export function Board({
       });
     pending.current = request;
     return request;
-  }, [requestedWorkspace, itemId, spaceId, t]);
+  }, [t]);
   useEffect(() => {
     const abort = new AbortController();
     controller.current = abort;
@@ -169,13 +175,13 @@ export function Board({
       clearInterval(interval);
       document.removeEventListener("visibilitychange", poll);
     };
-  }, [refresh]);
+  }, [refresh, requestedWorkspace, itemId, spaceId]);
   const loadWorkspaces = refresh;
   const reload = async () => {
     await pending.current;
     await refresh();
   };
-  const open = async (id: string) => {
+  const open = (id: string) => {
     setEditing(false);
     setComment("");
     setParams((previous) => {
@@ -185,11 +191,21 @@ export function Board({
       return next;
     });
   };
+  const clearSelection = () => {
+    setSelected(null);
+    setSelectionProblem(null);
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      for (const key of ["item", "itemId", "id"]) next.delete(key);
+      return next;
+    });
+  };
   const move = async (id: string, status: NonNullable<BoardPatch["status"]>) => {
     if (mutation.current) return;
     const item = catalog.find((row) => row.id === id);
     if (!item) return;
     const oldStatus = BoardPatchSchema.shape.status.safeParse(item.status);
+    const ticket = epoch.current;
     mutation.current = true;
     setBusy(true);
     setError("");
@@ -210,6 +226,7 @@ export function Board({
       await reload();
     } catch {
       setError(t`Could not update this item.`);
+      if (ticket !== epoch.current) await reload();
     } finally {
       setOptimistic(null);
       setBusy(false);
@@ -218,6 +235,7 @@ export function Board({
   };
   const act = async (work: () => Promise<unknown>) => {
     if (mutation.current) return;
+    const ticket = epoch.current;
     mutation.current = true;
     setBusy(true);
     setError("");
@@ -226,6 +244,7 @@ export function Board({
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : t`Could not update this item.`);
+      if (ticket !== epoch.current) await reload();
     } finally {
       setBusy(false);
       mutation.current = false;
@@ -347,6 +366,17 @@ export function Board({
           </Button>
         </div>
       ) : null}
+      {selectionProblem ? (
+        <div role="alert" className="my-2 space-x-2 text-destructive">
+          <Trans>Could not load</Trans> {itemId}
+          <Button variant="ghost" onClick={() => void reload()}>
+            <Trans>Retry</Trans>
+          </Button>
+          <Button variant="ghost" onClick={clearSelection}>
+            <Trans>Close</Trans>
+          </Button>
+        </div>
+      ) : null}
       {exportPath ? <output className="my-2 block break-all text-sm">{exportPath}</output> : null}
       {loaded && !workspace && !error && !problem ? (
         <div className="space-y-2">
@@ -431,7 +461,7 @@ export function Board({
             </NativeSelect>
           </div>
           {view === "graph" ? (
-            <DependencyGraph graph={currentGraph} onOpen={(id) => void act(() => open(id))} />
+            <DependencyGraph graph={currentGraph} onOpen={open} />
           ) : view === "epics" ? (
             <div className="space-y-2">
               {catalog
@@ -441,7 +471,7 @@ export function Board({
                   const done = children.filter((item) => item.status === "closed").length;
                   return (
                     <article key={epic.id} className="rounded-lg border border-border bg-card p-4">
-                      <Button variant="ghost" onClick={() => void act(() => open(epic.id))}>
+                      <Button variant="ghost" onClick={() => open(epic.id)}>
                         {epic.title}
                       </Button>
                       <span className="ms-2 text-muted-foreground">
@@ -454,11 +484,7 @@ export function Board({
                         aria-label={epic.title}
                       />
                       {children.map((child) => (
-                        <Button
-                          key={child.id}
-                          variant="ghost"
-                          onClick={() => void act(() => open(child.id))}
-                        >
+                        <Button key={child.id} variant="ghost" onClick={() => open(child.id)}>
                           {child.title}
                         </Button>
                       ))}
@@ -507,14 +533,7 @@ export function Board({
       <Dialog
         open={selected !== null}
         onOpenChange={(open) => {
-          if (!open) {
-            setSelected(null);
-            setParams((previous) => {
-              const next = new URLSearchParams(previous);
-              for (const key of ["item", "itemId", "id"]) next.delete(key);
-              return next;
-            });
-          }
+          if (!open) clearSelection();
         }}
       >
         <DialogContent className="inset-y-0 left-auto right-0 top-0 h-full max-w-full translate-x-0 translate-y-0 overflow-auto rounded-none sm:max-w-xl">
@@ -532,7 +551,7 @@ export function Board({
                   items={catalog}
                   bots={bots}
                   save={async ({ dependencies: _dependencies, ...patch }) => {
-                    setSelected(await rpc.board.update({ workspaceId, id: selected.id, patch }));
+                    await rpc.board.update({ workspaceId, id: selected.id, patch });
                     setEditing(false);
                     await refresh();
                   }}
@@ -608,7 +627,6 @@ export function Board({
                   onClick={() =>
                     void act(async () => {
                       await rpc.board.claim({ workspaceId, id: selected.id });
-                      await open(selected.id);
                     })
                   }
                 >
@@ -623,7 +641,6 @@ export function Board({
                         ids: [selected.id],
                         reason: "Completed",
                       });
-                      await open(selected.id);
                     })
                   }
                 >
@@ -668,13 +685,11 @@ export function Board({
                   disabled={busy}
                   onCheckedChange={(checked) =>
                     void act(async () =>
-                      setSelected(
-                        await rpc.board.update({
-                          workspaceId,
-                          id: selected.id,
-                          patch: { closeWhenDone: checked },
-                        }),
-                      ),
+                      rpc.board.update({
+                        workspaceId,
+                        id: selected.id,
+                        patch: { closeWhenDone: checked },
+                      }),
                     )
                   }
                 />
@@ -693,7 +708,7 @@ export function Board({
                       <Button
                         key={`${edge.id}:${edge.type}`}
                         variant="ghost"
-                        onClick={() => void act(() => open(edge.id))}
+                        onClick={() => open(edge.id)}
                       >
                         {edge.id}
                         {edge.type !== "blocks" ? ` · ${edge.type}` : ""}

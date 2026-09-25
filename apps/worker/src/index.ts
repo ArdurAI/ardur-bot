@@ -15,6 +15,7 @@ import {
   backfillRuntimePins,
   ChatSdkMessagingSurface,
   createBackgroundJobHandlers,
+  createBoardNotificationDelivery,
   createCloudAgentConnection,
   createConnectorStack,
   createJobReconciler,
@@ -26,7 +27,6 @@ import {
   createRunSecretWriter,
   createWebProvider,
   databaseCapacityBackoffMs,
-  deliverBoardNotifications,
   EncryptedSecretStore,
   ExpoPushProvider,
   GraphileJobPublisher,
@@ -278,12 +278,15 @@ async function main() {
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
     reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
-    reconcileBoardOutcomes: async () => {
-      await reconcileBoardOutcomes({ prisma, dataDir });
-      await deliverBoardNotifications(prisma, new ExpoPushProvider(dataDir));
-    },
+    reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir }),
   });
   reconciler.start();
+  const boardNotifications = createBoardNotificationDelivery({
+    prisma,
+    notifications: new ExpoPushProvider(dataDir),
+    leadership: createPostgresReconciliationLeadership(pool, { lockId: 2 }),
+  });
+  boardNotifications.start();
   const chatReceivers = createMessagingReceivers({
     prisma,
     pool,
@@ -299,6 +302,7 @@ async function main() {
     stopping = true;
     try {
       await chatReceivers.stop();
+      await boardNotifications.stop();
       await reconciler.stop();
       await jobHost.stop();
       await jobs.close();

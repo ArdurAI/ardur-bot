@@ -17,11 +17,13 @@ const fakes = vi.hoisted(() => ({
   setParams: vi.fn(),
   push: vi.fn(),
   paired: false,
+  pairing: vi.fn(),
+  requestClose: undefined as (() => void) | undefined,
   alert: vi.fn(),
   save: vi.fn(),
 }));
 vi.mock("./api", () => ({ rpc: vi.fn(), selectedSpaceId: () => "space" }));
-vi.mock("./dispatch", () => ({ hasPairedDevice: async () => fakes.paired }));
+vi.mock("./dispatch", () => ({ hasPairedDevice: () => fakes.pairing() }));
 vi.mock("expo-secure-store", () => ({
   getItemAsync: async () => null,
   setItemAsync: fakes.save.mockResolvedValue(undefined),
@@ -44,8 +46,18 @@ vi.mock("react-native", () => ({
   View: ({ children }: { children: ReactNode }) => h("div", null, children),
   ScrollView: ({ children }: { children: ReactNode }) => h("div", null, children),
   Text: ({ children }: { children: ReactNode }) => h("span", null, children),
-  Modal: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
-    visible ? h("div", { role: "dialog" }, children) : null,
+  Modal: ({
+    visible,
+    children,
+    onRequestClose,
+  }: {
+    visible: boolean;
+    children: ReactNode;
+    onRequestClose?: () => void;
+  }) => {
+    fakes.requestClose = onRequestClose;
+    return visible ? h("div", { role: "dialog" }, children) : null;
+  },
   Button: ({
     title,
     onPress,
@@ -145,6 +157,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   fakes.params = {};
   fakes.paired = false;
+  fakes.pairing.mockReset().mockImplementation(async () => fakes.paired);
   vi.mocked(rpc).mockImplementation(async (procedure) =>
     procedure === "board/view"
       ? board
@@ -328,3 +341,78 @@ it("clears a created quick-add even if its subsequent status change fails", asyn
     vi.mocked(rpc).mock.calls.filter(([procedure]) => procedure === "board/create"),
   ).toHaveLength(1);
 });
+it.each(["Close", "Android Back"])(
+  "dismisses the selection immediately with %s while offline",
+  async (action) => {
+    fakes.params = { workspace: "workspace", item: item.id };
+    vi.mocked(rpc)
+      .mockResolvedValueOnce({ ...board, selected: item })
+      .mockRejectedValue(new Error("offline"));
+    await act(async () => root.render(h(MobileBoard)));
+    expect(node.querySelector('[role="dialog"]')).not.toBeNull();
+    await act(async () => (action === "Close" ? button("Close").click() : fakes.requestClose!()));
+    expect(node.querySelector('[role="dialog"]')).toBeNull();
+    expect(fakes.setParams).toHaveBeenCalledWith(expect.objectContaining({ item: "" }));
+  },
+);
+it.each(["Blocked", "Follow", "Comment", "Builder"])(
+  "shows a failed %s action and recovery inside the native sheet",
+  async (action) => {
+    vi.mocked(rpc).mockImplementation(async (procedure) => {
+      if (procedure === "board/view")
+        return { ...board, selected: item, bots: [{ id: "builder", name: "Builder" }] };
+      throw new Error("offline");
+    });
+    await act(async () => root.render(h(MobileBoard)));
+    if (action === "Comment") await type("Comment", "Check this");
+    const target = [...node.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+      (button) => button.textContent === action,
+    )!;
+    await act(async () => target.click());
+    const sheet = node.querySelector('[role="dialog"]')!;
+    expect(sheet.textContent).toContain("Could not load Board; retry.");
+    const retry = [...sheet.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Retry",
+    );
+    expect(retry).toBeDefined();
+    const before = vi
+      .mocked(rpc)
+      .mock.calls.filter(([procedure]) => procedure === "board/view").length;
+    await act(async () => retry!.click());
+    expect(
+      vi.mocked(rpc).mock.calls.filter(([procedure]) => procedure === "board/view"),
+    ).toHaveLength(before + 1);
+  },
+);
+it("drops unavailable bot IDs when editing the mobile board allowlist", async () => {
+  vi.mocked(rpc).mockImplementation(async (procedure) => {
+    if (procedure === "me") return { isDeploymentOwner: true };
+    if (procedure === "bots/list") return [{ id: "builder", name: "Builder" }];
+    if (procedure === "board/workspaces")
+      return {
+        workspaces: [
+          { ...board.workspaces[0], allowAllBots: false, allowedBotIds: ["archived", "deleted"] },
+        ],
+        problem: null,
+      };
+    return {};
+  });
+  await act(async () => root.render(h(BoardsSettings)));
+  await act(async () => node.querySelector<HTMLInputElement>('[aria-label="Builder"]')!.click());
+  expect(rpc).toHaveBeenCalledWith("board/configure", {
+    workspaceId: "workspace",
+    patch: { allowedBotIds: ["builder"] },
+  });
+});
+it.each(["me", "paired-device"])(
+  "retries ownership bootstrap after the initial %s check fails",
+  async (failure) => {
+    if (failure === "me") vi.mocked(rpc).mockRejectedValueOnce(new Error("offline"));
+    else fakes.pairing.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => root.render(h(BoardsSettings)));
+    expect(node.textContent).toContain("Could not load Board; retry.");
+    await act(async () => button("Retry").click());
+    expect(node.textContent).toContain("Make default");
+    expect(node.textContent).not.toContain("Could not load Board; retry.");
+  },
+);

@@ -167,8 +167,10 @@ assignee and comment count; `board_notifications` stores versioned changes. Shar
 provider reads and mutations observe those fields, including bot tools and outcome
 comments. An observation and notification share a database transaction. The normal
 notification activity poll delivers web and desktop notifications; the existing
-worker reconciliation loop retries mobile push delivery through the configured
-notification provider. Current ownership, membership, enabled state and notification
+worker's independent notification loop retries mobile push delivery through the configured
+notification provider. It has separate leadership, non-overlapping 30-second cycles,
+and one 15-second deadline for each batch. Push delivery does not block run,
+routine or lease recovery. Current ownership, membership, enabled state and notification
 preferences are checked before delivery. Unfollow removes pending notifications.
 External Beads changes are observed on the next app read. Push delivery is at least
 once on transport failures, with the existing per-item collapse key.
