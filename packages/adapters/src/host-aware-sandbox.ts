@@ -102,6 +102,23 @@ export class HostAwareSandbox implements SandboxProvider {
     return this.isolated.describe();
   }
 
+  /**
+   * Kind that will actually run. An existing computer follows route(); a placement
+   * target follows provision(), which uses the desktop host for every connectionless
+   * computer while This Mac is selected.
+   */
+  async routedKind(
+    subject: { connectionId?: string | null; kind?: string | null },
+    side: "computer" | "target",
+  ): Promise<string> {
+    if (side === "computer") {
+      return (subject.kind === "desktop" ? this.host : this.isolated).describe().id;
+    }
+    const provider =
+      !subject.connectionId && (await this.hostEnabled()) ? this.host : this.isolated;
+    return provider.describe().id;
+  }
+
   private route(computer: ComputerRef) {
     return computer.kind === "desktop" ? this.host : this.isolated;
   }

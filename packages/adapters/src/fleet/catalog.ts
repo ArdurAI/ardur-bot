@@ -6,7 +6,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerSecretLoader } from "../computer-connections.js";
 import { ComputerConnections } from "../computer-connections.js";
 import { DockerSandboxProvider } from "../docker-sandbox.js";
-import { sandboxKindForBot } from "../host-aware-sandbox.js";
+import { HostAwareSandbox, sandboxKindForBot } from "../host-aware-sandbox.js";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "../sandbox-factory.js";
 import { hostCapacity } from "./service.js";
@@ -68,11 +68,12 @@ export class FleetCatalog {
     targets: FleetTarget[],
     context: AdapterContext,
   ): Promise<FleetTarget[]> {
-    const sourceKind = (await this.resolveComputer(computer, context)).describe().id;
+    const source = await this.resolveComputer(computer, context);
+    const sourceKind = await this.effectiveSandboxKind(source, computer, "computer");
     const compatible = await Promise.all(
       targets.map(async (target) => {
         const targetKind = await this.resolveTarget(target, context)
-          .then((provider) => provider.describe().id)
+          .then((provider) => this.effectiveSandboxKind(provider, target, "target"))
           .catch(() => null);
         return targetKind === sourceKind ? target : null;
       }),
@@ -103,10 +104,23 @@ export class FleetCatalog {
         };
     if (!target) throw new Error("Computer replacement target is unavailable");
     const targetProvider = await this.resolveTarget(target, context);
-    if (targetProvider.describe().id !== source.describe().id) {
-      throw new Error("Computer replacement target is unavailable");
+    // Automatic placement carries a target id and must stay on one running kind.
+    // A Settings connection change is already confirmed and may cross kinds.
+    if (configuration.targetId !== undefined) {
+      const sourceKind = await this.effectiveSandboxKind(source, computer, "computer");
+      const targetKind = await this.effectiveSandboxKind(targetProvider, target, "target");
+      if (sourceKind !== targetKind) throw new Error("Computer replacement target is unavailable");
     }
     return { source, target: targetProvider };
+  }
+  private async effectiveSandboxKind(
+    provider: SandboxProvider,
+    subject: { connectionId?: string | null; kind?: string | null },
+    side: "computer" | "target",
+  ): Promise<string> {
+    return provider instanceof HostAwareSandbox
+      ? provider.routedKind(subject, side)
+      : provider.describe().id;
   }
   async testDefault(context: AdapterContext) {
     const deployment = await this.prisma.deploymentSettings.findUnique({
