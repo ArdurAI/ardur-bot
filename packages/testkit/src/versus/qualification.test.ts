@@ -4,6 +4,7 @@ import {
   assessContainerCohort,
   inspectLocalRoute,
   parseQualificationArguments,
+  parseServingContext,
   runQualification,
 } from "./qualification.js";
 import { planPairs } from "./scheduler.js";
@@ -13,7 +14,7 @@ const expected = {
   model: "qwen3:8b",
   digest: contentDigest("synthetic-model"),
   quantization: "Q4_K_M",
-  contextSize: 32768,
+  contextSize: 64000,
 };
 function fixture() {
   const tag = { name: expected.model, digest: expected.digest, size: 100 };
@@ -22,7 +23,7 @@ function fixture() {
     details: { quantization_level: expected.quantization },
     model_info: {
       "general.architecture": "qwen3",
-      "qwen3.context_length": 40960,
+      "qwen3.context_length": 131072,
       "tokenizer.ggml.tokens": ["synthetic"],
     },
     capabilities: ["completion", "tools"],
@@ -31,6 +32,7 @@ function fixture() {
     { models: [tag] },
     { version: "0.0.0-test" },
     show,
+    { models: [{ ...tag, context_length: 64000 }] },
     { models: [tag] },
     { version: "0.0.0-test" },
   ];
@@ -123,6 +125,7 @@ describe("non-generating live prerequisites", () => {
       report,
       routeContext: 32768,
       architectureMaximum: 40960,
+      servingContext: null,
     });
     expect(blocked.ready).toBe(false);
     expect(blocked.gates.aggregateDisk).toBe(true);
@@ -136,8 +139,78 @@ describe("non-generating live prerequisites", () => {
         report: null,
         routeContext: 32768,
         architectureMaximum: 40960,
+        servingContext: null,
       }).gates.approval,
     ).toBe(false);
+  });
+  it("makes the approved cohort ready only with an attested context inside both bounds", () => {
+    const counter = { cap: 2, admitted: 2, nextRefused: true, effectAfterRefusal: false };
+    const report = {
+      realModelCalls: 0,
+      imagePulls: 0,
+      packageDownloads: 0,
+      checks: [
+        {
+          name: "aggregate-disk-cap",
+          passed: true,
+          evidence: { mechanism: "tmpfs-size", capBytes: 8388608, containerAlive: true },
+        },
+        {
+          name: "tool-and-descendant-admission",
+          passed: true,
+          evidence: {
+            toolCalls: counter,
+            descendants: { helpers: counter, commands: counter },
+          },
+        },
+        { name: "product-tool-round-trip", passed: true, evidence: {} },
+        {
+          name: "dependency-manifest",
+          passed: true,
+          evidence: { missingPackages: [], missingBytes: 0 },
+        },
+      ],
+    };
+    expect(
+      assessContainerCohort({
+        approval: "approved",
+        report,
+        routeContext: 64000,
+        architectureMaximum: 131072,
+        servingContext: 64000,
+      }),
+    ).toMatchObject({ ready: true, failures: [], gates: { contextPin: true } });
+    for (const servingContext of [null, 32768, 131072])
+      expect(
+        assessContainerCohort({
+          approval: "approved",
+          report,
+          routeContext: 64000,
+          architectureMaximum: 131072,
+          servingContext,
+        }).ready,
+      ).toBe(false);
+  });
+  it("parses recorded serving-state fixtures without loading a model", () => {
+    const tag = { name: expected.model, digest: expected.digest };
+    expect(
+      parseServingContext(
+        { models: [{ ...tag, context_length: 64000, size_vram: 1234 }] },
+        expected,
+      ),
+    ).toBe(64000);
+    for (const value of [
+      { models: [] },
+      { models: [{ ...tag, digest: contentDigest("other"), context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 0 }] },
+      {
+        models: [
+          { ...tag, context_length: 64000 },
+          { ...tag, context_length: 64000 },
+        ],
+      },
+    ])
+      expect(() => parseServingContext(value, expected)).toThrow();
   });
   it("prints help without probing or discovery and rejects accidental live options", async () => {
     const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -157,6 +230,7 @@ describe("non-generating live prerequisites", () => {
       "/api/tags",
       "/api/version",
       "/api/show",
+      "/api/ps",
       "/api/tags",
       "/api/version",
     ]);
@@ -175,10 +249,10 @@ describe("non-generating live prerequisites", () => {
     ).toBe(true);
     expect(result).toMatchObject({
       toolRoundTrip: "not-run",
-      effectiveContext: null,
+      effectiveContext: 64000,
       generationRequests: 0,
     });
-    expect(result.budget.contextSize).toBe(32768);
+    expect(result.budget.contextSize).toBe(64000);
     expect(result.budget.model.digest).toBe(expected.digest);
     expect(result.budget.model.tokenizerHash).toBe(
       contentDigest({ "tokenizer.ggml.tokens": ["synthetic"] }),
@@ -209,7 +283,7 @@ describe("non-generating live prerequisites", () => {
     async (version) => {
       const f = fixture();
       f.responses[1] = { version };
-      f.responses[4] = { version };
+      f.responses[5] = { version };
       await expect(inspectLocalRoute(expected, f.transport)).rejects.toThrow("serverVersion");
       expect(f.requests.map(({ url }) => new URL(url).pathname)).toEqual([
         "/api/tags",
@@ -222,13 +296,13 @@ describe("non-generating live prerequisites", () => {
     async (version) => {
       const f = fixture();
       f.responses[1] = { version };
-      f.responses[4] = { version };
+      f.responses[5] = { version };
       expect((await inspectLocalRoute(expected, f.transport)).budget.model.serverVersion).toBe(
         version,
       );
       const changed = fixture();
       changed.responses[1] = { version };
-      changed.responses[4] = { version: null };
+      changed.responses[5] = { version: null };
       await expect(inspectLocalRoute(expected, changed.transport)).rejects.toThrow("version drift");
     },
   );
@@ -239,10 +313,10 @@ describe("non-generating live prerequisites", () => {
       if (change === "quantization") f.show.details.quantization_level = "Q8";
       if (change === "context") f.show.model_info["qwen3.context_length"] = 4096;
       if (change === "tokenizer") f.show.model_info["tokenizer.ggml.tokens"] = [];
-      if (change === "tag-race") f.responses[3] = { models: [] };
-      if (change === "server-race") f.responses[4] = { version: "changed" };
+      if (change === "tag-race") f.responses[4] = { models: [] };
+      if (change === "server-race") f.responses[5] = { version: "changed" };
       await expect(inspectLocalRoute(expected, f.transport)).rejects.toThrow();
-      expect(f.requests.length).toBeLessThanOrEqual(5);
+      expect(f.requests.length).toBeLessThanOrEqual(6);
       expect(f.requests.some(({ url }) => /generate|chat|pull|create/.test(url))).toBe(false);
     },
   );

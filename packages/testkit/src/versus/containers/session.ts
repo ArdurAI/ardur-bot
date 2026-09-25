@@ -149,6 +149,7 @@ export function assertContainerProof(proof: ContainerProof, policy: ContainerPol
   );
 }
 type Waiter = { resolve: (value: unknown) => void; reject: (error: Error) => void };
+export type ContainerSnapshotEntry = string | { kind: "link" };
 export class ContainerSession {
   readonly id: string;
   readonly policy: Readonly<ContainerPolicy>;
@@ -497,7 +498,7 @@ export class ContainerSession {
     return Buffer.from((await this.file("read", file)) as string, "base64");
   }
   async snapshot(directory = "workspace") {
-    return (await this.file("snapshot", directory)) as Record<string, string>;
+    return (await this.file("snapshot", directory)) as Record<string, ContainerSnapshotEntry>;
   }
   /** The trusted caller must reserve a semantic tool/descendant before starting product-requested work. */
   async exec(

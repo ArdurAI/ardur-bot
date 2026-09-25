@@ -77,7 +77,12 @@ export class HermesContainerAdapter implements VersusAdapter {
         files: {
           write: (name, content) => session.write(`workspace/${name}`, content),
           read: async (name) => (await session.read(`workspace/${name}`)).toString("utf8"),
-          snapshot: () => session.snapshot(),
+          snapshot: async () =>
+            Object.fromEntries(
+              Object.entries(await session.snapshot()).filter(
+                (entry): entry is [string, string] => typeof entry[1] === "string",
+              ),
+            ),
         },
       });
       await this.broker.prepare();

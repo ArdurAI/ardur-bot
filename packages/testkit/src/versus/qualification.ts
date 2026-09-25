@@ -33,6 +33,22 @@ export interface RouteExpectation {
   contextSize: number;
 }
 
+/** Read-only Ollama serving-state attestation. It never loads or extends a model lease. */
+export function parseServingContext(value: unknown, expected: RouteExpectation): number {
+  const state = record(value);
+  requireValue(Array.isArray(state.models), "Missing serving model inventory");
+  const matches = state.models
+    .map(record)
+    .filter((item) => item.name === expected.model && item.digest === expected.digest);
+  requireValue(matches.length === 1, "Expected model is not uniquely loaded");
+  const context = matches[0]!.context_length;
+  requireValue(
+    typeof context === "number" && Number.isSafeInteger(context) && context > 0,
+    "Loaded model context is unavailable",
+  );
+  return context;
+}
+
 /** Metadata only: no generation, pull, load, copy, create, delete, or keep-alive operation. */
 export async function inspectLocalRoute(expected: RouteExpectation, transport = fetch) {
   const origin = new URL(expected.origin);
@@ -112,6 +128,7 @@ export async function inspectLocalRoute(expected: RouteExpectation, transport = 
     typeof show.template === "string" && show.template.length > 0,
     "Model template unavailable",
   );
+  const effectiveContext = parseServingContext(await metadata("/api/ps"), expected);
   const model = {
     id: expected.model,
     digest: expected.digest,
@@ -139,21 +156,20 @@ export async function inspectLocalRoute(expected: RouteExpectation, transport = 
       ? show.capabilities.filter((item) => typeof item === "string" && /^[a-z-]+$/.test(item))
       : [],
     toolRoundTrip: "not-run",
-    effectiveContext: null,
+    effectiveContext,
     generationRequests: 0,
-    settingsQualification:
-      "OpenAI transport does not attest num_ctx; maximum architecture context is not the active context",
+    settingsQualification: "Local Ollama serving state attests the loaded context length",
   };
 }
 
 const HELP = `Non-generating versus qualification preflight
 
-pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision <40-hex> --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 32768 --out ./artifacts/versus/qualification
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision <40-hex> --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 64000 --out ./artifacts/versus/qualification
 
 Container cohort planning uses the same metadata checks and writes canary-budget.json.
 It does not start a product, a container, or inference. Approval is never implied:
 
-pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 32768 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 64000 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
 
 Optional: --hermes-executable <path> --hermes-source <path>
 Runs benign OS/interpreter probes and reads local model/Docker metadata only.
@@ -235,6 +251,7 @@ export function assessContainerCohort(input: {
   report: Record<string, unknown> | null;
   routeContext: number | null;
   architectureMaximum: number | null;
+  servingContext: number | null;
 }) {
   const failures: string[] = [];
   const disk = gate(input.report, "aggregate-disk-cap");
@@ -278,8 +295,10 @@ export function assessContainerCohort(input: {
     contextPin:
       input.routeContext !== null &&
       input.architectureMaximum !== null &&
+      input.servingContext !== null &&
       input.routeContext >= HERMES_MINIMUM_CONTEXT_TOKENS &&
-      input.architectureMaximum >= HERMES_MINIMUM_CONTEXT_TOKENS,
+      input.routeContext <= input.architectureMaximum &&
+      input.servingContext === input.routeContext,
   };
   if (!gates.approval) failures.push("Container cohort approval is absent");
   if (!input.report) failures.push("Container qualification report is absent");
@@ -299,7 +318,20 @@ export function assessContainerCohort(input: {
     failures.push(
       `Observed model architecture maximum ${input.architectureMaximum ?? "unobserved"} is below the Hermes minimum ${HERMES_MINIMUM_CONTEXT_TOKENS}`,
     );
-  failures.push("The OpenAI transport does not attest the active context");
+  if (
+    input.routeContext !== null &&
+    input.architectureMaximum !== null &&
+    input.routeContext > input.architectureMaximum
+  )
+    failures.push(
+      `Declared context ${input.routeContext} exceeds model architecture maximum ${input.architectureMaximum}`,
+    );
+  if (input.servingContext === null)
+    failures.push("Local serving state does not attest the active context");
+  else if (input.servingContext !== input.routeContext)
+    failures.push(
+      `Loaded serving context ${input.servingContext} does not match declared context ${input.routeContext ?? "unobserved"}`,
+    );
   return { ready: failures.length === 0, failures, gates };
 }
 
@@ -441,6 +473,7 @@ export async function runQualification(args: string[]) {
       report: containerReport,
       routeContext: route?.budget.contextSize ?? null,
       architectureMaximum: typeof route?.maximumContext === "number" ? route.maximumContext : null,
+      servingContext: typeof route?.effectiveContext === "number" ? route.effectiveContext : null,
     });
     failures.push(...assessment.failures);
     containerCohort = {

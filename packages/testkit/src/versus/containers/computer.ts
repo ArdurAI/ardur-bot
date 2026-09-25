@@ -138,7 +138,7 @@ export class ContainerComputer implements SandboxProvider {
         "Container listing unavailable",
       );
       requireValue(
-        record.kind === "file" || record.kind === "dir",
+        record.kind === "file" || record.kind === "dir" || record.kind === "link",
         "Container listing unavailable",
       );
       requireValue(
@@ -147,7 +147,9 @@ export class ContainerComputer implements SandboxProvider {
       );
       entries.push({
         path: relative ? `${relative}/${name}` : name,
-        kind: record.kind,
+        // The shared product contract predates non-followed links; the controlled lane
+        // retains the runtime kind instead of misreporting a link as file content.
+        kind: record.kind as ComputerFileEntry["kind"],
         size: record.kind === "dir" ? 0 : record.size,
         ...(record.kind === "file" && record.executable === true ? { executable: true } : {}),
       });
@@ -157,7 +159,7 @@ export class ContainerComputer implements SandboxProvider {
   async *exportWorkspace(computer: ComputerRef): AsyncIterable<PortableFile> {
     this.check(computer);
     for (const [file, content] of Object.entries(await this.session.snapshot()))
-      yield { path: file, content: Buffer.from(content) };
+      if (typeof content === "string") yield { path: file, content: Buffer.from(content) };
   }
   async importWorkspace(
     computer: ComputerRef,
@@ -347,7 +349,12 @@ export class ContainerComputer implements SandboxProvider {
     }
   }
   async snapshotFiles(_homeKey: string, botId: string) {
-    return this.session.snapshot(this.name(teamBotWorkspaceDirectory(botId)));
+    const snapshot = await this.session.snapshot(this.name(teamBotWorkspaceDirectory(botId)));
+    return Object.fromEntries(
+      Object.entries(snapshot).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
   }
   async connectScreen(): Promise<never> {
     throw new Error("Graphical computer unsupported in controlled container lane");

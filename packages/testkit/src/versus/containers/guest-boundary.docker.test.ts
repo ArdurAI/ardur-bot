@@ -84,7 +84,7 @@ async function execCode(session: ContainerSession, script: string) {
 }
 
 it.skipIf(!imageReady)(
-  "refuses a workspace symlink into trial state for list, read, and write",
+  "lists and snapshots links without following them and refuses traversal",
   async () => {
     const opened = await openSession();
     try {
@@ -102,7 +102,6 @@ it.skipIf(!imageReady)(
         "import os; os.symlink('/opt/data/state', '/opt/data/workspace/leak')",
       );
       for (const action of [
-        () => computer.listFiles(ref, "leak", current),
         () => computer.readFile(ref, "leak/config.yaml", current),
         () =>
           computer.writeFile(
@@ -119,7 +118,57 @@ it.skipIf(!imageReady)(
         expect((error as Error).message).toBe(SYMLINK_REFUSAL);
         expect((error as Error).message.includes("\n")).toBe(false);
       }
+      expect(await computer.listFiles(ref, "", current)).toContainEqual({
+        path: "leak",
+        kind: "link",
+        size: 0,
+      });
+      expect(await opened.session.snapshot()).toMatchObject({
+        leak: { kind: "link" },
+      });
       expect((await opened.session.read("state/config.yaml")).toString()).toBe("broker: true\n");
+    } finally {
+      await opened.close();
+    }
+  },
+  90_000,
+);
+
+it.skipIf(!imageReady)(
+  "never follows a file swapped to a symlink while snapshotting",
+  async () => {
+    const opened = await openSession();
+    try {
+      await opened.session.write("workspace/race.txt", "workspace-value");
+      await opened.session.write("state/private.txt", "state-value");
+      const racer = await opened.session.exec([
+        "/usr/bin/python3",
+        "-I",
+        "-S",
+        "-c",
+        [
+          "import os",
+          "root='/opt/data/workspace'",
+          "target='/opt/data/state/private.txt'",
+          "for _ in range(4000):",
+          "    try: os.unlink(root+'/race.txt')",
+          "    except FileNotFoundError: pass",
+          "    os.symlink(target, root+'/race.txt')",
+          "    os.unlink(root+'/race.txt')",
+          "    fd=os.open(root+'/race.txt', os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o660)",
+          "    os.write(fd, b'workspace-value')",
+          "    os.close(fd)",
+        ].join("\n"),
+      ]);
+      const closed = new Promise<void>((resolve, reject) => {
+        racer.once("error", reject);
+        racer.once("close", () => resolve());
+      });
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const snapshot = await opened.session.snapshot().catch(() => ({}));
+        expect(JSON.stringify(snapshot)).not.toContain("state-value");
+      }
+      await closed;
     } finally {
       await opened.close();
     }
