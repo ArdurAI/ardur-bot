@@ -15,6 +15,7 @@ import {
   integrationById,
   integrationCatalog,
   integrationFailure,
+  MCP_OAUTH_PENDING_TTL_MS,
   McpConnector,
   McpReauthorizationRequiredError,
 } from "@ardurbot/adapters";
@@ -186,6 +187,23 @@ export class IntegrationConnections {
 
   async beginAuthorization(actor: Owner, input: { serverId: string; redirectUri: string }) {
     const server = await this.owned(actor, input.serverId);
+    // Read the pending id before the probe. The write below succeeds only when
+    // that id is still current, so a faster attempt cannot be overwritten.
+    const observedPending = server.pendingOauthSessionId ?? null;
+    const observedUpdatedAt = server.updatedAt;
+    let expired = false;
+    if (observedPending) {
+      const session = await this.prisma.mcpOAuthSession.findFirst({
+        where: {
+          id: observedPending,
+          serverId: server.id,
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+        },
+        select: { createdAt: true },
+      });
+      expired = !session || session.createdAt.getTime() < Date.now() - MCP_OAUTH_PENDING_TTL_MS;
+    }
     let started: Awaited<ReturnType<McpOAuthBroker["begin"]>>;
     try {
       started = await this.oauth.begin({
@@ -197,25 +215,60 @@ export class IntegrationConnections {
       if (!server.catalogId) await this.recordFailure(actor, server, error);
       throw error;
     }
-    if (started.status !== "authorization_required") await this.capture(actor, input.serverId);
-    // The session id is this attempt. A server that is not connected yet can drop its
-    // previous result. A connected server stays connected until discovery records the outcome.
-    else
-      await this.prisma.mcpServer.updateMany({
-        where: {
-          id: server.id,
-          spaceId: actor.spaceId,
-          userId: actor.userId,
-          enabled: true,
-        },
-        data: {
-          pendingOauthSessionId: started.sessionId,
-          ...(!server.catalogId && server.connectionState !== "connected"
-            ? { connectionState: "not-connected" }
-            : {}),
-        },
+    if (started.status !== "authorization_required") {
+      await this.capture(actor, input.serverId);
+      return started;
+    }
+    const bound = await this.prisma.mcpServer.updateMany({
+      where: {
+        id: server.id,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        pendingOauthSessionId: observedPending,
+        // A finish during the probe clears the pending id back to what we read
+        // and bumps updatedAt. An expired id is not a live attempt, so the
+        // stored id alone decides whether this begin may replace it.
+        ...(!expired && observedUpdatedAt ? { updatedAt: observedUpdatedAt } : {}),
+      },
+      data: {
+        pendingOauthSessionId: started.sessionId,
+        ...(!server.catalogId && server.connectionState !== "connected"
+          ? { connectionState: "not-connected" }
+          : {}),
+      },
+    });
+    if (!bound.count) {
+      this.oauth.discardSession(started.sessionId);
+      await this.prisma.mcpOAuthSession.deleteMany({
+        where: { id: started.sessionId, spaceId: actor.spaceId, userId: actor.userId },
       });
+      return { status: "replaced" as const };
+    }
     return started;
+  }
+
+  /** Drop this attempt's pending id. A different id is left alone. */
+  async cancelAuthorization(actor: Owner, input: { serverId: string; sessionId: string }) {
+    await this.prisma.mcpServer.updateMany({
+      where: {
+        id: input.serverId,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        pendingOauthSessionId: input.sessionId,
+      },
+      data: { pendingOauthSessionId: null, consentStartedAt: null },
+    });
+    await this.prisma.mcpOAuthSession.deleteMany({
+      where: {
+        id: input.sessionId,
+        serverId: input.serverId,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+      },
+    });
+    this.oauth.discardSession(input.sessionId);
   }
 
   private oauthApp(catalogId: string) {

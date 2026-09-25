@@ -12,6 +12,7 @@ export default function McpSection(props: SettingsPageProps) {
       onClose={props.onClose}
       onBusyChange={props.onBusyChange}
       focusServerId={props.initialIntegration}
+      focusRequest={props.mcpFocusRequest}
     />
   );
 }

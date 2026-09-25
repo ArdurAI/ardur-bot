@@ -5,7 +5,8 @@ import type {
 } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { McpOauthWait } from "../../lib/mcp-connect";
 import { rpc } from "../../lib/rpc";
 import { connectRemoteMcp, matchesCatalogEndpoint } from "./connect-remote-mcp";
 
@@ -39,7 +40,12 @@ export function DirectMcpSearch({
   // A credential belongs to the one result it was typed for.
   const [credential, setCredential] = useState<{ endpoint: string; value: string } | null>(null);
   const [rejectedEndpoint, setRejectedEndpoint] = useState<string | null>(null);
-  const [notice, setNotice] = useState<"declined" | "unfinished" | "replaced" | null>(null);
+  const [notice, setNotice] = useState<
+    "declined" | "unfinished" | "replaced" | "waiting" | "cancelled" | null
+  >(null);
+  const [waiting, setWaiting] = useState<McpOauthWait | null>(null);
+  const attempt = useRef(0);
+  const userCancelled = useRef(false);
   const remoteResults = [
     ...new Map(
       results.flatMap((result) =>
@@ -82,6 +88,8 @@ export function DirectMcpSearch({
   }
 
   async function connect(target: Target, token: string) {
+    const mine = ++attempt.current;
+    userCancelled.current = false;
     const auth = target.surface?.auth;
     if (credential && credential.endpoint !== target.endpoint) {
       setCredential(null);
@@ -112,6 +120,7 @@ export function DirectMcpSearch({
     setError(null);
     setRejectedEndpoint(null);
     setNotice(null);
+    setWaiting(null);
     try {
       if (target.descriptor) {
         const typedToken = target.descriptor.authKind === "oauth" ? "" : token.trim();
@@ -125,7 +134,15 @@ export function DirectMcpSearch({
         botId,
         auth: auth?.type === "none" ? "none" : auth?.type === "mixed" ? "mixed" : "oauth",
         credential: token.trim() ? { value: token, headerName: auth?.headerName } : undefined,
+        onWaiting: (wait) => {
+          if (mine !== attempt.current) return;
+          setBusy(false);
+          setWaiting(wait);
+          setNotice("waiting");
+        },
       });
+      if (mine !== attempt.current) return;
+      setWaiting(null);
       if (outcome === "credential-rejected") {
         setCredential({ endpoint: target.endpoint, value: token });
         setRejectedEndpoint(target.endpoint);
@@ -136,7 +153,7 @@ export function DirectMcpSearch({
         return;
       }
       if (outcome === "cancelled") {
-        setNotice("declined");
+        setNotice(userCancelled.current ? "cancelled" : "declined");
         return;
       }
       if (outcome === "needs-sign-in") {
@@ -156,9 +173,9 @@ export function DirectMcpSearch({
       setUrlToken("");
       await onConnected?.(outcome.serverId);
     } catch {
-      setError("connect");
+      if (mine === attempt.current) setError("connect");
     } finally {
-      setBusy(false);
+      if (mine === attempt.current) setBusy(false);
     }
   }
 
@@ -188,7 +205,7 @@ export function DirectMcpSearch({
             <Button
               variant="outline"
               disabled={
-                busy ||
+                (busy && !waiting) ||
                 connected.includes(result.endpoint) ||
                 (result.descriptor?.authKind === "token" &&
                   credential?.endpoint === result.endpoint &&
@@ -258,7 +275,7 @@ export function DirectMcpSearch({
           ) : null}
           <Button
             disabled={
-              busy ||
+              (busy && !waiting) ||
               !endpoint.trim() ||
               (typedDescriptor?.authKind === "token" && !urlToken.trim())
             }
@@ -277,6 +294,22 @@ export function DirectMcpSearch({
           </Button>
         </div>
       </details>
+      {notice === "waiting" && waiting ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">{t`Waiting for sign-in in the other window.`}</p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              userCancelled.current = true;
+              void waiting.cancel();
+            }}
+          >{t`Cancel sign-in`}</Button>
+        </div>
+      ) : null}
+      {notice === "cancelled" ? (
+        <p className="text-sm text-muted-foreground">{t`Sign-in was cancelled.`}</p>
+      ) : null}
       {notice === "declined" ? (
         <p className="text-sm text-muted-foreground">
           {t`Sign-in was declined. Reconnect to try again.`}
@@ -287,7 +320,7 @@ export function DirectMcpSearch({
       ) : null}
       {notice === "replaced" ? (
         <p className="text-sm text-muted-foreground">
-          {t`This sign-in window was replaced by a newer one.`}
+          {t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`}
         </p>
       ) : null}
       {error ? (

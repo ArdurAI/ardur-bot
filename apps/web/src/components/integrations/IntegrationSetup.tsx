@@ -2,7 +2,8 @@ import type { IntegrationSetupState } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check } from "lucide-react";
-import { lazy, Suspense, useEffect, useId, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import type { McpOauthWait } from "../../lib/mcp-connect";
 import { rpc } from "../../lib/rpc";
 
 const DirectMcpSearch = lazy(() =>
@@ -38,6 +39,8 @@ export function IntegrationSetup({
   const [endpoint, setEndpoint] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [oauthWait, setOauthWait] = useState<McpOauthWait | null>(null);
+  const userCancelled = useRef(false);
   const choices: { id: Choice; label: string }[] = [
     { id: "direct", label: t`Direct MCP` },
     { id: "composio", label: "Composio" },
@@ -223,8 +226,9 @@ export function IntegrationSetup({
             />
           </label>
           <Button
-            disabled={busy || !endpoint.trim()}
-            onClick={() =>
+            disabled={(busy && !oauthWait) || !endpoint.trim()}
+            onClick={() => {
+              userCancelled.current = false;
               void run(async () => {
                 const { connectRemoteMcp } = await import("./connect-remote-mcp");
                 const outcome = await connectRemoteMcp({
@@ -232,7 +236,12 @@ export function IntegrationSetup({
                   endpoint,
                   credential: apiKey.trim() ? { value: apiKey } : undefined,
                   botId,
+                  onWaiting: (waiting) => {
+                    setBusy(false);
+                    setOauthWait(waiting);
+                  },
                 });
+                setOauthWait(null);
                 if (typeof outcome === "object") {
                   onServerConnected?.(outcome.serverId);
                   return;
@@ -243,18 +252,33 @@ export function IntegrationSetup({
                     : outcome === "needs-credential"
                       ? t`Enter a credential for this server and try again.`
                       : outcome === "cancelled"
-                        ? t`Sign-in was declined. Reconnect to try again.`
+                        ? userCancelled.current
+                          ? t`Sign-in was cancelled.`
+                          : t`Sign-in was declined. Reconnect to try again.`
                         : outcome === "needs-sign-in"
                           ? t`Sign-in did not finish. Try again.`
                           : outcome === "replaced"
-                            ? t`This sign-in window was replaced by a newer one.`
+                            ? t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`
                             : t`Could not finish sign-in. Try again.`,
                 );
-              })
-            }
+              });
+            }}
           >
             <Trans>Connect</Trans>
           </Button>
+          {oauthWait ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">{t`Waiting for sign-in in the other window.`}</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  userCancelled.current = true;
+                  void oauthWait.cancel();
+                }}
+              >{t`Cancel sign-in`}</Button>
+            </div>
+          ) : null}
           <details className="text-sm text-muted-foreground">
             <summary className="cursor-pointer">
               <Trans>Setup help</Trans>

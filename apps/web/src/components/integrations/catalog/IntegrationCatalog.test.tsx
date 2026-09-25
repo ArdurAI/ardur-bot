@@ -846,7 +846,10 @@ describe("Settings integration catalog", () => {
       }),
     ]);
     await click(resultConnect("Either")!);
-    expect(api.oauth).toHaveBeenCalledExactlyOnceWith("created-1");
+    expect(api.oauth).toHaveBeenCalledExactlyOnceWith(
+      "created-1",
+      expect.objectContaining({ onWaiting: expect.any(Function) }),
+    );
     expect(api.remove).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')).toBeNull();
     await fill("Credential", "synthetic-token");
@@ -871,7 +874,10 @@ describe("Settings integration catalog", () => {
     expect(api.create).toHaveBeenCalledExactlyOnceWith(
       expect.not.objectContaining({ secret: expect.anything() }),
     );
-    expect(api.oauth).toHaveBeenCalledExactlyOnceWith("created-1");
+    expect(api.oauth).toHaveBeenCalledExactlyOnceWith(
+      "created-1",
+      expect.objectContaining({ onWaiting: expect.any(Function) }),
+    );
     expect(api.tools).not.toHaveBeenCalled();
   });
 
@@ -918,6 +924,36 @@ describe("Settings integration catalog", () => {
     expect(resultConnect("Figma")?.disabled).toBe(false);
   });
 
+  it("keeps Connect enabled while sign-in waits in the other window", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    createdServers();
+    let resolveSignIn: (value: string) => void = () => undefined;
+    api.oauth.mockImplementation(
+      (
+        _serverId: string,
+        options?: { onWaiting?: (waiting: { cancel: () => Promise<void> }) => void },
+      ) =>
+        new Promise<string>((resolve) => {
+          resolveSignIn = resolve;
+          options?.onWaiting?.({
+            cancel: async () => {
+              resolve("cancelled");
+            },
+          });
+        }),
+    );
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "Figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+    expect(resultConnect("Figma")?.disabled).toBe(false);
+    expect(button("Cancel sign-in")).toBeDefined();
+    await click(button("Cancel sign-in"));
+    expect(container.textContent).toContain("Sign-in was cancelled.");
+    expect(resolveSignIn).toBeTypeOf("function");
+  });
   it("shows the replaced-window sentence and leaves Connect available", async () => {
     api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
     createdServers();
@@ -927,7 +963,9 @@ describe("Settings integration catalog", () => {
     await fill("Search apps", "Figma");
     await click(button("Search integrations.sh"));
     await click(resultConnect("Figma")!);
-    expect(container.textContent).toContain("This sign-in window was replaced by a newer one.");
+    expect(container.textContent).toContain(
+      "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
+    );
     expect(resultConnect("Figma")?.disabled).toBe(false);
   });
 

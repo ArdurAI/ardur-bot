@@ -1172,12 +1172,20 @@ export const appContract = {
             authorizationUrl: z.string().url(),
           }),
           z.object({
-            status: z.enum(["already_connected", "authorization_not_requested"]),
+            status: z.enum(["already_connected", "authorization_not_requested", "replaced"]),
           }),
         ]),
       ),
       complete: oc
         .input(z.object({ sessionId: Id, code: z.string().min(1), state: z.string().min(1) }))
+        .output(
+          z.object({
+            ok: z.literal(true),
+            result: z.enum(["connected", "replaced"]).default("connected"),
+          }),
+        ),
+      cancel: oc
+        .input(z.object({ serverId: Id, sessionId: Id }))
         .output(z.object({ ok: z.literal(true) })),
       disconnect: oc.input(z.object({ serverId: Id })).output(z.object({ ok: z.literal(true) })),
     },

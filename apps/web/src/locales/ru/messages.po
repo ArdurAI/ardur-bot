@@ -1216,6 +1216,14 @@ msgstr "Отменить создание группы"
 msgid "Cancel reply"
 msgstr "Отменить ответ"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Cancel sign-in"
+msgstr "Отменить вход"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -6795,6 +6803,15 @@ msgstr ""
 msgid "Sign-in timed out."
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Sign-in was cancelled."
+msgstr "Вход отменён."
+
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Sign-in was declined."
 msgstr "Вход отклонён."
@@ -7361,10 +7378,11 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpOAuthCallback.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx
-msgid "This sign-in window was replaced by a newer one."
-msgstr "Это окно входа заменено более новым."
+msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
+msgstr "Это окно входа заменено более новым. Завершите вход там или начните снова."
 
 #: src/pages/account/AccountSettings.tsx
 msgid "This signs out every other session and keeps this one signed in."
@@ -7728,6 +7746,14 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
 msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Waiting for sign-in in the other window."
+msgstr "Ожидание входа в другом окне."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

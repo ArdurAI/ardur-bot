@@ -29,6 +29,10 @@ export function SettingsOverlay({
   const panelRef = useRef<HTMLDivElement>(null);
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [initialItem, setInitialItem] = useState<string | undefined>(props.initialIntegration);
+  const [mcpFocusRequest, setMcpFocusRequest] = useState(
+    props.initialIntegration && initialSection === "mcp" ? 1 : 0,
+  );
+  const linkedFocusApplied = useRef(false);
   const [busy, setBusy] = useState(false);
   const [targetLabel, setTargetLabel] = useState<string | null>(null);
   const [serverUpdates, setServerUpdates] = useState(false);
@@ -69,6 +73,10 @@ export function SettingsOverlay({
   useEffect(() => {
     setInitialItem(linkedItem);
     if (linkedItem) setSection(initialSection);
+    if (linkedFocusApplied.current && linkedItem && initialSection === "mcp") {
+      setMcpFocusRequest((current) => current + 1);
+    }
+    linkedFocusApplied.current = true;
   }, [linkedItem, initialSection]);
   function navigate(next: SettingsSection, item?: string) {
     if (busy) return;
@@ -78,6 +86,7 @@ export function SettingsOverlay({
       registration?.searchLabels?.find((label) => matchesSetting(i18n._(label), search.query));
     setTargetLabel(match ? i18n._(match) : null);
     search.setQuery("");
+    if (item && next === "mcp") setMcpFocusRequest((current) => current + 1);
     setInitialItem(item);
     setSection(next);
   }
@@ -186,6 +195,7 @@ export function SettingsOverlay({
                     key={active.id}
                     {...props}
                     initialIntegration={initialItem}
+                    mcpFocusRequest={mcpFocusRequest}
                     onClose={close}
                     onBusyChange={setBusy}
                     navigate={navigate}

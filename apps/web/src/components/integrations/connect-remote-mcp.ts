@@ -1,3 +1,4 @@
+import type { McpOauthWait } from "../../lib/mcp-connect";
 import { connectMcpOauth } from "../../lib/mcp-connect";
 import { rpc } from "../../lib/rpc";
 
@@ -17,7 +18,8 @@ export type RemoteMcpOutcome =
  * A server created here is never removed: the person deletes it. "mixed" servers try
  * browser sign-in first and return "needs-credential" when the server offers none.
  * A token the server rejects returns "credential-rejected". "cancelled" means the
- * person declined. "needs-sign-in" means the popup closed or never finished.
+ * person declined or cancelled. "needs-sign-in" means the attempt expired before
+ * sign-in finished.
  * "sign-in-failed" means token exchange or discovery failed after consent.
  * "replaced" means a newer sign-in window took over this attempt.
  */
@@ -27,6 +29,7 @@ export async function connectRemoteMcp(input: {
   botId?: string;
   auth?: "none" | "oauth" | "mixed";
   credential?: RemoteMcpCredential;
+  onWaiting?: (waiting: McpOauthWait) => void;
 }): Promise<RemoteMcpOutcome> {
   const endpoint = input.endpoint.trim();
   const value = input.credential?.value.trim();
@@ -69,7 +72,7 @@ export async function connectRemoteMcp(input: {
   let oauth: Awaited<ReturnType<typeof connectMcpOauth>> | undefined;
   try {
     if (value || input.auth === "none") await rpc.mcp.servers.tools({ serverId: server.id });
-    else oauth = await connectMcpOauth(server.id);
+    else oauth = await connectMcpOauth(server.id, { onWaiting: input.onWaiting });
   } catch (error) {
     failed = true;
     failure = error;

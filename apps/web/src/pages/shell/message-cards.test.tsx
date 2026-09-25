@@ -89,7 +89,9 @@ it("says a replaced sign-in window was replaced and does not approve the bot", a
   const container = await mount();
   await click("Authorize");
   expect(api.approve).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("This sign-in window was replaced by a newer one.");
+  expect(container.textContent).toContain(
+    "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
+  );
 });
 
 it("says sign-in was declined and does not approve the bot", async () => {

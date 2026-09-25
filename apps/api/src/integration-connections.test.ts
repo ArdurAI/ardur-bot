@@ -77,16 +77,27 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
         where,
         data,
       }: {
-        where: { revision?: number; pendingOauthSessionId?: string | null; enabled?: boolean };
+        where: {
+          revision?: number;
+          pendingOauthSessionId?: string | null;
+          enabled?: boolean;
+          updatedAt?: Date;
+          OR?: Array<{ pendingOauthSessionId?: string | null }>;
+        };
         data: Partial<McpServer>;
       }) => {
         if (where.revision !== undefined && row.revision !== where.revision) return { count: 0 };
         if (where.enabled === true && !row.enabled) return { count: 0 };
         if (
           where.pendingOauthSessionId !== undefined &&
-          row.pendingOauthSessionId !== where.pendingOauthSessionId
+          (row.pendingOauthSessionId ?? null) !== where.pendingOauthSessionId
         )
           return { count: 0 };
+        if (where.updatedAt !== undefined) {
+          const expected = where.updatedAt instanceof Date ? where.updatedAt.getTime() : Number.NaN;
+          const actual = row.updatedAt instanceof Date ? row.updatedAt.getTime() : undefined;
+          if (actual !== expected) return { count: 0 };
+        }
         const revision = typeof data.revision === "object" ? row.revision + 1 : row.revision;
         row = { ...row, ...data, revision };
         return { count: 1 };
@@ -129,7 +140,10 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
         return { count: data.length };
       }),
     },
-    mcpOAuthSession: { deleteMany: vi.fn(async () => ({ count: 1 })) },
+    mcpOAuthSession: {
+      deleteMany: vi.fn(async () => ({ count: 1 })),
+      findFirst: vi.fn(async () => null),
+    },
     externalEffect: { updateMany: vi.fn(async () => ({ count: 1 })) },
     $executeRaw: vi.fn(async () => 1),
     $transaction: vi.fn(),
@@ -143,6 +157,7 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
     })),
     disconnect: vi.fn(async () => undefined),
     forgetPending: vi.fn(),
+    discardSession: vi.fn(),
     restorePriorConnected: vi.fn(async () => false),
     discardPriorConnected: vi.fn(),
   };
@@ -561,6 +576,93 @@ describe("catalog connection lifecycle", () => {
       pendingOauthSessionId: "newer",
     });
     expect(f.row().lastError).toBeUndefined();
+  });
+  it("does not let a slower begin rebind a server a faster begin already claimed", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      connectionState: "not-connected",
+      pendingOauthSessionId: null,
+    });
+    const input = {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    };
+    f.oauth.begin.mockImplementationOnce(async () => {
+      await f.service.beginAuthorization(actor, input);
+      return {
+        status: "authorization_required" as const,
+        sessionId: "slow",
+        authorizationUrl: "https://example.test/authorize-slow",
+      };
+    });
+    const slow = await f.service.beginAuthorization(actor, input);
+    expect(slow).toEqual({ status: "replaced" });
+    expect(f.row().pendingOauthSessionId).toBe("session");
+  });
+  it("does not let a slower begin rebind a server after a faster attempt finishes", async () => {
+    const f = fixture();
+    const startedAt = new Date("2026-09-25T12:00:00.000Z");
+    f.setRow({
+      catalogId: null,
+      connectionState: "not-connected",
+      pendingOauthSessionId: null,
+      updatedAt: startedAt,
+    });
+    const input = {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    };
+    f.oauth.begin.mockImplementationOnce(async () => {
+      f.setRow({
+        pendingOauthSessionId: null,
+        connectionState: "connected",
+        updatedAt: new Date("2026-09-25T12:00:02.000Z"),
+      });
+      return {
+        status: "authorization_required" as const,
+        sessionId: "slow",
+        authorizationUrl: "https://example.test/authorize-slow",
+      };
+    });
+    const slow = await f.service.beginAuthorization(actor, input);
+    expect(slow).toEqual({ status: "replaced" });
+    expect(f.row().pendingOauthSessionId).toBeNull();
+  });
+  it("replaces an expired pending sign-in when that id is still the one stored", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      connectionState: "not-connected",
+      pendingOauthSessionId: "stale",
+    });
+    f.db.mcpOAuthSession.findFirst.mockResolvedValue({
+      id: "stale",
+      createdAt: new Date(Date.now() - 11 * 60 * 1000),
+    });
+    const result = await f.service.beginAuthorization(actor, {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    });
+    expect(result).toMatchObject({ status: "authorization_required", sessionId: "session" });
+    expect(f.row().pendingOauthSessionId).toBe("session");
+    expect(f.db.mcpServer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ pendingOauthSessionId: "stale" }),
+      }),
+    );
+  });
+  it("clears only the matching pending session when sign-in is cancelled", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      connectionState: "not-connected",
+      pendingOauthSessionId: "ours",
+    });
+    await f.service.cancelAuthorization(actor, { serverId: "connection", sessionId: "other" });
+    expect(f.row().pendingOauthSessionId).toBe("ours");
+    await f.service.cancelAuthorization(actor, { serverId: "connection", sessionId: "ours" });
+    expect(f.row().pendingOauthSessionId).toBeNull();
   });
   it("clears a custom server's earlier result while its browser sign-in is pending", async () => {
     const f = fixture();

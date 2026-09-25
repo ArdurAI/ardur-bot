@@ -1216,6 +1216,14 @@ msgstr "Cancel new group"
 msgid "Cancel reply"
 msgstr "Cancel reply"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Cancel sign-in"
+msgstr "Cancel sign-in"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr "Cancellations"
@@ -6795,6 +6803,15 @@ msgstr "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, to
 msgid "Sign-in timed out."
 msgstr "Sign-in timed out."
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Sign-in was cancelled."
+msgstr "Sign-in was cancelled."
+
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Sign-in was declined."
 msgstr "Sign-in was declined."
@@ -7361,10 +7378,11 @@ msgstr "This service needs client registration before you can connect."
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpOAuthCallback.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx
-msgid "This sign-in window was replaced by a newer one."
-msgstr "This sign-in window was replaced by a newer one."
+msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
+msgstr "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
 
 #: src/pages/account/AccountSettings.tsx
 msgid "This signs out every other session and keeps this one signed in."
@@ -7728,6 +7746,14 @@ msgstr "Voice shortcut"
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
 msgstr "Waiting for approval"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Waiting for sign-in in the other window."
+msgstr "Waiting for sign-in in the other window."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

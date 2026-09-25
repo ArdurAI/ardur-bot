@@ -9,6 +9,7 @@ import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { connectIntegration } from "../../../lib/connect-integration";
 import { refreshIntegrationCatalog } from "../../../lib/integration-catalog-query";
+import type { McpOauthWait } from "../../../lib/mcp-connect";
 import { MCP_OAUTH_CHANNEL } from "../../../lib/mcp-oauth-channel";
 import { rpc } from "../../../lib/rpc";
 import type { CatalogTab } from "../../../pages/customize/CustomizeControls";
@@ -36,7 +37,10 @@ export function IntegrationCards({
   const [remoteServers, setRemoteServers] = useState<McpServer[]>([]);
   const [selected, setSelected] = useState<string | null>(reconnectId ?? null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<"load" | "token" | "replaced" | null>(null);
+  const [error, setError] = useState<"load" | "token" | "replaced" | "cancelled" | null>(null);
+  const [oauthWait, setOauthWait] = useState<McpOauthWait | null>(null);
+  const userCancelled = useRef(false);
+  const oauthAttempt = useRef(0);
   const [tokenFor, setTokenFor] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [hosts, setHosts] = useState<Record<string, string>>({});
@@ -134,16 +138,33 @@ export function IntegrationCards({
       onOpenMcp?.(server.id);
       return;
     }
+    const mine = ++oauthAttempt.current;
     setBusy(server.id);
+    setOauthWait(null);
     setError(null);
+    userCancelled.current = false;
     try {
-      const outcome = await connectRemoteMcp({ name: server.name, endpoint: server.endpoint });
+      const outcome = await connectRemoteMcp({
+        name: server.name,
+        endpoint: server.endpoint,
+        onWaiting: (waiting) => {
+          if (mine !== oauthAttempt.current) return;
+          setBusy(null);
+          setOauthWait(waiting);
+        },
+      });
+      if (mine !== oauthAttempt.current) return;
+      setOauthWait(null);
       await refresh();
       if (outcome === "replaced") setError("replaced");
+      if (outcome === "cancelled" && userCancelled.current) setError("cancelled");
     } catch {
-      setError("load");
+      if (mine === oauthAttempt.current) setError("load");
     } finally {
-      setBusy(null);
+      if (mine === oauthAttempt.current) {
+        setBusy(null);
+        setOauthWait(null);
+      }
     }
   }
   async function removeCustom(server: McpServer) {
@@ -266,14 +287,29 @@ export function IntegrationCards({
         onQuery={setQuery}
         searchLabel={t`Search integrations`}
       />
+      {oauthWait ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">{t`Waiting for sign-in in the other window.`}</p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              userCancelled.current = true;
+              void oauthWait.cancel();
+            }}
+          >{t`Cancel sign-in`}</Button>
+        </div>
+      ) : null}
       {error ? (
         <div role="alert">
           <p className="text-sm text-destructive">
             {error === "token"
               ? t`Enter a valid token.`
-              : error === "replaced"
-                ? t`This sign-in window was replaced by a newer one.`
-                : t`Could not connect or load integrations.`}
+              : error === "cancelled"
+                ? t`Sign-in was cancelled.`
+                : error === "replaced"
+                  ? t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`
+                  : t`Could not connect or load integrations.`}
           </p>
           <Button
             variant="outline"

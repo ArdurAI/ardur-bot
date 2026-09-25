@@ -27,7 +27,20 @@ export function McpOAuthCallbackPage() {
     handledState.current = state;
     void rpc.mcp.oauth
       .complete({ sessionId: state, code, state })
-      .then(() => {
+      .then((completed) => {
+        if (completed.result === "replaced") {
+          const channel = new BroadcastChannel(POPUP_NAME);
+          channel.postMessage({
+            type: "mcp-oauth-complete",
+            sessionId: state,
+            result: "replaced",
+          });
+          channel.close();
+          setError(
+            t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`,
+          );
+          return;
+        }
         const channel = new BroadcastChannel(POPUP_NAME);
         channel.postMessage({ type: "mcp-oauth-complete", sessionId: state });
         channel.close();

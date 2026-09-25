@@ -35,6 +35,7 @@ export type SettingsPageProps = {
   initialProvider?: string;
   onOpenBotRuntime?: () => void;
   initialIntegration?: string;
+  mcpFocusRequest?: number;
   avatarStyle: AvatarStyle;
   onAvatarStyleChange: (style: AvatarStyle) => Promise<void>;
   isDeploymentOwner?: boolean;

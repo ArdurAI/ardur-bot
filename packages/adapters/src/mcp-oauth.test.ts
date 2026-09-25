@@ -303,6 +303,13 @@ describe("MCP OAuth", () => {
       expect(second.status).toBe("authorization_required");
       if (second.status !== "authorization_required") throw new Error("OAuth was not requested");
       expect(second.sessionId).not.toBe(started.sessionId);
+      // The connection row, not the broker, names the attempt that may exchange a code.
+      prisma.mcpServer.findFirst.mockResolvedValue({
+        id: "server-1",
+        endpoint: `${mcpOrigin}/mcp`,
+        secretId: null,
+        pendingOauthSessionId: started.sessionId,
+      });
 
       await broker.complete({
         sessionId: started.sessionId,
@@ -422,6 +429,7 @@ describe("MCP OAuth", () => {
           id: "server-1",
           endpoint: "https://mcp.example.test/mcp",
           secretId: "secret-1",
+          pendingOauthSessionId: sessionId,
         }),
         update: vi.fn().mockResolvedValue({}),
       },

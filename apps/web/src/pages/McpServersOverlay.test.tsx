@@ -136,6 +136,55 @@ it("keeps a failed add editable and lets the user cancel without creating a serv
   expect(fake.create).toHaveBeenCalledOnce();
 });
 
+it("focuses a managed server once and does not scroll again when the list refreshes", async () => {
+  const scroll = vi.fn();
+  HTMLElement.prototype.scrollIntoView = scroll;
+  const channels: Array<{ onmessage: ((event: MessageEvent) => void) | null }> = [];
+  vi.stubGlobal(
+    "BroadcastChannel",
+    class {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor() {
+        channels.push(this);
+      }
+      close() {}
+    },
+  );
+  const server = {
+    id: "reports",
+    name: "Reports",
+    transport: "streamable_http",
+    oauthStatus: "none",
+    connectionState: "not-connected",
+    endpoint: "https://tools.example.test/mcp",
+    enabled: true,
+    catalogId: null,
+  } as McpServer;
+  fake.list.mockResolvedValue([server]);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  cleanup = async () => {
+    await act(async () => root.unmount());
+    container.remove();
+  };
+  await act(async () =>
+    root.render(
+      <McpServersOverlay embedded onClose={vi.fn()} focusServerId="reports" focusRequest={1} />,
+    ),
+  );
+  expect(document.activeElement?.id).toBe("mcp-server-reports");
+  expect(scroll).toHaveBeenCalledTimes(1);
+  scroll.mockClear();
+  fake.list.mockResolvedValue([{ ...server, name: "Reports refreshed" }]);
+  await act(async () => {
+    channels.at(-1)?.onmessage?.({ data: { type: "mcp-oauth-complete" } } as MessageEvent);
+  });
+  expect(container.textContent).toContain("Reports refreshed");
+  expect(scroll).not.toHaveBeenCalled();
+  expect(document.activeElement?.id).toBe("mcp-server-reports");
+});
+
 it("shows a recorded discovery failure instead of a connected label", async () => {
   const server = {
     id: "reports",

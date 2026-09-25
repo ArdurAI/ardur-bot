@@ -1216,6 +1216,14 @@ msgstr "Neue Gruppe abbrechen"
 msgid "Cancel reply"
 msgstr "Antwort abbrechen"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Cancel sign-in"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -6795,6 +6803,15 @@ msgstr ""
 msgid "Sign-in timed out."
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Sign-in was cancelled."
+msgstr ""
+
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Sign-in was declined."
 msgstr ""
@@ -7361,9 +7378,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpOAuthCallback.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx
-msgid "This sign-in window was replaced by a newer one."
+msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
@@ -7727,6 +7745,14 @@ msgstr ""
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Waiting for sign-in in the other window."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx

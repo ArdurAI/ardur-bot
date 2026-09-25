@@ -26,7 +26,7 @@ import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { McpToolReview } from "../components/integrations/catalog/McpToolReview";
 import { desktopBridge } from "../lib/desktop";
 import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
@@ -53,11 +53,13 @@ export function McpServersOverlay({
   embedded = false,
   onBusyChange,
   focusServerId,
+  focusRequest = 0,
 }: {
   onClose: () => void;
   embedded?: boolean;
   onBusyChange?(busy: boolean): void;
   focusServerId?: string;
+  focusRequest?: number;
 }) {
   const { t } = useLingui();
   const [adding, setAdding] = useState(false);
@@ -80,6 +82,13 @@ export function McpServersOverlay({
   const [saving, setSaving] = useState(false);
   const [defaultsBusy, setDefaultsBusy] = useState(false);
   const [oauthPending, setOauthPending] = useState<string | null>(null);
+  const [oauthWait, setOauthWait] = useState<{
+    serverId: string;
+    cancel: () => Promise<void>;
+  } | null>(null);
+  const userCancelled = useRef(false);
+  const oauthAttempt = useRef(0);
+  const appliedFocus = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     onBusyChange?.(saving || defaultsBusy || editing || oauthPending !== null);
@@ -112,11 +121,14 @@ export function McpServersOverlay({
     );
   }, []);
   useEffect(() => {
+    if (!focusRequest || appliedFocus.current === focusRequest) return;
     if (!focusServerId || !servers.some((server) => server.id === focusServerId)) return;
     const card = document.getElementById(`mcp-server-${focusServerId}`);
-    card?.scrollIntoView({ block: "center" });
-    card?.focus();
-  }, [focusServerId, servers]);
+    if (!card) return;
+    appliedFocus.current = focusRequest;
+    card.scrollIntoView({ block: "center" });
+    card.focus();
+  }, [focusRequest, focusServerId, servers]);
 
   useEffect(() => {
     // BroadcastChannel instead of window.opener messaging: provider login
@@ -210,10 +222,21 @@ export function McpServersOverlay({
   }
 
   async function connectOAuth(server: McpServer) {
+    const mine = ++oauthAttempt.current;
     setError(null);
     setOauthPending(server.id);
+    setOauthWait(null);
+    userCancelled.current = false;
     try {
-      const result = await connectMcpOauth(server.id);
+      const result = await connectMcpOauth(server.id, {
+        onWaiting: (waiting) => {
+          if (mine !== oauthAttempt.current) return;
+          setOauthPending(null);
+          setOauthWait({ serverId: server.id, cancel: waiting.cancel });
+        },
+      });
+      if (mine !== oauthAttempt.current) return;
+      setOauthWait(null);
       if (result !== "cancelled") setOauthPending(null);
       const listed = await refresh();
       if (result === "connected") return;
@@ -225,7 +248,13 @@ export function McpServersOverlay({
         return;
       }
       if (result === "replaced") {
-        setError(t`This sign-in window was replaced by a newer one.`);
+        setError(
+          t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`,
+        );
+        return;
+      }
+      if (result === "cancelled") {
+        setError(userCancelled.current ? t`Sign-in was cancelled.` : t`Sign-in was declined.`);
         return;
       }
       if (result === "needs-sign-in") {
@@ -242,6 +271,7 @@ export function McpServersOverlay({
       }
       setOauthPending((current) => (current === server.id ? null : current));
     } catch (err) {
+      if (mine !== oauthAttempt.current) return;
       setError(err instanceof Error ? err.message : t`Could not start OAuth`);
       setOauthPending(null);
     }
@@ -606,6 +636,11 @@ export function McpServersOverlay({
                               >
                                 {server.enabled ? t`Disable` : t`Enable`}
                               </Button>
+                              {oauthWait?.serverId === server.id ? (
+                                <p className="w-full text-sm text-muted-foreground">
+                                  {t`Waiting for sign-in in the other window.`}
+                                </p>
+                              ) : null}
                               <Button
                                 type="button"
                                 size="sm"
@@ -614,6 +649,19 @@ export function McpServersOverlay({
                               >
                                 {oauthActionLabel(server, oauthPending === server.id)}
                               </Button>
+                              {oauthWait?.serverId === server.id ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    userCancelled.current = true;
+                                    void oauthWait.cancel();
+                                  }}
+                                >
+                                  {t`Cancel sign-in`}
+                                </Button>
+                              ) : null}
                               {server.oauthStatus !== "none" ? (
                                 <Button
                                   type="button"

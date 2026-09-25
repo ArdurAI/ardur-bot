@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { McpOAuthBroker } from "@ardurbot/adapters";
+import { McpOAuthAttemptReplacedError } from "@ardurbot/adapters";
 import { Hono } from "hono";
 import type { IntegrationConnections } from "./integration-connections.js";
 
@@ -20,6 +21,7 @@ export function integrationOAuthReturn(
     const code = c.req.query("code");
     let name: string | undefined;
     let id: string | undefined;
+    let replaced = false;
     let message = "Could not complete sign-in. Return to Ardur Bot and connect again.";
     try {
       const denied = c.req.query("error");
@@ -38,8 +40,13 @@ export function integrationOAuthReturn(
         name = server.name;
         message = `Connected to ${name}. You can close this tab and return to Ardur Bot.`;
       }
-    } catch {
+    } catch (error) {
       // Codes, tokens and provider response bodies never enter a page or log.
+      if (error instanceof McpOAuthAttemptReplacedError) {
+        replaced = true;
+        message =
+          "This sign-in window was replaced by a newer one. Finish signing in there, or start again.";
+      }
     }
     const nonce = randomBytes(18).toString("base64");
     c.header("Cache-Control", "no-store");
@@ -53,7 +60,7 @@ export function integrationOAuthReturn(
       ? `ardurbot://integrations/${encodeURIComponent(id)}`
       : "ardurbot://integrations";
     return c.html(
-      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ardur Bot</title><body><main><p>${escapeHtml(message)}</p><a href="${escapeHtml(destination)}">Open Ardur Bot</a></main><script nonce="${nonce}">history.replaceState(null,"",location.pathname);${name ? `try { const channel = new BroadcastChannel("ardurbot-mcp-oauth"); channel.postMessage({type:"mcp-oauth-complete",sessionId:${JSON.stringify(state)}}); channel.close(); } catch {} window.close();` : ""}</script></body></html>`,
+      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ardur Bot</title><body><main><p>${escapeHtml(message)}</p><a href="${escapeHtml(destination)}">Open Ardur Bot</a></main><script nonce="${nonce}">history.replaceState(null,"",location.pathname);${name || replaced ? `try { const channel = new BroadcastChannel("ardurbot-mcp-oauth"); channel.postMessage({type:"mcp-oauth-complete",sessionId:${JSON.stringify(state)}${replaced ? ',result:"replaced"' : ""}}); channel.close(); } catch {} window.close();` : ""}</script></body></html>`,
     );
   });
   return app;

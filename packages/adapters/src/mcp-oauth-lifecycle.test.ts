@@ -255,6 +255,38 @@ describe("managed OAuth lifecycle", () => {
     });
     expect(f.server().lastError).toBeNull();
   });
+  it("keeps the finished sign-in's tokens when an older callback arrives", async () => {
+    const f = await fixture(
+      async () =>
+        Response.json({ access_token: "fake-a-access", token_type: "bearer", expires_in: 3600 }),
+      { catalogId: null, connectionState: "connected", pendingOauthSessionId: null },
+    );
+    const sessionMaterial = material();
+    sessionMaterial.oauth!.codeVerifier = "fake-verifier";
+    const stored = await f.secrets.put(JSON.stringify(sessionMaterial), f.context, "attempt-a");
+    f.db.mcpOAuthSession.findFirst.mockResolvedValue({
+      id: "attempt-a",
+      ...actor,
+      serverId: "connection",
+      endpoint: "https://mcp.example.test/mcp",
+      redirectUri: "https://app.example.test/api/oauth/done",
+      oauthCiphertext: stored.ciphertext,
+      createdAt: new Date(),
+    });
+    const writesBefore = f.db.secret.create.mock.calls.length;
+    await expect(
+      f.broker.complete({
+        sessionId: "attempt-a",
+        code: "fake-code-a",
+        state: "attempt-a",
+        ...actor,
+      }),
+    ).rejects.toThrow("replaced");
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.db.secret.create).toHaveBeenCalledTimes(writesBefore);
+    expect(f.persisted().oauth?.tokens?.access_token).toBe("fake-old-access");
+    expect(f.server().pendingOauthSessionId).toBeNull();
+  });
   it("writes the previous tokens back when a re-authorization fails on this instance", async () => {
     const f = await fixture(async () => Response.json({}), {
       catalogId: null,

@@ -189,6 +189,16 @@ export class McpReauthorizationRequiredError extends Error {
   }
 }
 
+/** The callback belongs to an attempt that was replaced or already finished. */
+export class McpOAuthAttemptReplacedError extends Error {
+  readonly code = "MCP_OAUTH_REPLACED";
+  readonly result = "replaced" as const;
+  constructor() {
+    super("replaced");
+    this.name = "McpOAuthAttemptReplacedError";
+  }
+}
+
 /** The server demanded sign-in, but browser authorization could not start. */
 export class McpOAuthUnavailableError extends Error {
   readonly code = "MCP_OAUTH_UNAVAILABLE";
@@ -212,11 +222,20 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
   private readonly runtimeState = randomUUID();
   private persistQueue = Promise.resolve();
   private refreshing?: Promise<void>;
+  private tokenSessionId?: string;
+
+  /** Token saves after this point match the attempt that is still pending. */
+  guardTokenWrite(sessionId: string): void {
+    this.tokenSessionId = sessionId;
+  }
 
   constructor(
     readonly serverId: string,
     private readonly material: OAuthMaterial,
-    private readonly persistMaterial: (material: OAuthMaterial) => Promise<void>,
+    private readonly persistMaterial: (
+      material: OAuthMaterial,
+      pendingSessionId?: string,
+    ) => Promise<void>,
     private readonly options: ProviderOptions = {},
   ) {
     if (options.redirectUri) {
@@ -371,7 +390,8 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
 
   private async persist(): Promise<void> {
     const snapshot = structuredClone(this.material);
-    const next = this.persistQueue.then(() => this.persistMaterial(snapshot));
+    const pendingSessionId = this.tokenSessionId;
+    const next = this.persistQueue.then(() => this.persistMaterial(snapshot, pendingSessionId));
     this.persistQueue = next.catch(() => undefined);
     await next;
   }
@@ -387,7 +407,8 @@ type Pending = {
   expiry?: ReturnType<typeof setTimeout>;
 };
 
-const PENDING_TTL_MS = 10 * 60_000;
+export const MCP_OAUTH_PENDING_TTL_MS = 10 * 60_000;
+const PENDING_TTL_MS = MCP_OAUTH_PENDING_TTL_MS;
 const MAX_PENDING_SESSIONS = 100;
 
 /** OAuth traffic runs through the same URL policy as runtime MCP requests
@@ -518,7 +539,8 @@ export class McpOAuthBroker {
         ...actor,
       });
       return { ...actor, serverId };
-    } catch {
+    } catch (error) {
+      if (error instanceof McpOAuthAttemptReplacedError) throw error;
       const pending = this.pending.get(input.state);
       if (pending) this.discardPending(input.state, pending);
       await this.prisma.mcpOAuthSession.deleteMany({ where: { id: input.state, ...actor } });
@@ -955,11 +977,11 @@ export class McpOAuthBroker {
     const current = await this.prisma.mcpServer.findFirst({
       where: { id: pending.serverId, ...context, enabled: true },
     });
-    if (
-      typeof current?.pendingOauthSessionId === "string" &&
-      current.pendingOauthSessionId !== input.sessionId
-    ) {
-      throw new Error("MCP OAuth session is invalid or expired");
+    // Null and a different id are the same outcome: this attempt is not the one
+    // still pending, so the code is not exchanged and no tokens are written.
+    if (!current) throw new Error("MCP OAuth session is invalid or expired");
+    if (current.pendingOauthSessionId !== input.sessionId) {
+      throw new McpOAuthAttemptReplacedError();
     }
     if (current?.connectionState === "connected" && current.secretId && current.endpoint) {
       const loaded = await this.loadMaterial(
@@ -978,6 +1000,7 @@ export class McpOAuthBroker {
         });
       }
     }
+    pending.provider.guardTokenWrite(input.sessionId);
     const endpoint = new URL(pending.endpoint);
     const networkFetch = oauthFetch(pending.endpoint, this.network);
     const transport = new StreamableHTTPClientTransport(endpoint, {
@@ -1023,6 +1046,11 @@ export class McpOAuthBroker {
   private discardPending(sessionId: string, pending: Pending): void {
     if (pending.expiry) clearTimeout(pending.expiry);
     this.pending.delete(sessionId);
+  }
+
+  discardSession(sessionId: string): void {
+    const pending = this.pending.get(sessionId);
+    if (pending) this.discardPending(sessionId, pending);
   }
 
   forgetPending(input: { serverId: string; spaceId: string; userId: string }): void {
@@ -1083,15 +1111,19 @@ export class McpOAuthBroker {
     return new StoredMcpOAuthProvider(
       server.id,
       loaded.material,
-      async (material) => {
-        await this.replaceMaterial(
+      async (material, pendingSessionId) => {
+        const stored = await this.replaceMaterial(
           server.id,
           material,
           context,
           false,
           server.endpoint,
           server.catalogId || server.imported ? server.revision : undefined,
+          pendingSessionId,
         );
+        if (pendingSessionId !== undefined && stored === undefined) {
+          throw new McpOAuthAttemptReplacedError();
+        }
       },
       options,
     );

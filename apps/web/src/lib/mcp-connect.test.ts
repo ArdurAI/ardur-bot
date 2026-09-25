@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectMcpOauth, waitForMcpOauth } from "./mcp-connect";
 
 const begin = vi.hoisted(() => vi.fn());
+const cancel = vi.hoisted(() => vi.fn(async () => ({ ok: true as const })));
 const list = vi.hoisted(() => vi.fn(async (): Promise<unknown[]> => []));
-vi.mock("./rpc", () => ({ rpc: { mcp: { oauth: { begin }, servers: { list } } } }));
+vi.mock("./rpc", () => ({
+  rpc: { mcp: { oauth: { begin, cancel }, servers: { list } } },
+}));
 
 let channel: { onmessage?: (event: { data: unknown }) => void; close: ReturnType<typeof vi.fn> };
 let popup: { closed: boolean; close: ReturnType<typeof vi.fn>; location: { href: string } };
@@ -256,7 +259,7 @@ describe("MCP browser consent", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(await result).toBe("connected");
   });
-  it("returns needs-sign-in within two seconds of the popup closing", async () => {
+  it("keeps waiting when the popup opener is severed and resolves on the callback", async () => {
     const result = waitForMcpOauth(
       "https://auth.example.test/authorize",
       popup as unknown as Window,
@@ -267,8 +270,34 @@ describe("MCP browser consent", () => {
       settled = value;
     });
     popup.closed = true;
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(settled).toBe("needs-sign-in");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(settled).toBeNull();
+    channel.onmessage?.({ data: { type: "mcp-oauth-complete", sessionId: "ours" } });
+    expect(await result).toBe("connected");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("cancels the pending sign-in on the server and resolves cancelled", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    list.mockResolvedValue([
+      { id: "connection", connectionState: "not-connected", pendingOauthSessionId: "ours" },
+    ]);
+    let controls: { sessionId: string; cancel: () => Promise<void> } | undefined;
+    const result = connectMcpOauth("connection", {
+      onWaiting: (waiting) => {
+        controls = waiting;
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controls?.sessionId).toBe("ours");
+    popup.closed = true;
+    await vi.advanceTimersByTimeAsync(2_000);
+    await controls!.cancel();
+    expect(cancel).toHaveBeenCalledWith({ serverId: "connection", sessionId: "ours" });
+    expect(await result).toBe("cancelled");
   });
   it("leaves a connected server connected when the popup closes without a callback", async () => {
     begin.mockResolvedValue({

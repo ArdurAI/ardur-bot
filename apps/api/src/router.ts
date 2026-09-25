@@ -64,6 +64,7 @@ import {
   listPiCatalog,
   listScratchpadItems,
   loadPushToken,
+  McpOAuthAttemptReplacedError,
   McpOAuthBroker,
   mapScratchpadItem,
   modelCredentialDto,
@@ -3854,8 +3855,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               userId: context.actor.userId,
             });
             if (serverId) await integrations.capture(context.actor, serverId, input.sessionId);
-            return { ok: true as const };
-          } catch {
+            return { ok: true as const, result: "connected" as const };
+          } catch (error) {
+            if (error instanceof McpOAuthAttemptReplacedError) {
+              return { ok: true as const, result: "replaced" as const };
+            }
             if (mcpOAuth.recordAttemptFailure) {
               await mcpOAuth
                 .recordAttemptFailure({
@@ -3870,6 +3874,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               message: "Could not complete authorization. Try connecting again.",
             });
           }
+        }),
+        cancel: authed.mcp.oauth.cancel.handler(async ({ context, input }) => {
+          await integrations.cancelAuthorization(context.actor, input);
+          return { ok: true as const };
         }),
         disconnect: authed.mcp.oauth.disconnect.handler(async ({ context, input }) => {
           await mcpOAuth.disconnect({
