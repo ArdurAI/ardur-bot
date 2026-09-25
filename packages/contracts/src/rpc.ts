@@ -226,7 +226,9 @@ function createIdeContract() {
     roots: oc.output(z.array(IdeRootSchema)),
     list: oc
       .input(z.object({ rootId: Id, path: IdePathSchema.default("") }))
-      .output(z.array(IdeEntrySchema)),
+      .output(
+        z.object({ entries: z.array(IdeEntrySchema), hiddenCount: z.number().int().nonnegative() }),
+      ),
     read: oc.input(z.object({ rootId: Id, path: IdePathSchema.min(1) })).output(IdeFileSchema),
     save: oc
       .input(

@@ -60,6 +60,24 @@ afterEach(() => {
 });
 
 describe("mobile API authentication", () => {
+  it.each([
+    "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
+    "This bot may only run locally — change the pin or the space policy",
+  ])("decodes a memory refusal from the real oRPC envelope: %s", async (message) => {
+    paired.loadHome.mockResolvedValue(null);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse(
+          { json: { defined: false, code: "BAD_REQUEST", status: 400, message } },
+          { status: 400 },
+        ),
+      ),
+    );
+    await expect(
+      rpc("memory/propose", { intent: "edit", text: "Use short answers.", requestId: "test" }),
+    ).rejects.toThrow(message);
+  });
   beforeEach(async () => {
     vi.restoreAllMocks();
     vi.mocked(SecureStore.getItemAsync).mockReset();

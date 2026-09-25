@@ -858,4 +858,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Taught skill": "教授的技能",
   Web: "网络",
   "by you": "由你创建",
+  "This bot may only run locally — change the pin or the space policy":
+    "此 Bot 只能在本地运行 — 请更改固定模型或空间策略",
 };

@@ -23,18 +23,87 @@ function fixture(kind: "host" | "sandbox" = "sandbox") {
     botId: "bot",
     name: "Project",
   };
-  const findMany = vi.fn(async () => [
+  const findMany = vi.fn<
+    () => Promise<
+      Array<{
+        id: string;
+        botId: string;
+        runId: string;
+        createdAt: Date;
+        type: string;
+        payload: unknown;
+      }>
+    >
+  >(async () => [
     event("first", "src/main.ts"),
     event("foreign", "secret", "other"),
     event("escape", "../outside"),
   ]);
-  const resolve = vi.fn(async () => ({ root }));
-  const changes = createIdeChanges({ prisma: { event: { findMany } } as unknown as PrismaClient }, {
-    resolve,
-  } as unknown as ReturnType<typeof createIdeFiles>);
-  return { changes, findMany, resolve };
+  const resolveCommandCwd = vi.fn(async () => "/home/ardurbot");
+  const resolve = vi.fn(async () => ({
+    root,
+    computer: { id: "computer", kind: "fake", homeKey: "home", providerRef: "ref" },
+    context: { botId: "bot" },
+  }));
+  const changes = createIdeChanges(
+    {
+      prisma: { event: { findMany } } as unknown as PrismaClient,
+      sandbox: { resolveCommandCwd },
+    } as unknown as Parameters<typeof createIdeChanges>[0],
+    {
+      resolve,
+    } as unknown as ReturnType<typeof createIdeFiles>,
+  );
+  return { changes, findMany, resolve, resolveCommandCwd };
 }
 describe("IDE change history", () => {
+  const command = (id: string, cwd: string) => ({
+    ...event(id, "main.ts"),
+    type: "command.finished",
+    payload: {
+      block: {
+        commandId: id,
+        runId: "run",
+        attemptId: null,
+        executionId: id,
+        command: "git diff",
+        cwd,
+        computerId: "computer",
+        computer: "Test",
+        startedAt: input.since,
+        durationMs: 1,
+        exitCode: 0,
+        outcome: "completed",
+        stdout: "--- a/main.ts\n+++ b/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
+        stderr: "",
+        error: null,
+        redacted: false,
+        truncated: false,
+        replayOf: null,
+        rerunDisabledReason: null,
+      },
+    },
+  });
+  it.each(["ardurbot-home", "/dynamic/workspaces/session/home", "/home/ardurbot"])(
+    "maps command paths through the provider home %s",
+    async (home) => {
+      const f = fixture();
+      f.resolveCommandCwd.mockResolvedValue(home);
+      f.findMany.mockResolvedValue([
+        command("command", `${home}/project`),
+        command("outside", `${home}-neighbor`),
+      ]);
+      expect((await f.changes(actor, input)).items).toMatchObject([
+        { id: "command-0", path: "project/main.ts" },
+      ]);
+      expect((await f.changes(actor, input)).items).toHaveLength(1);
+      expect(f.resolveCommandCwd).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "fake" }),
+        undefined,
+        expect.objectContaining({ botId: "bot" }),
+      );
+    },
+  );
   it("scopes today's history to membership, own conversations, selected computer and root", async () => {
     const f = fixture();
     expect((await f.changes(actor, input)).items.map((item) => item.id)).toEqual(["first"]);

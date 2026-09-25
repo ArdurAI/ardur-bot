@@ -5817,6 +5817,10 @@ msgstr ""
 msgid "Select the text to copy it."
 msgstr ""
 
+#: src/pages/ide/dialogs.tsx
+msgid "Selection shortened to 32,000 characters."
+msgstr "선택 영역이 32,000자로 줄었습니다."
+
 #: src/pages/memory/MemoryComposer.tsx
 #: src/pages/Shell.tsx
 #: src/pages/system/QuickComposer.tsx
@@ -6077,6 +6081,10 @@ msgstr ""
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "소프트웨어 업데이트"
+
+#: src/pages/ide/IdePage.tsx
+msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
+msgstr "지원되지 않는 이름을 가진 항목이 숨겨졌습니다({hiddenCount})."
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
@@ -6421,6 +6429,7 @@ msgstr ""
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
 
+#: src/pages/memory/MemoryComposer.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot may only run locally — change the pin or the space policy"
 msgstr ""

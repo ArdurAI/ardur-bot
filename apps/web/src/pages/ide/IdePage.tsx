@@ -55,7 +55,7 @@ export default function IdePage() {
       ),
     [t],
   );
-  useUnsavedChanges(tabs.some(modified), t`Unsaved changes`);
+  useUnsavedChanges(tabs.some(modified) || saving, t`Unsaved changes`, saving);
   useEffect(() => {
     const abort = new AbortController();
     void Promise.all([
@@ -79,15 +79,22 @@ export default function IdePage() {
       const key = `${rootId}:${path}`;
       let promise = directories.current.get(key);
       if (!promise) {
-        promise = rpc.ide.list({ rootId, path }).catch((error) => {
-          directories.current.delete(key);
-          throw error;
-        });
+        promise = rpc.ide
+          .list({ rootId, path })
+          .then(({ entries, hiddenCount }) => {
+            if (latest.current.rootId === rootId && hiddenCount)
+              setStatus(t`Some entries have unsupported names and are hidden (${hiddenCount}).`);
+            return entries;
+          })
+          .catch((error) => {
+            directories.current.delete(key);
+            throw error;
+          });
         directories.current.set(key, promise);
       }
       return promise;
     },
-    [rootId, treeRevision],
+    [rootId, treeRevision, t],
   );
   const open = useCallback(
     (path: string) => {
@@ -202,8 +209,9 @@ export default function IdePage() {
     directories.current.clear();
     setTreeRevision((value) => value + 1);
   }, []);
-  const changes = useChanges(root?.id, bots, onError, filesChanged);
+  const changes = useChanges(root?.id, drawer && drawerTab === "changes", onError, filesChanged);
   const close = (closing: EditorTab) => {
+    if (savingRef.current) return;
     if (modified(closing) && !window.confirm(t`Unsaved changes`)) return;
     const remaining = tabs.filter((tab) => tab.id !== closing.id);
     setTabs(remaining);
@@ -256,7 +264,9 @@ export default function IdePage() {
             <NativeSelect
               aria-label={t`Computer`}
               value={rootId}
+              disabled={saving}
               onChange={(event) => {
+                if (savingRef.current) return;
                 if (tabs.some(modified) && !window.confirm(t`Unsaved changes`)) return;
                 opening.current = "";
                 rootGeneration.current++;
@@ -331,6 +341,7 @@ export default function IdePage() {
                   variant="ghost"
                   size="icon-sm"
                   aria-label={t`Close ${basename(current.path)}`}
+                  disabled={saving}
                   onClick={() => close(current)}
                 >
                   <X size={12} />

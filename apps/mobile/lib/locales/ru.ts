@@ -892,4 +892,6 @@ export const RU_MESSAGES: Record<string, string> = {
   "Taught skill": "Обученный навык",
   Web: "Веб",
   "by you": "создано вами",
+  "This bot may only run locally — change the pin or the space policy":
+    "Этот бот может работать только локально — измените закреплённую модель или политику пространства",
 };

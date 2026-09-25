@@ -1,5 +1,9 @@
 import type { LearningProposal, SpaceLearningConfig } from "@ardurbot/contracts";
-import { MEMORY_IMPORT_PROMPT, MEMORY_REVIEW_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
+import {
+  MEMORY_IMPORT_PROMPT,
+  MEMORY_REVIEW_UNAVAILABLE_MESSAGE,
+  MODEL_LOCALITY_DENIED_MESSAGE,
+} from "@ardurbot/contracts";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
@@ -79,7 +83,7 @@ export function MemoryIntentControls() {
   const [instruction, setInstruction] = useState("");
   const [items, setItems] = useState<LearningProposal[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<"runtime" | "request" | null>(null);
+  const [error, setError] = useState<"runtime" | "locality" | "request" | null>(null);
   const locked = useRef(false);
   const ticket = useRef(0);
   useFocusEffect(
@@ -113,7 +117,9 @@ export function MemoryIntentControls() {
         setError(
           error instanceof Error && error.message === MEMORY_REVIEW_UNAVAILABLE_MESSAGE
             ? "runtime"
-            : "request",
+            : error instanceof Error && error.message === MODEL_LOCALITY_DENIED_MESSAGE
+              ? "locality"
+              : "request",
         );
     } finally {
       locked.current = false;
@@ -195,7 +201,9 @@ export function MemoryIntentControls() {
             ? t(
                 "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
               )
-            : t("Could not prepare memory changes. Try again.")}
+            : error === "locality"
+              ? t("This bot may only run locally — change the pin or the space policy")
+              : t("Could not prepare memory changes. Try again.")}
         </Text>
       ) : null}
     </View>

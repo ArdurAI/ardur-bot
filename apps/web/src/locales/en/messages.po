@@ -5817,6 +5817,10 @@ msgstr "Select output"
 msgid "Select the text to copy it."
 msgstr "Select the text to copy it."
 
+#: src/pages/ide/dialogs.tsx
+msgid "Selection shortened to 32,000 characters."
+msgstr "Selection shortened to 32,000 characters."
+
 #: src/pages/memory/MemoryComposer.tsx
 #: src/pages/Shell.tsx
 #: src/pages/system/QuickComposer.tsx
@@ -6077,6 +6081,10 @@ msgstr "Slash commands"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "Software update"
+
+#: src/pages/ide/IdePage.tsx
+msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
+msgstr "Some entries have unsupported names and are hidden ({hiddenCount})."
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
@@ -6421,6 +6429,7 @@ msgstr "This action could not finish; try again."
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 
+#: src/pages/memory/MemoryComposer.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot may only run locally — change the pin or the space policy"
 msgstr "This bot may only run locally — change the pin or the space policy"
