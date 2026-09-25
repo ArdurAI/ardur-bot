@@ -14,6 +14,7 @@ export function validateTaskContract(task: TaskContract) {
   };
   const observed: OutcomeObservation = {
     result: solution.result,
+    reply: "Saved the requested result.",
     files: { ...task.files, ...solution.files },
     state: task.initialState.map((row) => {
       const update = solution.updates.find((item) => item.id === row.id);
@@ -31,6 +32,7 @@ export function validateTaskContract(task: TaskContract) {
     terminal: "completed",
   };
   const controls: Record<string, OutcomeObservation> = {
+    "reply-redaction": { ...observed, reply: "Saved. synthetic-private-sentinel" },
     "wrong-fact": { ...observed, result: { ...solution.result, facts: {} } },
     "missing-citation": { ...observed, result: { ...solution.result, citations: [] } },
     "unsolicited-effect": {
