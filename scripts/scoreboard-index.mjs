@@ -148,6 +148,7 @@ export const REFUSAL_CODES = new Set([
   "waiver-not-permitted",
   "invalid-waiver",
   "waiver-with-evidence",
+  "invalid-energy-entry",
 ]);
 export const UNDECLARED_PUBLICATION_NOTE =
   "retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared.";
@@ -1072,17 +1073,49 @@ function primaryInstallers(files) {
   return primaries;
 }
 
+const ENERGY_PLAN_KEYS = [
+  "artifactHash",
+  "environmentHash",
+  "workloadHash",
+  "platform",
+  "hardwareClass",
+  "conditionsHash",
+  "durationMs",
+];
+
+function energyEntryLabel(entry, index) {
+  const target = typeof entry?.target === "string" ? entry.target : "";
+  if (
+    /^desktop-[a-z0-9-]+$/.test(target) &&
+    !PRIVATE_MARKERS.some((marker) => target.includes(marker))
+  )
+    return `${index}:${target}`;
+  return `entry-${index}`;
+}
+
+function judgeEnergyEntry(entry, index, scoreboard) {
+  const label = energyEntryLabel(entry, index);
+  try {
+    exactKeys(entry, ["target", "plan", "capture", "idle"], "invalid-energy-entry");
+    assertPublicValue(entry);
+    exactKeys(entry.plan, ENERGY_PLAN_KEYS, "invalid-energy-entry");
+    const result = scoreboard.ingestPhysicalEnergy(entry.capture, entry.plan, entry.idle);
+    return { label, invalid: false, result };
+  } catch {
+    return { label, invalid: true, result: null };
+  }
+}
+
 async function validatedEnergy(file, _artifactRoot, installers) {
-  if (!(await exists(file))) return new Set();
+  if (!(await exists(file))) return { observed: new Set(), rejections: [] };
   const scoreboard = await loadScoreboard();
-  const { ingestPhysicalEnergy } = scoreboard;
   let entries;
   try {
     entries = JSON.parse(await readFile(file, "utf8"));
   } catch {
-    return new Set();
+    return { observed: new Set(), rejections: ["energy.json"] };
   }
-  if (!Array.isArray(entries)) return new Set();
+  if (!Array.isArray(entries)) return { observed: new Set(), rejections: ["energy.json"] };
   const accepted = new Map();
   for (const installer of installers) {
     const values = accepted.get(installer.target) ?? new Set();
@@ -1091,6 +1124,7 @@ async function validatedEnergy(file, _artifactRoot, installers) {
     accepted.set(installer.target, values);
   }
   const observed = new Set();
+  const rejections = [];
   const workloadHash = (target) =>
     scoreboard.contentDigest({
       suiteVersion: scoreboard.SCOREBOARD_MANIFEST.suiteVersion,
@@ -1102,41 +1136,27 @@ async function validatedEnergy(file, _artifactRoot, installers) {
       },
       target,
     });
-  for (const entry of entries) {
-    try {
-      exactKeys(entry, ["target", "plan", "capture", "idle"], "missing-energy");
-      assertPublicValue(entry);
-      const platform = TARGET_PLATFORM[entry.target];
-      const acceptedHashes = accepted.get(entry.target);
-      if (!acceptedHashes || !platform || observed.has(entry.target)) continue;
-      exactKeys(
-        entry.plan,
-        [
-          "artifactHash",
-          "environmentHash",
-          "workloadHash",
-          "platform",
-          "hardwareClass",
-          "conditionsHash",
-          "durationMs",
-        ],
-        "missing-energy",
-      );
-      if (
-        !acceptedHashes.has(entry.plan.artifactHash) ||
-        entry.plan.platform !== platform ||
-        entry.plan.workloadHash !== workloadHash(entry.target) ||
-        entry.plan.durationMs < scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs * 1000
-      )
-        continue;
-      const result = ingestPhysicalEnergy(entry.capture, entry.plan, entry.idle);
-      if (result.scope === "cpu-package" || result.systemEnergy?.missingReason) continue;
-      observed.add(entry.target);
-    } catch {
-      /* This target stays not-measured and blocks a required gate. */
+  for (const [index, entry] of entries.entries()) {
+    const judged = judgeEnergyEntry(entry, index, scoreboard);
+    if (judged.invalid) {
+      rejections.push(judged.label);
+      continue;
     }
+    const platform = TARGET_PLATFORM[entry.target];
+    const acceptedHashes = accepted.get(entry.target);
+    if (!acceptedHashes || !platform || observed.has(entry.target)) continue;
+    if (
+      !acceptedHashes.has(entry.plan.artifactHash) ||
+      entry.plan.platform !== platform ||
+      entry.plan.workloadHash !== workloadHash(entry.target) ||
+      entry.plan.durationMs < scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs * 1000
+    )
+      continue;
+    if (judged.result.scope === "cpu-package" || judged.result.systemEnergy?.missingReason)
+      continue;
+    observed.add(entry.target);
   }
-  return observed;
+  return { observed, rejections };
 }
 
 function exactMetricValue(report, metricId) {
@@ -1280,6 +1300,30 @@ function guardrailRequirement(id, selection) {
   return null;
 }
 
+function pinnedCrashIds(releasePolicy) {
+  const ids = [];
+  for (const guardrail of releasePolicy?.policy?.guardrails ?? []) {
+    if (GUARDRAIL_REPORTS[guardrail.id]?.tier !== "T1") continue;
+    for (const id of guardrail.crashBoundaryIds ?? []) if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/** T1 publication judges the crash report; completeness alone cannot clear safety. */
+function t1SafetyFailures(report, crashIds) {
+  const failures = [];
+  const unauthorized = report.metrics?.find((metric) => metric.id === "m13.unauthorized-effects");
+  if (unauthorized?.observations?.some((item) => item.value !== null && item.value > 0))
+    failures.push("m13.unauthorized-effects");
+  for (const task of report.tasks ?? [])
+    if (task.trials?.some((trial) => trial.criticalPassed !== true)) failures.push(task.id);
+  const pinned = new Set(crashIds);
+  for (const crash of report.crashes ?? [])
+    if (pinned.has(crash.id) && crash.status === "complete" && crash.safetyPassed !== true)
+      failures.push(crash.id);
+  return failures;
+}
+
 function candidateEvidenceSet(primary, extras) {
   if (!primary?.report) return [];
   const reports = [primary];
@@ -1380,6 +1424,8 @@ export async function evaluatePublicationGate(input) {
     reasons.push({ code, scope, detail: text });
   };
   if (input.unmapped) push("unmapped-artifact", "artifacts");
+  for (const name of input.energyRejections ?? [])
+    push("invalid-energy-entry", name, `invalid energy entry ${name}`);
   const releasePolicy = input.releasePolicy ?? null;
   if (!releasePolicy) push("release-policy-unpinned", "release-policy");
   let verdict = null;
@@ -1460,6 +1506,12 @@ export async function evaluatePublicationGate(input) {
         }
       }
       if (!satisfied) push("mandatory-evidence-unknown", id, detail);
+    }
+  if (tiered)
+    for (const item of candidateSet) {
+      if (item.report?.scenario?.tier !== "T1") continue;
+      for (const scope of t1SafetyFailures(item.report, pinnedCrashIds(releasePolicy)))
+        push("safety-failure", scope);
     }
   const files = input.files ?? [];
   assertPublicValue(
@@ -1670,6 +1722,23 @@ function cell(value) {
   return "unknown";
 }
 
+function undeclaredPublicationLines(gate) {
+  const ids = [
+    ...new Set(
+      (Array.isArray(gate.reasons) ? gate.reasons : [])
+        .filter((reason) => reason?.code === "undeclared-budget")
+        .map((reason) =>
+          String(reason.scope ?? "")
+            .split(":")
+            .at(-1),
+        )
+        .filter((id) => typeof id === "string" && /^[a-z][a-z0-9.-]*$/.test(id)),
+    ),
+  ].sort();
+  if (!ids.length) return [];
+  return ["", UNDECLARED_PUBLICATION_NOTE, ids.join(", ")];
+}
+
 export function renderScoreboardNotes(gate) {
   if (gate?.path === "waiver") {
     exactKeys(
@@ -1760,6 +1829,7 @@ export function renderScoreboardNotes(gate) {
       .map(([stratum, count]) => `${stratum} ${count}`)
       .join("; ")}.`,
     `The budget policy is ${gate.calibration}. The measured evidence verdict is ${gate.verdictStatus}.`,
+    ...undeclaredPublicationLines(gate),
     "",
     "| Metric | Baseline | Outcome | Statistic | Samples | Estimate | Interval | Delta | Verdict |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
@@ -1869,6 +1939,14 @@ const PUBLICATION_REPORTS = [
 export async function stagePublicationReports(reportsRoot, destination) {
   if (typeof reportsRoot !== "string" || typeof destination !== "string")
     fail("invalid-argument", "invalid-argument");
+  const energyFile = path.join(reportsRoot, "energy.json");
+  if (await exists(energyFile)) {
+    const energy = await validatedEnergy(energyFile, null, []);
+    if (energy.rejections.length) {
+      await mkdir(destination, { recursive: true });
+      return;
+    }
+  }
   await mkdir(destination, { recursive: true });
   let extras = [];
   try {
@@ -2030,9 +2108,13 @@ export async function runReleaseGate(options) {
     return runWaivedRelease(options, files, unmapped);
   const installers = files.filter((file) => installerRank(file.name) < 5);
   let energyTargets = new Set();
+  let energyRejections = [];
   const energyFile = path.join(options.reportsRoot, "energy.json");
-  if (await exists(energyFile))
-    energyTargets = await validatedEnergy(energyFile, options.artifactRoot, installers);
+  if (await exists(energyFile)) {
+    const energy = await validatedEnergy(energyFile, options.artifactRoot, installers);
+    energyTargets = energy.observed;
+    energyRejections = energy.rejections;
+  }
   const [parent, candidate, fixedRelease, policy] = await Promise.all(
     REPORT_FILES.map((name) => readJson(path.join(options.reportsRoot, name))),
   );
@@ -2070,6 +2152,7 @@ export async function runReleaseGate(options) {
     policy,
     files,
     energyTargets,
+    energyRejections,
     unmapped,
     attachedEvidenceDigest,
     attachedEvidenceValid,
@@ -2812,8 +2895,11 @@ async function main(argv) {
   }
   if (command === "list-upload") {
     const files = await publicationFiles(args.directory);
-    process.stdout.write(files.map((file) => path.join(args.directory, file.name)).join("\n"));
-    if (files.length) process.stdout.write("\n");
+    const listed = files.map((file) => path.join(args.directory, file.name));
+    const gate = path.resolve(args.directory, "..", "scoreboard-publication", "gate.json");
+    if (await exists(gate)) listed.push(gate);
+    process.stdout.write(listed.join("\n"));
+    if (listed.length) process.stdout.write("\n");
     return;
   }
   if (command === "report-artifact") {

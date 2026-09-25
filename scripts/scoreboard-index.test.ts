@@ -1,7 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { access, cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import {
+  access,
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,6 +58,8 @@ import {
   SCOREBOARD_INDEX_RELATIVE_PATH,
   samplePlanFor,
   selectCommitRange,
+  stagePublicationReports,
+  UNDECLARED_PUBLICATION_NOTE,
   verifyPublicationBytes,
   WORKFLOW_ARTIFACT_RETENTION_DAYS,
 } from "./scoreboard-index.mjs";
@@ -2366,6 +2378,143 @@ ${script}`,
       await rm(crashed.root, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("refuses a T1 crash report that fails safety before rendering notes", async () => {
+    const probe = await documentedPinnedRelease();
+    const crashPath = path.join(probe.reportsRoot, "candidate-crash.json");
+    const artifactPath = path.join(probe.artifactRoot, "scoreboard-candidate-crash.json");
+    const original = await readFile(crashPath);
+    const cases = [
+      {
+        name: "unauthorized-effects",
+        edit: (report: ReturnType<typeof syntheticReport>) => {
+          const metric = report.metrics.find((item) => item.id === "m13.unauthorized-effects");
+          if (!metric) throw new Error("missing unauthorized-effects");
+          for (const observation of metric.observations) observation.value = 1;
+        },
+      },
+      {
+        name: "safety-passed",
+        edit: (report: ReturnType<typeof syntheticReport>) => {
+          const crash = report.crashes.find((item) => item.status === "complete");
+          if (!crash) throw new Error("missing completed crash");
+          crash.safetyPassed = false;
+        },
+      },
+      {
+        name: "critical-passed",
+        edit: (report: ReturnType<typeof syntheticReport>) => {
+          const trial = report.tasks.flatMap((task) => task.trials)[0];
+          if (!trial) throw new Error("missing trial");
+          trial.passed = false;
+          trial.criticalPassed = false;
+        },
+      },
+    ];
+    try {
+      for (const [index, item] of cases.entries()) {
+        const envelope = JSON.parse(original.toString("utf8")) as {
+          report: ReturnType<typeof syntheticReport>;
+        };
+        item.edit(envelope.report);
+        const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report));
+        await writeFile(crashPath, bytes);
+        await writeFile(artifactPath, bytes);
+        const result = await gate(probe, `index-t1-safety-${index}`);
+        expect(result.code, item.name).not.toBe(0);
+        expect(result.gate.allowPublication, item.name).toBe(false);
+        expect(result.gate.reasons, item.name).toContainEqual(
+          expect.objectContaining({ code: "safety-failure" }),
+        );
+        expect(() => renderScoreboardNotes(result.gate), item.name).toThrow(/human acceptance/i);
+      }
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 180_000);
+
+  it("refuses a private energy entry and stages nothing for upload", async () => {
+    const probe = await stagePassing();
+    const cleanReady = path.join(probe.root, "clean-ready");
+    try {
+      const energyPath = path.join(probe.reportsRoot, "energy.json");
+      const originalEnergy = await readFile(energyPath);
+      await stagePublicationReports(probe.reportsRoot, cleanReady);
+      const stagedEnergy = await readFile(path.join(cleanReady, "scoreboard-energy.json"));
+      expect(Buffer.compare(originalEnergy, stagedEnergy)).toBe(0);
+
+      const entries = JSON.parse(originalEnergy.toString("utf8")) as {
+        target: string;
+        plan: { hardwareClass: string };
+      }[];
+      const covered = entries.find((entry) => entry.target === "desktop-darwin-arm64");
+      if (!covered) throw new Error("missing darwin energy entry");
+      const rejected = structuredClone(covered);
+      rejected.plan.hardwareClass = "/Users/example/lab";
+      entries.unshift(rejected);
+      await writeFile(energyPath, JSON.stringify(entries));
+      const result = await gate(probe, "index-private-energy");
+      expect(result.code).not.toBe(0);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(result.gate.reasons).toContainEqual(
+        expect.objectContaining({
+          code: "invalid-energy-entry",
+          scope: "0:desktop-darwin-arm64",
+          detail: expect.stringContaining("0:desktop-darwin-arm64"),
+        }),
+      );
+      expect(JSON.stringify(result.gate)).not.toContain("/Users/");
+      const ready = path.join(probe.root, "release-ready");
+      await stagePublicationReports(probe.reportsRoot, ready);
+      expect(await readdir(ready)).toEqual([]);
+      const listed = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "list-upload", "--directory", ready],
+        { encoding: "utf8" },
+      );
+      expect(listed.status).toBe(0);
+      expect(listed.stdout).toBe("");
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("prints undeclared budgets in the release notes and uploads the gate", async () => {
+    const probe = await documentedPinnedRelease();
+    try {
+      const result = await gate(probe, "index-undeclared-notes");
+      expect(result.code).toBe(0);
+      expect(result.gate.allowPublication).toBe(true);
+      const ids = ["m10.post-idle-retained", "m13.terminal-stop"];
+      for (const id of ids) {
+        expect(result.gate.reasons).toContainEqual(
+          expect.objectContaining({
+            code: "undeclared-budget",
+            scope: `candidate:${id}`,
+          }),
+        );
+      }
+      const notes = releaseNotes(["fix: fixture"], result.gate);
+      const evidence = notes.split("## Measured evidence")[1] ?? "";
+      expect(evidence).toContain(UNDECLARED_PUBLICATION_NOTE);
+      for (const id of ids) expect(evidence).toContain(id);
+      const publication = path.join(probe.root, "publication");
+      const ready = path.join(publication, "release-ready");
+      const gateFile = path.join(publication, "scoreboard-publication", "gate.json");
+      await mkdir(path.dirname(gateFile), { recursive: true });
+      await writeFile(gateFile, await readFile(path.join(probe.root, "gate.json")));
+      await stagePublicationReports(probe.reportsRoot, ready);
+      const listed = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "list-upload", "--directory", ready],
+        { encoding: "utf8" },
+      );
+      expect(listed.status).toBe(0);
+      expect(listed.stdout).toContain(gateFile);
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
 
 describe("comparison reason classification", () => {

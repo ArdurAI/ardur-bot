@@ -293,10 +293,14 @@ satisfies the guardrail:
 Startup sample floors are read from the T2 report. The statistical verdict compares
 `parent.json`, `candidate.json`, and `fixed-release.json` using only the T2 requirements: startup
 floors, latency, bundles, memory, and energy binding. Crash boundaries are not part of that
-comparison. They are required of `candidate-crash.json` alone. Recovery does not compare a parent
-or fixed-release crash report, because the guardrail checks that the candidate completed each
-pinned boundary. A set that contains only the T2 report records `mandatory-evidence-unknown` for
-recovery, with the detail `missing T1 durable crash report: candidate-crash.json`.
+comparison. They are required of `candidate-crash.json` alone. That T1 report is also judged:
+every `m13.unauthorized-effects` observation is zero, every trial has `criticalPassed` true, and
+every completed pinned crash has `safetyPassed` true. A miss is the refusal `safety-failure`. It
+is never waivable, it blocks publication, and release notes are not rendered. Recovery does not
+compare a parent or fixed-release crash report, because the guardrail checks that the candidate
+completed each pinned boundary. A set that contains only the T2 report records
+`mandatory-evidence-unknown` for recovery, with the detail
+`missing T1 durable crash report: candidate-crash.json`.
 Live cache-hit ratios stay on an explicit T3 run. They are not required of the T1 crash report.
 Release notes render each guardrail summary from the report that satisfied that guardrail and
 name that report. Recovery and task lines come from the T1 crash report, not from the T2 startup
@@ -307,7 +311,10 @@ The pinned `docs/performance/release-policy.json` is unchanged.
 The five effect-safety counts are checked by their guardrail and the safety verdict rather than the
 budget selection, because seven reliability metrics in one family exceed the resample limit. Tool
 termination and retained-session growth have no reviewed declaration yet. retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared. That pending result is recorded as `undeclared-budget` with those metric ids. It is
-not a missing-report failure and it does not refuse the candidate.
+not a missing-report failure and it does not refuse the candidate. When publication proceeds with
+those reasons, the release notes evidence section prints that sentence with the metric ids, and
+`gate.json` is uploaded as a release asset next to the reports so the reasons outlive the workflow
+artifact.
 
 The previous fixed release is the closest `v*` tag on the first-parent history of the commit
 being published. The release workflow resolves it with `git describe --tags --abbrev=0 --match
@@ -353,7 +360,10 @@ hardware class, conditions, and duration exactly. The capture's artifact hash mu
 of the published installer file's bytes, which is that file's inventory entry digest. The digest of
 the inventory envelope does not satisfy the binding. A capture bound only to the envelope is
 `missing-energy` for every required target that lacks a file-byte capture. An unrelated digest is
-`missing-energy` as well. Human acceptance is separate and is not granted
+`missing-energy` as well. A private path or any other invalid entry is the refusal
+`invalid-energy-entry`, and the reason names that entry. The publication directory then receives
+nothing from the report set, and the upload list is empty. A file whose entries are all valid is
+copied unchanged. Human acceptance is separate and is not granted
 by the evidence.
 
 The `performance` workflow uses the production Vite build with synthetic auth/RPC responses and a
