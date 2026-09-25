@@ -22,7 +22,7 @@ import type {
   WebProvider,
 } from "@ardurbot/adapter-kit";
 import { routineJobKey, routineWakeupJob, runContinueJob } from "@ardurbot/adapter-kit";
-import type { MessageBlock, RunStatus, RuntimePin } from "@ardurbot/contracts";
+import type { CommandBlock, MessageBlock, RunStatus, RuntimePin } from "@ardurbot/contracts";
 import {
   ATTACHMENT_MAX_BYTES,
   BOT_DESCRIPTION_MAX_LENGTH,
@@ -194,7 +194,7 @@ import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-fac
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
 import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
-import { createCommandRecording } from "./command-recording.js";
+import { adoptOpenCommands, createCommandRecording } from "./command-recording.js";
 import {
   CommandReplayUnavailableError,
   commandReplayEvents,
@@ -1890,6 +1890,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           sandbox: deps.sandbox,
           context,
         });
+        const openCommands = new Map<string, CommandBlock>();
         const commandRecording = createCommandRecording({
           events: deps.events,
           sandbox: deps.sandbox,
@@ -1901,6 +1902,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           secrets: runSecrets,
           replayOf: commandReplay?.commandId,
           resolveCwd: (requested, executionId) => shellCwd(requested, executionId),
+          openCommands,
         });
         let currentTurnFiles: Awaited<ReturnType<typeof materializeCurrentTurnFiles>>;
         try {
@@ -4436,13 +4438,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? await eventLog.findMany({
                 where: {
                   runId,
-                  type: { in: ["agent.tool.called", "agent.tool.completed"] },
+                  type: {
+                    in: [
+                      "agent.tool.called",
+                      "agent.tool.completed",
+                      "command.intent",
+                      "command.started",
+                      "command.finished",
+                    ],
+                  },
                 },
                 orderBy: { seq: "asc" },
                 select: { type: true, payload: true },
               })
             : [];
           const unfinishedTools = unfinishedToolCalls(priorToolEvents);
+          adoptOpenCommands(openCommands, priorToolEvents);
           const resumedIds = new Map<string, string>();
           const claims = new Map<
             string,
@@ -4486,7 +4497,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           ) => {
             const claim = claimRecordedTool(name, args, executionId, true);
             try {
-              const result = await commandRecording.invoke(name, args, executionId, applyTool);
+              const result = await commandRecording.invoke(
+                name,
+                args,
+                claim.operationId,
+                applyTool,
+              );
               briefToolResults = appendBriefToolResult(briefToolResults, name, result, runSecrets);
               finishRecordedTool({
                 runId,

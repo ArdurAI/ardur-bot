@@ -1,5 +1,5 @@
 import type { TraceBatch, TraceBoundary, TraceOutcome, TracePoint } from "@ardurbot/contracts";
-import { TRACE_BOUNDARIES } from "@ardurbot/contracts";
+import { DEFAULT_CLOCK_UNCERTAINTY_MS, TRACE_BOUNDARIES } from "@ardurbot/contracts";
 import { nextFence } from "@ardurbot/core";
 import type { MetricEvidence, PerformanceEvidenceReport } from "../performance-report.js";
 import { canonicalSerialize, contentDigest } from "./manifest.js";
@@ -310,9 +310,21 @@ function operationSpan(
   const endUncertainty = uncertainty.get(end.processId);
   const widen =
     startUncertainty === undefined && endUncertainty === undefined
-      ? 1000
+      ? DEFAULT_CLOCK_UNCERTAINTY_MS
       : (startUncertainty ?? 0) + (endUncertainty ?? 0);
+  // A lower bound below zero does not show that the finish happened after the start.
+  if (value - widen < 0) return missing("clock-uncertain");
   return { value, lowerMs: value - widen, upperMs: value + widen, reason: "wall-clock" };
+}
+
+/** Reasons that leave a crash span unmeasured. An interrupted start is one of them. */
+export function crashSpanUnmeasured(reason: string | null) {
+  return (
+    reason === "interrupted" ||
+    reason === "clock-not-calibrated" ||
+    reason === "clock-skew" ||
+    reason === "clock-uncertain"
+  );
 }
 
 export function deriveTrace(
@@ -535,13 +547,11 @@ export function collectTraceEvidence(
     const missingBoundaries = options.requiredBoundaries.filter(
       (b) => !subset.some((p) => p.boundary === b),
     );
-    const spanUnmeasured = (reason: string | null) =>
-      reason === "clock-not-calibrated" || reason === "clock-skew";
     const operationsObserved = pairAcrossProcesses
       ? derived.operations.every(
           (operation) =>
             operation.duration.reason !== "boundary-not-observed" &&
-            !spanUnmeasured(operation.duration.reason),
+            !crashSpanUnmeasured(operation.duration.reason),
         )
       : derived.operations.every((operation) => operation.duration.value !== null);
     return {

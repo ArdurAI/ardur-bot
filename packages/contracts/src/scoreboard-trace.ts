@@ -33,6 +33,12 @@ export const TRACE_BOUNDARIES = [
 
 export type TraceBoundary = (typeof TRACE_BOUNDARIES)[number];
 export type TraceOutcome = "success" | "failed" | "cancelled" | "timed-out" | "uncertain";
+
+/**
+ * Widening used when a batch omits `clockUncertaintyMs`, and the value a live buffer
+ * records when a wall-clock versus monotonic cross-check cannot be measured.
+ */
+export const DEFAULT_CLOCK_UNCERTAINTY_MS = 1000;
 export interface TracePoint {
   traceId: string;
   processId: string;
@@ -54,7 +60,8 @@ export interface TraceBatch {
   timeOrigin?: number;
   /**
    * Recorded uncertainty of this process clock, in milliseconds.
-   * A cross-process span widens by the sum of the two batches, or by one second when neither recorded it.
+   * A live buffer measures this once, or records `DEFAULT_CLOCK_UNCERTAINTY_MS` when it cannot.
+   * A cross-process span widens by the sum of the two batches, or by that default when neither recorded it.
    */
   clockUncertaintyMs?: number;
   points: TracePoint[];

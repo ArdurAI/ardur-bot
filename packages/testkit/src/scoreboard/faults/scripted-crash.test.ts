@@ -56,7 +56,6 @@ function crashFrom(runtime: "scripted" | "pi") {
   const attempt = 3;
   const before = capture("interrupted-worker", 1_700_000_000_000, () => {
     recordBoundaries(killed, attempt, 10);
-    tracePoint(RUN, "tool.started", { operationId: `${RUN}:destination.write:9`, attempt }, 80);
   });
   const after = capture("recovered-worker", 1_700_000_004_000, () => {
     tracePoint(

@@ -1,13 +1,32 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import type { TraceBatch, TraceBoundary, TracePoint } from "@ardurbot/contracts";
-import { TRACE_BOUNDARIES } from "@ardurbot/contracts";
+import { DEFAULT_CLOCK_UNCERTAINTY_MS, TRACE_BOUNDARIES } from "@ardurbot/contracts";
 
 type Detail = Pick<TracePoint, "attempt" | "operationId" | "requestId" | "outcome" | "scheduledMs">;
 const boundaries = new Set<string>(TRACE_BOUNDARIES);
 /** Tool execution ids include the tool name, which may contain a dot. */
 const opaque = (value: unknown): value is string =>
   typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,128}$/.test(value);
+/** One sample of how far the wall clock and the monotonic clock disagree, in milliseconds. */
+function measureClockUncertaintyMs(): number {
+  try {
+    const before = Date.now();
+    const monotonic = performance.now();
+    const after = Date.now();
+    const estimated = performance.timeOrigin + monotonic;
+    const uncertainty = Math.max(
+      Math.abs(estimated - before),
+      Math.abs(estimated - after),
+      Math.max(0, after - before),
+    );
+    if (!Number.isFinite(uncertainty) || uncertainty < 0) return DEFAULT_CLOCK_UNCERTAINTY_MS;
+    return uncertainty;
+  } catch {
+    return DEFAULT_CLOCK_UNCERTAINTY_MS;
+  }
+}
+
 const context = new AsyncLocalStorage<{ traceId: string; attempt: number }>();
 let active: ReturnType<typeof createTraceBuffer> | undefined;
 
@@ -20,7 +39,10 @@ export function createTraceBuffer(
     now?: () => number;
     /** Wall-clock milliseconds of this process time origin. Defaults to `performance.timeOrigin`. */
     timeOrigin?: number;
-    /** Recorded uncertainty of this process clock, in milliseconds. Omitted when unknown. */
+    /**
+     * Recorded uncertainty of this process clock, in milliseconds.
+     * Measured once from the wall clock and the monotonic clock when omitted.
+     */
     clockUncertaintyMs?: number;
   } = {},
 ) {
@@ -38,15 +60,14 @@ export function createTraceBuffer(
   )
     throw new Error("Invalid trace buffer options");
   const timeOrigin = options.timeOrigin ?? performance.timeOrigin;
-  const clockUncertaintyMs = options.clockUncertaintyMs;
+  const clockUncertaintyMs = options.clockUncertaintyMs ?? measureClockUncertaintyMs();
   if (
     !Number.isFinite(timeOrigin) ||
     timeOrigin < 0 ||
-    (clockUncertaintyMs !== undefined &&
-      (!Number.isFinite(clockUncertaintyMs) || clockUncertaintyMs < 0))
+    !Number.isFinite(clockUncertaintyMs) ||
+    clockUncertaintyMs < 0
   )
     throw new Error("Invalid trace buffer options");
-  const uncertainty = clockUncertaintyMs === undefined ? {} : { clockUncertaintyMs };
   const now = options.now ?? (() => performance.now());
   let points: TracePoint[] = [];
   let sequence = 0;
@@ -110,7 +131,7 @@ export function createTraceBuffer(
         version: 1,
         processId,
         timeOrigin,
-        ...uncertainty,
+        clockUncertaintyMs,
         points: points.map((point) => ({ ...point })),
         counters: { ...counters },
       };
@@ -120,7 +141,7 @@ export function createTraceBuffer(
         version: 1 as const,
         processId,
         timeOrigin,
-        ...uncertainty,
+        clockUncertaintyMs,
         points,
         counters: { ...counters },
       };

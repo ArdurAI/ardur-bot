@@ -15,7 +15,11 @@ import {
   contentDigest,
   EXPERIMENT_DEFINITIONS,
 } from "../manifest.js";
-import { collectTraceEvidence, LOCAL_TRACE_BOUNDARIES } from "../trace-collector.js";
+import {
+  collectTraceEvidence,
+  crashSpanUnmeasured,
+  LOCAL_TRACE_BOUNDARIES,
+} from "../trace-collector.js";
 import type { MatrixResult } from "./catalog.js";
 
 const CRASH_CONTROLS: Record<string, readonly string[]> = {
@@ -61,16 +65,14 @@ function recordedBoundaries(value: unknown): readonly TraceBoundary[] | null | u
 function sameBoundaries(left: readonly TraceBoundary[], right: readonly TraceBoundary[]) {
   return left.length === right.length && left.every((boundary, index) => boundary === right[index]);
 }
-function spanUnmeasured(reason: string | null) {
-  return reason === "clock-not-calibrated" || reason === "clock-skew";
-}
 /**
  * Both processes must contribute a batch. Crash recollection pairs a start with a finish
- * on the recovering process whose attempt is the next lease fence. A cross-process span is a
- * wall-clock interval. The merged trace is complete when that recollection reports exactly one
- * terminal, every stored boundary, no drop, and a measured crash span. A start with no finish is
- * interrupted and does not by itself make the crash incomplete. clock-not-calibrated and
- * clock-skew leave the span unmeasured.
+ * on the recovering process whose attempt is the next lease fence. A finish on any other fence
+ * does not pair. A cross-process span is a wall-clock interval only when its lower bound stays
+ * at or above zero. The merged trace is complete when that recollection reports exactly one
+ * terminal, every stored boundary, no drop, and a measured crash span. An interrupted start,
+ * a clock that was not calibrated, clock skew, or an uncertainty interval that crosses zero
+ * leaves the span unmeasured.
  */
 function crashTraces(
   boundaryId: string,
@@ -102,7 +104,7 @@ function crashTraces(
     );
     if (
       fragment.derived.some((trace) =>
-        trace.operations.some((operation) => spanUnmeasured(operation.duration.reason)),
+        trace.operations.some((operation) => crashSpanUnmeasured(operation.duration.reason)),
       )
     )
       return { status: "unmeasured" };

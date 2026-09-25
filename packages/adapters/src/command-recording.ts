@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { CommandBlock, CommandEventPayload } from "@ardurbot/contracts";
-import { COMMAND_SUPPRESSED, COMMAND_TRUNCATED, CommandRequestSchema } from "@ardurbot/contracts";
+import {
+  COMMAND_SUPPRESSED,
+  COMMAND_TRUNCATED,
+  CommandEventPayloadSchema,
+  CommandRequestSchema,
+} from "@ardurbot/contracts";
 import {
   createBoundedCommandOutput,
   createStreamingRedactor,
@@ -47,6 +52,33 @@ type StoredComputer = {
   providerRef: string | null;
 };
 
+/** Keeps a command the killed attempt already published, so resume can finish that card. */
+export function adoptOpenCommands(
+  target: Map<string, CommandBlock>,
+  events: readonly { type: string; payload: unknown }[],
+) {
+  const finished = new Set<string>();
+  for (const event of events) {
+    if (
+      event.type !== "command.intent" &&
+      event.type !== "command.started" &&
+      event.type !== "command.finished"
+    )
+      continue;
+    const parsed = CommandEventPayloadSchema.safeParse(event.payload);
+    if (!parsed.success) continue;
+    const block = parsed.data.block;
+    if (event.type === "command.finished") {
+      finished.add(block.executionId);
+      target.delete(block.executionId);
+      continue;
+    }
+    if (finished.has(block.executionId)) continue;
+    if (block.outcome === "waiting" || block.outcome === "running")
+      target.set(block.executionId, block);
+  }
+}
+
 export function createCommandRecording(input: {
   events: Pick<ThreadEvents, "append">;
   sandbox: SandboxProvider;
@@ -58,6 +90,8 @@ export function createCommandRecording(input: {
   secrets: string[];
   replayOf?: string | null;
   resolveCwd?: (requested: string | undefined, executionId: string) => string | undefined;
+  /** Waiting or running cards from the killed attempt, keyed by execution id. */
+  openCommands?: ReadonlyMap<string, CommandBlock>;
 }) {
   const entries = new Map<
     string,
@@ -128,19 +162,26 @@ export function createCommandRecording(input: {
       cwd === resolvedCwd &&
       (request.cwd === undefined || safe(request.cwd) === request.cwd);
     const suppress = sensitiveShellCommand(request?.command ?? "") || !unchanged;
-    const commandId = createHash("sha256")
-      .update(JSON.stringify([input.context.runId, input.attemptId, executionId]))
-      .digest("hex");
+    const prior = input.openCommands?.get(executionId);
+    const resumeCard =
+      prior && (prior.outcome === "waiting" || prior.outcome === "running") ? prior : undefined;
+    const commandId = resumeCard
+      ? resumeCard.commandId
+      : createHash("sha256")
+          .update(JSON.stringify([input.context.runId, input.attemptId, executionId]))
+          .digest("hex");
     const block: CommandBlock = {
       commandId,
       runId: input.context.runId,
-      attemptId: input.attemptId,
-      executionId,
+      attemptId: resumeCard ? resumeCard.attemptId : input.attemptId,
+      executionId: resumeCard ? resumeCard.executionId : executionId,
       command,
       cwd,
       computerId: input.storedComputer.id,
       computer: safe(`${input.computer.kind}:${input.computer.providerRef ?? input.computer.id}`),
-      startedAt: new Date().toISOString(),
+      startedAt: resumeCard
+        ? (resumeCard.startedAt ?? new Date().toISOString())
+        : new Date().toISOString(),
       durationMs: null,
       exitCode: null,
       outcome: "waiting",
@@ -149,7 +190,7 @@ export function createCommandRecording(input: {
       error: null,
       redacted: !unchanged || suppress,
       truncated: false,
-      replayOf: input.replayOf ?? null,
+      replayOf: resumeCard ? resumeCard.replayOf : (input.replayOf ?? null),
       rerunDisabledReason:
         !unchanged || suppress
           ? "This command cannot be retained safely for rerun."
@@ -159,21 +200,24 @@ export function createCommandRecording(input: {
     };
     const entry = { block, started: Date.now(), suppress, request };
     entries.set(executionId, entry);
-    // Failing this write prevents even approval-effect persistence or execution.
-    await append("command.intent", {
-      block,
-      replay:
-        block.rerunDisabledReason || !request
-          ? null
-          : {
-              request,
-              computerFingerprint: commandComputerFingerprint(
-                input.storedComputer,
-                input.computer.providerRef,
-                resolvedCwd!,
-              ),
-            },
-    });
+    // A second intent for a card the killed attempt already published would open another row.
+    if (!resumeCard) {
+      // Failing this write prevents even approval-effect persistence or execution.
+      await append("command.intent", {
+        block,
+        replay:
+          block.rerunDisabledReason || !request
+            ? null
+            : {
+                request,
+                computerFingerprint: commandComputerFingerprint(
+                  input.storedComputer,
+                  input.computer.providerRef,
+                  resolvedCwd!,
+                ),
+              },
+      });
+    }
     try {
       const result =
         !request || !unchanged || cwdError

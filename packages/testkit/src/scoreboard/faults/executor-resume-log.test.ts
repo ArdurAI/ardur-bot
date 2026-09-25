@@ -11,7 +11,7 @@ vi.mock("../../../../adapters/src/delegation-execution.js", () => ({
 }));
 
 import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
-import type { ActionApprovalRule } from "@ardurbot/core";
+import { type ActionApprovalRule, projectCommandBlocks } from "@ardurbot/core";
 import { afterEach, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "../../../../adapters/src/auto-review.js";
 import type * as ComputerLifecycleModule from "../../../../adapters/src/computer-lifecycle.js";
@@ -103,6 +103,7 @@ function harness(scripted: boolean) {
   const log: Logged[] = [];
   let seq = 0;
   let persist = true;
+  let cutAfter: string | null = null;
   let barrier: Promise<void> = Promise.resolve();
   releaseTools = () => {};
   let calls: ToolCall[] = [];
@@ -367,6 +368,7 @@ function harness(scripted: boolean) {
           payload: event.payload ?? null,
           seq: seq++,
         });
+        if (cutAfter && event.type === cutAfter) persist = false;
       }),
       pauseRunForInput: vi.fn(async () => true),
       finalizeRun,
@@ -437,6 +439,25 @@ function harness(scripted: boolean) {
       await pending;
       persist = true;
       return killed;
+    },
+    async killAt(next: ToolCall[], eventType: "agent.tool.called" | "command.intent") {
+      calls = next;
+      concurrent = false;
+      this.hold();
+      cutAfter = eventType;
+      const pending = executor.continueRun(run.id, "worker-1");
+      await waitUntil(
+        `kill after ${eventType}`,
+        () => !persist && log.some((event) => event.type === eventType),
+        pending,
+      );
+      releaseTools();
+      await pending;
+      // The dying process may have stored an effect result without a durable command finish.
+      // Drop that row so resume launches the command and records command.started.
+      effects.length = 0;
+      persist = true;
+      cutAfter = null;
     },
     async resume(next: ToolCall[], overlap = false) {
       calls = next;
@@ -541,4 +562,86 @@ it("closes identical open shell calls in the order they were called", async () =
   expect(executionIds(ordered, "agent.tool.completed")).toEqual([sameA, sameB]);
   expect(executionIds(ordered, "agent.tool.called")).toEqual([sameA, sameB]);
   expect(openExecutionIds(ordered)).toEqual([]);
+});
+
+function commandIdentity(events: readonly Logged[]) {
+  return events
+    .filter((event) => event.type.startsWith("command."))
+    .map((event) => {
+      const block = (event.payload as { block?: { executionId?: string; commandId?: string } })
+        .block;
+      return {
+        type: event.type,
+        executionId: block?.executionId,
+        commandId: block?.commandId,
+      };
+    });
+}
+
+function projectedCommands(events: readonly Logged[]) {
+  return projectCommandBlocks(
+    events.map((event) => ({
+      id: String(event.seq),
+      seq: event.seq,
+      type: event.type,
+      runId: event.runId ?? RUN,
+      threadId: "thread-1",
+      createdAt: new Date("2026-09-24T12:00:00Z"),
+      payload: event.payload,
+    })),
+  );
+}
+
+async function resumeKilledShell(cut: "command.intent" | "agent.tool.called") {
+  const h = harness(true);
+  await h.killAt([{ name: "shell", args: ARGS_A, executionId: A }], cut);
+  await h.resume([{ name: "shell", args: ARGS_A, executionId: MINTED }]);
+  const commands = commandIdentity(h.log);
+  const tools = h.toolEvents();
+  const blocks = projectedCommands(h.log);
+  return { commands, tools, blocks };
+}
+
+function expectOneCommand(
+  commands: ReturnType<typeof commandIdentity>,
+  tools: Logged[],
+  blocks: ReturnType<typeof projectedCommands>,
+) {
+  expect(commands.length).toBeGreaterThan(0);
+  expect(commands.every((event) => event.executionId === A)).toBe(true);
+  expect(commands.filter((event) => event.type === "command.intent")).toHaveLength(1);
+  expect(new Set(commands.map((event) => event.commandId)).size).toBe(1);
+  expect(executionIds(tools, "agent.tool.called")).toEqual([A]);
+  expect(executionIds(tools, "agent.tool.completed")).toEqual([A]);
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    executionId: A,
+    commandId: commands[0]?.commandId,
+    outcome: "completed",
+    stdout: "ok",
+  });
+  expect(
+    blocks.some((block) => block.rerunDisabledReason === "The original command was not recorded."),
+  ).toBe(false);
+  expect(blocks.some((block) => block.commandId.startsWith("legacy:"))).toBe(false);
+}
+
+it("completes a command killed after intent on the original id", async () => {
+  const resumed = await resumeKilledShell("command.intent");
+  expectOneCommand(resumed.commands, resumed.tools, resumed.blocks);
+  expect(resumed.commands.map((event) => event.type)).toEqual([
+    "command.intent",
+    "command.started",
+    "command.finished",
+  ]);
+});
+
+it("records a command killed before intent on the original id", async () => {
+  const resumed = await resumeKilledShell("agent.tool.called");
+  expectOneCommand(resumed.commands, resumed.tools, resumed.blocks);
+  expect(resumed.commands.map((event) => event.type)).toEqual([
+    "command.intent",
+    "command.started",
+    "command.finished",
+  ]);
 });

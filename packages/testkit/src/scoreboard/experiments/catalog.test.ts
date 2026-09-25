@@ -411,7 +411,7 @@ describe("matrix selection and evidence", () => {
       traceIds: [],
     });
   });
-  it("completes the worker crash-04 split, including a span measured across the crash", () => {
+  it("measures the recovered span and leaves an unpaired start unmeasured", () => {
     const stored = SCRIPTED_TRACE_BOUNDARIES;
     const phases = crashPhases("run-pair", { origin: 100, openTool: "tool-cut" });
     const crash = matrixEvidence([
@@ -421,13 +421,13 @@ describe("matrix selection and evidence", () => {
       }),
     ]).crashes.find((row) => row.id === "crash-04");
     expect(crash).toMatchObject({
-      status: "complete",
-      missingReason: null,
-      recovery: "explicit-uncertainty",
-      safetyPassed: true,
-      taskCompleted: false,
+      status: "incomplete",
+      missingReason: "crash-span-unmeasured",
+      recovery: null,
+      safetyPassed: null,
+      taskCompleted: null,
     });
-    expect(crash?.traceIds).toHaveLength(1);
+    expect(crash?.traceIds).toHaveLength(0);
     const batches = [...phases.before.raw.batches, ...phases.after.raw.batches];
     const started = phases.before.raw.batches[0]!.points.find(
       (point) => point.boundary === "tool.started",
@@ -441,7 +441,7 @@ describe("matrix selection and evidence", () => {
       requiredBoundaries: stored,
       pairAcrossProcesses: true,
     });
-    expect(paired.derived[0]!.complete).toBe(true);
+    expect(paired.derived[0]!.complete).toBe(false);
     expect(paired.derived[0]!.missingBoundaries).toEqual([]);
     const tools = paired.derived[0]!.operations.filter(
       (operation) => operation.kind === "tool.started",

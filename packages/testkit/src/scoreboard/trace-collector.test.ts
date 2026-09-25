@@ -166,6 +166,8 @@ describe("trace evidence", () => {
       const stamp = (batch: TraceBatch, timeOrigin: number | undefined) => {
         if (timeOrigin === undefined) delete (batch as { timeOrigin?: number }).timeOrigin;
         else (batch as { timeOrigin?: number }).timeOrigin = timeOrigin;
+        // This case locks the documented widening used when a batch omits clock uncertainty.
+        delete (batch as { clockUncertaintyMs?: number }).clockUncertaintyMs;
         return batch;
       };
       const evidence = collectTraceEvidence(
@@ -283,12 +285,20 @@ describe("trace evidence", () => {
       outcome: "interrupted",
       duration: { value: null, reason: "interrupted" },
     });
-    expect(unrelated.derived[0]!.complete).toBe(true);
+    expect(unrelated.derived[0]!.complete).toBe(false);
   });
 
   it("pairs crash boundaries across processes only when crash evidence asks", () => {
-    const before = createTraceBuffer({ processId: "interrupted-worker", now: () => 1 });
-    const after = createTraceBuffer({ processId: "recovered-worker", now: () => 1 });
+    const before = createTraceBuffer({
+      processId: "interrupted-worker",
+      now: () => 1,
+      clockUncertaintyMs: 0,
+    });
+    const after = createTraceBuffer({
+      processId: "recovered-worker",
+      now: () => 1,
+      clockUncertaintyMs: 0,
+    });
     before.record("run-a", "admission.started", {}, 0);
     before.record("run-a", "provider.started", { operationId: "provider-1", attempt: 0 }, 10);
     before.record("run-a", "tool.started", { operationId: "tool-1", attempt: 0 }, 20);
@@ -317,7 +327,7 @@ describe("trace evidence", () => {
     const options = { sessionId: "crash", pairId: null, requiredBoundaries };
     const batches = [before.snapshot(), after.snapshot()];
     const paired = collectTraceEvidence(batches, { ...options, pairAcrossProcesses: true });
-    expect(paired.derived[0]!.complete).toBe(true);
+    expect(paired.derived[0]!.complete).toBe(false);
     expect(
       paired.derived[0]!.operations.find((operation) => operation.kind === "tool.started")!.duration
         .value,
@@ -491,6 +501,10 @@ describe("trace evidence", () => {
       const batches = [killed.snapshot(), recovered.snapshot()];
       if (origins.killed === undefined) delete batches[0]!.timeOrigin;
       if (origins.recovered === undefined) delete batches[1]!.timeOrigin;
+      if (!uncertainty) {
+        delete batches[0]!.clockUncertaintyMs;
+        delete batches[1]!.clockUncertaintyMs;
+      }
       const evidence = collectTraceEvidence(batches, {
         sessionId: "crash",
         pairId: null,
@@ -586,4 +600,158 @@ describe("trace evidence", () => {
       "clock-skew",
     );
   });
+
+  it("leaves a finish on any fence other than the next one unmeasured", () => {
+    const attempt = 4;
+    const crash = (finishAttempt: number) =>
+      matrixEvidence([
+        fenceCrash(attempt, finishAttempt, {
+          killed: 1_700_000_000_000,
+          recovered: 1_700_000_003_000,
+        }),
+      ]).crashes.find((row) => row.id === "crash-04");
+    expect(crash(attempt + 2)).toMatchObject({
+      status: "incomplete",
+      missingReason: "crash-span-unmeasured",
+      safetyPassed: null,
+      recovery: null,
+    });
+  });
+
+  it("accepts a finish on the next fence when the span stays measured", () => {
+    const attempt = 4;
+    const crash = matrixEvidence([
+      fenceCrash(attempt, nextFence(attempt), {
+        killed: 1_700_000_000_000,
+        recovered: 1_700_000_003_000,
+      }),
+    ]).crashes.find((row) => row.id === "crash-04");
+    expect(crash).toMatchObject({ status: "complete", missingReason: null });
+  });
+
+  it("rejects a wall span whose uncertainty interval crosses zero", () => {
+    const attempt = 4;
+    const uncertain = matrixEvidence([
+      fenceCrash(
+        attempt,
+        nextFence(attempt),
+        { killed: 1_700_000_000_000, recovered: 1_700_000_000_400 },
+        { killed: 500, recovered: 500 },
+        20,
+      ),
+    ]).crashes.find((row) => row.id === "crash-04");
+    expect(uncertain).toMatchObject({
+      status: "incomplete",
+      missingReason: "crash-span-unmeasured",
+      safetyPassed: null,
+      recovery: null,
+    });
+  });
+
+  it("keeps a cross-process span whose interval stays above zero", () => {
+    const attempt = 4;
+    const measured = matrixEvidence([
+      fenceCrash(
+        attempt,
+        nextFence(attempt),
+        { killed: 1_700_000_000_000, recovered: 1_700_000_000_400 },
+        { killed: 50, recovered: 50 },
+        20,
+      ),
+    ]).crashes.find((row) => row.id === "crash-04");
+    expect(measured).toMatchObject({ status: "complete", missingReason: null });
+    const killed = createTraceBuffer({
+      processId: "interrupted-worker",
+      now: () => 1,
+      timeOrigin: 1_700_000_000_000,
+      clockUncertaintyMs: 50,
+    });
+    const recovered = createTraceBuffer({
+      processId: "recovered-worker",
+      now: () => 1,
+      timeOrigin: 1_700_000_000_400,
+      clockUncertaintyMs: 50,
+    });
+    killed.record("run-a", "tool.started", { operationId: "tool-1", attempt }, 0);
+    recovered.record(
+      "run-a",
+      "tool.finished",
+      { operationId: "tool-1", attempt: nextFence(attempt), outcome: "success" },
+      0,
+    );
+    const span = collectTraceEvidence([killed.snapshot(), recovered.snapshot()], {
+      sessionId: "crash",
+      pairId: null,
+      requiredBoundaries: ["tool.started", "tool.finished"],
+      pairAcrossProcesses: true,
+    }).derived[0]!.operations[0]!.duration;
+    expect(span).toEqual({ value: 400, lowerMs: 300, upperMs: 500, reason: "wall-clock" });
+  });
+
+  it("records clock uncertainty on every trace batch", () => {
+    const buffer = createTraceBuffer({ processId: "worker-a", now: () => 1 });
+    const first = buffer.snapshot();
+    const second = buffer.drain();
+    expect(first.clockUncertaintyMs).toEqual(expect.any(Number));
+    expect(first.clockUncertaintyMs).toBeGreaterThanOrEqual(0);
+    expect(second.clockUncertaintyMs).toBe(first.clockUncertaintyMs);
+    const explicit = createTraceBuffer({
+      processId: "worker-b",
+      now: () => 1,
+      clockUncertaintyMs: 1000,
+    });
+    expect(explicit.snapshot().clockUncertaintyMs).toBe(1000);
+  });
 });
+
+function fenceCrash(
+  attempt: number,
+  finishAttempt: number,
+  origins: { killed: number; recovered: number },
+  uncertainty?: { killed: number; recovered: number },
+  finishedAt = 35,
+): MatrixResult {
+  const stored = ["admission.started", "tool.started", "tool.finished", "terminal.committed"];
+  const killed = createTraceBuffer({
+    processId: "interrupted-worker",
+    now: () => 1,
+    timeOrigin: origins.killed,
+    clockUncertaintyMs: uncertainty?.killed,
+  });
+  const recovered = createTraceBuffer({
+    processId: "recovered-worker",
+    now: () => 1,
+    timeOrigin: origins.recovered,
+    clockUncertaintyMs: uncertainty?.recovered,
+  });
+  killed.record("run-a", "admission.started", {}, 0);
+  killed.record("run-a", "tool.started", { operationId: "tool-1", attempt }, 20);
+  recovered.record(
+    "run-a",
+    "tool.finished",
+    { operationId: "tool-1", attempt: finishAttempt, outcome: "success" },
+    finishedAt,
+  );
+  recovered.record("run-a", "terminal.committed", { outcome: "success" }, finishedAt + 1);
+  const phase = (batch: TraceBatch) => ({
+    ...collectTraceEvidence([batch], {
+      sessionId: "matrix-fault",
+      pairId: null,
+      requiredBoundaries: stored,
+    }),
+    requiredBoundaries: stored,
+  });
+  return {
+    id: "crash-04",
+    experiment: "O9",
+    tier: "T1",
+    status: "passed",
+    checks: { killedAtBoundary: true },
+    measurements: {
+      before: { trace: phase(killed.snapshot()) },
+      after: { autonomousCompletion: false, trace: phase(recovered.snapshot()) },
+    },
+    coverage: [],
+    gaps: [],
+  };
+}

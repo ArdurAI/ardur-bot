@@ -142,19 +142,23 @@ stored for that trace. The fault worker stores the list its runtime can emit. A 
 never emits `provider.*` or `text.published`, so those boundaries are not required for a scripted
 crash; a Pi runtime fixture uses the full local list. An empty boundary list is never substituted.
 Crash collection pairs a `provider.started` or `tool.started` on the killed process with a finish
-on the recovering process that has the same operation id and the next lease fence. Each batch
-carries that process's `timeOrigin`. A cross-process span is a wall-clock interval
-(`reason: "wall-clock"`): the point estimate is the difference of wall times (`timeOrigin + at`),
-and the bounds widen by the sum of the two batches' recorded `clockUncertaintyMs`, or by one
-second when neither batch recorded a clock uncertainty. It is never an exact span. A batch without
+on the recovering process that has the same operation id and the next lease fence. A finish on any
+other fence does not pair and does not make the crash complete. Each batch carries that process's
+`timeOrigin` and `clockUncertaintyMs`. The buffer measures the uncertainty once, from a wall-clock
+versus monotonic cross-check, or records the documented default of one second when that check
+cannot be made. A cross-process span is a wall-clock interval (`reason: "wall-clock"`) only when
+the widened lower bound stays at or above zero: the point estimate is the difference of wall times
+(`timeOrigin + at`), and the bounds widen by the sum of the two batches' recorded
+`clockUncertaintyMs`, or by one second when neither batch recorded a clock uncertainty. It is never
+an exact span. A lower bound below zero is `clock-uncertain`, not `wall-clock`. A batch without
 `timeOrigin` leaves the span `clock-not-calibrated`. Wall time that runs backwards is `clock-skew`.
-Neither case subtracts the process-local clocks, and neither is `reversed-boundaries`. Either
-unmeasured span makes the crash `incomplete` with `crash-span-unmeasured`, and `safetyPassed` and
-`recovery` stay unset. A start with no paired finish is `interrupted`; that cut alone does not
-make the crash incomplete. The merged trace is accepted only when both processes contributed a
-batch and collection is complete: exactly one terminal point, every required boundary present on
-the merged trace, a measured crash span, and no batch that dropped or invalidated a point. One
-process alone, admission points alone, two terminal points, or a dropped terminal stay
+None of those cases subtract the process-local clocks, and none is `reversed-boundaries`. A start
+with no finish on the next fence is `interrupted`. An interrupted start, an uncalibrated clock,
+clock skew, or an uncertainty interval that crosses zero makes the crash `incomplete` with
+`crash-span-unmeasured`, and `safetyPassed` and `recovery` stay unset. The merged trace is accepted
+only when both processes contributed a batch and collection is complete: exactly one terminal point,
+every required boundary present on the merged trace, a measured crash span, and no batch that
+dropped or invalidated a point. One process alone, admission points alone, two terminal points, or a dropped terminal stay
 `trace-links-missing`. Ordinary single-process traces still require each start and finish on the
 same process and still report an exact span. An incomplete crash must not record a recovery or a
 passed safety result. The evidence schema stays the existing crash keys.
@@ -164,6 +168,7 @@ experiment variants remain incomplete until their full acceptance closes.
 Trace collection reuses W0-4 and preserves unknown/unobserved boundaries. Cross-process timing
 is not combined without a shared clock. Crash spans use each batch's `timeOrigin` as that shared
 wall-clock origin and publish an interval, widened by recorded clock uncertainty or by one second.
+An interval whose lower bound is below zero is unmeasured.
 Fixture counters do not become provider usage, and hashes do not become
 live cache hits. No priced cost is emitted
 without dated rate evidence.
