@@ -47,6 +47,7 @@ export async function connectMcpOauth(
   } catch (error) {
     const server = (await rpc.mcp.servers.list()).find((item) => item.id === serverId);
     if (server && recordedOauthOutcome(server) === "sign-in-failed") return "sign-in-failed";
+    if (server?.lastError?.includes("oauth_unavailable")) return "oauth-unavailable";
     throw error;
   }
   if (started.status !== "authorization_required") return started.status;

@@ -7,4 +7,5 @@ export type McpOauthResult =
   | "sign-in-failed"
   | "replaced"
   | "already_connected"
-  | "authorization_not_requested";
+  | "authorization_not_requested"
+  | "oauth-unavailable";

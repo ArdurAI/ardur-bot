@@ -185,6 +185,58 @@ it("focuses a managed server once and does not scroll again when the list refres
   expect(document.activeElement?.id).toBe("mcp-server-reports");
 });
 
+it("shows the plain sentence when the server offers no browser sign-in", async () => {
+  const provider = "provider-denied-browser-sign-in";
+  const server = {
+    id: "reports",
+    name: "Reports",
+    transport: "streamable_http",
+    oauthStatus: "none",
+    connectionState: "not-connected",
+    endpoint: "https://tools.example.test/mcp",
+    enabled: true,
+    catalogId: null,
+    lastError: null,
+  } as McpServer;
+  fake.list.mockResolvedValue([server]);
+  oauth.mockImplementation(async () => {
+    fake.list.mockResolvedValue([
+      {
+        ...server,
+        connectionState: "needs-sign-in",
+        lastError: "Needs sign-in (oauth_unavailable).",
+      },
+    ]);
+    throw new Error(provider);
+  });
+  const container = await mount();
+  await click("Connect OAuth");
+  expect(container.textContent).toContain(
+    "This server did not offer browser sign-in. Enter a token instead.",
+  );
+  expect(container.textContent).not.toContain(provider);
+});
+
+it("rejects Add server when a token and a header are both filled", async () => {
+  const container = await mount();
+  await click("Add MCP server");
+  await fill("mcp-name", "Reports");
+  await fill("mcp-endpoint", "https://tools.example.test/mcp");
+  await fill("mcp-secret", "synthetic-token");
+  const header = document.querySelector('[aria-label="Header value"]') as HTMLInputElement;
+  expect(header).not.toBeNull();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      header,
+      "synthetic-header",
+    );
+    header.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await click("Add server");
+  expect(fake.create).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Choose one credential: a token or a header.");
+});
+
 it("shows a recorded discovery failure instead of a connected label", async () => {
   const server = {
     id: "reports",

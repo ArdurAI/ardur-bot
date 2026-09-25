@@ -315,6 +315,70 @@ describe("catalog connection lifecycle", () => {
       where: { id: expect.any(String), ...actor },
     });
   });
+  it("returns replaced for the catalog connect that loses the reservation and does not plain-update the pending id", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: "notion",
+      connectionState: "not-connected",
+      pendingOauthSessionId: null,
+      enabled: true,
+      revision: 2,
+      updatedAt: new Date(),
+    });
+    let second:
+      | { status?: string; sessionId: string | null; authorizationUrl: string | null }
+      | undefined;
+    let opened = false;
+    f.oauth.begin.mockImplementation(async (input: { sessionId?: string }) => {
+      if (!opened) {
+        opened = true;
+        second = await f.service.connect(actor, {
+          catalogId: "notion",
+          connectionId: "connection",
+        });
+      }
+      return {
+        status: "authorization_required" as const,
+        sessionId: input.sessionId ?? "session",
+        authorizationUrl: "https://example.test/authorize",
+      };
+    });
+    const first = await f.service.connect(actor, {
+      catalogId: "notion",
+      connectionId: "connection",
+    });
+    expect(second?.authorizationUrl).toBe("https://example.test/authorize");
+    expect(second?.status).not.toBe("replaced");
+    expect(first).toMatchObject({ status: "replaced", authorizationUrl: null, sessionId: null });
+    expect(f.row().pendingOauthSessionId).toBe(second?.sessionId);
+    const plainPendingWrites = f.db.mcpServer.update.mock.calls.filter(
+      (call: [{ data: { pendingOauthSessionId?: string | null } }]) =>
+        typeof call[0].data.pendingOauthSessionId === "string",
+    );
+    expect(plainPendingWrites).toEqual([]);
+  });
+  it("does not mark a catalog row failed when a probe loses the pending id", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: "notion",
+      connectionState: "awaiting-consent",
+      pendingOauthSessionId: null,
+      enabled: true,
+      revision: 2,
+      updatedAt: new Date(),
+    });
+    f.oauth.begin.mockImplementationOnce(async () => {
+      f.setRow({ pendingOauthSessionId: "winner" });
+      throw new Error("probe failed");
+    });
+    const result = await f.service.connect(actor, {
+      catalogId: "notion",
+      connectionId: "connection",
+    });
+    expect(result).toMatchObject({ status: "replaced", authorizationUrl: null });
+    expect(f.row().pendingOauthSessionId).toBe("winner");
+    expect(f.row().connectionState).not.toBe("discovery-failed");
+  });
   it("creates an unassigned connection and delegates OAuth without inventing client parameters", async () => {
     const f = fixture();
     const result = await f.service.connect(actor, { catalogId: "gitlab" });
@@ -330,6 +394,7 @@ describe("catalog connection lifecycle", () => {
       serverId: result.connection.id,
       ...actor,
       redirectUri: "https://app.example.test/api/oauth/done",
+      sessionId: expect.any(String),
     });
     expect(result.connection.state).toBe("awaiting-consent");
     expect(result.authorizationUrl).toBe("https://example.test/authorize");
@@ -637,6 +702,41 @@ describe("catalog connection lifecycle", () => {
     const slow = await f.service.beginAuthorization(actor, input);
     expect(slow).toEqual({ status: "replaced" });
     expect(f.row().pendingOauthSessionId).toBeNull();
+  });
+  it("clears an expired pending id before a new begin and does not look up the session", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      connectionState: "not-connected",
+      pendingOauthSessionId: "stale",
+      updatedAt: new Date(Date.now() - 11 * 60 * 1000),
+    });
+    const result = await f.service.beginAuthorization(actor, {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    });
+    const updates = f.db.mcpServer.updateMany.mock.calls.map(
+      (
+        call: [
+          {
+            where: { pendingOauthSessionId?: string | null };
+            data: { pendingOauthSessionId?: string | null };
+          },
+        ],
+      ) => call[0],
+    );
+    expect(updates[0]).toEqual(
+      expect.objectContaining({
+        where: expect.objectContaining({ pendingOauthSessionId: "stale" }),
+        data: { pendingOauthSessionId: null },
+      }),
+    );
+    expect(updates[1]?.where.pendingOauthSessionId).toBeNull();
+    expect(f.db.mcpOAuthSession.findFirst).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: "authorization_required" });
+    if (result.status !== "authorization_required") throw new Error("sign-in was not requested");
+    expect(f.row().pendingOauthSessionId).toBe(result.sessionId);
+    expect(f.row().pendingOauthSessionId).not.toBe("stale");
   });
   it("replaces an expired pending sign-in when that id is still the one stored", async () => {
     const f = fixture();

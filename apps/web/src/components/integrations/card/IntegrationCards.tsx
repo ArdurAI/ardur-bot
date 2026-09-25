@@ -263,14 +263,38 @@ export function IntegrationCards({
       {finding ? (
         <DirectMcpSearch
           catalog={data.catalog}
-          onConnectCatalog={(descriptor, accessToken) =>
-            connect(
-              descriptor,
-              data.connections.find((connection) => connection.catalogId === descriptor.id),
-              accessToken?.trim() ? "token" : descriptor.authKind,
-              accessToken,
-            )
-          }
+          onConnectCatalog={async (descriptor, accessToken, hooks) => {
+            try {
+              return await connectIntegration(
+                descriptor,
+                data.connections.find((connection) => connection.catalogId === descriptor.id),
+                {
+                  authKind: accessToken?.trim() ? "token" : descriptor.authKind,
+                  token: accessToken ?? token,
+                  host: hosts[descriptor.id] || undefined,
+                  ...(descriptor.authKind === "oauth" && clients[descriptor.id]?.clientId
+                    ? { oauthClient: clients[descriptor.id] }
+                    : {}),
+                  onPopup: (value) => {
+                    popup.current = value;
+                  },
+                  onStarted: (value) =>
+                    setData((current) => ({
+                      ...current,
+                      connections: [
+                        value,
+                        ...current.connections.filter((row) => row.id !== value.id),
+                      ],
+                    })),
+                  onWaiting: hooks?.onWaiting,
+                },
+              );
+            } catch (caught) {
+              const message = caught instanceof Error ? caught.message : "";
+              setError(message === "Enter a valid token." ? "token" : "load");
+              return false;
+            }
+          }}
           onConnected={async () => {
             try {
               await refresh();

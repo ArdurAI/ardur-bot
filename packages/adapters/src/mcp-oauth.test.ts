@@ -226,6 +226,7 @@ describe("MCP OAuth", () => {
             secretId: null,
           }),
           update: vi.fn().mockResolvedValue({}),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         },
         secret: {
           findFirst: vi.fn(),
@@ -241,6 +242,7 @@ describe("MCP OAuth", () => {
             secretId: null,
           }),
           update: vi.fn().mockResolvedValue({}),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         },
         secret: {
           findFirst: vi.fn(),
@@ -360,6 +362,7 @@ describe("MCP OAuth", () => {
           secretId: null,
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
       mcpOAuthSession: oauthSessionStore(),
@@ -432,6 +435,7 @@ describe("MCP OAuth", () => {
           pendingOauthSessionId: sessionId,
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "encrypted" }),
@@ -481,6 +485,7 @@ describe("MCP OAuth", () => {
           secretId: "secret-current",
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn().mockResolvedValue({
@@ -543,6 +548,7 @@ describe("MCP OAuth", () => {
           secretId: "secret-current",
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn().mockResolvedValue({
@@ -644,6 +650,7 @@ describe("MCP OAuth", () => {
           secretId: null,
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
       mcpOAuthSession: oauthSessionStore(),
@@ -658,7 +665,10 @@ describe("MCP OAuth", () => {
         userId: "user-1",
         redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
       }),
-    ).rejects.toThrow(/redirect/i);
+    ).rejects.toMatchObject({
+      message: "This server did not offer browser sign-in. Enter a token instead.",
+      cause: expect.objectContaining({ message: expect.stringMatching(/redirect/i) }),
+    });
     expect(requestedUrls.every((url) => !url.includes("attacker.example.test"))).toBe(true);
   });
 
@@ -680,6 +690,7 @@ describe("MCP OAuth", () => {
           catalogId: null,
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
       mcpOAuthSession: oauthSessionStore(),
@@ -750,6 +761,7 @@ describe("MCP OAuth", () => {
           secretId: null,
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn(),

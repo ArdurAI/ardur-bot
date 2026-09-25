@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   tools: vi.fn(),
   approve: vi.fn(),
   connect: vi.fn(),
+  status: vi.fn(),
   grants: vi.fn(),
   assign: vi.fn(),
   revoke: vi.fn(),
@@ -879,6 +880,90 @@ describe("Settings integration catalog", () => {
       expect.objectContaining({ onWaiting: expect.any(Function) }),
     );
     expect(api.tools).not.toHaveBeenCalled();
+  });
+
+  it("shows the plain sentence when a custom server offers no browser sign-in", async () => {
+    const provider = "provider-denied-browser-sign-in";
+    const servers = createdServers();
+    api.oauth.mockImplementation(async () => {
+      const server = servers[0];
+      if (server) {
+        server.connectionState = "needs-sign-in";
+        server.lastError = "Needs sign-in (oauth_unavailable).";
+      }
+      throw new Error(provider);
+    });
+    await openResults([publicResult]);
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain(
+      "This server did not offer browser sign-in. Enter a token instead.",
+    );
+    expect(container.textContent).not.toContain(provider);
+  });
+
+  it("shows a declined catalog sign-in and a failed one in Find apps", async () => {
+    const notion = {
+      ...catalog[0]!,
+      id: "notion",
+      name: "Notion",
+      authKind: "oauth" as const,
+      endpoint: "https://mcp.notion.example.test/mcp",
+    };
+    api.list.mockImplementation(async () => ({ catalog: [notion], connections: [] }));
+    vi.spyOn(window, "open").mockReturnValue({
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    vi.useFakeTimers();
+    try {
+      api.connect.mockResolvedValue({
+        connection: {
+          ...connected,
+          id: "notion-1",
+          catalogId: "notion",
+          state: "awaiting-consent",
+          lastError: null,
+        },
+        authorizationUrl: "https://auth.example.test/authorize",
+        sessionId: "session",
+      });
+      api.status.mockResolvedValue({
+        ...connected,
+        id: "notion-1",
+        catalogId: "notion",
+        state: "cancelled",
+        lastError: "Sign-in was declined.",
+      });
+      await openResults([
+        listing("Notion", "https://mcp.notion.example.test/mcp", {
+          type: "oauth",
+          headerName: null,
+          note: null,
+        }),
+      ]);
+      await click(resultConnect("Notion")!);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(container.textContent).toContain("Sign-in was declined. Reconnect to try again.");
+      expect(resultConnect("Notion")?.textContent).toBe("Connect");
+
+      api.status.mockResolvedValue({
+        ...connected,
+        id: "notion-1",
+        catalogId: "notion",
+        state: "discovery-failed",
+        lastError: "Could not complete sign-in. Connect again.",
+      });
+      await click(resultConnect("Notion")!);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(container.textContent).toContain("Could not complete sign-in. Connect again.");
+      expect(resultConnect("Notion")?.textContent).toBe("Connect");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("sends a typed token for a mixed listing that matches a built-in app", async () => {

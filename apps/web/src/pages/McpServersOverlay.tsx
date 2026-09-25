@@ -163,6 +163,10 @@ export function McpServersOverlay({
       setError(t`Add a stdio command.`);
       return;
     }
+    if (secret.trim() && headerValue.trim()) {
+      setError(t`Choose one credential: a token or a header.`);
+      return;
+    }
     setSaving(true);
     try {
       const slug = deriveMcpSlug(name);
@@ -240,6 +244,10 @@ export function McpServersOverlay({
       if (result !== "cancelled") setOauthPending(null);
       const listed = await refresh();
       if (result === "connected") return;
+      if (result === "oauth-unavailable") {
+        setError(t`This server did not offer browser sign-in. Enter a token instead.`);
+        return;
+      }
       if (result === "sign-in-failed") {
         setError(
           listed.find((item) => item.id === server.id)?.lastError?.trim() ||
@@ -272,7 +280,15 @@ export function McpServersOverlay({
       setOauthPending((current) => (current === server.id ? null : current));
     } catch (err) {
       if (mine !== oauthAttempt.current) return;
-      setError(err instanceof Error ? err.message : t`Could not start OAuth`);
+      const listed = await refresh().catch(() => []);
+      const recorded = listed.find((item) => item.id === server.id)?.lastError ?? "";
+      setError(
+        recorded.includes("oauth_unavailable")
+          ? t`This server did not offer browser sign-in. Enter a token instead.`
+          : err instanceof Error
+            ? err.message
+            : t`Could not start OAuth`,
+      );
       setOauthPending(null);
     }
   }

@@ -1403,6 +1403,10 @@ msgstr "Выбрать файл"
 msgid "Choose folder"
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
+msgstr "Выберите один способ: токен или заголовок."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Выберите, какую подключенную модель использует Ardur Bot."
@@ -7352,6 +7356,12 @@ msgstr "Эта ссылка для сброса недействительна �
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."
 msgstr "Этот сервер невозможно назначить без бота."
+
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr "Этот сервер не предложил вход через браузер. Введите токен."
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx

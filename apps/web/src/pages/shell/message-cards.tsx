@@ -381,20 +381,22 @@ export function McpApprovalCard({
             }
           }
           setError(
-            result === "replaced"
-              ? t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`
-              : result === "cancelled"
-                ? userCancelled.current
-                  ? t`Sign-in was cancelled.`
-                  : t`Sign-in was declined.`
-                : result === "needs-sign-in"
-                  ? t`Sign-in did not finish. Try again.`
-                  : recorded ||
-                    (result === "already_connected"
-                      ? t`This server is already connected. Disconnect it first to authorize again.`
-                      : result === "authorization_not_requested"
-                        ? t`This server did not request browser authorization.`
-                        : t`Could not load this account’s tools.`),
+            result === "oauth-unavailable"
+              ? t`This server did not offer browser sign-in. Enter a token instead.`
+              : result === "replaced"
+                ? t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`
+                : result === "cancelled"
+                  ? userCancelled.current
+                    ? t`Sign-in was cancelled.`
+                    : t`Sign-in was declined.`
+                  : result === "needs-sign-in"
+                    ? t`Sign-in did not finish. Try again.`
+                    : recorded ||
+                      (result === "already_connected"
+                        ? t`This server is already connected. Disconnect it first to authorize again.`
+                        : result === "authorization_not_requested"
+                          ? t`This server did not request browser authorization.`
+                          : t`Could not load this account’s tools.`),
           );
           setState("pending");
           return;
@@ -405,7 +407,20 @@ export function McpApprovalCard({
       setState("connected");
     } catch (err) {
       if (mine !== attempt.current) return;
-      setError(err instanceof Error ? err.message : t`Could not approve this server`);
+      let recorded = "";
+      try {
+        recorded =
+          (await rpc.mcp.servers.list()).find((server) => server.id === serverId)?.lastError ?? "";
+      } catch {
+        recorded = "";
+      }
+      setError(
+        recorded.includes("oauth_unavailable")
+          ? t`This server did not offer browser sign-in. Enter a token instead.`
+          : err instanceof Error
+            ? err.message
+            : t`Could not approve this server`,
+      );
       setState("pending");
     }
   }

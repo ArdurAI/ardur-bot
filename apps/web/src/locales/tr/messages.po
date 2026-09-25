@@ -1403,6 +1403,10 @@ msgstr "Dosya seç"
 msgid "Choose folder"
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Ardur Bot'nun hangi bağlı modeli kullanacağını seç."
@@ -7352,6 +7356,12 @@ msgstr "Bu sıfırlama bağlantısı geçersiz veya süresi dolmuş"
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."
 msgstr "Bu sunucu bir bot olmadan atanamaz."
+
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx

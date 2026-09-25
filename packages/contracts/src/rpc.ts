@@ -1083,6 +1083,7 @@ export const appContract = {
           connection: IntegrationConnectionSchema,
           authorizationUrl: z.string().url().nullable(),
           sessionId: z.string().nullable(),
+          status: z.literal("replaced").optional(),
         }),
       ),
     assign: oc

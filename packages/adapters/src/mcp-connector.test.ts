@@ -841,6 +841,69 @@ describe("MCP connector session cache", () => {
     await connector.close();
   });
 
+  it("sends a header without Authorization and a bearer with Authorization when each is the only credential", async () => {
+    const headerState = {
+      failNext: false,
+      initializations: 0,
+      headers: [] as Record<string, string>[],
+    };
+    const endpoint = "http://localhost:8123/api/mcp";
+    vi.stubGlobal("fetch", mcpFetch(headerState, endpoint));
+    const headerAssignment = {
+      ...ASSIGNMENT,
+      server: { ...SERVER, endpoint, secretId: "secret-header" },
+    };
+    const headerConnector = new McpConnector(
+      {
+        botMcpServer: { findMany: vi.fn().mockResolvedValue([headerAssignment]) },
+        secret: {
+          findFirst: vi.fn().mockResolvedValue({ id: "secret-header", ciphertext: "encrypted" }),
+        },
+      } as never,
+      {
+        load: vi.fn().mockReturnValue(JSON.stringify({ headers: { "X-Api-Key": "local-key" } })),
+      } as never,
+    );
+    await headerConnector.discoverTools({
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never);
+    expect(headerState.headers[0]?.["x-api-key"]).toBe("local-key");
+    expect(headerState.headers[0]?.authorization).toBeUndefined();
+    await headerConnector.close();
+
+    const bearerState = {
+      failNext: false,
+      initializations: 0,
+      headers: [] as Record<string, string>[],
+    };
+    vi.stubGlobal("fetch", mcpFetch(bearerState, endpoint));
+    const bearerAssignment = {
+      ...ASSIGNMENT,
+      server: { ...SERVER, endpoint, secretId: "secret-bearer" },
+    };
+    const bearerConnector = new McpConnector(
+      {
+        botMcpServer: { findMany: vi.fn().mockResolvedValue([bearerAssignment]) },
+        secret: {
+          findFirst: vi.fn().mockResolvedValue({ id: "secret-bearer", ciphertext: "encrypted" }),
+        },
+      } as never,
+      { load: vi.fn().mockReturnValue(JSON.stringify({ secret: "local-token" })) } as never,
+    );
+    await bearerConnector.discoverTools({
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never);
+    expect(bearerState.headers[0]?.authorization).toBe("Bearer local-token");
+    expect(bearerState.headers[0]?.["x-api-key"]).toBeUndefined();
+    await bearerConnector.close();
+  });
+
   it("sends a named header and no Authorization bearer when that is the only credential", async () => {
     const state = { failNext: false, initializations: 0, headers: [] as Record<string, string>[] };
     const localAssignment = {

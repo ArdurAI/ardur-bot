@@ -110,6 +110,7 @@ function memoryDb() {
       updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
         const reserving =
           typeof data.pendingOauthSessionId === "string" && data.pendingOauthSessionId.length > 0;
+        const persistingSecret = typeof data.secretId === "string";
         if (reserving) {
           reservations += 1;
           binds.push(where);
@@ -117,6 +118,15 @@ function memoryDb() {
             reservationEntered?.();
             await new Promise<void>((resolve) => {
               releaseReservation = resolve;
+            });
+          }
+        }
+        if (holdProbe && persistingSecret) {
+          probeHolds += 1;
+          if (probeHolds === 1) {
+            probeEntered?.();
+            await new Promise<void>((resolve) => {
+              releaseProbe = resolve;
             });
           }
         }
@@ -294,31 +304,37 @@ describe("MCP sign-in bind through real provider persistence", () => {
     expect(material.some((value) => typeof value.oauth?.codeVerifier === "string")).toBe(true);
   });
 
-  it("writes the verifier between the read and a bind that ignores updatedAt", async () => {
+  it("writes the verifier only while the reserved attempt still holds the pending id", async () => {
     const f = harness();
-    const read = f.row();
-    expect(read.pendingOauthSessionId).toBeNull();
+    const sessionId = "attempt";
+    const reserved = await f.db.mcpServer.updateMany({
+      where: { id: "connection", pendingOauthSessionId: null },
+      data: { pendingOauthSessionId: sessionId },
+    });
+    expect(reserved.count).toBe(1);
     const started = await f.oauth.begin({
       serverId: "connection",
       ...actor,
       redirectUri,
+      sessionId,
     });
     expect(started.status).toBe("authorization_required");
-    const bound = await f.db.mcpServer.updateMany({
+    const stale = await f.db.mcpServer.updateMany({
       where: {
         id: "connection",
         ...actor,
         enabled: true,
-        pendingOauthSessionId: read.pendingOauthSessionId,
+        pendingOauthSessionId: null,
       },
-      data: { pendingOauthSessionId: started.sessionId },
+      data: { pendingOauthSessionId: "other" },
     });
-    expect(f.order.indexOf("read")).toBeGreaterThanOrEqual(0);
-    expect(f.order.indexOf("verifier")).toBeGreaterThan(f.order.indexOf("read"));
-    expect(f.order.indexOf("bind")).toBeGreaterThan(f.order.indexOf("verifier"));
-    expect(bound.count).toBe(1);
-    expect(f.row().pendingOauthSessionId).toBe(started.sessionId);
+    expect(stale.count).toBe(0);
+    expect(f.row().pendingOauthSessionId).toBe(sessionId);
     expect(f.binds.every((where) => !Object.hasOwn(where, "updatedAt"))).toBe(true);
+    const material = [...f.secretRows.values()].map((secret) =>
+      JSON.parse(f.secrets.load(secret.ciphertext, secret.id)),
+    );
+    expect(material.some((value) => typeof value.oauth?.codeVerifier === "string")).toBe(true);
   });
 
   it("lets a newer begin replace an older one still inside the probe, and does not probe a lost reservation", async () => {
@@ -336,6 +352,45 @@ describe("MCP sign-in bind through real provider persistence", () => {
     expect(f.sessions).toHaveLength(1);
     expect(f.sessions[0]).toMatchObject({ id: newer.sessionId });
     for (const where of f.binds) expect(where).not.toHaveProperty("updatedAt");
+  });
+
+  it("drops a losing probe's verifier writes and keeps the winner's secret after cancel", async () => {
+    const f = harness();
+    f.holdProbe();
+    const older = f.service.beginAuthorization(actor, input);
+    await f.probeStarted;
+    const newer = await f.service.beginAuthorization(actor, input);
+    f.releaseProbe();
+    const first = await older;
+    expect(first).toEqual({ status: "replaced" });
+    expect(newer).toMatchObject({ status: "authorization_required" });
+    if (newer.status !== "authorization_required") throw new Error("sign-in was not requested");
+    const winnerSession = f.sessions.find((session) => session.id === newer.sessionId);
+    expect(winnerSession).toBeDefined();
+    const winnerMaterial = JSON.parse(
+      f.secrets.load(String(winnerSession?.oauthCiphertext), newer.sessionId),
+    ) as { oauth?: { codeVerifier?: string } };
+    const winnerVerifier = winnerMaterial.oauth?.codeVerifier;
+    expect(typeof winnerVerifier).toBe("string");
+    const stored = f.secretRows.get(String(f.row().secretId));
+    expect(stored).toBeDefined();
+    const serverMaterial = JSON.parse(f.secrets.load(stored!.ciphertext, stored!.id)) as {
+      oauth?: { codeVerifier?: string };
+    };
+    expect(serverMaterial.oauth?.codeVerifier).toBe(winnerVerifier);
+    expect(f.sessions.map((session) => session.id)).toEqual([newer.sessionId]);
+    await f.service.cancelAuthorization(actor, {
+      serverId: "connection",
+      sessionId: newer.sessionId,
+    });
+    expect(f.row().pendingOauthSessionId).toBeNull();
+    expect(f.row().connectionState).toBe("not-connected");
+    const afterCancel = f.secretRows.get(String(f.row().secretId));
+    expect(afterCancel).toBeDefined();
+    const cancelledMaterial = JSON.parse(
+      f.secrets.load(afterCancel!.ciphertext, afterCancel!.id),
+    ) as { oauth?: { codeVerifier?: string } };
+    expect(cancelledMaterial.oauth?.codeVerifier).toBe(winnerVerifier);
   });
 
   it("replaces an older begin that is still inside the probe", async () => {

@@ -1403,6 +1403,10 @@ msgstr "파일 선택"
 msgid "Choose folder"
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Ardur Bot에서 기본으로 사용할 연결된 모델을 선택하세요."
@@ -7352,6 +7356,12 @@ msgstr "이 재설정 링크는 유효하지 않거나 만료되었습니다"
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."
 msgstr "연결할 Bot이 없어 이 서버를 배정할 수 없습니다."
+
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx

@@ -1,12 +1,12 @@
 import type {
   IntegrationCatalogResult,
   IntegrationCatalogSurface,
+  IntegrationConnection,
   IntegrationDescriptor,
 } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useRef, useState } from "react";
-import type { McpOauthWait } from "../../lib/mcp-connect";
 import { rpc } from "../../lib/rpc";
 import { connectRemoteMcp, matchesCatalogEndpoint } from "./connect-remote-mcp";
 
@@ -25,7 +25,11 @@ export function DirectMcpSearch({
 }: {
   botId?: string;
   catalog?: IntegrationDescriptor[];
-  onConnectCatalog?: (descriptor: IntegrationDescriptor, token?: string) => Promise<boolean>;
+  onConnectCatalog?: (
+    descriptor: IntegrationDescriptor,
+    token?: string,
+    hooks?: { onWaiting?: (waiting: { cancel: () => Promise<void> }) => void },
+  ) => Promise<boolean | IntegrationConnection>;
   onConnected?: (serverId: string) => void | Promise<void>;
 }) {
   const { t } = useLingui();
@@ -41,9 +45,10 @@ export function DirectMcpSearch({
   const [credential, setCredential] = useState<{ endpoint: string; value: string } | null>(null);
   const [rejectedEndpoint, setRejectedEndpoint] = useState<string | null>(null);
   const [notice, setNotice] = useState<
-    "declined" | "unfinished" | "replaced" | "waiting" | "cancelled" | null
+    "declined" | "unfinished" | "replaced" | "waiting" | "cancelled" | "failed" | "token" | null
   >(null);
-  const [waiting, setWaiting] = useState<McpOauthWait | null>(null);
+  const [failureText, setFailureText] = useState<string | null>(null);
+  const [waiting, setWaiting] = useState<{ cancel: () => Promise<void> } | null>(null);
   const attempt = useRef(0);
   const userCancelled = useRef(false);
   const remoteResults = [
@@ -125,8 +130,40 @@ export function DirectMcpSearch({
       if (target.descriptor) {
         const typedToken =
           auth?.type === "mixed" || target.descriptor.authKind !== "oauth" ? token.trim() : "";
-        if (await onConnectCatalog?.(target.descriptor, typedToken || undefined))
+        const outcome = await onConnectCatalog?.(target.descriptor, typedToken || undefined, {
+          onWaiting: (wait) => {
+            if (mine !== attempt.current) return;
+            setBusy(false);
+            setWaiting(wait);
+            setNotice("waiting");
+          },
+        });
+        if (mine !== attempt.current) return;
+        if (outcome === true || (isConnection(outcome) && outcome.state === "connected")) {
+          setWaiting(null);
+          setNotice(null);
           setConnected((current) => [...current, target.endpoint]);
+          return;
+        }
+        if (!isConnection(outcome)) return;
+        if (outcome.state === "awaiting-consent") {
+          setNotice("waiting");
+          return;
+        }
+        setWaiting(null);
+        if (outcome.state === "cancelled") {
+          setNotice(userCancelled.current ? "cancelled" : "declined");
+          return;
+        }
+        if (outcome.lastError?.includes("oauth_unavailable")) {
+          setNotice("token");
+          return;
+        }
+        if (outcome.state === "discovery-failed" || outcome.state === "needs-sign-in") {
+          setFailureText(outcome.lastError ?? null);
+          setNotice("failed");
+          return;
+        }
         return;
       }
       const outcome = await connectRemoteMcp({
@@ -166,6 +203,10 @@ export function DirectMcpSearch({
         return;
       }
       if (typeof outcome !== "object") {
+        if (outcome === "oauth-unavailable") {
+          setNotice("token");
+          return;
+        }
         if (outcome === "sign-in-failed") setError("connect");
         return;
       }
@@ -319,6 +360,16 @@ export function DirectMcpSearch({
       {notice === "unfinished" ? (
         <p className="text-sm text-muted-foreground">{t`Sign-in did not finish. Try again.`}</p>
       ) : null}
+      {notice === "failed" ? (
+        <p className="text-sm text-destructive" role="alert">
+          {failureText?.trim() || t`Could not connect or load integrations.`}
+        </p>
+      ) : null}
+      {notice === "token" ? (
+        <p className="text-sm text-destructive" role="alert">
+          {t`This server did not offer browser sign-in. Enter a token instead.`}
+        </p>
+      ) : null}
       {notice === "replaced" ? (
         <p className="text-sm text-muted-foreground">
           {t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`}
@@ -338,6 +389,12 @@ export function DirectMcpSearch({
       ) : null}
     </div>
   );
+}
+
+function isConnection(
+  value: boolean | IntegrationConnection | undefined,
+): value is IntegrationConnection {
+  return typeof value === "object" && value !== null && "state" in value;
 }
 
 function matchingDescriptor(

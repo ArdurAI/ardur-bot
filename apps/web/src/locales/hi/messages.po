@@ -1403,6 +1403,10 @@ msgstr "फ़ाइल चुनें"
 msgid "Choose folder"
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "चुनें कि Ardur Bot किस कनेक्टेड मॉडल का उपयोग करे।"
@@ -7352,6 +7356,12 @@ msgstr "यह रीसेट लिंक अमान्य है या इ
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."
 msgstr "बॉट के बिना यह सर्वर असाइन नहीं किया जा सकता।"
+
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx

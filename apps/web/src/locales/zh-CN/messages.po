@@ -1403,6 +1403,10 @@ msgstr "选择文件"
 msgid "Choose folder"
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
+msgstr "请只选择一种凭据：令牌或请求头。"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "选择 Ardur Bot 使用的已连接模型。"
@@ -7352,6 +7356,12 @@ msgstr "此重置链接无效或已过期"
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."
 msgstr "没有 Bot 就无法分配此服务器。"
+
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr "此服务器未提供浏览器登录。请改为输入令牌。"
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx

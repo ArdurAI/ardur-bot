@@ -11,7 +11,8 @@ export type RemoteMcpOutcome =
   | "needs-credential"
   | "credential-rejected"
   | "sign-in-failed"
-  | "replaced";
+  | "replaced"
+  | "oauth-unavailable";
 
 /**
  * Connects a remote MCP server and trusts only the connection state the API recorded.
@@ -86,9 +87,12 @@ export async function connectRemoteMcp(input: {
     oauth === "replaced"
   )
     return oauth;
-  const state = (await rpc.mcp.servers.list()).find(
-    (candidate) => candidate.id === server.id,
-  )?.connectionState;
+  const listed = (await rpc.mcp.servers.list()).find((candidate) => candidate.id === server.id);
+  if (oauth === "oauth-unavailable" || listed?.lastError?.includes("oauth_unavailable")) {
+    if (!value && input.auth === "mixed") return "needs-credential";
+    return "oauth-unavailable";
+  }
+  const state = listed?.connectionState;
   if (!failed && state === "connected") {
     if (input.botId) await rpc.mcp.assignments.approve({ botId: input.botId, serverId: server.id });
     return { serverId: server.id };

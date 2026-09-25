@@ -702,34 +702,47 @@ const McpServerBaseInput = z.object({
    * OAuth state survives so a connected server stays connected. */
   clearCredential: z.boolean().optional(),
 });
-export const McpServerConfigInput = z.discriminatedUnion("transport", [
-  McpServerBaseInput.extend({
-    transport: z.literal("streamable_http"),
-    endpoint: McpRemoteEndpointSchema,
-    headers: McpHeadersSchema.default({}),
-    secret: z.string().max(16384).optional(),
-  }),
-  McpServerBaseInput.extend({
-    transport: z.literal("sse"),
-    endpoint: McpRemoteEndpointSchema,
-    headers: McpHeadersSchema.default({}),
-    secret: z.string().max(16384).optional(),
-  }),
-  McpServerBaseInput.extend({
-    transport: z.literal("stdio"),
-    command: z.string().min(1).max(512),
-    args: z.array(z.string().max(2048)).max(64).default([]),
-    env: z
-      .record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().max(4096))
-      .superRefine((value, ctx) => {
-        if (Object.keys(value).length > 32) {
-          ctx.addIssue({ code: "custom", message: "At most 32 environment variables are allowed" });
-        }
-      })
-      .default({}),
-    secret: z.string().max(16384).optional(),
-  }),
-]);
+export const McpServerConfigInput = z
+  .discriminatedUnion("transport", [
+    McpServerBaseInput.extend({
+      transport: z.literal("streamable_http"),
+      endpoint: McpRemoteEndpointSchema,
+      headers: McpHeadersSchema.default({}),
+      secret: z.string().max(16384).optional(),
+    }),
+    McpServerBaseInput.extend({
+      transport: z.literal("sse"),
+      endpoint: McpRemoteEndpointSchema,
+      headers: McpHeadersSchema.default({}),
+      secret: z.string().max(16384).optional(),
+    }),
+    McpServerBaseInput.extend({
+      transport: z.literal("stdio"),
+      command: z.string().min(1).max(512),
+      args: z.array(z.string().max(2048)).max(64).default([]),
+      env: z
+        .record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().max(4096))
+        .superRefine((value, ctx) => {
+          if (Object.keys(value).length > 32) {
+            ctx.addIssue({
+              code: "custom",
+              message: "At most 32 environment variables are allowed",
+            });
+          }
+        })
+        .default({}),
+      secret: z.string().max(16384).optional(),
+    }),
+  ])
+  .superRefine((value, ctx) => {
+    if (!("headers" in value) || !value.secret?.trim()) return;
+    const named = Object.values(value.headers).some((header) => header.trim());
+    if (!named) return;
+    ctx.addIssue({
+      code: "custom",
+      message: "Choose one credential: a token or a header.",
+    });
+  });
 export type McpServerConfigInput = z.infer<typeof McpServerConfigInput>;
 
 export const McpServerSchema = z.object({

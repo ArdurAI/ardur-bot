@@ -199,13 +199,24 @@ export class McpOAuthAttemptReplacedError extends Error {
   }
 }
 
+/** Shown wherever a 401 has no browser authorization URL. Provider text stays off the screen. */
+export const MCP_BROWSER_SIGN_IN_UNAVAILABLE =
+  "This server did not offer browser sign-in. Enter a token instead.";
+
 /** The server demanded sign-in, but browser authorization could not start. */
 export class McpOAuthUnavailableError extends Error {
   readonly code = "MCP_OAUTH_UNAVAILABLE";
   constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : "Needs sign-in.", { cause });
+    super(MCP_BROWSER_SIGN_IN_UNAVAILABLE, { cause });
     this.name = "McpOAuthUnavailableError";
   }
+}
+
+export function isMcpOAuthAttemptReplaced(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  if ("code" in error && error.code === "MCP_OAUTH_REPLACED") return true;
+  if ("result" in error && error.result === "replaced") return true;
+  return error instanceof Error && error.cause !== error && isMcpOAuthAttemptReplaced(error.cause);
 }
 
 type ProviderOptions = {
@@ -779,7 +790,7 @@ export class McpOAuthBroker {
     sessionId?: string;
   }): Promise<
     | { status: "authorization_required"; sessionId: string; authorizationUrl: string }
-    | { status: "already_connected" | "authorization_not_requested" }
+    | { status: "already_connected" | "authorization_not_requested" | "replaced" }
   > {
     const server = await this.prisma.mcpServer.findFirst({
       where: {
@@ -841,9 +852,13 @@ export class McpOAuthBroker {
     });
     const client = new Client({ name: "ardurbot-oauth", version: "0.1.0" });
     const signal = AbortSignal.timeout(15_000);
+    // The caller reserved this session before the probe, so every credential
+    // write matches that pending id. A write that loses the reservation is dropped.
+    provider.guardTokenWrite(sessionId);
     try {
       await client.connect(transport, { signal, timeout: 15_000 });
     } catch (error) {
+      if (isMcpOAuthAttemptReplaced(error)) return { status: "replaced" };
       const transient =
         transientIntegrationError(error) ||
         (error instanceof Error && transientIntegrationError(error.cause));
@@ -1206,15 +1221,36 @@ export class McpOAuthBroker {
         });
       }
       const previousSecretId = server.secretId;
-      const saved = await tx.mcpServer.update({
-        where: { id: serverId },
-        data: {
-          secretId: stored?.id ?? null,
-          ...(incrementRevision ? { revision: { increment: 1 } } : {}),
-        },
-      });
-      if (incrementRevision && saved.imported)
-        await this.advanceImportReceipts(tx, serverId, saved.revision, context);
+      const secretData = {
+        secretId: stored?.id ?? null,
+        ...(incrementRevision ? { revision: { increment: 1 } } : {}),
+      };
+      if (expectedPendingSessionId !== undefined) {
+        const saved = await tx.mcpServer.updateMany({
+          where: {
+            id: serverId,
+            spaceId: context.spaceId,
+            userId: context.userId,
+            pendingOauthSessionId: expectedPendingSessionId,
+          },
+          data: secretData,
+        });
+        if (!saved.count) {
+          if (stored) {
+            await tx.secret.deleteMany({
+              where: { id: stored.id, spaceId: context.spaceId, userId: context.userId },
+            });
+          }
+          return undefined;
+        }
+      } else {
+        const saved = await tx.mcpServer.update({
+          where: { id: serverId },
+          data: secretData,
+        });
+        if (incrementRevision && saved.imported)
+          await this.advanceImportReceipts(tx, serverId, saved.revision, context);
+      }
       if (previousSecretId && previousSecretId !== stored?.id) {
         await tx.secret.deleteMany({ where: { id: previousSecretId } });
       }

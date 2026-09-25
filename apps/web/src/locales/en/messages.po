@@ -1403,6 +1403,10 @@ msgstr "Choose file"
 msgid "Choose folder"
 msgstr "Choose folder"
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
+msgstr "Choose one credential: a token or a header."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
 msgstr "Choose which connected model Ardur Bot uses."
@@ -7352,6 +7356,12 @@ msgstr "This reset link is invalid or expired"
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."
 msgstr "This server cannot be assigned without a bot."
+
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr "This server did not offer browser sign-in. Enter a token instead."
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx

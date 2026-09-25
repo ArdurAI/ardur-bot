@@ -64,9 +64,12 @@ import {
   listPiCatalog,
   listScratchpadItems,
   loadPushToken,
+  MCP_BROWSER_SIGN_IN_UNAVAILABLE,
   McpOAuthAttemptReplacedError,
   McpOAuthBroker,
+  McpOAuthUnavailableError,
   mapScratchpadItem,
+  mcpCredentialConflict,
   modelCredentialDto,
   NATIVE_HOST_OWNER_MESSAGE,
   nativeHostOwner,
@@ -3483,6 +3486,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           );
         }),
         create: authed.mcp.servers.create.handler(async ({ context, input }) => {
+          const credentialConflict = mcpCredentialConflict({
+            secret: "secret" in input ? input.secret : undefined,
+            headers: "headers" in input ? input.headers : undefined,
+          });
+          if (credentialConflict)
+            throw new ORPCError("BAD_REQUEST", { message: credentialConflict });
           const secretPayload = buildMcpCredentialBlob(input);
           const stored = secretPayload
             ? await deps.secrets.put(
@@ -3842,8 +3851,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             }
             return await integrations.beginAuthorization(context.actor, input);
           } catch (error) {
+            const unavailable =
+              error instanceof McpOAuthUnavailableError ||
+              (error instanceof Error && "code" in error && error.code === "MCP_OAUTH_UNAVAILABLE");
             throw new ORPCError("BAD_REQUEST", {
-              message: error instanceof Error ? error.message : "Could not start MCP OAuth",
+              message: unavailable
+                ? MCP_BROWSER_SIGN_IN_UNAVAILABLE
+                : error instanceof Error
+                  ? error.message
+                  : "Could not start MCP OAuth",
             });
           }
         }),

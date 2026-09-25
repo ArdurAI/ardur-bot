@@ -14,6 +14,7 @@ export async function connectIntegration(
     oauthClient?: { clientId: string; clientSecret?: string };
     onPopup?: (popup: Window | null) => void;
     onStarted?: (connection: IntegrationConnection) => void;
+    onWaiting?: (waiting: { cancel: () => Promise<void> }) => void;
   } = {},
 ) {
   const authKind = options.authKind ?? descriptor.authKind;
@@ -43,6 +44,12 @@ export async function connectIntegration(
       window.location.assign(started.authorizationUrl);
       return started.connection;
     }
+    options.onWaiting?.({
+      cancel: async () => {
+        await rpc.integrations.cancel({ connectionId: started.connection.id });
+        popup?.close();
+      },
+    });
     const deadline = Date.now() + 10 * 60_000;
     while (Date.now() < deadline) {
       await new Promise((resolve) => window.setTimeout(resolve, 1000));

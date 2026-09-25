@@ -68,6 +68,27 @@ async function click(label: string) {
   await act(async () => button!.click());
 }
 
+it("shows the plain sentence when the server offers no browser sign-in", async () => {
+  const provider = "provider-denied-browser-sign-in";
+  api.oauth.mockImplementation(async () => {
+    api.list.mockResolvedValue([
+      {
+        id: "server-1",
+        connectionState: "needs-sign-in",
+        lastError: "Needs sign-in (oauth_unavailable).",
+      },
+    ]);
+    throw new Error(provider);
+  });
+  const container = await mount();
+  await click("Authorize");
+  expect(container.textContent).toContain(
+    "This server did not offer browser sign-in. Enter a token instead.",
+  );
+  expect(container.textContent).not.toContain(provider);
+  expect(api.approve).not.toHaveBeenCalled();
+});
+
 it("does not approve a bot when tool discovery failed", async () => {
   api.oauth.mockResolvedValue("sign-in-failed");
   api.list.mockResolvedValue([
