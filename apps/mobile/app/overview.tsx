@@ -9,12 +9,14 @@ import {
   ActivityIndicator,
   AppState,
   Button,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { rpc } from "../lib/api";
+import { filingDestination } from "../lib/filing-destination";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "../lib/overview";
@@ -73,9 +75,16 @@ export default function OverviewScreen() {
                       }
                     />
                     {item.filedBy ? (
-                      <Text style={{ color: tokens.foreground }}>
-                        {t("Filed by {name}", { name: item.filedBy.botName })}
-                      </Text>
+                      <Pressable
+                        accessibilityRole="link"
+                        onPress={() => {
+                          if (item.filedBy) router.push(filingDestination(item.filedBy));
+                        }}
+                      >
+                        <Text style={{ color: tokens.foreground }}>
+                          {t("Filed by {name}", { name: item.filedBy.botName })}
+                        </Text>
+                      </Pressable>
                     ) : null}
                   </View>
                 ))}

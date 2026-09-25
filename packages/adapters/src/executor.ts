@@ -1904,7 +1904,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 signal: context.signal,
               },
             )
-          : { board: "write" as const, reason: null };
+          : { board: "write" as const, reason: null, workspaceIds: [] as string[] };
         const tools = applyBoardToolAccess([...builtins, ...exposedConnectorTools], {
           enabled: upkeepEnabled,
           board: boardAccess.board,
@@ -4376,6 +4376,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               board: boardAccess.board,
               reason: boardAccess.reason,
               memory: tools.some((tool) => tool.name === "remember"),
+              workspaceIds: boardAccess.workspaceIds,
             }),
           ]
             .filter((instruction): instruction is string => Boolean(instruction))

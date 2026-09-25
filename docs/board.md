@@ -149,16 +149,20 @@ unfinished work after checking for an open item with the same title, comment
 outcomes, close finished items with a reason, and record durable learnings with
 `remember`. If there is no board, the computer is unreachable, or the run is
 read-only, the instruction says so in one sentence and only tools that can run are
-offered. Turning the setting off removes that instruction and leaves tool behavior
-as it was. The same row shows whether learning review is on, the reviewer model,
-and Enable. Enable uses the existing learning configure call. Learning review stays
+offered. If the default board does not admit the bot but another initialized board
+does, the tools stay and the instruction adds `Pass workspaceId <id>.` Turning the
+setting off removes that instruction, the filing caps, the duplicate-title check
+and the `bot-filed` label. The same row shows whether learning review is on, the
+reviewer model, and Enable. Enable uses the existing learning configure call. Learning review stays
 off until someone turns it on.
 
 Bot-created items keep the actor `bot:<name>`, the label `bot-filed`, and the run
-id in Beads metadata. The server allows 5 new items per run and 30 per space each
-hour, returns an existing open item when the normalized title matches, and redacts
-that run's secrets from titles, bodies and comments. Read-only grants still reject
-writes.
+id in Beads metadata while the setting is on. The server allows 5 new items per run
+and 30 per space each hour, and returns an existing open item when the normalized
+title matches. It redacts that run's secrets from titles, descriptions, acceptance
+criteria, comments and close reasons whether or not the setting is on. Read-only
+grants still reject writes. A stale phone confirmation does not make the board
+read-only; the run pauses for confirmation the same way as other consequential tools.
 
 Send to a bot creates a normal conversation turn containing the item's title,
 description and acceptance criteria. The item becomes in progress, assigned to

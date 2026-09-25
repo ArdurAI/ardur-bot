@@ -63,6 +63,8 @@ export const BoardFilingSchema = z.object({
   botId: z.string().min(1).max(128),
   botName: z.string().min(1).max(80),
   runId: z.string().min(1).max(128),
+  groupId: z.string().min(1).max(128).nullable(),
+  messageId: z.string().min(1).max(128).nullable(),
 });
 export type BoardFiling = z.infer<typeof BoardFilingSchema>;
 export const BoardHistorySchema = z.object({
@@ -168,15 +170,24 @@ export const BoardProblemSchema = z.object({
     "forbidden",
     "invalid_response",
     "command_failed",
+    "created_incomplete",
     "dolt_missing",
   ]),
   message: z.string(),
+  itemId: z.string().min(1).max(160).optional(),
 });
 export type BoardProblem = z.infer<typeof BoardProblemSchema>;
 export class BoardError extends Error {
   constructor(readonly problem: BoardProblem) {
     super(problem.message);
     this.name = "BoardError";
+  }
+}
+export class BoardDeniedError extends BoardError {
+  readonly admission = "denied" as const;
+  constructor() {
+    super({ code: "forbidden", message: "This bot is not allowed on this board." });
+    this.name = "BoardDeniedError";
   }
 }
 

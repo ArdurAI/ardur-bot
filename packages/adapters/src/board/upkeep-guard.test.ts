@@ -1,7 +1,9 @@
-import type { WorkItem } from "@ardurbot/contracts/board";
+import { ALL_DEVICE_SCOPES } from "@ardurbot/contracts";
+import { BoardError, type WorkItem } from "@ardurbot/contracts/board";
 import { expect, it, vi } from "vitest";
 import { selectBuiltinToolsForRun } from "../executor.js";
 import { agentToolsForRequest } from "../pi-runtime.js";
+import { currentRemoteDecision, enforceRemoteExecution } from "../remote-execution.js";
 import { advertisedHostTools } from "../remote-host-runtime.js";
 import { createArdurToolBridge } from "../runtimes/claude-mcp-bridge.js";
 import { parseBeadsItem } from "./beads.js";
@@ -13,6 +15,7 @@ import {
   botUpkeepPrompt,
   MEMORY_UPKEEP_SENTENCE,
   measureInstructionTokens,
+  resolveBoardAccess,
 } from "./upkeep.js";
 
 const baseTools = {
@@ -83,10 +86,23 @@ function service(options?: { open?: WorkItem[]; filings?: number; hourFilings?: 
         filings.push(row);
         return row;
       }),
-      delete: vi.fn(async () => ({})),
+      delete: vi.fn(async ({ where }: { where: { id: string } }) => {
+        const index = filings.findIndex((row) => row.id === where.id);
+        if (index >= 0) filings.splice(index, 1);
+        return { id: where.id };
+      }),
     },
+    run: { findFirst: vi.fn(async () => null) },
     $executeRaw: vi.fn(async () => 1),
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const snapshot = filings.map((row) => ({ ...row }));
+      try {
+        return await fn(prisma);
+      } catch (error) {
+        filings.splice(0, filings.length, ...snapshot);
+        throw error;
+      }
+    }),
   };
   const created = item("Task");
   const provider = {
@@ -296,7 +312,364 @@ it("reads bot filing metadata from a Beads item", () => {
       labels: ["bot-filed"],
       metadata: { ardur_run_id: "run", ardur_bot_id: "builder", ardur_filed_by: "Builder" },
     }).filedBy,
-  ).toEqual({ botId: "builder", botName: "Builder", runId: "run" });
+  ).toEqual({
+    botId: "builder",
+    botName: "Builder",
+    runId: "run",
+    groupId: null,
+    messageId: null,
+  });
+});
+
+it("redacts run secrets from a board create and comment when upkeep is off", async () => {
+  const { board, provider } = service();
+  await executeBoardTool(
+    board,
+    scope,
+    "board_create",
+    {
+      workspaceId: "workspace",
+      item: {
+        title: "Rotate sk-test",
+        description: "token sk-test",
+        acceptanceCriteria: "sk-test",
+      },
+    },
+    { upkeep: false, secrets: ["sk-test"] },
+  );
+  expect(provider.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: "Rotate [redacted]",
+      description: "token [redacted]",
+      acceptanceCriteria: "[redacted]",
+    }),
+  );
+  await executeBoardTool(
+    board,
+    scope,
+    "board_comment",
+    { workspaceId: "workspace", id: "board-a", text: "used sk-test" },
+    { upkeep: false, secrets: ["sk-test"] },
+  );
+  expect(provider.comment).toHaveBeenCalledWith("board-a", "used [redacted]");
+  await executeBoardTool(
+    board,
+    scope,
+    "board_close",
+    { workspaceId: "workspace", ids: ["board-a"], reason: "done sk-test" },
+    { upkeep: false, secrets: ["sk-test"] },
+  );
+  expect(provider.close).toHaveBeenCalledWith(["board-a"], "done [redacted]");
+});
+
+it("keeps the filing when create reports the item already exists", async () => {
+  const { board, provider, prisma } = service({ filings: 4 });
+  provider.create.mockRejectedValueOnce(
+    new BoardError({
+      code: "created_incomplete",
+      message:
+        "Item board-new was created, but its details could not finish. Open it before retrying.",
+      itemId: "board-new",
+    }),
+  );
+  await expect(
+    executeBoardTool(
+      board,
+      scope,
+      "board_create",
+      { workspaceId: "workspace", item: { title: "Partial" } },
+      { upkeep: true },
+    ),
+  ).rejects.toMatchObject({ problem: { code: "created_incomplete", itemId: "board-new" } });
+  expect(prisma.botBoardFiling.delete).not.toHaveBeenCalled();
+  provider.create.mockResolvedValue(item("Next"));
+  const next = await executeBoardTool(
+    board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "Next" } },
+    { upkeep: true },
+  );
+  expect(next).toEqual({
+    error:
+      "This run already filed 5 board items. Comment on an existing item instead of creating another.",
+  });
+  expect(provider.create).toHaveBeenCalledTimes(1);
+});
+
+it("serializes same-title filings so only one item is created", async () => {
+  const { board, provider, prisma } = service();
+  const open: WorkItem[] = [];
+  let releaseFirst: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let createdCount = 0;
+  provider.list.mockImplementation(async () => open.map((row) => ({ ...row })));
+  provider.create.mockImplementation(async (createdItem?: { title?: string }) => {
+    createdCount += 1;
+    const created = item(createdItem?.title ?? "Ship the board");
+    created.id = `board-${createdCount}`;
+    if (createdCount === 1) await gate;
+    open.push(created);
+    return created;
+  });
+  let chain = Promise.resolve();
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+    const run = chain.then(async () => {
+      const snapshot = [...open];
+      try {
+        return await fn(prisma);
+      } catch (error) {
+        open.splice(0, open.length, ...snapshot);
+        throw error;
+      }
+    });
+    chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  });
+  const pending = Promise.all([
+    executeBoardTool(
+      board,
+      scope,
+      "board_create",
+      { workspaceId: "workspace", item: { title: "Ship the board" } },
+      { upkeep: true },
+    ),
+    executeBoardTool(
+      board,
+      { ...scope, runId: "run-b" },
+      "board_create",
+      { workspaceId: "workspace", item: { title: "Ship the board" } },
+      { upkeep: true },
+    ),
+  ]);
+  const started = Date.now();
+  while (provider.create.mock.calls.length < 1) {
+    if (Date.now() - started > 1000) break;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  let results: unknown[] = [];
+  try {
+    expect(provider.create).toHaveBeenCalledTimes(1);
+  } finally {
+    releaseFirst();
+    results = await pending;
+  }
+  expect(provider.create).toHaveBeenCalledTimes(1);
+  expect(prisma.botBoardFiling.create).toHaveBeenCalledTimes(1);
+  expect(results).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        duplicate: true,
+        message: "An open item already has this title: board-1.",
+      }),
+    ]),
+  );
+});
+
+function workspaceRow(id: string, admitted: boolean, isDefault = false) {
+  return {
+    id,
+    spaceId: "space",
+    ownerUserId: "owner",
+    kind: id === "folder" ? "folder" : "space",
+    path: id === "folder" ? "/fixture/folder" : "/fixture/board",
+    prefix: "work",
+    name: id,
+    enabled: true,
+    initialized: true,
+    isDefault,
+    allowAllBots: false,
+    allowedBotIds: admitted ? ["builder"] : [],
+    createdAt: new Date(0),
+  };
+}
+
+function phoneBoard(options: {
+  scopes: readonly string[];
+  lastPresenceAt: Date | null;
+  boards: ReturnType<typeof workspaceRow>[];
+}) {
+  const grant = {
+    id: "phone",
+    instanceId: "home",
+    spaceId: "space",
+    userId: "owner",
+    scopes: options.scopes,
+    revokedAt: null as Date | null,
+    lastPresenceAt: options.lastPresenceAt,
+    trustedAt: new Date(),
+    kind: "device",
+  };
+  const run = {
+    id: "run",
+    botId: "builder",
+    taskId: "task",
+    spaceId: "space",
+    userId: "owner",
+    originDeviceGrantId: "phone",
+    remoteDeviceGrantIds: ["phone"],
+    cancelRequestedAt: null,
+    status: "running",
+  };
+  const prisma = {
+    deploymentSettings: {
+      findUnique: vi.fn(async () => ({ ownerUserId: "owner", computerHost: "this-mac" })),
+    },
+    spaceMember: { findUnique: vi.fn(async () => ({ id: "member", userId: "owner" })) },
+    user: { findUniqueOrThrow: vi.fn(async () => ({ name: "Owner" })) },
+    bot: {
+      findFirst: vi.fn(async () => ({
+        id: "builder",
+        name: "Builder",
+        computer: { kind: "desktop" },
+      })),
+    },
+    run: {
+      findUnique: vi.fn(async () => run),
+      findFirst: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
+    },
+    deviceGrant: {
+      findUnique: vi.fn(async () => grant),
+      findFirst: vi.fn(async () => (grant.revokedAt ? null : grant)),
+    },
+    instanceIdentity: {
+      findUnique: vi.fn(async () => ({ instanceId: "home", scopes: [...ALL_DEVICE_SCOPES] })),
+    },
+    remoteAuthorityPolicy: { findMany: vi.fn(async () => []) },
+    deviceAuditEvent: { create: vi.fn(async () => ({})) },
+    space: { findUniqueOrThrow: vi.fn(async () => ({ requireTrustedDevices: false })) },
+    boardWorkspace: {
+      findMany: vi.fn(async () => options.boards),
+      findFirst: vi.fn(
+        async ({ where }: { where: Record<string, unknown> }) =>
+          options.boards.find((row) =>
+            Object.entries(where).every(([key, value]) => row[key as keyof typeof row] === value),
+          ) ?? null,
+      ),
+    },
+  };
+  const board = new BoardService({ prisma: prisma as never, dataDir: "/fixture" });
+  return { prisma, board, grant };
+}
+
+const phoneScope = { userId: "owner", spaceId: "space", botId: "builder", runId: "run" };
+
+it("keeps board writes when phone presence is stale and pauses board_create", async () => {
+  const { prisma, board } = phoneBoard({
+    scopes: ALL_DEVICE_SCOPES,
+    lastPresenceAt: new Date(Date.now() - 11 * 60_000),
+    boards: [{ ...workspaceRow("default", true, true), allowAllBots: true, allowedBotIds: [] }],
+  });
+  const decision = await currentRemoteDecision(prisma as never, "run", "board_create");
+  expect(decision).toMatchObject({
+    allowed: false,
+    kind: "presence",
+    action: "Confirm on your phone",
+  });
+  const access = await resolveBoardAccess(board, prisma as never, phoneScope);
+  expect(access).toMatchObject({ board: "write", reason: null });
+  expect(
+    botUpkeepPrompt({
+      enabled: true,
+      board: access.board,
+      reason: access.reason,
+      memory: true,
+      workspaceIds: access.workspaceIds,
+    }),
+  ).not.toContain("This board is read-only for this run.");
+  expect(names(access.board)).toContain("board_create");
+  const pause = vi.fn(async (_reason: string, _action: string) => undefined);
+  expect(
+    await enforceRemoteExecution({
+      prisma: prisma as never,
+      runId: "run",
+      tool: "board_create",
+      pause,
+    }),
+  ).toBe(false);
+  expect(
+    await enforceRemoteExecution({ prisma: prisma as never, runId: "run", tool: "shell", pause }),
+  ).toBe(false);
+  expect(pause.mock.calls.map((call) => call[1])).toEqual([
+    "Confirm on your phone",
+    "Confirm on your phone",
+  ]);
+});
+
+it("keeps an ordinary grant read-only", async () => {
+  const { prisma, board } = phoneBoard({
+    scopes: ["dispatch", "ordinary"],
+    lastPresenceAt: new Date(),
+    boards: [{ ...workspaceRow("default", true, true), allowAllBots: true, allowedBotIds: [] }],
+  });
+  const decision = await currentRemoteDecision(prisma as never, "run", "board_create");
+  expect(decision).toMatchObject({
+    allowed: false,
+    kind: "authority",
+    action: "Approve on your Mac",
+  });
+  const access = await resolveBoardAccess(board, prisma as never, phoneScope);
+  expect(access).toMatchObject({ board: "read", reason: "read-only" });
+  expect(
+    botUpkeepPrompt({
+      enabled: true,
+      board: access.board,
+      reason: access.reason,
+      memory: true,
+      workspaceIds: access.workspaceIds,
+    }),
+  ).toContain("This board is read-only for this run.");
+  expect(names(access.board)).toContain("board_show");
+  expect(names(access.board)).not.toContain("board_create");
+});
+
+it("shows a folder board when the default board excludes the bot", async () => {
+  const { prisma, board } = phoneBoard({
+    scopes: ALL_DEVICE_SCOPES,
+    lastPresenceAt: new Date(),
+    boards: [workspaceRow("default", false, true), workspaceRow("folder", true)],
+  });
+  const provider = { show: vi.fn(async () => item("Task")) };
+  vi.spyOn(board, "provider").mockImplementation(async (callScope, id) => {
+    await BoardService.prototype.workspace.call(board, callScope, id);
+    return provider as never;
+  });
+  const shown = await executeBoardTool(
+    board,
+    phoneScope,
+    "board_show",
+    { workspaceId: "folder", id: "board-a" },
+    { upkeep: true, board: "none", reason: "no-board" },
+  );
+  expect(provider.show).toHaveBeenCalledWith("board-a");
+  expect(shown).not.toEqual({ error: "This space has no board this bot can use." });
+  const access = await resolveBoardAccess(board, prisma as never, phoneScope);
+  expect(access.board).toBe("write");
+  expect(names(access.board)).toContain("board_create");
+  expect(
+    botUpkeepPrompt({
+      enabled: true,
+      board: access.board,
+      reason: access.reason,
+      memory: true,
+      workspaceIds: access.workspaceIds,
+    }),
+  ).toContain("Pass workspaceId folder.");
+  const denied = await executeBoardTool(
+    board,
+    phoneScope,
+    "board_show",
+    { workspaceId: "default", id: "board-a" },
+    { upkeep: true, board: "write", reason: null },
+  );
+  expect(denied).toEqual({ error: "Pass workspaceId folder." });
 });
 
 it("leaves board tools unchanged when upkeep is off", async () => {
@@ -309,7 +682,7 @@ it("leaves board tools unchanged when upkeep is off", async () => {
     { upkeep: false, secrets: ["sk-test"] },
   );
   expect(provider.create).toHaveBeenCalledWith(
-    expect.objectContaining({ title: "Task", description: "sk-test" }),
+    expect.objectContaining({ title: "Task", description: "[redacted]" }),
   );
   expect(provider.noteFiling).not.toHaveBeenCalled();
 });

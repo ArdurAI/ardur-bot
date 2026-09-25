@@ -73,7 +73,9 @@ export function parseBeadsItem(value: unknown): WorkItem {
   const botId = str(meta.ardur_bot_id);
   const botName = str(meta.ardur_filed_by);
   const filed =
-    runId && botId && botName ? BoardFilingSchema.safeParse({ botId, botName, runId }) : null;
+    runId && botId && botName
+      ? BoardFilingSchema.safeParse({ botId, botName, runId, groupId: null, messageId: null })
+      : null;
   return WorkItemSchema.parse({
     id,
     title: z.string().parse(raw.title),
@@ -236,8 +238,9 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
       return await this.show(created.id);
     } catch {
       throw new BoardError({
-        code: "command_failed",
+        code: "created_incomplete",
         message: `Item ${created.id} was created, but its details could not finish. Open it before retrying.`,
+        itemId: created.id,
       });
     }
   }

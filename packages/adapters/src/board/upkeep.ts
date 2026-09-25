@@ -42,18 +42,24 @@ export function boardUnavailableSentence(reason: BoardUnavailableReason): string
   return "This space has no board this bot can use.";
 }
 
+export function alternateBoardSentence(workspaceIds: readonly string[]): string {
+  return `Pass workspaceId ${workspaceIds.join(" or ")}.`;
+}
+
 export function botUpkeepPrompt(input: {
   enabled: boolean;
   board: BoardToolAccess;
   reason: BoardUnavailableReason | null;
   memory: boolean;
+  workspaceIds?: readonly string[];
 }): string {
   if (!input.enabled) return "";
-  if (input.board === "write") return input.memory ? BOARD_UPKEEP_SECTION : BOARD_WORK;
+  const hint = input.workspaceIds?.length ? ` ${alternateBoardSentence(input.workspaceIds)}` : "";
+  if (input.board === "write") return `${input.memory ? BOARD_UPKEEP_SECTION : BOARD_WORK}${hint}`;
   const reason = input.reason ?? (input.board === "read" ? "read-only" : "no-board");
-  return [boardUnavailableSentence(reason), input.memory ? MEMORY_UPKEEP_SENTENCE : ""]
+  return `${[boardUnavailableSentence(reason), input.memory ? MEMORY_UPKEEP_SENTENCE : ""]
     .filter(Boolean)
-    .join(" ");
+    .join(" ")}${hint}`;
 }
 
 export function applyBoardToolAccess<T extends { name: string }>(
@@ -87,21 +93,42 @@ export function withBotFiledLabel(labels: string[] | undefined): string[] {
 
 const UNREACHABLE = "This bot cannot reach this board's computer.";
 
+export function isBoardUnreachable(error: unknown): boolean {
+  return error instanceof BoardError && error.message === UNREACHABLE;
+}
+
 export async function resolveBoardAccess(
   service: BoardService,
   prisma: PrismaClient,
   scope: BoardScope,
-): Promise<{ board: BoardToolAccess; reason: BoardUnavailableReason | null }> {
+): Promise<{
+  board: BoardToolAccess;
+  reason: BoardUnavailableReason | null;
+  workspaceIds: string[];
+}> {
+  const none = (reason: BoardUnavailableReason) => ({
+    board: "none" as const,
+    reason,
+    workspaceIds: [] as string[],
+  });
+  let choice: Awaited<ReturnType<BoardService["botBoardChoices"]>>;
   try {
-    await service.workspace(scope);
+    choice = await service.botBoardChoices(scope);
   } catch (error) {
     if (!(error instanceof BoardError)) throw error;
-    if (error.message === UNREACHABLE) return { board: "none", reason: "unreachable" };
-    return { board: "none", reason: "no-board" };
+    if (isBoardUnreachable(error)) return none("unreachable");
+    return none("no-board");
   }
-  if (!scope.runId) return { board: "write", reason: null };
+  if (choice.admitted.length === 0) return none("no-board");
+  const workspaceIds = choice.implicitAdmitted ? [] : choice.admitted.map((row) => row.id);
+  if (!scope.runId) return { board: "write", reason: null, workspaceIds };
   const write = await currentRemoteDecision(prisma, scope.runId, "board_create");
-  if (write.allowed) return { board: "write", reason: null };
+  if (write.allowed) return { board: "write", reason: null, workspaceIds };
+  if (write.kind === "presence") return { board: "write", reason: null, workspaceIds };
   const read = await currentRemoteDecision(prisma, scope.runId, "board_ready");
-  return { board: read.allowed ? "read" : "none", reason: "read-only" };
+  return {
+    board: read.allowed ? "read" : "none",
+    reason: "read-only",
+    workspaceIds: read.allowed ? workspaceIds : [],
+  };
 }

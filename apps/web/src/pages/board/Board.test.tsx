@@ -84,23 +84,29 @@ async function render(children: ReactNode, path = "/") {
   );
   return node;
 }
-it("shows a filed-by marker that links to the run", async () => {
-  const filed = {
-    ...item("board-a"),
-    filedBy: { botId: "builder", botName: "Builder", runId: "run-1" },
-  };
+it("links a filing to the group or bot message, and to the thread when the run has none", async () => {
+  const filing = (id: string, groupId: string | null, messageId: string | null) => ({
+    ...item(id),
+    filedBy: { botId: "builder", botName: "Builder", runId: id, groupId, messageId },
+  });
   const node = await render(
     <BoardColumns
       snapshot={{
-        items: [filed],
-        readyIds: ["board-a"],
+        items: [
+          filing("board-a", "squad", "msg-1"),
+          filing("board-b", null, "msg-2"),
+          filing("board-c", null, null),
+        ],
+        readyIds: ["board-a", "board-b", "board-c"],
         blockedIds: [],
       }}
       onOpen={() => undefined}
     />,
   );
-  const link = node.querySelector<HTMLAnchorElement>('a[href="/app/builder?run=run-1"]');
-  expect(link?.textContent).toContain("Builder");
+  expect(node.querySelector('a[href="/app/g/squad?m=msg-1"]')?.textContent).toContain("Builder");
+  expect(node.querySelector('a[href="/app/builder?m=msg-2"]')).toBeTruthy();
+  expect(node.querySelector('a[href="/app/builder"]')).toBeTruthy();
+  expect(node.querySelector('a[href="/app/builder?run=board-c"]')).toBeNull();
 });
 it("preserves precise dates on unrelated edits and allows clearing or changing a date", async () => {
   const existing = {
