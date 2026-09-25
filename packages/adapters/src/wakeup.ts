@@ -113,7 +113,7 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
       Object.keys(handlers).map((name) => [
         name,
         async (payload: unknown) => {
-          const unpacked = unwrapJobPayload(payload);
+          const unpacked = unwrapJobPayload(withoutCronMarker(payload));
           await runCorrelatedJob({
             name,
             payload: unpacked.payload,
@@ -362,4 +362,13 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
     this.stopped = !this.closeRequested;
     this.closing = false;
   }
+}
+
+/** Graphile Worker adds `_cron` to scheduled jobs; it is transport metadata, never job input. */
+function withoutCronMarker(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || !("_cron" in payload))
+    return payload;
+  const input = { ...(payload as Record<string, unknown>) };
+  delete input._cron;
+  return input;
 }

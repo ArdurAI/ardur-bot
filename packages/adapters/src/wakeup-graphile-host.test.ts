@@ -124,6 +124,26 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
     run.mockReset();
   });
 
+  it("strips Graphile's cron marker before strict payload validation", async () => {
+    const first = mockRunner();
+    run.mockResolvedValueOnce(first.runner);
+    const maintain = vi.fn(async () => undefined);
+    const host = new GraphileJobWorkerHost({} as Pool, { sleep: async () => undefined });
+    await host.start({ ...handlers(), "briefs.maintain": maintain });
+    const { taskList } = run.mock.calls[0]![0] as {
+      taskList: Record<string, (payload: unknown) => Promise<void>>;
+    };
+    await taskList.briefs_maintain!({
+      _cron: { ts: "2026-09-25T02:30:00.000Z", backfilled: false },
+    });
+    await taskList.briefs_maintain!({ runId: "run-1", _cron: { ts: "2026-09-25T02:40:00.000Z" } });
+    expect(maintain.mock.calls).toEqual([[{}], [{ runId: "run-1" }]]);
+    await expect(
+      taskList["briefs.maintain"]!({ runId: "run-1", spaceId: "space" }),
+    ).rejects.toThrow(/spaceId/);
+    await host.stop();
+  });
+
   it("backs off then restarts when runner.promise rejects with 53300", async () => {
     const first = mockRunner();
     const second = mockRunner();
