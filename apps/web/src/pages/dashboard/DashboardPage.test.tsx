@@ -629,6 +629,24 @@ it("labels aggregate usage as records rather than provider requests", async () =
   expect(node.querySelector('[data-panel="usage"]')?.textContent).not.toContain("requests");
 });
 
+it("shows ready work when filing outcomes fail", async () => {
+  api.work.mockResolvedValue({
+    workspace: { id: "planning", name: "Planning" },
+    ready: 2,
+    inProgress: 1,
+    blocked: 0,
+    items: [{ id: "work-1", title: "Next work" }],
+  });
+  api.filingOutcomes.mockRejectedValue(new Error("outcomes unavailable"));
+  await renderPage();
+  const panel = node.querySelector('[data-panel="work"]')!;
+  expect(panel.textContent).toContain("Ready: 2");
+  expect(panel.textContent).toContain("Next work");
+  expect(panel.textContent).toContain("Board outcomes are unavailable right now.");
+  expect(panel.textContent).not.toContain("Could not load");
+  expect(panel.textContent).not.toContain("closed without being completed");
+});
+
 it("shows default-board work and item links without adding subscriptions", async () => {
   api.work.mockResolvedValue({
     workspace: { id: "planning", name: "Planning" },

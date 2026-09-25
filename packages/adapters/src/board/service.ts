@@ -534,27 +534,41 @@ export class BoardService {
     }
   }
   /**
-   * This run's reservation for the same normalized title, when it never received an item id.
-   * An item that already has a filing row is left alone so the caller can report a duplicate.
+   * This run's fresh reservation for the same normalized title, when it never received an item id.
+   * Claims only an open item with no filer, no filing row, and a created time from the
+   * reservation's second through the next 15 minutes. A reservation older than 15 minutes
+   * is left for discardStaleHollow.
    */
   async claimHollowFiling(
     scope: BoardScope,
     workspaceId: string,
-    itemId: string,
+    item: Pick<WorkItem, "id" | "createdAt" | "filedBy">,
     titleKey: string,
   ) {
-    if (!scope.runId) return null;
+    if (!scope.runId || item.filedBy) return null;
     const hollow = await this.options.prisma.botBoardFiling.findFirst({
       where: { spaceId: scope.spaceId, runId: scope.runId, itemId: null, titleKey },
       orderBy: { createdAt: "desc" },
     });
-    if (!hollow) return null;
+    if (!hollow?.createdAt || !createdWithinReservation(item.createdAt, hollow.createdAt))
+      return null;
     const taken = await this.options.prisma.botBoardFiling.findFirst({
-      where: { workspaceId, itemId },
+      where: { workspaceId, itemId: item.id },
     });
     if (taken) return null;
-    await this.recordFilingItem(hollow.id, workspaceId, itemId);
+    await this.recordFilingItem(hollow.id, workspaceId, item.id);
     return hollow;
+  }
+  /** Deletes this run's hollow reservation once it is older than 15 minutes. */
+  async discardStaleHollow(scope: BoardScope, titleKey: string) {
+    if (!scope.runId) return false;
+    const hollow = await this.options.prisma.botBoardFiling.findFirst({
+      where: { spaceId: scope.spaceId, runId: scope.runId, itemId: null, titleKey },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!hollow?.createdAt || !reservationIsStale(hollow.createdAt)) return false;
+    await this.options.prisma.botBoardFiling.delete({ where: { id: hollow.id } });
+    return true;
   }
   /** The run's own filing for an item, when an earlier attempt created it. */
   async runFiling(scope: BoardScope, workspaceId: string, itemId: string) {
@@ -608,16 +622,25 @@ export class BoardService {
     const existing = (await provider.list()).find(
       (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
     );
-    if (own && !own.itemId && own.titleKey === title && existing) {
+    const stale = Boolean(own && !own.itemId && own.createdAt && reservationIsStale(own.createdAt));
+    if (
+      !stale &&
+      own &&
+      !own.itemId &&
+      own.titleKey === title &&
+      own.createdAt &&
+      existing &&
+      !existing.filedBy
+    ) {
       const taken = await prisma.botBoardFiling.findFirst({
         where: { workspaceId: workspace.id, itemId: existing.id },
       });
-      if (!taken && createdAfterReservation(existing.createdAt, own.createdAt)) {
+      if (!taken && createdWithinReservation(existing.createdAt, own.createdAt)) {
         await this.recordFilingItem(own.id, workspace.id, existing.id);
         return { item: existing, duplicate: false, workspaceId: workspace.id };
       }
     }
-    if (own) await prisma.botBoardFiling.delete({ where: { id: own.id } });
+    if (own && !own.itemId) await prisma.botBoardFiling.delete({ where: { id: own.id } });
     const link = {
       spaceId: scope.spaceId,
       runId: null,
@@ -627,7 +650,7 @@ export class BoardService {
       titleKey: title,
       reused: false,
     };
-    if (existing) {
+    if (existing && !stale) {
       await prisma.botBoardFiling.create({
         data: { ...link, itemId: existing.id, reused: true },
       });
@@ -702,14 +725,26 @@ function isFilingPoolTimeout(error: unknown): boolean {
 
 /**
  * Beads lists created_at as a whole second. A reservation stores milliseconds.
- * An item counts when its created_at, at whole-second precision, is at or after
- * the reservation's createdAt truncated to a second. A human item created in that
- * same second, with no filer and no filing row, is claimed; that is accepted.
+ * An item counts when its created time, at whole-second precision, is at or after
+ * the reservation's second and at or before the reservation plus 15 minutes, and
+ * the reservation itself is still inside those 15 minutes. A human item created
+ * in that same second, with no filer and no filing row, is claimed; that is accepted.
  */
-function createdAfterReservation(itemCreatedAt: string, reservedAt: Date): boolean {
+function createdWithinReservation(itemCreatedAt: string, reservedAt: Date): boolean {
   const created = new Date(itemCreatedAt).getTime();
-  if (Number.isNaN(created)) return false;
-  return Math.floor(created / 1000) >= Math.floor(reservedAt.getTime() / 1000);
+  const reserved = reservedAt.getTime();
+  if (Number.isNaN(created) || Number.isNaN(reserved) || reservationIsStale(reservedAt))
+    return false;
+  return (
+    Math.floor(created / 1000) >= Math.floor(reserved / 1000) &&
+    created <= reserved + HOLLOW_RESERVATION_MS
+  );
+}
+
+/** A hollow reservation older than 15 minutes is never claimed. */
+function reservationIsStale(reservedAt: Date, now = Date.now()): boolean {
+  const reserved = reservedAt.getTime();
+  return !Number.isNaN(reserved) && reserved < now - HOLLOW_RESERVATION_MS;
 }
 
 /** A hollow reservation counts only for its first 15 minutes. An attached item always counts. */

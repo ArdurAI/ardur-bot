@@ -172,26 +172,34 @@ own short transaction and no Beads command runs inside a database transaction. A
 that waits 15 seconds for the lock returns `Another write is in progress. Try again in a few seconds.`
 Once create returns an item id, that id stays on the reservation. A failed create that left no item
 removes its reservation. A reservation with no item id stops counting toward either cap
-after 15 minutes, and the same run's retry attaches a matching open item that has no
-filer to that reservation. Learning approval holds the filing lock until the suggestion
-is saved as applied. Reject and Undo read the suggestion status under that lock before
-they close or delete an item. Beads lists `created_at` as a whole second while a
-reservation stores milliseconds. An open item with no filing row counts as created for
-that reservation when its listed time, truncated to a second, is at or after the
-reservation time truncated to a second. A human item created in that same second, with
-no filer and no filing row, is claimed; that is accepted. It redacts that run's secrets from titles,
+after 15 minutes. A retry claims an open item only when that item has no filer, no filing
+row, and a created time from the reservation's second through the reservation plus 15
+minutes, and the reservation itself is still inside those 15 minutes. A hollow reservation
+older than 15 minutes is never claimed: the next Approve deletes it and creates a new item,
+and the next Reject deletes it. Learning approval holds the filing lock until the suggestion
+is saved as applied, filing first and then the save. Reject and Undo commit the status
+change under that lock before they close the item. If that close fails, the filing keeps
+the close reason in `closePending` and a later Undo or Reject finishes the close. An item
+already closed with "Undone from Learning" counts as undone. Beads lists `created_at` as a
+whole second while a reservation stores milliseconds. A human item created in the
+reservation's same second, with no filer and no filing row, is claimed while the reservation
+is still fresh; that is accepted. It redacts that run's secrets from titles,
 descriptions, acceptance criteria, labels, assignees, external references, comments
 and close reasons whether or not the setting is on. Read-only
 grants still reject writes. A stale phone confirmation does not make the board
 read-only; the run pauses for confirmation the same way as other consequential tools.
 
 The Work panel and mobile Overview group the last 30 days of filing records by bot
-and show completed, open and closed-without-being-completed counts. A board read observes returned
+and show completed, open and closed-without-being-completed counts. If that outcome
+query fails, the Work panel still shows the work list and one line: "Board outcomes
+are unavailable right now." A board read observes returned
 closed items and records the first outcome without another Beads call. An empty close
 reason or a completion word (done, complete, completed, fixed, resolved) is completed unless a
 negation comes up to three words before it. The negation words are not, never, no, nothing,
 nobody, none, nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't,
-and unable to ("not done", "can't get it fixed", "nothing was resolved", "isn't done"). A
+and unable to ("not done", "can't get it fixed", "nothing was resolved", "isn't done").
+"no" followed by a number is a label, not a negation ("ticket no 12 resolved", "case no 5 fixed",
+"Item no 1 done"). "no fix was possible" stays closed without being completed. A
 completion word with an un- prefix (unresolved, unfixed, undone, uncompleted) is negated.
 Every other reason, including "won't fix", is closed without being completed. A learning proposal that
 links to an existing item records its outcome but is not counted again. An item
@@ -252,9 +260,9 @@ for management and Files access. New mobile strings have Russian and Chinese tra
   queue. Very large boards can exceed these limits and return a structured error.
 - The UI and provider add no runtime dependencies or required hosted service.
   Ordinary model costs still apply when work is sent to a bot.
-- Apply the application migrations through `20260925200000_board_filing_title_key`,
+- Apply the application migrations through `20260925210000_board_filing_close_pending`,
   which follows `20260925170000_bot_upkeep`, `20260925180000_board_filing_outcomes`,
-  and `20260925190000_board_filing_reuse`,
+  `20260925190000_board_filing_reuse`, and `20260925200000_board_filing_title_key`,
   before opening Board. Generation and offline tests do not prove a live
   deployment has applied the schema.
 

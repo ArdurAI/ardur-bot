@@ -2234,6 +2234,8 @@ model BotBoardFiling {
   reused Boolean @default(false)
   closedAt DateTime?
   outcome String?
+  // The close reason after Undo or Reject has committed and the board close has not finished.
+  closePending String?
   createdAt DateTime @default(now())
 
   @@index([runId])

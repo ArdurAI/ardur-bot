@@ -106,6 +106,15 @@ it.each([
 ])("classifies the negated close reason %j as closed otherwise", (reason) => {
   expect(boardFilingOutcome(reason)).toBe("closed-other");
 });
+it.each(["ticket no 12 resolved", "case no 5 fixed", "Item no 1 done"])(
+  "classifies the numbered close reason %j as completed",
+  (reason) => {
+    expect(boardFilingOutcome(reason)).toBe("completed");
+  },
+);
+it("keeps a numbered label from turning a real negation into a completion", () => {
+  expect(boardFilingOutcome("no fix was possible")).toBe("closed-other");
+});
 it("does not emit after a concurrent observer consumed the version or an unfollow removed it", async () => {
   const { prisma, create, updateMany } = fixture();
   updateMany.mockResolvedValue({ count: 0 });

@@ -130,18 +130,18 @@ async function fileUpkeepItem(
     (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
   );
   if (existing) {
-    if (
-      !existing.filedBy &&
-      (await service.claimHollowFiling(scope, workspaceId, existing.id, title))
-    )
+    if (!existing.filedBy && (await service.claimHollowFiling(scope, workspaceId, existing, title)))
       return noteFiling(service, provider, scope, existing);
-    const repair = !existing.filedBy && (await service.runFiling(scope, workspaceId, existing.id));
-    return {
-      item: repair ? await noteFiling(service, provider, scope, existing) : existing,
-      duplicate: true,
-      message: duplicateBoardItemMessage(existing.id),
-    };
-  }
+    if (!(await service.discardStaleHollow(scope, title))) {
+      const repair =
+        !existing.filedBy && (await service.runFiling(scope, workspaceId, existing.id));
+      return {
+        item: repair ? await noteFiling(service, provider, scope, existing) : existing,
+        duplicate: true,
+        message: duplicateBoardItemMessage(existing.id),
+      };
+    }
+  } else await service.discardStaleHollow(scope, title);
   const reserved = await service.reserveBotFiling(scope, title);
   if (!reserved.ok) return { error: reserved.message };
   let created: WorkItem | undefined;

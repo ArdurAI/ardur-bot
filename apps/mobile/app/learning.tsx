@@ -359,10 +359,11 @@ export default function Learning() {
                                 ? t(
                                     "This board item changed after it was filed, so it was left open for review on the Board.",
                                   )
-                                : conflict.current ||
-                                  t(
-                                    "This board item changed after it was filed. Review it on the Board.",
-                                  )
+                                : conflict.code === "board-changed" || !conflict.current
+                                  ? t(
+                                      "This board item changed after it was filed. Review it on the Board.",
+                                    )
+                                  : conflict.current
                               : t(
                                   "Later edits overlap this change. Review both versions in History.",
                                 )}

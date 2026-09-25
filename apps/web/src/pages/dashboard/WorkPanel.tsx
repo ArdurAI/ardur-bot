@@ -6,14 +6,23 @@ import { rpc } from "../../lib/rpc";
 import { FiledBy } from "../board/FiledBy";
 import type { PanelActions, PanelContext } from "./panels";
 
-export function load({ signal, spaceId }: PanelContext) {
-  return Promise.all([
-    rpc.board.work({}, { signal, context: { spaceId } }),
-    rpc.board.filingOutcomes({}, { signal, context: { spaceId } }),
-  ]).then(([work, outcomes]) => ({ ...work, filingOutcomes: outcomes.bots }));
+export async function load({ signal, spaceId }: PanelContext) {
+  const work = await rpc.board.work({}, { signal, context: { spaceId } });
+  try {
+    const outcomes = await rpc.board.filingOutcomes({}, { signal, context: { spaceId } });
+    return { ...work, filingOutcomes: outcomes.bots, outcomesUnavailable: false };
+  } catch (error) {
+    if (signal.aborted || (error instanceof Error && error.name === "AbortError")) throw error;
+    return {
+      ...work,
+      filingOutcomes: [] as Awaited<ReturnType<typeof rpc.board.filingOutcomes>>["bots"],
+      outcomesUnavailable: true,
+    };
+  }
 }
 type WorkData = BoardWork & {
   filingOutcomes: Awaited<ReturnType<typeof load>>["filingOutcomes"];
+  outcomesUnavailable?: boolean;
 };
 export default function WorkPanel({ data, openSettings }: { data: WorkData } & PanelActions) {
   if (!data.workspace)
@@ -22,7 +31,7 @@ export default function WorkPanel({ data, openSettings }: { data: WorkData } & P
         <Button variant="ghost" onClick={() => openSettings("boards")}>
           <Trans>Set up a board</Trans>
         </Button>
-        <FilingOutcomes rows={data.filingOutcomes} />
+        <OutcomeLine data={data} />
       </div>
     );
   return (
@@ -63,9 +72,18 @@ export default function WorkPanel({ data, openSettings }: { data: WorkData } & P
           <Trans>No ready work</Trans>
         </p>
       )}
-      <FilingOutcomes rows={data.filingOutcomes} />
+      <OutcomeLine data={data} />
     </div>
   );
+}
+function OutcomeLine({ data }: { data: WorkData }) {
+  if (data.outcomesUnavailable)
+    return (
+      <p className="text-muted-foreground">
+        <Trans>Board outcomes are unavailable right now.</Trans>
+      </p>
+    );
+  return <FilingOutcomes rows={data.filingOutcomes} />;
 }
 function FilingOutcomes({ rows }: { rows: WorkData["filingOutcomes"] }) {
   return rows.map((row) => (

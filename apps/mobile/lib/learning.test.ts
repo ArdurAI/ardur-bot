@@ -430,6 +430,72 @@ it.each([
   },
 );
 
+it.each([
+  ["ru", RU_MESSAGES, "Эта задача на доске изменилась после создания. Проверьте её на доске."],
+  ["zh-CN", ZH_MESSAGES, "此看板事项在创建后已有变更。请在看板上查看。"],
+] as const)(
+  "renders the Undo board-changed sentence from the %s catalog",
+  async (locale, messages, translated) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const board = {
+      ...proposal,
+      type: "board-item",
+      proposedContent: undefined,
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+      },
+      diff: "+Finish the import follow-up",
+      status: "applied",
+      appliedBoardItem: {
+        workspaceId: "workspace",
+        itemId: "board-a",
+        updatedAt: "2026-09-25T12:00:00.000Z",
+        duplicate: false,
+      },
+    };
+    const current = "This board item changed after it was filed. Review it on the Board.";
+    request.mockImplementation(async (path: string) => {
+      if (path === "learning/journey") return [];
+      if (path === "learning/settings")
+        return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+      if (path === "learning/revert")
+        return {
+          proposal: board,
+          conflict: {
+            before: "",
+            applied: "board-a",
+            current,
+            expectedRevision: 0,
+            code: "board-changed",
+          },
+        };
+      return {
+        reviews: [],
+        proposals: [board],
+        pendingCount: 0,
+        appliedThisWeek: 1,
+        botNames: {},
+      };
+    });
+    const container = document.createElement("div"),
+      root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(Learning)));
+      i18n.locale = locale;
+      i18n.messages = messages;
+      await act(async () =>
+        [...container.querySelectorAll("button")].find((b) => b.textContent === "Undo")!.click(),
+      );
+      expect(container.textContent).toContain(translated);
+      expect(container.textContent).not.toContain(current);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
+
 it("falls back to the server sentence for an unknown board conflict code", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const board = {

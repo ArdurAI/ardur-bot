@@ -158,6 +158,7 @@ afterEach(async () => {
 
 const LEFT_OPEN =
   "This board item changed after it was filed, so it was left open for review on the Board.";
+const BOARD_CHANGED = "This board item changed after it was filed. Review it on the Board.";
 
 function catalogTranslation(locale: string, msgid: string) {
   const catalog = readFileSync(`apps/web/src/locales/${locale}/messages.po`, "utf8");
@@ -381,6 +382,53 @@ it.each([
     i18n.locale = locale;
     i18n.messages = { [LEFT_OPEN]: catalogTranslation(locale, LEFT_OPEN) };
     await click("Reject");
+    expect(container.querySelector("article [role=alert]")?.textContent).toBe(translated);
+  },
+);
+
+it.each([
+  ["ru", "Эта задача на доске изменилась после создания. Проверьте её на доске."],
+  ["zh-CN", "此看板事项在创建后已有变更。请在看板上查看。"],
+] as const)(
+  "renders the Undo board-changed sentence from the %s catalog",
+  async (locale, translated) => {
+    const board = {
+      ...proposal,
+      type: "board-item",
+      proposedContent: undefined,
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+      },
+      status: "applied",
+      appliedBoardItem: {
+        workspaceId: "workspace",
+        itemId: "board-a",
+        updatedAt: "2026-09-25T12:00:00.000Z",
+        duplicate: false,
+      },
+    };
+    api.list.mockResolvedValue({
+      reviews: [],
+      proposals: [board],
+      pendingCount: 0,
+      appliedThisWeek: 1,
+    });
+    api.revert.mockResolvedValue({
+      proposal: board,
+      conflict: {
+        before: "",
+        applied: "board-a",
+        current: BOARD_CHANGED,
+        expectedRevision: 0,
+        code: "board-changed",
+      },
+    });
+    await act(async () => root.render(<LearningInbox botId="bot" />));
+    i18n.locale = locale;
+    i18n.messages = { [BOARD_CHANGED]: catalogTranslation(locale, BOARD_CHANGED) };
+    await click("Undo");
     expect(container.querySelector("article [role=alert]")?.textContent).toBe(translated);
   },
 );

@@ -5,7 +5,7 @@ const COMPLETION_WORD = "done|complete|completed|fixed|resolved";
 const COMPLETION = new RegExp(`\\b(?:${COMPLETION_WORD})\\b`, "iu");
 const UN_COMPLETION = /\bun(?:completed|complete|resolved|fixed|done)\b/iu;
 const NEGATED_COMPLETION = new RegExp(
-  `\\b(?:nothing|nobody|nowhere|none|never|not|no|cannot|unable to|(?:can|couldn|won|didn|isn|wasn|hasn|haven)['’]?t)(?:\\s+[\\w'’]+){0,3}?\\s+(?:${COMPLETION_WORD})\\b`,
+  `\\b(?:nothing|nobody|nowhere|none|never|not|no(?!\\s+\\d)|cannot|unable to|(?:can|couldn|won|didn|isn|wasn|hasn|haven)['’]?t)(?:\\s+[\\w'’]+){0,3}?\\s+(?:${COMPLETION_WORD})\\b`,
   "iu",
 );
 
@@ -13,9 +13,10 @@ const NEGATED_COMPLETION = new RegExp(
  * An empty reason or a completion word means done, unless a negation comes up to three
  * words before any completion word. Negations are not, never, no, nothing, nobody, none,
  * nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't, and
- * unable to ("not done", "can't get it fixed", "nothing was resolved"). A completion word
- * with an un- prefix (unresolved, unfixed, undone, uncompleted) is negated. Every other
- * reason, including "won't fix", is closed otherwise.
+ * unable to ("not done", "can't get it fixed", "nothing was resolved"). "no" followed by
+ * a number is a label, not a negation ("ticket no 12 resolved"). A completion word with
+ * an un- prefix (unresolved, unfixed, undone, uncompleted) is negated. Every other reason,
+ * including "won't fix" and "no fix was possible", is closed otherwise.
  */
 export function boardFilingOutcome(reason = ""): "completed" | "closed-other" {
   if (!reason.trim()) return "completed";

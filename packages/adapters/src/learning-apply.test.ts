@@ -1,6 +1,5 @@
 import type { LearningProposal, RuntimePin } from "@ardurbot/contracts";
-import type { PrismaClient } from "@ardurbot/db";
-import { observeBoardItems } from "@ardurbot/db";
+import { IsolationError, observeBoardItems, type PrismaClient } from "@ardurbot/db";
 import { MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import { memoryDatabaseFake, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
 import { describe, expect, it, vi } from "vitest";
@@ -1393,13 +1392,17 @@ async function pendingBoard(f: ReturnType<typeof fixture>) {
 }
 
 it("owns a Beads item listed at the reservation's whole second and reuses the previous second", async () => {
-  const reservedAt = new Date("2026-09-24T21:16:44.171Z");
+  const reservedAt = new Date(Date.now() - 2_000);
+  reservedAt.setMilliseconds(171);
+  const sameSecond = new Date(Math.floor(reservedAt.getTime() / 1000) * 1000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
   const f = fixture();
   const created = {
     id: "board-a",
     status: "open",
-    createdAt: "2026-09-24T21:16:44Z",
-    updatedAt: "2026-09-24T21:16:44Z",
+    createdAt: sameSecond,
+    updatedAt: sameSecond,
     title: "Finish the import follow-up",
   };
   const close = vi.fn(async () => [{ ...created, status: "closed" }]);
@@ -1445,11 +1448,14 @@ it("owns a Beads item listed at the reservation's whole second and reuses the pr
   expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
 
   const older = fixture();
+  const previousSecond = new Date(Math.floor(reservedAt.getTime() / 1000) * 1000 - 1000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
   const previous = {
     id: "board-b",
     status: "open",
-    createdAt: "2026-09-24T21:16:43Z",
-    updatedAt: "2026-09-24T21:16:43Z",
+    createdAt: previousSecond,
+    updatedAt: previousSecond,
     title: "Finish the import follow-up",
   };
   const olderClose = vi.fn(async () => [{ ...previous, status: "closed" }]);
@@ -1726,4 +1732,299 @@ it("holds the filing lock through the learning save", async () => {
   await apply.approve(proposal.id, actor);
   expect(opens.at(-1)).toBe(1);
   expect(opens).toContain(0);
+});
+
+const BOARD_TITLE = "Finish the import follow-up";
+
+async function hollowProposal(f: ReturnType<typeof fixture>, reservedAt: Date) {
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: BOARD_TITLE,
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  f.filings.push({
+    id: "reservation",
+    ...actor,
+    botId: "bot",
+    workspaceId: null,
+    itemId: null,
+    learningProposalId: proposal.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+    createdAt: reservedAt,
+  });
+  return proposal;
+}
+
+function listedBoard(
+  f: ReturnType<typeof fixture>,
+  listed: {
+    id: string;
+    createdAt: string;
+    filedBy?: { runId: string; botId: string; botName: string } | null;
+  },
+) {
+  const open = {
+    id: listed.id,
+    status: "open",
+    createdAt: listed.createdAt,
+    updatedAt: listed.createdAt,
+    title: BOARD_TITLE,
+    filedBy: listed.filedBy ?? null,
+  };
+  const created = {
+    id: "board-new",
+    status: "open",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    title: BOARD_TITLE,
+  };
+  const close = vi.fn(async (ids: string[]) => [
+    { ...(ids[0] === created.id ? created : open), status: "closed" },
+  ]);
+  const create = vi.fn(async () => created);
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => [open]),
+    create,
+    show: vi.fn(async (id: string) => (id === created.id ? created : open)),
+    close,
+  } as never);
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  return { apply, create, close, open };
+}
+
+it("does not claim a next-day same-title item", async () => {
+  const f = fixture();
+  const reservedAt = new Date(Date.now() - 60_000);
+  const { apply, create, close } = listedBoard(f, {
+    id: "board-human",
+    createdAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  const proposal = await hollowProposal(f, reservedAt);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-human",
+    duplicate: true,
+  });
+  expect(create).not.toHaveBeenCalled();
+  await apply.revert(proposal.id, actor);
+  expect(close).not.toHaveBeenCalled();
+});
+
+it("does not claim an item that another run already filed", async () => {
+  const f = fixture();
+  const reservedAt = new Date(Date.now() - 60_000);
+  const { apply, create, close } = listedBoard(f, {
+    id: "board-other",
+    createdAt: new Date(reservedAt.getTime() + 30_000).toISOString(),
+    filedBy: { runId: "other-run", botId: "other", botName: "Other" },
+  });
+  const proposal = await hollowProposal(f, reservedAt);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-other",
+    duplicate: true,
+  });
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings.some((row) => row.itemId === "board-other" && row.reused === false)).toBe(false);
+  await apply.revert(proposal.id, actor);
+  expect(close).not.toHaveBeenCalled();
+});
+
+it("owns an item created inside the reservation window when it has no filer", async () => {
+  const f = fixture();
+  const reservedAt = new Date(Date.now() - 60_000);
+  const { apply, create, close } = listedBoard(f, {
+    id: "board-owned",
+    createdAt: new Date(reservedAt.getTime() + 30_000).toISOString(),
+  });
+  const proposal = await hollowProposal(f, reservedAt);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-owned",
+    duplicate: false,
+  });
+  expect(create).not.toHaveBeenCalled();
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-owned"], "Undone from Learning");
+});
+
+it("deletes a hollow reservation older than 15 minutes and creates a new item", async () => {
+  const f = fixture();
+  const reservedAt = new Date(Date.now() - 20 * 60_000);
+  const { apply, create, close } = listedBoard(f, {
+    id: "board-later",
+    createdAt: new Date(reservedAt.getTime() + 60_000).toISOString(),
+  });
+  const proposal = await hollowProposal(f, reservedAt);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(f.filings.some((row) => row.id === "reservation")).toBe(false);
+  expect(create).toHaveBeenCalledOnce();
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-new",
+    duplicate: false,
+  });
+  expect(f.filings.some((row) => row.itemId === "board-later" && row.reused === false)).toBe(false);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-new"], "Undone from Learning");
+});
+
+it("leaves the item open and the filing intact when Undo's learning save loses the compaction generation", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  show.mockImplementation(async () => {
+    f.thread.historyCompactionGeneration += 1;
+    return {
+      id: "board-a",
+      status: "open",
+      createdAt: "2026-09-25T12:00:00.000Z",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+    };
+  });
+  await expect(apply.revert(proposal.id, actor)).rejects.toBeInstanceOf(IsolationError);
+  expect(close).not.toHaveBeenCalled();
+  expect(f.filings).toHaveLength(1);
+  expect(f.filings[0]).toMatchObject({ itemId: "board-a", learningProposalId: proposal.id });
+  expect(f.proposals[0]?.status).toBe("applied");
+});
+
+it("leaves Undo reverted with a close marker when the board close fails, and a retry finishes it", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  await expect(apply.revert(proposal.id, actor)).rejects.toThrow(/beads down/);
+  expect(f.proposals[0]?.status).toBe("reverted");
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", closePending: "Undone from Learning" }),
+  ]);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Undone from Learning";
+    return [{ ...item }];
+  });
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("treats a board item already closed as Undone from Learning as a finished Undo", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => ({ ...item }));
+  close.mockRejectedValueOnce(new Error("beads down"));
+  await expect(apply.revert(proposal.id, actor)).rejects.toThrow(/beads down/);
+  expect(f.proposals[0]?.status).toBe("reverted");
+  expect(f.filings[0]).toMatchObject({ closePending: "Undone from Learning" });
+  item.status = "closed";
+  item.closeReason = "Undone from Learning";
+  close.mockClear();
+  const finished = await apply.revert(proposal.id, actor);
+  expect(finished.proposal.status).toBe("reverted");
+  expect(close).not.toHaveBeenCalled();
+  expect(f.filings).toEqual([]);
+});
+
+it("leaves the item open and the filing intact when Reject's learning save loses the compaction generation", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+  });
+  show.mockImplementation(async () => {
+    f.thread.historyCompactionGeneration += 1;
+    return {
+      id: "board-a",
+      status: "open",
+      createdAt: "2026-09-25T12:00:00.000Z",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+    };
+  });
+  await expect(apply.reject(proposal.id, actor)).rejects.toBeInstanceOf(IsolationError);
+  expect(close).not.toHaveBeenCalled();
+  expect(f.filings).toHaveLength(1);
+  expect(f.proposals[0]?.status).toBe("pending");
+});
+
+it("leaves Reject rejected with a close marker when the board close fails, and a retry finishes it", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+  });
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  await expect(apply.reject(proposal.id, actor)).rejects.toThrow(/beads down/);
+  expect(f.proposals[0]?.status).toBe("rejected");
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", closePending: "Rejected from Learning" }),
+  ]);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Rejected from Learning";
+    return [{ ...item }];
+  });
+  const rejected = await apply.reject(proposal.id, actor);
+  expect(rejected.proposal.status).toBe("rejected");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("names an Undo board conflict board-changed", async () => {
+  const { apply, proposal: create } = boardFixture({
+    duplicate: false,
+    updatedAt: "2026-09-25T13:00:00.000Z",
+  });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.conflict).toMatchObject({
+    code: "board-changed",
+    current: "This board item changed after it was filed. Review it on the Board.",
+  });
 });

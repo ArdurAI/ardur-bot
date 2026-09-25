@@ -38,6 +38,12 @@ it("records the normalized title on a filing without rewriting existing rows", (
   expect(titled).not.toMatch(/\bNOT NULL\b|\bDROP TABLE\b|\bDELETE FROM\b|\bTRUNCATE\b/);
 });
 
+it("records a pending close without rewriting existing filing rows", () => {
+  const pending = migration("20260925210000_board_filing_close_pending");
+  expect(pending).toContain('ADD COLUMN "closePending" TEXT');
+  expect(pending).not.toMatch(/\bNOT NULL\b|\bDROP TABLE\b|\bDELETE FROM\b|\bTRUNCATE\b/);
+});
+
 it("names every Board migration in the operator checklist", () => {
   const docs = readFileSync(new URL("../../../docs/board.md", import.meta.url), "utf8");
   const named = [...docs.matchAll(/`(\d{14}_[a-z_]+)`/g)].map((match) => match[1]);
@@ -46,6 +52,7 @@ it("names every Board migration in the operator checklist", () => {
     "20260925180000_board_filing_outcomes",
     "20260925190000_board_filing_reuse",
     "20260925200000_board_filing_title_key",
+    "20260925210000_board_filing_close_pending",
   ])
     expect(named).toContain(name);
   for (const name of named)

@@ -548,10 +548,10 @@ function LearningCard({
                   This board item changed after it was filed, so it was left open for review on the
                   Board.
                 </Trans>
-              ) : conflict.current ? (
-                conflict.current
-              ) : (
+              ) : conflict.code === "board-changed" || !conflict.current ? (
                 <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
+              ) : (
+                conflict.current
               )}
             </p>
           ) : (

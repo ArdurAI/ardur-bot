@@ -1134,6 +1134,7 @@ it("acquires the filing lock from its own pool when the shared pool is exhausted
 it("keeps a created item on its reservation when recording the id fails, then the same run attaches it", async () => {
   const { board, provider, filings, prisma } = service();
   const created = item("Ship the board");
+  created.createdAt = new Date(Date.now() + 5_000).toISOString();
   provider.create.mockResolvedValue(created);
   const update = prisma.botBoardFiling.update.getMockImplementation();
   prisma.botBoardFiling.update.mockImplementation(async () => {
@@ -1400,4 +1401,107 @@ it("claims a hollow reservation only for its own title and does not take an item
   });
   expect(taken.filings.find((row) => row.id === "hollow")).toMatchObject({ itemId: null });
   expect(taken.provider.create).not.toHaveBeenCalled();
+});
+
+it("does not claim a next-day item from a hollow reservation on the tool path", async () => {
+  const later = item("Ship the board");
+  later.createdAt = new Date(Date.now() + 86_400_000).toISOString();
+  const { board, provider, filings } = service({ open: [later] });
+  filings.push(
+    filingRow({
+      id: "hollow",
+      itemId: null,
+      titleKey: "ship the board",
+      createdAt: new Date(),
+    }),
+  );
+  const result = await executeBoardTool(
+    board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "Ship the board" } },
+    { upkeep: true },
+  );
+  expect(result).toMatchObject({
+    duplicate: true,
+    item: { id: "board-a" },
+  });
+  expect(filings.find((row) => row.id === "hollow")).toMatchObject({ itemId: null });
+  expect(provider.create).not.toHaveBeenCalled();
+});
+
+it("does not claim an item another run filed from a hollow reservation on the tool path", async () => {
+  const theirs = item("Ship the board");
+  theirs.createdAt = new Date().toISOString();
+  theirs.filedBy = {
+    runId: "other-run",
+    botId: "other",
+    botName: "Other",
+    groupId: null,
+    messageId: null,
+  };
+  const { board, provider, filings } = service({ open: [theirs] });
+  filings.push(
+    filingRow({
+      id: "hollow",
+      itemId: null,
+      titleKey: "ship the board",
+      createdAt: new Date(Date.now() - 60_000),
+    }),
+  );
+  const result = await executeBoardTool(
+    board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "Ship the board" } },
+    { upkeep: true },
+  );
+  expect(result).toMatchObject({ duplicate: true, item: { id: "board-a" } });
+  expect(filings.find((row) => row.id === "hollow")).toMatchObject({ itemId: null });
+  expect(provider.create).not.toHaveBeenCalled();
+});
+
+it("claims a hollow reservation for an item created inside the window with no filer", async () => {
+  const owned = item("Ship the board");
+  const reservedAt = new Date(Date.now() - 60_000);
+  owned.createdAt = new Date(reservedAt.getTime() + 30_000).toISOString();
+  const { board, provider, filings } = service({ open: [owned] });
+  filings.push(
+    filingRow({ id: "hollow", itemId: null, titleKey: "ship the board", createdAt: reservedAt }),
+  );
+  const result = await executeBoardTool(
+    board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "ship the board" } },
+    { upkeep: true },
+  );
+  expect(result).not.toMatchObject({ duplicate: true });
+  expect(filings).toEqual([
+    expect.objectContaining({ id: "hollow", itemId: "board-a", workspaceId: "workspace" }),
+  ]);
+  expect(provider.create).not.toHaveBeenCalled();
+});
+
+it("deletes a hollow reservation older than 15 minutes and creates a new item on the tool path", async () => {
+  const reservedAt = new Date(Date.now() - 20 * 60_000);
+  const later = item("Ship the board");
+  later.id = "board-later";
+  later.createdAt = new Date(reservedAt.getTime() + 60_000).toISOString();
+  const { board, provider, filings } = service({ open: [later] });
+  filings.push(
+    filingRow({ id: "hollow", itemId: null, titleKey: "ship the board", createdAt: reservedAt }),
+  );
+  const result = await executeBoardTool(
+    board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "Ship the board" } },
+    { upkeep: true },
+  );
+  expect(filings.some((row) => row.id === "hollow")).toBe(false);
+  expect(provider.create).toHaveBeenCalledOnce();
+  expect(result).toMatchObject({ id: "board-a" });
+  expect(result).not.toMatchObject({ duplicate: true });
+  expect(filings.some((row) => row.itemId === "board-later")).toBe(false);
 });
