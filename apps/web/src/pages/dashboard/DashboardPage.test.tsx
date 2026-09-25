@@ -116,6 +116,7 @@ async function renderPage(scope = "viewer:space") {
       </MemoryRouter>,
     ),
   );
+  await act(() => vi.dynamicImportSettled());
   await vi.waitFor(() => expect(node.querySelectorAll('[aria-busy="true"]').length).toBe(0));
 }
 it("loads seven independent lazy panels and renders honest empty states", async () => {

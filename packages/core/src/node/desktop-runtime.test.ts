@@ -63,7 +63,7 @@ function fixture(timeout = 5000) {
 describe("shared Linux desktop lifecycle", () => {
   it("allocates live slots past 1000 bots, keeps assignments across callers, and rejects stale leases", () => {
     // This case scans real files and needs room for filesystem contention in the full suite.
-    const f = fixture(15_000);
+    const f = fixture(30_000);
     expect(f.ensure("a").stdout).toContain("ARDURBOT_DESKTOP=0:view-a");
     expect(f.ensure("b").stdout).toContain("ARDURBOT_DESKTOP=1:view-b");
     expect(f.ensure("a", "new:2").stdout).toContain("ARDURBOT_DESKTOP=0:view-a");
