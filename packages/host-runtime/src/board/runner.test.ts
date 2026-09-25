@@ -1,6 +1,7 @@
 import {
   chmod,
   copyFile,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -226,13 +227,10 @@ it("initializes a folder whose .beads directory has no metadata or config", asyn
   expect(result.ok).toBe(true);
   expect(await readFile(path.join(f.root, ".beads", "metadata.json"), "utf8")).toBe("{}");
 });
-it("surfaces the redacted first stderr line when init fails", async () => {
-  const f = await fixture({
-    BOARD_FIXTURE_INIT_STDERR:
-      "Initialization failed for person@example.test token=fixture-secret\nprivate detail",
-  });
+async function failedInit(stderr: string) {
+  const f = await fixture({ BOARD_FIXTURE_INIT_STDERR: stderr });
   await rm(path.join(f.workspace.path, ".beads"), { recursive: true });
-  const result = await f.runner.run(
+  return f.runner.run(
     {
       action: "init",
       argv: [],
@@ -241,6 +239,11 @@ it("surfaces the redacted first stderr line when init fails", async () => {
       workspace: { kind: "space" },
     },
     "space",
+  );
+}
+it("redacts the Beads error line when init fails", async () => {
+  const result = await failedInit(
+    "warning: beads.role not configured (GH#2950).\nInitialization failed for person@example.test token=fixture-secret",
   );
   expect(result).toMatchObject({
     ok: false,
@@ -251,6 +254,94 @@ it("surfaces the redacted first stderr line when init fails", async () => {
   });
   expect(JSON.stringify(result)).not.toContain("fixture-secret");
 });
+it.each([
+  [
+    "show does-not-exist",
+    [
+      "warning: beads.role not configured (GH#2950).",
+      "  Fix: git config beads.role maintainer",
+      "  Or:  git config beads.role contributor",
+      'Error fetching does-not-exist: no issue found matching "does-not-exist"',
+    ].join("\n"),
+    'Beads reported: Error fetching does-not-exist: no issue found matching "does-not-exist".',
+  ],
+  [
+    "repository id warning",
+    [
+      "Warning: failed to update git exclude: not a git repository",
+      "Warning: could not compute repository ID: not a git repository",
+      "Warning: could not compute clone ID: not a git repository: not a git repository: exit status 128",
+      "Error: --from-jsonl specified but /fixture/board/.beads/issues.jsonl does not exist",
+    ].join("\n"),
+    "Beads reported: Error: --from-jsonl specified but /fixture/board/.beads/issues.jsonl does not exist.",
+  ],
+  [
+    "bare error line",
+    "Error:\ndatabase not found: board",
+    "Beads reported: database not found: board.",
+  ],
+])("reports the Beads error from %s stderr", async (_shape, stderr, message) => {
+  expect(await failedInit(stderr)).toMatchObject({
+    ok: false,
+    problem: { code: "command_failed", message },
+  });
+});
+it("keeps the generic sentence when stderr has only warnings", async () => {
+  expect(
+    await failedInit(
+      "warning: beads.role not configured (GH#2950).\nWarning: could not compute repository ID: not a git repository\n",
+    ),
+  ).toMatchObject({
+    ok: false,
+    problem: {
+      code: "command_failed",
+      message: "Beads could not finish this change. Check the item and its dependencies.",
+    },
+  });
+});
+it.each(["beads.db", "embeddeddolt"] as const)(
+  "refuses %s without settings and does not report it as initialized",
+  async (entry) => {
+    const f = await fixture();
+    const beads = path.join(f.root, ".beads");
+    await mkdir(beads);
+    if (entry === "beads.db") await writeFile(path.join(beads, entry), "");
+    else await mkdir(path.join(beads, entry));
+    const discovered = await f.runner.run(
+      { action: "discover", argv: [], actor: "Owner" },
+      "space",
+    );
+    expect(discovered).toMatchObject({
+      ok: true,
+      workspaces: expect.arrayContaining([
+        expect.objectContaining({ path: f.root, kind: "folder", initialized: false }),
+      ]),
+    });
+    expect(
+      await f.runner.run(
+        {
+          action: "init",
+          argv: [],
+          actor: "Owner",
+          prefix: "board",
+          workspace: { kind: "folder", path: f.root },
+        },
+        "space",
+      ),
+    ).toMatchObject({
+      ok: false,
+      problem: {
+        code: "command_failed",
+        message:
+          "This folder has board data without its settings files. Move its .beads folder aside, then start the board.",
+      },
+    });
+    await expect(readFile(path.join(beads, "metadata.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect((await lstat(path.join(beads, entry))).isDirectory()).toBe(entry === "embeddeddolt");
+  },
+);
 it("rejects an init that exits successfully without creating metadata", async () => {
   const f = await fixture({ BOARD_FIXTURE_INIT_EMPTY: "1" });
   await rm(path.join(f.workspace.path, ".beads"), { recursive: true });

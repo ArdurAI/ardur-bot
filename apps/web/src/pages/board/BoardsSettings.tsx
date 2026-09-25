@@ -1,10 +1,18 @@
 import type { BoardConfiguration, BoardProblem, BoardWorkspace } from "@ardurbot/contracts/board";
 import { Button, Dialog, DialogContent, DialogTitle, Input, NativeSelect } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { fallbackORPCErrorMessage, ORPCError } from "@orpc/client";
 import { useEffect, useState } from "react";
 import { SettingsRow } from "../../components/SettingsRow";
 import { rpc } from "../../lib/rpc";
 import type { SettingsPageProps } from "../settings-types";
+
+function actionMessage(error: unknown, fallback: string) {
+  if (!(error instanceof ORPCError) || !error.message) return fallback;
+  if (!error.defined && error.message === fallbackORPCErrorMessage(error.code, undefined))
+    return fallback;
+  return error.message;
+}
 
 export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageProps) {
   const { t } = useLingui();
@@ -44,14 +52,16 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
     setBusy(true);
     onBusyChange(true);
     setActionError(null);
+    let acted = false;
     try {
       await action();
+      acted = true;
       setConfirm(null);
       await load();
     } catch (error) {
       setActionError({
-        target,
-        message: error instanceof Error ? error.message : t`Could not complete this action.`,
+        target: acted ? "refresh" : target,
+        message: actionMessage(error, t`Could not complete this action.`),
       });
     } finally {
       setBusy(false);
@@ -137,7 +147,10 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
         <NativeSelect
           aria-label={t`Board`}
           value={board?.id ?? ""}
-          onChange={(event) => setId(event.target.value)}
+          onChange={(event) => {
+            setId(event.target.value);
+            setActionError(null);
+          }}
         >
           {boards.map((row) => (
             <option key={row.id} value={row.id}>
@@ -228,28 +241,30 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
           <SettingsRow
             label={t`Allowed bots`}
             content={
-              !board.allowAllBots ? (
+              !board.allowAllBots || actionError?.target === "bots" ? (
                 <div className="space-y-2 py-2">
-                  {bots.map((bot) => (
-                    <label key={bot.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={board.allowedBotIds.includes(bot.id)}
-                        disabled={busy}
-                        onChange={(event) =>
-                          void configure(
-                            {
-                              allowedBotIds: event.target.checked
-                                ? [...board.allowedBotIds, bot.id]
-                                : board.allowedBotIds.filter((id) => id !== bot.id),
-                            },
-                            "bots",
-                          )
-                        }
-                      />
-                      {bot.name}
-                    </label>
-                  ))}
+                  {!board.allowAllBots
+                    ? bots.map((bot) => (
+                        <label key={bot.id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={board.allowedBotIds.includes(bot.id)}
+                            disabled={busy}
+                            onChange={(event) =>
+                              void configure(
+                                {
+                                  allowedBotIds: event.target.checked
+                                    ? [...board.allowedBotIds, bot.id]
+                                    : board.allowedBotIds.filter((id) => id !== bot.id),
+                                },
+                                "bots",
+                              )
+                            }
+                          />
+                          {bot.name}
+                        </label>
+                      ))
+                    : null}
                   {actionError?.target === "bots" ? (
                     <p role="alert">{actionError.message}</p>
                   ) : null}

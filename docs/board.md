@@ -57,9 +57,14 @@ one `<app home>/board/.beads/` for every space would share unrelated work. Prefi
 are derived from the space name. `board_workspaces` records kind, path, prefix,
 enabled state and ownership. Existing folder prefixes are read from Beads.
 
-Registered folders appear in the picker. Existing `.beads/` folders are opened
-directly. An empty registered folder requires the owner to choose
-`Start board`; a dialog lists the files before initialization.
+Registered folders appear in the picker. A folder whose `.beads/` directory
+contains `metadata.json` or `config.yaml` is opened directly. A `.beads/`
+directory that has `beads.db` or `embeddeddolt/` but neither settings file is
+not a board: discovery reports it as not initialized, and Start board refuses
+with "This folder has board data without its settings files. Move its .beads
+folder aside, then start the board." Nothing is deleted. An empty registered
+folder requires the owner to choose `Start board`; a dialog lists the files
+before initialization.
 The exact initialization flags tested against `bd version 1.2.2 (6c124203e)` are:
 
 ```text

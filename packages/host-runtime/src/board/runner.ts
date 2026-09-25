@@ -73,6 +73,20 @@ async function hasBoard(beads: string) {
     (await exists(path.join(beads, "config.yaml")))
   );
 }
+async function hasBoardData(beads: string) {
+  return (
+    (await exists(path.join(beads, "beads.db"))) || (await exists(path.join(beads, "embeddeddolt")))
+  );
+}
+function boardFailureDetail(stderr: string) {
+  let detail = "";
+  for (const line of stderr.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || /^warning:/i.test(trimmed) || /^error:$/i.test(trimmed)) continue;
+    detail = trimmed;
+  }
+  return redactHostStatus(detail);
+}
 async function noLinks(root: string, budget = { remaining: 20_000 }) {
   if (--budget.remaining < 0)
     return fail("forbidden", "This board is too large to inspect safely.");
@@ -198,7 +212,7 @@ export class BoardRunner {
         },
         (error, stdout, stderr) => {
           if (!error) return resolve(stdout);
-          const diagnostic = redactHostStatus(stderr);
+          const diagnostic = boardFailureDetail(stderr);
           const code =
             error.killed || error.name === "AbortError"
               ? "timeout"
@@ -332,6 +346,11 @@ export class BoardRunner {
             if (initialized && request.workspace?.kind === "space")
               return { ok: true, version, path: directory };
             if (initialized) return fail("command_failed", "This folder already has a board.");
+            if (await hasBoardData(beads))
+              return fail(
+                "command_failed",
+                "This folder has board data without its settings files. Move its .beads folder aside, then start the board.",
+              );
             if (!request.prefix) return fail("forbidden", "Choose a board prefix.");
             await privateDirectory(directory, ".beads");
             await chmod(beads, 0o700);
