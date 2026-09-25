@@ -1,10 +1,16 @@
-import type { AdapterContext } from "@ardurbot/adapter-kit";
+import type {
+  AdapterContext,
+  AgentHomeStore,
+  JobPublisher,
+  SandboxProvider,
+} from "@ardurbot/adapter-kit";
 import { choosePlacement, unknownCapacity } from "@ardurbot/contracts/fleet";
-import type { PrismaClient } from "@ardurbot/db";
+import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { afterEach, expect, it, vi } from "vitest";
 import { DockerSandboxProvider } from "../docker-sandbox.js";
 import { createRunSandbox } from "../host-aware-sandbox.js";
 import { FleetCatalog } from "./catalog.js";
+import { placeRunComputer } from "./placement.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -76,4 +82,130 @@ it("uses the configured desktop fallback for null bindings and can place work ba
     version: "test",
     os: "linux",
   });
+});
+
+it("lists a local Docker computer separately when Kubernetes is the default and places from that row", async () => {
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  const dockerCapacity = {
+    ...unknownCapacity(),
+    source: "docker" as const,
+    memoryFree: 512 * 1024 ** 2,
+  };
+  const kubernetesCapacity = {
+    ...unknownCapacity(),
+    source: "kubernetes-metrics" as const,
+    memoryFree: 32 * 1024 ** 3,
+  };
+  vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockResolvedValue({
+    name: "docker",
+    rootless: false,
+    version: "test",
+    os: "linux",
+    capacity: dockerCapacity,
+  });
+  const bot = {
+    id: "bot",
+    name: "Bot",
+    runtimeKind: "pi",
+    archivedAt: null,
+    placementConsent: false,
+    moveAutomatically: false,
+    pendingPlacement: null,
+  };
+  const computer = {
+    id: "computer",
+    homeKey: "home",
+    providerRef: "ref",
+    state: "running",
+    networkEgress: true,
+    kind: "docker",
+    imageProfile: "base",
+    connectionId: null,
+    maintenanceId: null,
+    controlHolder: "none",
+    bots: [bot],
+  };
+  const prisma = {
+    connection: { findMany: async () => [] },
+    bot: {
+      findMany: vi.fn(async () => [{ ...bot, computer }]),
+      update: vi.fn(async () => ({})),
+    },
+    space: {
+      findUniqueOrThrow: async () => ({ placement: { mode: "threshold", minimumFreeGb: 4 } }),
+    },
+    deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+    run: {
+      findUniqueOrThrow: async () => ({
+        id: "run",
+        userId: "owner",
+        spaceId: "space",
+        botId: "bot",
+        threadId: "thread",
+        runtimeComputer: null,
+        placement: null,
+        leaseOwner: "worker",
+        leaseFence: 1,
+        bot: { ...bot, computer },
+      }),
+      findUnique: async () => ({
+        status: "running",
+        startedAt: new Date(),
+        originDeviceGrantId: null,
+        remoteRootTaskId: null,
+        delegationId: null,
+      }),
+      findFirst: async () => null,
+      updateMany: async () => ({ count: 1 }),
+    },
+    thread: { update: async () => ({ nextEventSeq: 2 }) },
+    event: { create: async () => ({ seq: 1 }) },
+    $queryRaw: async () => [],
+    $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(prisma),
+  };
+  const context: AdapterContext = {
+    userId: "owner",
+    spaceId: "space",
+    operationId: "list",
+    traceId: "list",
+    signal: new AbortController().signal,
+  };
+  const fallback = {
+    describe: () => ({ id: "kubernetes" }),
+    capacity: async () => kubernetesCapacity,
+  } as unknown as SandboxProvider;
+  const catalog = new FleetCatalog(
+    prisma as unknown as PrismaClient,
+    { load: () => "" },
+    {},
+    fallback,
+  );
+  const fleet = await catalog.list(context);
+  const docker = fleet.targets.find(
+    (target) => target.connectionId === null && target.kind === "docker",
+  );
+  const kubernetes = fleet.targets.find((target) => target.kind === "kubernetes");
+  expect(fleet.defaultTargetId).toBe("default");
+  expect(docker?.id).toBeTruthy();
+  expect(docker?.id).not.toBe(kubernetes?.id);
+  expect(docker).toMatchObject({
+    capacity: expect.objectContaining({ memoryFree: dockerCapacity.memoryFree }),
+    bots: [{ id: "bot", name: "Bot" }],
+  });
+  expect(kubernetes?.bots).toEqual([]);
+  const deps = {
+    prisma: prisma as unknown as PrismaClient,
+    home: {} as AgentHomeStore,
+    sandbox: {} as SandboxProvider,
+    jobs: {} as JobPublisher,
+    events: { append: vi.fn(), notify: vi.fn(async () => undefined) } as unknown as ThreadEvents,
+  };
+  expect(await placeRunComputer(deps, catalog, "run", new AbortController().signal)).toBe(false);
+  expect(prisma.bot.update).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: {
+        pendingPlacement: expect.objectContaining({ fromTargetId: docker?.id, runId: "run" }),
+      },
+    }),
+  );
 });

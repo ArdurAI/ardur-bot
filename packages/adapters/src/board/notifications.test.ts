@@ -1,8 +1,30 @@
 import type { JobPublisher, NotificationProvider } from "@ardurbot/adapter-kit";
-import type { PrismaClient } from "@ardurbot/db";
+import type { Pool, PrismaClient } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
 import { createJobReconciler } from "../job-reconciler.js";
 import { createBoardNotificationDelivery, deliverBoardNotifications } from "./notifications.js";
+
+function notificationPool(acquired = true) {
+  const open = new Set<object>();
+  const queries: Array<{ sql: string; params?: unknown[] }> = [];
+  const pool = {
+    connect: vi.fn(async () => {
+      const client = {
+        query: vi.fn(async (sql: string, params?: unknown[]) => {
+          queries.push({ sql, params });
+          if (sql.includes("pg_try_advisory_xact_lock")) return { rows: [{ acquired }] };
+          return { rows: [] };
+        }),
+        release: vi.fn(() => {
+          open.delete(client);
+        }),
+      };
+      open.add(client);
+      return client;
+    }),
+  };
+  return { pool: pool as unknown as Pick<Pool, "connect">, open, queries };
+}
 
 function fixture() {
   const workspace = { id: "board", spaceId: "space", ownerUserId: "owner", enabled: true };
@@ -108,7 +130,7 @@ it("keeps core recovery independent of a stalled push, bounds cycles, and aborts
         );
       }),
   );
-  const leadership = { tryAcquire: vi.fn(async () => true), release: vi.fn(async () => undefined) };
+  const { pool, open } = notificationPool();
   const db = Object.assign(prisma, {
     run: { findMany: vi.fn(async () => []) },
     routine: { findMany: vi.fn(async () => []) },
@@ -118,7 +140,7 @@ it("keeps core recovery independent of a stalled push, bounds cycles, and aborts
   const delivery = createBoardNotificationDelivery({
     prisma: db as unknown as PrismaClient,
     notifications: notifications as unknown as NotificationProvider,
-    leadership,
+    pool,
   });
   try {
     delivery.start();
@@ -145,20 +167,45 @@ it("keeps core recovery independent of a stalled push, bounds cycles, and aborts
     vi.useRealTimers();
   }
   expect(active).toBe(0);
-  expect(leadership.release).toHaveBeenCalledOnce();
+  expect(open.size).toBe(0);
+});
+it("returns the board notification pool client after a delivery tick", async () => {
+  vi.useFakeTimers();
+  const { prisma, notifications } = fixture();
+  const { pool, open, queries } = notificationPool();
+  const delivery = createBoardNotificationDelivery({
+    prisma: prisma as unknown as PrismaClient,
+    notifications: notifications as unknown as NotificationProvider,
+    pool,
+  });
+  try {
+    delivery.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(notifications.send).toHaveBeenCalled();
+    expect(open.size).toBe(0);
+    expect(queries).toContainEqual({
+      sql: "SELECT pg_try_advisory_xact_lock($1::integer, $2::integer) AS acquired",
+      params: [1_380_019_075, 3],
+    });
+  } finally {
+    await delivery.stop();
+    vi.useRealTimers();
+  }
 });
 it("does not drain notifications on a follower worker", async () => {
   vi.useFakeTimers();
   const { prisma, notifications } = fixture();
+  const { pool, open } = notificationPool(false);
   const delivery = createBoardNotificationDelivery({
     prisma: prisma as unknown as PrismaClient,
     notifications: notifications as unknown as NotificationProvider,
-    leadership: { tryAcquire: async () => false, release: async () => undefined },
+    pool,
   });
   try {
     delivery.start();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(prisma.boardNotification.findMany).not.toHaveBeenCalled();
+    expect(open.size).toBe(0);
   } finally {
     await delivery.stop();
     vi.useRealTimers();
