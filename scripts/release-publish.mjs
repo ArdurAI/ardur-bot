@@ -86,6 +86,25 @@ if (uploaded.status !== 0) {
 
 const edited = gh(["release", "edit", tag, "--draft=false", "--prerelease", "--latest=false"]);
 if (edited.status !== 0) {
-  if (createdDraft) gh(["release", "delete", tag, "--yes", "--cleanup-tag=false"]);
+  if (createdDraft) {
+    const again = gh(["release", "view", tag, "--json", "isDraft"]);
+    let published = false;
+    let draft = false;
+    if (again.status === 0) {
+      try {
+        const parsed = JSON.parse(again.stdout);
+        published = parsed.isDraft === false;
+        draft = parsed.isDraft === true;
+      } catch {
+        published = false;
+        draft = false;
+      }
+    }
+    if (draft) gh(["release", "delete", tag, "--yes", "--cleanup-tag=false"]);
+    if (published) {
+      process.stderr.write("warning: the edit reported an error after publishing\n");
+      process.exit(0);
+    }
+  }
   propagate(edited);
 }

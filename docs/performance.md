@@ -291,6 +291,11 @@ satisfies the guardrail:
 
 Startup sample floors are read from the T2 report. A set that contains only that report records
 `mandatory-evidence-unknown` for recovery, with the detail `missing T1 durable crash report`.
+Release notes render each guardrail summary from the report that satisfied that guardrail and
+name that report. Recovery and task lines come from the T1 crash report, not from the T2 startup
+report. The publication directory receives every report in the set, the gate hashes those bytes
+into `distributedDigests`, and the release upload includes them, so the bytes behind each
+guardrail remain after the 90-day workflow artifact expires.
 The pinned `docs/performance/release-policy.json` is unchanged.
 The five effect-safety counts are checked by their guardrail and the safety verdict rather than the
 budget selection, because seven reliability metrics in one family exceed the resample limit. Tool
@@ -312,7 +317,10 @@ equal the candidate report, records every derived publication file, and publicat
 exact flat file set before upload. Release notes and the gate label the SHA-256 of the exact
 attached `scoreboard-candidate.json` bytes separately from the canonical evidence-envelope SHA-256.
 A leftover draft for the same tag is deleted and publication continues. A published release is left
-in place. A draft created by a failed upload is deleted so the same tag can be retried.
+in place. If clearing the draft flag reports an error after the release is already public,
+publication keeps that release and exits successfully with a warning that the edit reported an
+error after publishing. A draft created by a failed upload, or an edit that fails while the
+release is still a draft, is deleted so the same tag can be retried.
 Credential-free pull-request runners do not receive provider credentials. Live provider evaluation
 stays explicit and budgeted.
 

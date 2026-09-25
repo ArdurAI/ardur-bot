@@ -98,6 +98,7 @@ jobs:
         with:
           pattern: scoreboard-reports
       - run: node scripts/desktop-release-assets.mjs version source publication/release-ready
+      - run: node scripts/scoreboard-index.mjs stage-reports --reports scoreboard-reports --directory publication/release-ready
       - env:
           SCOREBOARD_ARTIFACTS: publication/release-ready
           SCOREBOARD_WAIVER: \${{ inputs.evidence_waiver }}
@@ -1227,6 +1228,44 @@ describe("release publication gate", () => {
     }
   }
 
+  async function refreezeStartupPolicy(reportsRoot: string) {
+    const candidate = JSON.parse(await readFile(path.join(reportsRoot, "candidate.json"), "utf8"))
+      .report as ReturnType<typeof syntheticReport>;
+    const proposed = createBudgetPolicy(
+      {
+        metricIds: ["m13.wrong-pin"],
+        taskIds: [],
+        experimentIds: [],
+        crashBoundaryIds: [],
+        usage: false,
+      },
+      {
+        mode: "release",
+        environmentHash: candidate.environmentHash,
+        scenario: candidate.scenario,
+      },
+    );
+    const calibrationA = structuredClone(candidate);
+    calibrationA.id = "calibration-a";
+    calibrationA.createdAt = "2026-01-01T00:00:00.000Z";
+    const calibrationB = structuredClone(calibrationA);
+    calibrationB.id = "calibration-b";
+    calibrationB.createdAt = "2026-01-02T00:00:00.000Z";
+    await writeFile(
+      path.join(reportsRoot, "policy.json"),
+      JSON.stringify(
+        freezeBudgetPolicy(
+          proposed,
+          [
+            createPerformanceEvidenceEnvelope(calibrationA),
+            createPerformanceEvidenceEnvelope(calibrationB),
+          ],
+          "2026-01-03T00:00:00.000Z",
+        ),
+      ),
+    );
+  }
+
   async function rebindEnergy(
     reportsRoot: string,
     target: string,
@@ -1832,6 +1871,159 @@ describe("release publication gate", () => {
     } finally {
       await rm(paired.root, { recursive: true, force: true });
       await rm(startupOnly.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("renders recovery and tasks from the T1 crash report and publishes both reports", async () => {
+    const paired = await stagePassing();
+    try {
+      await setStartupTier(paired);
+      await refreezeStartupPolicy(paired.reportsRoot);
+      await writeCandidateCrashReport(paired.reportsRoot);
+      const crashPath = path.join(paired.reportsRoot, "candidate-crash.json");
+      const crashEnvelope = JSON.parse(await readFile(crashPath, "utf8")) as {
+        report: ReturnType<typeof syntheticReport>;
+      };
+      for (const task of crashEnvelope.report.tasks) {
+        task.status = "complete";
+        task.missingReason = null;
+        task.fixtureHash = hash("fixture");
+        task.graderHash = hash("grader");
+        task.trials = [
+          {
+            id: `trial-${task.id}`,
+            sessionId: "session-1",
+            pairId: `pair-${task.id}`,
+            traceId: "trace-01",
+            outcome: "success",
+            passed: true,
+            criticalPassed: true,
+            withinDeadline: true,
+          },
+        ];
+      }
+      const crashBytes = JSON.stringify(createPerformanceEvidenceEnvelope(crashEnvelope.report));
+      await writeFile(crashPath, crashBytes);
+      await writeFile(
+        path.join(paired.artifactRoot, "scoreboard-candidate-crash.json"),
+        crashBytes,
+      );
+      const policy = fixtureReleasePolicy();
+      await writeReleasePolicy(paired.root, {
+        ...policy,
+        guardrails: [
+          ...policy.guardrails,
+          {
+            id: "recovery",
+            metricIds: [],
+            taskIds: [],
+            experimentIds: [],
+            crashBoundaryIds: CRASH_BOUNDARIES.map((boundary) => boundary.id),
+            usage: false,
+          },
+          {
+            id: "deterministic-tasks",
+            metricIds: [],
+            taskIds: TASK_DEFINITIONS.map((task) => task.id),
+            experimentIds: [],
+            crashBoundaryIds: [],
+            usage: false,
+          },
+        ],
+      });
+      const result = await gate(paired, "index-evidence-notes");
+      expect(result.code).toBe(0);
+      const notes = releaseNotes(["fix: fixture"], result.gate);
+      const taskLine = notes.slice(notes.indexOf("Task success: ")).split("\n");
+      const recoveryLine = notes.slice(notes.indexOf("Recovery: ")).split("\n");
+      expect(taskLine[0]).not.toContain("unknown");
+      expect(taskLine[0]).toContain("trials passed");
+      expect(taskLine[1]).toBe("Report: candidate-crash.json.");
+      expect(recoveryLine[0]).toContain(
+        "crash-01 recovered by automatic recovery, safety passed, task completed",
+      );
+      expect(recoveryLine[0]).not.toContain("unknown");
+      expect(recoveryLine[1]).toBe("Report: candidate-crash.json.");
+      const candidateBytes = await readFile(
+        path.join(paired.artifactRoot, "scoreboard-candidate.json"),
+      );
+      for (const [name, bytes] of [
+        ["scoreboard-candidate.json", candidateBytes],
+        ["scoreboard-candidate-crash.json", Buffer.from(crashBytes)],
+      ] as const) {
+        const digest = createHash("sha256").update(bytes).digest("hex");
+        expect(result.gate.distributedDigests).toContainEqual(
+          expect.objectContaining({ name, sha256: digest, bytes: bytes.length }),
+        );
+      }
+    } finally {
+      await rm(paired.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("copies every candidate report into the release-ready upload list", async () => {
+    const paired = await stagePassing();
+    const work = await mkdtemp(path.join(os.tmpdir(), "scoreboard-ready-"));
+    try {
+      await setStartupTier(paired);
+      await writeCandidateCrashReport(paired.reportsRoot);
+      await cp(paired.reportsRoot, path.join(work, "scoreboard-reports"), { recursive: true });
+      const step = performanceYaml.split(
+        "      - name: Assemble the exact publication files before gating\n",
+      )[1];
+      const script = step
+        ?.split("        run: |\n")[1]
+        ?.split("\n      - ")[0]
+        ?.split("\n")
+        .map((line) => line.slice(10))
+        .join("\n");
+      expect(script).toBeTruthy();
+      const assembled = spawnSync(
+        "bash",
+        [
+          "-c",
+          `
+node() {
+  if [[ "$1" == *desktop-release-assets.mjs ]]; then
+    mkdir -p "$4"
+    return 0
+  fi
+  if [[ "$1" == *scoreboard-index.mjs ]]; then
+    command node "${repo}/scripts/scoreboard-index.mjs" "\${@:2}"
+    return
+  fi
+  command node "$@"
+}
+${script}`,
+        ],
+        {
+          cwd: work,
+          encoding: "utf8",
+          env: { ...process.env, RELEASE_VERSION: "0.1.0" },
+        },
+      );
+      expect(assembled.status).toBe(0);
+      const ready = path.join(work, "publication", "release-ready");
+      const listed = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "list-upload", "--directory", ready],
+        { encoding: "utf8" },
+      );
+      expect(listed.status).toBe(0);
+      const { publicationFiles } = await import("./scoreboard-index.mjs");
+      const uploaded = await publicationFiles(ready);
+      for (const source of ["candidate.json", "candidate-crash.json"]) {
+        const name = `scoreboard-${source}`;
+        const bytes = await readFile(path.join(paired.reportsRoot, source));
+        const digest = createHash("sha256").update(bytes).digest("hex");
+        expect(listed.stdout).toContain(name);
+        expect(uploaded).toContainEqual(
+          expect.objectContaining({ name, sha256: digest, bytes: bytes.length }),
+        );
+      }
+    } finally {
+      await rm(paired.root, { recursive: true, force: true });
+      await rm(work, { recursive: true, force: true });
     }
   }, 60_000);
 

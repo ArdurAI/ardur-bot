@@ -1277,13 +1277,36 @@ function guardrailRequirement(id, selection) {
 }
 
 function candidateEvidenceSet(primary, extras) {
-  if (!primary) return [];
+  if (!primary?.report) return [];
   const reports = [primary];
   for (const extra of extras ?? []) {
-    const report = extra?.report;
-    if (report && sameCandidateBuild(report, primary)) reports.push(report);
+    if (extra?.report && sameCandidateBuild(extra.report, primary.report)) reports.push(extra);
   }
   return reports;
+}
+
+const SUMMARY_FROM_GUARDRAIL = {
+  taskSummary: "deterministic-tasks",
+  safetySummary: "effect-safety",
+  recoverySummary: "recovery",
+  tokensSummary: "prompt-tokens",
+  cacheSummary: "cache-compaction",
+  compactionSummary: "cache-compaction",
+  memorySummary: "memory",
+  bundleSummary: "bundle",
+};
+
+function summariesFor(report) {
+  return {
+    taskSummary: taskSummary(report),
+    safetySummary: safetySummary(report),
+    recoverySummary: recoverySummary(report),
+    tokensSummary: report.usage.length ? `${report.usage.length} requests` : "unknown",
+    cacheSummary: metricSummary(report, "m05."),
+    compactionSummary: metricSummary(report, "m06."),
+    memorySummary: metricSummary(report, "m10."),
+    bundleSummary: metricSummary(report, "m11."),
+  };
 }
 
 export async function evaluatePublicationGate(input) {
@@ -1322,12 +1345,13 @@ export async function evaluatePublicationGate(input) {
       );
     candidateReport = verdict.evidence?.candidate.report ?? null;
   }
-  const candidateSet = candidateEvidenceSet(candidateReport, input.candidateReports);
+  const candidateSet = candidateEvidenceSet(input.candidateEvidence, input.candidateReports);
+  const satisfiedBy = new Map();
   if (candidateSet.length && releasePolicy)
     for (const { id, ...selection } of releasePolicy.policy.guardrails) {
       const requirement = guardrailRequirement(id, selection);
       const pool = requirement
-        ? candidateSet.filter((report) => report.scenario?.tier === requirement.tier)
+        ? candidateSet.filter((item) => item.report.scenario?.tier === requirement.tier)
         : candidateSet;
       if (requirement && !pool.length) {
         push("mandatory-evidence-unknown", id, `missing ${requirement.label}`);
@@ -1335,10 +1359,11 @@ export async function evaluatePublicationGate(input) {
       }
       let satisfied = false;
       let detail;
-      for (const report of pool) {
+      for (const item of pool) {
         try {
-          scoreboard.assertRequiredEvidence(report, selection);
+          scoreboard.assertRequiredEvidence(item.report, selection);
           satisfied = true;
+          satisfiedBy.set(id, item);
           break;
         } catch (error) {
           detail = error instanceof Error ? error.message : undefined;
@@ -1456,6 +1481,12 @@ export async function evaluatePublicationGate(input) {
   }
   if (input.attachedEvidenceValid !== true)
     push("artifact-digest-mismatch", "scoreboard-candidate.json");
+  for (const item of candidateSet) {
+    const name = `scoreboard-${item.source}`;
+    const published = files.find((file) => file.name === name);
+    if (!published || published.sha256 !== item.sha256 || published.bytes !== item.bytes)
+      push("artifact-digest-mismatch", name);
+  }
   const unique = [];
   for (const reason of reasons) {
     if (!unique.some((item) => item.code === reason.code && item.scope === reason.scope))
@@ -1476,29 +1507,15 @@ export async function evaluatePublicationGate(input) {
         `${right.metricId}:${right.baseline}:${right.outcome}:${right.statistic}`,
       ),
     );
-  const summaries = candidateReport
-    ? {
-        taskSummary: taskSummary(candidateReport),
-        safetySummary: safetySummary(candidateReport),
-        recoverySummary: recoverySummary(candidateReport),
-        tokensSummary: candidateReport.usage.length
-          ? `${candidateReport.usage.length} requests`
-          : "unknown",
-        cacheSummary: metricSummary(candidateReport, "m05."),
-        compactionSummary: metricSummary(candidateReport, "m06."),
-        memorySummary: metricSummary(candidateReport, "m10."),
-        bundleSummary: metricSummary(candidateReport, "m11."),
-      }
-    : {
-        taskSummary: "unknown",
-        safetySummary: "unknown",
-        recoverySummary: "unknown",
-        tokensSummary: "unknown",
-        cacheSummary: "unknown",
-        compactionSummary: "unknown",
-        memorySummary: "unknown",
-        bundleSummary: "unknown",
-      };
+  const fallback = candidateReport ? summariesFor(candidateReport) : null;
+  const summaries = {};
+  const summarySources = {};
+  for (const [key, guardrailId] of Object.entries(SUMMARY_FROM_GUARDRAIL)) {
+    const match = satisfiedBy.get(guardrailId);
+    const rendered = match ? summariesFor(match.report) : fallback;
+    summaries[key] = rendered ? rendered[key] : "unknown";
+    summarySources[key] = match?.source ?? null;
+  }
   for (const summary of Object.values(summaries))
     if (summary === "unknown" || summary.includes("unknown")) unknowns.push(summary);
   const requiredEnergy = REQUIRED_RELEASE_TARGETS.filter(
@@ -1525,6 +1542,7 @@ export async function evaluatePublicationGate(input) {
     verdictStatus: verdict?.status ?? "missing",
     rows,
     ...summaries,
+    summarySources,
     energySummary:
       requiredEnergy.length === REQUIRED_RELEASE_TARGETS.length
         ? `observed on ${requiredEnergy.join(", ")}`
@@ -1615,6 +1633,7 @@ export function renderScoreboardNotes(gate) {
       "compactionSummary",
       "memorySummary",
       "bundleSummary",
+      "summarySources",
       "energySummary",
       "attachedEvidenceSha256",
       "canonicalEnvelopeSha256",
@@ -1658,20 +1677,28 @@ export function renderScoreboardNotes(gate) {
       `| ${cell(row.metricId)} | ${cell(row.baseline)} | ${cell(row.outcome)} | ${cell(row.statistic)} | ${cell(row.samples)} | ${cell(row.estimate)} | ${interval} | ${cell(row.delta)} | ${cell(row.verdict)} |`,
     );
   }
-  lines.push(
-    "",
-    `Task success: ${gate.taskSummary}.`,
-    `Critical safety: ${gate.safetySummary}.`,
-    `Recovery: ${gate.recoverySummary}.`,
-    `Tokens: ${gate.tokensSummary}.`,
-    `Cache: ${gate.cacheSummary}.`,
-    `Compaction: ${gate.compactionSummary}.`,
-    `Memory: ${gate.memorySummary}.`,
-    `Bundles: ${gate.bundleSummary}.`,
-    `Energy: ${gate.energySummary}.`,
-    "",
-    "Unknowns:",
-  );
+  exactKeys(gate.summarySources, Object.keys(SUMMARY_FROM_GUARDRAIL), "invalid-gate");
+  lines.push("");
+  for (const [key, label] of [
+    ["taskSummary", "Task success"],
+    ["safetySummary", "Critical safety"],
+    ["recoverySummary", "Recovery"],
+    ["tokensSummary", "Tokens"],
+    ["cacheSummary", "Cache"],
+    ["compactionSummary", "Compaction"],
+    ["memorySummary", "Memory"],
+    ["bundleSummary", "Bundles"],
+  ]) {
+    const source = gate.summarySources[key];
+    if (
+      source !== null &&
+      (typeof source !== "string" || !/^[a-z0-9][a-z0-9.-]*\.json$/.test(source))
+    )
+      fail("invalid-gate", "invalid-gate");
+    lines.push(`${label}: ${gate[key]}.`);
+    if (source) lines.push(`Report: ${source}.`);
+  }
+  lines.push(`Energy: ${gate.energySummary}.`, "", "Unknowns:");
   if (!gate.unknowns.length) lines.push("- none");
   for (const unknown of gate.unknowns) lines.push(`- ${unknown}`);
   lines.push(
@@ -1707,15 +1734,60 @@ async function readExtraCandidateReports(reportsRoot, primary) {
   const primaryReport = primary?.report;
   const reports = [];
   for (const name of names) {
-    const parsed = await readJson(path.join(reportsRoot, name));
-    if (!parsed) continue;
+    let raw;
+    try {
+      raw = await readFile(path.join(reportsRoot, name));
+    } catch {
+      continue;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.toString("utf8"));
+    } catch {
+      continue;
+    }
     try {
       const envelope = scoreboard.parsePerformanceEvidenceEnvelope(parsed);
       if (primaryReport && !sameCandidateBuild(envelope.report, primaryReport)) continue;
-      reports.push(envelope);
+      reports.push({
+        source: name,
+        sha256: sha256(raw),
+        bytes: raw.length,
+        report: envelope.report,
+      });
     } catch {}
   }
   return reports;
+}
+
+const PUBLICATION_REPORTS = [
+  "parent.json",
+  "candidate.json",
+  "fixed-release.json",
+  "policy.json",
+  "energy.json",
+];
+
+/** Copy every report the release gate can cite into the flat publication directory. */
+export async function stagePublicationReports(reportsRoot, destination) {
+  if (typeof reportsRoot !== "string" || typeof destination !== "string")
+    fail("invalid-argument", "invalid-argument");
+  await mkdir(destination, { recursive: true });
+  let extras = [];
+  try {
+    extras = (await readdir(reportsRoot))
+      .filter((name) => /^candidate-.+\.json$/.test(name))
+      .sort();
+  } catch {
+    extras = [];
+  }
+  for (const name of [...PUBLICATION_REPORTS, ...extras]) {
+    const from = path.join(reportsRoot, name);
+    if (!(await exists(from))) continue;
+    const published = `scoreboard-${name}`;
+    artifactName(published);
+    await cp(from, path.join(destination, published));
+  }
 }
 
 async function appendVisible(root, input) {
@@ -1882,9 +1954,20 @@ export async function runReleaseGate(options) {
       attachedEvidenceValid = false;
     }
   }
+  let candidateEvidence = null;
+  if (candidate?.report) {
+    const raw = await readFile(path.join(options.reportsRoot, "candidate.json"));
+    candidateEvidence = {
+      source: "candidate.json",
+      sha256: sha256(raw),
+      bytes: raw.length,
+      report: candidate.report,
+    };
+  }
   const gate = await evaluatePublicationGate({
     parent,
     candidate,
+    candidateEvidence,
     candidateReports: await readExtraCandidateReports(options.reportsRoot, candidate),
     fixedRelease,
     policy,
@@ -2444,6 +2527,16 @@ export function assertWorkflowContracts(performanceText, releaseText) {
   );
   requireText(
     releaseGate,
+    "node scripts/scoreboard-index.mjs stage-reports",
+    "publication copies every candidate report",
+  );
+  if (
+    releaseGate.indexOf("node scripts/scoreboard-index.mjs stage-reports") >
+    releaseGate.indexOf("node scripts/scoreboard-index.mjs release-gate")
+  )
+    errors.push("candidate reports are copied after the gate");
+  requireText(
+    releaseGate,
     "SCOREBOARD_ARTIFACTS: publication/release-ready",
     "gate must inspect publication files",
   );
@@ -2580,6 +2673,10 @@ async function main(argv) {
     );
     return;
   }
+  if (command === "stage-reports") {
+    await stagePublicationReports(args.reports, args.directory);
+    return;
+  }
   if (command === "release-gate") {
     process.exitCode = await runReleaseGate({
       artifactRoot: env("SCOREBOARD_ARTIFACTS") || "release-artifacts",
@@ -2632,7 +2729,7 @@ async function main(argv) {
   }
   fail(
     "invalid-argument",
-    "Expected baseline-decision, restore-index, prior-index, index-push, release-gate, report-artifact, verify-publication, list-upload, or check-workflows.",
+    "Expected baseline-decision, restore-index, prior-index, index-push, stage-reports, release-gate, report-artifact, verify-publication, list-upload, or check-workflows.",
   );
 }
 
