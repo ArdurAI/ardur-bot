@@ -1088,6 +1088,28 @@ model Artifact {
 }
 
 model UsageRecord {
+  /// Null on historical/totals-only rows. Never backfill certainty or request identity.
+  requestKey String? @unique
+  requestId String?
+  attemptId String?
+  parentRequestId String?
+  counterEpoch String?
+  counterMode String?
+  lastSequence Int?
+  purpose String @default("legacy")
+  coverage String @default("partial")
+  categoryCoverage Json?
+  inputSemantics String @default("unknown")
+  reasoningSemantics String @default("unknown")
+  logicalInputTokens Int?
+  uncachedInputTokens Int?
+  cacheReadInputTokens Int?
+  cacheWriteInputTokens Int?
+  reportedOutputTokens Int?
+  reasoningTokens Int?
+  /// A snapshot of the admitted pin, not credentials or mutable bot settings.
+  runtimePin Json?
+  observations RequestUsageObservation[]
   delegationId String?
   rootTaskId String?
   requesterBotId String?
@@ -1120,6 +1142,20 @@ model UsageRecord {
   @@index([rootTaskId])
   @@index([delegationId])
   @@map("usage_records")
+}
+
+/// Immutable safe usage receipts, deleted with the owning usage row/space.
+model RequestUsageObservation {
+  id String @id @default(cuid())
+  usageRecordId String
+  usageRecord UsageRecord @relation(fields: [usageRecordId], references: [id], onDelete: Cascade)
+  sequence Int
+  fingerprint String
+  observation Json
+  createdAt DateTime @default(now())
+
+  @@unique([usageRecordId, sequence])
+  @@map("request_usage_observations")
 }
 
 model NotificationPreference {

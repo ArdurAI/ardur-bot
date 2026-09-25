@@ -142,6 +142,10 @@ it("counts coordinator usage before the first handoff and rolls back an exhauste
     _sum: { inputTokens: 119000, outputTokens: 1000 },
   });
   await expect(f.admit()).rejects.toMatchObject({ problem: { code: "budget-exhausted" } });
+  expect(f.tx.usageRecord.aggregate).toHaveBeenCalledWith({
+    where: { rootTaskId: "root", purpose: { not: "detached-learning" } },
+    _sum: { inputTokens: true, outputTokens: true },
+  });
   expect(f.state().root).toBeNull();
   expect(f.state().rows).toHaveLength(0);
 });
