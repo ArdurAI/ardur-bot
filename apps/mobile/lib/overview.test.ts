@@ -139,7 +139,7 @@ it("renders every pending approval per run in read-only form", async () => {
   expect(node.textContent?.match(/Waiting for your approval/g)).toHaveLength(2);
   expect(node.querySelector("button")).toBeNull();
 });
-it.each(["needs-sign-in", "disconnected"])(
+it.each(["needs-sign-in", "not-connected"])(
   "renders canonical %s integrations as needing sign-in",
   async (state) => {
     vi.mocked(loadOverviewConnections).mockResolvedValue(

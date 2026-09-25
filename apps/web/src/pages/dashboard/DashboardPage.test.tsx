@@ -581,7 +581,7 @@ it("opens external runs through ChatTaskReview with their isolated thread", asyn
   );
   expect(api.thread).toHaveBeenCalledWith({ botId: "bot", threadId: "external-thread" });
 });
-it.each(["needs-sign-in", "disconnected"])(
+it.each(["needs-sign-in", "not-connected"])(
   "renders integration %s with its reconnect state",
   async (state) => {
     api.connections.mockResolvedValue(

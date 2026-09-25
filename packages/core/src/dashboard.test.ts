@@ -58,7 +58,7 @@ describe("overview projections", () => {
 
 it.each([
   ["needs-sign-in", "none", true, "needs-sign-in"],
-  ["disconnected", "reconnect", true, "needs-sign-in"],
+  ["not-connected", "reconnect", true, "needs-sign-in"],
   ["connected", "reconnect", true, "needs-sign-in"],
   ["connected", "reconnect", false, "not-connected"],
   ["discovery-failed", "none", true, "error"],
