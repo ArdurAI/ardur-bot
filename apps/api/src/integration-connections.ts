@@ -187,11 +187,10 @@ export class IntegrationConnections {
 
   async beginAuthorization(actor: Owner, input: { serverId: string; redirectUri: string }) {
     const server = await this.owned(actor, input.serverId);
-    // Read the pending id before the probe. The write below succeeds only when
-    // that id is still current, so a faster attempt cannot be overwritten.
+    // Reserve before the probe. The probe persists the PKCE verifier, and that
+    // write bumps updatedAt, so the compare never includes a timestamp.
     const observedPending = server.pendingOauthSessionId ?? null;
-    const observedUpdatedAt = server.updatedAt;
-    let expired = false;
+    let comparedPending = observedPending;
     if (observedPending) {
       const session = await this.prisma.mcpOAuthSession.findFirst({
         where: {
@@ -202,50 +201,76 @@ export class IntegrationConnections {
         },
         select: { createdAt: true },
       });
-      expired = !session || session.createdAt.getTime() < Date.now() - MCP_OAUTH_PENDING_TTL_MS;
+      const absent =
+        !session || session.createdAt.getTime() < Date.now() - MCP_OAUTH_PENDING_TTL_MS;
+      // A missing or expired attempt is absent, and a live one is replaced too.
+      // Both compares name the id that was stored, never updatedAt, so a begin
+      // that already wrote a different id is left alone.
+      comparedPending = absent ? observedPending : (server.pendingOauthSessionId ?? null);
     }
+    const sessionId = randomUUID();
+    const reserved = await this.prisma.mcpServer.updateMany({
+      where: {
+        id: server.id,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        pendingOauthSessionId: comparedPending,
+      },
+      data: {
+        pendingOauthSessionId: sessionId,
+        ...(!server.catalogId && server.connectionState !== "connected"
+          ? { connectionState: "not-connected" }
+          : {}),
+      },
+    });
+    if (!reserved.count) return { status: "replaced" as const };
     let started: Awaited<ReturnType<McpOAuthBroker["begin"]>>;
     try {
       started = await this.oauth.begin({
         ...input,
         spaceId: actor.spaceId,
         userId: actor.userId,
+        sessionId,
       });
     } catch (error) {
-      if (!server.catalogId) await this.recordFailure(actor, server, error);
+      const released = await this.releaseAttempt(actor, server.id, sessionId);
+      if (released && !server.catalogId) await this.recordFailure(actor, server, error);
       throw error;
     }
     if (started.status !== "authorization_required") {
-      await this.capture(actor, input.serverId);
-      return started;
+      const released = await this.releaseAttempt(actor, server.id, sessionId);
+      if (released) await this.capture(actor, input.serverId);
+      return released ? started : { status: "replaced" as const };
     }
-    const bound = await this.prisma.mcpServer.updateMany({
-      where: {
-        id: server.id,
-        spaceId: actor.spaceId,
-        userId: actor.userId,
-        enabled: true,
-        pendingOauthSessionId: observedPending,
-        // A finish during the probe clears the pending id back to what we read
-        // and bumps updatedAt. An expired id is not a live attempt, so the
-        // stored id alone decides whether this begin may replace it.
-        ...(!expired && observedUpdatedAt ? { updatedAt: observedUpdatedAt } : {}),
-      },
-      data: {
-        pendingOauthSessionId: started.sessionId,
-        ...(!server.catalogId && server.connectionState !== "connected"
-          ? { connectionState: "not-connected" }
-          : {}),
-      },
-    });
-    if (!bound.count) {
+    const current = await this.owned(actor, server.id);
+    if (current.pendingOauthSessionId !== sessionId) {
       this.oauth.discardSession(started.sessionId);
       await this.prisma.mcpOAuthSession.deleteMany({
         where: { id: started.sessionId, spaceId: actor.spaceId, userId: actor.userId },
       });
       return { status: "replaced" as const };
     }
-    return started;
+    return { ...started, sessionId };
+  }
+
+  /** Drop this attempt when it is still the pending one. A newer id stays. */
+  private async releaseAttempt(actor: Owner, serverId: string, sessionId: string) {
+    const released = await this.prisma.mcpServer.updateMany({
+      where: {
+        id: serverId,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        pendingOauthSessionId: sessionId,
+      },
+      data: { pendingOauthSessionId: null },
+    });
+    this.oauth.discardSession(sessionId);
+    await this.prisma.mcpOAuthSession.deleteMany({
+      where: { id: sessionId, spaceId: actor.spaceId, userId: actor.userId },
+    });
+    return released.count > 0;
   }
 
   /** Drop this attempt's pending id. A different id is left alone. */
@@ -549,13 +574,14 @@ export class IntegrationConnections {
       await tx.mcpServer.updateMany({
         where,
         data: {
-          // A catalog health check keeps its connection through a failed read. A failed
-          // re-authorization keeps it too when the previous tokens were written back.
+          // A connected server, catalog or custom, stays connected through a failed
+          // read. A failed re-authorization keeps it too when the previous tokens
+          // were written back. A server that is not connected is marked failed.
           ...(keep
             ? { connectionState: "connected" }
             : needsSignIn || droppedReauth
               ? { connectionState: "needs-sign-in" }
-              : current.connectionState === "connected" && server.catalogId
+              : current.connectionState === "connected"
                 ? {}
                 : { connectionState: "discovery-failed" }),
           lastCheckedAt: new Date(),

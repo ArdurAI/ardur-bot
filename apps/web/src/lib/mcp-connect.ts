@@ -38,10 +38,17 @@ export async function connectMcpOauth(
   serverId: string,
   options?: { onWaiting?: (waiting: McpOauthWait) => void },
 ): Promise<McpOauthResult> {
-  const started = await rpc.mcp.oauth.begin({
-    serverId,
-    redirectUri: `${window.location.origin}/api/oauth/done`,
-  });
+  let started: Awaited<ReturnType<typeof rpc.mcp.oauth.begin>>;
+  try {
+    started = await rpc.mcp.oauth.begin({
+      serverId,
+      redirectUri: `${window.location.origin}/api/oauth/done`,
+    });
+  } catch (error) {
+    const server = (await rpc.mcp.servers.list()).find((item) => item.id === serverId);
+    if (server && recordedOauthOutcome(server) === "sign-in-failed") return "sign-in-failed";
+    throw error;
+  }
   if (started.status !== "authorization_required") return started.status;
   return waitForMcpOauth(
     started.authorizationUrl,

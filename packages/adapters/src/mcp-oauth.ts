@@ -776,6 +776,7 @@ export class McpOAuthBroker {
     userId: string;
     redirectUri: string;
     clientInformation?: OAuthClientInformationMixed;
+    sessionId?: string;
   }): Promise<
     | { status: "authorization_required"; sessionId: string; authorizationUrl: string }
     | { status: "already_connected" | "authorization_not_requested" }
@@ -805,7 +806,7 @@ export class McpOAuthBroker {
     if (activeCount >= MAX_PENDING_SESSIONS) {
       throw new Error("Too many pending MCP authorization attempts; wait and try again");
     }
-    const sessionId = randomUUID();
+    const sessionId = input.sessionId ?? randomUUID();
     const context = { spaceId: input.spaceId, userId: input.userId };
     const loaded = await this.loadMaterial(server, context);
     if (server.catalogId || server.imported)

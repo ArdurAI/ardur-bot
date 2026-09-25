@@ -123,7 +123,8 @@ export function DirectMcpSearch({
     setWaiting(null);
     try {
       if (target.descriptor) {
-        const typedToken = target.descriptor.authKind === "oauth" ? "" : token.trim();
+        const typedToken =
+          auth?.type === "mixed" || target.descriptor.authKind !== "oauth" ? token.trim() : "";
         if (await onConnectCatalog?.(target.descriptor, typedToken || undefined))
           setConnected((current) => [...current, target.endpoint]);
         return;

@@ -251,7 +251,11 @@ describe("catalog connection lifecycle", () => {
         redirectUri: "https://app.example.test/mcp/oauth/callback",
       };
       expect(await f.service.beginAuthorization(actor, input)).toEqual({ status });
-      expect(f.oauth.begin).toHaveBeenCalledWith({ ...input, ...actor });
+      expect(f.oauth.begin).toHaveBeenCalledWith({
+        ...input,
+        ...actor,
+        sessionId: expect.any(String),
+      });
       expect(f.service.tools).toHaveBeenCalledWith(actor, "connection");
       expect(f.row()).toMatchObject({ connectionState: "connected", manifest });
     },
@@ -477,7 +481,7 @@ describe("catalog connection lifecycle", () => {
   });
   it.each([
     ["an auth failure", new McpReauthorizationRequiredError("connection"), "needs-sign-in"],
-    ["any other failure", new Error("fake-secret"), "discovery-failed"],
+    ["any other failure", new Error("fake-secret"), "connected"],
   ])("records %s on every custom server discovery", async (_, failure, state) => {
     const f = fixture();
     f.setRow({ catalogId: null });
@@ -488,6 +492,8 @@ describe("catalog connection lifecycle", () => {
     expect(f.row().connectionState).toBe("connected");
     await expect(f.service.capture(actor, "connection")).rejects.toThrow();
     expect(f.row().connectionState).toBe(state);
+    if (state === "connected")
+      expect(f.row().lastError).toBe("Could not reach this integration. Try again.");
     expect(JSON.stringify(f.row())).not.toContain("fake-secret");
   });
   it("keeps a connected custom server connected when re-authorization starts", async () => {
@@ -505,14 +511,16 @@ describe("catalog connection lifecycle", () => {
   it("binds a re-authorization to its oauth session without changing a working connection", async () => {
     const f = fixture();
     f.setRow({ catalogId: null, connectionState: "connected", revision: 4 });
-    await f.service.beginAuthorization(actor, {
+    const started = await f.service.beginAuthorization(actor, {
       serverId: "connection",
       redirectUri: "https://app.example.test/mcp/oauth/callback",
     });
+    expect(started).toMatchObject({ status: "authorization_required" });
+    if (started.status !== "authorization_required") throw new Error("sign-in was not requested");
     expect(f.row()).toMatchObject({
       connectionState: "connected",
       revision: 4,
-      pendingOauthSessionId: "session",
+      pendingOauthSessionId: started.sessionId,
     });
   });
   it("records a re-authorization only after discovery, and keeps the connection when the old tokens return", async () => {
@@ -598,7 +606,8 @@ describe("catalog connection lifecycle", () => {
     });
     const slow = await f.service.beginAuthorization(actor, input);
     expect(slow).toEqual({ status: "replaced" });
-    expect(f.row().pendingOauthSessionId).toBe("session");
+    expect(f.row().pendingOauthSessionId).toEqual(expect.any(String));
+    expect(f.oauth.begin).toHaveBeenCalledTimes(2);
   });
   it("does not let a slower begin rebind a server after a faster attempt finishes", async () => {
     const f = fixture();
@@ -644,8 +653,14 @@ describe("catalog connection lifecycle", () => {
       serverId: "connection",
       redirectUri: "https://app.example.test/mcp/oauth/callback",
     });
-    expect(result).toMatchObject({ status: "authorization_required", sessionId: "session" });
-    expect(f.row().pendingOauthSessionId).toBe("session");
+    expect(result).toMatchObject({ status: "authorization_required" });
+    if (result.status !== "authorization_required") throw new Error("sign-in was not requested");
+    expect(f.row().pendingOauthSessionId).toBe(result.sessionId);
+    expect(f.db.mcpServer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.not.objectContaining({ updatedAt: expect.anything() }),
+      }),
+    );
     expect(f.db.mcpServer.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ pendingOauthSessionId: "stale" }),
@@ -663,6 +678,26 @@ describe("catalog connection lifecycle", () => {
     expect(f.row().pendingOauthSessionId).toBe("ours");
     await f.service.cancelAuthorization(actor, { serverId: "connection", sessionId: "ours" });
     expect(f.row().pendingOauthSessionId).toBeNull();
+  });
+  it("keeps a connected custom server connected when the sign-in probe times out", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: null, connectionState: "connected", lastError: null });
+    const failure = new Error("timed out");
+    failure.name = "TimeoutError";
+    f.oauth.begin.mockRejectedValue(failure);
+    const read = vi.spyOn(McpConnector.prototype, "resourceTools").mockResolvedValue([]);
+    await expect(
+      f.service.beginAuthorization(actor, {
+        serverId: "connection",
+        redirectUri: "https://app.example.test/mcp/oauth/callback",
+      }),
+    ).rejects.toBe(failure);
+    expect(f.row()).toMatchObject({
+      connectionState: "connected",
+      lastError: "Could not reach this integration. Try again.",
+    });
+    await expect(f.service.resourceTools(actor, "connection", "jira")).resolves.toEqual([]);
+    expect(read).toHaveBeenCalled();
   });
   it("clears a custom server's earlier result while its browser sign-in is pending", async () => {
     const f = fixture();
@@ -682,7 +717,7 @@ describe("catalog connection lifecycle", () => {
     ["any other probe failure", new Error("fake-provider-response"), "discovery-failed"],
   ])("records %s when a custom server's OAuth probe fails", async (_, failure, state) => {
     const f = fixture();
-    f.setRow({ catalogId: null });
+    f.setRow({ catalogId: null, connectionState: "not-connected" });
     f.oauth.begin.mockRejectedValue(failure);
     await expect(
       f.service.beginAuthorization(actor, {

@@ -317,6 +317,19 @@ describe("MCP browser consent", () => {
     expect(await result).toBe("needs-sign-in");
     expect(server).toMatchObject({ connectionState: "connected", revision: 4 });
   });
+  it("reports sign-in-failed when a connected server survives a probe error", async () => {
+    begin.mockRejectedValue(new Error("timed out"));
+    list.mockResolvedValue([
+      {
+        id: "connection",
+        connectionState: "connected",
+        lastError: "Could not reach this integration. Try again.",
+        pendingOauthSessionId: null,
+      },
+    ]);
+    await expect(connectMcpOauth("connection")).resolves.toBe("sign-in-failed");
+    expect(window.open).not.toHaveBeenCalled();
+  });
   it("reports a post-consent failure instead of a completed sign-in", async () => {
     begin.mockResolvedValue({
       status: "authorization_required",

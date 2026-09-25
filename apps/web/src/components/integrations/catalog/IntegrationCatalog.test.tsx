@@ -881,6 +881,41 @@ describe("Settings integration catalog", () => {
     expect(api.tools).not.toHaveBeenCalled();
   });
 
+  it("sends a typed token for a mixed listing that matches a built-in app", async () => {
+    const notion = {
+      ...catalog[0]!,
+      id: "notion",
+      name: "Notion",
+      authKind: "oauth" as const,
+      endpoint: "https://mcp.notion.example.test/mcp",
+    };
+    api.list.mockImplementation(async () => ({ catalog: [notion], connections: [] }));
+    api.connect.mockResolvedValue({
+      connection: { ...connected, catalogId: "notion", state: "connected" },
+      authorizationUrl: null,
+      sessionId: null,
+    });
+    await openResults([
+      listing("Notion directory", "https://mcp.notion.example.test/mcp", {
+        type: "mixed",
+        headerName: null,
+        note: null,
+      }),
+    ]);
+    await click(resultConnect("Notion")!);
+    expect(api.connect).not.toHaveBeenCalled();
+    expect(container.querySelector('[aria-label="Credential"]')).not.toBeNull();
+    await fill("Credential", "synthetic-token");
+    await click(resultConnect("Notion")!);
+    expect(api.connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catalogId: "notion",
+        authKind: "token",
+        token: "synthetic-token",
+      }),
+    );
+  });
+
   it("asks for a GitHub token before connecting and shows the API sentence", async () => {
     const github = {
       ...catalog[0]!,
