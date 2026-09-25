@@ -2,6 +2,36 @@ import type { DocumentRevision } from "@ardurbot/contracts";
 import { expect, it } from "vitest";
 import { learningJourney } from "./learning-journey.js";
 
+it("labels imported source revisions without presenting them as approved proposals", () => {
+  const imported = { tool: "claude-code", authorizesIntent: false, kind: "memories" };
+  const revision = {
+    documentId: "doc",
+    revision: 1,
+    author: { kind: "human" },
+    scopeKey: { kind: "user" },
+    createdAt: "2026-09-24T12:00:00.000Z",
+    imported,
+  } as unknown as DocumentRevision;
+  const entries = learningJourney(
+    [
+      revision,
+      {
+        ...revision,
+        revision: 2,
+        deletedAt: "2026-09-24T13:00:00.000Z",
+        createdAt: "2026-09-24T13:00:00.000Z",
+      },
+    ],
+    [],
+  );
+  expect(entries.map((entry) => entry.action)).toEqual(["import-removed", "imported"]);
+  expect(
+    entries.every(
+      (entry) => entry.importedFrom === "claude-code" && !entry.proposalId && !entry.grantId,
+    ),
+  ).toBe(true);
+});
+
 it("uses revision provenance and audit dates, deduplicates applies, and retains grant and curator events", () => {
   const revision = {
     documentId: "doc",

@@ -138,6 +138,13 @@ import {
   SpaceLearningConfigSchema,
 } from "./learning.js";
 import {
+  LocalImportActionSchema,
+  LocalImportResponseSchema,
+  LocalImportRootsSchema,
+  LocalImportSelectionSchema,
+  LocalImportStatusSchema,
+} from "./local-import.js";
+import {
   MemoryBundleSchema,
   MemoryDocumentHeadSchema,
   MemoryDocumentPageSchema,
@@ -268,6 +275,32 @@ function createIdeContract() {
 }
 
 export const appContract = {
+  localImport: {
+    credentials: oc
+      .input(
+        z.strictObject({
+          serverId: z.string().min(1),
+          env: z
+            .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().min(1).max(4096))
+            .refine((value) => Object.keys(value).length <= 64),
+          headers: z
+            .record(z.string().regex(/^[A-Za-z0-9-]+$/), z.string().min(1).max(4096))
+            .refine((value) => Object.keys(value).length <= 32),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+    status: oc.output(LocalImportStatusSchema),
+    configure: oc
+      .input(
+        z.strictObject({
+          autoImport: z.boolean().optional(),
+          roots: LocalImportRootsSchema.optional(),
+          selection: LocalImportSelectionSchema.optional(),
+        }),
+      )
+      .output(LocalImportStatusSchema),
+    run: oc.input(LocalImportActionSchema).output(LocalImportResponseSchema),
+  },
   ...customizationContract,
   account: accountContract,
   channelPairing: channelPairingContract,

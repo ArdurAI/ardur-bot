@@ -4,6 +4,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
+    "./local-import-fixtures": "./src/fixtures/local-import.ts",
     ".": "./src/index.ts",
     "./memory-conformance": "./src/memory-conformance.ts",
     "./memory-fakes": "./src/memory-fakes.ts",

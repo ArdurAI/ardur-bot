@@ -37,6 +37,16 @@ function fakePrisma(
 }
 
 describe("createJobReconciler", () => {
+  it("includes opted-in import reconciliation without delaying the routine path on failure", async () => {
+    const prisma = fakePrisma();
+    const { jobs } = publisher();
+    const reconcileLocalImport = vi.fn(async () => {
+      throw new Error("Import unavailable");
+    });
+    await createJobReconciler({ prisma, jobs, reconcileLocalImport }).reconcileOnce();
+    expect(reconcileLocalImport).toHaveBeenCalledOnce();
+    expect(prisma.routine.findMany).toHaveBeenCalled();
+  });
   it("queues local brief recovery at startup and every ten minutes, retrying a rejected enqueue", async () => {
     vi.useFakeTimers();
     try {

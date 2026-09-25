@@ -8,6 +8,7 @@ import {
   skillDocumentContext,
 } from "@ardurbot/adapters";
 import type { Actor, AgentSkill, AgentSkillSource } from "@ardurbot/contracts";
+import { ImportedProvenanceSchema } from "@ardurbot/contracts/local-import";
 import {
   buildSkillMd,
   findSkillByName,
@@ -21,6 +22,7 @@ import type { MemoryService } from "@ardurbot/memory";
 import { ORPCError } from "@orpc/server";
 
 type AgentSkillRow = {
+  imported?: unknown;
   id: string;
   name: string;
   description: string;
@@ -44,6 +46,7 @@ function asSource(value: string): AgentSkillSource {
 export function mapAgentSkill(row: AgentSkillRow): AgentSkill {
   const source = asSource(row.source);
   return {
+    ...(row.imported ? { imported: ImportedProvenanceSchema.parse(row.imported) } : {}),
     id: row.id,
     documentId: row.documentId,
     activeRevision: row.activeRevision,
