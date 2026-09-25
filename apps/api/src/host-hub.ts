@@ -215,6 +215,7 @@ export class HostHub {
     if (probe?.worker === worker) {
       this.probes.delete(id);
       clearTimeout(probe.timer);
+      this.rememberCompleted(worker, id);
       void worker
         .send({
           v: 1,
@@ -246,13 +247,16 @@ export class HostHub {
     const p = this.pending.get(id);
     if (p) {
       clearTimeout(p.timer);
-      const completed = this.completed.get(p.worker) ?? new Set<string>();
-      completed.add(id);
-      if (completed.size > 64) completed.delete(completed.values().next().value!);
-      this.completed.set(p.worker, completed);
+      this.rememberCompleted(p.worker, id);
     }
     this.pending.delete(id);
     this.drainProbes();
+  }
+  private rememberCompleted(worker: HostWire, id: string) {
+    const completed = this.completed.get(worker) ?? new Set<string>();
+    completed.add(id);
+    if (completed.size > 64) completed.delete(completed.values().next().value!);
+    this.completed.set(worker, completed);
   }
   private probeCapacity() {
     // Keep half the shared slots available for execution, including native runtime starts.

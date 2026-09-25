@@ -44,6 +44,11 @@ describe("outbound host hub", () => {
       if (action === "cancel") await hub.fromWorker(worker, { v: 1, type: "cancel", id: "queued" });
       else hub.detach();
       await queued;
+      // A final cancellation can overtake the end frame on the initiating socket.
+      await hub.fromWorker(worker, { v: 1, type: "cancel", id: "queued" });
+      await expect(
+        hub.fromWorker(wire(), { v: 1, type: "cancel", id: "queued" }),
+      ).rejects.toThrow();
       if (action === "cancel") await hub.fromHost(host, { v: 1, type: "end", id: "first" });
       else hub.attach(wire(), "owner", "second");
       expect(
