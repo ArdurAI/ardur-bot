@@ -21,9 +21,17 @@ export default function PrivacySettings({ navigate, onBusyChange }: SettingsPage
     setBusy(true);
     setError("");
     try {
-      const data = memory ? await rpc.memory.export() : await rpc.export.account();
+      if (!memory) {
+        const { path } = await rpc.export.account();
+        const anchor = document.createElement("a");
+        anchor.href = path;
+        anchor.download = "account-v2.tar.gz";
+        anchor.click();
+        return;
+      }
+      const data = await rpc.memory.export();
       downloadArtifactBytes(
-        memory ? "memory-v1.json" : "account-v1.json",
+        "memory-v1.json",
         "application/json",
         new TextEncoder().encode(JSON.stringify(data, null, 2)),
       );

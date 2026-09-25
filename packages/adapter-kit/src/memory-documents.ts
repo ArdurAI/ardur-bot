@@ -30,6 +30,8 @@ export type {
 /** Built from authenticated membership and bot permissions, never tool arguments. */
 export interface MemoryAccess extends AdapterContext {
   botIds: readonly string[];
+  groupIds?: readonly string[];
+  groupId?: string;
   generation?: number;
   threadId?: string;
   model?: MemoryModel;
@@ -42,6 +44,7 @@ export interface DocumentListInput {
   cursor?: string;
   limit?: number;
   scope?: DocumentScope["kind"];
+  groupId?: string;
   botId?: string;
   includeDeleted?: boolean;
 }

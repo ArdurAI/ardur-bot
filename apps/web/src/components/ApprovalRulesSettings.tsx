@@ -3,6 +3,7 @@ import { Button, Label, Switch } from "@ardurbot/ui-web";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
+import { approvalPolicyCopy } from "../lib/approval-policy-copy";
 import { rpc } from "../lib/rpc";
 
 function describeRule(rule: ActionApprovalRule): string {
@@ -25,7 +26,7 @@ function describeRule(rule: ActionApprovalRule): string {
 }
 
 export function ApprovalRulesSettings() {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const autoReviewId = useId();
   const [botNames, setBotNames] = useState<Record<string, string>>({});
   const [rules, setRules] = useState<ActionApprovalRule[]>([]);
@@ -168,9 +169,7 @@ export function ApprovalRulesSettings() {
           <Trans>Loading rules…</Trans>
         </p>
       ) : rules.length === 0 ? (
-        <p className="mt-4 text-[13px] text-muted-foreground">
-          <Trans>No exceptions. Actions run automatically.</Trans>
-        </p>
+        <p className="mt-4 text-[13px] text-muted-foreground">{i18n._(approvalPolicyCopy)}</p>
       ) : (
         <ul className="mt-4 space-y-2">
           {rules.map((rule) => (

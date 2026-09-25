@@ -195,6 +195,10 @@ msgstr "@{0}"
 msgid "1 run at this pin; hosted providers may bill per run"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "7 days"
+msgstr "7 天"
+
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
 msgstr "什么都做一点"
@@ -283,6 +287,10 @@ msgstr ""
 msgid "Actions for space"
 msgstr ""
 
+#: src/lib/approval-policy-copy.ts
+msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr "启用"
@@ -293,6 +301,7 @@ msgstr "当前模型"
 
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/settings-sections.ts
 msgid "Active sessions"
 msgstr ""
 
@@ -430,6 +439,7 @@ msgstr "正在添加…"
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineSchedule.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
 msgid "Advanced"
 msgstr "高级"
@@ -827,6 +837,7 @@ msgid "Available after the routine is saved"
 msgstr "保存例行任务后可用"
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "Avatar"
 msgstr ""
 
@@ -848,6 +859,10 @@ msgstr "返回"
 
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 msgid "Back to capabilities"
+msgstr ""
+
+#: src/pages/NotFound.tsx
+msgid "Back to home"
 msgstr ""
 
 #: src/pages/memory/MemorySettings.tsx
@@ -973,10 +988,6 @@ msgstr "默认情况下 Bot 会直接执行。只有当你想先审核某类操�
 msgid "Bots are working"
 msgstr "Bot 正在工作"
 
-#: src/pages/settings/GeneralSettings.tsx
-msgid "Bots may read and write here; consequential actions still ask"
-msgstr ""
-
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -984,6 +995,10 @@ msgstr ""
 #: src/pages/GitMemorySettings.tsx
 msgid "Branch"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Brief"
+msgstr "简报"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Browse extensions"
@@ -1015,6 +1030,10 @@ msgstr ""
 msgid "by you"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Cache hits"
+msgstr "缓存命中"
+
 #: src/pages/CallView.tsx
 msgid "Call"
 msgstr "通话"
@@ -1026,6 +1045,7 @@ msgstr "无法连接服务器。"
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -1067,7 +1087,7 @@ msgid "cancelled"
 msgstr "已取消"
 
 #: src/components/AskCard.tsx
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
@@ -1136,6 +1156,7 @@ msgstr "聊天应用"
 msgid "Chat bot"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Chat font"
 msgstr ""
@@ -1482,6 +1503,10 @@ msgstr ""
 msgid "Computers that can run tasks with access to local files, computer use, browser use, and local MCPs"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Concurrent runs"
+msgstr "并发运行"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
 msgstr ""
@@ -1650,6 +1675,11 @@ msgstr ""
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
 
+#: src/components/Context.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Context"
+msgstr "上下文"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1677,6 +1707,10 @@ msgstr "使用邮箱继续"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Controls how connector tools are loaded in new conversations."
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Coordinator"
+msgstr "协调者"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Coordinator bot"
@@ -1979,6 +2013,10 @@ msgstr ""
 msgid "Could not load computers."
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Could not load data"
+msgstr "无法加载数据"
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
 msgstr ""
@@ -2023,6 +2061,10 @@ msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 msgid "Could not load plugins"
+msgstr ""
+
+#: src/pages/RoutineHistory.tsx
+msgid "Could not load run history."
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
@@ -2081,10 +2123,6 @@ msgstr "无法加载语音设置"
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
-#: src/pages/LocalSettings.tsx
-msgid "Could not open local settings. Start the local server and create its owner account, then try again."
-msgstr ""
-
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Could not pair this account. Check its settings and try again."
 msgstr ""
@@ -2095,6 +2133,10 @@ msgstr "无法播放测试片段"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not prepare the import. Try again."
+msgstr ""
+
+#: src/pages/LocalSettings.tsx
+msgid "Could not reach the local server. Start it and try again."
 msgstr ""
 
 #: src/pages/account/AccountSignIn.tsx
@@ -2180,6 +2222,10 @@ msgstr "无法保存自动审核"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Could not save capabilities. Try again."
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Could not save changes"
+msgstr "无法保存更改"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Could not save changes. Try again."
@@ -2643,6 +2689,7 @@ msgstr ""
 msgid "Destination scope"
 msgstr ""
 
+#: src/components/AskCard.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -2784,7 +2831,7 @@ msgstr ""
 msgid "Don’t have an account?"
 msgstr "还没有账户？"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "完成"
@@ -2842,6 +2889,7 @@ msgstr "例如 Hivenet Agent、Presales、工时表机器人"
 msgid "Earlier message"
 msgstr "更早的消息"
 
+#: src/components/Context.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
@@ -2868,6 +2916,7 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
+#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "邮箱"
 
@@ -3015,6 +3064,7 @@ msgstr "导出"
 msgid "Export block"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
@@ -3023,6 +3073,7 @@ msgstr ""
 msgid "Export JSON"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export memory"
 msgstr ""
@@ -3053,7 +3104,7 @@ msgstr ""
 msgid "failed"
 msgstr "失败"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "失败"
@@ -3158,6 +3209,7 @@ msgid "From the catalog"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "Full name"
 msgstr ""
 
@@ -3218,6 +3270,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Group"
 msgstr "群组"
+
+#: src/components/Context.tsx
+msgid "Group brief"
+msgstr "群组简报"
 
 #: src/pages/GroupPanel.tsx
 msgid "Group settings"
@@ -3588,6 +3644,7 @@ msgid "Kubernetes context"
 msgstr ""
 
 #: src/pages/account/AccountLanguage.tsx
+#: src/pages/settings-sections.ts
 msgid "Language"
 msgstr "语言"
 
@@ -3639,6 +3696,7 @@ msgstr ""
 msgid "Learning"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
@@ -3662,6 +3720,10 @@ msgstr ""
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Leave"
 msgstr "退出"
+
+#: src/components/Context.tsx
+msgid "Left unchanged: {reason}"
+msgstr "保持不变：{reason}"
 
 #: src/pages/system/DispatchSetting.tsx
 msgid "Let paired phones and chat accounts dispatch, steer, and approve work in this space."
@@ -3773,6 +3835,7 @@ msgstr ""
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/RoutineHistory.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
@@ -3794,6 +3857,7 @@ msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/settings-sections.ts
 msgid "Local devices"
 msgstr ""
 
@@ -3949,6 +4013,7 @@ msgstr ""
 msgid "Memory location and documents"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Memory preferences"
 msgstr ""
@@ -4090,9 +4155,17 @@ msgstr ""
 msgid "Model options"
 msgstr "模型选项"
 
+#: src/components/Context.tsx
+msgid "Model or memory unavailable"
+msgstr "模型或记忆不可用"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "模型费用使用你的提供方密钥。"
+
+#: src/components/Context.tsx
+msgid "Model unavailable"
+msgstr "模型不可用"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
@@ -4141,6 +4214,7 @@ msgstr ""
 msgid "More memory"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Motion"
 msgstr ""
@@ -4187,7 +4261,7 @@ msgstr ""
 msgid "Needs approval"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Needs input"
 msgstr "需要输入"
 
@@ -4204,7 +4278,7 @@ msgstr ""
 msgid "Needs sign-in on this computer"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Needs takeover"
 msgstr "需要接管"
 
@@ -4307,10 +4381,6 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
-#: src/components/ApprovalRulesSettings.tsx
-msgid "No exceptions. Actions run automatically."
-msgstr "没有例外。操作会自动执行。"
-
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
 msgstr "还没有群聊。"
@@ -4381,6 +4451,7 @@ msgid "No results"
 msgstr "无结果"
 
 #: src/pages/RoutineEditor.tsx
+#: src/pages/RoutineHistory.tsx
 msgid "No runs yet"
 msgstr "还没有运行记录"
 
@@ -4413,8 +4484,9 @@ msgid "No uploaded files"
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
+#: src/pages/GroupPanel.tsx
 msgid "None"
-msgstr ""
+msgstr "无"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -4503,6 +4575,7 @@ msgstr "暂无记忆"
 msgid "Nothing to review."
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -4641,6 +4714,10 @@ msgstr ""
 msgid "Open links in built-in browser"
 msgstr ""
 
+#: src/pages/LocalSettings.tsx
+msgid "Open local settings from the desktop app on the server’s computer."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "打开导航"
@@ -4745,6 +4822,14 @@ msgstr ""
 msgid "Other model…"
 msgstr "其他模型…"
 
+#: src/components/Context.tsx
+msgid "Owner edited recently"
+msgstr "所有者最近编辑过"
+
+#: src/pages/NotFound.tsx
+msgid "Page not found"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
 msgstr "PagerDuty 事件"
@@ -4772,6 +4857,7 @@ msgstr "搁置"
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
+#: src/pages/settings-sections.ts
 msgid "Password"
 msgstr "密码"
 
@@ -4989,7 +5075,11 @@ msgstr ""
 msgid "Pushed"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/components/Context.tsx
+msgid "Queue wait"
+msgstr "排队等待"
+
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
@@ -5424,6 +5514,7 @@ msgstr ""
 msgid "Restricted"
 msgstr ""
 
+#: src/components/Context.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
@@ -5433,6 +5524,7 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
+#: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
@@ -5528,6 +5620,10 @@ msgstr "撤销"
 msgid "Revoked"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Rewritten {time}"
+msgstr "已重写 {time}"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Robot"
 msgstr "机器人"
@@ -5539,6 +5635,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Rotate key"
 msgstr "轮换密钥"
+
+#: src/components/Context.tsx
+msgid "Routed by default"
+msgstr "按默认规则路由"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/Shell.tsx
@@ -5582,7 +5682,7 @@ msgstr "运行时间必须是将来的时间。"
 msgid "running"
 msgstr "运行中"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/DelegationLines.tsx
@@ -5632,6 +5732,7 @@ msgid "Sans"
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
@@ -5816,6 +5917,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Select the text to copy it."
 msgstr ""
+
+#: src/pages/ide/dialogs.tsx
+msgid "Selection shortened to 32,000 characters."
+msgstr "所选内容已缩短至 32,000 个字符。"
 
 #: src/pages/memory/MemoryComposer.tsx
 #: src/pages/Shell.tsx
@@ -6078,6 +6183,10 @@ msgstr ""
 msgid "Software update"
 msgstr "软件更新"
 
+#: src/pages/ide/IdePage.tsx
+msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
+msgstr "部分条目的名称不受支持，已隐藏（{hiddenCount}）。"
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
 msgstr ""
@@ -6167,7 +6276,7 @@ msgstr ""
 msgid "Start recording"
 msgstr "开始录制"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Starting"
 msgstr "正在开始"
 
@@ -6293,6 +6402,10 @@ msgstr ""
 msgid "task"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Task budget reached"
+msgstr "任务预算已用尽"
+
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
 msgstr ""
@@ -6401,6 +6514,7 @@ msgstr ""
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Theme"
 msgstr ""
@@ -6421,6 +6535,7 @@ msgstr ""
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
 
+#: src/pages/memory/MemoryComposer.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot may only run locally — change the pin or the space policy"
 msgstr ""
@@ -6537,6 +6652,10 @@ msgstr ""
 msgid "Time of day"
 msgstr "时间"
 
+#: src/components/Context.tsx
+msgid "Time to first token"
+msgstr "首个词元耗时"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Timeline"
@@ -6553,6 +6672,10 @@ msgstr ""
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "至:"
+
+#: src/components/Context.tsx
+msgid "Today"
+msgstr "今天"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -6600,6 +6723,7 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg token"
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
 msgstr ""
@@ -6754,6 +6878,7 @@ msgstr ""
 msgid "Upload ZIP"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Uploaded files"
 msgstr ""
@@ -6901,6 +7026,7 @@ msgid "What should this routine do each time it runs?"
 msgstr "每次运行时，这个例行任务应做什么？"
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "What should your bots call you?"
 msgstr ""
 

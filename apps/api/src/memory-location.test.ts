@@ -33,6 +33,7 @@ async function fixture() {
     $executeRaw: vi.fn(async () => 0),
     spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
     bot: { findMany: vi.fn(async () => []) },
+    chatGroup: { findMany: vi.fn(async () => []) },
     spaceMemoryConfig: {
       findUnique: async () => config,
       findFirst: async () => null,

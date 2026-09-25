@@ -4,7 +4,7 @@ import { MemoryBundleSchema } from "./memory-documents.js";
 import { UserPreferencesSchema } from "./preferences.js";
 
 export const AccountExportSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   exportedAt: z.string(),
   account: z.object({
     name: z.string(),
@@ -19,7 +19,7 @@ export const AccountExportSchema = z.object({
       name: z.string(),
       bots: z.array(ExportManifestSchema),
       memory: MemoryBundleSchema.nullable(),
-      uploads: z.array(ArtifactSchema.extend({ contentBase64: z.string() })),
+      uploads: z.array(ArtifactSchema.extend({ archivePath: z.string() })),
       conversations: z.array(z.object({ id: z.string(), messages: z.array(z.json()) })),
       usage: z.array(z.json()),
       feedback: z.array(z.json()),
@@ -27,3 +27,5 @@ export const AccountExportSchema = z.object({
     }),
   ),
 });
+
+export const ExportDownloadSchema = z.object({ path: z.string() });

@@ -1,6 +1,7 @@
 import type { AgentRunModel } from "@ardurbot/adapter-kit";
 import type { Actor, ResolvedPin, RuntimePin, RuntimeProblem } from "@ardurbot/contracts";
 import {
+  MODEL_LOCALITY_DENIED_MESSAGE,
   RuntimePinError,
   RuntimePinSchema,
   runtimePinProblem,
@@ -167,11 +168,7 @@ export async function resolveRunModelPin(input: {
         resolved,
       )
     )
-      return runtimePinProblem(
-        pin,
-        "locality-denied",
-        "This bot may only run locally — change the pin or the space policy",
-      );
+      return runtimePinProblem(pin, "locality-denied", MODEL_LOCALITY_DENIED_MESSAGE);
     const problem = validateRuntimePin(resolved, pin);
     return problem ?? { ...resolved, kind: "resolved", pin };
   } catch (error) {

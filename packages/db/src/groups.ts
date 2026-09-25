@@ -18,6 +18,7 @@ type GroupRecord = {
   spaceId: string;
   userId: string;
   name: string;
+  coordinatorBotId?: string | null;
   pinned: boolean;
   sectionId: string | null;
   archivedAt: Date | null;
@@ -64,6 +65,7 @@ function mapGroup(group: GroupRecord): Group {
     id: group.id,
     spaceId: group.spaceId,
     name: group.name,
+    coordinatorBotId: group.coordinatorBotId ?? null,
     pinned: group.pinned,
     sectionId: group.sectionId,
     archivedAt: group.archivedAt?.toISOString() ?? null,
@@ -281,6 +283,7 @@ export function createGroupRepos(prisma: PrismaClient) {
       actor: Actor,
       input: {
         groupId: string;
+        coordinatorBotId?: string | null;
         name?: string;
         botIds?: string[];
         pinned?: boolean;
@@ -314,6 +317,8 @@ export function createGroupRepos(prisma: PrismaClient) {
         const nextBotIds = new Set(
           members?.map((member) => member.botId) ?? current.members.map((member) => member.botId),
         );
+        if (input.coordinatorBotId && !nextBotIds.has(input.coordinatorBotId))
+          throw new IsolationError();
         const removedBotIds = current.members
           .map((member) => member.botId)
           .filter((botId) => !nextBotIds.has(botId));
@@ -349,6 +354,12 @@ export function createGroupRepos(prisma: PrismaClient) {
           where: { id: input.groupId },
           data: {
             updatedAt: new Date(),
+            coordinatorBotId:
+              input.coordinatorBotId !== undefined
+                ? input.coordinatorBotId
+                : current.coordinatorBotId && !nextBotIds.has(current.coordinatorBotId)
+                  ? null
+                  : undefined,
             pinned: input.pinned,
             sectionId: input.sectionId,
           },

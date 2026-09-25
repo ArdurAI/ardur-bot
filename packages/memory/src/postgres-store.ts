@@ -17,9 +17,11 @@ export class PostgresMemoryJournal implements MemoryJournal {
       where: { spaceId: access.spaceId },
       include: { revisions: { orderBy: { revision: "asc" } } },
     });
-    // Documents written before the lifecycle migration have no revision rows. Expose the row
-    // itself as their head so lists, exports and reconciliation never fail on legacy data; the
-    // next commit records revision + 1 as usual.
+    const persisted = new Map(
+      rows.map((row) => [row.id, new Set(row.revisions.map((revision) => revision.revision))]),
+    );
+    // Legacy seeds have no revision rows. Preserve this original head alongside the next
+    // change in the caller's transaction, so a reload cannot lose the first revision.
     for (const row of rows) {
       if (row.revisions.length > 0) continue;
       row.revisions.push({
@@ -47,9 +49,17 @@ export class PostgresMemoryJournal implements MemoryJournal {
       const scope: DocumentScope =
         row.scope === "space-shared"
           ? { kind: "space-shared", spaceId: row.spaceId }
-          : row.scope === "bot"
-            ? { kind: "bot", spaceId: row.spaceId, userId: row.userId, botId: row.botId! }
-            : { kind: "user", spaceId: row.spaceId, userId: row.userId };
+          : row.scope === "group"
+            ? {
+                kind: "group",
+                spaceId: row.spaceId,
+                userId: row.userId,
+                botId: row.botId!,
+                groupId: row.scopeKey!.slice(row.botId!.length + 1),
+              }
+            : row.scope === "bot"
+              ? { kind: "bot", spaceId: row.spaceId, userId: row.userId, botId: row.botId! }
+              : { kind: "user", spaceId: row.spaceId, userId: row.userId };
       return {
         id: row.id,
         delivery: {
@@ -99,7 +109,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
           head.scopeKey.kind === "space-shared"
             ? (existing?.userId ?? access.userId)
             : head.scopeKey.userId,
-        botId: head.scopeKey.kind === "bot" ? head.scopeKey.botId : null,
+        botId: "botId" in head.scopeKey ? head.scopeKey.botId : null,
         scope: head.scopeKey.kind,
         scopeKey: scopeKey(head.scopeKey),
         path: head.path,
@@ -134,7 +144,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
           });
       }
       for (const r of doc.revisions.filter(
-        (revision) => revision.revision > (existing?.revision ?? 0),
+        (revision) => !persisted.get(doc.id)?.has(revision.revision),
       )) {
         await this.tx.memoryRevision.create({
           data: {

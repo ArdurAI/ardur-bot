@@ -1,10 +1,50 @@
 import type { Actor } from "@ardurbot/contracts";
+import { RuntimePinError } from "@ardurbot/contracts";
 import type { JournalDocument } from "@ardurbot/memory";
 import { JournalDocumentStore, MemoryService } from "@ardurbot/memory";
+import { os } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { describe, expect, it } from "vitest";
+import { memoryRpc } from "./memory-routes.js";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
+
+it("serializes a typed locality denial as the safe existing problem", async () => {
+  const handler = new RPCHandler({
+    propose: os.handler(() =>
+      memoryRpc(async () => {
+        throw new RuntimePinError({
+          kind: "problem",
+          code: "locality-denied",
+          reason: "untrusted provider detail",
+          actions: ["change-pin"],
+          pin: {
+            runtimeKind: "pi",
+            provider: "openai-compatible",
+            modelId: "fixture",
+            credentialId: "connection",
+            effort: "medium",
+            revision: 0,
+          },
+        });
+      }),
+    ),
+  });
+  const { response } = await handler.handle(
+    new Request("http://example.test/propose", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"json":null}',
+    }),
+  );
+  expect(response.status).toBe(403);
+  const payload = await response.json();
+  expect(payload.json).toMatchObject({
+    message: "This bot may only run locally — change the pin or the space policy",
+    data: { code: "locality-denied" },
+  });
+  expect(JSON.stringify(payload)).not.toContain("untrusted provider detail");
+});
 
 async function fixture(prisma: unknown = {}) {
   let records: JournalDocument[] = [];

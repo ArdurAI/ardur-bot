@@ -169,3 +169,16 @@ test("production shell startup, fake-provider first token, and three motions", a
   await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
   for (const warning of warnings) console.warn(`::warning title=Motion budget::${warning}`);
 });
+
+test("idle spaces polling waits at least five seconds between reads", async ({ page }) => {
+  await installPerformanceFixture(page);
+  const reads: number[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/rpc/spaces/list")) reads.push(Date.now());
+  });
+  await page.goto("http://127.0.0.1:55420/app/fixture-bot-0");
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  await expect.poll(() => reads.length, { timeout: 16000 }).toBeGreaterThanOrEqual(2);
+  // Request dispatch and browser scheduling may vary by a few milliseconds.
+  expect(reads.at(-1)! - reads.at(-2)!).toBeGreaterThanOrEqual(4900);
+});

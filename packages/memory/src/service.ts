@@ -9,7 +9,11 @@ import type {
   MemoryModel,
   SemanticMemoryProvider,
 } from "@ardurbot/adapter-kit";
-import { MemoryAccessError, MemoryGenerationError } from "@ardurbot/adapter-kit";
+import {
+  MemoryAccessError,
+  MemoryConflictError,
+  MemoryGenerationError,
+} from "@ardurbot/adapter-kit";
 import type { Prisma } from "@ardurbot/db";
 import { previewImport, requireImportReady } from "./portable.js";
 import { assertMemorySafe } from "./redaction.js";
@@ -21,6 +25,8 @@ export interface MemoryOperationContext extends AdapterContext {
   memoryGeneration?: number;
   memoryModel?: MemoryModel;
   threadId?: string;
+  groupId?: string;
+  briefGeneration?: number;
   knownSecrets?: readonly string[];
   memoryRecall?: boolean;
   memorySessionStart?: boolean;
@@ -139,6 +145,7 @@ export class MemoryService {
       id?: string;
       scope: DocumentScope["kind"];
       botId?: string;
+      groupId?: string;
       path: string;
       content: string;
       expectedRevision: number;
@@ -150,7 +157,7 @@ export class MemoryService {
     const document = await this.open(context, async (s) => {
       if (input.id) await s.beforeWrite?.(input.id);
       else if (s.beforeWrite) {
-        const scope = ownedScope(input.scope, s.access, input.botId);
+        const scope = ownedScope(input.scope, s.access, input.botId, input.groupId);
         const bundle = await s.store.exportBundle(s.access);
         const existing = bundle.documents.find((doc) => {
           const head = doc.revisions.at(-1)!;
@@ -163,46 +170,82 @@ export class MemoryService {
       return s.store.commit(
         {
           ...input,
-          scopeKey: ownedScope(input.scope, s.access, input.botId),
+          scopeKey: ownedScope(input.scope, s.access, input.botId, input.groupId),
           ...this.attribution(s, context),
+          ...(input.scope === "group"
+            ? {
+                delivery: {
+                  status: "delivered" as const,
+                  generation: s.generation,
+                  provider: null,
+                },
+              }
+            : {}),
         },
         s.access,
       );
     });
     return this.queued(document, context);
   }
-  /** Compatibility saves choose the current revision while holding the same writer lock. */
+  /** Automatic saves retry one stale revision as an append; human conflicts remain explicit. */
   async save(
     input: {
       scope: DocumentScope["kind"];
       botId?: string;
+      groupId?: string;
       path: string;
       content: string;
       references?: string[];
+      expectedRevision?: number;
     },
     context: MemoryOperationContext,
   ) {
     assertMemorySafe(input, context.knownSecrets);
-    const document = await this.open(context, async (s) => {
-      const scope = ownedScope(input.scope, s.access, input.botId);
-      const bundle = await s.store.exportBundle(s.access);
-      const existing = bundle.documents.find((d) => {
-        const head = d.revisions.at(-1)!;
-        return head.path === input.path && JSON.stringify(head.scopeKey) === JSON.stringify(scope);
+    const readBase = (revision?: number) =>
+      this.open(context, async (session) => {
+        const scope = ownedScope(input.scope, session.access, input.botId, input.groupId);
+        const bundle = await session.store.exportBundle(session.access);
+        const document = bundle.documents.find((doc) => {
+          const head = doc.revisions.at(-1)!;
+          return (
+            head.path === input.path && JSON.stringify(head.scopeKey) === JSON.stringify(scope)
+          );
+        });
+        return (
+          (revision === undefined
+            ? document?.revisions.at(-1)
+            : document?.revisions.find((value) => value.revision === revision)) ?? null
+        );
       });
-      if (existing) await s.beforeWrite?.(existing.id);
-      return s.store.commit(
+    const base = await readBase(input.expectedRevision);
+    try {
+      return await this.commit(
         {
           ...input,
-          id: existing?.id,
-          scopeKey: scope,
-          expectedRevision: existing?.revisions.at(-1)?.revision ?? 0,
-          ...this.attribution(s, context),
+          id: base?.documentId,
+          expectedRevision: input.expectedRevision ?? base?.revision ?? 0,
         },
-        s.access,
+        context,
       );
-    });
-    return this.queued(document, context);
+    } catch (error) {
+      if (!(error instanceof MemoryConflictError) || !context.runId) throw error;
+      const latestRevision = await readBase();
+      const latest = latestRevision ? await this.read(latestRevision.documentId, context) : null;
+      if (!latest || latest.deletedAt) throw error;
+      const addition =
+        base && input.content.startsWith(base.content)
+          ? input.content.slice(base.content.length).trim()
+          : input.content;
+      return this.commit(
+        {
+          ...input,
+          id: latest.id,
+          content: `${latest.content}\n\n${addition}`,
+          expectedRevision: latest.revision,
+        },
+        context,
+      );
+    }
   }
   async update(
     id: string,

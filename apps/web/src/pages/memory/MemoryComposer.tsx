@@ -1,5 +1,8 @@
 import type { LearningProposal } from "@ardurbot/contracts";
-import { MEMORY_REVIEW_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
+import {
+  MEMORY_REVIEW_UNAVAILABLE_MESSAGE,
+  MODEL_LOCALITY_DENIED_MESSAGE,
+} from "@ardurbot/contracts";
 import { Button, Textarea } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useRef, useState } from "react";
@@ -15,7 +18,7 @@ export function MemoryComposer({
   const [instruction, setInstruction] = useState("");
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
-  const [error, setError] = useState<"runtime" | "request" | null>(null);
+  const [error, setError] = useState<"runtime" | "locality" | "request" | null>(null);
 
   async function submit() {
     if (locked.current || !instruction.trim()) return;
@@ -29,7 +32,9 @@ export function MemoryComposer({
       setError(
         error instanceof Error && error.message === MEMORY_REVIEW_UNAVAILABLE_MESSAGE
           ? "runtime"
-          : "request",
+          : error instanceof Error && error.message === MODEL_LOCALITY_DENIED_MESSAGE
+            ? "locality"
+            : "request",
       );
     } finally {
       locked.current = false;
@@ -64,6 +69,8 @@ export function MemoryComposer({
               Memory review is not available with Claude Code or Codex yet; import memory or edit a
               document directly.
             </Trans>
+          ) : error === "locality" ? (
+            <Trans>This bot may only run locally — change the pin or the space policy</Trans>
           ) : (
             <Trans>Could not request memory changes. Try again.</Trans>
           )}

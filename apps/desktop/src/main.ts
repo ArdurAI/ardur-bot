@@ -995,10 +995,10 @@ function commitPendingAppSwitch() {
  * Undo an open that could not be persisted. When a prior session exists, restore
  * it. On first run keep the connected window so the user can retry save.
  */
-function abandonPendingAppSwitch(
+async function abandonPendingAppSwitch(
   previousSetup: DesktopSetup | null,
   previousUrl: string | null,
-): "restored" | "kept" {
+): Promise<"restored" | "kept"> {
   const previous = pendingPreviousWindow;
   pendingPreviousWindow = null;
   if (previous !== null && !previous.isDestroyed()) {
@@ -1007,6 +1007,7 @@ function abandonPendingAppSwitch(
     if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;
+    if (previousUrl !== null) await hostService?.activate(previousUrl);
     // If setup was already closed (e.g. during a slow write), make the restored
     // session visible — otherwise macOS can be left with no shown window.
     if (setupWindow === null || setupWindow.isDestroyed()) {
@@ -1059,7 +1060,7 @@ async function recoverFromCrashedSave(
   previousSetup: DesktopSetup | null,
   previousUrl: string | null,
 ): Promise<string> {
-  const outcome = abandonPendingAppSwitch(previousSetup, previousUrl);
+  const outcome = await abandonPendingAppSwitch(previousSetup, previousUrl);
   await rollbackSetupFile(userDataDir, previousSetup);
   if (outcome === "kept") {
     if (mainWindow !== null && !mainWindow.isDestroyed()) mainWindow.destroy();
@@ -1433,7 +1434,7 @@ app.whenReady().then(async () => {
         }
         return { ok: true };
       } catch {
-        const outcome = abandonPendingAppSwitch(previousSetup, previousUrl);
+        const outcome = await abandonPendingAppSwitch(previousSetup, previousUrl);
         return {
           ok: false,
           error:

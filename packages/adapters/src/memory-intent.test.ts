@@ -123,7 +123,13 @@ describe("explicit memory intents", () => {
           text: "Use short answers.",
           requestId: "policy-fixture",
         }),
-      ).rejects.toThrow("This bot may only run locally — change the pin or the space policy");
+      ).rejects.toMatchObject({
+        name: "RuntimePinError",
+        problem: {
+          code: "locality-denied",
+          reason: "This bot may only run locally — change the pin or the space policy",
+        },
+      });
       expect(await resolvePin.mock.results[0]!.value).toMatchObject({
         kind: "problem",
         code: "locality-denied",

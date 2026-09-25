@@ -254,6 +254,10 @@ export class ClaudeStreamParser {
               (tokens.cacheReadInputTokens ?? 0) +
               (tokens.cacheCreationInputTokens ?? 0),
             outputTokens: tokens.outputTokens!,
+            ...(Number.isSafeInteger(tokens.cacheReadInputTokens) &&
+            tokens.cacheReadInputTokens! >= 0
+              ? { cachedTokens: tokens.cacheReadInputTokens }
+              : {}),
           });
       }
       return [...events, { type: "done" }];

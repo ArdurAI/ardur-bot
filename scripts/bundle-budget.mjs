@@ -1,9 +1,16 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 export async function measureBundle(directory) {
+  const root = await realpath(directory);
+  async function asset(file) {
+    const resolved = await realpath(path.resolve(root, file));
+    if (!resolved.startsWith(`${root}${path.sep}`))
+      throw new Error("Asset escapes bundle directory");
+    return readFile(resolved);
+  }
   const manifest = JSON.parse(await readFile(path.join(directory, ".vite/manifest.json"), "utf8"));
   const html = await readFile(path.join(directory, "index.html"), "utf8");
   const initial = new Set(
@@ -23,7 +30,7 @@ export async function measureBundle(directory) {
   }
   const files = {};
   for (const file of [...initial].sort()) {
-    files[file] = gzipSync(await readFile(path.join(directory, file)), { level: 9 }).length;
+    files[file] = gzipSync(await asset(file), { level: 9 }).length;
   }
   // Stable source ids, plus uniquely named shared chunks, survive hashed file names.
   const names = Object.values(manifest).map((entry) => entry.name);
@@ -42,9 +49,25 @@ export async function measureBundle(directory) {
         },
       ]),
   );
+  const totals = { "renderer-assets": 0, css: 0, fonts: 0 };
+  async function inventory(dir) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) throw new Error("Bundle inventory cannot follow symbolic links");
+      if (entry.isDirectory()) await inventory(file);
+      else if (entry.isFile()) {
+        const { size } = await stat(file);
+        totals["renderer-assets"] += size;
+        if (/\.css$/i.test(entry.name)) totals.css += size;
+        if (/\.(woff2?|ttf|otf)$/i.test(entry.name)) totals.fonts += size;
+      }
+    }
+  }
+  await inventory(root);
   return {
     initial: { files, gzipBytes: Object.values(files).reduce((sum, size) => sum + size, 0) },
     chunks,
+    totals,
   };
 }
 
@@ -63,14 +86,108 @@ export function bundleWarnings(report, baseline) {
     if (chunk.dynamic && !chunk.lazy)
       warnings.push(`Dynamic entry is in the initial graph: ${id}.`);
   }
+  for (const [category, bytes] of Object.entries(baseline.totals ?? {})) {
+    const current = report.totals?.[category];
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || !Number.isSafeInteger(current) || current < 0)
+      warnings.push(`Missing or invalid artifact category: ${category}.`);
+    else if (current - bytes > bytes * 0.05)
+      warnings.push(`Total artifact grew beyond 5%: ${category}.`);
+  }
   return warnings;
 }
 
+export const ARTIFACT_CATEGORIES = Object.freeze([
+  "css",
+  "fonts",
+  "renderer-assets",
+  "main",
+  "preload",
+  "host",
+  "asar",
+  "native-modules",
+  "installer",
+  "download",
+  "installed",
+]);
+
+/** Static diagnostics complement schema-3 evidence; raw sizes alone are not release provenance. */
+export function bundleVerdict(candidate, parent, fixedRelease) {
+  const reasons = [];
+  const comparisons = [];
+  for (const [scope, baseline] of [
+    ["parent", parent],
+    ["fixed-release", fixedRelease],
+  ]) {
+    if (!baseline) {
+      reasons.push({ code: "missing-baseline", scope });
+      continue;
+    }
+    try {
+      for (const report of [baseline, candidate]) {
+        if (
+          !Number.isSafeInteger(report.initial.gzipBytes) ||
+          report.initial.gzipBytes < 0 ||
+          !report.chunks ||
+          typeof report.chunks !== "object" ||
+          Array.isArray(report.chunks)
+        )
+          throw new Error("invalid bundle");
+        for (const chunk of Object.values(report.chunks)) {
+          if (!chunk || typeof chunk.lazy !== "boolean" || typeof chunk.dynamic !== "boolean")
+            throw new Error("invalid chunk");
+        }
+        for (const category of ARTIFACT_CATEGORIES) {
+          if (!Number.isSafeInteger(report.totals?.[category]) || report.totals[category] < 0)
+            reasons.push({ code: "incomplete-artifact-category", scope, category });
+        }
+      }
+      const warnings = bundleWarnings(candidate, baseline);
+      comparisons.push({ scope, warnings });
+      for (const warning of warnings)
+        reasons.push({
+          code: warning.startsWith("Missing") ? "invalid-artifact-value" : "budget-regression",
+          scope,
+          detail: warning,
+        });
+    } catch {
+      reasons.push({ code: "invalid-bundle-report", scope });
+    }
+  }
+  reasons.push({
+    code: "schema-3-evidence-required",
+    scope: "release",
+    detail:
+      "Use the performance comparator for calibrated policy, artifact provenance and complete release evidence.",
+  });
+  const regressed = reasons.some((reason) => reason.code === "budget-regression");
+  return {
+    status: regressed ? "regression" : "incomplete",
+    exitCode: regressed ? 1 : 2,
+    comparisons,
+    reasons,
+  };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const report = await measureBundle(process.argv[2] ?? "apps/web/dist");
-  const warnings = process.argv[3]
-    ? bundleWarnings(report, JSON.parse(await readFile(process.argv[3], "utf8")))
-    : [];
-  console.log(JSON.stringify({ ...report, warnings }, null, 2));
-  for (const warning of warnings) console.warn(`::warning title=Bundle budget::${warning}`);
+  try {
+    const report = await measureBundle(process.argv[2] ?? "apps/web/dist");
+    if (!process.argv[3]) console.log(JSON.stringify(report, null, 2));
+    else {
+      const parent = JSON.parse(await readFile(process.argv[3], "utf8"));
+      const fixed = process.argv[4] ? JSON.parse(await readFile(process.argv[4], "utf8")) : null;
+      const verdict = bundleVerdict(report, parent, fixed);
+      console.log(JSON.stringify({ ...report, ...verdict }, null, 2));
+      console.error(`Bundle budget: ${verdict.status}.`);
+      process.exitCode = verdict.exitCode;
+    }
+  } catch {
+    console.log(
+      JSON.stringify({
+        status: "incomplete",
+        exitCode: 2,
+        reasons: [{ code: "invalid-bundle-input", scope: "cli" }],
+      }),
+    );
+    process.exitCode = 2;
+  }
 }
