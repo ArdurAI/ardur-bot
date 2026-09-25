@@ -90,9 +90,15 @@ export async function readSkillDocument(
       context,
     );
   } catch (error) {
-    if (error instanceof MemoryConflictError) {
+    // A concurrent creator can reach the immutable builtin guard before the
+    // store checks expectedRevision. Reuse only the identical, readable snapshot.
+    if (
+      error instanceof MemoryConflictError ||
+      (kind === "builtin" && error instanceof MemoryAccessError)
+    ) {
       const winner = await findExisting();
-      if (winner) return winner;
+      if (winner && (kind !== "builtin" || (!winner.deletedAt && winner.content === row.content)))
+        return winner;
     }
     throw error;
   }

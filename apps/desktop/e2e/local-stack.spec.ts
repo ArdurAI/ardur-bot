@@ -1,8 +1,10 @@
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
-import { createServer, type RequestListener, type Server } from "node:http";
+import type { RequestListener, Server } from "node:http";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { type ElectronApplication, _electron as electron, expect, test } from "@playwright/test";
+import type { ElectronApplication } from "@playwright/test";
+import { _electron as electron, expect, test } from "@playwright/test";
 
 const APP_MARKER = "Local Ardur Bot stack ready";
 const IMAGE_TAG = "v9.9.9";
@@ -115,8 +117,16 @@ async function writeFakeDocker(mode: FakeDockerMode) {
       ? '    echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2; exit 1 ;;'
       : '    echo "27.1.1"; exit 0 ;;',
     "esac",
-    "# compose --env-file .env -f docker-compose.images.yml --project-name ardurbot-desktop <command> ...",
-    'case "$8" in',
+    // Consume Compose options, including additional files for managed memory.
+    '[ "$1" = "compose" ] || exit 2',
+    "shift",
+    'while [ "$#" -gt 0 ]; do',
+    '  case "$1" in',
+    "    --env-file|-f|--project-name) shift 2 ;;",
+    "    *) break ;;",
+    "  esac",
+    "done",
+    'case "$1" in',
     "  pull)",
     mode === "pull-fails"
       ? '    echo "Error response from daemon: manifest unknown" >&2; exit 1 ;;'
@@ -124,7 +134,7 @@ async function writeFakeDocker(mode: FakeDockerMode) {
     up,
     '  logs) echo "web-1 | listening"; exit 0 ;;',
     "esac",
-    "exit 0",
+    'echo "Unexpected fake Docker command: $*" >&2; exit 2',
     "",
   ];
   await writeFile(script, lines.join("\n"), { encoding: "utf8", mode: 0o755 });
@@ -211,7 +221,7 @@ test("This computer installs and starts the stack, then opens the app", async ()
   );
 
   const compose =
-    "compose --env-file .env -f docker-compose.images.yml --project-name ardurbot-desktop";
+    "compose --env-file .env -f docker-compose.images.yml -f docker-compose.memory.json --project-name ardurbot-desktop";
   expect(await readLog()).toEqual([
     `${stackDir} | ${IMAGE_TAG} | compose version --short`,
     `${stackDir} | ${IMAGE_TAG} | info --format {{.ServerVersion}}`,

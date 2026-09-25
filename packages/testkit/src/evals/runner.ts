@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { type AgentRuntime, type JobPublisher, runJobKey } from "@ardurbot/adapter-kit";
+import type { AgentRuntime, JobPublisher } from "@ardurbot/adapter-kit";
+import { runJobKey } from "@ardurbot/adapter-kit";
 import { MessagingTeamChatEmulator } from "@ardurbot/adapters";
-import type { ModelConnectInput, RunStatus } from "@ardurbot/contracts";
+import type { MemoryPage, ModelConnectInput, RunStatus } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, isTerminal } from "@ardurbot/core";
 import type { createDb } from "@ardurbot/db";
 import { sessionCookieHeader } from "../index.js";
 import type { EvalCase, Evidence } from "./cases.js";
-import { emptyTrial, type FailureCategory, redact, type TrialResult } from "./report.js";
+import type { FailureCategory, TrialResult } from "./report.js";
+import { emptyTrial, redact } from "./report.js";
 import { EvalServices } from "./services.js";
 
 type App = { request: (input: string, init?: RequestInit) => Promise<Response> };
@@ -185,9 +187,7 @@ export async function runTrial(
     for (const [stepIndex, step] of scenario.steps.entries()) {
       if (Date.now() >= deadline) throw new EvalFailure("incomplete", "Trial time budget exceeded");
       if ("newWorkspace" in step) {
-        priorMemory = (await rpc<Array<{ content: string }>>(app, cookie, "memory/list", { botId }))
-          .map((m) => m.content)
-          .join("\n");
+        priorMemory = await readMemorySnapshot(app, cookie, botId);
         await setupActor();
         continue;
       }
@@ -365,9 +365,7 @@ export async function runTrial(
         files[path] = null;
       }
     }
-    const memories = await rpc<Array<{ content: string }>>(handles.app, cookie, "memory/list", {
-      botId,
-    });
+    const memory = await readMemorySnapshot(handles.app, cookie, botId);
     const routines = await handles.prisma.routine.findMany({
       where: { botId },
       select: { name: true, prompt: true, crons: true, active: true },
@@ -380,7 +378,7 @@ export async function runTrial(
       notes: services.notes,
       calls: services.calls,
       routines,
-      memory: memories.map((m) => m.content).join("\n"),
+      memory,
       approvalPending,
       pendingApproval,
       priorMemory,
@@ -456,6 +454,17 @@ export async function runTrial(
     result.latencyMs = Date.now() - started;
   }
   return result;
+}
+
+export async function readMemorySnapshot(app: App, cookie: string, botId: string): Promise<string> {
+  const contents: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await rpc<MemoryPage>(app, cookie, "memory/list", { botId, cursor, limit: 100 });
+    contents.push(...page.items.map((item) => item.content));
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+  return contents.join("\n");
 }
 
 async function rpc<T>(app: App, cookie: string, proc: string, body: unknown = {}): Promise<T> {
