@@ -11,12 +11,14 @@ export function IntegrationTable({
   onConnect,
   onManage,
   renderActions,
+  renderType,
 }: {
   rows: ConnectorRow[];
   busy?: string | null;
   onConnect(row: ConnectorRow): void;
   onManage?(row: ConnectorRow): void;
   renderActions?(row: ConnectorRow): ReactNode;
+  renderType?(row: ConnectorRow): ReactNode;
 }) {
   const { t } = useLingui();
   return (
@@ -46,7 +48,11 @@ export function IntegrationTable({
               </td>
               <td className="py-4 pr-3">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span>{row.type === "web" ? t`Web` : t`Desktop`}</span>
+                  {renderType ? (
+                    renderType(row)
+                  ) : (
+                    <span>{row.type === "web" ? t`Web` : t`Desktop`}</span>
+                  )}
                   {row.badges.map((badge) => (
                     <Badge key={badge} variant="secondary">
                       {badge === "included"

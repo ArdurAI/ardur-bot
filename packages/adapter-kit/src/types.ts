@@ -7,6 +7,7 @@ import type {
   RuntimeProblem,
   SandboxKind,
 } from "@ardurbot/contracts";
+import type { HostIntegrationId } from "@ardurbot/contracts/host-integrations";
 
 export interface AdapterContext {
   toolAccessMode?: "when-needed" | "all";
@@ -75,6 +76,8 @@ export interface ComputerRef {
 
 export interface CommandRequest {
   argv: string[];
+  /** Host-owned credentials must still match the integration the owner granted. */
+  hostIntegration?: { id: HostIntegrationId; identity: string; workspace: string | null };
   cwd?: string;
   env?: Record<string, string>;
   pty?: boolean;

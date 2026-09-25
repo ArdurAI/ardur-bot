@@ -83,12 +83,18 @@ export interface ArdurBotDesktop {
   };
   platform: string;
   window: {
+    setUnsavedChanges?: (dirty: boolean) => Promise<void>;
     close: () => Promise<void>;
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
     state: () => Promise<{ minimized: boolean; maximized: boolean; fullScreen: boolean }>;
   };
   update: ArdurBotDesktopUpdate;
+  integrations?: {
+    open(url: string): Promise<void>;
+    focus(): Promise<void>;
+    onReturn(listener: (id: string) => void): () => void;
+  };
   oauth: {
     /**
      * Open system-browser auth. A redirect_uri must be HTTP loopback with state;

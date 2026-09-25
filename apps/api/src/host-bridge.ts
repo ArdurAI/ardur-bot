@@ -1,11 +1,14 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
+import path from "node:path";
 import type { Duplex } from "node:stream";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
+import type { Actor } from "@ardurbot/contracts";
 import type { HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
-import { HOST_FRAME_BYTES } from "@ardurbot/contracts/host-bridge";
+import { HOST_WRITE_FRAME_BYTES, HostOperationSchema } from "@ardurbot/contracts/host-bridge";
 import { RuntimePinSchema } from "@ardurbot/contracts/runtime-pins";
 import type { PrismaClient } from "@ardurbot/db";
+import { requireMembership } from "@ardurbot/db";
 import type { HostWire } from "@ardurbot/host-runtime/bridge-wire";
 import { receiveFrames, wsWire } from "@ardurbot/host-runtime/bridge-wire";
 import { hostTokenMatches, hostWorkerToken } from "@ardurbot/host-runtime/worker-auth";
@@ -18,7 +21,8 @@ export function hostTokenHash(token: string) {
 }
 export class HostBridge {
   readonly hub: HostHub;
-  private readonly settingsRequests = new Set<string>();
+  private readonly ownerFiles = new WeakMap<HostRequest, Actor>();
+  private readonly settingsRequests = new WeakSet<HostRequest>();
   constructor(
     private readonly prisma: PrismaClient,
     private readonly encryptionKey: string,
@@ -68,39 +72,107 @@ export class HostBridge {
       health: configured ? this.hub.health : null,
     };
   }
+  /** In-process grants cannot be supplied by a worker or a renderer. No bot run is fabricated. */
+  async ownerFile(actor: Actor, operation: HostOperation, signal?: AbortSignal) {
+    if (!actor.isDeploymentOwner || !operation.op.startsWith("computer.files."))
+      throw new Error("Only the deployment owner can edit registered folders.");
+    const id = randomUUID();
+    const request: HostRequest = {
+      v: 1,
+      type: "request",
+      id,
+      scope: { userId: actor.userId, spaceId: actor.spaceId, botId: "ide", runId: id },
+      operation: HostOperationSchema.parse(operation),
+    };
+    this.ownerFiles.set(request, actor);
+    const chunks: Buffer[] = [];
+    let result: unknown;
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    const ended = new Promise<void>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    const worker: HostWire = {
+      send: async (frame) => {
+        if (frame.type === "end") {
+          if (frame.problem) reject(new Error(frame.problem.reason));
+          else resolve();
+        } else if (frame.type === "stream") {
+          if (frame.channel === "file" && typeof frame.data === "string")
+            chunks.push(Buffer.from(frame.data, "base64"));
+          else if (frame.channel === "result") result = frame.data;
+          else throw new Error("Unexpected host file response.");
+          await this.hub.fromWorker(worker, { v: 1, type: "ack", id, seq: frame.seq });
+        }
+      },
+      close: () => reject(new Error("Host service disconnected.")),
+    };
+    const cancel = () => this.hub.cancel(id, worker);
+    signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      signal?.throwIfAborted();
+      await Promise.all([this.hub.request(request, worker), ended]);
+      return { bytes: new Uint8Array(Buffer.concat(chunks)), result };
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+      this.hub.closeWorker(worker);
+      this.ownerFiles.delete(request);
+    }
+  }
   private async authorize(request: HostRequest, ownerId: string, generation: string) {
     if (request.scope.userId !== ownerId) return false;
-    if ("serverId" in request.operation) {
-      const [registration, deployment] = await Promise.all([
-        this.prisma.hostRegistration.findUnique({ where: { id: "default" } }),
-        this.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
-      ]);
-      return (
-        registration?.generation === generation &&
-        registration.userId === ownerId &&
-        deployment?.ownerUserId === ownerId &&
-        authorizeHostMcp(this.prisma, request, this.settingsRequests.has(request.id))
-      );
-    }
-    const [registration, deployment, run] = await Promise.all([
+    const [registration, deployment] = await Promise.all([
       this.prisma.hostRegistration.findUnique({ where: { id: "default" } }),
       this.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
-      this.prisma.run.findFirst({
-        where: {
-          id: request.scope.runId,
-          botId: request.scope.botId,
-          spaceId: request.scope.spaceId,
-          userId: ownerId,
-          status: "running",
-          cancelRequestedAt: null,
-        },
-        include: { bot: { include: { computer: true } } },
-      }),
     ]);
     if (
       registration?.generation !== generation ||
-      registration?.userId !== ownerId ||
-      deployment?.ownerUserId !== ownerId ||
+      registration.userId !== ownerId ||
+      deployment?.ownerUserId !== ownerId
+    )
+      return false;
+    const owner = this.ownerFiles.get(request);
+    const settingsRequest = this.settingsRequests.has(request);
+    if (owner || settingsRequest) {
+      try {
+        await requireMembership(this.prisma, request.scope.userId, request.scope.spaceId);
+      } catch {
+        return false;
+      }
+    }
+    if (owner) {
+      const op = request.operation;
+      if (!op.op.startsWith("computer.files.") || !("path" in op)) return false;
+      const paths = this.hub.health?.platform === "win32" ? path.win32 : path.posix;
+      return (
+        paths.isAbsolute(op.path) &&
+        registration.hostRoots.some((root) => {
+          const relative = paths.relative(root, op.path);
+          return (
+            relative === "" ||
+            (!relative.startsWith(`..${paths.sep}`) &&
+              relative !== ".." &&
+              !paths.isAbsolute(relative))
+          );
+        })
+      );
+    }
+    if ("editor" in request.operation && request.operation.editor) return false;
+    if ("serverId" in request.operation)
+      return authorizeHostMcp(this.prisma, request, settingsRequest);
+    const run = await this.prisma.run.findFirst({
+      where: {
+        id: request.scope.runId,
+        botId: request.scope.botId,
+        spaceId: request.scope.spaceId,
+        userId: ownerId,
+        status: "running",
+        cancelRequestedAt: null,
+      },
+      include: { bot: { include: { computer: true } } },
+    });
+    if (
       !run ||
       (run.bot.computer?.kind !== "desktop" &&
         (deployment.computerHost !== "this-mac" || run.bot.computer?.connectionId)) ||
@@ -136,9 +208,9 @@ export class HostBridge {
       type: "request",
       id,
       scope: { userId: context.userId, spaceId: context.spaceId, botId: "settings", runId: id },
-      operation,
+      operation: HostOperationSchema.parse(operation),
     };
-    this.settingsRequests.add(id);
+    this.settingsRequests.add(request);
     let value: unknown;
     let wire: HostWire | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -166,7 +238,7 @@ export class HostBridge {
       });
     } finally {
       clearTimeout(timer);
-      this.settingsRequests.delete(id);
+      this.settingsRequests.delete(request);
       if (wire) this.hub.closeWorker(wire);
     }
   }
@@ -181,7 +253,7 @@ export class HostBridge {
   }) {
     const wss = new WebSocketServer({
       noServer: true,
-      maxPayload: HOST_FRAME_BYTES,
+      maxPayload: HOST_WRITE_FRAME_BYTES,
       perMessageDeflate: false,
     });
     server.on("upgrade", (request, socket, head) => {

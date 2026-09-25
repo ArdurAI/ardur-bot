@@ -16,7 +16,7 @@ it("shows the pin and directs recovery to its provider and failed bot", () => {
     "This bot is pinned to xai · grok-4.6 · high; connect it or change the pin.",
   );
   expect(runtimePinRecovery(problem, "failed-group-member")).toEqual({
-    connect: { pathname: "/models", params: { provider: "xai" } },
+    connect: { pathname: "/models", params: { provider: "xai", botId: "failed-group-member" } },
     changePin: { pathname: "/bot-settings", params: { botId: "failed-group-member" } },
   });
 });

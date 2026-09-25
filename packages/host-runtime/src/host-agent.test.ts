@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
@@ -7,6 +7,7 @@ import { decodeHostFrame, encodeHostFrame, HOST_WINDOW } from "@ardurbot/contrac
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostAgent } from "./host-agent.js";
+import { HostMcpServers } from "./host-mcp.js";
 import { nativeEnvironment } from "./runtimes/native-process.js";
 
 vi.mock("node:os", async (original) => ({
@@ -80,7 +81,7 @@ const turn: HostOperation = {
     },
   },
 };
-async function fixture(runtime?: AgentRuntime) {
+async function fixture(runtime?: AgentRuntime, acknowledge = false) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "host-agent-")));
   roots.push(root);
   const frames: HostFrame[] = [];
@@ -94,6 +95,10 @@ async function fixture(runtime?: AgentRuntime) {
     {
       send: async (frame) => {
         frames.push(decodeHostFrame(encodeHostFrame(frame)));
+        if (acknowledge && frame.type === "stream")
+          queueMicrotask(() => {
+            void agent.receive({ v: 1, type: "ack", id: frame.id, seq: frame.seq });
+          });
         if (frame.type === "end") {
           pendingEnds.get(frame.id)?.();
           pendingEnds.delete(frame.id);
@@ -264,4 +269,85 @@ it("reports the host inventory through health and the run-scoped environment ope
   await agent.receive(request({ op: "computer.environment", homeKey: "bot" }));
   await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
   expect(frames[0]).toMatchObject({ type: "stream", channel: "result", data: health.environment });
+});
+
+vi.mock("./host-integrations.js", () => ({ inspectHostIntegrations: async () => [] }));
+it("round-trips a 2 MB owner save and bounds larger previews without raising bot file limits", async () => {
+  const { agent, frames, root, completed } = await fixture(undefined, true);
+  const content = Buffer.alloc(2 * 1024 * 1024, 97);
+  const file = path.join(root, "editor.txt");
+  await agent.receive(
+    request({
+      op: "computer.files.write",
+      homeKey: "ide",
+      path: file,
+      editor: true,
+      content: content.toString("base64"),
+    }),
+  );
+  await completed("req");
+  expect(frames.at(-1)).toMatchObject({ type: "end", id: "req" });
+  expect(frames.at(-1)).not.toHaveProperty("problem");
+  expect(await readFile(file)).toEqual(content);
+  await writeFile(file, Buffer.concat([content, Buffer.from("large")]));
+  await agent.receive({
+    ...request({
+      op: "computer.files.read",
+      homeKey: "ide",
+      path: file,
+      editor: true,
+      maxBytes: content.length + 1,
+    }),
+    id: "preview",
+  });
+  await completed("preview");
+  expect(frames.at(-1)).toMatchObject({ type: "end", id: "preview" });
+  const chunks = frames.flatMap((frame) =>
+    frame.type === "stream" && frame.id === "preview" && frame.channel === "file"
+      ? [Buffer.from(frame.data as string, "base64")]
+      : [],
+  );
+  expect(Buffer.concat(chunks).length).toBe(content.length + 1);
+  await agent.receive({
+    ...request({ op: "computer.files.read", homeKey: "bot", path: file }),
+    id: "bot-read",
+  });
+  await completed("bot-read");
+  expect(frames.at(-1)).toMatchObject({
+    type: "end",
+    id: "bot-read",
+    problem: expect.any(Object),
+  });
+});
+
+it("dispatches registered MCP requests and completes acknowledged streams without provisioning files", async () => {
+  const execute = vi.spyOn(HostMcpServers.prototype, "execute").mockResolvedValue({ tools: [] });
+  const provision = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
+  const { agent, frames, root, completed } = await fixture(undefined, true);
+  agent.refreshMcp = vi.fn(async () => {
+    await agent.configureMcp([
+      {
+        serverId: "server",
+        userId: "owner",
+        spaceId: "space",
+        revision: 1,
+        command: "node",
+        args: [],
+        env: {},
+        cwd: root,
+        redactions: [],
+      },
+    ]);
+  });
+  const operation = { op: "mcp.tools", serverId: "server", revision: 1 } as const;
+  const frame = request(operation);
+  await agent.receive(frame);
+  await completed(frame.id);
+  expect(agent.refreshMcp).toHaveBeenCalledOnce();
+  expect(execute).toHaveBeenCalledWith(operation, frame.scope, expect.any(AbortSignal));
+  expect(provision).not.toHaveBeenCalled();
+  expect(frames).toEqual([
+    { v: 1, type: "stream", id: frame.id, seq: 0, channel: "result", data: { tools: [] } },
+    { v: 1, type: "end", id: frame.id },
+  ]);
 });

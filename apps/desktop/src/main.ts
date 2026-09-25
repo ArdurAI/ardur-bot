@@ -4,28 +4,21 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopReachability, DesktopSetup } from "@ardurbot/contracts";
 import { LOCAL_SETTINGS_PAGE } from "@ardurbot/contracts/local-settings";
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  Menu,
-  net,
-  type Session,
-  session,
-  shell,
-} from "electron";
-import {
-  DesktopUpdateController,
-  type ElectronAutoUpdater,
-  LAUNCH_CHECK_DELAY_MS,
-} from "./auto-update.js";
+import type { Session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "electron";
+import type { ElectronAutoUpdater } from "./auto-update.js";
+import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
 import { openBrowserAuth } from "./browser-auth.js";
 import { cliVersion } from "./cli.js";
 import { installDevices } from "./devices-ipc.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
 import { installCustomizationIpc } from "./extensions/ipc.js";
 import { installHostService } from "./host-service-ipc.js";
+import {
+  focusIntegration,
+  integrationReturnId,
+  registerIntegrationProtocol,
+} from "./integration-return.js";
 import { requestLocalSettings } from "./local-settings.js";
 import {
   LocalStackController,
@@ -71,6 +64,7 @@ import { readEnabledRoutines } from "./system/routines.js";
 import { installSystemRuntime } from "./system/runtime.js";
 import { systemTray } from "./system/tray.js";
 import { staysRunning } from "./tray.js";
+import { UnsavedFiles } from "./unsaved-files.js";
 import { shouldOpenInAppPopup } from "./window-open.js";
 import {
   browserWindowOptions,
@@ -93,6 +87,7 @@ const DESKTOP_STACK_PROBE_PATH = "/.well-known/ardurbot-desktop-stack";
 const DESKTOP_STACK_TOKEN_HEADER = "x-ardurbot-desktop-stack-token";
 let desktopTray: ReturnType<typeof systemTray> = null;
 let mainWindow: BrowserWindow | null = null;
+const unsavedFiles = new UnsavedFiles<BrowserWindow>();
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
 let setupWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -146,7 +141,23 @@ if (PERFORMANCE_USER_DATA) {
   app.setPath("sessionData", path.join(PERFORMANCE_USER_DATA, "session"));
 }
 if (!app.requestSingleInstanceLock()) process.exit(0);
-app.on("second-instance", () => app.emit("activate"));
+let pendingIntegrationReturn: string | null = null;
+function returnToIntegration(value: string) {
+  const id = integrationReturnId(value);
+  if (id === null) return;
+  pendingIntegrationReturn = id;
+  app.emit("activate");
+  focusIntegration(mainWindow, id);
+}
+app.on("second-instance", (_event, argv) => {
+  const link = argv.find((arg) => arg.startsWith("ardurbot:"));
+  if (link) returnToIntegration(link);
+  else app.emit("activate");
+});
+app.on("open-url", (event, value) => {
+  event.preventDefault();
+  returnToIntegration(value);
+});
 
 app.once("will-finish-launching", () => markOnce("rk:main:will-finish-launching"));
 app.once("ready", () => markOnce("rk:main:ready"));
@@ -347,6 +358,24 @@ function createWindow(url: string, partition: string | null) {
     popup.webContents.on("will-redirect", (details) => capture(details));
     popup.webContents.on("will-navigate", (details) => capture(details));
   });
+  win.webContents.on("will-prevent-unload", (event) => {
+    if (quitting && !unsavedFiles.has(win)) {
+      event.preventDefault();
+      return;
+    }
+    const discard =
+      dialog.showMessageBoxSync(win, {
+        type: "question",
+        message: "Unsaved changes",
+        buttons: ["Cancel", "Discard"],
+        defaultId: 0,
+        cancelId: 0,
+      }) === 1;
+    if (discard) {
+      unsavedFiles.set(win, false);
+      event.preventDefault();
+    } else quitting = false;
+  });
   win.on("close", (event) => {
     if (
       staysRunning(process.platform, desktopTray !== null, hostService?.keepRunning) &&
@@ -362,16 +391,19 @@ function createWindow(url: string, partition: string | null) {
           !hostService?.keepRunning &&
           mainWindow === win &&
           !win.isDestroyed() &&
-          !win.isVisible()
+          !win.isVisible() &&
+          !unsavedFiles.has(win)
         )
           win.destroy();
       }, WARM_WINDOW_TTL_MS);
     }
   });
   win.once("closed", () => {
-    clearTimeout(warmWindowTimer);
-    hostService?.windowClosed();
-    if (mainWindow === win) mainWindow = null;
+    if (mainWindow === win) {
+      clearTimeout(warmWindowTimer);
+      mainWindow = null;
+      hostService?.windowClosed();
+    }
   });
   markOnce("rk:main:window-created");
   if (win.isVisible()) markOnce("rk:main:window-shown");
@@ -971,8 +1003,8 @@ function abandonPendingAppSwitch(
   pendingPreviousWindow = null;
   if (previous !== null && !previous.isDestroyed()) {
     const failed = mainWindow;
-    if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     mainWindow = previous;
+    if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;
     // If setup was already closed (e.g. during a slow write), make the restored
@@ -1052,6 +1084,9 @@ function safeOrigin(targetUrl: string) {
 }
 
 app.whenReady().then(async () => {
+  registerIntegrationProtocol(app);
+  const initialLink = process.argv.find((arg) => arg.startsWith("ardurbot:"));
+  if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
   installCustomizationIpc({ window: () => mainWindow, target: () => currentTargetUrl });
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
   hostService = installHostService({
@@ -1114,6 +1149,30 @@ app.whenReady().then(async () => {
     browserAuthAttempts.clear();
   };
   app.on("before-quit", cancelBrowserAuth);
+  ipcMain.handle("desktop.integrations.open", async (event, value: unknown) => {
+    if (
+      !fromMainWindow(event) ||
+      event.senderFrame !== event.sender.mainFrame ||
+      typeof value !== "string" ||
+      value.length > 16384
+    )
+      throw new Error("Invalid sign-in request.");
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password)
+      throw new Error("Invalid sign-in address.");
+    await shell.openExternal(url.href);
+  });
+  ipcMain.handle("desktop.integrations.focus", (event) => {
+    if (fromMainWindow(event) && event.senderFrame === event.sender.mainFrame)
+      focusIntegration(mainWindow, "");
+  });
+  ipcMain.handle("desktop.integrations.ready", (event) => {
+    if (!fromMainWindow(event) || event.senderFrame !== event.sender.mainFrame) return;
+    if (pendingIntegrationReturn !== null) {
+      focusIntegration(mainWindow, pendingIntegrationReturn);
+      pendingIntegrationReturn = null;
+    }
+  });
   ipcMain.handle("desktop.oauth.open", async (event, url: unknown) => {
     if (
       (!fromMainWindow(event) &&
@@ -1237,6 +1296,16 @@ app.whenReady().then(async () => {
     } finally {
       selectingMemoryFolder = false;
     }
+  });
+  ipcMain.handle("desktop.window.unsaved", (event, dirty: unknown) => {
+    const win = fromMainWindow(event) ? mainWindow : null;
+    if (
+      !win ||
+      event.senderFrame !== win.webContents.mainFrame ||
+      safeOrigin(event.senderFrame.url) !== safeOrigin(appWindowTargets.get(win) ?? "")
+    )
+      throw new Error("Window is unavailable here.");
+    unsavedFiles.set(win, dirty);
   });
   ipcMain.handle("desktop.window.close", (event) => {
     windowFrom(event)?.close();
@@ -1506,8 +1575,24 @@ app.on("window-all-closed", () => {
   if (!staysRunning(process.platform, desktopTray !== null, hostService?.keepRunning)) app.quit();
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   quitting = true;
+  if (mainWindow && unsavedFiles.has(mainWindow)) {
+    const discard =
+      dialog.showMessageBoxSync(mainWindow, {
+        type: "question",
+        message: "Unsaved changes",
+        buttons: ["Cancel", "Discard"],
+        defaultId: 0,
+        cancelId: 0,
+      }) === 1;
+    if (!discard) {
+      event.preventDefault();
+      quitting = false;
+      return;
+    }
+    unsavedFiles.set(mainWindow, false);
+  }
   hostService?.stop();
   desktopTray?.destroy();
   desktopTray = null;

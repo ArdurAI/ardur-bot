@@ -93,6 +93,7 @@ export class RemoteHostSandboxProvider extends DesktopSandboxProvider {
         argv: request.argv,
         cwd: request.cwd,
         timeoutMs: request.timeoutMs,
+        ...(request.hostIntegration ? { hostIntegration: request.hostIntegration } : {}),
       },
       context,
     )) {

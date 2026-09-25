@@ -103,7 +103,7 @@ export function createTerminalRoutes(deps: {
     },
     async ticket(
       actor: Actor,
-      input: { botId: string; computerId: string; sessionId?: string },
+      input: { botId: string; computerId: string; sessionId?: string; workspace?: "computer" },
       authSessionId: string | undefined,
       origin: string | undefined,
     ) {
@@ -157,7 +157,7 @@ export function createTerminalRoutes(deps: {
                 generation: computer.providerRef!,
                 expiresAt: computer.controlLeaseExpiresAt!.getTime(),
                 workingRoot:
-                  computer.scope === "team"
+                  computer.scope === "team" && input.workspace !== "computer"
                     ? `/home/ardurbot/bots/${input.botId}`
                     : "/home/ardurbot",
               },

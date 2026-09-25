@@ -63,6 +63,50 @@ function fixture() {
 }
 
 describe("integration RPC boundaries", () => {
+  it("routes MCP permissions through the shared service with the MCP ownership boundary", async () => {
+    const f = fixture();
+    const assign = vi.spyOn(IntegrationConnections.prototype, "assign").mockResolvedValue([]);
+    const input = {
+      serverId: "server",
+      botIds: ["bot"],
+      toolIds: ["get_item"],
+      spaceToolPolicies: { get_item: "ask-first" },
+    };
+    expect((await f.request("mcp/servers/permissions", input))?.status).toBe(200);
+    expect(assign).toHaveBeenCalledExactlyOnceWith(
+      actor,
+      { ...input, connectionId: "server" },
+      "mcp",
+    );
+    expect((await f.request("mcp/servers/permissions", input, null))?.status).toBe(401);
+    expect(assign).toHaveBeenCalledTimes(1);
+  });
+  it("refuses write Allow for a custom MCP server at the API boundary", async () => {
+    const f = fixture();
+    f.prisma.mcpServer.findFirst.mockResolvedValueOnce({
+      id: "server",
+      catalogId: null,
+      enabled: true,
+      connectionState: "connected",
+      manifest: {
+        capturedAt: "2026-09-24T00:00:00.000Z",
+        serverVersion: null,
+        account: null,
+        tools: [
+          { id: "update_item", description: "Update an item", inputSchemaDigest: "a".repeat(64) },
+        ],
+      },
+    } as never);
+    const response = await f.request("mcp/servers/permissions", {
+      serverId: "server",
+      botIds: [],
+      toolIds: ["update_item"],
+      spaceToolPolicies: { update_item: "allow" },
+    });
+    expect(response?.status).toBe(400);
+    expect(await response?.text()).toContain("Writes always ask");
+    expect(f.prisma.mcpServer.update).not.toHaveBeenCalled();
+  });
   it("enables a custom default without replacing credentials and requires fresh tool approval", async () => {
     const f = fixture();
     const row = {

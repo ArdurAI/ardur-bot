@@ -86,6 +86,7 @@ it.each([false, true])(
     expect(args).toEqual(["-c", "which gh && gh auth status 2>&1 | head -5"]);
     expect(options.shell).toBe(false);
     expect(options.env).toEqual({
+      AWS_PROFILE: "placeholder",
       PATH: root,
       HOME: "/fixture/home",
       SHELL: "/bin/zsh",

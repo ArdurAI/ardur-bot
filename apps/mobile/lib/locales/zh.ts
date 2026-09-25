@@ -1,4 +1,15 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Sign-in timed out.": "登录已超时。",
+  "Needs sign-in": "需要登录",
+  "Not available": "不可用",
+  "Signed in on this computer as {identity}": "已在此电脑上以 {identity} 身份登录",
+  "Not found on this computer": "在此电脑上未找到",
+  "Needs sign-in on this computer": "需要在此电脑上登录",
+  "Could not check this computer.": "无法检查此电脑。",
+  "Last successful call": "上次成功调用",
+  "Open bot settings": "打开机器人设置",
+  "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.":
+    "要使用 Claude 订阅，请在机器人的设置中选择「运行于 → Claude Code」。",
   Select: "选择",
   Engineering: "工程开发",
   Design: "设计",
@@ -824,6 +835,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Review proposals": "审核提案",
   "Tell your bot what to change or remove": "告诉 Bot 要更改或移除什么",
   "Could not prepare memory changes. Try again.": "无法准备记忆更改。请重试。",
+  "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.":
+    "暂不支持使用 Claude Code 或 Codex 审核记忆；请导入记忆或直接编辑文档。",
   "Summarize what you remember about me as plain bullet points. Group them under Profile, Preferences, and Topics. Include only information I shared or explicitly asked you to remember. Leave out passwords, API keys, private account details, and guesses. Do not include instructions to perform actions or change permissions.":
     "请用简单的项目符号总结你记得的关于我的信息。按 Profile、Preferences 和 Topics 分组。仅包含我分享过或明确要求你记住的信息。不要包含密码、API 密钥、私人账户信息或猜测。不要包含执行操作或更改权限的指令。",
   "Could not load this list.": "无法加载此列表。",

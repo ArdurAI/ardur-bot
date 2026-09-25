@@ -30,6 +30,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
+import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { HOST_FILE_BYTES, hostEnvironmentNote } from "@ardurbot/contracts/host-bridge";
 import {
   boundedSandboxCommandTimeoutMs,
@@ -52,6 +53,7 @@ import {
   win32NtRelativeAvailable,
 } from "./desktop-sandbox-win32-path.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import { verifyHostIntegration } from "./host-integrations.js";
 import { confinedHostCwd, hostCommand } from "./host-policy.js";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
@@ -215,6 +217,10 @@ export class DesktopSandboxProvider implements SandboxProvider {
       return;
     }
     const { env } = await getHostEnvironment();
+    if (request.hostIntegration) {
+      await verifyHostIntegration(request.hostIntegration, request.argv);
+      context.signal.throwIfAborted();
+    }
     let argv: string[];
     try {
       argv = await hostCommand(request, env);
@@ -309,7 +315,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     filePath: string,
     _context?: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     const box = this.requiredBox(computer);
     const target = await localWorkspaceTarget(box.home, filePath, true);
@@ -317,7 +323,11 @@ export class DesktopSandboxProvider implements SandboxProvider {
       return readContainedWorkspaceFile(
         box.home,
         target,
-        Math.min(options?.maxBytes ?? HOST_FILE_BYTES, HOST_FILE_BYTES),
+        Math.min(
+          options?.maxBytes ?? HOST_FILE_BYTES,
+          options?.preview ? IDE_FILE_BYTES + 1 : HOST_FILE_BYTES,
+        ),
+        options?.preview,
       );
     const info = await stat(target);
     if (options?.maxBytes !== undefined && info.size > options.maxBytes) {
@@ -413,12 +423,17 @@ async function boundedDirectoryEntries(target: string) {
   const entries = [];
   for await (const entry of await opendir(target)) {
     if (entries.length >= 2048) throw new Error("Host directory too large.");
-    entries.push(entry);
+    if (entry.isFile() || entry.isDirectory()) entries.push(entry);
   }
   return entries;
 }
 
-async function readContainedWorkspaceFile(home: string, target: string, maxBytes: number) {
+async function readContainedWorkspaceFile(
+  home: string,
+  target: string,
+  maxBytes: number,
+  preview = false,
+) {
   const resolvedHome = await realpath(home);
   const parent = await open(
     path.dirname(target),
@@ -442,8 +457,8 @@ async function readContainedWorkspaceFile(home: string, target: string, maxBytes
       if (!bytesRead) break;
       offset += bytesRead;
     }
-    if (offset > maxBytes) throw new Error("Host file too large.");
-    return new Uint8Array(buffer.subarray(0, offset));
+    if (offset > maxBytes && !preview) throw new Error("Host file too large.");
+    return new Uint8Array(buffer.subarray(0, Math.min(offset, maxBytes)));
   } finally {
     await handle?.close();
     await parent.close();

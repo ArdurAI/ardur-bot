@@ -6,6 +6,7 @@ import {
   getHostEnvironment,
   inspectHostEnvironment,
 } from "@ardurbot/host-runtime/host-environment";
+import { inspectHostIntegrations } from "@ardurbot/host-runtime/host-integrations";
 import { probeClaude } from "@ardurbot/host-runtime/runtimes/claude-code-runtime";
 import { probeCodex } from "@ardurbot/host-runtime/runtimes/codex-app-server-runtime";
 
@@ -32,12 +33,14 @@ export async function sourceHostStatus(
       inspectHostEnvironment(getHostEnvironment(), false),
       probeClaude(),
       probeCodex(),
+      inspectHostIntegrations(),
     ])
-      .then(([environment, claude, codex]) => ({
+      .then(([environment, claude, codex, integrations]) => ({
         platform: process.platform as HostHealth["platform"],
         roots: [homedir()],
         load: 0,
         environment,
+        integrations,
         claude,
         codex,
       }))
