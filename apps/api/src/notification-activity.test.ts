@@ -22,6 +22,8 @@ it("scopes the feed to memberships and applies all four account preferences", as
   ]);
   const prisma = {
     run: { findMany },
+    deploymentSettings: { findUnique: vi.fn(async () => ({ ownerUserId: "owner" })) },
+    boardNotification: { findMany: vi.fn(async () => []) },
     userPreferences: {
       findUnique: vi.fn(async () => ({
         responseCompletions: false,
@@ -50,4 +52,48 @@ it("scopes the feed to memberships and applies all four account preferences", as
       }),
     }),
   );
+});
+
+it("includes only the acting owner's followed Board events with current space membership", async () => {
+  const findMany = vi.fn(async () => [
+    {
+      id: "notice",
+      title: "Plan work",
+      createdAt: new Date("2026-09-25T00:00:00Z"),
+      follow: { workspaceId: "board", itemId: "item", workspace: { spaceId: "space" } },
+    },
+  ]);
+  const deployment = vi.fn(async () => ({ ownerUserId: "owner" }));
+  const prisma = {
+    run: { findMany: vi.fn(async () => []) },
+    userPreferences: { findUnique: vi.fn(async () => null) },
+    deploymentSettings: { findUnique: deployment },
+    boardNotification: { findMany },
+  } as unknown as PrismaClient;
+  const result = await notificationActivity(prisma, { userId: "owner", spaceId: "space" } as Actor);
+  expect(result.activities).toMatchObject([
+    {
+      name: "Plan work",
+      status: "board_changed",
+      category: "responseCompletions",
+      board: { spaceId: "space", workspaceId: "board", itemId: "item" },
+    },
+  ]);
+  expect(findMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: {
+        follow: {
+          userId: "owner",
+          workspace: {
+            enabled: true,
+            ownerUserId: "owner",
+            space: { memberships: { some: { userId: "owner" } } },
+          },
+        },
+      },
+    }),
+  );
+  deployment.mockResolvedValue({ ownerUserId: "new-owner" });
+  expect((await notificationActivity(prisma, { userId: "owner" } as Actor)).activities).toEqual([]);
+  expect(findMany).toHaveBeenCalledOnce();
 });

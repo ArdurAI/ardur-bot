@@ -119,3 +119,25 @@ it("does not poll before preferences load or replay events seen with denied perm
   await poll();
   expect(fake.show).not.toHaveBeenCalled();
 });
+
+it("delivers followed Board changes through the shared preference gate", async () => {
+  fake.activity.mockResolvedValueOnce(snapshot([])).mockResolvedValue(
+    snapshot([
+      {
+        ...row,
+        id: "board-change",
+        name: "Plan next step",
+        status: "board_changed",
+        threadId: "board:workspace:item",
+        board: { spaceId: "space", workspaceId: "workspace", itemId: "item" },
+      },
+    ]),
+  );
+  await renderSettings(<Harness />);
+  await poll();
+  expect(fake.show).toHaveBeenCalledExactlyOnceWith("Plan next step", {
+    tag: "board:workspace:item",
+  });
+  await poll();
+  expect(fake.show).toHaveBeenCalledOnce();
+});

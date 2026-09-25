@@ -33,10 +33,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
     } else {
       await route.fulfill({
         json: {
-          json: fixture.rpc(
-            procedure,
-            procedure === "threads/answer" ? route.request().postDataJSON().json : undefined,
-          ),
+          json: fixture.rpc(procedure, route.request().postDataJSON()?.json),
         },
       });
     }
@@ -47,6 +44,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
     await expect(page.getByTestId("dashboard").getByRole("heading")).toHaveText([
       "Dashboard",
       "Now",
+      "Work",
       "Computers",
       "Connections",
       "Routines",
@@ -54,7 +52,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
       "Learning",
       "Governance",
     ]);
-    await expect(page.getByTestId("dashboard").locator('[aria-busy="true"]')).toHaveCount(7);
+    await expect(page.getByTestId("dashboard").locator('[aria-busy="true"]')).toHaveCount(8);
   } finally {
     releaseBootstrap();
   }
@@ -93,7 +91,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
       new Promise<number>((resolve) => {
         const start = performance.now();
         const observer = new MutationObserver(() => {
-          if (document.querySelectorAll('[data-testid="dashboard"] [data-panel]').length !== 7)
+          if (document.querySelectorAll('[data-testid="dashboard"] [data-panel]').length !== 8)
             return;
           if (document.querySelector('[data-testid="dashboard"] [aria-busy="true"]')) return;
           observer.disconnect();
@@ -122,9 +120,37 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   await page.keyboard.press("Control+1");
   await expect(page.getByTestId("dashboard")).toBeVisible();
   await page.keyboard.press("Control+3");
+  await expect(page).toHaveURL(/\/app\/ide$/);
+  await expect(page).toHaveTitle("IDE — Ardur Bot");
+  await page.keyboard.press("Control+1");
+  await page
+    .getByRole("navigation", { name: "Dashboard", exact: true })
+    .getByRole("link", { name: "Board", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/app\/board$/);
   await expect(page.getByRole("heading", { name: "Board", exact: true })).toBeVisible();
   await expect(page).toHaveTitle("Board — Ardur Bot");
+  const card = page.locator('[data-board-item="work-1"]');
+  await card.dragTo(page.locator('[data-board-column="in_progress"]'));
+  await expect(
+    page.locator('[data-board-column="in_progress"] [data-board-item="work-1"]'),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(
+    page.locator('[data-board-column="ready"] [data-board-item="work-1"]'),
+  ).toBeVisible();
+  await page.goto("/app/board?workspace=board&item=work-1");
+  await expect(page.getByRole("dialog")).toContainText("Check the work");
+  await expect(page).toHaveTitle("Board — Ardur Bot");
+  await page.getByRole("button", { name: "Follow", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Unfollow", exact: true })).toBeVisible();
+  await captureScreenshot(page, testInfo, "dashboard-board-item");
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("navigation", { name: "Dashboard", exact: true })
+    .getByRole("link", { name: "Overview", exact: true })
+    .click();
+  await expect(page.locator('[data-panel="work"]')).toContainText("Plan next step");
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
   await page.goto("/app/team");
   await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
@@ -139,6 +165,7 @@ test("HTTP/1.1 keeps approvals and summary refresh usable with twelve bot thread
   let activeStreams = 0;
   let peakStreams = 0;
   let summaries = 0;
+  let boardSummaries = 0;
   const protocols = new Set<string>();
   const server = createServer(async (request, response) => {
     protocols.add(request.httpVersion);
@@ -164,6 +191,7 @@ test("HTTP/1.1 keeps approvals and summary refresh usable with twelve bot thread
       let body = "";
       for await (const chunk of request) body += chunk;
       if (procedure === "dashboard/now") summaries += 1;
+      if (procedure === "board/view") boardSummaries += 1;
       response.setHeader("Content-Type", "application/json");
       response.end(
         JSON.stringify({ json: fixture.rpc(procedure, body ? JSON.parse(body).json : undefined) }),
@@ -204,12 +232,19 @@ test("HTTP/1.1 keeps approvals and summary refresh usable with twelve bot thread
     const beforeRefresh = summaries;
     await page.clock.runFor(15_001);
     await expect.poll(() => summaries).toBeGreaterThan(beforeRefresh);
+    await page.goto(`http://127.0.0.1:${address.port}/app/board`);
+    await expect(page.locator('[data-board-item="work-1"]')).toBeVisible();
+    const beforeBoard = boardSummaries;
+    await page.clock.runFor(15_001);
+    await expect.poll(() => boardSummaries).toBeGreaterThan(beforeBoard);
+    expect(peakStreams).toBeLessThanOrEqual(1);
     expect([...protocols]).toEqual(["1.1"]);
   } finally {
     await testInfo.attach("dashboard-http1-requests", {
       body: JSON.stringify({
         peakStreams,
         summaries,
+        boardSummaries,
         answered: fixture.approvedInput !== undefined,
       }),
       contentType: "application/json",

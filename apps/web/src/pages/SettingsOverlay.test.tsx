@@ -63,6 +63,7 @@ vi.mock("./import/LocalImportPage", () => ({
   LocalImportPage: () => <div>Found on this Mac</div>,
 }));
 vi.mock("./customize/PluginsPage", () => ({ default: () => <div>In this space</div> }));
+vi.mock("./board/BoardsSettings", () => ({ default: () => <div>Board configuration</div> }));
 vi.mock("./LearningInbox", () => ({
   LearningInbox: () => <div>Learning inbox timeline and curator</div>,
 }));
@@ -167,6 +168,18 @@ it("finds Open to in General and saves it only on this device", async () => {
   });
   expect(localStorage.getItem("ardurbot:open-to")).toBe("bots");
   expect(fake.update).not.toHaveBeenCalled();
+});
+it("finds Boards by its configuration labels and opens the lazy settings section", async () => {
+  const container = await render();
+  await changeInput(
+    container.querySelector<HTMLInputElement>('input[type="search"]')!,
+    "default board",
+  );
+  expect(container.querySelectorAll('[data-testid^="settings-nav-"]')).toHaveLength(1);
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[data-testid="settings-nav-boards"]')!.click(),
+  );
+  await waitForSection(() => container.textContent!.includes("Board configuration"));
 });
 it("hides notification switches with no delivery path", async () => {
   vi.stubGlobal("Notification", undefined);

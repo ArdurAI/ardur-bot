@@ -65,7 +65,7 @@ function fixture() {
   return { app, deps, grant, read, signed, call, tx };
 }
 describe("isolated device routes", () => {
-  it.each(["board/workspaces", "board/snapshot", "board/show"])(
+  it.each(["board/workspaces", "board/snapshot", "board/show", "board/view", "board/work"])(
     "allows the signed read-only Board procedure %s",
     async (procedure) => {
       const f = fixture();

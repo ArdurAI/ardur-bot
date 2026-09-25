@@ -46,6 +46,7 @@ function fixture() {
     search: vi.fn(async () => []),
   };
   vi.spyOn(BoardService.prototype, "actor").mockResolvedValue("bot:Builder");
+  vi.spyOn(BoardService.prototype, "workspace").mockResolvedValue({ id: "workspace" } as never);
   vi.spyOn(BoardService.prototype, "provider").mockResolvedValue(provider as never);
   const prisma = {
     run: { findFirst: vi.fn(async () => null) },
@@ -98,4 +99,97 @@ it("restores assignment if turn creation fails and intersects search with filter
     }),
   ).toMatchObject({ items: [], readyIds: ["board-a"] });
   expect(provider.list).toHaveBeenCalledWith();
+});
+
+it("serves one whole-board snapshot with at most one selected item and no per-item queries", async () => {
+  const { board, provider, item, prisma } = fixture();
+  vi.spyOn(BoardService.prototype, "configured").mockResolvedValue([
+    {
+      id: "workspace",
+      enabled: true,
+      initialized: true,
+      isDefault: true,
+      allowAllBots: true,
+    } as never,
+  ]);
+  Object.assign(prisma, { boardFollow: { findMany: vi.fn(async () => [{ itemId: "board-a" }]) } });
+  Object.assign(prisma.bot, { findMany: vi.fn(async () => [{ id: "builder", name: "Builder" }]) });
+  provider.list.mockResolvedValue(
+    Array.from({ length: 100 }, (_, index) => ({ ...item, id: `item-${index}` })),
+  );
+  const result = await board.view(actor, { itemId: "board-a" });
+  expect(result.snapshot.items).toHaveLength(100);
+  expect(result.followingIds).toEqual(["board-a"]);
+  expect(provider.list).toHaveBeenCalledTimes(1);
+  expect(provider.ready).toHaveBeenCalledTimes(1);
+  expect(provider.blocked).toHaveBeenCalledTimes(1);
+  expect(provider.show).toHaveBeenCalledTimes(1);
+});
+it("persists only the acting user's follow and authorizes before reading or writing it", async () => {
+  const { board, prisma } = fixture();
+  const follows = { upsert: vi.fn(), deleteMany: vi.fn() };
+  Object.assign(prisma, { boardFollow: follows });
+  await board.follow(actor, { workspaceId: "workspace", id: "board-a", following: true });
+  expect(follows.upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: {
+        workspaceId_itemId_userId: { workspaceId: "workspace", itemId: "board-a", userId: "owner" },
+      },
+      update: {},
+    }),
+  );
+  await board.follow(actor, { workspaceId: "workspace", id: "board-a", following: false });
+  expect(follows.deleteMany).toHaveBeenCalledWith({
+    where: { workspaceId: "workspace", itemId: "board-a", userId: "owner" },
+  });
+  vi.mocked(BoardService.prototype.provider).mockRejectedValueOnce(new Error("forbidden"));
+  await expect(
+    board.follow(
+      { ...actor, userId: "other" },
+      { workspaceId: "workspace", id: "board-a", following: true },
+    ),
+  ).rejects.toThrow("forbidden");
+  expect(follows.upsert).toHaveBeenCalledTimes(1);
+});
+it("checks board-specific bot permission before dispatch", async () => {
+  const { board, provider } = fixture();
+  vi.mocked(BoardService.prototype.workspace).mockRejectedValueOnce(
+    new Error("This bot is not allowed on this board."),
+  );
+  await expect(board.send(actor, input)).rejects.toThrow("not allowed");
+  expect(provider.update).not.toHaveBeenCalled();
+});
+it("projects default-board Work counts and at most three prioritized ready items from one summary", async () => {
+  const { board, item } = fixture();
+  const ready = Array.from({ length: 5 }, (_, index) => ({
+    ...item,
+    id: `ready-${index}`,
+    priority: 4 - index,
+  }));
+  const summary = vi.spyOn(board, "view").mockResolvedValue({
+    workspaces: [{ id: "workspace", name: "Work" }] as never,
+    workspaceId: "workspace",
+    selected: null,
+    followingIds: [],
+    bots: [],
+    problem: null,
+    snapshot: {
+      items: [
+        ...ready,
+        { ...item, id: "working", status: "in_progress" },
+        { ...item, id: "blocked", status: "blocked" },
+      ],
+      readyIds: ready.map((row) => row.id),
+      blockedIds: ["blocked"],
+    },
+  });
+  const result = await board.work(actor);
+  expect(summary).toHaveBeenCalledExactlyOnceWith(actor, {});
+  expect(result).toMatchObject({
+    workspace: { id: "workspace" },
+    ready: 5,
+    inProgress: 1,
+    blocked: 1,
+  });
+  expect(result.items.map((row) => row.id)).toEqual(["ready-4", "ready-3", "ready-2"]);
 });

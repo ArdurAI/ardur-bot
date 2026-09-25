@@ -131,8 +131,8 @@ it("ignores modified and repeated shortcuts and preserves legacy bot selection",
   ).toBe(item);
 });
 
-it("registers the landed Board page for the third shortcut", async () => {
-  await import("./board-nav");
+it("registers IDE as the third destination without a Board tab", async () => {
+  await import("./ide-nav");
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={["/app"]}>
@@ -140,9 +140,10 @@ it("registers the landed Board page for the third shortcut", async () => {
       </MemoryRouter>,
     ),
   );
+  expect(node.querySelector("[data-order]")?.textContent).toBe("dashboard,bots,ide");
   await act(async () =>
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "3", ctrlKey: true })),
   );
-  expect(node.querySelector("output")?.textContent).toBe("/app/board");
-  expect(document.title).toBe("Board — Ardur Bot");
+  expect(node.querySelector("output")?.textContent).toBe("/app/ide");
+  expect(document.title).toBe("IDE — Ardur Bot");
 });

@@ -130,7 +130,7 @@ function SessionApp() {
           />
           <Route
             path="/app/board"
-            element={user ? <ShellPage board /> : <Navigate to="/sign-in" replace />}
+            element={user ? <ShellPage dashboard /> : <Navigate to="/sign-in" replace />}
           />
           <Route
             path="/app/ide"
@@ -226,7 +226,9 @@ function SessionUnavailable({ refetch }: { refetch: () => Promise<void> }) {
 function StartPage({ dashboard = false, team = false }: { dashboard?: boolean; team?: boolean }) {
   const openTo = useOpenTo();
   const [params] = useSearchParams();
-  return dashboard && openTo === "bots" && params.get("view") !== "dashboard" ? (
+  return dashboard &&
+    openTo === "bots" &&
+    !["dashboard", "board"].includes(params.get("view") ?? "") ? (
     <Navigate to="/app/bots" replace />
   ) : (
     <ShellPage dashboard={dashboard} team={team} />

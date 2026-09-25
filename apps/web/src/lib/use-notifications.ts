@@ -31,23 +31,25 @@ export function useNotifications() {
           )
             continue;
           const title =
-            row.status === "completed"
-              ? i18n._({
-                  id: "{name} finished",
-                  message: "{name} finished",
-                  values: { name: row.name },
-                })
-              : row.status === "failed"
+            row.status === "board_changed"
+              ? row.name.slice(0, 200)
+              : row.status === "completed"
                 ? i18n._({
-                    id: "{name} failed",
-                    message: "{name} failed",
+                    id: "{name} finished",
+                    message: "{name} finished",
                     values: { name: row.name },
                   })
-                : i18n._({
-                    id: "{name} needs your input",
-                    message: "{name} needs your input",
-                    values: { name: row.name },
-                  });
+                : row.status === "failed"
+                  ? i18n._({
+                      id: "{name} failed",
+                      message: "{name} failed",
+                      values: { name: row.name },
+                    })
+                  : i18n._({
+                      id: "{name} needs your input",
+                      message: "{name} needs your input",
+                      values: { name: row.name },
+                    });
           await notify(
             { id: row.id, category: row.category, title, body: "", threadId: row.threadId },
             snapshot.preferences.notifications,

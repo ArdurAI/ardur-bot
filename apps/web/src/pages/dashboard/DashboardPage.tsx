@@ -4,6 +4,7 @@ import { useLingui } from "@lingui/react";
 import { Trans } from "@lingui/react/macro";
 import type { ErrorInfo, ReactNode } from "react";
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import type { DashboardPanel, PanelActions } from "./panels";
 import { useDashboardPanels } from "./panels";
 
@@ -16,6 +17,7 @@ export function clearDashboardCache() {
 }
 
 const LearningDialog = lazy(() => import("./LearningDialog"));
+const Board = lazy(() => import("../board/Board").then((module) => ({ default: module.Board })));
 
 export function DashboardPage({
   scope,
@@ -27,33 +29,71 @@ export function DashboardPage({
 } & Pick<PanelActions, "openSettings">) {
   const [learningOpen, setLearningOpen] = useState(false);
   const panels = useDashboardPanels();
+  const location = useLocation();
+  const board =
+    location.pathname === "/app/board" ||
+    new URLSearchParams(location.search).get("view") === "board";
   if (cacheScope !== scope) {
     cache.clear();
     cacheScope = scope;
   }
   return (
     <section className="min-h-0 flex-1 overflow-auto p-4 md:p-6" data-testid="dashboard">
-      <h1 className="mb-5 text-lg font-medium">
+      <h1 id="dashboard-heading" className="mb-3 text-lg font-medium">
         <Trans>Dashboard</Trans>
       </h1>
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 lg:grid-cols-2">
-        {panels.map((panel) =>
-          spaceId ? (
-            <DashboardPanelView
-              key={`${scope}:${panel.id}`}
-              panel={panel}
+      <nav
+        aria-labelledby="dashboard-heading"
+        className="mb-5 flex w-fit gap-0.5 rounded-lg bg-muted p-0.5"
+      >
+        <Link
+          to="/app?view=dashboard"
+          aria-current={!board ? "page" : undefined}
+          className={`rounded-md px-3 py-1 text-sm ${!board ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+        >
+          <Trans>Overview</Trans>
+        </Link>
+        <Link
+          to="/app/board"
+          aria-current={board ? "page" : undefined}
+          className={`rounded-md px-3 py-1 text-sm ${board ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+        >
+          <Trans>Board</Trans>
+        </Link>
+      </nav>
+      {board ? (
+        <Suspense fallback={<PanelSkeleton />}>
+          {spaceId ? (
+            <Board
+              key={scope}
               scope={scope}
               spaceId={spaceId}
-              {...actions}
-              openLearning={() => setLearningOpen(true)}
+              openSettings={() => actions.openSettings("boards")}
             />
           ) : (
-            <DashboardPanelFrame key={panel.id} panel={panel}>
-              <PanelSkeleton />
-            </DashboardPanelFrame>
-          ),
-        )}
-      </div>
+            <PanelSkeleton />
+          )}
+        </Suspense>
+      ) : (
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 lg:grid-cols-2">
+          {panels.map((panel) =>
+            spaceId ? (
+              <DashboardPanelView
+                key={`${scope}:${panel.id}`}
+                panel={panel}
+                scope={scope}
+                spaceId={spaceId}
+                {...actions}
+                openLearning={() => setLearningOpen(true)}
+              />
+            ) : (
+              <DashboardPanelFrame key={panel.id} panel={panel}>
+                <PanelSkeleton />
+              </DashboardPanelFrame>
+            ),
+          )}
+        </div>
+      )}
       {learningOpen ? (
         <Suspense fallback={null}>
           <LearningDialog onClose={() => setLearningOpen(false)} />

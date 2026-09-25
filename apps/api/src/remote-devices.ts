@@ -196,6 +196,8 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "board/workspaces",
   "board/snapshot",
   "board/show",
+  "board/view",
+  "board/work",
   "comparisons/list",
   "comparisons/get",
   "briefs/list",
