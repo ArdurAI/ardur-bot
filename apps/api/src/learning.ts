@@ -107,9 +107,14 @@ export function createLearningService(deps: {
         filing?.outcome === "completed" || filing?.outcome === "closed-other"
           ? filing.outcome
           : null;
+      const closeReason = proposal.appliedBoardItem?.closeReason?.trim() || null;
       return {
         ...proposal,
-        boardOutcome: { closedAt: filing?.closedAt?.toISOString() ?? null, outcome },
+        boardOutcome: {
+          closedAt: filing?.closedAt?.toISOString() ?? null,
+          outcome,
+          closeReason: outcome === "closed-other" ? closeReason : null,
+        },
       };
     });
   }

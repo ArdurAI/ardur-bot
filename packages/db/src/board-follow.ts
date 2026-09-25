@@ -1,18 +1,29 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
 import type { PrismaClient } from "./client.js";
 
-const COMPLETION = /\b(?:done|complete|completed|fixed|resolved)\b/iu;
-const NEGATED_COMPLETION =
-  /\b(?:not|never|no|cannot|unable to|(?:can|couldn|won|didn|isn|wasn|hasn|haven)['’]?t)(?:\s+[\w'’]+){0,3}?\s+(?:done|complete|completed|fixed|resolved)\b/iu;
+const COMPLETION_WORD = "done|complete|completed|fixed|resolved";
+const COMPLETION = new RegExp(`\\b(?:${COMPLETION_WORD})\\b`, "iu");
+const UN_COMPLETION = /\bun(?:completed|complete|resolved|fixed|done)\b/iu;
+const NEGATED_COMPLETION = new RegExp(
+  `\\b(?:nothing|nobody|nowhere|none|never|not|no|cannot|unable to|(?:can|couldn|won|didn|isn|wasn|hasn|haven)['’]?t)(?:\\s+[\\w'’]+){0,3}?\\s+(?:${COMPLETION_WORD})\\b`,
+  "iu",
+);
 
 /**
  * An empty reason or a completion word means done, unless a negation comes up to three
- * words before any completion word ("not done", "can't get it fixed"). Every other reason,
- * including "won't fix", is closed otherwise.
+ * words before any completion word. Negations are not, never, no, nothing, nobody, none,
+ * nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't, and
+ * unable to ("not done", "can't get it fixed", "nothing was resolved"). A completion word
+ * with an un- prefix (unresolved, unfixed, undone, uncompleted) is negated. Every other
+ * reason, including "won't fix", is closed otherwise.
  */
 export function boardFilingOutcome(reason = ""): "completed" | "closed-other" {
   if (!reason.trim()) return "completed";
-  return COMPLETION.test(reason) && !NEGATED_COMPLETION.test(reason) ? "completed" : "closed-other";
+  const withoutUn = reason.replace(UN_COMPLETION, " ");
+  if (UN_COMPLETION.test(reason) && !COMPLETION.test(withoutUn)) return "closed-other";
+  return COMPLETION.test(withoutUn) && !NEGATED_COMPLETION.test(reason)
+    ? "completed"
+    : "closed-other";
 }
 
 /** Beads owns item state. A follower's observed version makes notifications retry-safe. */
@@ -24,7 +35,11 @@ export async function observeBoardItems(
   if (!items.length) return;
   const byId = new Map(items.map((item) => [item.id, item]));
   const closed = items.filter((item) => item.status === "closed");
-  for (const item of closed)
+  for (const item of closed) {
+    const pending = await prisma.botBoardFiling.findMany({
+      where: { workspaceId, itemId: item.id, closedAt: null, outcome: null },
+      select: { learningProposalId: true },
+    });
     await prisma.botBoardFiling.updateMany({
       where: {
         workspaceId,
@@ -37,6 +52,26 @@ export async function observeBoardItems(
         outcome: boardFilingOutcome(item.closeReason ?? ""),
       },
     });
+    const closeReason = item.closeReason?.trim() ?? "";
+    for (const row of pending) {
+      if (!row.learningProposalId || !closeReason) continue;
+      const proposal = await prisma.learningProposal.findUnique({
+        where: { id: row.learningProposalId },
+        select: { body: true },
+      });
+      const body = proposal?.body;
+      if (!body || typeof body !== "object" || Array.isArray(body)) continue;
+      const applied = "appliedBoardItem" in body ? body.appliedBoardItem : undefined;
+      if (!applied || typeof applied !== "object" || Array.isArray(applied)) continue;
+      if ("closeReason" in applied && applied.closeReason === closeReason) continue;
+      await prisma.learningProposal.update({
+        where: { id: row.learningProposalId },
+        data: {
+          body: { ...body, appliedBoardItem: { ...applied, closeReason } },
+        },
+      });
+    }
+  }
   const follows = await prisma.boardFollow.findMany({
     where: { workspaceId, itemId: { in: [...byId.keys()] }, workspace: { enabled: true } },
   });

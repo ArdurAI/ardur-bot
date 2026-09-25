@@ -73,6 +73,7 @@ import { signupPolicyFromEnv } from "@ardurbot/core";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import {
   createDb,
+  createFilingLockPool,
   createPool,
   createThreadEvents,
   parsePositiveInteger,
@@ -177,11 +178,14 @@ export async function createApp(
   installLogger(logger);
   warnAutoReviewConfiguration(logger);
   const created = prismaOverride
-    ? { prisma: prismaOverride, pool: undefined }
-    : createDb(env.databaseUrl, {
-        poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 4),
-        applicationName: "ardurbot-api",
-      });
+    ? { prisma: prismaOverride, pool: undefined, lockPool: undefined }
+    : {
+        ...createDb(env.databaseUrl, {
+          poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 4),
+          applicationName: "ardurbot-api",
+        }),
+        lockPool: createFilingLockPool(env.databaseUrl, { applicationName: "ardurbot-api" }),
+      };
   const { prisma } = created;
   const realtime =
     realtimeOverride ??
@@ -421,6 +425,7 @@ export async function createApp(
   const executor = createRunExecutor({
     prisma,
     pool: created.pool,
+    lockPool: created.lockPool,
     runtime,
     sandbox,
     memory,
@@ -533,6 +538,7 @@ export async function createApp(
     cloudAgent,
     prisma,
     pool: created.pool,
+    lockPool: created.lockPool,
     events,
     auth,
     jobs,
@@ -1097,6 +1103,7 @@ export async function createApp(
       await mcp.close();
       await prisma.$disconnect().catch(() => undefined);
       await created.pool?.end().catch(() => undefined);
+      await created.lockPool?.end().catch(() => undefined);
       await ownedJobPool?.end().catch(() => undefined);
       await logger.flush({ timeoutMs: 2_000 });
     },

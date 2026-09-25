@@ -45,7 +45,7 @@ Existing document bodies are not supplied. Do not propose a complete replacement
 Propose only reusable prose procedures, memory facts, explicit typed setting suggestions, or one board item for an unfinished follow-up from this run. Evidence covers this run only, so a board item never claims a failure recurred. Never change pins, tool policies or approval defaults.
 Use only the supplied scope, target revisions and opaque evidence ids. Never include credentials or private contact information.
 Each proposal has type (memory, skill, preference, board-item, policy-suggestion, pin-insight, harness-issue), scope, target,
-expectedBaseRevision (for an existing document), proposedContent OR typedDelta {key,value} OR boardItem {title,description,acceptanceCriteria,workspaceId?}, rationale, evidenceIds,
+expectedBaseRevision (for an existing document), proposedContent OR typedDelta {key,value} OR boardItem {title,description,acceptanceCriteria,labels?,workspaceId?}, rationale, evidenceIds,
 and confidence {label:"model estimate",value:0..1}. A new document has no documentId and base revision 0.
 Skill content must be SKILL.md with name and description frontmatter. Do not include executable scripts.
 Do not propose changes to protected or imported documents. Return no other text.`;
@@ -80,8 +80,17 @@ const RECURRENCE =
  * rejected; "run it again" is an ordinary follow-up.
  */
 function claimsRecurrence(candidate: LearningCandidate) {
+  const item = candidate.boardItem;
   return RECURRENCE.test(
-    [candidate.boardItem?.title, candidate.boardItem?.description, candidate.rationale].join("\n"),
+    [
+      item?.title,
+      item?.description,
+      item?.acceptanceCriteria,
+      item?.labels?.join("\n"),
+      candidate.rationale,
+    ]
+      .filter((part) => part)
+      .join("\n"),
   );
 }
 export function validateLearningCandidate(

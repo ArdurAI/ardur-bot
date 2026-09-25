@@ -1008,11 +1008,14 @@ export const ZH_MESSAGES: Record<string, string> = {
   "In progress": "进行中",
   Blocked: "已阻塞",
   Comment: "评论",
-  "{name} filed {filed}: {done} done, {open} open, {other} closed otherwise.":
-    "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{other} 项因其他原因关闭。",
+  "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
+    "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{other} 项已关闭但未完成。",
   "This board item is still open.": "此看板事项仍处于开放状态。",
   "This board item was completed.": "此看板事项已完成。",
-  "This board item was closed otherwise.": "此看板事项因其他原因关闭。",
+  "This board item was closed without being completed. Review it on the Board.":
+    "此看板事项已关闭但未完成。请在看板上查看。",
+  "This board item was closed without being completed: {reason}. Review it on the Board.":
+    "此看板事项已关闭但未完成：{reason}。请在看板上查看。",
   "This board item changed after it was filed. Review it on the Board.":
     "此看板事项在创建后已有变更。请在看板上查看。",
 };

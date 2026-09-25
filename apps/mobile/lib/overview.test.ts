@@ -80,7 +80,10 @@ it("renders the three read-only Overview panels and their empty states", async (
   ])
     expect(node.textContent).toContain(text);
   expect(node.textContent).not.toContain("Allow once");
-  expect(node.textContent).toContain("Helper filed 3: 1 done, 1 open, 1 closed otherwise.");
+  expect(node.textContent).toContain(
+    "Helper filed 3: 1 done, 1 open, 1 closed without being completed.",
+  );
+  expect(node.textContent).not.toContain("closed otherwise");
 });
 it("keeps loading and error recovery independent without exposing approval or settings actions", async () => {
   let reject!: (error: Error) => void;

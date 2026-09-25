@@ -47,6 +47,16 @@ export function createDb(
   return { prisma, pool };
 }
 
+/** Filing locks only. Same connection settings as the shared pool, with two connections. */
+export const FILING_LOCK_POOL_MAX = 2;
+
+export function createFilingLockPool(
+  connectionString: string,
+  options: DbClientOptions = {},
+): Pool {
+  return createPool(connectionString, { ...options, poolMax: FILING_LOCK_POOL_MAX });
+}
+
 export function isTooManyDatabaseConnections(error: unknown): boolean {
   const seen = new Set<unknown>();
   let current: unknown = error;

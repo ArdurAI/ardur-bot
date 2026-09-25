@@ -291,7 +291,14 @@ export default function Learning() {
                           {proposal.boardOutcome.outcome === "completed"
                             ? t("This board item was completed.")
                             : proposal.boardOutcome.outcome === "closed-other"
-                              ? t("This board item was closed otherwise.")
+                              ? proposal.boardOutcome.closeReason
+                                ? t(
+                                    "This board item was closed without being completed: {reason}. Review it on the Board.",
+                                    { reason: proposal.boardOutcome.closeReason },
+                                  )
+                                : t(
+                                    "This board item was closed without being completed. Review it on the Board.",
+                                  )
                               : t("This board item is still open.")}
                         </Text>
                       ) : null}

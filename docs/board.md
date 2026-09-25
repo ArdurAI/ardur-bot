@@ -166,21 +166,28 @@ id in Beads metadata while the setting is on. The run, bot and filer are written
 one Beads update; if the same run finds its own item without them, it writes them
 again. The server allows 5 new items per run and 30 per space each hour, and returns
 an existing open item when the normalized title matches. Filings in one space run one
-at a time under a Postgres session advisory lock; the reservation is its own short
-transaction and no Beads command runs inside a database transaction. A filing that
-waits 15 seconds for the lock returns `Another write is in progress`. A failed create
-that left no item removes its reservation. It redacts that run's secrets from titles,
+at a time under a Postgres session advisory lock held on a separate two-connection
+pool, so the lock never borrows from the shared database pool. The reservation is its
+own short transaction and no Beads command runs inside a database transaction. A filing
+that waits 15 seconds for the lock returns `Another write is in progress`. Once create
+returns an item id, that id stays on the reservation. A failed create that left no item
+removes its reservation. A reservation with no item id stops counting toward either cap
+after 15 minutes, and the same run's retry attaches a matching open item that has no
+filer to that reservation. It redacts that run's secrets from titles,
 descriptions, acceptance criteria, labels, assignees, external references, comments
 and close reasons whether or not the setting is on. Read-only
 grants still reject writes. A stale phone confirmation does not make the board
 read-only; the run pauses for confirmation the same way as other consequential tools.
 
 The Work panel and mobile Overview group the last 30 days of filing records by bot
-and show completed, open and otherwise-closed counts. A board read observes returned
+and show completed, open and closed-without-being-completed counts. A board read observes returned
 closed items and records the first outcome without another Beads call. An empty close
-reason or a completion word (done, complete, fixed, resolved) is completed unless a
-negation comes up to three words before it ("not done", "can't get it fixed"); every
-other reason, including "won't fix", is closed otherwise. A learning proposal that
+reason or a completion word (done, complete, completed, fixed, resolved) is completed unless a
+negation comes up to three words before it. The negation words are not, never, no, nothing,
+nobody, none, nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't,
+and unable to ("not done", "can't get it fixed", "nothing was resolved", "isn't done"). A
+completion word with an un- prefix (unresolved, unfixed, undone, uncompleted) is negated.
+Every other reason, including "won't fix", is closed without being completed. A learning proposal that
 links to an existing item records its outcome but is not counted again. An item
 that nobody reads after it closes remains open in this projection until the next read,
 so staleness is unbounded for an abandoned board and otherwise lasts until the next

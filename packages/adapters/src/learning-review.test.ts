@@ -536,11 +536,19 @@ describe("proposal validation", () => {
     };
     expect(validateLearningCandidate(retry, { ...input, evidence: [outcome] })).toBe("pending");
   });
-  it.each<{ title?: string; description?: string; rationale?: string }>([
+  it.each<{
+    title?: string;
+    description?: string;
+    acceptanceCriteria?: string;
+    labels?: string[];
+    rationale?: string;
+  }>([
     { title: "Track recurring failure" },
     { description: "The integration failed again." },
     { description: "The export keeps failing." },
     { rationale: "This happened across runs." },
+    { acceptanceCriteria: "This failed again across runs." },
+    { labels: ["keeps failing"] },
   ])("rejects a board item that claims recurrence from one run (%o)", (claim) => {
     const outcome = {
       id: "outcome",
@@ -552,7 +560,7 @@ describe("proposal validation", () => {
       redactionVersion: 1 as const,
       outcome: { category: "failure" as const, classification: "execution" as const },
     };
-    const { rationale, ...item } = claim;
+    const { rationale, labels, ...item } = claim;
     const board: LearningCandidate = {
       type: "board-item",
       scope,
@@ -562,7 +570,8 @@ describe("proposal validation", () => {
         description: "The run stopped before the import finished.",
         acceptanceCriteria: "The import completes.",
         ...item,
-      },
+        ...(labels ? { labels } : {}),
+      } as LearningCandidate["boardItem"],
       rationale: rationale ?? "The follow-up remains unfinished.",
       evidenceIds: ["outcome"],
       confidence: { label: "model estimate", value: 0.7 },

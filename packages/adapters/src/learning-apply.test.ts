@@ -3,6 +3,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import { memoryDatabaseFake, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
 import { describe, expect, it, vi } from "vitest";
+import { BoardService } from "./board/service.js";
 import { createLearningApplyService } from "./learning-apply.js";
 import { applyGrantedLearning } from "./learning-auto-apply.js";
 import { createLearningGrants } from "./learning-grants.js";
@@ -874,6 +875,7 @@ function boardFixture(filed: { duplicate: boolean; updatedAt?: string }) {
   const item = {
     id: "board-a",
     status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
     updatedAt: filed.updatedAt ?? "2026-09-25T12:00:00.000Z",
   };
   const hostCalls: Array<{ call: string; transactions: number }> = [];
@@ -984,6 +986,62 @@ it("undoes a reused, human-created board item by removing only the association",
   expect(f.audits.map((row) => row.action)).toEqual(["approve", "revert"]);
 });
 
+it("keeps a created item when recording its id fails, then the next approval owns it and Undo closes it", async () => {
+  const f = fixture();
+  const created = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    title: "Finish the import follow-up",
+  };
+  const close = vi.fn(async () => [{ ...created, status: "closed" }]);
+  const show = vi.fn(async () => created);
+  let listed = 0;
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => {
+      listed += 1;
+      return listed === 1 ? [] : [created];
+    }),
+    create: vi.fn(async () => created),
+    show,
+    close,
+  } as never);
+  let updates = 0;
+  const update = f.db.botBoardFiling.update.getMockImplementation()!;
+  f.db.botBoardFiling.update.mockImplementation(async (args: { where: Row; data: Row }) => {
+    updates += 1;
+    if (updates <= 3) throw new Error("timeout exceeded when trying to connect");
+    return update(args);
+  });
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  await expect(apply.approve(proposal.id, actor)).rejects.toThrow(
+    /timeout exceeded when trying to connect/,
+  );
+  expect(f.filings).toEqual([
+    expect.objectContaining({ learningProposalId: proposal.id, itemId: "board-a", reused: false }),
+  ]);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal).toMatchObject({
+    status: "applied",
+    appliedBoardItem: { itemId: "board-a", duplicate: false },
+  });
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+});
+
 it("does not file a board item for a proposal rejected while approval waited", async () => {
   const { f, apply, boardService, proposal: create } = boardFixture({ duplicate: false });
   const proposal = await create();
@@ -996,6 +1054,83 @@ it("does not file a board item for a proposal rejected while approval waited", a
   );
   expect(boardService.fileLearningProposal).not.toHaveBeenCalled();
   expect(f.proposals[0]).toMatchObject({ status: "rejected" });
+});
+
+it("closes an unchanged filed item on Reject, leaves a changed item, and never closes a reused item", async () => {
+  const unchanged = boardFixture({ duplicate: false });
+  const pending = await unchanged.proposal();
+  unchanged.f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: pending.id,
+    reused: false,
+  });
+  unchanged.show.mockResolvedValue({
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+  });
+  const rejected = await unchanged.apply.reject(pending.id, actor);
+  expect(unchanged.close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(rejected.proposal.status).toBe("rejected");
+  expect(unchanged.f.filings).toEqual([]);
+
+  const changed = boardFixture({ duplicate: false });
+  const edited = await changed.proposal();
+  changed.f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: edited.id,
+    reused: false,
+  });
+  changed.show.mockResolvedValue({
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T13:00:00.000Z",
+  });
+  const left = await changed.apply.reject(edited.id, actor);
+  expect(changed.close).not.toHaveBeenCalled();
+  expect(changed.f.filings).toHaveLength(1);
+  expect(left.proposal.status).toBe("rejected");
+  expect(left.conflict?.current).toBe(
+    "This board item changed after it was filed, so it was left open for review on the Board.",
+  );
+
+  const reused = boardFixture({ duplicate: true });
+  const linked = await reused.proposal();
+  reused.f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: linked.id,
+    reused: true,
+  });
+  const kept = await reused.apply.reject(linked.id, actor);
+  expect(reused.close).not.toHaveBeenCalled();
+  expect(reused.show).not.toHaveBeenCalled();
+  expect(kept.proposal.status).toBe("rejected");
+  expect(reused.f.filings.map((row) => row.itemId)).toEqual(["board-a"]);
+});
+
+it("refuses to edit a board item and leaves its content unchanged", async () => {
+  const { f, apply, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  const before = structuredClone(f.proposals[0]?.body);
+  await expect(
+    apply.edit(proposal.id, actor, { proposedContent: "A different follow-up." }),
+  ).rejects.toThrow("This suggestion cannot be edited here.");
+  expect(f.proposals[0]?.body).toEqual(before);
+  expect(f.audits.map((row) => row.action)).not.toContain("edit");
 });
 
 it("undoes an approved category edit without overwriting later category changes", async () => {

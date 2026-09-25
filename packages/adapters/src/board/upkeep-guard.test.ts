@@ -74,10 +74,25 @@ const filingRow = (row: Partial<Filing> & { id: string }): Filing => ({
   createdAt: new Date(),
   ...row,
 });
-const filingMatches = (row: Filing, where: Record<string, unknown> = {}) =>
-  Object.entries(where).every(([key, value]) =>
-    value !== null && typeof value === "object" ? true : row[key] === value,
-  );
+const filingMatches = (row: Filing, where: Record<string, unknown> = {}): boolean =>
+  Object.entries(where).every(([key, value]) => {
+    if (key === "OR" && Array.isArray(value))
+      return value.some((branch) => filingMatches(row, branch as Record<string, unknown>));
+    if (key === "NOT" && value && typeof value === "object" && !(value instanceof Date))
+      return !filingMatches(row, value as Record<string, unknown>);
+    if (value && typeof value === "object" && !(value instanceof Date)) {
+      const condition = value as Record<string, unknown>;
+      if ("gte" in condition) {
+        const left = row[key];
+        const right = condition.gte;
+        return left instanceof Date && right instanceof Date && left.getTime() >= right.getTime();
+      }
+      if ("not" in condition)
+        return condition.not === null ? row[key] != null : row[key] !== condition.not;
+      return true;
+    }
+    return row[key] === value;
+  });
 
 /** A session advisory lock table shared by every client of one fake pool. */
 function advisoryPool() {
@@ -120,6 +135,7 @@ function service(options?: {
   filings?: number;
   hourFilings?: number;
   pool?: unknown;
+  lockPool?: unknown;
 }) {
   const filings: Filing[] = Array.from({ length: options?.filings ?? 0 }, (_, index) =>
     filingRow({ id: `run-${index}` }),
@@ -228,6 +244,7 @@ function service(options?: {
     prisma: prisma as never,
     dataDir: "/fixture",
     pool: options?.pool as never,
+    lockPool: options?.lockPool as never,
   });
   vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
   vi.spyOn(board, "provider").mockResolvedValue(provider as never);
@@ -600,6 +617,7 @@ it("files learning proposals through redaction, dedupe and the hourly cap", asyn
       botId: "builder",
       workspaceId: "workspace",
       learningProposalId: "proposal",
+      reused: false,
     },
   });
 
@@ -1069,4 +1087,112 @@ it("records a proposal's reuse of an open item and returns its own filing on ret
   expect(filed.provider.show).toHaveBeenCalledWith("board-a");
   expect(retry).toEqual({ ...first, item: shown });
   expect(filed.filings).toHaveLength(1);
+});
+
+it("acquires the filing lock from its own pool when the shared pool is exhausted", async () => {
+  const shared = advisoryPool();
+  shared.pool.connect.mockImplementation(async () => {
+    throw new Error("timeout exceeded when trying to connect");
+  });
+  const locks = advisoryPool();
+  const { board } = service({ pool: shared.pool, lockPool: locks.pool });
+  await expect(board.withFilingLock(scope, async () => "filed")).resolves.toBe("filed");
+  expect(locks.pool.connect).toHaveBeenCalled();
+  expect(shared.pool.connect).not.toHaveBeenCalled();
+});
+
+it("keeps a created item on its reservation when recording the id fails, then the same run attaches it", async () => {
+  const { board, provider, filings, prisma } = service();
+  const created = item("Ship the board");
+  provider.create.mockResolvedValue(created);
+  const update = prisma.botBoardFiling.update.getMockImplementation();
+  prisma.botBoardFiling.update.mockImplementation(async () => {
+    throw new Error("timeout exceeded when trying to connect");
+  });
+  await expect(
+    executeBoardTool(
+      board,
+      scope,
+      "board_create",
+      { workspaceId: "workspace", item: { title: "Ship the board" } },
+      { upkeep: true },
+    ),
+  ).rejects.toThrow(/timeout exceeded when trying to connect/);
+  expect(filings).toEqual([
+    expect.objectContaining({ id: expect.any(String), itemId: null, workspaceId: null }),
+  ]);
+  expect(provider.create).toHaveBeenCalledOnce();
+  prisma.botBoardFiling.update.mockImplementation(update!);
+  provider.list.mockResolvedValue([created]);
+  const retry = await executeBoardTool(
+    board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "ship the board" } },
+    { upkeep: true },
+  );
+  expect(provider.create).toHaveBeenCalledOnce();
+  expect(retry).not.toMatchObject({ duplicate: true });
+  expect(filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", workspaceId: "workspace" }),
+  ]);
+});
+
+it("ignores hollow reservations older than 15 minutes for both filing caps", async () => {
+  const stale = new Date(Date.now() - 20 * 60 * 1000);
+  const run = service();
+  for (let index = 0; index < 5; index += 1)
+    run.filings.push(filingRow({ id: `stale-run-${index}`, itemId: null, createdAt: stale }));
+  const filed = await executeBoardTool(
+    run.board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "After the stale reservations" } },
+    { upkeep: true },
+  );
+  expect(filed).not.toHaveProperty("error");
+  expect(run.provider.create).toHaveBeenCalledOnce();
+
+  const fresh = service();
+  for (let index = 0; index < 5; index += 1)
+    fresh.filings.push(
+      filingRow({ id: `fresh-run-${index}`, itemId: null, createdAt: new Date() }),
+    );
+  const blocked = await executeBoardTool(
+    fresh.board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "Still inside the window" } },
+    { upkeep: true },
+  );
+  expect(blocked).toEqual({
+    error:
+      "This run already filed 5 board items. Comment on an existing item instead of creating another.",
+  });
+
+  const learningScope = { userId: "owner", spaceId: "space", botId: "builder" };
+  const hour = service();
+  for (let index = 0; index < 30; index += 1)
+    hour.filings.push(
+      filingRow({
+        id: `stale-hour-${index}`,
+        runId: null,
+        itemId: null,
+        reused: false,
+        createdAt: stale,
+      }),
+    );
+  await expect(
+    hour.board.fileLearningProposal(
+      learningScope,
+      "proposal",
+      {
+        title: "After the hour of hollow reservations",
+        description: "",
+        acceptanceCriteria: "Done",
+      },
+      [],
+    ),
+  ).resolves.toMatchObject({ duplicate: false });
+  expect(hour.provider.create).toHaveBeenCalledOnce();
 });

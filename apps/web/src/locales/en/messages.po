@@ -72,8 +72,8 @@ msgstr "{0} documents, {1} revisions"
 #. placeholder {3}: row.open
 #. placeholder {4}: row.other
 #: src/pages/dashboard/WorkPanel.tsx
-msgid "{0} filed {1}: {2} done, {3} open, {4} closed otherwise."
-msgstr "{0} filed {1}: {2} done, {3} open, {4} closed otherwise."
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+msgstr "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
 
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
 #: src/pages/fleet/FleetSettings.tsx
@@ -7221,9 +7221,14 @@ msgstr "This board item changed after it was filed. Review it on the Board."
 msgid "This board item is still open."
 msgstr "This board item is still open."
 
+#. placeholder {0}: proposal.boardOutcome.closeReason
 #: src/pages/LearningInbox.tsx
-msgid "This board item was closed otherwise."
-msgstr "This board item was closed otherwise."
+msgid "This board item was closed without being completed: {0}. Review it on the Board."
+msgstr "This board item was closed without being completed: {0}. Review it on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed. Review it on the Board."
+msgstr "This board item was closed without being completed. Review it on the Board."
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."

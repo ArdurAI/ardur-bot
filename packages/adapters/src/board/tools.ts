@@ -130,6 +130,8 @@ async function fileUpkeepItem(
     (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
   );
   if (existing) {
+    if (!existing.filedBy && (await service.claimHollowFiling(scope, workspaceId, existing.id)))
+      return noteFiling(service, provider, scope, existing);
     const repair = !existing.filedBy && (await service.runFiling(scope, workspaceId, existing.id));
     return {
       item: repair ? await noteFiling(service, provider, scope, existing) : existing,
@@ -139,14 +141,14 @@ async function fileUpkeepItem(
   }
   const reserved = await service.reserveBotFiling(scope);
   if (!reserved.ok) return { error: reserved.message };
-  let created: WorkItem;
+  let created: WorkItem | undefined;
   try {
     created = await provider.create({ ...item, labels: withBotFiledLabel(item.labels) });
+    await service.recordFilingItem(reserved.id, workspaceId, created.id);
   } catch (error) {
-    await service.settleFailedFiling(reserved.id, workspaceId, error);
+    await service.settleFailedFiling(reserved.id, workspaceId, error, created?.id);
     throw error;
   }
-  await service.recordFilingItem(reserved.id, workspaceId, created.id);
   return noteFiling(service, provider, scope, created);
 }
 async function admittedWorkspaceIds(service: BoardService, scope: BoardScope) {

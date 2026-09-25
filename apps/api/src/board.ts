@@ -32,7 +32,7 @@ export function createBoard(deps: RouterDeps) {
   const service = new BoardService({
     prisma: deps.prisma,
     dataDir: deps.dataDir,
-    pool: deps.pool,
+    lockPool: deps.lockPool,
     localRun: (request, scope) => requestBoardCommand(deps, request, scope),
     ownerRun: (request, scope) => {
       if (!deps.hostBridge)

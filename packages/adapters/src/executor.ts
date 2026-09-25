@@ -633,6 +633,8 @@ export interface ExecutorDeps {
   deploymentModelKey?: string;
   dataDir?: string;
   pool?: Pick<Pool, "connect">;
+  /** Filing locks only. Never the shared Prisma pool. */
+  lockPool?: Pick<Pool, "connect">;
   notifications?: NotificationProvider;
   jobs: JobPublisher;
   /** Messaging surface; absent means zero identity queries and no chat prompts. */
@@ -1895,7 +1897,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               new BoardService({
                 prisma: deps.prisma,
                 dataDir: deps.dataDir ?? "./data",
-                pool: deps.pool,
+                lockPool: deps.lockPool,
               }),
               deps.prisma,
               {
@@ -3790,7 +3792,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   new BoardService({
                     prisma: deps.prisma,
                     dataDir: deps.dataDir ?? "./data",
-                    pool: deps.pool,
+                    lockPool: deps.lockPool,
                   }),
                   {
                     userId: run.userId,

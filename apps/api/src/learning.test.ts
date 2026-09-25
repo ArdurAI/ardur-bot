@@ -220,8 +220,11 @@ it("loads board outcomes for every listed proposal in one query", async () => {
     select: { learningProposalId: true, closedAt: true, outcome: true },
   });
   expect(list.proposals.map((proposal) => [proposal.id, proposal.boardOutcome])).toEqual([
-    ["created", { closedAt: null, outcome: null }],
-    ["reused", { closedAt: "2026-09-25T13:00:00.000Z", outcome: "closed-other" }],
+    ["created", { closedAt: null, outcome: null, closeReason: null }],
+    [
+      "reused",
+      { closedAt: "2026-09-25T13:00:00.000Z", outcome: "closed-other", closeReason: null },
+    ],
     ["undone", undefined],
   ]);
 });

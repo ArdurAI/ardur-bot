@@ -32,6 +32,7 @@ export const LearningBoardItemSchema = z
     title: z.string().trim().min(1).max(200),
     description: z.string().max(32_000),
     acceptanceCriteria: z.string().trim().min(1).max(32_000),
+    labels: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
     workspaceId: z.string().min(1).max(160).optional(),
   })
   .strict();
@@ -189,6 +190,7 @@ export const LearningProposalSchema = z
         itemId: z.string(),
         updatedAt: z.string(),
         duplicate: z.boolean(),
+        closeReason: z.string().max(32_000).optional(),
       })
       .strict()
       .optional(),
@@ -196,6 +198,7 @@ export const LearningProposalSchema = z
       .object({
         closedAt: z.string().datetime().nullable(),
         outcome: z.enum(["completed", "closed-other"]).nullable(),
+        closeReason: z.string().nullable().optional(),
       })
       .strict()
       .optional(),

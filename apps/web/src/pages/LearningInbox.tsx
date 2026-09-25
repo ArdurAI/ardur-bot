@@ -451,7 +451,16 @@ function LearningCard({
             {proposal.boardOutcome.outcome === "completed" ? (
               <Trans>This board item was completed.</Trans>
             ) : proposal.boardOutcome.outcome === "closed-other" ? (
-              <Trans>This board item was closed otherwise.</Trans>
+              proposal.boardOutcome.closeReason ? (
+                <Trans>
+                  This board item was closed without being completed:{" "}
+                  {proposal.boardOutcome.closeReason}. Review it on the Board.
+                </Trans>
+              ) : (
+                <Trans>
+                  This board item was closed without being completed. Review it on the Board.
+                </Trans>
+              )
             ) : (
               <Trans>This board item is still open.</Trans>
             )}

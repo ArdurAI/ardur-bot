@@ -16,6 +16,7 @@ function fixture() {
   };
   const create = vi.fn();
   const filing = vi.fn(async () => ({ count: 0 }));
+  const findFilings = vi.fn(async () => [] as Array<{ learningProposalId: string | null }>);
   const updateMany = vi.fn(async ({ where, data }) => {
     if (where.version !== follow.version) return { count: 0 };
     Object.assign(follow, { ...data, version: follow.version + 1 });
@@ -23,7 +24,7 @@ function fixture() {
   });
   const prisma = {
     boardFollow: { findMany: vi.fn(async () => [{ ...follow }]) },
-    botBoardFiling: { updateMany: filing },
+    botBoardFiling: { updateMany: filing, findMany: findFilings },
     $transaction: vi.fn(async (work) =>
       work({ boardFollow: { updateMany }, boardNotification: { create } }),
     ),
@@ -90,6 +91,21 @@ it.each(["Done", "Fixed in the next build", "Resolved, not a duplicate", "Comple
     expect(boardFilingOutcome(reason)).toBe("completed");
   },
 );
+it.each([
+  "nothing was resolved",
+  "nothing fixed",
+  "Nothing has been done",
+  "nobody resolved this",
+  "none resolved",
+  "nowhere was this resolved",
+  "unresolved",
+  "unfixed",
+  "undone",
+  "uncompleted",
+  "isn't done",
+])("classifies the negated close reason %j as closed otherwise", (reason) => {
+  expect(boardFilingOutcome(reason)).toBe("closed-other");
+});
 it("does not emit after a concurrent observer consumed the version or an unfollow removed it", async () => {
   const { prisma, create, updateMany } = fixture();
   updateMany.mockResolvedValue({ count: 0 });

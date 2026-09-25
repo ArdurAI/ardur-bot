@@ -62,6 +62,7 @@ it.each([
     ),
   );
   expect(node.textContent).toContain(
-    `Helper filed ${filed}: ${done} done, ${open} open, ${other} closed otherwise.`,
+    `Helper filed ${filed}: ${done} done, ${open} open, ${other} closed without being completed.`,
   );
+  expect(node.textContent).not.toContain("closed otherwise");
 });

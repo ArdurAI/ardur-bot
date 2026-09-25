@@ -35,7 +35,12 @@ export type BoardScope = {
 export type BoardServiceOptions = {
   prisma: PrismaClient;
   dataDir: string;
-  /** Coordinates filings across processes. Without it, filings serialize within this process. */
+  /**
+   * Filing locks only. Production passes the two-connection pool from createFilingLockPool
+   * so a held lock never borrows from the shared Prisma pool.
+   */
+  lockPool?: Pick<Pool, "connect">;
+  /** @deprecated Use lockPool. Kept so a caller with one dedicated pool still serializes. */
   pool?: Pick<Pool, "connect">;
   ownerRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
   localRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
@@ -48,6 +53,9 @@ const FILING_LOCK_KEY = "(hashtext($2::text) & -8) | $3::integer";
 const FILING_LOCK_WAIT_MS = 15_000;
 const FILING_LOCK_POLL_MS = 250;
 const FILING_BUSY = "Another write is in progress";
+const FILING_RECORD_ATTEMPTS = 3;
+const FILING_RECORD_BACKOFF_MS = 25;
+const HOLLOW_RESERVATION_MS = 15 * 60 * 1000;
 const localFilingLocks = new Map<string, Promise<void>>();
 
 async function withLocalFilingLock<T>(spaceId: string, work: () => Promise<T>): Promise<T> {
@@ -422,7 +430,7 @@ export class BoardService {
    * pooled connection. Waiters poll without holding a connection and give up after a bound.
    */
   async withFilingLock<T>(scope: BoardScope, work: () => Promise<T>): Promise<T> {
-    const pool = this.options.pool;
+    const pool = this.options.lockPool ?? this.options.pool;
     if (!pool) return withLocalFilingLock(scope.spaceId, work);
     const key = [FILING_LOCK_NAMESPACE, scope.spaceId, FILING_LOCK_ID];
     const deadline = Date.now() + FILING_LOCK_WAIT_MS;
@@ -460,7 +468,7 @@ export class BoardService {
     if (!runId) return { ok: false as const, message: RUN_FILING_LIMIT };
     return this.options.prisma.$transaction(async (tx) => {
       const runCount = await tx.botBoardFiling.count({
-        where: { spaceId: scope.spaceId, runId },
+        where: { spaceId: scope.spaceId, runId, ...countedFilingWhere() },
       });
       if (runCount >= RUN_FILING_CAP) return { ok: false as const, message: RUN_FILING_LIMIT };
       if (await this.spaceFilingCapReached(tx, scope.spaceId))
@@ -472,20 +480,53 @@ export class BoardService {
     });
   }
   async recordFilingItem(filingId: string, workspaceId: string, itemId: string) {
-    await this.options.prisma.botBoardFiling.update({
-      where: { id: filingId },
-      data: { workspaceId, itemId },
-    });
+    let last: unknown;
+    for (let attempt = 0; attempt < FILING_RECORD_ATTEMPTS; attempt += 1) {
+      try {
+        await this.options.prisma.botBoardFiling.update({
+          where: { id: filingId },
+          data: { workspaceId, itemId },
+        });
+        return;
+      } catch (error) {
+        last = error;
+        if (attempt === FILING_RECORD_ATTEMPTS - 1) break;
+        await new Promise((resolve) =>
+          setTimeout(resolve, FILING_RECORD_BACKOFF_MS * (attempt + 1)),
+        );
+      }
+    }
+    throw last;
   }
-  /** Keeps a reservation whose item exists, even partially; otherwise releases it. */
-  async settleFailedFiling(filingId: string, workspaceId: string, error: unknown) {
+  /**
+   * Keeps a reservation whose item exists, whatever the error type. Deletes it only when
+   * no item id is known. Recording retries before this gives up and leaves the row.
+   */
+  async settleFailedFiling(
+    filingId: string,
+    workspaceId: string,
+    error: unknown,
+    createdItemId?: string,
+  ) {
+    const itemId =
+      createdItemId ?? (error instanceof BoardError ? error.problem.itemId : undefined);
     try {
-      if (error instanceof BoardError && error.problem.itemId)
-        await this.recordFilingItem(filingId, workspaceId, error.problem.itemId);
+      if (itemId) await this.recordFilingItem(filingId, workspaceId, itemId);
       else await this.options.prisma.botBoardFiling.delete({ where: { id: filingId } });
     } catch (settleError) {
       getLogger().error("board filing cleanup", settleError);
     }
+  }
+  /** This run's reservation that never received an item id. */
+  async claimHollowFiling(scope: BoardScope, workspaceId: string, itemId: string) {
+    if (!scope.runId) return null;
+    const hollow = await this.options.prisma.botBoardFiling.findFirst({
+      where: { spaceId: scope.spaceId, runId: scope.runId, itemId: null },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!hollow) return null;
+    await this.recordFilingItem(hollow.id, workspaceId, itemId);
+    return hollow;
   }
   /** The run's own filing for an item, when an earlier attempt created it. */
   async runFiling(scope: BoardScope, workspaceId: string, itemId: string) {
@@ -496,8 +537,14 @@ export class BoardService {
   }
   private async spaceFilingCapReached(tx: Prisma.TransactionClient, spaceId: string) {
     const since = new Date(Date.now() - 60 * 60 * 1000);
+    const freshHollow = new Date(Date.now() - HOLLOW_RESERVATION_MS);
     const count = await tx.botBoardFiling.count({
-      where: { spaceId, reused: false, createdAt: { gte: since } },
+      where: {
+        spaceId,
+        reused: false,
+        createdAt: { gte: since },
+        OR: [{ itemId: { not: null } }, { createdAt: { gte: freshHollow } }],
+      },
     });
     return count >= SPACE_FILING_CAP;
   }
@@ -518,7 +565,7 @@ export class BoardService {
       const provider = await this.provider(scope, own.workspaceId);
       return {
         item: await provider.show(own.itemId),
-        duplicate: own.reused,
+        duplicate: own.reused === true,
         workspaceId: own.workspaceId,
       };
     }
@@ -540,6 +587,7 @@ export class BoardService {
       botId: scope.botId,
       workspaceId: workspace.id,
       learningProposalId: proposalId,
+      reused: false,
     };
     if (existing) {
       await prisma.botBoardFiling.create({
@@ -552,6 +600,7 @@ export class BoardService {
         throw new BoardError({ code: "busy", message: SPACE_FILING_LIMIT });
       return tx.botBoardFiling.create({ data: link });
     });
+    let createdId: string | undefined;
     try {
       const created = await provider.create({
         ...item,
@@ -559,10 +608,11 @@ export class BoardService {
         priority: 2,
         labels: withBotFiledLabel(undefined),
       });
+      createdId = created.id;
       await this.recordFilingItem(filing.id, workspace.id, created.id);
       return { item: created, duplicate: false, workspaceId: workspace.id };
     } catch (error) {
-      await this.settleFailedFiling(filing.id, workspace.id, error);
+      await this.settleFailedFiling(filing.id, workspace.id, error, createdId);
       throw error;
     }
   }
@@ -605,6 +655,14 @@ export class BoardService {
       })),
     };
   }
+}
+
+/** A hollow reservation counts only for its first 15 minutes. An attached item always counts. */
+function countedFilingWhere() {
+  const freshHollow = new Date(Date.now() - HOLLOW_RESERVATION_MS);
+  return {
+    OR: [{ itemId: { not: null } }, { itemId: null, createdAt: { gte: freshHollow } }],
+  };
 }
 
 function boardAdmits(row: { allowAllBots: boolean; allowedBotIds: string[] }, botId?: string) {

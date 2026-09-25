@@ -71,8 +71,8 @@ function FilingOutcomes({ rows }: { rows: WorkData["filingOutcomes"] }) {
   return rows.map((row) => (
     <p key={row.botId}>
       <Trans>
-        {row.name} filed {row.filed}: {row.done} done, {row.open} open, {row.other} closed
-        otherwise.
+        {row.name} filed {row.filed}: {row.done} done, {row.open} open, {row.other} closed without
+        being completed.
       </Trans>
     </p>
   ));

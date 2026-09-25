@@ -31,7 +31,19 @@ import { skillDocumentContext } from "./skill-documents.js";
 
 type Identity = Pick<Actor, "spaceId" | "userId">;
 const BOARD_UNDO_REASON = "Undone from Learning";
+const BOARD_REJECT_REASON = "Rejected from Learning";
 const BOARD_ITEM_CHANGED = "This board item changed after it was filed. Review it on the Board.";
+const BOARD_REJECT_LEFT =
+  "This board item changed after it was filed, so it was left open for review on the Board.";
+type LearningActionResult = {
+  proposal: LearningProposal;
+  conflict?: {
+    before: string;
+    applied: string;
+    current: string;
+    expectedRevision: number;
+  };
+};
 export interface LearningApplyDependencies {
   prisma: PrismaClient;
   memoryDocuments?: MemoryService;
@@ -706,6 +718,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         if (
           proposal.operation ||
           proposal.type === "policy-suggestion" ||
+          proposal.type === "board-item" ||
           learningApprovalBlock(proposal)
         )
           throw new Error("This suggestion cannot be edited here.");
@@ -717,7 +730,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     },
     async reject(id: string, actor: Identity, _reason?: string) {
       const identity = { spaceId: actor.spaceId, userId: actor.userId };
-      const reject = () =>
+      const reject = (): Promise<LearningActionResult> =>
         operation(id, identity, async (tx, proposal, _context, audit) => {
           if (proposal.status !== "pending")
             throw new Error("This suggestion is no longer pending.");
@@ -736,11 +749,53 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         where: { id, ...identity },
         select: { body: true },
       });
+      const body = row?.body as { type?: unknown; scope?: { botId?: string } } | undefined;
       // An approval that already passed its pending check finishes before this reject.
-      const board = (row?.body as { type?: unknown } | undefined)?.type === "board-item";
-      return board && deps.boardService
-        ? deps.boardService.withFilingLock(identity, reject)
-        : reject();
+      if (body?.type !== "board-item" || !deps.boardService) return reject();
+      const boardService = deps.boardService;
+      return boardService.withFilingLock(identity, async () => {
+        let leftOpen: { itemId: string; sentence: string } | undefined;
+        const filing = await deps.prisma.botBoardFiling.findFirst({
+          where: { spaceId: identity.spaceId, learningProposalId: id },
+        });
+        if (filing?.itemId && filing.workspaceId && !filing.reused) {
+          const provider = await boardService.provider(
+            {
+              ...identity,
+              ...(body.scope?.botId || filing.botId
+                ? { botId: body.scope?.botId ?? filing.botId ?? undefined }
+                : {}),
+            },
+            filing.workspaceId,
+          );
+          const item = await provider.show(filing.itemId);
+          const rejected = item.status === "closed" && item.closeReason === BOARD_REJECT_REASON;
+          const changed =
+            !rejected && (item.status === "closed" || item.updatedAt !== item.createdAt);
+          if (changed) leftOpen = { itemId: filing.itemId, sentence: BOARD_REJECT_LEFT };
+          else {
+            if (!rejected) await provider.close([item.id], BOARD_REJECT_REASON);
+            await deps.prisma.botBoardFiling.deleteMany({
+              where: { id: filing.id, spaceId: identity.spaceId },
+            });
+          }
+        } else if (filing && !filing.itemId)
+          await deps.prisma.botBoardFiling.deleteMany({
+            where: { id: filing.id, spaceId: identity.spaceId },
+          });
+        const result = await reject();
+        return leftOpen
+          ? {
+              ...result,
+              conflict: {
+                before: "",
+                applied: leftOpen.itemId,
+                current: leftOpen.sentence,
+                expectedRevision: 0,
+              },
+            }
+          : result;
+      });
     },
     async revert(id: string, actor: Identity) {
       actor = { spaceId: actor.spaceId, userId: actor.userId };

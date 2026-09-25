@@ -60,6 +60,7 @@ import {
 import { resolveEncryptionKey, resolveSupervisorToken } from "@ardurbot/core";
 import {
   createDb,
+  createFilingLockPool,
   createThreadEvents,
   isTooManyDatabaseConnections,
   parsePositiveInteger,
@@ -76,13 +77,15 @@ async function main() {
   // separate ones. Keep this modest: graphile holds a LISTEN client, and the
   // reconciler and messaging receivers each hold an advisory-lock client for the
   // process lifetime (namespace 1380019075, ids 1 and 2). Board notifications
-  // take a transaction lock (id 3) for one tick and return that client; board
-  // filings hold a per-space session lock (id 4) for one filing. A larger
-  // max just competes for Postgres max_connections (53300).
+  // take a transaction lock (id 3) for one tick and return that client. Board
+  // filings use lockPool (max 2, id 4) so a held filing lock cannot starve the
+  // writes it protects. A larger shared max just competes for Postgres
+  // max_connections (53300).
   const { prisma, pool } = createDb(databaseUrl, {
     poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 8),
     applicationName: "ardurbot-worker",
   });
+  const lockPool = createFilingLockPool(databaseUrl, { applicationName: "ardurbot-worker" });
   const realtime = new PostgresRealtimeFanout({
     connectionString: process.env.REALTIME_DATABASE_URL ?? databaseUrl,
     publisher: pool,
@@ -192,6 +195,7 @@ async function main() {
   const executor = createRunExecutor({
     prisma,
     pool,
+    lockPool,
     runtime,
     sandbox,
     memory,
@@ -319,6 +323,7 @@ async function main() {
       await mcp.close();
       await prisma.$disconnect().catch(() => undefined);
       await pool.end().catch(() => undefined);
+      await lockPool.end().catch(() => undefined);
     } finally {
       await logger.flush({ timeoutMs: 2_000 });
     }
