@@ -813,6 +813,9 @@ export const COMPUTER_UPDATE_STAGES = [
   "restoring",
   "reconnecting",
 ] as const;
+/** A move that did not start because the computer changed. Not a failure. */
+export const computerMoveSkippedReason =
+  "The computer changed before the move, so it stayed where it is.";
 export const ComputerUpdateSchema = z.object({
   canReleaseReservation: z.boolean().optional(),
   action: z.enum(["update", "recover"]),
@@ -820,8 +823,9 @@ export const ComputerUpdateSchema = z.object({
   botId: Id,
   name: z.string(),
   mode: ComputerModeSchema,
-  status: z.enum(["queued", "running", "interrupted", "completed", "failed"]),
+  status: z.enum(["queued", "running", "interrupted", "completed", "failed", "skipped"]),
   stage: z.enum(COMPUTER_UPDATE_STAGES),
+  reason: z.string().max(500).optional(),
 });
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 

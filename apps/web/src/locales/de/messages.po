@@ -356,6 +356,10 @@ msgstr "Aktivität"
 msgid "Add"
 msgstr "Hinzufügen"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Add a connection under Settings, Connections, to move this computer to another machine."
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
 msgstr ""
@@ -3179,9 +3183,8 @@ msgstr ""
 msgid "Engine endpoint"
 msgstr ""
 
-#. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine: {0}"
+msgid "Engine: {label}"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
@@ -7173,6 +7176,10 @@ msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "The bot is working — wait or stop it"
+msgstr ""
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer changed before the move, so it stayed where it is."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx

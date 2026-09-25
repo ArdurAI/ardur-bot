@@ -1,4 +1,5 @@
 import type { AdapterContext } from "@ardurbot/adapter-kit";
+import { computerMoveSkippedReason } from "@ardurbot/contracts";
 import { choosePlacement, PlacementSettingsSchema } from "@ardurbot/contracts/fleet";
 import { appendEventInTransaction, createThreadMessageInTransaction, Prisma } from "@ardurbot/db";
 import { ComputerBusyError, replaceComputer } from "../computer-lifecycle.js";
@@ -256,15 +257,25 @@ export async function placeRunComputer(
     ) {
       await deps.prisma.computerUpdate.updateMany({
         where: { id: updateId, status: "running" },
-        data: { status: "failed" },
+        data: {
+          status: "skipped",
+          configuration: {
+            connectionId: decision.connectionId,
+            imageProfile: computer.imageProfile,
+            confirmed: true,
+            placementRunId: runId,
+            targetId: decision.targetId,
+            reason: computerMoveSkippedReason,
+          },
+        },
       });
       await deps.prisma.run.updateMany({
         where: ownedRun,
         data: {
           placement: {
             ...decision,
-            status: "failed",
-            reason: "The computer changed before the move, so it stayed where it is.",
+            status: "skipped",
+            reason: computerMoveSkippedReason,
           },
         },
       });

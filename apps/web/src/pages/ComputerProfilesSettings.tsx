@@ -96,7 +96,7 @@ export function ComputerProfile({
   onChanged: () => Promise<void>;
 }) {
   const { t } = useLingui();
-  const locked = !status.connectionId;
+  const connectionless = !status.connectionId;
   const savedConnectionId = status.connectionId ?? "";
   const [profile, setProfile] = useState<ComputerProfileId>(status.imageProfile ?? "base");
   const [connectionId, setConnectionId] = useState(savedConnectionId);
@@ -114,7 +114,7 @@ export function ComputerProfile({
     name: string;
   } | null>(null);
   useEffect(() => {
-    if (locked) {
+    if (connectionless && !connectionId) {
       setEngineError("");
       setDetectedEngine(null);
       return;
@@ -140,12 +140,14 @@ export function ComputerProfile({
     return () => {
       active = false;
     };
-  }, [locked, connectionId, engineRefresh]);
-  const engine = locked
+  }, [connectionless, connectionId, engineRefresh]);
+  const staying = connectionless && !connectionId;
+  const engine = staying
     ? status.kind
     : detectedEngine?.connectionId === connectionId
       ? detectedEngine.name
       : (connection?.settings.engine ?? status.kind);
+  const savedEngine = engineLabel(status.kind);
   const supported = ["docker", "podman", "kubernetes", "remote-docker", "desktop"].includes(engine);
   async function save() {
     setPending(true);
@@ -154,7 +156,7 @@ export function ComputerProfile({
       await rpc.computer.configure({
         botId,
         imageProfile: profile,
-        connectionId: locked ? null : connectionId || null,
+        connectionId: connectionId || null,
         confirmed: true,
       });
       setConfirm(false);
@@ -188,29 +190,27 @@ export function ComputerProfile({
           id={`connection-${botId}`}
           aria-label={t`Connection`}
           value={connectionId}
-          disabled={pending || locked}
+          disabled={pending || (connectionless && connections.length === 0)}
           onChange={(event) => setConnectionId(event.target.value)}
         >
-          {locked ? (
-            <NativeSelectOption value="">{label}</NativeSelectOption>
+          {connectionless ? (
+            <NativeSelectOption value="">{savedEngine}</NativeSelectOption>
           ) : (
             <NativeSelectOption value="">
               <Trans>Deployment default</Trans>
             </NativeSelectOption>
           )}
-          {locked
-            ? null
-            : connections.map((entry) => (
-                <NativeSelectOption key={entry.id} value={entry.id}>
-                  {entry.name}
-                </NativeSelectOption>
-              ))}
+          {connections.map((entry) => (
+            <NativeSelectOption key={entry.id} value={entry.id}>
+              {entry.name}
+            </NativeSelectOption>
+          ))}
         </NativeSelect>
       </label>
-      {locked ? (
+      {connectionless && connections.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {/* biome-ignore format: one catalog sentence */}
-          <Trans>Moving this computer between engines is not available yet. Add a connection to move it to another machine.</Trans>
+          <Trans>Add a connection under Settings, Connections, to move this computer to another machine.</Trans>
         </p>
       ) : null}
       {supported ? (

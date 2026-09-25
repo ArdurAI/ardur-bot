@@ -1018,7 +1018,9 @@ it("refuses a Docker move onto This Mac when the host bridge is on and still exp
   try {
     await expect(
       catalog.resolveReplacementRouting(computer.row, configuration, context),
-    ).rejects.toThrow("This Mac is not available.");
+    ).rejects.toThrow(
+      "This Mac is not available. Choose a saved connection or keep the current engine.",
+    );
     await performComputerUpdate(deps, update.id);
     expect(update.status).toBe("failed");
     expect(destroy).not.toHaveBeenCalled();
@@ -1416,6 +1418,143 @@ it("checkpoints and destroys the loaded computer rather than a precomputed engin
     ).rejects.toThrow();
     expect(stale.destroy).not.toHaveBeenCalled();
     expect(hostDestroy).toHaveBeenCalled();
+  } finally {
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+it("moves a local Docker computer to a remote Docker engine and never to SSH", async () => {
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-docker-family-"));
+  vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockResolvedValue({
+    name: "docker",
+    rootless: false,
+    version: "test",
+    os: "linux",
+    capacity: { ...unknownCapacity(), source: "docker", memoryFree: 512 * 1024 ** 2 },
+  });
+  const docker = localDocker({ providerRef: "docker-new", fresh: true });
+  vi.spyOn(DockerSandboxProvider.prototype, "exportWorkspace").mockImplementation(
+    async function* () {
+      yield { path: "notes/keep.txt", content: new TextEncoder().encode("saved") };
+    },
+  );
+  const measured = (id: "remote-docker" | "ssh", memoryFree: number) => ({
+    describe: () => ({ id }),
+    capacity: async () => ({
+      ...unknownCapacity(),
+      source: id === "ssh" ? ("ssh" as const) : ("docker" as const),
+      memoryFree,
+    }),
+    provision: vi.fn(async () => ({
+      id: `${id}-computer`,
+      botId: "home",
+      kind: id,
+      providerRef: `${id}-computer`,
+      fresh: true,
+    })),
+    prepare: async () => undefined,
+    importWorkspace: async () => undefined,
+    releaseScreen: async () => undefined,
+    destroy: vi.fn(async () => undefined),
+  });
+  const remote = measured("remote-docker", 8 * 1024 ** 3);
+  const ssh = measured("ssh", 32 * 1024 ** 3);
+  vi.spyOn(ComputerConnections.prototype, "resolve").mockImplementation(async (id: string) => {
+    if (id === "remote-engine") return remote as unknown as SandboxProvider;
+    if (id === "ssh-machine") return ssh as unknown as SandboxProvider;
+    throw new Error("The computer connection is unavailable; choose a connection in Settings.");
+  });
+  const computer = storedComputer();
+  const prisma = {
+    connection: {
+      findMany: async () => [
+        {
+          id: "remote-engine",
+          displayName: "Remote Docker",
+          status: "connected",
+          metadata: { engine: "docker", dockerContext: "remote" },
+        },
+        {
+          id: "ssh-machine",
+          displayName: "Linux machine",
+          status: "connected",
+          metadata: { engine: "ssh", ssh: { host: "computer.invalid", user: "runner" } },
+        },
+      ],
+    },
+    bot: {
+      findMany: async () => [{ ...movingBot, computer: computer.row }],
+      updateMany: async () => ({ count: 1 }),
+    },
+    space: { findUniqueOrThrow: async () => ({ placement: { mode: "free-memory" } }) },
+    deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+    run: {
+      findUniqueOrThrow: async () => runRow(computer.row),
+      findFirst: async ({ where }: { where: { id?: unknown } }) =>
+        where.id === "run"
+          ? { id: "run", runtimeComputer: null, placement: { status: "moving" } }
+          : null,
+      findUnique: async () => ({
+        status: "running",
+        startedAt: new Date(),
+        originDeviceGrantId: null,
+        remoteRootTaskId: null,
+        delegationId: null,
+      }),
+      updateMany: async () => ({ count: 1 }),
+    },
+    computer,
+    computerUpdate: {
+      create: async () => ({ id: "move" }),
+      update: async () => ({}),
+      updateMany: async () => ({ count: 1 }),
+    },
+    thread: { update: async () => ({ nextEventSeq: 2, nextMessageSeq: 2 }) },
+    message: { create: async () => ({ id: "message" }) },
+    event: { create: async () => ({ seq: 1, type: "thread.message.created" }) },
+    $queryRaw: async () => [],
+    $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(prisma),
+  };
+  const sandbox = createRunSandbox("docker", {
+    prisma: prisma as unknown as PrismaClient,
+    secrets: { load: () => "" },
+  });
+  const catalog = new FleetCatalog(
+    prisma as unknown as PrismaClient,
+    { load: () => "" },
+    {},
+    sandbox,
+  );
+  const context: AdapterContext = { ...runContext, operationId: "place", traceId: "place" };
+  try {
+    const fleet = await catalog.list(context);
+    const compatible = await catalog.compatibleTargets(computer.row, fleet.targets, context);
+    expect(compatible.map((target) => target.id)).toEqual(
+      expect.arrayContaining(["remote-engine"]),
+    );
+    expect(compatible.map((target) => target.id)).not.toContain("ssh-machine");
+    const moved = await placeRunComputer(
+      {
+        prisma: prisma as unknown as PrismaClient,
+        home: new LocalAgentHomeStore(homeRoot),
+        sandbox,
+        jobs: {} as JobPublisher,
+        events: { notify: vi.fn(async () => undefined) } as unknown as ThreadEvents,
+      },
+      catalog,
+      "run",
+      new AbortController().signal,
+    );
+    expect(moved).toBe(true);
+    expect(computer.row).toMatchObject({
+      connectionId: "remote-engine",
+      kind: "remote-docker",
+    });
+    expect(remote.provision).toHaveBeenCalledOnce();
+    expect(ssh.provision).not.toHaveBeenCalled();
+    expect(ssh.destroy).not.toHaveBeenCalled();
+    expect(docker.destroy).toHaveBeenCalled();
   } finally {
     await rm(homeRoot, { recursive: true, force: true });
   }

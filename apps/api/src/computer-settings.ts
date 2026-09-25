@@ -8,6 +8,7 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
   ComputerEngineUnavailableError,
+  thisMacUnavailableMessage,
 } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -121,7 +122,7 @@ export async function validateComputerConfiguration(
 ) {
   const configuration = ComputerConfigurationSchema.parse(raw);
   if (!configuration.confirmed) throw new Error("This replaces the computer's files. Continue?");
-  if (configuration.thisMac) throw new Error("This Mac is not available.");
+  if (configuration.thisMac) throw new Error(thisMacUnavailableMessage);
   if (
     configuration.connectionId &&
     !(await prisma.connection.findFirst({

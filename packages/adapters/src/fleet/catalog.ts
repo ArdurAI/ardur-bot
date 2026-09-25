@@ -1,6 +1,6 @@
 import type { AdapterContext, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { FleetTarget } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema, thisMacUnavailableMessage } from "@ardurbot/contracts";
 import { PlacementSettingsSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "../computer-connections.js";
@@ -29,6 +29,11 @@ export function fleetComputerTargetId(
     );
   }
   return fleet.defaultTargetId;
+}
+
+/** Local Docker and remote Docker (socket, endpoint, or context) are one family. */
+export function placementEngineFamily(providerId: string): string {
+  return providerId === "docker" || providerId === "remote-docker" ? "docker" : providerId;
 }
 
 export class FleetCatalog {
@@ -73,13 +78,15 @@ export class FleetCatalog {
     targets: FleetTarget[],
     context: AdapterContext,
   ): Promise<FleetTarget[]> {
-    const sourceKind = (await this.resolveComputer(computer, context)).describe().id;
+    const sourceFamily = placementEngineFamily(
+      (await this.resolveComputer(computer, context)).describe().id,
+    );
     const compatible = await Promise.all(
       targets.map(async (target) => {
-        const targetKind = await this.resolveTarget(target, context)
+        const targetId = await this.resolveTarget(target, context)
           .then((provider) => provider.describe().id)
           .catch(() => null);
-        return targetKind === sourceKind ? target : null;
+        return targetId && placementEngineFamily(targetId) === sourceFamily ? target : null;
       }),
     );
     return compatible.filter((target): target is FleetTarget => target !== null);
@@ -92,7 +99,7 @@ export class FleetCatalog {
   ): Promise<{ source: SandboxProvider; target: SandboxProvider }> {
     const source = await this.resolveComputer(computer, context);
     if (configuration.targetId === undefined) {
-      if (configuration.thisMac) throw new Error("This Mac is not available.");
+      if (configuration.thisMac) throw new Error(thisMacUnavailableMessage);
       if (
         configuration.connectionId === undefined ||
         configuration.connectionId === computer.connectionId
@@ -110,7 +117,10 @@ export class FleetCatalog {
     );
     const target = row && (await this.resolveTarget(row, context));
     // Automatic placement stays on one kind of computer until verified migration lands.
-    if (!target || target.describe().id !== source.describe().id)
+    if (
+      !target ||
+      placementEngineFamily(target.describe().id) !== placementEngineFamily(source.describe().id)
+    )
       throw new Error("Computer replacement target is unavailable");
     return { source, target };
   }

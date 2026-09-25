@@ -56,6 +56,9 @@ export const ComputerConnectionInputSchema = z.object({
     .object({ ca: z.string().max(4096), cert: z.string().max(4096), key: z.string().max(4096) })
     .optional(),
 });
+/** Older clients can still ask for This Mac. The next step is part of the refusal. */
+export const thisMacUnavailableMessage =
+  "This Mac is not available. Choose a saved connection or keep the current engine.";
 export const ComputerConfigurationSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema,

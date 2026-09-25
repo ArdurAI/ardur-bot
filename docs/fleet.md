@@ -55,14 +55,21 @@ Threshold mode keeps the current target while it has at least the configured amo
 memory. It never chooses an unknown, stale, disconnected, or merely discovered target. Ties stay
 where they are. CPU load is reported separately and is not treated as memory capacity.
 
-Automatic moves are paused across engines: until verified migration lands, a move stays on the
-same kind of computer, such as between Docker engines or between Linux machines. Moving work to
-another engine remains the goal. It waits because today's move removes the old computer before
-the new one has accepted the workspace. Verified migration will start the destination, import and
-verify the workspace, point the computer at it, and only then remove the old one. Moving a
-connectionless computer between Docker and This Mac is not available until that migration lands.
-Settings shows the engine the computer runs on. A computer that already has a connection can move
-to another saved connection, or back to the deployment engine.
+Automatic moves stay inside one engine family until verified migration lands. Local Docker and
+remote Docker — a socket, an endpoint, or a Docker context — are one family, so a local Docker
+computer can move to a remote Docker engine. SSH, Kubernetes, and every other provider id stay in
+their own family. Podman has no provider id of its own: a Podman socket reports `docker` and a
+Podman endpoint or context reports `remote-docker`, so those connections share the Docker family.
+Moving work to another family remains the goal. It waits because today's move removes the old
+computer before the new one has accepted the workspace. Verified migration will start the
+destination, import and verify the workspace, point the computer at it, and only then remove the
+old one. Moving a connectionless computer between Docker and This Mac is not available until that
+migration lands. Settings shows the engine the computer runs on. A computer with no connection can
+move to a saved connection; with none, Settings says to add one under Settings, Connections.
+Deployment default and This Mac are not offered for that computer. A computer that already has a
+connection can move to another saved connection, or back to the deployment engine. If the computer
+changes before an automatic move starts, the move is skipped: the computer stays, and the update
+is not a failure.
 
 `placeRunComputer` runs before the first computer execution lease and before tool effects. It
 never moves an existing run snapshot. A first move pauses for that bot's consent unless `Move
@@ -83,8 +90,8 @@ This Mac uses the host, and E2B, Daytona, Box, and Kubernetes use that kind's pr
 chosen when the computer is created: This Mac when that choice is on and there is no connection,
 otherwise the deployment default. Changing This Mac or the deployment default does not move a
 computer that already has a kind, including one whose machine is missing after a failed reset or
-update. Settings shows that saved engine. It does not move a connectionless computer between
-Docker and This Mac; that waits for verified migration.
+update. Settings shows that saved engine. A connectionless computer can move to a saved
+connection. Moving one between Docker and This Mac waits for verified migration.
 
 Moves reserve the computer using the existing maintenance record, save a checkpoint with the old
 connection, destroy the old computer, then provision and restore with the new connection. The

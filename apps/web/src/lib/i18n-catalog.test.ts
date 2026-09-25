@@ -258,4 +258,33 @@ describe("lingui catalogs", () => {
       'msgstr "{0, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}"',
     );
   });
+
+  it("ships the fleet move sentences in every catalog, with Russian and Chinese filled", () => {
+    const sentences = [
+      "Add a connection under Settings, Connections, to move this computer to another machine.",
+      "The computer changed before the move, so it stayed where it is.",
+    ];
+    const translations: Record<string, Record<string, string>> = {
+      ru: {
+        [sentences[0]!]:
+          "Добавьте подключение в разделе «Настройки», «Подключения», чтобы перенести этот компьютер на другую машину.",
+        [sentences[1]!]: "Компьютер изменился до переноса, поэтому он остался на месте.",
+      },
+      "zh-CN": {
+        [sentences[0]!]: "在“设置”的“连接”中添加连接，即可将此电脑移到另一台机器。",
+        [sentences[1]!]: "电脑在移动前已更改，因此仍留在原处。",
+      },
+    };
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`msgid "${sentence}"`);
+        const filled = translations[locale]?.[sentence];
+        if (filled) expect(catalog).toContain(`msgid "${sentence}"\nmsgstr "${filled}"`);
+      }
+    }
+  });
 });

@@ -356,6 +356,10 @@ msgstr "Активность"
 msgid "Add"
 msgstr "Добавить"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Add a connection under Settings, Connections, to move this computer to another machine."
+msgstr "Добавьте подключение в разделе «Настройки», «Подключения», чтобы перенести этот компьютер на другую машину."
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
 msgstr "Чтобы использовать это, добавьте модель в настройках."
@@ -3179,9 +3183,8 @@ msgstr "Включайтесь, когда... Игнорируйте..."
 msgid "Engine endpoint"
 msgstr ""
 
-#. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine: {0}"
+msgid "Engine: {label}"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
@@ -7174,6 +7177,10 @@ msgstr "API не вернулся. Обновите эту страницу."
 #: src/pages/shell/computer-terminal.tsx
 msgid "The bot is working — wait or stop it"
 msgstr ""
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer changed before the move, so it stayed where it is."
+msgstr "Компьютер изменился до переноса, поэтому он остался на месте."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."

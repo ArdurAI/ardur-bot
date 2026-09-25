@@ -356,6 +356,10 @@ msgstr "动态"
 msgid "Add"
 msgstr "添加"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Add a connection under Settings, Connections, to move this computer to another machine."
+msgstr "在“设置”的“连接”中添加连接，即可将此电脑移到另一台机器。"
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
 msgstr "请在设置中添加模型后再使用。"
@@ -3179,9 +3183,8 @@ msgstr ""
 msgid "Engine endpoint"
 msgstr ""
 
-#. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine: {0}"
+msgid "Engine: {label}"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
@@ -7174,6 +7177,10 @@ msgstr "API 未恢复。请刷新此页面。"
 #: src/pages/shell/computer-terminal.tsx
 msgid "The bot is working — wait or stop it"
 msgstr ""
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer changed before the move, so it stayed where it is."
+msgstr "电脑在移动前已更改，因此仍留在原处。"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."

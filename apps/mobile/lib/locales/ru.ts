@@ -588,6 +588,8 @@ export const RU_MESSAGES: Record<string, string> = {
   Recent: "Недавние",
   Recover: "Восстановить",
   "Recover computer": "Восстановить компьютер",
+  "The computer changed before the move, so it stayed where it is.":
+    "Компьютер изменился до переноса, поэтому он остался на месте.",
   "Recovering…": "Восстановление…",
   Release: "Освободить управление",
   "Remove {name}": "Удалить {name}",

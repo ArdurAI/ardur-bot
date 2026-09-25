@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { replaceComputer } from "./computer-lifecycle.js";
 import {
+  computerUpdateView,
   performComputerUpdate,
   queueComputerUpdate,
   reconcileComputerUpdates,
@@ -251,6 +252,20 @@ describe("profile replacement intent", () => {
       routing,
     );
     expect(row.status).toBe("completed");
+  });
+  it("shows a skipped move with its reason instead of a failure", () => {
+    const reason = "The computer changed before the move, so it stayed where it is.";
+    expect(
+      computerUpdateView({
+        action: "update",
+        id: "move",
+        botId: "bot-1",
+        status: "skipped",
+        stage: "preparing",
+        configuration: { reason },
+        computer: { scope: "dedicated", bots: [{ id: "bot-1", name: "Writer" }] },
+      }),
+    ).toMatchObject({ status: "skipped", reason });
   });
 });
 

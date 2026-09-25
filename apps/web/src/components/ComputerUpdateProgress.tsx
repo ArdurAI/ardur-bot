@@ -53,18 +53,21 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
     t`Restoring your workspace`,
     t`Reconnecting`,
   ];
+  const skipped = t`The computer changed before the move, so it stayed where it is.`;
   const title = (update: ComputerUpdate) =>
-    computerUpdateNeedsAttention(update)
-      ? update.action === "recover"
-        ? t`Recovery failed`
-        : t`Update failed`
-      : update.action === "recover"
-        ? update.mode === "team"
-          ? t`Recovering Team Computer`
-          : t`Recovering ${update.name}’s Computer`
-        : update.mode === "team"
-          ? t`Updating Team Computer`
-          : t`Updating ${update.name}’s Computer`;
+    update.status === "skipped"
+      ? skipped
+      : computerUpdateNeedsAttention(update)
+        ? update.action === "recover"
+          ? t`Recovery failed`
+          : t`Update failed`
+        : update.action === "recover"
+          ? update.mode === "team"
+            ? t`Recovering Team Computer`
+            : t`Recovering ${update.name}’s Computer`
+          : update.mode === "team"
+            ? t`Updating Team Computer`
+            : t`Updating ${update.name}’s Computer`;
   const selected = updates.find((update) => update.id === openId);
   return (
     <>
@@ -79,7 +82,7 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
               computerUpdates.open(update.id);
             }}
           >
-            {computerUpdateNeedsAttention(update) ? (
+            {update.status === "skipped" ? null : computerUpdateNeedsAttention(update) ? (
               <CircleAlert className="text-destructive" />
             ) : (
               <LoadingState
@@ -91,9 +94,11 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
             )}
             <span className="text-center">
               <span className="block">{title(update)}</span>
-              <span className="block text-xs text-muted-foreground">
-                {labels[COMPUTER_UPDATE_STAGES.indexOf(update.stage)]}
-              </span>
+              {update.status === "skipped" ? null : (
+                <span className="block text-xs text-muted-foreground">
+                  {labels[COMPUTER_UPDATE_STAGES.indexOf(update.stage)]}
+                </span>
+              )}
             </span>
           </Button>
         ))}
@@ -114,7 +119,7 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
             <div className="border-b border-border px-6 py-5">
               <DialogTitle className="text-lg font-semibold">{title(selected)}</DialogTitle>
             </div>
-            {!computerUpdateNeedsAttention(selected) ? (
+            {selected.status !== "skipped" && !computerUpdateNeedsAttention(selected) ? (
               <ol className="space-y-4 px-6 py-6" aria-label={t`Update progress`}>
                 {computerUpdateStages(selected.action).map((stage, index) => {
                   const current = computerUpdateStages(selected.action).indexOf(selected.stage);
@@ -151,7 +156,7 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
                 })}
               </ol>
             ) : null}
-            {computerUpdateNeedsAttention(selected) ? (
+            {selected.status !== "skipped" && computerUpdateNeedsAttention(selected) ? (
               <p
                 role="alert"
                 className="mx-6 my-6 rounded-xl bg-muted px-4 py-4 text-sm text-muted-foreground"
@@ -164,7 +169,7 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
                   </Trans>
                 )}
               </p>
-            ) : (
+            ) : selected.status === "skipped" ? null : (
               <span role="status" className="sr-only">
                 {labels[COMPUTER_UPDATE_STAGES.indexOf(selected.stage)]}
               </span>
@@ -180,7 +185,7 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
                   <Trans>Release computer</Trans>
                 </Button>
               ) : null}
-              {selected.status === "failed" ? (
+              {selected.status === "failed" || selected.status === "skipped" ? (
                 <Button
                   variant="outline"
                   onClick={() =>

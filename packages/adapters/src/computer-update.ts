@@ -17,6 +17,14 @@ type Deps = Parameters<typeof replaceComputer>[0] & {
 };
 const STALE_MS = 10 * 60_000;
 
+function recordedReason(configuration: unknown): string | undefined {
+  if (!configuration || typeof configuration !== "object" || Array.isArray(configuration)) return;
+  const reason = (configuration as { reason?: unknown }).reason;
+  return typeof reason === "string" && reason.length > 0 && reason.length <= 500
+    ? reason
+    : undefined;
+}
+
 export function computerUpdateView(
   row: {
     action: string;
@@ -24,10 +32,12 @@ export function computerUpdateView(
     botId: string;
     status: string;
     stage: string;
+    configuration?: unknown;
     computer: { scope: string; bots: { id: string; name: string }[] };
   },
   isDeploymentOwner = false,
 ): ComputerUpdate {
+  const reason = recordedReason(row.configuration);
   return ComputerUpdateSchema.parse({
     canReleaseReservation: isDeploymentOwner && row.status === "interrupted",
     action: row.action,
@@ -39,6 +49,7 @@ export function computerUpdateView(
     mode: row.computer.scope === "team" ? "team" : "dedicated",
     status: row.status,
     stage: row.stage,
+    ...(reason ? { reason } : {}),
   });
 }
 
@@ -88,7 +99,7 @@ export async function queueComputerUpdate(
     });
     if (claimed.count !== 1) throw new ComputerBusyError();
     await tx.computerUpdate.updateMany({
-      where: { computerId, status: "failed" },
+      where: { computerId, status: { in: ["failed", "skipped"] } },
       data: { status: "dismissed" },
     });
     return tx.computerUpdate.findUniqueOrThrow({

@@ -250,11 +250,26 @@ it("aborts an automatic move when Settings changes the computer during listing",
   expect(moved).toMatchObject({ state: "running", providerRef: "docker-after-settings" });
   const updates = f.prisma.computer.updateMany.mock.calls as unknown as { data: object }[][];
   expect(updates.every((call) => call[0] !== undefined && !("state" in call[0].data))).toBe(true);
+  expect(f.prisma.computerUpdate.updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { id: "move", status: "running" },
+      data: expect.objectContaining({
+        status: "skipped",
+        configuration: expect.objectContaining({
+          reason: "The computer changed before the move, so it stayed where it is.",
+        }),
+      }),
+    }),
+  );
+  const updateWrites = (
+    f.prisma.computerUpdate.updateMany.mock.calls as unknown as { data?: { status?: string } }[][]
+  ).map((call) => call[0]?.data?.status);
+  expect(updateWrites).not.toContain("failed");
   expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
     expect.objectContaining({
       data: {
         placement: expect.objectContaining({
-          status: "failed",
+          status: "skipped",
           reason: "The computer changed before the move, so it stayed where it is.",
         }),
       },

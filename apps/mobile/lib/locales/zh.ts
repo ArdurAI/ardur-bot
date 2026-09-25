@@ -556,6 +556,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   Recent: "最近",
   Recover: "恢复",
   "Recover computer": "恢复电脑",
+  "The computer changed before the move, so it stayed where it is.":
+    "电脑在移动前已更改，因此仍留在原处。",
   "Recovering…": "正在恢复…",
   Release: "释放控制",
   "Remove {name}": "移除 {name}",

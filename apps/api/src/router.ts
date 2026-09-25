@@ -2181,7 +2181,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       updates: authed.computer.updates.handler(async ({ context }) => {
         const rows = await deps.prisma.computerUpdate.findMany({
           where: {
-            status: { in: ["queued", "running", "interrupted", "failed"] },
+            status: { in: ["queued", "running", "interrupted", "failed", "skipped"] },
             computer: {
               spaceId: context.actor.spaceId,
               bots: { some: { userId: context.actor.userId, archivedAt: null } },
@@ -2234,7 +2234,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         await deps.prisma.computerUpdate.updateMany({
           where: {
             id: input.id,
-            status: "failed",
+            status: { in: ["failed", "skipped"] },
             computer: {
               spaceId: context.actor.spaceId,
               bots: { some: { userId: context.actor.userId, archivedAt: null } },

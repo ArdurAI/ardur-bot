@@ -111,7 +111,9 @@ export const PlacementDecisionSchema = z.object({
 });
 export type PlacementDecision = z.infer<typeof PlacementDecisionSchema>;
 export const RunPlacementSchema = z.union([
-  PlacementDecisionSchema.extend({ status: z.enum(["pending", "moving", "moved", "failed"]) }),
+  PlacementDecisionSchema.extend({
+    status: z.enum(["pending", "moving", "moved", "failed", "skipped"]),
+  }),
   z.object({ status: z.literal("declined") }),
 ]);
 export const FleetSchema = /* @__PURE__ */ (() =>

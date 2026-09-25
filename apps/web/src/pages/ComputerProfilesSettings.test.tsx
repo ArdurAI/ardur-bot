@@ -132,9 +132,7 @@ it("keeps a connectionless computer on its engine and does not offer deployment 
         botId="bot"
         name="Builder"
         status={status}
-        connections={[
-          { id: "engine", name: "Other machine", settings: { engine: "podman" } as never },
-        ]}
+        connections={[]}
         onChanged={async () => {}}
       />,
     ),
@@ -145,7 +143,7 @@ it("keeps a connectionless computer on its engine and does not offer deployment 
   expect(element.textContent).toContain("Engine: Docker");
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.textContent).toContain(
-    "Moving this computer between engines is not available yet. Add a connection to move it to another machine.",
+    "Add a connection under Settings, Connections, to move this computer to another machine.",
   );
   expect(api.engine).not.toHaveBeenCalled();
   await act(async () => root.unmount());
@@ -170,7 +168,7 @@ it("shows a desktop computer as this computer when This Mac is off and keeps an 
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.textContent).not.toContain("Engine: Docker");
   expect(element.textContent).toContain(
-    "Moving this computer between engines is not available yet. Add a connection to move it to another machine.",
+    "Add a connection under Settings, Connections, to move this computer to another machine.",
   );
   expect(api.engine).not.toHaveBeenCalled();
   const select = element.querySelector<HTMLSelectElement>('[aria-label="Image profile"]')!;
@@ -188,6 +186,69 @@ it("shows a desktop computer as this computer when This Mac is off and keeps an 
     connectionId: null,
     confirmed: true,
   });
+  await act(async () => root.unmount());
+});
+
+it("moves a connectionless computer to a saved connection and explains when none exist", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={status}
+        connections={[
+          { id: "engine", name: "Other machine", settings: { engine: "docker" } as never },
+        ]}
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  expect(connection.disabled).toBe(false);
+  expect([...connection.options].map((option) => option.textContent)).toEqual([
+    "Docker",
+    "Other machine",
+  ]);
+  expect(element.textContent).not.toContain("Deployment default");
+  expect(element.textContent).not.toContain("This Mac");
+  expect(element.textContent).not.toContain("Moving this computer between engines");
+  await act(async () => {
+    connection.value = "engine";
+    connection.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => button("Apply").click());
+  await act(async () => button("Continue").click());
+  expect(api.configure).toHaveBeenCalledWith({
+    botId: "bot",
+    imageProfile: "base",
+    connectionId: "engine",
+    confirmed: true,
+  });
+  api.configure.mockClear();
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={status}
+        connections={[]}
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const empty = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  expect(empty.disabled).toBe(true);
+  expect([...empty.options].map((option) => option.textContent)).toEqual(["Docker"]);
+  expect(element.textContent).toContain(
+    "Add a connection under Settings, Connections, to move this computer to another machine.",
+  );
+  expect(element.textContent).not.toContain("Deployment default");
+  expect(element.textContent).not.toContain("This Mac");
   await act(async () => root.unmount());
 });
 

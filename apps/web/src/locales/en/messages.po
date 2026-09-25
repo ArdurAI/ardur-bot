@@ -356,6 +356,10 @@ msgstr "Activity"
 msgid "Add"
 msgstr "Add"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Add a connection under Settings, Connections, to move this computer to another machine."
+msgstr "Add a connection under Settings, Connections, to move this computer to another machine."
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
 msgstr "Add a model in Settings to use this."
@@ -3179,10 +3183,9 @@ msgstr "Engage when... Ignore..."
 msgid "Engine endpoint"
 msgstr "Engine endpoint"
 
-#. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine: {0}"
-msgstr "Engine: {0}"
+msgid "Engine: {label}"
+msgstr "Engine: {label}"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Engineering"
@@ -7174,6 +7177,10 @@ msgstr "The API did not come back. Refresh this page."
 #: src/pages/shell/computer-terminal.tsx
 msgid "The bot is working — wait or stop it"
 msgstr "The bot is working — wait or stop it"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer changed before the move, so it stayed where it is."
+msgstr "The computer changed before the move, so it stayed where it is."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."

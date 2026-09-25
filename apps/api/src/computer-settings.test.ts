@@ -70,7 +70,9 @@ describe("computer connection settings", () => {
         thisMac: true,
         confirmed: true,
       }),
-    ).rejects.toThrow("This Mac is not available.");
+    ).rejects.toThrow(
+      "This Mac is not available. Choose a saved connection or keep the current engine.",
+    );
     expect(findUnique).not.toHaveBeenCalled();
   });
   it("stores a generic engine socket without a credential or provider-specific variable", async () => {
