@@ -1,3 +1,5 @@
+import type { AgentUsage } from "@ardurbot/adapter-kit";
+import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import type { Actor } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { resolveReviewerPin } from "./learning-pin.js";
@@ -15,6 +17,7 @@ const pin = {
 };
 function fixture(
   output = '{"proposals":[{"action":"save","kind":"preferences","content":"Use short answers."}]}',
+  usage?: AgentUsage[],
 ) {
   const proposals: unknown[] = [];
   const bot = {
@@ -77,7 +80,8 @@ function fixture(
   const runtime = {
     run: vi.fn(async function* () {
       yield { type: "text", text: output };
-      yield { type: "usage", inputTokens: 100, outputTokens: 30 };
+      for (const event of usage ?? [{ inputTokens: 100, outputTokens: 30 }])
+        yield { type: "usage", ...event };
     }),
   };
   const deps = {
@@ -110,6 +114,45 @@ function fixture(
   };
 }
 describe("explicit memory intents", () => {
+  it("settles cumulative snapshots and their terminal receipt once", async () => {
+    const request = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      inputSemantics: "total-with-cache-subsets",
+      mappingVersion: "fixture-v1",
+    });
+    const started = request.start();
+    const snapshot = request.snapshot({ input: 100, output: 30 });
+    const f = fixture(undefined, [started, snapshot, request.finish("success"), snapshot]);
+    await proposeMemoryIntent(f.deps, actor, {
+      intent: "edit",
+      text: "Use short answers.",
+      requestId: "cumulative-fixture",
+    });
+    expect(f.db.reviewExecution.update).toHaveBeenLastCalledWith({
+      where: expect.anything(),
+      data: expect.objectContaining({ tokens: 130, reservedTokens: 130 }),
+    });
+  });
+
+  it("keeps the reservation when request receipts contain no measured usage", async () => {
+    const request = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      inputSemantics: "total-with-cache-subsets",
+      mappingVersion: "fixture-v1",
+    });
+    const f = fixture(undefined, [request.start(), request.finish("success")]);
+    await proposeMemoryIntent(f.deps, actor, {
+      intent: "edit",
+      text: "Use short answers.",
+      requestId: "unmeasured-fixture",
+    });
+    expect(f.db.reviewExecution.update.mock.calls.at(-1)?.[0].data).not.toHaveProperty(
+      "reservedTokens",
+    );
+  });
+
   it.each([{ mode: "local" }, { mode: "hosts", hosts: ["allowed.example.test"] }])(
     "refuses a remote edit under coordinator policy %j without dispatch",
     async (policy) => {

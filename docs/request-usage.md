@@ -161,6 +161,14 @@ intact. Summary spend survives a failed summary or a rejected generation update.
 same model, reservations, prompts and tool prohibition. Detached review usage is excluded from
 `loadLearningRecords` so its own metering cannot invalidate the reviewed source watermark.
 
+`ObservedUsageTotals` uses the same request arithmetic for memory-intent and consolidation
+reservations. Started and unavailable receipts do not settle an unknown bill as measured zero;
+cumulative snapshots, terminal receipts and delivery replays count each supplied token once.
+The team-chat engagement judge persists only newly measured input/output deltas returned by
+this accumulator. It has no persisted run, so its rows retain the legacy partial-coverage
+contract rather than claiming run-ledger attribution. Identity-free runtime events remain
+additive deltas. Distinct request attempts and verified counter epochs remain separate spend.
+
 Category completeness, request attribution and live-route coverage are different denominators.
 A complete turn aggregate cannot prove that every internal native request was observed. The live
 attribution target is at least 99%; replay results do not establish that target. No client UI or
