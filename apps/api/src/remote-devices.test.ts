@@ -223,7 +223,7 @@ it("exposes read-only comparison views to signed readers", async () => {
   }
 });
 
-it.each(["runs/list", "team/board", "dashboard/connections", "usage/summary"])(
+it.each(["runs/list", "team/board", "dashboard/now", "dashboard/connections", "usage/summary"])(
   "allows the read-only Overview procedure %s through a signed read grant",
   async (procedure) => {
     const f = fixture();

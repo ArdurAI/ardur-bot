@@ -924,6 +924,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "No usage": "Нет данных об использовании",
   "Today (UTC)": "Сегодня (UTC)",
   "This week (UTC)": "Эта неделя (UTC)",
+  "{records} usage records": "Записей об использовании: {records}",
   "{requests} requests": "Запросов: {requests}",
   "{tokens} tokens": "Токенов: {tokens}",
   "Waiting for input": "Ожидает ввода",

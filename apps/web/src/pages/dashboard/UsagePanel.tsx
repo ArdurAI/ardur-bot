@@ -48,11 +48,11 @@ export default function UsagePanel({ data }: { data: UsageSummary }) {
 }
 function Period({ value }: { value: UsagePeriod }) {
   const { t } = useLingui();
-  const requests = value.requests;
+  const records = value.records;
   const tokens = value.inputTokens + value.outputTokens;
   return (
     <p className="tabular-nums">
-      {t`${requests} requests`}
+      {t`${records} usage records`}
       {" · "}
       {t`${tokens} tokens`}
       {value.cost !== null ? (

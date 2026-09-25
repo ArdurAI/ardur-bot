@@ -181,13 +181,13 @@ msgstr "{name} needs your input"
 msgid "{reconnectCount} need reconnection"
 msgstr "{reconnectCount} need reconnection"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{records} usage records"
+msgstr "{records} usage records"
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} left · bot is watching, not acting"
-
-#: src/pages/dashboard/UsagePanel.tsx
-msgid "{requests} requests"
-msgstr "{requests} requests"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."

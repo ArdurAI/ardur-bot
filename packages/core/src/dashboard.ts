@@ -1,14 +1,14 @@
 import type {
   ConnectionOverview,
+  DashboardNow,
   DeviceGrantView,
   IntegrationCatalogList,
   McpServer,
   MessagingChannelMembership,
-  RunActivityRow,
   TeamRow,
 } from "@ardurbot/contracts";
 
-export type OverviewNow = { runs: RunActivityRow[]; rows: TeamRow[] };
+export type OverviewNow = DashboardNow;
 
 export function connectionOverview(input: {
   integrations: IntegrationCatalogList;
@@ -28,17 +28,18 @@ export function connectionOverview(input: {
           input.integrations.catalog.find((entry) => entry.id === row.catalogId)?.name ??
           row.catalogId,
         state:
-          row.state === "connected"
-            ? servers.get(row.id)?.enabled === false
-              ? "not-connected"
-              : servers.get(row.id)?.oauthStatus === "reconnect"
-                ? "needs-sign-in"
-                : "connected"
-            : row.state === "discovery-failed"
-              ? "error"
-              : ["awaiting-consent", "needs-client-registration"].includes(row.state)
-                ? "needs-sign-in"
-                : "not-connected",
+          servers.get(row.id)?.enabled === false
+            ? "not-connected"
+            : servers.get(row.id)?.oauthStatus === "reconnect" ||
+                ["needs-sign-in", "awaiting-consent", "needs-client-registration"].includes(
+                  row.state,
+                )
+              ? "needs-sign-in"
+              : row.state === "discovery-failed"
+                ? "error"
+                : row.state === "connected"
+                  ? "connected"
+                  : "not-connected",
       }),
     ),
     ...input.integrations.catalog

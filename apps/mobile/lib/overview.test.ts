@@ -46,7 +46,7 @@ const usage = {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
-  vi.mocked(loadOverviewNow).mockResolvedValue({ rows: [], runs: [] });
+  vi.mocked(loadOverviewNow).mockResolvedValue({ rows: [], runs: [], approvals: [] });
   vi.mocked(loadOverviewConnections).mockResolvedValue([]);
   vi.mocked(loadOverviewUsage).mockResolvedValue(usage);
   node = document.createElement("div");
@@ -93,7 +93,7 @@ it("keeps loading and error recovery independent without exposing approval or se
   expect(node.textContent).not.toContain("Could not load");
 });
 it("shows recorded provider periods and never substitutes a price for unknown cost", async () => {
-  const period = { requests: 3, inputTokens: 30, outputTokens: 12, cost: null };
+  const period = { records: 3, inputTokens: 30, outputTokens: 12, cost: null };
   vi.mocked(loadOverviewUsage).mockResolvedValue({
     ...usage,
     providers: [{ provider: "Local provider", today: period, week: period, daily: [] }],
@@ -101,7 +101,72 @@ it("shows recorded provider periods and never substitutes a price for unknown co
   await act(async () => root.render(createElement(OverviewScreen)));
   expect(node.textContent).toContain("Local provider");
   expect(node.textContent).toContain("Today (UTC)");
-  expect(node.textContent).toContain("3 requests · 42 tokens");
+  expect(node.textContent).toContain("3 usage records · 42 tokens");
   expect(node.textContent).not.toContain("Cost:");
   expect(node.querySelector("button")).toBeNull();
 });
+
+it("renders every pending approval per run in read-only form", async () => {
+  vi.mocked(loadOverviewNow).mockResolvedValue({
+    rows: [],
+    runs: ["older", "newer"].map((runId) => ({
+      runId,
+      botId: "bot",
+      botName: "Reviewer",
+      threadId: "thread",
+      groupId: null,
+      groupName: null,
+      status: "waiting_input",
+      trigger: "user",
+      notificationsEnabled: false,
+      promptSnippet: `Review ${runId}`,
+      updatedAt: "2026-09-24T00:00:00Z",
+    })),
+    approvals: ["older", "newer"].map((runId) => ({
+      runId,
+      messageId: `message-${runId}`,
+      block: {
+        kind: "ask",
+        status: "pending",
+        text: `Approve ${runId}?`,
+        approvalEffectId: `effect-${runId}`,
+      },
+    })),
+  });
+  await act(async () => root.render(createElement(OverviewScreen)));
+  expect(node.textContent).toContain("Approve older?");
+  expect(node.textContent).toContain("Approve newer?");
+  expect(node.textContent?.match(/Waiting for your approval/g)).toHaveLength(2);
+  expect(node.querySelector("button")).toBeNull();
+});
+it.each(["needs-sign-in", "disconnected"])(
+  "renders canonical %s integrations as needing sign-in",
+  async (state) => {
+    vi.mocked(loadOverviewConnections).mockResolvedValue(
+      connectionOverview({
+        integrations: {
+          catalog: [],
+          connections: [{ id: "calendar", catalogId: "Calendar", state }],
+        } as unknown as IntegrationCatalogList,
+        servers: [{ id: "calendar", name: "Calendar", enabled: true, oauthStatus: "reconnect" }],
+        devices: [],
+        channels: [],
+      }),
+    );
+    await act(async () => root.render(createElement(OverviewScreen)));
+    expect(node.textContent).toContain("Calendar · Needs sign-in");
+  },
+);
+it("identifies totals-only usage as records on mobile", async () => {
+  const period = { records: 1, requests: 1, inputTokens: 20, outputTokens: 5, cost: null };
+  vi.mocked(loadOverviewUsage).mockResolvedValue({
+    ...usage,
+    providers: [{ provider: "Aggregate collector", today: period, week: period, daily: [] }],
+  });
+  await act(async () => root.render(createElement(OverviewScreen)));
+  expect(node.textContent).toContain("1 usage records · 25 tokens");
+  expect(node.textContent).not.toContain("requests");
+});
+
+import type { IntegrationCatalogList } from "@ardurbot/contracts";
+import { connectionOverview } from "@ardurbot/core";

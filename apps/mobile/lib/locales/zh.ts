@@ -890,6 +890,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "No usage": "暂无使用记录",
   "Today (UTC)": "今天（UTC）",
   "This week (UTC)": "本周（UTC）",
+  "{records} usage records": "{records} 条用量记录",
   "{requests} requests": "{requests} 次请求",
   "{tokens} tokens": "{tokens} 个令牌",
   "Waiting for input": "等待输入",

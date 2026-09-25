@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+
+import type { IntegrationCatalogList } from "@ardurbot/contracts";
+import { connectionOverview } from "@ardurbot/core";
 import type { MessageDescriptor } from "@lingui/core";
 import type { ComponentProps, ReactNode } from "react";
 import { act, lazy } from "react";
@@ -10,9 +13,11 @@ import { getDashboardPanels } from "./panels";
 
 const api = vi.hoisted(() => ({
   team: vi.fn(),
+  now: vi.fn(),
   runs: vi.fn(),
   thread: vi.fn(),
   answer: vi.fn(),
+  subscribe: vi.fn(),
   host: vi.fn(),
   computers: vi.fn(),
   engines: vi.fn(),
@@ -27,10 +32,10 @@ vi.mock("../../lib/rpc", () => ({
   rpc: {
     team: { board: api.team },
     runs: { list: api.runs },
-    threads: { get: api.thread, answer: api.answer, subscribe: async function* () {} },
+    threads: { get: api.thread, answer: api.answer, subscribe: api.subscribe },
     host: { status: api.host },
     computer: { list: api.computers, connections: api.engines, engine: api.engine },
-    dashboard: { connections: api.connections },
+    dashboard: { now: api.now, connections: api.connections },
     routines: { overview: api.routines },
     usage: { summary: api.usage },
     learning: { list: api.learning },
@@ -54,6 +59,10 @@ vi.mock("@ardurbot/chat-ui/web", () => ({
   ChatMarkdown: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("@ardurbot/ui-web", () => ({
+  Dialog: ({ children }: { children: ReactNode }) => children,
+  DialogContent: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
+  DialogHeader: ({ children }: { children: ReactNode }) => children,
+  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
   Button: ({
     variant: _variant,
     size: _size,
@@ -64,7 +73,7 @@ vi.mock("@ardurbot/ui-web", () => ({
 
 let node: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
-const period = { requests: 2, inputTokens: 30, outputTokens: 10, cost: null };
+const period = { records: 2, inputTokens: 30, outputTokens: 10, cost: null };
 const summary = {
   inputTokens: 30,
   outputTokens: 10,
@@ -80,6 +89,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   clearDashboardCache();
   api.team.mockResolvedValue({ rows: [] });
+  api.now.mockResolvedValue({ rows: [], runs: [], approvals: [] });
   api.runs.mockResolvedValue({ runs: [] });
   api.host.mockResolvedValue({ connected: false, configured: false, roots: [], health: null });
   api.computers.mockResolvedValue([]);
@@ -129,6 +139,35 @@ it("loads seven independent lazy panels and renders honest empty states", async 
   );
   expect(governance.querySelector("a")?.getAttribute("href")).toContain("governance.md");
   expect(governance.querySelector("button, input, select")).toBeNull();
+});
+it.each([1, 12, 100])("bounds persistent requests with %s bot threads", async (count) => {
+  let active = 0;
+  let peak = 0;
+  api.subscribe.mockImplementation(async (_input, { signal }: { signal: AbortSignal }) => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise<void>((resolve) =>
+      signal.addEventListener("abort", () => resolve(), { once: true }),
+    );
+    active -= 1;
+    return (async function* () {})();
+  });
+  api.now.mockResolvedValue({
+    runs: [],
+    approvals: [],
+    rows: Array.from({ length: count }, (_, index) => ({
+      botId: `bot-${index}`,
+      threadId: `thread-${index}`,
+      cursor: 0,
+      delegations: [],
+    })),
+  });
+  await renderPage();
+  expect(node.textContent).toContain("Nothing running");
+  expect(peak).toBeLessThanOrEqual(1);
+  expect(api.now).toHaveBeenCalledOnce();
+  await act(async () => root.render(null));
+  expect(active).toBe(0);
 });
 it("paints the layout before bootstrap without starting unscoped panel requests", async () => {
   await act(async () =>
@@ -212,7 +251,7 @@ it.each([
   expect(actions.openSettings).toHaveBeenCalledWith(section);
 });
 it.each([
-  ["now", "team", "Nothing running"],
+  ["now", "now", "Nothing running"],
   ["computers", "host", "This computer"],
   ["connections", "connections", "No connections"],
   ["routines", "routines", "No scheduled runs"],
@@ -262,6 +301,11 @@ it("renders panel data and answers through the real chat approval card and threa
     startedAt: "2026-09-24T00:00:00Z",
   };
   api.runs.mockResolvedValue({ runs: [run] });
+  api.now.mockResolvedValue({
+    rows: [],
+    runs: [run],
+    approvals: [{ ...approval(run.runId), messageId: "message" }],
+  });
   api.thread.mockResolvedValue({
     run: { id: "run", status: "waiting_input" },
     messages: [
@@ -318,7 +362,7 @@ it("renders panel data and answers through the real chat approval card and threa
         provider: "Local provider",
         today: period,
         week: period,
-        daily: [{ date: "2026-09-24", requests: 2, tokens: 40 }],
+        daily: [{ date: "2026-09-24", records: 2, tokens: 40 }],
       },
     ],
   });
@@ -338,7 +382,7 @@ it("renders panel data and answers through the real chat approval card and threa
     "Needs sign-in",
     "Daily review",
     "Failed",
-    "2 requests",
+    "2 usage records",
     "40 tokens",
     "Keep the preferred format",
   ])
@@ -377,6 +421,11 @@ it.each([null, "group"])(
       approvalTarget,
     };
     api.runs.mockResolvedValue({ runs: [run] });
+    api.now.mockResolvedValue({
+      rows: [],
+      runs: [run],
+      approvals: [{ ...approval(run.runId), messageId: "coordinator-card" }],
+    });
     api.thread.mockResolvedValue({
       run: null,
       activeRuns: [],
@@ -402,8 +451,8 @@ it.each([null, "group"])(
     api.answer.mockResolvedValue({ ok: true });
     await renderPage();
     const target = groupId ? { groupId } : { botId: "coordinator", threadId: "coordinator-thread" };
-    expect(api.thread).toHaveBeenCalledWith(
-      target,
+    expect(api.now).toHaveBeenCalledWith(
+      undefined,
       expect.objectContaining({ context: { spaceId: "space" } }),
     );
     await act(async () =>
@@ -433,4 +482,138 @@ it("keeps warm content immediately available, below the 200 ms render budget, an
   expect(elapsed).toBeLessThan(200);
   await renderPage("another:space");
   expect(api.features).toHaveBeenCalledTimes(calls + 1);
+});
+
+function waitingRun(runId: string, extra = {}) {
+  return {
+    runId,
+    botId: "bot",
+    botName: "Reviewer",
+    threadId: "thread",
+    groupId: null,
+    groupName: null,
+    status: "waiting_input",
+    trigger: "user",
+    notificationsEnabled: false,
+    promptSnippet: `Review ${runId}`,
+    updatedAt: "2026-09-24T00:00:00Z",
+    ...extra,
+  };
+}
+function approval(runId: string) {
+  return {
+    runId,
+    messageId: `message-${runId}`,
+    block: {
+      kind: "ask",
+      status: "pending",
+      text: `Approve ${runId}?`,
+      approvalEffectId: `effect-${runId}`,
+      actions: [
+        { id: "allow", label: "Allow once" },
+        { id: "deny", label: "Deny" },
+      ],
+    },
+  };
+}
+it.each(["newest run only", "approval outside message page"])(
+  "renders all pending approvals despite a snapshot with %s",
+  async (snapshotCase) => {
+    const runs = [waitingRun("older"), waitingRun("newer")];
+    const approvals = runs.map((run) => approval(run.runId));
+    api.now.mockResolvedValue({ rows: [], runs, approvals });
+    api.runs.mockResolvedValue({ runs });
+    api.thread.mockResolvedValue({
+      run: { id: "newer", status: "waiting_input" },
+      messages:
+        snapshotCase === "newest run only"
+          ? approvals.map((item) => ({
+              id: item.messageId,
+              runId: item.runId,
+              blocks: [item.block],
+            }))
+          : Array.from({ length: 100 }, (_, seq) => ({
+              id: `later-${seq}`,
+              runId: "newer",
+              blocks: [{ kind: "text", text: "Progress" }],
+            })),
+    });
+    await renderPage();
+    expect(node.textContent).toContain("Approve older?");
+    expect(node.textContent).toContain("Approve newer?");
+    expect(
+      [...node.querySelectorAll("button")].filter((button) => button.textContent === "Allow once"),
+    ).toHaveLength(2);
+    expect(api.thread).not.toHaveBeenCalled();
+  },
+);
+it("opens group runs in their group conversation", async () => {
+  const runs = [waitingRun("group-run", { groupId: "group", status: "running" })];
+  api.now.mockResolvedValue({ rows: [], runs, approvals: [] });
+  api.runs.mockResolvedValue({ runs });
+  await renderPage();
+  expect(node.querySelector('[data-panel="now"] a')?.getAttribute("href")).toBe("/app/g/group");
+});
+it("opens external runs through ChatTaskReview with their isolated thread", async () => {
+  const runs = [
+    waitingRun("external-run", {
+      externalThread: true,
+      threadId: "external-thread",
+      status: "running",
+    }),
+  ];
+  api.now.mockResolvedValue({ rows: [], runs, approvals: [] });
+  api.runs.mockResolvedValue({ runs });
+  api.thread.mockResolvedValue({
+    messages: [
+      { id: "external-message", blocks: [{ kind: "text", text: "External task evidence" }] },
+    ],
+    run: null,
+  });
+  await renderPage();
+  const open = [...node.querySelectorAll('[data-panel="now"] button')].find((button) =>
+    button.textContent?.includes("Review external-run"),
+  );
+  expect(open).toBeDefined();
+  await act(async () => (open as HTMLButtonElement).click());
+  await vi.waitFor(() =>
+    expect(node.querySelector('[role="dialog"]')?.textContent).toContain("External task evidence"),
+  );
+  expect(api.thread).toHaveBeenCalledWith({ botId: "bot", threadId: "external-thread" });
+});
+it.each(["needs-sign-in", "disconnected"])(
+  "renders integration %s with its reconnect state",
+  async (state) => {
+    api.connections.mockResolvedValue(
+      connectionOverview({
+        integrations: {
+          catalog: [],
+          connections: [{ id: "calendar", catalogId: "Calendar", state }],
+        } as unknown as IntegrationCatalogList,
+        servers: [{ id: "calendar", name: "Calendar", enabled: true, oauthStatus: "reconnect" }],
+        devices: [],
+        channels: [],
+      }),
+    );
+    await renderPage();
+    expect(node.querySelector('[data-panel="connections"]')?.textContent).toContain(
+      "Needs sign-in",
+    );
+  },
+);
+it("labels aggregate usage as records rather than provider requests", async () => {
+  api.usage.mockResolvedValue({
+    ...summary,
+    providers: [
+      {
+        provider: "Aggregate collector",
+        today: { ...period, records: 2 },
+        week: { ...period, records: 2 },
+        daily: [],
+      },
+    ],
+  });
+  await renderPage();
+  expect(node.querySelector('[data-panel="usage"]')?.textContent).toContain("2 usage records");
+  expect(node.querySelector('[data-panel="usage"]')?.textContent).not.toContain("requests");
 });
