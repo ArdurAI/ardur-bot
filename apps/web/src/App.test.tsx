@@ -21,8 +21,8 @@ vi.mock("./components/PreferencesProvider", () => ({
   PreferencesProvider: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("./pages/Shell", () => ({
-  ShellPage: ({ board, team }: { board?: boolean; team?: boolean }) => (
-    <p>{board ? "Board route" : team ? "Team route" : "Bot route"}</p>
+  ShellPage: ({ dashboard, team }: { dashboard?: boolean; team?: boolean }) => (
+    <p>{dashboard ? "Dashboard route" : team ? "Team route" : "Bot route"}</p>
   ),
 }));
 vi.mock("./pages/ide/IdePage", () => ({ default: () => <p>IDE route</p> }));
@@ -43,7 +43,9 @@ import { App } from "./App";
 
 describe("App routing", () => {
   it.each([
-    ["/app/board", true, "Board route"],
+    ["/app/board", true, "Dashboard route"],
+    ["/app/board?workspace=board&item=work-1", true, "Dashboard route"],
+    ["/app?view=board&workspace=board&item=work-1", true, "Dashboard route"],
     ["/app/team", true, "Team route"],
     ["/app/builder", true, "Bot route"],
     ["/app/board", false, "Sign in route"],
