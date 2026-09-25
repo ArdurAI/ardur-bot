@@ -2034,6 +2034,7 @@ msgstr "Could not complete the request."
 msgid "Could not complete the update. Try again."
 msgstr "Could not complete the update. Try again."
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Could not complete this action."
