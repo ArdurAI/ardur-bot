@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NO_SANDBOX_MESSAGE } from "./none-sandbox.js";
 import { createSandboxProvider, sandboxProvidersForKeys } from "./sandbox-factory.js";
 
@@ -54,6 +54,18 @@ describe("createSandboxProvider", () => {
     expect(providers.daytona!().describe().id).toBe("daytona");
     expect(providers.box!().describe().id).toBe("box");
     expect(sandboxProvidersForKeys({ e2bApiKey: "  " }).e2b).toBeUndefined();
+  });
+
+  it("registers Kubernetes when the deployment cluster env is set", () => {
+    expect(sandboxProvidersForKeys({}).kubernetes).toBeUndefined();
+    vi.stubEnv("KUBERNETES_SERVICE_HOST", "10.0.0.1");
+    vi.stubEnv("KUBERNETES_SERVICE_PORT", "443");
+    try {
+      expect(typeof sandboxProvidersForKeys({}).kubernetes).toBe("function");
+      expect(sandboxProvidersForKeys({ e2bApiKey: "e2b-test" }).kubernetes).toBeTypeOf("function");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("throws on unknown provider", () => {

@@ -363,6 +363,18 @@ msgstr ""
 msgid "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
 msgstr ""
 
+msgid "This moves the computer from {0} to {1} and replaces its files. Continue?"
+msgstr ""
+
+msgid "this engine"
+msgstr ""
+
+msgid "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine."
+msgstr ""
+
+msgid "{0} is not available. Choose a saved connection or keep the current engine."
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
 msgstr "Agrega un modelo en Configuración para usarlo."

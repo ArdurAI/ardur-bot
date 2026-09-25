@@ -47,7 +47,7 @@ The E2B adapter uses `@e2b/desktop` for machine lifecycle, shell commands, files
 
 ## Daytona backend
 
-The database stores the provider kind and opaque `providerRef`. That reference is an acceleration path, not durable data. It is passed back only to the same provider kind. A missing machine or a provider-kind change creates a replacement and restores its workspace through the provider-neutral contract. A computer without a saved connection keeps the provider for the kind saved when it was created. Docker stays on local Docker and a host computer stays on This Mac. A started E2B, Daytona, Box, or Kubernetes computer stays on that kind's provider. This Mac applies when a computer is created, not to one that has already started. Moving a connectionless computer between Docker and This Mac is not available until verified migration lands. Settings shows the engine the computer runs on and can move that computer to a saved connection. A connected computer can move back to Docker when that is the deployment default. Moving one onto This Mac is refused until verified migration lands.
+The database stores the provider kind and opaque `providerRef`. That reference is an acceleration path, not durable data. It is passed back only to the same provider kind. A missing machine or a provider-kind change creates a replacement and restores its workspace through the provider-neutral contract. A computer without a saved connection keeps the provider for the kind saved when it was created. Docker stays on local Docker and a host computer stays on This Mac. A started E2B, Daytona, Box, or Kubernetes computer stays on that kind's provider. A connectionless Kubernetes computer runs on the deployment cluster when the process has the Kubernetes configuration a Kubernetes deployment uses: `KUBERNETES_SERVICE_HOST` and `KUBERNETES_SERVICE_PORT`, the same environment the Kubernetes client reads for an in-cluster configuration. That provider is registered under any `SANDBOX_PROVIDER`. When that configuration is absent, the run fails with "No Kubernetes provider is registered. Add a Kubernetes connection or run the deployment on Kubernetes." and the computer row is left as it is. This Mac applies when a computer is created, not to one that has already started. Moving a connectionless computer between Docker and This Mac is not available until verified migration lands. Settings shows the engine the computer runs on and can move that computer to a saved connection. A connected computer can move back to Docker when that is the deployment default. Moving one onto the host is refused until verified migration lands. The refusal names the host for the platform: This Mac, or This computer.
 
 ## Box backend
 
@@ -118,7 +118,10 @@ browser profiles are portable, while system packages outside the workspace are n
 ## Compute profiles and local engines
 
 Docker computers now carry an explicit Standard or Developer image profile and may bind to a
-shared Docker/Podman socket connection. Kubernetes/kind computers implement the same lifecycle
+shared Docker/Podman socket connection. Image profiles do not apply to a host computer. Settings
+hides that control, and Apply does not send a profile, so a settings save does not replace the
+host computer to install nothing. Install the tools on the machine when the host needs them.
+Kubernetes/kind computers implement the same lifecycle
 and portable file contract through the Kubernetes API, retaining a home PVC during sleep. Their
 screen and interactive-terminal capability flags are false. Profile and connection changes use
 confirmed background maintenance and preserve the external workspace checkpoint.

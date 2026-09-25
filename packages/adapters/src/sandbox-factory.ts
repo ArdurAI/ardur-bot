@@ -1,5 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
 import type { SandboxProvider } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import { BoxSandboxEmulator } from "./box-emulator.js";
 import { BoxSandboxProvider } from "./box-sandbox.js";
@@ -11,6 +13,7 @@ import { ManagedSandboxEmulator } from "./e2b-emulator.js";
 import { E2BSandboxProvider } from "./e2b-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
 import type { KubernetesApi } from "./kubernetes-client.js";
+import { createInClusterKubernetesApi } from "./kubernetes-client.js";
 import { KubernetesSandboxProvider } from "./kubernetes-sandbox.js";
 import { NoneSandboxProvider } from "./none-sandbox.js";
 
@@ -56,6 +59,57 @@ function missingRemoteKey(provider: "e2b" | "daytona" | "box", envName: string):
   );
 }
 
+const SERVICE_ACCOUNT_NAMESPACE = "/var/run/secrets/kubernetes.io/serviceaccount/namespace";
+
+/** Same environment loadFromCluster reads for a process running on Kubernetes. */
+export function kubernetesDeploymentConfigured(env: NodeJS.ProcessEnv = process.env) {
+  return Boolean(env.KUBERNETES_SERVICE_HOST?.trim());
+}
+
+function deploymentNamespace() {
+  try {
+    if (!existsSync(SERVICE_ACCOUNT_NAMESPACE)) return "ardurbot";
+    const value = readFileSync(SERVICE_ACCOUNT_NAMESPACE, "utf8").trim();
+    if (/^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/.test(value)) return value;
+  } catch {
+    // An unreadable service-account file keeps the computer namespace default.
+  }
+  return "ardurbot";
+}
+
+function inClusterApi(namespace: string): KubernetesApi {
+  let ready: Promise<KubernetesApi> | undefined;
+  const client = () => (ready ??= createInClusterKubernetesApi(namespace));
+  return {
+    capacity: () =>
+      client().then((api) => api.capacity?.() ?? Promise.resolve({ nodes: [], pods: [] })),
+    namespaces: () => client().then((api) => api.namespaces?.() ?? Promise.resolve([namespace])),
+    supportsEgress: (signal) =>
+      client().then((api) => api.supportsEgress?.(signal) ?? Promise.resolve(false)),
+    setEgress: (name, enabled, signal) =>
+      client().then((api) => api.setEgress?.(name, enabled, signal) ?? Promise.resolve()),
+    read: (resource, name, signal) => client().then((api) => api.read(resource, name, signal)),
+    create: (resource, body, signal) => client().then((api) => api.create(resource, body, signal)),
+    remove: (resource, name, signal) => client().then((api) => api.remove(resource, name, signal)),
+    exec: (name, argv, signal, input) =>
+      (async function* () {
+        yield* (await client()).exec(name, argv, signal, input);
+      })(),
+  };
+}
+
+function deploymentKubernetes(): SandboxProvider {
+  const namespace = deploymentNamespace();
+  return new KubernetesSandboxProvider(
+    inClusterApi(namespace),
+    ComputerConnectionSettingsSchema.parse({
+      engine: "kubernetes",
+      context: "inClusterContext",
+      namespace,
+    }),
+  );
+}
+
 /** Providers for connectionless computers whose kind is not the deployment default. */
 export function sandboxProvidersForKeys(
   opts: SandboxProviderOptions,
@@ -64,6 +118,12 @@ export function sandboxProvidersForKeys(
   if (opts.e2bApiKey?.trim()) providers.e2b = () => createSandboxProvider("e2b", opts);
   if (opts.daytonaApiKey?.trim()) providers.daytona = () => createSandboxProvider("daytona", opts);
   if (opts.boxApiKey?.trim()) providers.box = () => createSandboxProvider("box", opts);
+  if (kubernetesDeploymentConfigured()) {
+    providers.kubernetes = () =>
+      opts.kubernetes
+        ? new KubernetesSandboxProvider(opts.kubernetes.api, opts.kubernetes.settings)
+        : deploymentKubernetes();
+  }
   return memoizeProviders(providers);
 }
 
@@ -86,9 +146,10 @@ export function createSandboxProvider(kind: string, opts: SandboxProviderOptions
       if (!opts.boxApiKey?.trim()) return missingRemoteKey("box", "BOX_API_KEY");
       return new BoxSandboxProvider({ apiKey: opts.boxApiKey, apiUrl: opts.boxApiUrl });
     case "kubernetes":
-      if (!opts.kubernetes)
-        throw new Error("Choose a Kubernetes connection in Settings → Computers.");
-      return new KubernetesSandboxProvider(opts.kubernetes.api, opts.kubernetes.settings);
+      if (opts.kubernetes)
+        return new KubernetesSandboxProvider(opts.kubernetes.api, opts.kubernetes.settings);
+      if (kubernetesDeploymentConfigured()) return deploymentKubernetes();
+      throw new Error("Choose a Kubernetes connection in Settings → Computers.");
     case "docker":
       return new DockerSandboxProvider(
         opts.supervisorUrl ?? "http://127.0.0.1:7091",

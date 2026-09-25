@@ -363,6 +363,18 @@ msgstr "Добавьте подключение в разделе «Настро
 msgid "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
 msgstr "Перенос этого компьютера на этот Mac пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
 
+msgid "This moves the computer from {0} to {1} and replaces its files. Continue?"
+msgstr "Это переносит компьютер с {0} на {1} и заменяет его файлы. Продолжить?"
+
+msgid "this engine"
+msgstr "этот механизм"
+
+msgid "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine."
+msgstr "Перенос этого компьютера на {0} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
+
+msgid "{0} is not available. Choose a saved connection or keep the current engine."
+msgstr "{0} недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
 msgstr "Чтобы использовать это, добавьте модель в настройках."

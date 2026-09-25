@@ -126,10 +126,11 @@ export async function validateComputerConfiguration(
   spaceId: string,
   raw: z.infer<typeof ComputerConfigurationSchema>,
   sandboxProvider = "docker",
+  platform: string | null | undefined = process.platform,
 ) {
   const configuration = ComputerConfigurationSchema.parse(raw);
   if (!configuration.confirmed) throw new Error("This replaces the computer's files. Continue?");
-  if (configuration.thisMac) throw new Error(thisMacUnavailableMessage);
+  if (configuration.thisMac) throw new Error(thisMacUnavailableMessage(platform));
   if (configuration.connectionId === null) {
     const bot = await prisma.bot.findFirst({
       where: { id: configuration.botId, spaceId },
@@ -141,7 +142,7 @@ export async function validateComputerConfiguration(
           ? await prisma.deploymentSettings.findUnique({ where: { id: "default" } })
           : null;
       if (sandboxKindForBot(sandboxProvider, deployment?.computerHost) === "desktop")
-        throw new Error(moveOntoThisMacUnavailableMessage);
+        throw new Error(moveOntoThisMacUnavailableMessage(platform));
     }
   }
   if (

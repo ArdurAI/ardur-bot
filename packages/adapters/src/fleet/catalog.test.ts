@@ -1005,6 +1005,7 @@ it("refuses a Docker move onto This Mac when the host bridge is on and still exp
     { load: () => "" },
     { hostClient },
     sandbox,
+    "darwin",
   );
   const context = { ...runContext, runId: undefined, operationId: "update-1" };
   const deps = {
@@ -1245,7 +1246,9 @@ it("keeps a started Kubernetes computer on Kubernetes and leaves the row when th
         runContext,
         "bot",
       ),
-    ).rejects.toThrow("No Kubernetes provider is registered.");
+    ).rejects.toThrow(
+      "No Kubernetes provider is registered. Add a Kubernetes connection or run the deployment on Kubernetes.",
+    );
     expect(missing.updateMany).not.toHaveBeenCalled();
     expect(missing.row).toMatchObject({
       state: "running",
@@ -1596,5 +1599,39 @@ it("names the host row This Mac on darwin and This computer on linux", async () 
   );
   expect((await listed("MacIntel")).targets.find((target) => target.id === "host")?.name).toBe(
     "This Mac",
+  );
+});
+
+it("refuses a host move with This computer on linux and This Mac on darwin", async () => {
+  const fallback = {
+    describe: () => ({ id: "docker" }),
+    capacity: async () => unknownCapacity(),
+  } as unknown as SandboxProvider;
+  const context: AdapterContext = {
+    userId: "owner",
+    spaceId: "space",
+    operationId: "move",
+    traceId: "move",
+    signal: new AbortController().signal,
+  };
+  const catalog = (platform: string) =>
+    new FleetCatalog({} as PrismaClient, { load: () => "" }, {}, fallback, platform);
+  await expect(
+    catalog("linux").resolveReplacementRouting(
+      { kind: "docker", connectionId: null },
+      { thisMac: true },
+      context,
+    ),
+  ).rejects.toThrow(
+    "This computer is not available. Choose a saved connection or keep the current engine.",
+  );
+  await expect(
+    catalog("darwin").resolveReplacementRouting(
+      { kind: "docker", connectionId: null },
+      { thisMac: true },
+      context,
+    ),
+  ).rejects.toThrow(
+    "This Mac is not available. Choose a saved connection or keep the current engine.",
   );
 });

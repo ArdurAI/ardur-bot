@@ -63,13 +63,19 @@ describe("computer connection settings", () => {
     const findUnique = vi.fn(async () => ({ computerHost: "this-mac" }));
     const prisma = { deploymentSettings: { findUnique } } as unknown as PrismaClient;
     await expect(
-      validateComputerConfiguration(prisma, "space", {
-        botId: "bot",
-        imageProfile: "base",
-        connectionId: null,
-        thisMac: true,
-        confirmed: true,
-      }),
+      validateComputerConfiguration(
+        prisma,
+        "space",
+        {
+          botId: "bot",
+          imageProfile: "base",
+          connectionId: null,
+          thisMac: true,
+          confirmed: true,
+        },
+        "docker",
+        "darwin",
+      ),
     ).rejects.toThrow(
       "This Mac is not available. Choose a saved connection or keep the current engine.",
     );
@@ -89,18 +95,67 @@ describe("computer connection settings", () => {
       connection: { findFirst: vi.fn() },
     } as unknown as PrismaClient;
     await expect(
-      validateComputerConfiguration(prisma, "space", {
-        botId: "bot",
-        imageProfile: "base",
-        connectionId: null,
-        confirmed: true,
-      }),
+      validateComputerConfiguration(
+        prisma,
+        "space",
+        {
+          botId: "bot",
+          imageProfile: "base",
+          connectionId: null,
+          confirmed: true,
+        },
+        "docker",
+        "darwin",
+      ),
     ).rejects.toThrow(
       "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.",
     );
     expect(update).not.toHaveBeenCalled();
     expect(prisma.computerUpdate.create).not.toHaveBeenCalled();
     expect(prisma.connection.findFirst).not.toHaveBeenCalled();
+  });
+  it("names host refusals This computer on linux and This Mac on darwin", async () => {
+    const prisma = {
+      bot: { findFirst: async () => ({ computer: { connectionId: "office" } }) },
+      deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
+      computer: { update: vi.fn() },
+      computerUpdate: { create: vi.fn() },
+      connection: { findFirst: vi.fn() },
+    } as unknown as PrismaClient;
+    const move = {
+      botId: "bot",
+      imageProfile: "base" as const,
+      connectionId: null,
+      confirmed: true as const,
+    };
+    await expect(
+      validateComputerConfiguration(prisma, "space", { ...move, thisMac: true }, "docker", "linux"),
+    ).rejects.toThrow(
+      "This computer is not available. Choose a saved connection or keep the current engine.",
+    );
+    await expect(
+      validateComputerConfiguration(prisma, "space", move, "docker", "linux"),
+    ).rejects.toThrow(
+      "Moving this computer onto This computer is not available yet. Choose a saved connection or keep the current engine.",
+    );
+    await expect(
+      validateComputerConfiguration(
+        prisma,
+        "space",
+        { ...move, thisMac: true },
+        "docker",
+        "darwin",
+      ),
+    ).rejects.toThrow(
+      "This Mac is not available. Choose a saved connection or keep the current engine.",
+    );
+    await expect(
+      validateComputerConfiguration(prisma, "space", move, "docker", "darwin"),
+    ).rejects.toThrow(
+      "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.",
+    );
+    expect(prisma.computer.update).not.toHaveBeenCalled();
+    expect(prisma.computerUpdate.create).not.toHaveBeenCalled();
   });
   it("accepts an empty connection when Docker is the deployment default", async () => {
     const prisma = {

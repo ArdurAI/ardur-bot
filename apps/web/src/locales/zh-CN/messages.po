@@ -363,6 +363,18 @@ msgstr "在“设置”的“连接”中添加连接，即可将此电脑移到
 msgid "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
 msgstr "暂时无法将此电脑移到这台 Mac。请选择已保存的连接，或保留当前引擎。"
 
+msgid "This moves the computer from {0} to {1} and replaces its files. Continue?"
+msgstr "这将把电脑从 {0} 移到 {1}，并替换其中的文件。要继续吗？"
+
+msgid "this engine"
+msgstr "此引擎"
+
+msgid "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine."
+msgstr "暂时无法将此电脑移到{0}。请选择已保存的连接，或保留当前引擎。"
+
+msgid "{0} is not available. Choose a saved connection or keep the current engine."
+msgstr "{0}尚不可用。请选择已保存的连接，或保留当前引擎。"
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
 msgstr "请在设置中添加模型后再使用。"

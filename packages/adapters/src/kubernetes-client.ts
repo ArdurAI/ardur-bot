@@ -5,6 +5,7 @@ export type { KubernetesObject } from "@ardurbot/host-runtime/fleet/kubernetes-s
 import { readFile } from "node:fs/promises";
 import type { ProcessEvent } from "@ardurbot/adapter-kit";
 import type {
+  KubeConfig,
   RequestContext,
   ResponseContext,
   V1NetworkPolicy,
@@ -117,14 +118,27 @@ export async function snapshotKubeconfig(source: KubeconfigSource): Promise<Kube
   }
 }
 
+export async function createInClusterKubernetesApi(namespace: string): Promise<KubernetesApi> {
+  const { KubeConfig } = await import("@kubernetes/client-node");
+  const config = new KubeConfig();
+  config.loadFromCluster();
+  return createKubernetesApi(
+    { inline: "in-cluster" },
+    namespace,
+    config.getCurrentContext(),
+    config,
+  );
+}
+
 export async function createKubernetesApi(
   source: KubeconfigSource,
   namespace: string,
   context: string,
+  loaded?: KubeConfig,
 ): Promise<KubernetesApi> {
   const { CoreV1Api, AppsV1Api, NetworkingV1Api, CustomObjectsApi, Exec, createConfiguration } =
     await import("@kubernetes/client-node");
-  const config = await loadConfig(source);
+  const config = loaded ?? (await loadConfig(source));
   if (!config.getContexts().some((entry: { name: string }) => entry.name === context))
     throw new Error("The selected Kubernetes context is unavailable.");
   config.setCurrentContext(context);

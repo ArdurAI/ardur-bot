@@ -2024,6 +2024,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           context.actor.spaceId,
           input,
           deps.env.sandboxProvider,
+          deps.hostBridge?.hub.health?.platform || process.platform,
         );
         try {
           await releaseMaintenanceControl(deps, context.actor, bot.computer.id);

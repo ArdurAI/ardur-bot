@@ -265,6 +265,10 @@ describe("lingui catalogs", () => {
       "The computer changed before the move, so it stayed where it is.",
       "Deployment default (Docker)",
       "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.",
+      "This moves the computer from {0} to {1} and replaces its files. Continue?",
+      "this engine",
+      "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine.",
+      "{0} is not available. Choose a saved connection or keep the current engine.",
     ];
     const translations: Record<string, Record<string, string>> = {
       ru: {
@@ -274,12 +278,22 @@ describe("lingui catalogs", () => {
         [sentences[2]!]: "Развертывание по умолчанию (Docker)",
         [sentences[3]!]:
           "Перенос этого компьютера на этот Mac пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
+        [sentences[4]!]: "Это переносит компьютер с {0} на {1} и заменяет его файлы. Продолжить?",
+        [sentences[5]!]: "этот механизм",
+        [sentences[6]!]:
+          "Перенос этого компьютера на {0} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
+        [sentences[7]!]:
+          "{0} недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
       },
       "zh-CN": {
         [sentences[0]!]: "在“设置”的“连接”中添加连接，即可将此电脑移到另一台机器。",
         [sentences[1]!]: "电脑在移动前已更改，因此仍留在原处。",
         [sentences[2]!]: "部署默认（Docker）",
         [sentences[3]!]: "暂时无法将此电脑移到这台 Mac。请选择已保存的连接，或保留当前引擎。",
+        [sentences[4]!]: "这将把电脑从 {0} 移到 {1}，并替换其中的文件。要继续吗？",
+        [sentences[5]!]: "此引擎",
+        [sentences[6]!]: "暂时无法将此电脑移到{0}。请选择已保存的连接，或保留当前引擎。",
+        [sentences[7]!]: "{0}尚不可用。请选择已保存的连接，或保留当前引擎。",
       },
     };
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {

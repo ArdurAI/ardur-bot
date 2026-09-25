@@ -4,11 +4,7 @@ import type {
   ComputerStatus,
   Me,
 } from "@ardurbot/contracts";
-import {
-  COMPUTER_PROFILES,
-  hostComputerLabel,
-  moveOntoThisMacUnavailableMessage,
-} from "@ardurbot/contracts";
+import { COMPUTER_PROFILES, hostComputerLabel, matchesHostRefusal } from "@ardurbot/contracts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -169,14 +165,23 @@ export function ComputerProfile({
       : (connection?.settings.engine ?? status.kind);
   const savedEngine = engineLabel(status.kind);
   const offerDeploymentDefault = !connectionless && deploymentDefault === "docker";
+  const hostComputer = status.kind === "desktop";
   const supported = ["docker", "podman", "kubernetes", "remote-docker", "desktop"].includes(engine);
+  const savedConnection = connections.find((entry) => entry.id === savedConnectionId);
+  const selectedConnection = connections.find((entry) => entry.id === connectionId);
+  const sourceLabel = savedConnection?.name ?? t`this engine`;
+  const destinationLabel = connectionId
+    ? (selectedConnection?.name ?? t`this engine`)
+    : t`Deployment default (Docker)`;
+  const hostLabel =
+    hostComputerLabel(hostPlatform()) === "This Mac" ? t`This Mac` : t`This computer`;
   async function save() {
     setPending(true);
     setError("");
     try {
       await rpc.computer.configure({
         botId,
-        imageProfile: profile,
+        ...(hostComputer ? {} : { imageProfile: profile }),
         connectionId: connectionId || null,
         confirmed: true,
       });
@@ -185,10 +190,13 @@ export function ComputerProfile({
     } catch (caught: unknown) {
       const message = caught instanceof Error ? caught.message : "";
       setError(
-        message === moveOntoThisMacUnavailableMessage
+        matchesHostRefusal(message, "move")
           ? // biome-ignore format: one catalog sentence
-            t`Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.`
-          : t`Could not change the computer; stop its bots and try again.`,
+            t`Moving this computer onto ${hostLabel} is not available yet. Choose a saved connection or keep the current engine.`
+          : matchesHostRefusal(message, "unavailable")
+            ? // biome-ignore format: one catalog sentence
+              t`${hostLabel} is not available. Choose a saved connection or keep the current engine.`
+            : t`Could not change the computer; stop its bots and try again.`,
       );
     } finally {
       setPending(false);
@@ -227,7 +235,9 @@ export function ComputerProfile({
               <Trans>Deployment default (Docker)</Trans>
             </NativeSelectOption>
           ) : (
-            <NativeSelectOption value={savedConnectionId}>{savedEngine}</NativeSelectOption>
+            <NativeSelectOption value={savedConnectionId}>
+              {savedConnection?.name ?? t`this engine`}
+            </NativeSelectOption>
           )}
           {connections
             .filter(
@@ -246,7 +256,7 @@ export function ComputerProfile({
           <Trans>Add a connection under Settings, Connections, to move this computer to another machine.</Trans>
         </p>
       ) : null}
-      {supported ? (
+      {supported && !hostComputer ? (
         <>
           <label htmlFor={`profile-${botId}`} className="block space-y-1">
             <span>
@@ -308,7 +318,10 @@ export function ComputerProfile({
               <Trans>Change computer</Trans>
             </AlertDialogTitle>
             <AlertDialogDescription>
-              <Trans>This replaces the computer's files. Continue?</Trans>
+              {connectionId !== savedConnectionId
+                ? // biome-ignore format: one catalog sentence
+                  t`This moves the computer from ${sourceLabel} to ${destinationLabel} and replaces its files. Continue?`
+                : t`This replaces the computer's files. Continue?`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

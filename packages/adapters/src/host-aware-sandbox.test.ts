@@ -9,6 +9,7 @@ import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
 import { createRunSandbox, HostAwareSandbox, sandboxKindForBot } from "./host-aware-sandbox.js";
+import { KubernetesSandboxProvider } from "./kubernetes-sandbox.js";
 
 vi.mock("@ardurbot/host-runtime/host-environment", async (original) => ({
   ...(await original<object>()),
@@ -303,6 +304,44 @@ describe("host-aware sandbox", () => {
     }
   });
 
+  it("runs a connectionless Kubernetes computer on the deployment cluster when that env is set", async () => {
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+    vi.stubEnv("KUBERNETES_SERVICE_HOST", "10.0.0.1");
+    vi.stubEnv("KUBERNETES_SERVICE_PORT", "443");
+    const provision = vi.spyOn(KubernetesSandboxProvider.prototype, "provision").mockResolvedValue({
+      id: "pod",
+      botId: "bot",
+      kind: "kubernetes",
+      providerRef: "pod-1",
+      fresh: false,
+    });
+    const docker = vi.spyOn(DockerSandboxProvider.prototype, "provision");
+    const sandbox = createRunSandbox("docker", {
+      prisma: {
+        deploymentSettings: { findUnique: async () => ({ computerHost: "docker" }) },
+      } as unknown as PrismaClient,
+      secrets: { load: () => "" },
+    });
+    try {
+      await sandbox.provision(
+        {
+          botId: "bot",
+          homePath: "/tmp/bot",
+          providerRef: "pod-1",
+          providerKind: "kubernetes",
+        },
+        ctx,
+      );
+      expect(provision).toHaveBeenCalledWith(
+        expect.objectContaining({ providerKind: "kubernetes", providerRef: "pod-1" }),
+        ctx,
+      );
+      expect(docker).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("fails a Kubernetes computer when that provider is not registered", async () => {
     vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
     const docker = vi.spyOn(DockerSandboxProvider.prototype, "provision");
@@ -324,7 +363,9 @@ describe("host-aware sandbox", () => {
           },
           ctx,
         ),
-      ).rejects.toThrow("No Kubernetes provider is registered.");
+      ).rejects.toThrow(
+        "No Kubernetes provider is registered. Add a Kubernetes connection or run the deployment on Kubernetes.",
+      );
       expect(docker).not.toHaveBeenCalled();
       expect(desktop).not.toHaveBeenCalled();
     } finally {

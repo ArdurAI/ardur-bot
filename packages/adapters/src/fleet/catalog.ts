@@ -105,7 +105,7 @@ export class FleetCatalog {
   ): Promise<{ source: SandboxProvider; target: SandboxProvider }> {
     const source = await this.resolveComputer(computer, context);
     if (configuration.targetId === undefined) {
-      if (configuration.thisMac) throw new Error(thisMacUnavailableMessage);
+      if (configuration.thisMac) throw new Error(thisMacUnavailableMessage(this.hostPlatform));
       if (
         configuration.connectionId === undefined ||
         configuration.connectionId === computer.connectionId
@@ -119,7 +119,7 @@ export class FleetCatalog {
               ? undefined
               : await this.prisma.deploymentSettings.findUnique({ where: { id: "default" } });
           if (sandboxKindForBot(fallbackId, deployment?.computerHost) === "desktop")
-            throw new Error(moveOntoThisMacUnavailableMessage);
+            throw new Error(moveOntoThisMacUnavailableMessage(this.hostPlatform));
         }
       }
       // A Settings connection change is already confirmed and may cross kinds.

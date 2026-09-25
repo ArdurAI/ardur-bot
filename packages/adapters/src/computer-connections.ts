@@ -93,7 +93,12 @@ const providerLabel: Record<string, string> = {
 /** One sentence naming the computer's kind and the provider that was not registered. */
 export class MissingComputerProviderError extends Error {
   constructor(kind: string) {
-    super(`No ${providerLabel[kind] ?? kind} provider is registered.`);
+    const name = providerLabel[kind] ?? kind;
+    super(
+      kind === "kubernetes"
+        ? `No ${name} provider is registered. Add a Kubernetes connection or run the deployment on Kubernetes.`
+        : `No ${name} provider is registered.`,
+    );
     this.name = "MissingComputerProviderError";
   }
 }

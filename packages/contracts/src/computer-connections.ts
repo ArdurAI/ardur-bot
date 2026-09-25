@@ -56,13 +56,6 @@ export const ComputerConnectionInputSchema = z.object({
     .object({ ca: z.string().max(4096), cert: z.string().max(4096), key: z.string().max(4096) })
     .optional(),
 });
-/** Older clients can still ask for This Mac. The next step is part of the refusal. */
-export const thisMacUnavailableMessage =
-  "This Mac is not available. Choose a saved connection or keep the current engine.";
-/** An empty connection would place a connected computer on This Mac. That move stays withdrawn. */
-export const moveOntoThisMacUnavailableMessage =
-  "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.";
-
 /** One host label: darwin and any Mac platform string, otherwise this computer. */
 export function hostComputerLabel(
   platform: string | null | undefined,
@@ -70,9 +63,25 @@ export function hostComputerLabel(
   if (platform === "darwin" || (platform != null && /mac/i.test(platform))) return "This Mac";
   return "This computer";
 }
+
+/** Older clients can still ask for the host. The next step is part of the refusal. */
+export function thisMacUnavailableMessage(platform: string | null | undefined) {
+  return `${hostComputerLabel(platform)} is not available. Choose a saved connection or keep the current engine.`;
+}
+
+/** An empty connection would place a connected computer on the host. That move stays withdrawn. */
+export function moveOntoThisMacUnavailableMessage(platform: string | null | undefined) {
+  return `Moving this computer onto ${hostComputerLabel(platform)} is not available yet. Choose a saved connection or keep the current engine.`;
+}
+
+/** The API may name the host for a different platform than the page that shows the error. */
+export function matchesHostRefusal(message: string, kind: "unavailable" | "move") {
+  const sentence = kind === "move" ? moveOntoThisMacUnavailableMessage : thisMacUnavailableMessage;
+  return (["darwin", "linux"] as const).some((platform) => message === sentence(platform));
+}
 export const ComputerConfigurationSchema = z.object({
   botId: z.string().min(1),
-  imageProfile: ComputerProfileSchema,
+  imageProfile: ComputerProfileSchema.optional(),
   connectionId: z.string().nullable(),
   /** Refused until verified migration can move a computer onto This Mac. */
   thisMac: z.literal(true).optional(),

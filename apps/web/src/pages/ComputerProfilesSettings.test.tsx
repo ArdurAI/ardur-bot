@@ -149,7 +149,7 @@ it("keeps a connectionless computer on its engine and does not offer deployment 
   await act(async () => root.unmount());
 });
 
-it("shows a desktop computer as this computer when This Mac is off and keeps an image change there", async () => {
+it("shows a desktop computer as this computer when This Mac is off and hides image profiles", async () => {
   const element = document.createElement("div");
   document.body.append(element);
   const root = createRoot(element);
@@ -171,21 +171,7 @@ it("shows a desktop computer as this computer when This Mac is off and keeps an 
     "Add a connection under Settings, Connections, to move this computer to another machine.",
   );
   expect(api.engine).not.toHaveBeenCalled();
-  const select = element.querySelector<HTMLSelectElement>('[aria-label="Image profile"]')!;
-  await act(async () => {
-    select.value = "developer";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  const button = (name: string) =>
-    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
-  await act(async () => button("Apply").click());
-  await act(async () => button("Continue").click());
-  expect(api.configure).toHaveBeenCalledWith({
-    botId: "bot",
-    imageProfile: "developer",
-    connectionId: null,
-    confirmed: true,
-  });
+  expect(element.querySelector('[aria-label="Image profile"]')).toBeNull();
   await act(async () => root.unmount());
 });
 
@@ -328,7 +314,7 @@ it("offers Deployment default (Docker) only when Docker is the deployment defaul
     ),
   );
   const hidden = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
-  expect([...hidden.options].map((option) => option.textContent)).toEqual(["ssh", "Lab"]);
+  expect([...hidden.options].map((option) => option.textContent)).toEqual(["Office", "Lab"]);
   expect(hidden.value).toBe("office");
   expect(element.textContent).not.toContain("Deployment default");
   await act(async () =>
@@ -404,6 +390,198 @@ it("still moves a connected computer to another saved connection or the deployme
     confirmed: true,
   });
   await act(async () => root.unmount());
+});
+
+it("shows the saved connection names and names both machines in the move dialog", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  const options = () =>
+    [...element.querySelectorAll<HTMLOptionElement>('[aria-label="Connection"] option')].map(
+      (option) => option.textContent,
+    );
+  const home = { ...status, kind: "ssh" as const, connectionId: "home" };
+  const connections = [
+    { id: "home", name: "Home", settings: { engine: "ssh" } as never },
+    { id: "office", name: "Office", settings: { engine: "ssh" } as never },
+  ];
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={home}
+        connections={connections}
+        deploymentDefault="this-mac"
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  expect(connection.value).toBe("home");
+  expect(options()).toEqual(["Home", "Office"]);
+  for (const kind of ["ssh", "Docker", "Kubernetes", "Podman", "E2B", "Daytona", "Box"])
+    expect(options()).not.toContain(kind);
+  await act(async () => {
+    connection.value = "office";
+    connection.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => button("Apply").click());
+  expect(element.querySelector('[role="alertdialog"]')?.textContent).toContain(
+    "This moves the computer from Home to Office and replaces its files. Continue?",
+  );
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={status}
+        connections={[{ id: "office", name: "Office", settings: { engine: "ssh" } as never }]}
+        deploymentDefault="this-mac"
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const connectionless = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  await act(async () => {
+    connectionless.value = "office";
+    connectionless.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => button("Apply").click());
+  expect(element.querySelector('[role="alertdialog"]')?.textContent).toContain(
+    "This moves the computer from this engine to Office and replaces its files. Continue?",
+  );
+  await act(async () => root.unmount());
+});
+
+it("hides image profiles on a desktop computer and still sends one for Docker", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={{ ...status, kind: "desktop" }}
+        connections={[{ id: "office", name: "Office", settings: { engine: "docker" } as never }]}
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  expect(element.querySelector('[aria-label="Image profile"]')).toBeNull();
+  const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  await act(async () => {
+    connection.value = "office";
+    connection.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => button("Apply").click());
+  await act(async () => button("Continue").click());
+  expect(api.configure).toHaveBeenCalledWith({
+    botId: "bot",
+    connectionId: "office",
+    confirmed: true,
+  });
+  api.configure.mockClear();
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={status}
+        connections={[]}
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const profile = element.querySelector<HTMLSelectElement>('[aria-label="Image profile"]')!;
+  expect(profile).not.toBeNull();
+  await act(async () => {
+    profile.value = "developer";
+    profile.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => button("Apply").click());
+  await act(async () => button("Continue").click());
+  expect(api.configure).toHaveBeenCalledWith({
+    botId: "bot",
+    imageProfile: "developer",
+    connectionId: null,
+    confirmed: true,
+  });
+  await act(async () => root.unmount());
+});
+
+it("re-renders host refusals with This computer on linux and This Mac on darwin", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  const render = (platform: string) => {
+    window.ardurbotDesktop = { platform } as NonNullable<Window["ardurbotDesktop"]>;
+    return root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={{ ...status, connectionId: "home" }}
+        connections={[
+          { id: "home", name: "Home", settings: { engine: "ssh" } as never },
+          { id: "office", name: "Office", settings: { engine: "ssh" } as never },
+        ]}
+        deploymentDefault="this-mac"
+        onChanged={async () => {}}
+      />,
+    );
+  };
+  const refuse = async (message: string) => {
+    api.configure.mockRejectedValueOnce(new Error(message));
+    const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+    await act(async () => {
+      connection.value = "office";
+      connection.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => button("Apply").click());
+    await act(async () => button("Continue").click());
+  };
+  try {
+    await act(async () => render("linux"));
+    await refuse(
+      "Moving this computer onto This computer is not available yet. Choose a saved connection or keep the current engine.",
+    );
+    expect(element.textContent).toContain(
+      "Moving this computer onto This computer is not available yet. Choose a saved connection or keep the current engine.",
+    );
+    expect(element.textContent).not.toContain("This Mac");
+    await act(async () => render("linux"));
+    await refuse(
+      "This computer is not available. Choose a saved connection or keep the current engine.",
+    );
+    expect(element.textContent).toContain(
+      "This computer is not available. Choose a saved connection or keep the current engine.",
+    );
+    await act(async () => render("darwin"));
+    await refuse(
+      "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.",
+    );
+    expect(element.textContent).toContain(
+      "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.",
+    );
+    await act(async () => render("darwin"));
+    await refuse(
+      "This Mac is not available. Choose a saved connection or keep the current engine.",
+    );
+    expect(element.textContent).toContain(
+      "This Mac is not available. Choose a saved connection or keep the current engine.",
+    );
+    expect(element.textContent).not.toContain("This computer is not available");
+  } finally {
+    delete window.ardurbotDesktop;
+    await act(async () => root.unmount());
+  }
 });
 
 it("keeps a stopped engine quiet until Retry and clears its reason after recovery", async () => {
