@@ -287,6 +287,10 @@ msgstr ""
 msgid "Actions for space"
 msgstr ""
 
+#: src/lib/approval-policy-copy.ts
+msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr ""
@@ -297,6 +301,7 @@ msgstr "Etkin model"
 
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/settings-sections.ts
 msgid "Active sessions"
 msgstr ""
 
@@ -434,6 +439,7 @@ msgstr "Ekleniyor…"
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineSchedule.tsx
+#: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
 msgid "Advanced"
 msgstr "Gelişmiş"
@@ -831,6 +837,7 @@ msgid "Available after the routine is saved"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "Avatar"
 msgstr ""
 
@@ -852,6 +859,10 @@ msgstr ""
 
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 msgid "Back to capabilities"
+msgstr ""
+
+#: src/pages/NotFound.tsx
+msgid "Back to home"
 msgstr ""
 
 #: src/pages/memory/MemorySettings.tsx
@@ -977,10 +988,6 @@ msgstr "Botlar varsayılan olarak sormadan hareket eder. Yalnızca belirli bir i
 msgid "Bots are working"
 msgstr "Botlar çalışıyor"
 
-#: src/pages/settings/GeneralSettings.tsx
-msgid "Bots may read and write here; consequential actions still ask"
-msgstr ""
-
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1080,7 +1087,7 @@ msgid "cancelled"
 msgstr "iptal edildi"
 
 #: src/components/AskCard.tsx
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Cancelled"
@@ -1149,6 +1156,7 @@ msgstr ""
 msgid "Chat bot"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Chat font"
 msgstr ""
@@ -2055,6 +2063,10 @@ msgstr ""
 msgid "Could not load plugins"
 msgstr ""
 
+#: src/pages/RoutineHistory.tsx
+msgid "Could not load run history."
+msgstr ""
+
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Could not load server diagnostics."
 msgstr ""
@@ -2111,10 +2123,6 @@ msgstr "Ses ayarları yüklenemedi"
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
-#: src/pages/LocalSettings.tsx
-msgid "Could not open local settings. Start the local server and create its owner account, then try again."
-msgstr ""
-
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Could not pair this account. Check its settings and try again."
 msgstr ""
@@ -2125,6 +2133,10 @@ msgstr "Deneme sesi çalınamadı"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not prepare the import. Try again."
+msgstr ""
+
+#: src/pages/LocalSettings.tsx
+msgid "Could not reach the local server. Start it and try again."
 msgstr ""
 
 #: src/pages/account/AccountSignIn.tsx
@@ -2677,6 +2689,7 @@ msgstr ""
 msgid "Destination scope"
 msgstr ""
 
+#: src/components/AskCard.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -2818,7 +2831,7 @@ msgstr ""
 msgid "Don’t have an account?"
 msgstr "Hesabın yok mu?"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Bitti"
@@ -2903,6 +2916,7 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
+#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "E-posta"
 
@@ -3050,6 +3064,7 @@ msgstr "Dışa aktar"
 msgid "Export block"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
@@ -3058,6 +3073,7 @@ msgstr ""
 msgid "Export JSON"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export memory"
 msgstr ""
@@ -3088,7 +3104,7 @@ msgstr ""
 msgid "failed"
 msgstr "başarısız"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
 msgstr "Başarısız"
@@ -3193,6 +3209,7 @@ msgid "From the catalog"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "Full name"
 msgstr ""
 
@@ -3627,6 +3644,7 @@ msgid "Kubernetes context"
 msgstr ""
 
 #: src/pages/account/AccountLanguage.tsx
+#: src/pages/settings-sections.ts
 msgid "Language"
 msgstr "Dil"
 
@@ -3678,6 +3696,7 @@ msgstr ""
 msgid "Learning"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
@@ -3816,6 +3835,7 @@ msgstr ""
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
+#: src/pages/RoutineHistory.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
@@ -3837,6 +3857,7 @@ msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/account/AccountTables.tsx
+#: src/pages/settings-sections.ts
 msgid "Local devices"
 msgstr ""
 
@@ -3992,6 +4013,7 @@ msgstr ""
 msgid "Memory location and documents"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Memory preferences"
 msgstr ""
@@ -4192,6 +4214,7 @@ msgstr ""
 msgid "More memory"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Motion"
 msgstr ""
@@ -4238,7 +4261,7 @@ msgstr ""
 msgid "Needs approval"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Needs input"
 msgstr "Girdi bekliyor"
 
@@ -4255,7 +4278,7 @@ msgstr ""
 msgid "Needs sign-in on this computer"
 msgstr ""
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Needs takeover"
 msgstr "Devralma bekliyor"
 
@@ -4358,10 +4381,6 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
-#: src/components/ApprovalRulesSettings.tsx
-msgid "No exceptions. Actions run automatically."
-msgstr "İstisna yok. İşlemler otomatik çalışır."
-
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
 msgstr ""
@@ -4432,6 +4451,7 @@ msgid "No results"
 msgstr "Sonuç yok"
 
 #: src/pages/RoutineEditor.tsx
+#: src/pages/RoutineHistory.tsx
 msgid "No runs yet"
 msgstr ""
 
@@ -4555,6 +4575,7 @@ msgstr "Henüz hatırlanan bir şey yok"
 msgid "Nothing to review."
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -4693,6 +4714,10 @@ msgstr ""
 msgid "Open links in built-in browser"
 msgstr ""
 
+#: src/pages/LocalSettings.tsx
+msgid "Open local settings from the desktop app on the server’s computer."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Open navigation"
 msgstr "Gezinmeyi aç"
@@ -4801,6 +4826,10 @@ msgstr "Başka model…"
 msgid "Owner edited recently"
 msgstr "Sahibi yakın zamanda düzenledi"
 
+#: src/pages/NotFound.tsx
+msgid "Page not found"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
 msgstr ""
@@ -4828,6 +4857,7 @@ msgstr "Beklet"
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
+#: src/pages/settings-sections.ts
 msgid "Password"
 msgstr "Parola"
 
@@ -5049,7 +5079,7 @@ msgstr ""
 msgid "Queue wait"
 msgstr "Kuyruk bekleme süresi"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
@@ -5494,6 +5524,7 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
+#: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
@@ -5651,7 +5682,7 @@ msgstr ""
 msgid "running"
 msgstr "çalışıyor"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/DelegationLines.tsx
@@ -5886,6 +5917,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Select the text to copy it."
 msgstr ""
+
+#: src/pages/ide/dialogs.tsx
+msgid "Selection shortened to 32,000 characters."
+msgstr "Seçim 32.000 karaktere kısaltıldı."
 
 #: src/pages/memory/MemoryComposer.tsx
 #: src/pages/Shell.tsx
@@ -6148,6 +6183,10 @@ msgstr ""
 msgid "Software update"
 msgstr ""
 
+#: src/pages/ide/IdePage.tsx
+msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
+msgstr "Bazı öğelerin adları desteklenmediği için gizlendi ({hiddenCount})."
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
 msgstr ""
@@ -6237,7 +6276,7 @@ msgstr ""
 msgid "Start recording"
 msgstr "Kaydı başlat"
 
-#: src/pages/ActivityList.tsx
+#: src/lib/run-status-label.ts
 msgid "Starting"
 msgstr "Başlıyor"
 
@@ -6475,6 +6514,7 @@ msgstr ""
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Theme"
 msgstr ""
@@ -6495,6 +6535,7 @@ msgstr ""
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
 
+#: src/pages/memory/MemoryComposer.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot may only run locally — change the pin or the space policy"
 msgstr ""
@@ -6682,6 +6723,7 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg token'ı"
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
 msgstr ""
@@ -6836,6 +6878,7 @@ msgstr ""
 msgid "Upload ZIP"
 msgstr ""
 
+#: src/pages/settings-sections.ts
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Uploaded files"
 msgstr ""
@@ -6983,6 +7026,7 @@ msgid "What should this routine do each time it runs?"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/settings-sections.ts
 msgid "What should your bots call you?"
 msgstr ""
 

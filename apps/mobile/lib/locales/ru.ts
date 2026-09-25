@@ -912,4 +912,6 @@ export const RU_MESSAGES: Record<string, string> = {
   "Owner edited recently": "Владелец недавно изменил сводку",
   "Could not load data": "Не удалось загрузить данные",
   "7 days": "7 дней",
+  "This bot may only run locally — change the pin or the space policy":
+    "Этот бот может работать только локально — измените закреплённую модель или политику пространства",
 };

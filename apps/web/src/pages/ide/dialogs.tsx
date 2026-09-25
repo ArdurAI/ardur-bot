@@ -1,4 +1,5 @@
 import type { Bot, IdeEntry } from "@ardurbot/contracts";
+import { IDE_SELECTION_CHARS } from "@ardurbot/contracts";
 import {
   Button,
   Dialog,
@@ -137,6 +138,12 @@ export function AskBot({
         <p className="truncate text-sm text-muted-foreground" title={path}>
           {path}:{selection.startLine}-{selection.endLine}
         </p>
+        {selection.text.length > IDE_SELECTION_CHARS ? (
+          <p
+            role="status"
+            className="text-sm text-muted-foreground"
+          >{t`Selection shortened to 32,000 characters.`}</p>
+        ) : null}
         <form
           className="space-y-3"
           onSubmit={(event) => {

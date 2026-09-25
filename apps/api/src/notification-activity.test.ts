@@ -9,6 +9,8 @@ it("scopes the feed to memberships and applies all four account preferences", as
     threadId: "thread",
     status: "completed",
     updatedAt: new Date("2026-09-24T00:00:00Z"),
+    completedAt: null,
+    attempts: [{ finishedAt: new Date("2026-09-23T23:59:59Z") }],
     bot: { name: "Bot", notifyOnFinish: true },
     thread: { groupId: null },
   };
@@ -30,6 +32,9 @@ it("scopes the feed to memberships and applies all four account preferences", as
     },
   } as unknown as PrismaClient;
   const result = await notificationActivity(prisma, { userId: "owner" } as Actor);
+  expect(result.activities[0]).toMatchObject({
+    occurredAt: row.attempts[0]!.finishedAt.toISOString(),
+  });
   expect(result.activities.map((item) => [item.category, item.enabled])).toEqual([
     ["responseCompletions", false],
     ["routines", false],

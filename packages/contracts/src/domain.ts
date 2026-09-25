@@ -4,7 +4,7 @@ import { ComputerProfileSchema } from "./computer-profiles.js";
 import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "./context.js";
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
-import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
+import { Id, MemoryScope, RunStatus, RunTriggerSchema, SandboxKind } from "./ids.js";
 import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
@@ -890,19 +890,7 @@ export const RunSchema = z.object({
   threadId: Id,
   taskId: Id,
   status: RunStatus,
-  trigger: z.enum([
-    "user",
-    "routine",
-    "resume",
-    "follow_up",
-    "reaction",
-    "spawn",
-    "skill",
-    "bot_message",
-    "webhook",
-    "messaging",
-    "cloud_agent",
-  ]),
+  trigger: RunTriggerSchema,
   routineId: Id.nullable(),
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
@@ -1304,12 +1292,12 @@ export const ExportManifestSchema = z.object({
       observations: z.array(LearningObservationSchema),
     })
     .optional(),
-  version: z.literal(1),
+  version: z.literal(2),
   exportedAt: z.string(),
   bot: BotSchema.pick({ name: true, title: true, description: true, instructions: true }),
   memory: z.array(z.object({ path: z.string(), content: z.string() })),
   routines: z.array(RoutineSchema.pick({ name: true, prompt: true, crons: true, timezone: true })),
-  files: z.array(z.object({ path: z.string(), content: z.string() })),
+  home: z.string().nullable(),
   history: z.array(ThreadMessageSchema),
 });
 export type ExportManifest = z.infer<typeof ExportManifestSchema>;

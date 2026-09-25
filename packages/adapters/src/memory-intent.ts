@@ -8,6 +8,7 @@ import {
   MEMORY_REVIEW_UNAVAILABLE_MESSAGE,
   MemoryDraftsSchema,
   MemoryIntentInputSchema,
+  RuntimePinError,
 } from "@ardurbot/contracts";
 import { importedMemoryDrafts, memoryIntentTarget, redactLearningText } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
@@ -124,7 +125,7 @@ export async function proposeMemoryIntent(
           },
         )
       : null;
-  if (resolved?.kind === "problem") throw new Error(resolved.reason);
+  if (resolved?.kind === "problem") throw new RuntimePinError(resolved);
   const reservation =
     input.intent === "import"
       ? 0

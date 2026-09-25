@@ -12,6 +12,7 @@ import {
   ComparisonSnapshotSchema,
   ComparisonStartSchema,
   DELEGATION_LIMITS,
+  RunTriggerSchema,
   RuntimePinError,
   TaskCardSchema,
 } from "@ardurbot/contracts";
@@ -121,7 +122,7 @@ async function queueComparisonRun(
       threadId: bot.thread.id,
       taskId: task.id,
       status: "queued",
-      trigger: "comparison",
+      trigger: RunTriggerSchema.enum.comparison,
     },
   });
   await tx.delegation.update({ where: { id: admitted.record.id }, data: { runId: run.id } });
@@ -265,7 +266,7 @@ export async function startComparison(deps: ComparisonDeps, scope: Scope, raw: C
           botId: coordinator.bot.id,
           threadId: thread.id,
           taskId: task.id,
-          trigger: "comparison-coordinator",
+          trigger: RunTriggerSchema.enum["comparison-coordinator"],
           status: "completed",
           completedAt: new Date(),
           runtimePin: coordinator.participant.executing.pin,

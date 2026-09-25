@@ -78,7 +78,7 @@ function fixture() {
   return state as typeof state & {
     openAppOnce: (url: string) => Promise<boolean>;
     commitPendingAppSwitch: () => void;
-    abandonPendingAppSwitch: (setup: null, url: string) => "restored" | "kept";
+    abandonPendingAppSwitch: (setup: null, url: string) => Promise<"restored" | "kept">;
   };
 }
 
@@ -107,7 +107,7 @@ describe("main window host lifecycle", () => {
     const previous = f.mainWindow!;
     await f.openAppOnce(url);
     const replacement = f.mainWindow!;
-    expect(f.abandonPendingAppSwitch(null, url)).toBe("restored");
+    expect(await f.abandonPendingAppSwitch(null, url)).toBe("restored");
     expect(replacement.isDestroyed()).toBe(true);
     expect(f.mainWindow).toBe(previous);
     expect(f.stop).not.toHaveBeenCalled();
@@ -123,6 +123,30 @@ describe("main window host lifecycle", () => {
     expect(await f.openAppOnce(url)).toBe(false);
     expect(f.mainWindow).toBe(previous);
     expect(f.stop).not.toHaveBeenCalled();
+  });
+  it("reactivates the restored server before completing a failed setup save", async () => {
+    const f = fixture();
+    await f.openAppOnce(url);
+    f.commitPendingAppSwitch();
+    await f.openAppOnce("https://replacement.example.test");
+    let finish!: () => void;
+    f.hostService.activate.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    let restored = false;
+    const rollback = Promise.resolve(f.abandonPendingAppSwitch(null, url)).then(() => {
+      restored = true;
+    });
+    await Promise.resolve();
+    expect(f.hostService.activate).toHaveBeenLastCalledWith(url);
+    expect(restored).toBe(false);
+    finish();
+    await rollback;
+    expect(restored).toBe(true);
+    expect(f.currentTargetUrl).toBe(url);
   });
   it("leaves keep-running policy to the host service when the active window closes", async () => {
     const f = fixture();

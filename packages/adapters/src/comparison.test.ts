@@ -1,10 +1,53 @@
-import { ComparisonExportSchema } from "@ardurbot/contracts";
+import {
+  AppBootstrapSchema,
+  ComparisonExportSchema,
+  RunActivityRowSchema,
+  RunSchema,
+  ThreadSnapshotSchema,
+} from "@ardurbot/contracts";
 import { readComparison } from "@ardurbot/db";
 import { describe, expect, it } from "vitest";
 import { mergeComparison, startComparison } from "./comparison.js";
 import { comparisonFixture, comparisonInput, comparisonScope } from "./comparison-test-fixture.js";
 
 describe("comparison orchestration through P2 admission", () => {
+  it("accepts persisted comparison runs in thread, bootstrap and Activity reads after reload", async () => {
+    const f = comparisonFixture();
+    await startComparison(f.deps, comparisonScope, comparisonInput);
+    const rows = JSON.parse(
+      JSON.stringify(f.state().runs.filter((row) => row.trigger?.startsWith("comparison"))),
+    );
+    expect(new Set(rows.map((row: { trigger: string }) => row.trigger))).toEqual(
+      new Set(["comparison", "comparison-coordinator"]),
+    );
+    for (const row of rows) {
+      const run = RunSchema.parse({
+        routineId: null,
+        modelProvider: null,
+        modelId: null,
+        error: null,
+        ...row,
+      });
+      const thread = { threadId: run.threadId, cursor: -1, messages: [], olderCursor: null, run };
+      expect(ThreadSnapshotSchema.safeParse(thread).success).toBe(true);
+      expect(AppBootstrapSchema.shape.thread.safeParse(thread).success).toBe(true);
+      expect(
+        RunActivityRowSchema.safeParse({
+          runId: run.id,
+          botId: run.botId,
+          botName: "Fixture",
+          groupId: null,
+          groupName: null,
+          threadId: run.threadId,
+          status: run.status,
+          trigger: run.trigger,
+          notificationsEnabled: false,
+          promptSnippet: "Compare",
+          updatedAt: row.createdAt,
+        }).success,
+      ).toBe(true);
+    }
+  });
   it("keeps effort evidence in comparison results and exported JSON", async () => {
     const f = comparisonFixture();
     const comparison = await startComparison(f.deps, comparisonScope, comparisonInput);

@@ -1,4 +1,4 @@
-import type { Bot, IdeChange } from "@ardurbot/contracts";
+import type { IdeChange } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -7,13 +7,12 @@ import { todayRange } from "./model";
 
 export function useChanges(
   rootId: string | undefined,
-  bots: Bot[],
+  enabled: boolean,
   onError: (error: unknown) => void,
   onFilesChanged: () => void,
 ) {
   const [items, setItems] = useState<IdeChange[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [revision, refresh] = useState(0);
   const generation = useRef(0);
   const loadingMore = useRef(false);
   useEffect(() => {
@@ -21,62 +20,47 @@ export function useChanges(
     setCursor(null);
   }, [rootId]);
   useEffect(() => {
-    if (!rootId) return;
+    if (!rootId || !enabled) return;
     const abort = new AbortController();
-    generation.current++;
-    void rpc.ide
-      .changes({ rootId, ...todayRange() }, { signal: abort.signal })
-      .then((page) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let pending = false;
+    let signature: string | undefined;
+    const refresh = async () => {
+      if (pending || abort.signal.aborted || document.visibilityState !== "visible") return;
+      clearTimeout(timer);
+      pending = true;
+      generation.current++;
+      try {
+        const page = await rpc.ide.changes({ rootId, ...todayRange() }, { signal: abort.signal });
         if (abort.signal.aborted) return;
         setItems(page.items);
         setCursor(page.nextCursor);
-      })
-      .catch((error) => {
+        const next = JSON.stringify(page.items.map((item) => item.id));
+        if (signature !== next) onFilesChanged();
+        signature = next;
+      } catch (error) {
         if (!abort.signal.aborted) onError(error);
-      });
-    return () => abort.abort();
-  }, [rootId, revision, onError]);
-  useEffect(() => {
-    const abort = new AbortController();
-    const changed = () => {
-      onFilesChanged();
-      refresh((value) => value + 1);
+      } finally {
+        pending = false;
+        if (!abort.signal.aborted && document.visibilityState === "visible")
+          timer = setTimeout(() => void refresh(), 10_000);
+      }
     };
-    // The existing event streams carry invalidations; the IDE never polls the filesystem.
-    for (const bot of bots)
-      void (async () => {
-        const head = await rpc.threads.head({ botId: bot.id }, { signal: abort.signal });
-        refresh((value) => value + 1);
-        const events = await rpc.threads.subscribe(
-          { botId: bot.id, cursor: head.cursor },
-          { signal: abort.signal },
-        );
-        for await (const event of events) {
-          if (abort.signal.aborted) return;
-          if (
-            [
-              "computer.file.changed",
-              "command.finished",
-              "thread.artifact",
-              "run.completed",
-            ].includes(event.type)
-          )
-            changed();
-        }
-      })().catch((error) => {
-        if (!abort.signal.aborted) onError(error);
-      });
     const visible = () => {
-      if (document.visibilityState === "visible") changed();
+      clearTimeout(timer);
+      if (document.visibilityState === "visible") void refresh();
     };
+    void refresh();
     document.addEventListener("visibilitychange", visible);
     return () => {
+      generation.current++;
       abort.abort();
+      clearTimeout(timer);
       document.removeEventListener("visibilitychange", visible);
     };
-  }, [bots, onError, onFilesChanged]);
+  }, [rootId, enabled, onError, onFilesChanged]);
   const more = useCallback(async () => {
-    if (!rootId || !cursor || loadingMore.current) return;
+    if (!enabled || !rootId || !cursor || loadingMore.current) return;
     loadingMore.current = true;
     const request = generation.current;
     try {
@@ -87,7 +71,7 @@ export function useChanges(
     } finally {
       loadingMore.current = false;
     }
-  }, [rootId, cursor]);
+  }, [rootId, cursor, enabled]);
   return { items, more: cursor ? more : undefined };
 }
 

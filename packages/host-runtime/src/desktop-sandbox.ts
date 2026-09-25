@@ -296,14 +296,16 @@ export class DesktopSandboxProvider implements SandboxProvider {
       : await readdir(target, { withFileTypes: true });
     const listed = await Promise.all(
       entries.map(async (entry) => {
-        const child = await localWorkspaceTarget(
-          box.home,
-          relative ? `${relative}/${entry.name}` : entry.name,
-          true,
-        );
-        const info = await stat(child);
+        const listedPath = relative ? `${relative}/${entry.name}` : entry.name;
+        // POSIX permits literal backslashes. List their metadata without treating them as
+        // separators or following a link; clients can reject unsupported names individually.
+        const literalName = process.platform !== "win32" && entry.name.includes("\\");
+        const child = literalName
+          ? path.join(target, entry.name)
+          : await localWorkspaceTarget(box.home, listedPath, true);
+        const info = literalName ? await lstat(child) : await stat(child);
         return {
-          path: normalizeWorkspacePath(relative ? `${relative}/${entry.name}` : entry.name),
+          path: listedPath,
           kind: info.isDirectory() ? ("dir" as const) : ("file" as const),
           size: info.size,
           ...(info.isFile() && info.mode & 0o100 ? { executable: true } : {}),
