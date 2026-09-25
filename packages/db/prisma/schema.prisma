@@ -626,6 +626,8 @@ model Run {
   boardItemId String?
   boardCloseWhenDone Boolean @default(false)
   boardCommentedAt DateTime?
+  boardDeliveryToken String?
+  boardDeliveryExpiresAt DateTime?
   contextSnapshot Json?
   routingRule String?
   queueWaitMs Int?
