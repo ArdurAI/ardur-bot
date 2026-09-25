@@ -14,16 +14,17 @@ import type { ReplayFixture } from "../scoreboard/replay/protocol.js";
 import { startReferenceRecording } from "../scoreboard/replay/recording.js";
 import { getTask } from "../scoreboard/tasks/catalog.js";
 import { referenceSolution } from "../scoreboard/tasks/reference.js";
-import type { VersusEvent } from "./adapters/types.js";
+import type { TrialArtifacts, VersusEvent } from "./adapters/types.js";
 import { startBroker, TrialBroker } from "./broker.js";
 import { BudgetLedger, parseBudget, requireValue } from "./budget.js";
+import type { ContainerSession } from "./containers/session.js";
 import { startGateway } from "./gateway.js";
 import { createTrialDirectory, destroyOwnedDirectory, prepareEnvironment } from "./isolation.js";
 import { inspectBuild, repositoryRoot, sanitize } from "./provenance.js";
 import { selfTestBudget } from "./self-test.js";
 
 /** Opt-in real application integration. Parent never imports the application or loads dotenv. */
-export async function rpcSelfTest(output: string) {
+export async function rpcSelfTest(output: string, containerMode = false) {
   const build = await inspectBuild();
   const resource = await createTrialDirectory(tmpdir());
   const out = path.resolve(output);
@@ -61,7 +62,10 @@ export async function rpcSelfTest(output: string) {
     const pnpmDirectory = path.dirname(
       execFileSync("/usr/bin/which", ["pnpm"], { encoding: "utf8" }).trim(),
     );
-    env.PATH = `${pnpmDirectory}${path.delimiter}${env.PATH}`;
+    const dockerDirectory = path.dirname(
+      execFileSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).trim(),
+    );
+    env.PATH = [pnpmDirectory, dockerDirectory, env.PATH].join(path.delimiter);
     Object.assign(env, {
       DOCKER_HOST: endpoint,
       TESTCONTAINERS_RYUK_DISABLED: "true",
@@ -72,7 +76,14 @@ export async function rpcSelfTest(output: string) {
     });
     child = spawn(
       process.execPath,
-      ["--import", "tsx", new URL(import.meta.url).pathname, "--child", resource.root, reportFile],
+      [
+        "--import",
+        "tsx",
+        new URL(import.meta.url).pathname,
+        containerMode ? "--container-child" : "--child",
+        resource.root,
+        reportFile,
+      ],
       { cwd: repositoryRoot, env, shell: false, stdio: ["ignore", "pipe", "pipe"] },
     );
     let diagnostics = "";
@@ -127,11 +138,13 @@ export async function rpcSelfTest(output: string) {
   }
 }
 
-async function childMain(root: string, reportFile: string) {
+async function childMain(root: string, reportFile: string, containerMode = false) {
   const results: Record<string, unknown>[] = [];
   const report = {
     version: 1,
-    kind: "real-application-scripted-provider",
+    kind: containerMode
+      ? "real-application-container-computer-scripted-provider"
+      : "real-application-scripted-provider",
     tier: "T0",
     timing: "virtual-contract-results",
     realModelCalls: 0,
@@ -173,15 +186,17 @@ async function childMain(root: string, reportFile: string) {
     };
     const { serve } = await import("@hono/node-server");
     let recordedFixture: ReplayFixture | null = null;
-    for (const scenario of [
-      "landed-fixture-drift-check",
-      "ordinary-recording",
-      "ordinary-strict-replay",
-      "mcp-connection",
-      "approval-denied",
-      "approval-resume",
-      "cancel-held-provider",
-    ] as const) {
+    for (const scenario of (
+      [
+        "landed-fixture-drift-check",
+        "ordinary-recording",
+        "ordinary-strict-replay",
+        "mcp-connection",
+        "approval-denied",
+        "approval-resume",
+        "cancel-held-provider",
+      ] as const
+    ).filter((scenario) => !containerMode || scenario !== "landed-fixture-drift-check")) {
       report.phase = scenario;
       await save();
       const database = await postgres.fresh();
@@ -203,6 +218,8 @@ async function childMain(root: string, reportFile: string) {
           at: events.length,
           clock: "virtual" as const,
         });
+      let computerSession: ContainerSession | undefined;
+      let collected: TrialArtifacts | undefined;
       let adapter: InstanceType<typeof ArdurAdapter> | undefined;
       let provider:
         | { baseUrl: string; close: () => Promise<void>; assertComplete: () => void }
@@ -383,14 +400,38 @@ async function childMain(root: string, reportFile: string) {
           },
         });
         const providerUrl = gateway.capability(scenario, null, emit);
-        const services = new DepartmentServices();
-        const sandbox = new DepartmentSandbox(path.join(directory.root, "computers"), task);
+        const { TrialAdmission, AdmittedDepartmentServices } = await import(
+          "./containers/admission.js"
+        );
+        const { ContainerComputer } = await import("./containers/computer.js");
+        const { ContainerSession } = await import("./containers/session.js");
+        const { COMPUTER_IMAGE } = await import("./containers/policy.js");
+        const admission = new TrialAdmission(scenario, ledger, emit, [
+          ...task.allowedTools,
+          "mcp_execute_tool",
+        ]);
+        if (containerMode)
+          computerSession = await ContainerSession.open({
+            root: directory.state,
+            image: COMPUTER_IMAGE,
+            budget,
+            wallMs: 120000,
+          });
+        const container = computerSession
+          ? new ContainerComputer(computerSession, task, admission)
+          : undefined;
+        const services = containerMode
+          ? new AdmittedDepartmentServices(admission)
+          : new DepartmentServices();
+        const sandbox =
+          container ?? new DepartmentSandbox(path.join(directory.root, "computers"), task);
         let decisions = 0;
         adapter = new ArdurAdapter({
           databaseUrl: database.url,
           dataDir: directory.state,
           services,
           sandbox,
+          container,
           mode: "scripted-provider",
           preapproveConsent: false,
           connectBroker: scenario === "mcp-connection",
@@ -448,7 +489,7 @@ async function childMain(root: string, reportFile: string) {
               authSecret: "synthetic-scoreboard-auth-secret-32",
               encryptionKey: FIXTURE_ENCRYPTION_KEY,
               sandbox,
-              sandboxProvider: "fake",
+              sandboxProvider: containerMode ? "docker" : "fake",
               agentRuntime: "pi",
               wakeupDriver: "graphile",
               composio: services,
@@ -500,7 +541,7 @@ async function childMain(root: string, reportFile: string) {
           signal: new AbortController().signal,
         });
         await adapter.submit();
-        const collected = await adapter.collect();
+        collected = await adapter.collect();
         provider.assertComplete();
         if (recorder) recordedFixture = recorder.fixture();
         assert.equal(
@@ -544,6 +585,7 @@ async function childMain(root: string, reportFile: string) {
           terminal: collected.observation.terminal,
           observationHash: contentDigest(collected.observation),
           reply: collected.observation.reply,
+          containerProof: computerSession?.proof ?? null,
           fixtureHash: recordedFixture ? contentDigest(recordedFixture) : null,
           decisions,
           effects: collected.observation.effects,
@@ -566,6 +608,8 @@ async function childMain(root: string, reportFile: string) {
               : String(error),
             [root, repositoryRoot],
           ),
+          observation: collected?.observation ?? null,
+          grade: collected ? gradeOutcome(task, collected.observation) : null,
           events,
           observedRequests,
         };
@@ -579,6 +623,7 @@ async function childMain(root: string, reportFile: string) {
       } finally {
         restoreNetwork?.();
         await adapter?.destroy();
+        await computerSession?.destroy();
         await gateway?.close();
         await mcp?.close();
         await provider?.close();
@@ -588,7 +633,7 @@ async function childMain(root: string, reportFile: string) {
       }
     }
     report.passed =
-      results.length === 7 &&
+      results.length === (containerMode ? 6 : 7) &&
       report.sourceDrift.length === 0 &&
       results.every((result) => result.passed);
     report.phase = "finished";
@@ -602,13 +647,15 @@ async function childMain(root: string, reportFile: string) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2);
   const action =
-    args[0] === "--child" && args.length === 3
-      ? childMain(args[1]!, args[2]!)
-      : args[0] === "--out" && args.length === 2
-        ? rpcSelfTest(args[1]!)
-        : Promise.reject(
-            new Error("Use --out <new-directory>; requires a cached local PostgreSQL image"),
-          );
+    ["--child", "--container-child"].includes(args[0] ?? "") && args.length === 3
+      ? childMain(args[1]!, args[2]!, args[0] === "--container-child")
+      : args[0] === "--container" && args[1] === "--out" && args.length === 3
+        ? rpcSelfTest(args[2]!, true)
+        : args[0] === "--out" && args.length === 2
+          ? rpcSelfTest(args[1]!)
+          : Promise.reject(
+              new Error("Use --out <new-directory>; requires a cached local PostgreSQL image"),
+            );
   action.catch((error) => {
     console.error(sanitize(error instanceof Error ? error.message : String(error)));
     process.exitCode = 1;

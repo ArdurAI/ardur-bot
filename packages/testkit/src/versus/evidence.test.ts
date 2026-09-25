@@ -13,7 +13,7 @@ import { parseArguments, runCli } from "./cli.js";
 import { validateEvidenceDirectory, writeEvidence } from "./evidence.js";
 import { blindPacket, gradeBlind } from "./grading.js";
 import * as provenance from "./provenance.js";
-import { inspectBuild, inspectHermes } from "./provenance.js";
+import { bytesHash, inspectBuild, inspectHermes } from "./provenance.js";
 import { planPairs } from "./scheduler.js";
 import { runOfflineSelfTest, selfTestBudget } from "./self-test.js";
 
@@ -268,6 +268,103 @@ describe("zero-inference dry run", () => {
     };
     await fs.writeFile(filename, JSON.stringify(report));
     await expect(validateEvidenceDirectory(out)).rejects.toThrow();
+  });
+  it("binds reread outcomes, raw grades, readable grades and analysis totals independently of final-file checksums", async () => {
+    const out = await directory();
+    const build = await inspectBuild();
+    const plan = planPairs({ ...selfTestBudget().cohort, tasks: ["task-01"], repetitions: 1 });
+    const tested = await runOfflineSelfTest(plan, build.graderHash);
+    await writeEvidence(out, {
+      mode: "self-test",
+      build,
+      hermes: (await inspectHermes()).identity,
+      plan,
+      ...tested,
+      prerequisites: [],
+      launchPlan: {},
+    });
+    const original = new Map<string, Buffer>();
+    for (const file of (await fs.readdir(out)).filter((name) => name !== "raw"))
+      original.set(file, await fs.readFile(path.join(out, file)));
+    const restore = async () => {
+      for (const [name, bytes] of original) await fs.writeFile(path.join(out, name), bytes);
+    };
+    const json = (name: string) => JSON.parse(original.get(name)!.toString());
+    const save = (name: string, value: unknown) =>
+      fs.writeFile(path.join(out, name), JSON.stringify(value));
+    const rehash = async () => {
+      const sums = json("checksums.json") as { name: string; sha256: string }[];
+      for (const entry of sums)
+        entry.sha256 = bytesHash(await fs.readFile(path.join(out, entry.name)));
+      await save("checksums.json", sums);
+    };
+    // Even a non-JSON final artifact is protected on reread.
+    await fs.appendFile(path.join(out, "index.md"), "Changed retained total");
+    await expect(validateEvidenceDirectory(out)).rejects.toThrow("checksum mismatch");
+    await restore();
+    const reportFile = [...original.keys()].find(
+      (name) => name.startsWith("ardur") && name.endsWith("-schema3.json"),
+    )!;
+    const report = json(reportFile);
+    report.tasks[0].trials[0].outcome = "failed";
+    report.tasks[0].trials[0].passed = false;
+    await save(reportFile, report);
+    await rehash();
+    await expect(validateEvidenceDirectory(out)).rejects.toThrow(
+      "outcome contradicts retained grades",
+    );
+    await restore();
+    const manifest = json("versus-manifest.json");
+    manifest.trialBindings[0].summary.grade.passed = false;
+    manifest.trialBindings[0].summary.outcome = "failed";
+    const summaries = manifest.trialBindings.map((entry: { summary: unknown }) => entry.summary);
+    await save("versus-manifest.json", manifest);
+    await fs.writeFile(
+      path.join(out, "trials.jsonl"),
+      summaries.map((trial: unknown) => JSON.stringify(trial)).join("\n"),
+    );
+    await fs.writeFile(
+      path.join(out, "grades.jsonl"),
+      summaries
+        .map((trial: { trialId: string; taskId: string; grade: unknown }) =>
+          JSON.stringify({
+            blindId: `blind-${contentDigest(trial.trialId).slice(0, 24)}`,
+            taskId: trial.taskId,
+            grade: trial.grade,
+          }),
+        )
+        .join("\n"),
+    );
+    await rehash();
+    await expect(validateEvidenceDirectory(out)).rejects.toThrow("Raw grade contradicts");
+    await restore();
+    const lines = original
+      .get("grades.jsonl")!
+      .toString()
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    lines[0].grade.criticalPassed = !lines[0].grade.criticalPassed;
+    await fs.writeFile(
+      path.join(out, "grades.jsonl"),
+      lines.map((line) => JSON.stringify(line)).join("\n"),
+    );
+    await rehash();
+    await expect(validateEvidenceDirectory(out)).rejects.toThrow("Grade sidecar mismatch");
+    await restore();
+    const totals = json("versus-manifest.json");
+    totals.analysis = { accepted: 999 };
+    await save("versus-manifest.json", totals);
+    await rehash();
+    await expect(validateEvidenceDirectory(out)).rejects.toThrow("manifest analysis totals");
+    await restore();
+    const coverage = json("coverage.json");
+    coverage.executedTrials++;
+    await save("coverage.json", coverage);
+    await rehash();
+    await expect(validateEvidenceDirectory(out)).rejects.toThrow("retained trial total");
+    await restore();
+    await validateEvidenceDirectory(out);
   });
 });
 describe("blind W0-5 grading", () => {

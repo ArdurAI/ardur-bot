@@ -156,17 +156,26 @@ export async function inspectBuild(root = repositoryRoot) {
   const commit = git(root, ["rev-parse", "HEAD"]);
   const parentCommit = git(root, ["rev-parse", "HEAD^"]);
   const fixedReleaseCommit = git(root, ["rev-parse", `${RESEARCH_BASELINE}^{commit}`]);
-  const tracked = git(root, [
-    "ls-files",
-    "--",
+  const sourceRoots = [
     "packages/testkit/src",
     "packages/adapters/src",
     "packages/adapter-kit/src",
+    "packages/auth/src",
     "packages/contracts/src",
     "packages/core/src",
     "packages/db/src",
+    "packages/logging/src",
+    "packages/host-runtime/src",
     "packages/memory/src",
     "apps/api/src",
+  ];
+  const tracked = git(root, [
+    "ls-files",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+    "--",
+    ...sourceRoots,
   ])
     .split("\n")
     .filter((file) => /\.(ts|json)$/.test(file));
@@ -178,15 +187,19 @@ export async function inspectBuild(root = repositoryRoot) {
       ),
     ]),
   ].sort();
-  const inventory: { file: string; sha256: string }[] = [];
+  const inventory: { file: string; sha256: string | null }[] = [];
   // Bound open files while avoiding thousands of serial filesystem round trips.
   for (let offset = 0; offset < files.length; offset += 32)
     inventory.push(
       ...(await Promise.all(
-        files.slice(offset, offset + 32).map(async (file) => ({
-          file,
-          sha256: bytesHash(await readFile(path.join(root, file))),
-        })),
+        files.slice(offset, offset + 32).map(async (file) => {
+          try {
+            return { file, sha256: bytesHash(await readFile(path.join(root, file))) };
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            return { file, sha256: null };
+          }
+        }),
       )),
     );
   const lock = bytesHash(await readFile(path.join(root, "pnpm-lock.yaml")));
@@ -195,8 +208,8 @@ export async function inspectBuild(root = repositoryRoot) {
     "--porcelain",
     "--untracked-files=all",
     "--",
-    "packages/testkit/src/versus",
-    "packages/testkit/src/scoreboard/replay/production.ts",
+    ...files,
+    "pnpm-lock.yaml",
     "packages/testkit/package.json",
   ]);
   const diff = git(root, [
@@ -205,7 +218,8 @@ export async function inspectBuild(root = repositoryRoot) {
     "--no-textconv",
     "HEAD",
     "--",
-    "packages/testkit/src",
+    ...files,
+    "pnpm-lock.yaml",
     "packages/testkit/package.json",
   ]);
   const buildArtifact = {
