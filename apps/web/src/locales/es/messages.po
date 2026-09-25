@@ -424,7 +424,6 @@ msgid "Adding…"
 msgstr "Agregando…"
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1015,7 +1014,6 @@ msgstr "No se puede alcanzar el servidor."
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
@@ -1369,7 +1367,6 @@ msgstr "Color"
 msgid "Color {color}"
 msgstr "Color {color}"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Coming soon"
 msgstr "Próximamente"
@@ -1505,7 +1502,6 @@ msgid "Confluence space keys or IDs"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -1557,12 +1553,7 @@ msgstr "Conecta este proveedor para usarlo como tu modelo personal."
 msgid "Connect Treg"
 msgstr "Conectar Treg"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Connect your account."
-msgstr ""
-
 #: src/components/composer/ComposerMenu.tsx
-#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/HostComputerSettings.tsx
@@ -1813,9 +1804,7 @@ msgstr ""
 msgid "Could not connect"
 msgstr "No se pudo conectar"
 
-#: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
 
@@ -2041,7 +2030,6 @@ msgid "Could not load the server configuration."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -2368,10 +2356,6 @@ msgstr ""
 msgid "Create a section and move {0} into it."
 msgstr "Crea una sección y mueve {0} a ella."
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Create a token"
-msgstr ""
-
 #: src/pages/Auth.tsx
 msgid "Create account"
 msgstr "Crear cuenta"
@@ -2612,6 +2596,7 @@ msgstr "Descripción"
 msgid "Design"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Desktop"
 msgstr ""
@@ -3097,7 +3082,6 @@ msgid "Finding…"
 msgstr "Buscando…"
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Fine-grained token"
 msgstr ""
 
@@ -3108,7 +3092,6 @@ msgid "Finish signing in at <0>{0}</0>. The final page may not load; paste its U
 msgstr "Termina de iniciar sesión en <0>{0}</0>. Es posible que la página final no cargue; pega aquí su URL o código."
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Finish signing in in your browser."
 msgstr ""
 
@@ -3196,16 +3179,11 @@ msgid "Git URL"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "GitLab host"
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
 msgid "Grant"
-msgstr ""
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Grant only the repositories and permissions this bot needs."
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -3517,6 +3495,10 @@ msgstr "Aislado"
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
 msgstr "Su conversación, archivos y rutinas se eliminarán de forma permanente. Los bots que creó permanecerán en tu lista."
 
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Jev needs a TypeSafe API key."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Jira project keys"
 msgstr ""
@@ -3812,7 +3794,6 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "Asegúrate de que no quede nada en ejecución en este ordenador."
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4609,7 +4590,6 @@ msgid "Open chat links in the desktop app."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Open documentation"
 msgstr ""
 
@@ -5036,7 +5016,6 @@ msgstr ""
 msgid "Recheck"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -5461,7 +5440,6 @@ msgstr ""
 msgid "Review saved copy"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/customize/McpDefaults.tsx
@@ -5469,7 +5447,6 @@ msgstr ""
 msgid "Review tools"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Review tools before your bots can use this account."
 msgstr ""
@@ -5742,7 +5719,7 @@ msgstr ""
 msgid "Search by domain"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Search integrations"
 msgstr ""
 
@@ -5985,10 +5962,6 @@ msgstr "Inicia sesión en Ardur Bot"
 msgid "Sign in to use quick access."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Sign in with GitHub"
-msgstr ""
-
 #: src/pages/account/AccountTables.tsx
 msgid "Sign out"
 msgstr ""
@@ -6000,10 +5973,6 @@ msgstr "Registrarse"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in expired. Connect Codex again."
-msgstr ""
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
@@ -6368,7 +6337,6 @@ msgid "The bot is working — wait or stop it"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "The connection was cancelled."
 msgstr ""
 
@@ -6493,7 +6461,6 @@ msgid "This server is managed by an extension"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "This service needs client registration before you can connect."
 msgstr ""
 
@@ -6581,7 +6548,6 @@ msgid "Trusted folders"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -6747,7 +6713,6 @@ msgid "Use a found model"
 msgstr "Usar un modelo encontrado"
 
 #: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 msgid "Use a token"
 msgstr ""
 
@@ -6772,10 +6737,6 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "Usar este modelo"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Use your GitLab host"
-msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
@@ -6831,6 +6792,7 @@ msgstr "Esperando…"
 msgid "We'll provide a prompt you can use to fetch the memory from your other account."
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Web"
 msgstr ""
@@ -6984,10 +6946,6 @@ msgstr "Puedes cerrar esta ventana."
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "Tienes el control"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Your account is connected."
-msgstr ""
 
 #. placeholder {0}: state.storage.path
 #: src/pages/system/SystemPage.tsx

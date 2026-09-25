@@ -46,11 +46,6 @@
       "lazy": true,
       "dynamic": false
     },
-    "chunk:ToolPicker": {
-      "file": "assets/ToolPicker-DKW7LVP1.js",
-      "lazy": true,
-      "dynamic": false
-    },
     "chunk:async": {
       "file": "assets/async-CU0Z_3ZN.js",
       "lazy": false,
@@ -275,6 +270,11 @@
       "file": "assets/ExtensionsPage-BNW9BpE2.js",
       "lazy": true,
       "dynamic": true
+    },
+    "chunk:ToolPermissions": {
+      "file": "assets/ToolPermissions-CmC4EzP3.js",
+      "lazy": true,
+      "dynamic": false
     }
   },
   "warnings": []

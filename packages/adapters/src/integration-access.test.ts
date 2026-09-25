@@ -36,7 +36,7 @@ function fixture() {
       id: "server",
       slug: "test",
       enabled: true,
-      catalogId: "github",
+      catalogId: "github" as string | null,
       connectionState: "connected",
       revision: 1,
       manifest,
@@ -120,6 +120,27 @@ const lazy = (name: string): ConnectorCall => ({
 });
 
 describe("MCP integration authorization", () => {
+  it("enforces Allow, Ask and Block for custom MCP tools and fences stale grants", async () => {
+    const f = fixture();
+    f.assignment.server.catalogId = null;
+    const id = tools[0]!.name;
+    const check = (args = {}) =>
+      integrationApprovalForCall(f.db as never, direct(id).route, context, args);
+    expect(await check()).toBe("ask-first");
+    f.assignment.server.spaceToolPolicies = { [id]: "allow" };
+    expect(await check()).toBe("allow");
+    expect(await check({ action: "delete" })).toBe("ask-first");
+    f.assignment.server.spaceToolPolicies = { [id]: "ask-first" };
+    expect(await check()).toBe("ask-first");
+    f.assignment.allowedTools = [];
+    expect(await check()).toBe("disabled");
+    f.assignment.allowedTools = [id];
+    f.assignment.server.revision++;
+    expect(await check()).toBe("disabled");
+    expect(await collect(f.connector, direct(id))).toMatchObject([{ type: "error" }]);
+    expect(f.network.fetch).not.toHaveBeenCalled();
+    await f.connector.close();
+  });
   it("uses fresh owner policies only for granted reads, without changing the intersection", async () => {
     const f = fixture();
     const id = tools[0]!.name;

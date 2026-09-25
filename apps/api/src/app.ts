@@ -89,6 +89,7 @@ import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
@@ -168,6 +169,7 @@ export async function createApp(
   const env = { ...loadEnv(process.env), ...envOverrides };
   const logger = loggerOverride ?? createServiceLogger({ service: SERVICE_NAMES.api });
   installLogger(logger);
+  warnAutoReviewConfiguration(logger);
   const created = prismaOverride
     ? { prisma: prismaOverride, pool: undefined }
     : createDb(env.databaseUrl, {

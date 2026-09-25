@@ -39,7 +39,7 @@ vi.mock("react-native", () => ({
 }));
 
 it("renders host and expired sign-in states with web management links and no grant mutations", async () => {
-  vi.mocked(rpc).mockResolvedValue({
+  const catalog = {
     catalog: [
       {
         id: "github",
@@ -81,7 +81,8 @@ it("renders host and expired sign-in states with web management links and no gra
       },
     ],
     webUrl: "https://app.example.test/",
-  });
+  };
+  vi.mocked(rpc).mockImplementation(async (path) => (path === "mcp/servers/list" ? [] : catalog));
   const node = document.createElement("div");
   const root = createRoot(node);
   await act(async () => root.render(createElement(IntegrationCatalog)));
@@ -89,7 +90,12 @@ it("renders host and expired sign-in states with web management links and no gra
   expect(node.textContent).toContain("Signed in on this computer as test-account");
   expect(node.textContent).toContain("Connect on web");
   expect(node.querySelectorAll("input,select,textarea")).toHaveLength(0);
-  expect(rpc).toHaveBeenCalledExactlyOnceWith("integrations/list");
+  expect(
+    vi
+      .mocked(rpc)
+      .mock.calls.map(([path]) => path)
+      .sort(),
+  ).toEqual(["integrations/list", "mcp/servers/list"]);
   await act(async () => root.unmount());
 });
 

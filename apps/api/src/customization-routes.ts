@@ -39,6 +39,7 @@ export function createCustomizationRoutes(
         for (const row of rows)
           if (
             row.connectionState === "discovery-failed" ||
+            row.connectionState === "needs-sign-in" ||
             (await oauth.statusFor(row, context.actor)) === "reconnect"
           )
             needingReconnection++;

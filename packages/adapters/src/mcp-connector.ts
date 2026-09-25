@@ -236,7 +236,7 @@ export class McpConnector implements ConnectorProvider {
             .filter(
               (tool) =>
                 granted.has(tool.name) &&
-                (!assignment.server.catalogId ||
+                ((!assignment.server.catalogId && !assignment.server.manifest) ||
                   (manifest.success &&
                     manifest.data.tools.some(
                       (captured) =>
@@ -360,7 +360,8 @@ export class McpConnector implements ConnectorProvider {
     if (
       !assignment ||
       !grantedMcpTools(assignment, [call.route.toolName]).length ||
-      (assignment.server.catalogId && call.route.resourceRevision !== assignment.server.revision)
+      ((assignment.server.catalogId || assignment.server.manifest) &&
+        call.route.resourceRevision !== assignment.server.revision)
     ) {
       await this.evict(`${call.route.resourceId} ${context.spaceId} ${context.userId}`);
       yield { type: "error", message: "MCP tool is not assigned to this bot" };
@@ -388,7 +389,7 @@ export class McpConnector implements ConnectorProvider {
       }
       const session = await this.sessionFor(assignment.server, context);
       material = this.sessions.get(sessionKey)?.material;
-      if (assignment.server.catalogId) {
+      if (assignment.server.catalogId || assignment.server.manifest) {
         const manifest = IntegrationManifestSchema.parse(assignment.server.manifest);
         const listed = await session.listTools({ signal: context.signal });
         const live = listed.tools.find((tool) => tool.name === call.route?.toolName);

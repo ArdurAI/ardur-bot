@@ -371,28 +371,6 @@ export class IntegrationConnections {
   async capture(actor: Owner, id: string): Promise<void> {
     const server = await this.owned(actor, id);
     if (!server.enabled) return;
-    if (!server.catalogId) {
-      try {
-        const manifest = await this.tools(actor, id);
-        await this.prisma.mcpServer.updateMany({
-          where: {
-            id,
-            spaceId: actor.spaceId,
-            userId: actor.userId,
-            enabled: true,
-            revision: server.revision,
-          },
-          data: { manifest, connectionState: "connected" },
-        });
-      } catch {
-        await this.prisma.mcpServer.updateMany({
-          where: { id, spaceId: actor.spaceId, userId: actor.userId, revision: server.revision },
-          data: { connectionState: "discovery-failed" },
-        });
-        throw new Error("Could not connect this server. Check its configuration and try again.");
-      }
-      return;
-    }
     try {
       const manifest = await this.tools(actor, id);
       const previous = IntegrationManifestSchema.safeParse(server.manifest);
@@ -477,6 +455,8 @@ export class IntegrationConnections {
           },
         });
       });
+      if (!server.catalogId)
+        throw new Error("Could not connect this server. Check its configuration and try again.");
     }
   }
 
@@ -560,6 +540,7 @@ export class IntegrationConnections {
       spaceToolPolicies?: SpaceToolPolicies;
       resourceConstraints?: IntegrationResourceConstraints;
     },
+    kind: "catalog" | "mcp" = "catalog",
   ) {
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${input.connectionId}))`;
@@ -571,12 +552,17 @@ export class IntegrationConnections {
           enabled: true,
         },
       });
-      if (!server?.catalogId || !integrationById(server.catalogId)?.available)
+      if (
+        !server ||
+        (kind === "catalog"
+          ? !server.catalogId || !integrationById(server.catalogId)?.available
+          : Boolean(server.catalogId))
+      )
         throw new IsolationError();
       const manifest = IntegrationManifestSchema.safeParse(server.manifest);
       if (server.connectionState !== "connected" || !manifest.success)
         throw new Error("Connect this integration before choosing tools.");
-      const descriptor = integrationById(server.catalogId)!;
+      const descriptor = server.catalogId ? integrationById(server.catalogId) : undefined;
       const constraints =
         input.resourceConstraints === undefined
           ? undefined
@@ -592,7 +578,7 @@ export class IntegrationConnections {
         });
       const names = new Set(
         manifest.data.tools
-          .filter((tool) => descriptor.toolPolicies[tool.id]?.approval !== "disabled")
+          .filter((tool) => descriptor?.toolPolicies[tool.id]?.approval !== "disabled")
           .map((tool) => tool.id),
       );
       if (input.toolIds.some((id) => !names.has(id)))

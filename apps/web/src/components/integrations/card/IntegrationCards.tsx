@@ -3,17 +3,29 @@ import type {
   IntegrationConnection,
   IntegrationDescriptor,
 } from "@ardurbot/contracts";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@ardurbot/ui-web";
+import { Button, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { connectIntegration } from "../../../lib/connect-integration";
 import { refreshIntegrationCatalog } from "../../../lib/integration-catalog-query";
 import { MCP_OAUTH_CHANNEL } from "../../../lib/mcp-connect";
 import { rpc } from "../../../lib/rpc";
+import type { CatalogTab } from "../../../pages/customize/CustomizeControls";
+import { CustomizeToolbar } from "../../../pages/customize/CustomizeControls";
+import { connectorRows } from "../../../pages/customize/connector-rows";
+import { IntegrationTable } from "../../../pages/customize/IntegrationTable";
 import { IntegrationDetails } from "../manage/IntegrationDetails";
 
-export function IntegrationCards({ reconnectId }: { reconnectId?: string }) {
+export function IntegrationCards({
+  reconnectId,
+  onBusyChange,
+}: {
+  reconnectId?: string;
+  onBusyChange?(busy: boolean): void;
+}) {
   const { t } = useLingui();
+  const [tab, setTab] = useState<CatalogTab>("catalog");
+  const [query, setQuery] = useState("");
   const [data, setData] = useState<IntegrationCatalogList>({ catalog: [], connections: [] });
   const [selected, setSelected] = useState<string | null>(reconnectId ?? null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -25,6 +37,10 @@ export function IntegrationCards({ reconnectId }: { reconnectId?: string }) {
     Record<string, { clientId: string; clientSecret?: string }>
   >({});
   const popup = useRef<Window | null>(null);
+  useEffect(() => {
+    onBusyChange?.(busy !== null);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
   const refresh = async () => {
     setData(await refreshIntegrationCatalog());
     setError(false);
@@ -51,7 +67,10 @@ export function IntegrationCards({ reconnectId }: { reconnectId?: string }) {
     };
   }, []);
   useEffect(() => {
-    if (reconnectId) setSelected(reconnectId);
+    if (reconnectId) {
+      setSelected(reconnectId);
+      setTab("yours");
+    }
   }, [reconnectId]);
   async function connect(
     descriptor: IntegrationDescriptor,
@@ -128,7 +147,7 @@ export function IntegrationCards({ reconnectId }: { reconnectId?: string }) {
     if (connection?.lastError === "Sign-in timed out.") return t`Sign-in timed out.`;
     switch (connection?.state) {
       case "connected":
-        return t`Connected`;
+        return null;
       case "awaiting-consent":
         return t`Finish signing in in your browser.`;
       case "needs-sign-in":
@@ -143,8 +162,20 @@ export function IntegrationCards({ reconnectId }: { reconnectId?: string }) {
         return null;
     }
   }
+  const rows = connectorRows({ ...data, servers: [], catalogTab: true }).filter(
+    (row) =>
+      (tab === "catalog" || !row.id.startsWith("catalog:")) &&
+      row.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+  );
   return (
     <div className="space-y-4" data-testid="integration-catalog">
+      <CustomizeToolbar
+        tab={tab}
+        onTab={setTab}
+        query={query}
+        onQuery={setQuery}
+        searchLabel={t`Search integrations`}
+      />
       {error ? (
         <div role="alert">
           <p className="text-sm text-destructive">{t`Could not connect or load integrations.`}</p>
@@ -154,8 +185,29 @@ export function IntegrationCards({ reconnectId }: { reconnectId?: string }) {
           >{t`Try again`}</Button>
         </div>
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {data.catalog.map((entry) => {
+      <IntegrationTable
+        rows={rows}
+        busy={busy}
+        onConnect={(row) => {
+          const entry = data.catalog.find((item) => item.id === row.catalogId);
+          if (entry)
+            void connect(
+              entry,
+              data.connections.find((item) => item.id === row.id),
+            );
+        }}
+        renderType={(row) => {
+          const entry = data.catalog.find((item) => item.id === row.catalogId);
+          return entry?.hostCli && (entry.endpoint || entry.id === "azure") ? (
+            <span>
+              {t`Desktop`} / {t`Web`}
+            </span>
+          ) : (
+            <span>{row.type === "desktop" ? t`Desktop` : t`Web`}</span>
+          );
+        }}
+        renderActions={(row) => {
+          const entry = data.catalog.find((item) => item.id === row.catalogId)!;
           const remote = data.connections.find(
             (row) => row.catalogId === entry.id && row.transport !== "host-cli",
           );
@@ -168,183 +220,178 @@ export function IntegrationCards({ reconnectId }: { reconnectId?: string }) {
             <Button variant="outline" onClick={() => setSelected(row.id)}>{t`Manage`}</Button>
           );
           return (
-            <Card key={entry.id} data-testid={`integration-${entry.id}`}>
-              <CardHeader>
-                <CardTitle>{entry.name}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {entry.hostCli ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      {identity && hostIdentity?.state === "signed-in"
-                        ? t`Signed in on this computer as ${identity}`
-                        : hostIdentity?.state === "not-found"
-                          ? t`Not found on this computer`
-                          : hostIdentity?.state === "needs-sign-in"
-                            ? t`Needs sign-in on this computer`
-                            : hostIdentity?.state === "unavailable"
-                              ? t`Could not check this computer.`
-                              : t`Open the desktop app to check this computer.`}
-                    </p>
-                    {local?.state === "connected" ? (
-                      manage(local)
-                    ) : hostIdentity?.state === "signed-in" ? (
-                      <Button
-                        disabled={busy !== null}
-                        onClick={() => void connect(entry, local, "host")}
-                      >{t`Use for bots on this computer`}</Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        render={
-                          <a href={entry.hostCli.installUrl} target="_blank" rel="noreferrer" />
-                        }
-                      >{t`Open documentation`}</Button>
-                    )}
-                  </div>
-                ) : null}
-                {entry.endpoint || remote || entry.id === "azure" ? (
-                  <div className="space-y-2">
-                    {status(remote) ? (
-                      <p className="text-sm text-muted-foreground">{status(remote)}</p>
-                    ) : null}
-                    {remote?.state === "awaiting-consent" ? (
-                      <Button
-                        variant="outline"
-                        onClick={() => void cancel(remote)}
-                      >{t`Cancel`}</Button>
-                    ) : (remote?.state === "connected" || remote?.state === "needs-sign-in") &&
-                      tokenFor !== entry.id ? (
-                      manage(remote)
-                    ) : (
-                      <>
-                        {entry.authKind === "oauth" && entry.endpoint ? (
-                          <Button
-                            disabled={busy !== null}
-                            onClick={() => void connect(entry, remote)}
+            <div className="mt-2 space-y-3">
+              {entry.hostCli ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    {identity && hostIdentity?.state === "signed-in"
+                      ? t`Signed in on this computer as ${identity}`
+                      : hostIdentity?.state === "not-found"
+                        ? t`Not found on this computer`
+                        : hostIdentity?.state === "needs-sign-in"
+                          ? t`Needs sign-in on this computer`
+                          : hostIdentity?.state === "unavailable"
+                            ? t`Could not check this computer.`
+                            : t`Open the desktop app to check this computer.`}
+                  </p>
+                  {local?.state === "connected" || local?.state === "needs-sign-in" ? (
+                    manage(local)
+                  ) : hostIdentity?.state === "signed-in" ? (
+                    <Button
+                      disabled={busy !== null}
+                      onClick={() => void connect(entry, local, "host")}
+                    >{t`Use for bots on this computer`}</Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      render={
+                        <a href={entry.hostCli.installUrl} target="_blank" rel="noreferrer" />
+                      }
+                    >{t`Open documentation`}</Button>
+                  )}
+                </div>
+              ) : null}
+              {entry.endpoint || remote || entry.id === "azure" ? (
+                <div className="space-y-2">
+                  {status(remote) ? (
+                    <p className="text-sm text-muted-foreground">{status(remote)}</p>
+                  ) : null}
+                  {remote?.state === "awaiting-consent" ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => void cancel(remote)}
+                    >{t`Cancel`}</Button>
+                  ) : (remote?.state === "connected" || remote?.state === "needs-sign-in") &&
+                    tokenFor !== entry.id ? (
+                    manage(remote)
+                  ) : (
+                    <>
+                      {entry.authKind === "oauth" && entry.endpoint ? (
+                        <Button
+                          disabled={busy !== null}
+                          onClick={() => void connect(entry, remote)}
+                        >
+                          {entry.hostCli ? t`Connect remote account` : t`Connect`}
+                        </Button>
+                      ) : null}
+                      {entry.oauthAvailable ? (
+                        <Button
+                          variant="outline"
+                          disabled={busy !== null}
+                          onClick={() => void connect(entry, remote, "oauth")}
+                        >{t`Connect remote account`}</Button>
+                      ) : null}
+                      {entry.authKind === "token" ? (
+                        tokenFor === entry.id ? (
+                          <form
+                            className="space-y-2"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              void connect(entry, remote, "token");
+                            }}
                           >
-                            {entry.hostCli ? t`Connect remote account` : t`Connect`}
-                          </Button>
-                        ) : null}
-                        {entry.oauthAvailable ? (
+                            <Input
+                              type="password"
+                              autoComplete="off"
+                              aria-label={t`Fine-grained token`}
+                              value={token}
+                              onChange={(event) => setToken(event.target.value)}
+                            />
+                            <Button
+                              type="submit"
+                              disabled={busy !== null || !token.trim()}
+                            >{t`Connect`}</Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => {
+                                setToken("");
+                                setTokenFor(null);
+                              }}
+                            >{t`Cancel`}</Button>
+                          </form>
+                        ) : (
                           <Button
                             variant="outline"
-                            disabled={busy !== null}
-                            onClick={() => void connect(entry, remote, "oauth")}
-                          >{t`Connect remote account`}</Button>
-                        ) : null}
-                        {entry.authKind === "token" ? (
-                          tokenFor === entry.id ? (
-                            <form
-                              className="space-y-2"
-                              onSubmit={(event) => {
-                                event.preventDefault();
-                                void connect(entry, remote, "token");
-                              }}
-                            >
-                              <Input
-                                type="password"
-                                autoComplete="off"
-                                aria-label={t`Fine-grained token`}
-                                value={token}
-                                onChange={(event) => setToken(event.target.value)}
-                              />
-                              <Button
-                                type="submit"
-                                disabled={busy !== null || !token.trim()}
-                              >{t`Connect`}</Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => {
-                                  setToken("");
-                                  setTokenFor(null);
-                                }}
-                              >{t`Cancel`}</Button>
-                            </form>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              onClick={() => setTokenFor(entry.id)}
-                            >{t`Use a token`}</Button>
-                          )
-                        ) : null}
-                      </>
-                    )}
-                    {["github", "gitlab", "azure"].includes(entry.id) ? (
-                      <details>
-                        <summary className="cursor-pointer text-xs text-muted-foreground">{t`Advanced`}</summary>
-                        {entry.id !== "github" ? (
+                            onClick={() => setTokenFor(entry.id)}
+                          >{t`Use a token`}</Button>
+                        )
+                      ) : null}
+                    </>
+                  )}
+                  {["github", "gitlab", "azure"].includes(entry.id) ? (
+                    <details>
+                      <summary className="cursor-pointer text-xs text-muted-foreground">{t`Advanced`}</summary>
+                      {entry.id !== "github" ? (
+                        <Input
+                          aria-label={entry.id === "gitlab" ? t`GitLab host` : t`Remote MCP URL`}
+                          placeholder={entry.id === "gitlab" ? t`GitLab host` : t`Remote MCP URL`}
+                          value={hosts[entry.id] ?? ""}
+                          onChange={(event) =>
+                            setHosts((current) => ({
+                              ...current,
+                              [entry.id]: event.target.value,
+                            }))
+                          }
+                        />
+                      ) : null}
+                      {entry.id !== "gitlab" ? (
+                        <>
                           <Input
-                            aria-label={entry.id === "gitlab" ? t`GitLab host` : t`Remote MCP URL`}
-                            placeholder={entry.id === "gitlab" ? t`GitLab host` : t`Remote MCP URL`}
-                            value={hosts[entry.id] ?? ""}
+                            aria-label={t`Client ID`}
+                            placeholder={t`Client ID`}
+                            value={clients[entry.id]?.clientId ?? ""}
                             onChange={(event) =>
-                              setHosts((current) => ({
+                              setClients((current) => ({
                                 ...current,
-                                [entry.id]: event.target.value,
+                                [entry.id]: {
+                                  ...current[entry.id],
+                                  clientId: event.target.value,
+                                },
                               }))
                             }
                           />
-                        ) : null}
-                        {entry.id !== "gitlab" ? (
-                          <>
-                            <Input
-                              aria-label={t`Client ID`}
-                              placeholder={t`Client ID`}
-                              value={clients[entry.id]?.clientId ?? ""}
-                              onChange={(event) =>
-                                setClients((current) => ({
-                                  ...current,
-                                  [entry.id]: {
-                                    ...current[entry.id],
-                                    clientId: event.target.value,
-                                  },
-                                }))
-                              }
-                            />
-                            <Input
-                              aria-label={t`Client secret`}
-                              placeholder={t`Client secret`}
-                              type="password"
-                              autoComplete="off"
-                              value={clients[entry.id]?.clientSecret ?? ""}
-                              onChange={(event) =>
-                                setClients((current) => ({
-                                  ...current,
-                                  [entry.id]: {
-                                    clientId: current[entry.id]?.clientId ?? "",
-                                    clientSecret: event.target.value || undefined,
-                                  },
-                                }))
-                              }
-                            />
-                          </>
-                        ) : null}
-                        {entry.id === "azure" ||
-                        (entry.id === "github" && clients[entry.id]?.clientId) ? (
-                          <Button
-                            disabled={busy !== null || (entry.id === "azure" && !hosts[entry.id])}
-                            onClick={() => void connect(entry, remote, "oauth")}
-                          >{t`Connect remote account`}</Button>
-                        ) : null}
-                      </details>
-                    ) : null}
-                  </div>
-                ) : null}
-                {entry.remoteDocsUrl ? (
-                  <a
-                    className="text-sm underline"
-                    href={entry.remoteDocsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >{t`Remote setup`}</a>
-                ) : null}
-              </CardContent>
-            </Card>
+                          <Input
+                            aria-label={t`Client secret`}
+                            placeholder={t`Client secret`}
+                            type="password"
+                            autoComplete="off"
+                            value={clients[entry.id]?.clientSecret ?? ""}
+                            onChange={(event) =>
+                              setClients((current) => ({
+                                ...current,
+                                [entry.id]: {
+                                  clientId: current[entry.id]?.clientId ?? "",
+                                  clientSecret: event.target.value || undefined,
+                                },
+                              }))
+                            }
+                          />
+                        </>
+                      ) : null}
+                      {entry.id === "azure" ||
+                      (entry.id === "github" && clients[entry.id]?.clientId) ? (
+                        <Button
+                          disabled={busy !== null || (entry.id === "azure" && !hosts[entry.id])}
+                          onClick={() => void connect(entry, remote, "oauth")}
+                        >{t`Connect remote account`}</Button>
+                      ) : null}
+                    </details>
+                  ) : null}
+                </div>
+              ) : null}
+              {entry.remoteDocsUrl ? (
+                <a
+                  className="text-sm underline"
+                  href={entry.remoteDocsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >{t`Remote setup`}</a>
+              ) : null}
+            </div>
           );
-        })}
-      </div>
+        }}
+      />
     </div>
   );
 }

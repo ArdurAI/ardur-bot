@@ -76,6 +76,11 @@ From `.env.images.example` (images installer). Leave blank if unused:
 | `SMTP_URL` / `EMAIL_FROM` | Password-recovery email |
 | Messaging tokens (Slack, Telegram, …) | Only if you enable those surfaces |
 
+If `ARDURBOT_AUTO_REVIEW_PROVIDER=jev` is selected while `TYPESAFE_API_KEY` is
+empty, Auto Review shows “Jev needs a TypeSafe API key.” and the API logs it once.
+The existing LLM checker remains the fallback; this configuration warning does
+not approve actions or bypass Ask-first rules.
+
 Blank optional keys are normal for a minimal published-images boot. Pipedream
 Connect keys appear only in source/Compose `.env.example`, not the images
 example.

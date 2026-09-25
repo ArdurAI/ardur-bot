@@ -34,6 +34,7 @@ import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
+  autoReviewConfigurationWarning,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
   CodexConnections,
@@ -99,6 +100,7 @@ import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
   appContract,
+  IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
@@ -3302,9 +3304,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     mcp: {
       servers: {
-        tools: authed.mcp.servers.tools.handler(({ context, input }) =>
-          integrations.tools(context.actor, input.serverId),
+        permissions: authed.mcp.servers.permissions.handler(({ context, input }) =>
+          integrations.assign(context.actor, { ...input, connectionId: input.serverId }, "mcp"),
         ),
+        tools: authed.mcp.servers.tools.handler(async ({ context, input }) => {
+          await integrations.capture(context.actor, input.serverId);
+          return IntegrationManifestSchema.parse(
+            (await integrations.owned(context.actor, input.serverId)).manifest,
+          );
+        }),
         list: authed.mcp.servers.list.handler(async ({ context }) => {
           const rows = await deps.prisma.mcpServer.findMany({
             where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
@@ -5395,7 +5403,11 @@ async function loadAutoReviewSettings(deps: RouterDeps, actor: Actor) {
   ]);
   const enabled = preference?.enabled ?? deploymentAutoReviewDefault(process.env);
   const checkerAvailable = environmentAvailable || Boolean(credential);
-  return { enabled, checkerAvailable };
+  return {
+    enabled,
+    checkerAvailable,
+    configurationWarning: autoReviewConfigurationWarning(process.env),
+  };
 }
 
 async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {

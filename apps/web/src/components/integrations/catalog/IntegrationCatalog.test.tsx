@@ -19,10 +19,16 @@ const api = vi.hoisted(() => ({
   discover: vi.fn(),
   resourceTools: vi.fn(),
   searchResources: vi.fn(),
+  computers: vi.fn(),
 }));
 vi.mock("../../../lib/rpc", () => ({
   selectedSpaceId: () => "space",
-  rpc: { integrations: api, bots: { list: api.bots }, mcp: { servers: { list: api.servers } } },
+  rpc: {
+    integrations: api,
+    bots: { list: api.bots },
+    computer: { list: api.computers },
+    mcp: { servers: { list: api.servers } },
+  },
 }));
 vi.mock("../../../lib/mcp-connect", () => ({
   MCP_OAUTH_CHANNEL: "test",
@@ -193,6 +199,7 @@ beforeEach(() => {
   );
   api.bots.mockResolvedValue([{ id: "bot", name: "Helper", archivedAt: null }]);
   api.grants.mockResolvedValue([]);
+  api.computers.mockResolvedValue([{ botId: "bot", status: { kind: "desktop" } }]);
   api.resourceTools.mockResolvedValue([]);
   api.searchResources.mockResolvedValue([]);
   api.assign.mockImplementation(async (input) =>
@@ -230,6 +237,39 @@ const click = async (element: HTMLElement) => {
 };
 
 describe("Settings integration catalog", () => {
+  it("shows local and remote accounts once and reconnects through the selected Manage view", async () => {
+    const local = { ...connected, id: "local", transport: "host-cli" as const };
+    const remote = {
+      ...connected,
+      state: "needs-sign-in" as const,
+      transport: "streamable_http" as const,
+    };
+    api.list.mockResolvedValue({
+      catalog: [
+        { ...catalog[0]!, hostCli: { command: "gh", installUrl: "https://example.test/install" } },
+      ],
+      connections: [local, remote],
+      hostSignIns: [{ id: "github", state: "signed-in", identity: "fixture-account" }],
+    });
+    await mount();
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(container.textContent).toContain("Desktop / Web");
+    expect(container.textContent).toContain("Signed in on this computer as fixture-account");
+    expect(container.textContent).toContain("Needs reconnection");
+    const manage = [...container.querySelectorAll("button")].filter(
+      (node) => node.textContent === "Manage",
+    );
+    expect(manage).toHaveLength(2);
+    await click(manage[1]!);
+    expect(container.querySelector("table")).toBeNull();
+    expect(
+      [...container.querySelectorAll("button")].filter((node) => node.textContent === "Reconnect"),
+    ).toHaveLength(1);
+    await click(button("Reconnect"));
+    expect(api.connect).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ connectionId: remote.id, authKind: "oauth" }),
+    );
+  });
   it("filters Yours and Catalog without mixing custom MCP servers into product accounts", async () => {
     connections = [connected];
     await mount();
@@ -245,7 +285,7 @@ describe("Settings integration catalog", () => {
     expect(container.querySelectorAll("tbody tr")).toHaveLength(0);
     expect(container.textContent).toContain("No items found.");
   });
-  it("shows eight cards with remote and host options", async () => {
+  it("shows eight table rows with remote and host options", async () => {
     await mount();
     expect(container.querySelectorAll('[data-testid^="integration-"]')).toHaveLength(9);
     expect(
@@ -429,7 +469,7 @@ describe("token and destination controls", () => {
       });
       await mount();
       const card = container.querySelector('[data-testid="integration-notion"]')!;
-      expect(card.querySelectorAll("p")).toHaveLength(1);
+      expect(card.querySelectorAll("p")).toHaveLength(state === "connected" ? 0 : 1);
       expect(card.textContent).toContain(sentence);
       expect(card.textContent).toContain(action);
       expect(card.querySelectorAll("button, a")).toHaveLength(1);

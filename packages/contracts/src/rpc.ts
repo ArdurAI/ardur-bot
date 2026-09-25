@@ -951,6 +951,16 @@ export const appContract = {
   },
   mcp: {
     servers: {
+      permissions: oc
+        .input(
+          z.object({
+            serverId: Id,
+            botIds: z.array(Id).max(100),
+            toolIds: z.array(z.string().min(1).max(200)).max(500),
+            spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
+          }),
+        )
+        .output(z.array(IntegrationGrantSchema)),
       tools: oc.input(z.object({ serverId: Id })).output(IntegrationManifestSchema),
       list: oc.output(z.array(McpServerSchema)),
       create: oc.input(McpServerConfigInput).output(McpServerSchema),

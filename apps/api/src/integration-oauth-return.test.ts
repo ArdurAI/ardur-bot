@@ -18,6 +18,19 @@ function fixture() {
   return { app, oauth, integrations, owner };
 }
 describe("API OAuth return page", () => {
+  it("does not claim a custom MCP connection succeeded without a successful health check", async () => {
+    const f = fixture();
+    f.integrations.owned.mockResolvedValue({
+      id: "connection",
+      name: "Custom server",
+      catalogId: null,
+      connectionState: "discovery-failed",
+    } as never);
+    const html = await (await f.app.request(`/?state=${state}&code=fake-code`)).text();
+    expect(html).toContain("Could not complete sign-in.");
+    expect(html).not.toContain("Connected to Custom server");
+    expect(html).not.toContain("window.close()");
+  });
   it("completes server-side without a browser session and renders a minimal close-and-return page", async () => {
     const f = fixture();
     const response = await f.app.request(`/?state=${state}&code=fake-code`);

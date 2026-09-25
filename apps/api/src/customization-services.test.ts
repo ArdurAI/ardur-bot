@@ -345,6 +345,13 @@ describe("customization service boundaries", () => {
     f.tables.mcpServer!.push(
       { id: "failed", ...actor, enabled: true, connectionState: "discovery-failed" },
       { id: "expired", ...actor, enabled: true, connectionState: "connected" },
+      {
+        id: "local-sign-in",
+        ...actor,
+        enabled: true,
+        connectionState: "needs-sign-in",
+        transport: "host-cli",
+      },
       { id: "disabled", ...actor, enabled: false, connectionState: "discovery-failed" },
       {
         id: "foreign",
@@ -370,7 +377,7 @@ describe("customization service boundaries", () => {
         { prefix: "/rpc", context: { actor: owner } },
       );
     expect(await (await call(actor)).response?.json()).toEqual({
-      json: { needingReconnection: 2 },
+      json: { needingReconnection: 3 },
     });
     expect((await call(null)).response?.status).toBe(401);
   });

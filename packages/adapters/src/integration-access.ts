@@ -90,9 +90,15 @@ export async function integrationApprovalDetailsForCall(
   });
   if (!assignment || !grantedMcpTools(assignment, [route.toolName]).length)
     return { approval: "disabled" };
-  if (!assignment.server.catalogId) return undefined;
+  if (!assignment.server.catalogId && !assignment.server.manifest) return undefined;
   if (route.resourceRevision !== assignment.server.revision) return { approval: "disabled" };
-  const descriptor = integrationById(assignment.server.catalogId);
+  const descriptor = assignment.server.catalogId
+    ? integrationById(assignment.server.catalogId)
+    : {
+        name: assignment.server.name,
+        available: true,
+        toolPolicies: {},
+      };
   const manifest = IntegrationManifestSchema.safeParse(assignment.server.manifest);
   if (!descriptor || !manifest.success) return { approval: "disabled" };
   const tool = manifest.data.tools.find((tool) => tool.id === route.toolName);

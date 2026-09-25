@@ -34,7 +34,7 @@ export function integrationOAuthReturn(
       await integrations.capture(result, result.serverId);
       const server = await integrations.owned(result, result.serverId);
       id = server.id;
-      if (server.connectionState === "connected" || !server.catalogId) {
+      if (server.connectionState === "connected") {
         name = server.name;
         message = `Connected to ${name}. You can close this tab and return to Ardur Bot.`;
       }

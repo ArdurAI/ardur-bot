@@ -153,6 +153,62 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
 }
 
 describe("catalog connection lifecycle", () => {
+  it.each([null, "extension", "plugin"])(
+    "persists custom MCP permissions atomically for %s provenance",
+    async (managedBy) => {
+      const f = fixture();
+      f.setRow({ catalogId: null, managedBy });
+      const input = {
+        connectionId: "connection",
+        botIds: ["bot"],
+        toolIds: ["synthetic_read"],
+        spaceToolPolicies: { synthetic_read: "allow" as const },
+      };
+      await f.service.assign(actor, input, "mcp");
+      expect(f.row().spaceToolPolicies).toEqual({ synthetic_read: "allow" });
+      expect(await f.service.grants(actor, "connection")).toEqual([
+        expect.objectContaining({ botId: "bot", toolIds: ["synthetic_read"] }),
+      ]);
+      await f.service.assign(
+        actor,
+        { ...input, spaceToolPolicies: { synthetic_read: "ask-first" } },
+        "mcp",
+      );
+      expect(f.row().spaceToolPolicies).toEqual({ synthetic_read: "ask-first" });
+      await f.service.assign(
+        actor,
+        { ...input, toolIds: [], spaceToolPolicies: { synthetic_read: "ask-first" } },
+        "mcp",
+      );
+      expect((await f.service.grants(actor, "connection"))[0]?.toolIds).toEqual([]);
+      expect(f.db.externalEffect.updateMany).toHaveBeenCalledTimes(3);
+    },
+  );
+  it("invalidates custom MCP grants when a captured tool schema changes", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: null });
+    await f.service.assign(
+      actor,
+      { connectionId: "connection", botIds: ["bot"], toolIds: ["synthetic_read"] },
+      "mcp",
+    );
+    vi.spyOn(f.service, "tools").mockResolvedValue({
+      ...manifest,
+      tools: manifest.tools.map((tool) => ({ ...tool, inputSchemaDigest: "b".repeat(64) })),
+    });
+    await f.service.capture(actor, "connection");
+    expect(await f.service.grants(actor, "connection")).toEqual([
+      expect.objectContaining({ needsReview: true, toolIds: [] }),
+    ]);
+    expect(f.row().spaceToolPolicies).toEqual({});
+  });
+  it("keeps catalog and MCP permission mutations in their owning sections", async () => {
+    const f = fixture();
+    const input = { connectionId: "connection", botIds: [], toolIds: [] };
+    await expect(f.service.assign(actor, input, "mcp")).rejects.toThrow();
+    f.setRow({ catalogId: null });
+    await expect(f.service.assign(actor, input)).rejects.toThrow();
+  });
   it.each(["authorization_not_requested", "already_connected"] as const)(
     "discovers custom servers after an OAuth probe returns %s",
     async (status) => {

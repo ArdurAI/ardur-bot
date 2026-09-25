@@ -89,6 +89,11 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     .click();
   const settings = page.getByTestId("user-settings");
   await expect(settings).toHaveAttribute("data-settings-section", "integrations");
+  await expect(settings.locator("tbody tr")).toHaveCount(10);
+  await settings.getByRole("searchbox", { name: "Search integrations" }).fill("Notion");
+  await expect(settings.locator("tbody tr")).toHaveCount(1);
+  await expect(settings.getByTestId("integration-notion")).toBeVisible();
+  await settings.getByRole("searchbox", { name: "Search integrations" }).fill("");
   for (const name of [
     "GitHub",
     "GitLab",
