@@ -311,6 +311,64 @@ describe("stabilized profiles", () => {
     expect(result.complete).toBe(false);
     expect(result.attempts).toBe(RESOURCE_PROFILES["mixed-soak"].durationMs / 1000 + 1);
   });
+  it("keeps a fully sampled soak when abort rejects with an ordinary error", async () => {
+    let now = 0;
+    const result = await collectResourceProfile({
+      profile: "mixed-soak",
+      signal: new AbortController().signal,
+      clock: {
+        now: () => now,
+        sleep: async (ms) => {
+          now += ms;
+        },
+      },
+      sample: async () => ({ atMs: now, processes: [] }),
+      mixedWork: (signal) =>
+        new Promise<void>((_resolve, reject) => {
+          const cancel = () => reject(new Error("Synthetic call cancelled"));
+          if (signal.aborted) {
+            cancel();
+            return;
+          }
+          signal.addEventListener("abort", cancel, { once: true });
+        }),
+      onAttempt: async () => {},
+    });
+    expect(result.attempts).toBe(RESOURCE_PROFILES["mixed-soak"].durationMs / 1000 + 1);
+    expect(result.failures).toBe(0);
+    expect(result.missed).toBe(0);
+    expect(result.workloadFailures).toBe(0);
+    expect(result.complete).toBe(true);
+  });
+  it("counts a late unrelated AbortError after the window as a workload failure", async () => {
+    let now = 0;
+    let rejectLater: ((error: unknown) => void) | undefined;
+    const duration = RESOURCE_PROFILES["mixed-soak"].durationMs;
+    const result = await collectResourceProfile({
+      profile: "mixed-soak",
+      signal: new AbortController().signal,
+      clock: {
+        now: () => now,
+        sleep: async (ms) => {
+          now += ms;
+        },
+      },
+      sample: async () => ({ atMs: now, processes: [] }),
+      mixedWork: () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectLater = reject;
+        }),
+      onAttempt: async (attempt) => {
+        if (attempt.scheduledMs === duration)
+          setTimeout(() => {
+            rejectLater?.(new DOMException("The operation was aborted.", "AbortError"));
+          }, 0);
+      },
+    });
+    expect(result.attempts).toBe(duration / 1000 + 1);
+    expect(result.workloadFailures).toBe(1);
+    expect(result.complete).toBe(false);
+  });
 });
 
 const energyBinding: EnergyBinding = {

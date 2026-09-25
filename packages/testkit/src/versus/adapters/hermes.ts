@@ -121,7 +121,8 @@ export function syntheticHermesConfig(budget: Budget, providerUrl: string, broke
       reasoning_effort: "none",
       temperature: budget.temperature,
     },
-    mcp_servers: { scoreboard: { url: brokerUrl, transport: "http" } },
+    mcp_servers: { "mcp-scoreboard": { url: brokerUrl, transport: "http" } },
+    security: { allow_lazy_installs: false },
     auxiliary: {
       vision: aux,
       compression: aux,
@@ -194,7 +195,7 @@ export class HermesOutput {
     const insideResponse = this.responseLines !== null;
     // Source: cli_stream_mixin's response box and cli_chat_turn_mixin's HORIZONTALS panel.
     // Keep unsanitized assistant text for the hidden grader; diagnostics are redacted separately.
-    const streamHeader = /^\s*╭─+\s*⚕ Hermes(?: \d{2}:\d{2}(?::\d{2})?)?─+╮\s*$/.test(line);
+    const streamHeader = /^\s*╭─+\s*⚕ Hermes(?: \d{2}:\d{2}(?::\d{2})?)?\s*─+╮\s*$/.test(line);
     const panelHeader = /^\s*─+\s+⚕ Hermes\s+─+\s*$/.test(line);
     if (streamHeader || panelHeader) {
       if (this.responseLines !== null) this.protocolError = "ambiguous-assistant-reply";

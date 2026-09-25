@@ -424,7 +424,9 @@ export async function nativeBindingExperiment(
   };
 }
 
-export async function computerLifecycleExperiment(): Promise<MatrixResult> {
+export async function computerLifecycleExperiment(options?: {
+  desktop?: Parameters<typeof runComputerLifecycle>[0];
+}): Promise<MatrixResult> {
   const dir = await mkdtemp(path.join(tmpdir(), "matrix-computer-"));
   try {
     const sandbox = new FakeSandboxProvider();
@@ -441,23 +443,24 @@ export async function computerLifecycleExperiment(): Promise<MatrixResult> {
     await sandbox.stop(warm, context);
     const resumed = await sandbox.provision(request, context);
     const other = await sandbox.provision({ ...request, botId: "other-fixture" }, context);
-    const checks = {
+    const fakeChecks = {
       coldFresh: cold.fresh === true,
       warmSameComputer: warm.id === cold.id && warm.fresh === false,
       stoppedResume: resumed.id === cold.id,
       scopesDistinct: other.id !== cold.id,
     };
     const desktop = await runComputerLifecycle(
-      new DesktopSandboxProvider({ root: dir }),
+      options?.desktop ?? new DesktopSandboxProvider({ root: dir }),
       request,
       context,
     );
+    const checks = { ...fakeChecks, ...desktop.checks };
     return {
       id: "O11",
       experiment: "O11",
       tier: "T0",
-      status: "incomplete",
-      checks: { ...checks, ...desktop.checks },
+      status: Object.values(checks).every(Boolean) ? "passed" : "finding",
+      checks,
       measurements: {
         modes: ["fake", "desktop"],
         runners: COMPUTER_RUNNERS,

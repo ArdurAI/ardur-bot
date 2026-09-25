@@ -127,16 +127,15 @@ export function IntegrationCards({
       setBusy(null);
     }
   }
-  const added = remoteAdditions(data, remoteServers, linked);
-  const listed = { ...data, connections: [...data.connections, ...added.connections] };
-  const active = listed.connections.find(
+  const customServers = customServerRows(data, remoteServers, linked);
+  const active = data.connections.find(
     (row) =>
       row.id === selected &&
       row.state !== "awaiting-consent" &&
       row.state !== "not-connected" &&
       row.state !== "cancelled",
   );
-  const descriptor = listed.catalog.find((entry) => entry.id === active?.catalogId);
+  const descriptor = data.catalog.find((entry) => entry.id === active?.catalogId);
   if (active && descriptor)
     return (
       <IntegrationDetails
@@ -174,8 +173,8 @@ export function IntegrationCards({
     }
   }
   const rows = [
-    ...connectorRows({ ...listed, servers: [], catalogTab: true }),
-    ...connectorRows({ catalog: [], connections: [], servers: added.extra }),
+    ...connectorRows({ ...data, servers: [], catalogTab: true }),
+    ...connectorRows({ catalog: [], connections: [], servers: customServers }),
   ].filter(
     (row) =>
       (tab === "catalog" || !row.id.startsWith("catalog:")) &&
@@ -225,15 +224,15 @@ export function IntegrationCards({
         rows={rows}
         busy={busy}
         onConnect={(row) => {
-          const entry = listed.catalog.find((item) => item.id === row.catalogId);
+          const entry = data.catalog.find((item) => item.id === row.catalogId);
           if (entry)
             void connect(
               entry,
-              listed.connections.find((item) => item.id === row.id),
+              data.connections.find((item) => item.id === row.id),
             );
         }}
         renderType={(row) => {
-          const entry = listed.catalog.find((item) => item.id === row.catalogId);
+          const entry = data.catalog.find((item) => item.id === row.catalogId);
           return entry?.hostCli && (entry.endpoint || entry.id === "azure") ? (
             <span>
               {t`Desktop`} / {t`Web`}
@@ -243,15 +242,15 @@ export function IntegrationCards({
           );
         }}
         renderActions={(row) => {
-          const entry = listed.catalog.find((item) => item.id === row.catalogId);
+          const entry = data.catalog.find((item) => item.id === row.catalogId);
           if (!entry) return null;
-          const remote = listed.connections.find(
+          const remote = data.connections.find(
             (row) => row.catalogId === entry.id && row.transport !== "host-cli",
           );
-          const local = listed.connections.find(
+          const local = data.connections.find(
             (row) => row.catalogId === entry.id && row.transport === "host-cli",
           );
-          const hostIdentity = listed.hostSignIns?.find((row) => row.id === entry.id);
+          const hostIdentity = data.hostSignIns?.find((row) => row.id === entry.id);
           const identity = hostIdentity?.identity;
           const manage = (row: IntegrationConnection) => (
             <Button variant="outline" onClick={() => setSelected(row.id)}>{t`Manage`}</Button>
@@ -441,50 +440,33 @@ async function readIntegrationPage() {
   return { catalog, servers };
 }
 
-/** integrations.list omits remote servers that have no catalog id. */
-function remoteAdditions(
+/**
+ * integrations.list omits remote servers that have no catalog id. Only servers that match no
+ * built-in app get a row here: a built-in app keeps its own row and connect flow, because its
+ * access controls live on catalog connections, not on a raw server at the same address.
+ */
+function customServerRows(
   data: IntegrationCatalogList,
   servers: McpServer[],
   linked: ReadonlySet<string>,
-) {
-  const connections: IntegrationConnection[] = [];
-  const extra: McpServer[] = [];
+): McpServer[] {
   const known = new Set(data.connections.map((row) => row.id));
-  for (const server of servers) {
-    if (known.has(server.id)) continue;
+  const builtInEndpoints = new Set(data.catalog.flatMap((entry) => entry.endpoint ?? []));
+  return servers.flatMap((server) => {
+    if (
+      known.has(server.id) ||
+      server.catalogId ||
+      (server.endpoint !== null && builtInEndpoints.has(server.endpoint))
+    )
+      return [];
     const state = liveRemoteState(server, linked);
-    if (!state) continue;
-    const descriptor = data.catalog.find(
-      (entry) =>
-        entry.id === server.catalogId ||
-        (Boolean(entry.endpoint) && entry.endpoint === server.endpoint),
-    );
-    const represented =
-      descriptor &&
-      (data.connections.some(
-        (row) => row.catalogId === descriptor.id && row.transport !== "host-cli",
-      ) ||
-        connections.some((row) => row.catalogId === descriptor.id));
-    if (represented) continue;
-    if (descriptor) {
-      connections.push({
-        id: server.id,
-        catalogId: descriptor.id,
-        state,
-        needsReview: false,
-        spaceToolPolicies: {},
-        manifest: null,
-        transport: server.transport,
-      });
-    } else if (!server.catalogId) {
-      extra.push(
-        state === "connected"
-          ? { ...server, enabled: true, oauthStatus: "connected", connectionState: "connected" }
-          : { ...server, enabled: true, oauthStatus: "reconnect", connectionState: state },
-      );
-    }
-  }
-  return { connections, extra };
+    if (!state) return [];
+    return [
+      state === "connected"
+        ? { ...server, enabled: true, oauthStatus: "connected", connectionState: "connected" }
+        : { ...server, enabled: true, oauthStatus: "reconnect", connectionState: state },
+    ];
+  });
 }
 
 function liveRemoteState(

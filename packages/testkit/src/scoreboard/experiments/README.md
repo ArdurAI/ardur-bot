@@ -31,7 +31,9 @@ them to two cases. Use the serial matrix CLI for controlled resource/timing comp
 
 Exit `0` means every selected probe passed its declared checks; `1` means a measured finding;
 `2` means incomplete evidence, a missing prerequisite, changed source or a release request
-without the complete release comparison. Every attempt is retained, including failed starts.
+without the complete release comparison. An incomplete result exits 2 even when its checks
+record that an observation did not happen. A false check on a passed or finding result, and
+any finding, exit 1. Every attempt is retained, including failed starts.
 The release verdict is always withheld by this runner.
 
 ## Scope and plans
@@ -56,13 +58,13 @@ maintenance/callback dependencies. They do not substitute for integrated executo
 | O2 | W0-6 / W0-7 / W1-10 | Pi HTTP/SSE parsing, byte/Unicode/secret fragmentation, safe PostgreSQL consumer. The short final delta is delayed until just before the finish frame and `[DONE]`; the assembled text is complete only after that delay. Renderer and executor flush cadence remain open. |
 | O3 | W0-6 / W1-6 / Chief of Staff | Actual serialized provider requests under time, memory, grant and schema changes; eligibility hashes are not cache-hit telemetry. |
 | O4 | W0-6 / W1-5 | Gold fact/negation/supersession/approval/unresolved/source probes, failed/oversized summary and concurrent generation edit; live model quality and summary usage remain open. |
-| O5 | W0-6 / W1-2 | Real document/revision scaling and denied scope. A head read that materializes unrelated revisions is a finding. No observed read is incomplete (`no-reads-observed`), not a pass. Query count, lock wait and peak heap remain open. |
+| O5 | W0-6 / W1-2 | Real document/revision scaling and denied scope. A head read that materializes unrelated revisions is a finding (exit 1). No observed read is incomplete (`no-reads-observed`) and exits 2, not a pass. Query count, lock wait and peak heap remain open. |
 | O6 | W0-6 / W1-3 / robust integrations | Real catalog/session code with durable grants, revisions, pagination, slow/unavailable transport and execute-after-revoke; full task-level required/optional semantics remain open. |
 | O7 | W0-6 / Chief of Staff / fleet | Real Graphile open-loop/fixed-concurrency work and saturated callback negative control; real maintenance/delegation/native placement remains open. |
 | O8 | W0-6 / robust integrations | Real Pi HTTP failures for two bots. Auth is not retried and Retry-After of one second is honored. There is no shared admission budget, and a non-numeric Retry-After retries immediately. Both are findings. |
 | O9 | W0-6 | All ten SIGKILL boundaries below plus grant revocation and pin mutation controls. |
 | O10 | W0-6 / W1-9 / robust integrations | Durable native binding changes, bounded queue overflow, host transport disconnect; installed CLI/login/version/leak acceptance remains open. |
-| O11 | W0-6 / fleet | Fake and actual desktop workspace lifecycle; `runComputerLifecycle` also accepts existing Docker, Podman, SSH and Kubernetes providers on isolated runners. |
+| O11 | W0-6 / fleet | Fake and actual desktop workspace lifecycle. The result passes or fails from those checks. Docker, Podman, SSH and Kubernetes remain gaps until an isolated runner calls `runComputerLifecycle`. |
 | O12 | W0-7 | Packaged startup, physical energy, memory sampling, quiet interval and soak; external runner dependency. |
 | O13 | W0-7 / fleet | Feature not implemented. Normal initialization remains the fallback; a workspace snapshot receipt does not imply a startup snapshot. |
 
@@ -98,17 +100,24 @@ deadline does not include API startup. The continuous Graphile runner schedules 
 sweep within 60 seconds of worker start. The 75-second window is one full sweep plus 15 seconds,
 without changing its scheduler or jitter. crash-08 and crash-10 send `observing` when recovery
 work begins, so their shorter path stays on the same 90-second budget.
-After confirmed process death the fixture expires run leases and computer execution leases: it sets
-`expiresAt` in the past and keeps the row. Production reclaim updates that row and increments its
-fence. Deleting the row would let the next acquire insert fence 1 and hide a reclaim regression.
-When a lease existed and the dead run was queued, leased, or running, recovery must show the same
-lease id and a higher fence. A terminal run, and a run already waiting for approval, keeps that
-expired tombstone: recovery does not call `acquireComputerExecutionLease`, so the fence stays put.
-Crash-01 and crash-02 die before that acquire, so they have no row to reclaim; a fresh fence-1
-insert there is the create path, not evidence of reclaim. Graphile locks are aged so production stale-lock
-reclamation can run without waiting hours. This is a declared clock acceleration, not autonomous
-wall-clock recovery evidence. The real native client is used against a synthetic loopback host;
-no installed CLI or human acceptance is implied.
+After confirmed process death the fixture expires run leases that are still leased or running by
+setting `leaseExpiresAt` to the epoch, and expires computer-execution rows without deleting them.
+`runLeaseClockAdvanced` is that run-lease acceleration. `computerLeaseVerdict` is the separate
+computer-lease oracle. `computerLeaseReclaimed` is true only when recovery reclaimed the same row.
+A retained tombstone is not a reclaim. Crash-02 dies at leased, before any computer lease, so the
+advanced run-lease clock is not wall-clock recovery and there is no computer row to reclaim.
+Production reclaim updates an existing row and increments its fence. Deleting the row would let the
+next acquire insert fence 1 and hide a reclaim regression. When a lease existed and the dead run was queued, leased, or running, recovery must show the same
+lease id and a higher fence. `continueRun` also claims waiting_input and waiting_takeover. A retry
+of that job calls `acquireComputerExecutionLease` and increments the same row; that higher fence is
+a reclaim, not a tombstone violation. The retry does not always run before the observation ends, so
+an unchanged row is still that lease. A pending approval is waiting_input, not a finished run.
+A terminal run (completed, failed, or cancelled) returns before that acquire and keeps the expired
+tombstone. Crash-01 dies before a computer lease
+exists. A fresh fence-1 insert there is the create path, not evidence of reclaim. Graphile locks
+are aged so production stale-lock reclamation can run without waiting hours. This is a declared
+clock acceleration, not autonomous wall-clock recovery evidence. The real native client is used
+against a synthetic loopback host; no installed CLI or human acceptance is implied.
 
 Retries use the existing nonce/effect contracts. A completed external action without a durable
 receipt must retain uncertainty: see the [AWS idempotent API guidance](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/),
@@ -123,8 +132,10 @@ read-back check. Their binding includes the base commit, deterministic tracked/u
 digest, dependency lock digest, image digests and sizes, environment and complete manifest.
 `matrixEvidence` emits the existing W0-1 `ExperimentEvidence`/`CrashEvidence` fragments for the
 scoreboard workflow. Revoke and pin controls are separate attempts (`crash-03-revoke`,
-`crash-03-pin`). A failed or incomplete control is folded into that crash's `safetyPassed`, so
-the fragment cannot report the boundary safe. The evidence schema stays the existing crash keys.
+`crash-03-pin`). A failed or incomplete control forces that crash's `safetyPassed` to false even
+when the base attempt is incomplete, so the fragment cannot report the boundary safe. An
+incomplete crash may record that failure and must not record a recovery or a passed safety
+result. The evidence schema stays the existing crash keys.
 Detailed probe results are supplemental raw evidence, not a replacement release schema. All
 experiment variants remain incomplete until their full acceptance closes.
 

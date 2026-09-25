@@ -705,8 +705,8 @@ export function parsePerformanceEvidenceReport(
           check(!crash.taskCompleted, "uncertainty is not task completion");
       } else
         check(
-          crash.recovery === null && crash.safetyPassed === null && crash.taskCompleted === null,
-          "incomplete crash cannot claim a result",
+          crash.recovery === null && crash.taskCompleted === null && crash.safetyPassed !== true,
+          "incomplete crash cannot claim recovery or a passed safety result",
         );
     }
     unique(array(report.usage).map((request) => request.requestId));

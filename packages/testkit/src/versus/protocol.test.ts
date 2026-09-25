@@ -103,6 +103,15 @@ describe("Hermes stateful protocol", () => {
     output.end();
     expect(output.reply).toBe("Saved café.\n\nFinal artifact saved.");
     expect(output.protocolError).toBeNull();
+    const spaced = new HermesOutput(emit);
+    spaced.push(
+      Buffer.from(
+        "╭─ ⚕ Hermes ────────────────────────────────╮\nSaved the requested result.\n╰──────────────────────────────────────────────╯\n",
+      ),
+    );
+    spaced.end();
+    expect(spaced.reply).toBe("Saved the requested result.");
+    expect(spaced.protocolError).toBeNull();
   });
   it.each(["unrecognized arguments", "invalid choice", "no such option"])(
     "keeps valid assistant discussion of %s and still detects a failing CLI exit",
@@ -145,6 +154,8 @@ describe("Hermes stateful protocol", () => {
       "http://127.0.0.1:124/mcp/cap",
     );
     expect(config.fallback_providers).toEqual([]);
+    expect(config.mcp_servers).toHaveProperty("mcp-scoreboard");
+    expect(config.security.allow_lazy_installs).toBe(false);
     expect(config.auxiliary.compression.model).toBe(selfTestBudget().model.id);
     expect(config.auxiliary.background_review.enabled).toBe(false);
     expect(config.curator.enabled).toBe(false);
