@@ -1,7 +1,9 @@
+import type { ComputerRef } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
 import { fakePodmanSupervisor } from "./docker-test-supervisor.js";
+import { FakeSandboxProvider } from "./fake-sandbox.js";
 import { createKubernetesApi } from "./kubernetes-client.js";
 import { FakeKubernetesApi } from "./kubernetes-test-api.js";
 import { NoneSandboxProvider } from "./none-sandbox.js";
@@ -44,6 +46,34 @@ function fixture(metadata: Record<string, unknown>) {
 }
 
 describe("saved computer connections", () => {
+  it.each([undefined, "saved"])(
+    "forwards history cwd options through connection %s and preserves execution defaults",
+    async (connectionId) => {
+      const { connections } = fixture({ engine: "podman" });
+      const fallback = new FakeSandboxProvider();
+      const connected = new FakeSandboxProvider();
+      const fallbackCwd = vi.spyOn(fallback, "resolveCommandCwd");
+      const connectedCwd = vi.spyOn(connected, "resolveCommandCwd");
+      vi.spyOn(connections, "resolve").mockResolvedValue(connected);
+      const provider = new ConnectedSandboxProvider(fallback, connections);
+      const computer: ComputerRef = {
+        id: "computer",
+        providerRef: "ref",
+        botId: "bot",
+        kind: "daytona",
+        connectionId,
+      };
+      const routed = connectionId ? connectedCwd : fallbackCwd;
+      await expect(
+        provider.resolveCommandCwd(computer, undefined, context, { activate: false }),
+      ).resolves.toBe("/home/ardurbot");
+      expect(routed).toHaveBeenLastCalledWith(computer, undefined, context, { activate: false });
+      await provider.resolveCommandCwd(computer, "project", context);
+      expect(routed).toHaveBeenLastCalledWith(computer, "project", context);
+      expect(connectionId ? fallbackCwd : connectedCwd).not.toHaveBeenCalled();
+    },
+  );
+
   it("routes a saved Podman computer even when the deployment default is none", async () => {
     vi.stubGlobal("fetch", fakePodmanSupervisor(context));
     const { provider, secrets } = fixture({ engine: "podman", socket: "/tmp/podman.sock" });

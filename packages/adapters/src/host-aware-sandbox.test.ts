@@ -31,6 +31,26 @@ describe("host-aware sandbox", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it.each(["desktop", "daytona"] as const)(
+    "forwards history cwd options to the %s provider and preserves execution defaults",
+    async (kind) => {
+      const isolated = new FakeSandboxProvider();
+      const host = new FakeSandboxProvider();
+      const isolatedCwd = vi.spyOn(isolated, "resolveCommandCwd");
+      const hostCwd = vi.spyOn(host, "resolveCommandCwd");
+      const sandbox = new HostAwareSandbox(isolated, host, async () => false);
+      const computer: ComputerRef = { id: "computer", providerRef: "ref", botId: "bot", kind };
+      const routed = kind === "desktop" ? hostCwd : isolatedCwd;
+      await expect(
+        sandbox.resolveCommandCwd(computer, undefined, ctx, { activate: false }),
+      ).resolves.toBe("/home/ardurbot");
+      expect(routed).toHaveBeenLastCalledWith(computer, undefined, ctx, { activate: false });
+      await sandbox.resolveCommandCwd(computer, "project", ctx);
+      expect(routed).toHaveBeenLastCalledWith(computer, "project", ctx);
+      expect(kind === "desktop" ? isolatedCwd : hostCwd).not.toHaveBeenCalled();
+    },
+  );
+
   it("exposes and routes page commands through the production Docker wrapper", async () => {
     const result = {
       ok: true,

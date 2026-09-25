@@ -135,12 +135,8 @@ export class HostAwareSandbox implements SandboxProvider {
     return this.route(computer).environmentNote?.(computer, context);
   }
 
-  async resolveCommandCwd(
-    computer: ComputerRef,
-    cwd: string | undefined,
-    context: AdapterContext,
-  ): Promise<string | null> {
-    return this.route(computer).resolveCommandCwd?.(computer, cwd, context) ?? null;
+  async resolveCommandCwd(...args: Parameters<NonNullable<SandboxProvider["resolveCommandCwd"]>>) {
+    return this.route(args[0]).resolveCommandCwd?.(...args) ?? null;
   }
 
   async *execute(
