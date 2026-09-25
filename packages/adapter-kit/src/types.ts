@@ -9,6 +9,7 @@ import type {
 } from "@ardurbot/contracts";
 
 export interface AdapterContext {
+  toolAccessMode?: "when-needed" | "all";
   operationId: string;
   traceId: string;
   spaceId: string;
@@ -61,6 +62,7 @@ export interface PortableFile {
 }
 
 export interface ComputerRef {
+  networkEgress?: boolean;
   imageProfile?: "base" | "developer";
   connectionId?: string | null;
   id: string;
@@ -563,7 +565,7 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
-  "briefs.maintain": Record<string, never>;
+  "briefs.maintain": { runId?: string };
   "learning.curate": { spaceId?: string; requestedBy?: string; requestId?: string };
   "learning.review": {
     runId: string;

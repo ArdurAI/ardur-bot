@@ -23,6 +23,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
     for (const row of rows) {
       if (row.revisions.length > 0) continue;
       row.revisions.push({
+        kind: row.kind,
         id: `legacy:${row.id}`,
         documentId: row.id,
         revision: row.revision,
@@ -68,6 +69,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
         },
         revisions: row.revisions.map((r) =>
           DocumentRevisionSchema.parse({
+            kind: r.kind,
             documentId: row.id,
             revision: r.revision,
             scopeKey: scope,
@@ -109,6 +111,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
         scope: head.scopeKey.kind,
         scopeKey: scopeKey(head.scopeKey),
         path: head.path,
+        kind: head.kind ?? "topic",
         content: head.content,
         revision: head.revision,
         deletedAt: head.deletedAt ? new Date(head.deletedAt) : null,
@@ -146,6 +149,7 @@ export class PostgresMemoryJournal implements MemoryJournal {
             documentId: doc.id,
             commitId: r.commitId,
             revision: r.revision,
+            kind: r.kind ?? "topic",
             content: r.content,
             sourceRunId: r.runId,
             sourceThreadId: r.threadId,

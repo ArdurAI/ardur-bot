@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { NativeAccountSettings } from "../components/account-settings";
 import { useAvatarStyle } from "../components/avatar-style";
 import { BotAvatar } from "../components/bot-avatar";
 import { HostComputerStatus } from "../components/host-computer-status";
@@ -236,6 +237,7 @@ export default function Account() {
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
+        <NativeAccountSettings />
         <HostComputerStatus />
         <Button
           color={mobileTokens().primary}
@@ -369,6 +371,15 @@ export default function Account() {
         <Pressable
           accessibilityRole="button"
           disabled={pending}
+          onPress={() => router.push("/capabilities")}
+          style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.settingsTitle}>{t("Capabilities")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
           onPress={() => router.push("/memory")}
           style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
         >
@@ -393,6 +404,35 @@ export default function Account() {
           style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
         >
           <Text style={styles.settingsTitle}>{t("Integrations")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => router.push("/mcp")}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsTitle}>{t("MCP")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => router.push("/skills")}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsTitle}>{t("Skills")}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending}
+          onPress={() => router.push("/plugins")}
+          style={styles.settingsButton}
+        >
+          <Text style={styles.settingsTitle}>{t("Plugins")}</Text>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
 

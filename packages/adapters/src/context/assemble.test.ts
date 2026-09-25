@@ -1,3 +1,4 @@
+import { botInstructionText } from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
 import { assembleTurnContext, needsRecall } from "./assemble.js";
 import { markStablePrefix } from "./provider-cache.js";
@@ -61,11 +62,36 @@ describe("turn context", () => {
   });
   it("refuses to silently truncate instructions or the new request", async () => {
     await expect(
-      assembleTurnContext({ instructions: "x".repeat(24001), history: [], message: "Hello" }),
+      assembleTurnContext({ instructions: "x".repeat(64001), history: [], message: "Hello" }),
     ).rejects.toThrow("instructions exceed");
     await expect(
       assembleTurnContext({ instructions: "Rules", history: [], message: "x".repeat(48001) }),
     ).rejects.toThrow("message exceeds");
+  });
+  it("keeps account instructions subordinate to bot instructions in the stable prefix", async () => {
+    const instructions = botInstructionText(
+      {
+        name: "Coordinator",
+        title: "Chief of Staff",
+        description: "",
+        instructions: "Use English.",
+      },
+      {
+        displayName: "",
+        workType: "",
+        instructions: "Use Spanish.",
+        revision: 4,
+        actorId: "owner",
+        origin: "human-settings",
+      },
+    );
+    const first = await assembleTurnContext({ instructions, history: [], message: "First turn" });
+    const second = await assembleTurnContext({ instructions, history: [], message: "Next turn" });
+    expect(first.stablePrefix).toBe(second.stablePrefix);
+    expect(first.stablePrefix).toContain("Use English.");
+    expect(first.stablePrefix).toContain("Use Spanish.");
+    expect(first.stablePrefix).toContain("bot's own instructions take precedence on conflict");
+    expect(first.snapshot.layers.stable).toBe(instructions.length);
   });
   it("places an explicit Anthropic cache marker on the exact stable prefix", () => {
     expect(

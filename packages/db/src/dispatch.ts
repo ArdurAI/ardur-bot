@@ -9,7 +9,12 @@ import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
 import { finishDelegation } from "./delegation.js";
-import { auditDevice, DeviceRequestError, deviceDigest } from "./device-grants.js";
+import {
+  assertDeviceTrusted,
+  auditDevice,
+  DeviceRequestError,
+  deviceDigest,
+} from "./device-grants.js";
 import { appendEventInTransaction, steerRunInTransaction } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import type { ChannelDispatchOrigin } from "./messaging-routes.js";
@@ -51,6 +56,7 @@ export async function loadRemoteAuthority(
   grant: DeviceGrant,
   botId: string,
 ): Promise<RemoteAuthority> {
+  await assertDeviceTrusted(tx, grant);
   const [home, member, bot, policies] = await Promise.all([
     tx.instanceIdentity.findUnique({ where: { id: "home" } }),
     tx.spaceMember.findUnique({
@@ -133,6 +139,7 @@ export async function admitDispatch(
         where: { id: grant.id, instanceId: grant.instanceId, revokedAt: null },
       });
       if (!liveGrant) throw new DeviceRequestError("This device is no longer allowed to run work.");
+      await assertDeviceTrusted(tx, liveGrant);
       const replay = await tx.dispatchReceipt.findUnique({
         where: { instanceId_spaceId_deviceGrantId_clientNonce: key },
       });

@@ -3,7 +3,7 @@ import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ard
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
 import { useId, useMemo, useState } from "react";
-import { BotContext } from "../components/Context";
+import { BotContext } from "../components/ContextEntry";
 
 function validSelection(name: string, selected: readonly string[]) {
   return (

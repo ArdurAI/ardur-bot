@@ -6,6 +6,7 @@ import {
   HostLifecyclePreferences,
   HostServiceStore,
   HostServiceSupervisor,
+  hostServiceIdentity,
   hostServiceLaunch,
   hostStorageAvailable,
   selectedHostRoot,
@@ -74,6 +75,7 @@ export function installHostService(options: {
     const config = await store.read();
     return {
       configured: config?.apiUrl === target,
+      registrationId: config?.apiUrl === target ? hostServiceIdentity(config) : undefined,
       roots: config?.apiUrl === target ? config.hostRoots : [],
       keepRunning: lifecycle.keepRunning,
     };

@@ -118,6 +118,7 @@ export class JournalDocumentStore implements MemoryDocumentStore {
     const id = doc?.id ?? randomUUID();
     const createdAt = this.clock().toISOString();
     const revision = DocumentRevisionSchema.parse({
+      kind: input.kind ?? current?.kind ?? "topic",
       documentId: id,
       revision: (current?.revision ?? 0) + 1,
       scopeKey: input.scopeKey,

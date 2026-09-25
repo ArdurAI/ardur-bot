@@ -180,7 +180,15 @@ function fixture({
   };
   const prisma = {
     delegationRoot: { findUnique: vi.fn(async () => null) },
-    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+    space: {
+      findUnique: vi.fn(async () => ({ allowedModelDestinations: null })),
+      findUniqueOrThrow: vi.fn(async () => ({
+        botInstructions: "",
+        botInstructionsAuthorId: null,
+        botInstructionsRevision: 0,
+      })),
+    },
+    user: { findUniqueOrThrow: vi.fn(async () => ({ displayName: "", workType: "" })) },
 
     computer: {
       findFirstOrThrow: vi.fn(async () => ({

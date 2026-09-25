@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const ContextBudgetsSchema = z.object({
-  stable: z.number().int().min(4000).max(64000).default(24000),
+  stable: z.number().int().min(4000).max(64000).default(64000),
   brief: z.number().int().min(200).max(6000).default(6000),
   summary: z.number().int().min(200).max(12000).default(4000),
   messages: z.number().int().min(1000).max(48000).default(12000),

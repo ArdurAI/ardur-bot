@@ -27,8 +27,12 @@ import { Check, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { McpToolReview } from "../components/integrations/catalog/McpToolReview";
+import { desktopBridge } from "../lib/desktop";
 import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
 import { rpc } from "../lib/rpc";
+import { McpConfigEditor } from "./customize/McpConfigEditor";
+import { McpDefaults } from "./customize/McpDefaults";
+import { McpDiagnostics } from "./customize/McpDiagnostics";
 
 function oauthStatusText(server: McpServer): string | null {
   if (server.oauthStatus === "connected") return t`OAuth connected`;
@@ -44,12 +48,15 @@ function oauthActionLabel(server: McpServer, pending: boolean): string {
 export function McpServersOverlay({
   onClose,
   embedded = false,
+  onBusyChange,
 }: {
   onClose: () => void;
   embedded?: boolean;
+  onBusyChange?(busy: boolean): void;
 }) {
   const { t } = useLingui();
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [reviewing, setReviewing] = useState<McpServer | null>(null);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [bots, setBots] = useState<Bot[]>([]);
@@ -66,7 +73,13 @@ export function McpServersOverlay({
   const [args, setArgs] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [defaultsBusy, setDefaultsBusy] = useState(false);
   const [oauthPending, setOauthPending] = useState<string | null>(null);
+
+  useEffect(() => {
+    onBusyChange?.(saving || defaultsBusy || editing || oauthPending !== null);
+    return () => onBusyChange?.(false);
+  }, [saving, defaultsBusy, editing, oauthPending, onBusyChange]);
 
   async function refresh() {
     const [nextServers, nextBots, assignments] = await Promise.all([
@@ -75,7 +88,7 @@ export function McpServersOverlay({
       rpc.mcp.assignments.all(),
     ]);
     const activeBots = nextBots.filter((bot) => !bot.archivedAt);
-    setServers(nextServers);
+    setServers(nextServers.filter((server) => !server.catalogId));
     setBots(activeBots);
     setBotAssignments(
       Object.fromEntries(
@@ -256,6 +269,9 @@ export function McpServersOverlay({
   return (
     <McpSettingsFrame embedded={embedded} onClose={onClose}>
       <div className="contents">
+        {editing ? (
+          <McpConfigEditor onClose={() => setEditing(false)} onApplied={() => void refresh()} />
+        ) : null}
         {reviewing ? (
           <McpToolReview
             server={reviewing}
@@ -286,6 +302,17 @@ export function McpServersOverlay({
           </p>
         ) : null}
         <div className="rk-scroll min-h-0 space-y-5 overflow-y-auto p-6">
+          <McpDefaults
+            servers={servers}
+            onBusyChange={setDefaultsBusy}
+            onEnabled={async (server) => {
+              await refresh();
+              setReviewing(server);
+            }}
+          />
+          {desktopBridge()?.customization ? (
+            <Button variant="outline" onClick={() => setEditing(true)}>{t`Edit config`}</Button>
+          ) : null}
           {!adding ? (
             <Button onClick={() => setAdding(true)}>
               <Trans>Add MCP server</Trans>
@@ -313,7 +340,12 @@ export function McpServersOverlay({
                   </Field>
                   <Tabs
                     value={transport}
-                    onValueChange={(value) => setTransport(value as McpTransport)}
+                    onValueChange={(value) => {
+                      if (value === "stdio" && desktopBridge()?.customization) {
+                        setAdding(false);
+                        setEditing(true);
+                      } else setTransport(value as McpTransport);
+                    }}
                   >
                     <TabsList className="w-full">
                       <TabsTrigger value="streamable_http">HTTP</TabsTrigger>
@@ -479,6 +511,14 @@ export function McpServersOverlay({
                             {statusText}
                           </p>
                         ) : null}
+                        {server.managedBy ? (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {server.managedBy === "extension"
+                              ? t`This server is managed by an extension`
+                              : t`This server is managed by a plugin`}
+                          </p>
+                        ) : null}
+                        {server.transport === "stdio" ? <McpDiagnostics server={server} /> : null}
                         <div className="mt-3 flex flex-wrap items-center gap-1.5">
                           <span className="text-[11px] text-muted-foreground">
                             <Trans>Agents:</Trans>
@@ -512,8 +552,20 @@ export function McpServersOverlay({
                           >
                             <Trans>Review tools</Trans>
                           </Button>
-                          {server.transport !== "stdio" ? (
+                          {server.transport !== "stdio" && !server.managedBy ? (
                             <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  void rpc.mcp.servers
+                                    .update({ id: server.id, enabled: !server.enabled })
+                                    .then(() => refresh())
+                                    .catch(() => setError(t`Could not update MCP server.`));
+                                }}
+                              >
+                                {server.enabled ? t`Disable` : t`Enable`}
+                              </Button>
                               <Button
                                 type="button"
                                 size="sm"
@@ -535,19 +587,21 @@ export function McpServersOverlay({
                               ) : null}
                             </>
                           ) : null}
-                          <Button
-                            type="button"
-                            variant={confirmingDelete === server.id ? "destructive" : "outline"}
-                            size="sm"
-                            className="ml-auto"
-                            onClick={() => void deleteServer(server)}
-                          >
-                            {confirmingDelete === server.id ? (
-                              <Trans>Confirm delete</Trans>
-                            ) : (
-                              <Trans>Delete</Trans>
-                            )}
-                          </Button>
+                          {!server.managedBy ? (
+                            <Button
+                              type="button"
+                              variant={confirmingDelete === server.id ? "destructive" : "outline"}
+                              size="sm"
+                              className="ml-auto"
+                              onClick={() => void deleteServer(server)}
+                            >
+                              {confirmingDelete === server.id ? (
+                                <Trans>Confirm delete</Trans>
+                              ) : (
+                                <Trans>Delete</Trans>
+                              )}
+                            </Button>
+                          ) : null}
                         </div>
                       </CardContent>
                     </Card>

@@ -7,6 +7,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
+import type { MemoryService } from "@ardurbot/memory";
 import { describe, expect, it, vi } from "vitest";
 import { createBackgroundJobHandlers } from "./background-job-handlers.js";
 import { createRunExecutor } from "./executor.js";
@@ -21,6 +22,56 @@ vi.mock("./messaging-delivery.js", () => ({
 }));
 
 describe("createBackgroundJobHandlers", () => {
+  it("delivers a 25 ms reply without waiting for a 500 ms brief model call", async () => {
+    vi.useFakeTimers();
+    try {
+      const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+      const refreshBrief = vi.fn(() => wait(500));
+      const continueRun = () => wait(25);
+      const baselineStart = Date.now();
+      const baseline = (async () => {
+        await continueRun();
+        await refreshBrief();
+      })();
+      await vi.runAllTimersAsync();
+      await baseline;
+      expect(Date.now() - baselineStart).toBe(525);
+      refreshBrief.mockClear();
+      const enqueue = vi.fn(async () => undefined);
+      const handlers = createBackgroundJobHandlers({
+        executor: { continueRun, refreshBrief } as unknown as ReturnType<typeof createRunExecutor>,
+        prisma: { run: { findUnique: async () => null } } as unknown as PrismaClient,
+        sandbox: {} as SandboxProvider,
+        home: {} as AgentHomeStore,
+        jobs: { enqueue } as unknown as JobPublisher,
+        events: {} as ThreadEvents,
+        workerId: "worker",
+        runtime: {} as AgentRuntime,
+        secretStore: {} as EncryptedSecretStore,
+        memoryProviders: { resolve: vi.fn(async () => null) },
+        memoryDocuments: {} as MemoryService,
+        messaging: {} as MessagingSurface,
+      });
+      const start = Date.now();
+      const turn = handlers["run.continue"]({ runId: "run" });
+      await vi.runAllTimersAsync();
+      await turn;
+      expect(Date.now() - start).toBe(25);
+      expect(refreshBrief).not.toHaveBeenCalled();
+      expect(enqueue).toHaveBeenLastCalledWith(
+        expect.objectContaining({ name: "briefs.maintain", payload: { runId: "run" } }),
+      );
+      expect(vi.mocked(mirrorMessagingOutbound).mock.invocationCallOrder.at(-1)).toBeLessThan(
+        enqueue.mock.invocationCallOrder.at(-1)!,
+      );
+      const maintenance = handlers["briefs.maintain"]({ runId: "run" });
+      await vi.runAllTimersAsync();
+      await maintenance;
+      expect(refreshBrief).toHaveBeenCalledExactlyOnceWith("run");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("delivers directly when shutdown rejects a completed run's mirror job", async () => {
     const enqueueError = new Error("Background job publisher is closing");
     const jobs = {

@@ -145,7 +145,15 @@ function fixture(runId = "run-1") {
   const replayRequest = { command: "pnpm test", cwd: "/workspace" };
   const prisma = {
     delegationRoot: { findUnique: vi.fn(async () => null) },
-    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+    space: {
+      findUnique: vi.fn(async () => ({ allowedModelDestinations: null })),
+      findUniqueOrThrow: vi.fn(async () => ({
+        botInstructions: "",
+        botInstructionsAuthorId: null as string | null,
+        botInstructionsRevision: 0,
+      })),
+    },
+    user: { findUniqueOrThrow: vi.fn(async () => ({ displayName: "", workType: "" })) },
 
     $queryRaw: vi.fn(async () => [{ acquired: true }]),
     computer: {
@@ -184,6 +192,7 @@ function fixture(runId = "run-1") {
         name: "Assistant",
         title: "Assistant",
         description: "Test assistant",
+        instructions: "",
         computerId: "computer-1",
         computer,
       })),
@@ -334,6 +343,41 @@ function fixture(runId = "run-1") {
 }
 
 describe("mutating tool effect idempotency keys", () => {
+  it("passes a human-authored account snapshot after the bot instructions and retains it on resume", async () => {
+    const f = fixture();
+    const bot = await f.prisma.bot.findUniqueOrThrow();
+    f.prisma.bot.findUniqueOrThrow.mockResolvedValue({
+      ...bot,
+      instructions: "Bot-specific rule.",
+    });
+    f.prisma.user.findUniqueOrThrow.mockResolvedValue({
+      displayName: "Captain",
+      workType: "research",
+    });
+    f.prisma.space.findUniqueOrThrow.mockResolvedValue({
+      botInstructions: "Use concise answers.",
+      botInstructionsAuthorId: "owner",
+      botInstructionsRevision: 3,
+    });
+    await f.run();
+    const instructions = f.runtimeRun.mock.calls[0]![0].instructions;
+    expect(instructions.indexOf("Bot-specific rule.")).toBeLessThan(
+      instructions.indexOf("Use concise answers."),
+    );
+    expect(instructions).toContain("human-authored");
+    expect(f.runRecord).toHaveProperty("accountInstructionContext", {
+      displayName: "Captain",
+      workType: "research",
+      instructions: "Use concise answers.",
+      actorId: "owner",
+      revision: 3,
+      origin: "human-settings",
+    });
+    f.prisma.user.findUniqueOrThrow.mockResolvedValue({ displayName: "Changed", workType: "" });
+    await f.run();
+    expect(f.runtimeRun.mock.calls[1]![0].instructions).toContain('Address the user as "Captain"');
+    expect(f.prisma.user.findUniqueOrThrow).toHaveBeenCalledOnce();
+  });
   it("executes different tools that share a reused provider tool-call id", async () => {
     const f = fixture("run-a");
     f.setCalls([

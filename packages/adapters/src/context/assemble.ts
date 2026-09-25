@@ -43,6 +43,7 @@ export function boundMessages(messages: Message[], budget: number): Message[] {
 }
 export async function assembleTurnContext(run: {
   instructions: string;
+  tools?: AgentRunRequest["tools"];
   brief?: string | null;
   summary?: string | null;
   history: Message[];
@@ -55,9 +56,23 @@ export async function assembleTurnContext(run: {
   recall?: () => Promise<string>;
 }) {
   const budgets = ContextBudgetsSchema.parse(run.budgets ?? {});
+  // Discovery has already applied Capabilities' access mode. Count only exposed schemas.
+  const toolCharacters =
+    Array.isArray(run.tools) && run.tools.length
+      ? JSON.stringify(
+          run.tools.map(({ name, description, inputSchema }) => ({
+            name,
+            description,
+            inputSchema,
+          })),
+        ).length
+      : 0;
+  const stableCharacters = run.instructions.length + toolCharacters;
   // Instructions and the new request are authority-bearing. Never silently cut either in half.
-  if (run.instructions.length > budgets.stable)
-    throw new Error("Bot instructions exceed the context budget. Increase the space budget.");
+  if (stableCharacters > budgets.stable)
+    throw new Error(
+      "Bot instructions exceed the context budget including exposed tools. Increase the space budget or load tools when needed.",
+    );
   if (run.message.length > budgets.message)
     throw new Error("This message exceeds the context budget. Send a shorter message.");
   const brief = frame("group_brief", run.brief ?? "", budgets.brief);
@@ -76,7 +91,7 @@ export async function assembleTurnContext(run: {
   ];
   const snapshot: ContextSnapshot = {
     layers: {
-      stable: run.instructions.length,
+      stable: stableCharacters,
       brief: brief.length,
       summary: summary.length,
       messages: messages.reduce((size, message) => size + message.content.length, 0),

@@ -1,3 +1,5 @@
+import type { DesktopCustomization } from "./desktop-extensions.js";
+
 /**
  * `unsupported` covers an unpackaged build and a repository with no published releases, which is
  * the normal state for a fork. It is not an error the user needs to act on. Automatic checks stay
@@ -47,12 +49,18 @@ export interface DesktopDeviceListenerState {
 }
 
 export interface ArdurBotDesktop {
+  customization?: DesktopCustomization;
   notifications?: {
     supported(): Promise<boolean>;
     show(message: { title: string; body: string; threadId: string }): Promise<boolean>;
   };
   host?: {
-    state(): Promise<{ configured: boolean; roots: string[]; keepRunning?: boolean }>;
+    state(): Promise<{
+      configured: boolean;
+      roots: string[];
+      registrationId?: string;
+      keepRunning?: boolean;
+    }>;
     setKeepRunning?(enabled: boolean): Promise<void>;
     setup(): Promise<void>;
     addRoot(): Promise<string | null>;

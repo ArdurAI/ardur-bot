@@ -244,7 +244,10 @@ export type SandboxInput =
   | { kind: "clipboard"; text: string };
 
 export function containerCreateOptions(input: ComputerCreateInput) {
-  const ports = computerPortBindings(input.publishControlPort);
+  const ports =
+    input.networkMode === "none"
+      ? { ExposedPorts: {}, PortBindings: {} }
+      : computerPortBindings(input.publishControlPort);
   return {
     Image: input.image,
     name: input.name,

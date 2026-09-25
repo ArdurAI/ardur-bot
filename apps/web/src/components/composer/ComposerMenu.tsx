@@ -45,6 +45,7 @@ export default function ComposerMenu(props: ComposerMenuProps) {
     connections: [],
   });
   const [servers, setServers] = useState<McpServer[]>([]);
+  const [reconnectCount, setReconnectCount] = useState(0);
   useEffect(() => {
     let active = true;
     const unsubscribe = subscribeIntegrationCatalog((value) => {
@@ -78,9 +79,21 @@ export default function ComposerMenu(props: ComposerMenuProps) {
       active = false;
     };
   }, [props.open, props.onError, t]);
-  const reconnectCount = integrations.connections.filter(
-    (connection) => connection.state !== "connected",
-  ).length;
+  useEffect(() => {
+    if (!props.open) return;
+    let active = true;
+    void rpc.connectors
+      .summary()
+      .then((summary) => {
+        if (active) setReconnectCount(summary.needingReconnection);
+      })
+      .catch(() => {
+        if (active) props.onError(t`Could not load integrations`);
+      });
+    return () => {
+      active = false;
+    };
+  }, [props.open, integrations.connections, props.onError, t]);
   async function selectConnector(
     descriptor: IntegrationDescriptor,
     connection: IntegrationConnection,

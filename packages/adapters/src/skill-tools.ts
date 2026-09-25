@@ -37,6 +37,7 @@ const MAX_SKILL_DESCRIPTION_CHARS = 2000;
 type SkillOwner = SkillDocumentOwner;
 
 type AgentSkillRow = {
+  componentKind?: string;
   id: string;
   name: string;
   description: string;
@@ -107,7 +108,7 @@ export async function listAgentSkillRecords(
   documents?: MemoryService,
 ): Promise<Array<SkillRecord & { id: string }>> {
   const rows = await prisma.agentSkill.findMany({
-    where: { spaceId: owner.spaceId, userId: owner.userId },
+    where: { spaceId: owner.spaceId, userId: owner.userId, enabled: true },
     orderBy: [{ name: "asc" }, { id: "asc" }],
   });
   return mergeBuiltinSkills(

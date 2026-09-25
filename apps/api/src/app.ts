@@ -93,6 +93,7 @@ import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { HostBridge } from "./host-bridge.js";
+import { mountHostMcpRoutes } from "./host-mcp-routes.js";
 import { ensureInstanceIdentity } from "./instance-identity.js";
 import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
 import { createLegacyChatDispatch, mountMessagingDispatch } from "./messaging-dispatch.js";
@@ -437,6 +438,12 @@ export async function createApp(
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
+        reconcileBriefs: () =>
+          jobs.enqueue({
+            name: "briefs.maintain",
+            payload: {},
+            replaceKey: "briefs.maintain:drain",
+          }),
       })
     : undefined;
   reconciler?.start();
@@ -448,6 +455,7 @@ export async function createApp(
     trustedOrigin: (origin) => isTrustedOrigin(origin, env),
   });
   const router = createRouter({
+    runtime,
     resolveComparisonPin: (bot) =>
       executor.resolveModel({ spaceId: bot.spaceId, userId: bot.userId, botId: bot.id }),
     terminals,
@@ -612,6 +620,7 @@ export async function createApp(
         actor,
         signal: c.req.raw.signal,
         authSessionId: session?.session.id,
+        authHeaders: sessionHeaders(c.req.raw),
         origin: c.req.header("origin"),
       },
     });
@@ -898,6 +907,7 @@ export async function createApp(
     })();
   }
 
+  mountHostMcpRoutes(app, { prisma, secrets, hostBridge });
   app.post("/api/host-bridge/pair", async (c) => {
     const origin = c.req.header("origin");
     if (origin && !isTrustedOrigin(origin, env)) return c.json({ error: "Forbidden" }, 403);

@@ -10,6 +10,7 @@ function fixture() {
     id: "brief",
     pendingRunId: "run",
     attemptedAt: null,
+    rewrittenAt: null as Date | null,
     historyGeneration: 0,
     lastMessageSeq: -1,
     toolResults: "read_document: saved result",
@@ -63,11 +64,28 @@ function fixture() {
   const commit = vi.fn(async (input) => ({ ...input, id: "document", revision: 1 }));
   const memory = { list: vi.fn(async () => ({ items: [] })), commit } as unknown as MemoryService;
   const requests: AgentRunRequest[] = [];
+  const recordUsage = vi.fn(
+    async (
+      _run: unknown,
+      _usage: { provider: string; model: string; inputTokens: number; outputTokens: number },
+    ) => undefined,
+  );
+  // Same deterministic offline tokenizer as the tool-loading fixture, not vendor billing.
+  const tokens = (text: string) => text.match(/\w+|[^\s\w]/g)?.length ?? 0;
   const runtime = {
     describe: () => ({ capabilities: { scripted: false } }),
     async *run(request: AgentRunRequest) {
       requests.push(request);
-      yield { type: "done", text: "## Goal\nCoordinate\n## Open items\nReview task card" };
+      const text = "## Goal\nCoordinate\n## Open items\nReview task card";
+      yield {
+        type: "usage",
+        provider: "fixture",
+        model: "pinned",
+        reported: true,
+        inputTokens: tokens(`${request.instructions}\n${request.prompt}`),
+        outputTokens: tokens(text),
+      };
+      yield { type: "done", text };
     },
   } as unknown as AgentRuntime;
   const resolve = vi.fn(async () => ({
@@ -85,11 +103,13 @@ function fixture() {
     commit,
     requests,
     resolve,
+    recordUsage,
     deps: {
       prisma,
       claim: (input: Parameters<typeof claimBotRun>[1]) => claimBotRun(prisma, input),
       memoryDocuments: memory,
       resolve,
+      recordUsage,
       secrets: [],
     },
   };
@@ -118,6 +138,49 @@ it("marks a changed group pending and rewrites after the turn with the selected 
   await refreshRunBrief(f.deps, "run");
   expect(f.requests).toHaveLength(attempts + 1);
   expect(f.state.lastMessageSeq).toBe(2);
+});
+it("skips a group turn with no new facts before resolving a model and consumes no tokens", async () => {
+  const f = fixture();
+  f.state.toolResults = "";
+  const rewrittenAt = new Date("2026-09-24T12:00:00Z");
+  f.state.rewrittenAt = rewrittenAt;
+  f.tx.delegation.findMany.mockResolvedValue([]);
+  f.tx.message.findMany.mockResolvedValue([
+    { role: "user", blocks: [{ kind: "text", text: "When is launch?" }] },
+    { role: "assistant", blocks: [{ kind: "text", text: "Launch on Friday." }] },
+    { role: "user", blocks: [{ kind: "text", text: "Thanks!" }] },
+  ]);
+  const memory = {
+    list: vi.fn(async () => ({
+      items: [{ path: "briefs/group.md", content: "## Goal\nLaunch on Friday." }],
+    })),
+  } as unknown as MemoryService;
+  await refreshRunBrief({ ...f.deps, memoryDocuments: memory }, "run");
+  expect(f.resolve).not.toHaveBeenCalled();
+  expect(f.requests).toHaveLength(0);
+  expect(f.recordUsage).not.toHaveBeenCalled();
+  expect(f.commit).not.toHaveBeenCalled();
+  expect(f.state).toMatchObject({
+    lastMessageSeq: 1,
+    rewrittenAt,
+    reason: null,
+    leaseExpiresAt: null,
+  });
+});
+it("accounts for exactly one bounded brief call on the changed-fact fixture", async () => {
+  const f = fixture();
+  await refreshRunBrief(f.deps, "run");
+  expect(f.requests).toHaveLength(1);
+  expect(f.requests[0]?.model.maxTokens).toBe(2000);
+  expect(f.recordUsage).toHaveBeenCalledOnce();
+  expect(f.recordUsage.mock.calls[0]?.[1]).toMatchInlineSnapshot(`
+    {
+      "inputTokens": 227,
+      "model": "pinned",
+      "outputTokens": 11,
+      "provider": "fixture",
+    }
+  `);
 });
 it("leaves unavailable runs pending with a reason and never rewrites an active turn", async () => {
   const f = fixture();

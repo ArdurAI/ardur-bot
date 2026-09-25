@@ -58,8 +58,9 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
-    "briefs.maintain": async () => {
-      await maintainBriefs(deps.prisma, deps.executor.refreshBrief);
+    "briefs.maintain": async (payload) => {
+      if (payload.runId) await deps.executor.refreshBrief(payload.runId);
+      else await maintainBriefs(deps.prisma, deps.executor.refreshBrief);
     },
     "learning.curate": (payload) => curateLearningSpaces(deps, payload),
     "learning.review": (payload) =>
@@ -115,6 +116,16 @@ export function createBackgroundJobHandlers(deps: {
           await deliverMessaging();
         });
       }
+      // Replies are durable and published before brief work enters its own worker job.
+      // The periodic drain recovers pending briefs if shutdown rejects this enqueue.
+      if (deps.memoryDocuments)
+        await deps.jobs
+          .enqueue({
+            name: "briefs.maintain",
+            payload: { runId: payload.runId },
+            replaceKey: `briefs.maintain:${payload.runId}`,
+          })
+          .catch((error) => getLogger().error("briefs.maintain enqueue error", error));
     },
     "messaging.deliver": async (payload) => {
       await deliverMessaging(payload.runId);

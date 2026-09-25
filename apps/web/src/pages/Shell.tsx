@@ -136,7 +136,7 @@ import {
   computersAreUnavailable,
 } from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
-import { RunContext } from "../components/Context";
+import { RunContext } from "../components/ContextEntry";
 import type { PendingAttachment } from "../components/composer/attachments";
 import { prepareComposerAttachments } from "../components/composer/attachments";
 import { ComposerTools } from "../components/composer/ComposerTools";
@@ -213,6 +213,7 @@ import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { CompareStart } from "./CompareStart";
+import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
 import type { RoutineDraftState } from "./RoutineEditor";
@@ -6083,6 +6084,8 @@ const MessageView = memo(function MessageView({
           if (!botId) return null;
           return <ChoiceCard key={i} botId={botId} block={block} onBotChanged={onBotChanged} />;
         }
+        if (block.kind === "app_connect" && block.connectorId === "trusted-catalog")
+          return <ConnectorSuggestion key={i} name={block.name} />;
         if (block.kind === "app_connect") {
           const botId = "botId" in artifactTarget ? artifactTarget.botId : message.botId;
           if (!botId) return null;

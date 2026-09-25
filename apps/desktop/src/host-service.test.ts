@@ -9,6 +9,7 @@ import {
   HostServiceStore,
   HostServiceSupervisor,
   hostServiceEnvironment,
+  hostServiceIdentity,
   hostServiceLaunch,
   hostStorageAvailable,
 } from "./host-service.js";
@@ -22,6 +23,16 @@ const config = {
 afterEach(() => vi.useRealTimers());
 
 describe("desktop host service", () => {
+  it("identifies an existing pairing without exposing its token or host verifier", () => {
+    const registrationId = hostServiceIdentity({ ...config, token: "fixture-pairing-token" });
+    expect(registrationId).toBe("abec6392afbdae15f7d66b9ef0b06fb1b36fff3dcd9d8ae47ddc5c4dabcfd2f3");
+    expect(registrationId).not.toBe(
+      "88c4c7666e266dc304941faed55a473c5103f9226538773a685b514f62e997e6",
+    );
+    expect(hostServiceIdentity({ ...config, token: "another-fixture-pairing" })).not.toBe(
+      registrationId,
+    );
+  });
   it("persists the close-window choice separately from pairing secrets", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "host-lifecycle-"));
     try {
