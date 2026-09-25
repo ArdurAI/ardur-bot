@@ -306,6 +306,44 @@ describe("local import lifecycle", () => {
       (await f.service.run(owner, { action: "undo", tool: "claude-code" })).result,
     ).toMatchObject({ removed: 3, conflicts: 0 });
   });
+  it.each(["receipt", "commit"] as const)(
+    "recovers an unfinished Obsidian re-import after Undo and a %s failure",
+    async (failure) => {
+      const f = await fixture({ obsidian: true });
+      await f.importAll();
+      const id = String(f.records.rows.find((row) => row.category === "memories")!.documentId);
+      await f.service.run(owner, { action: "undo", tool: "claude-code" });
+      const removedReceipt = structuredClone(f.records.rows.find((row) => row.documentId === id));
+      const manifest = await f.scan();
+      const action = {
+        action: "import",
+        scanId: manifest.scanId,
+        categories: ["memories"],
+      } as const;
+      if (failure === "receipt")
+        f.records.upsert.mockRejectedValueOnce(new Error("Fixture receipt failed."));
+      else f.failNextCommit();
+      await expect(
+        f.service.run(owner, { ...action, categories: [...action.categories] }),
+      ).rejects.toThrow(/Fixture/);
+      expect(f.records.rows.find((row) => row.documentId === id)).toEqual(removedReceipt);
+      f.restartVault();
+      expect(
+        (await f.service.run(owner, { ...action, categories: [...action.categories] })).result,
+      ).toMatchObject({ created: 1, conflicts: 0 });
+      expect(await f.documents.read(id, memoryContext())).toMatchObject({
+        revision: 3,
+        deletedAt: null,
+      });
+      expect(
+        (await f.service.run(owner, { ...action, categories: [...action.categories] })).result,
+      ).toMatchObject({ unchanged: 1, created: 0, conflicts: 0 });
+      expect(
+        (await f.service.run(owner, { action: "undo", tool: "claude-code" })).result,
+      ).toMatchObject({ removed: 1, conflicts: 0 });
+      expect((await f.documents.read(id, memoryContext()))?.revision).toBe(4);
+    },
+  );
   it("preserves an intervening manual edit to an unreceipted Obsidian note", async () => {
     const f = await fixture({ obsidian: true });
     const manifest = await f.scan();
@@ -654,6 +692,64 @@ describe("local import lifecycle", () => {
         ?.revisions.at(-1)?.content,
     ).toBe("Owner restored fact.");
   });
+  it.each([
+    ["journal", false],
+    ["Obsidian", true],
+  ] as const)(
+    "does not reclaim a manually restored note without edits in %s",
+    async (_store, obsidian) => {
+      const f = await fixture({ obsidian });
+      const importMemories = async () => {
+        const manifest = await f.scan();
+        return f.service.run(owner, {
+          action: "import",
+          scanId: manifest.scanId,
+          categories: ["memories"],
+        });
+      };
+      expect((await importMemories()).result).toMatchObject({ created: 1, conflicts: 0 });
+      const receipt = f.records.rows[0]!;
+      const id = String(receipt.documentId);
+      const original = (await f.documents.history(id, {}, memoryContext())).items[0]!;
+      expect(
+        (await f.service.run(owner, { action: "undo", tool: "claude-code" })).result,
+      ).toMatchObject({ removed: 1, conflicts: 0 });
+      const removedReceipt = structuredClone(f.records.rows[0]);
+      const restored = await f.documents.restore(id, original.revision, 2, memoryContext());
+      expect(restored).toMatchObject({
+        revision: 3,
+        content: original.content,
+        imported: original.imported,
+      });
+      if (obsidian) f.restartVault();
+
+      expect((await importMemories()).result).toMatchObject({
+        conflicts: 1,
+        created: 0,
+        updated: 0,
+      });
+      expect(f.records.rows[0]).toEqual(removedReceipt);
+      await f.file(
+        ".claude/projects/example/memory/fact.md",
+        "An updated source must not replace the restored note.",
+      );
+      expect((await importMemories()).result).toMatchObject({
+        conflicts: 1,
+        created: 0,
+        updated: 0,
+      });
+      expect(
+        (await f.service.run(owner, { action: "undo", tool: "claude-code" })).result,
+      ).toMatchObject({ removed: 0, conflicts: 0 });
+      expect(f.records.rows[0]).toEqual(removedReceipt);
+      expect(await f.documents.read(id, memoryContext())).toMatchObject({
+        revision: 3,
+        content: original.content,
+        deletedAt: null,
+      });
+      expect((await f.documents.history(id, {}, memoryContext())).items).toHaveLength(3);
+    },
+  );
   it("rolls back a document if its import receipt cannot be persisted", async () => {
     const f = await fixture();
     const scan = await f.scan();

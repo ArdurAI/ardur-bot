@@ -27,6 +27,7 @@ describePostgres("local import receipts, journal and credentials (PostgreSQL)", 
   let db: ReturnType<typeof createDb>;
   let home: string;
   let service: LocalImportService;
+  let documents: ReturnType<typeof createMemoryLifecycle>["service"];
   const secrets = new EncryptedSecretStore("fixture-local-import-encryption-material");
   const file = async (relative: string, body: string) => {
     const target = path.join(home, relative);
@@ -88,6 +89,7 @@ describePostgres("local import receipts, journal and credentials (PostgreSQL)", 
       },
     });
     const scanner = new LocalImportScanner({ home, platform: "darwin" });
+    documents = lifecycle.service;
     service = new LocalImportService({
       prisma: db.prisma,
       documents: lifecycle.service,
@@ -336,5 +338,57 @@ describePostgres("local import receipts, journal and credentials (PostgreSQL)", 
     await call("run", { action: "undo", tool: "codex" });
     expect(await db.prisma.mcpServer.count({ where: owner })).toBe(0);
     expect(await db.prisma.secret.count({ where: owner })).toBe(0);
+  });
+  it("keeps a manually restored note independent of imports and Undo without another edit", async () => {
+    await rm(path.join(home, ".claude/projects/fixture/memory/fact.md"));
+    const source = ".claude/projects/restored/memory/fact.md";
+    await file(source, "Keep the restored offline command.");
+    const context = {
+      ...owner,
+      operationId: "fixture-restore",
+      traceId: "fixture-restore",
+      signal: AbortSignal.timeout(60_000),
+    };
+    const importMemories = async () => {
+      const manifest = (await service.run(owner, { action: "scan" })).manifest!;
+      return service.run(owner, {
+        action: "import",
+        scanId: manifest.scanId,
+        tool: "claude-code",
+        categories: ["memories"],
+      });
+    };
+    expect((await importMemories()).result).toMatchObject({ created: 1, conflicts: 0 });
+    const receipt = await db.prisma.localImportRecord.findFirstOrThrow({
+      where: { config: owner, category: "memories", removedAt: null },
+    });
+    const id = receipt.documentId!;
+    const original = (await documents.history(id, {}, context)).items[0]!;
+    expect(
+      (await service.run(owner, { action: "undo", tool: "claude-code" })).result,
+    ).toMatchObject({ removed: 1, conflicts: 0 });
+    const removedReceipt = await db.prisma.localImportRecord.findUniqueOrThrow({
+      where: { id: receipt.id },
+    });
+    expect(await documents.restore(id, original.revision, 2, context)).toMatchObject({
+      revision: 3,
+      content: original.content,
+      imported: original.imported,
+    });
+    expect((await importMemories()).result).toMatchObject({ conflicts: 1, created: 0, updated: 0 });
+    await file(source, "A later source change must preserve the restored note.");
+    expect((await importMemories()).result).toMatchObject({ conflicts: 1, created: 0, updated: 0 });
+    expect(
+      (await service.run(owner, { action: "undo", tool: "claude-code" })).result,
+    ).toMatchObject({ removed: 0, conflicts: 0 });
+    expect(
+      await db.prisma.localImportRecord.findUniqueOrThrow({ where: { id: receipt.id } }),
+    ).toEqual(removedReceipt);
+    expect(await documents.read(id, context)).toMatchObject({
+      revision: 3,
+      content: original.content,
+      deletedAt: null,
+    });
+    expect((await documents.history(id, {}, context)).items).toHaveLength(3);
   });
 });
