@@ -2160,6 +2160,7 @@ msgstr "Could not import these documents. Check scopes and conflicts, then previ
 msgid "Could not install connector"
 msgstr "Could not install connector"
 
+#: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/KnowledgeSection.tsx
