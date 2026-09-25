@@ -7214,8 +7214,8 @@ msgid "This action could not finish; try again."
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
-msgid "This board item has moved on."
-msgstr "此看板事项已有后续变更。"
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr "此看板事项在创建后已有变更。请在看板上查看。"
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item is still open."

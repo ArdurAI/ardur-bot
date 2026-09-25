@@ -80,6 +80,12 @@ function table(rows: Row[]) {
       else rows.push(create);
       return row ?? create;
     }),
+    deleteMany: vi.fn(async ({ where }: { where: Row }) => {
+      const kept = rows.filter((row) => !matches(row, where));
+      const count = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { count };
+    }),
   };
 }
 function fixture() {
@@ -87,7 +93,9 @@ function fixture() {
     audits: Row[] = [],
     grants: Row[] = [],
     suppressions: Row[] = [],
-    skills: Row[] = [];
+    skills: Row[] = [],
+    filings: Row[] = [];
+  const transactions = { open: 0 };
   const bot = { id: "bot", ...actor, notifyOnFinish: true, autoSpeak: false };
   const thread = { id: "thread", ...actor, historyCompactionGeneration: 0 };
   const memoryDb = memoryDatabaseFake();
@@ -99,6 +107,7 @@ function fixture() {
     learningGrant: table(grants),
     learningSuppression: table(suppressions),
     agentSkill: table(skills),
+    botBoardFiling: table(filings),
     actionApprovalRule: {
       upsert: vi.fn(async ({ create }: { create: Row }) => ({ id: "rule", ...create })),
     },
@@ -116,10 +125,11 @@ function fixture() {
     ...db,
     $transaction: (action: (tx: typeof db) => Promise<unknown>) =>
       mutex(async () => {
-        const collections = [proposals, audits, grants, suppressions, skills];
+        const collections = [proposals, audits, grants, suppressions, skills, filings];
         const snapshot = collections.map((rows) => structuredClone(rows));
         const docs = structuredClone(memoryDb.documents),
           revisions = structuredClone(memoryDb.revisions);
+        transactions.open += 1;
         try {
           return await action(db);
         } catch (error) {
@@ -130,6 +140,8 @@ function fixture() {
           for (const [id, doc] of docs) memoryDb.documents.set(id, doc);
           memoryDb.revisions.splice(0, memoryDb.revisions.length, ...revisions);
           throw error;
+        } finally {
+          transactions.open -= 1;
         }
       }),
   } as unknown as PrismaClient;
@@ -223,6 +235,8 @@ function fixture() {
     grants,
     suppressions,
     skills,
+    filings,
+    transactions,
     bot,
     thread,
     enqueue,
@@ -855,54 +869,134 @@ it("preserves current citations when undoing a category change", async () => {
   });
 });
 
-it.each([false, true])(
-  "undoes an unchanged board item and leaves a changed item alone (changed=%s)",
-  async (changed) => {
-    const f = fixture();
-    const item = {
-      id: "board-a",
-      status: "open",
-      updatedAt: changed ? "2026-09-25T13:00:00.000Z" : "2026-09-25T12:00:00.000Z",
-    };
-    const close = vi.fn(async () => [{ ...item, status: "closed" }]);
-    const boardService = {
-      fileLearningProposal: vi.fn(async () => ({
+function boardFixture(filed: { duplicate: boolean; updatedAt?: string }) {
+  const f = fixture();
+  const item = {
+    id: "board-a",
+    status: "open",
+    updatedAt: filed.updatedAt ?? "2026-09-25T12:00:00.000Z",
+  };
+  const hostCalls: Array<{ call: string; transactions: number }> = [];
+  const host = (call: string) => hostCalls.push({ call, transactions: f.transactions.open });
+  const close = vi.fn(async () => {
+    host("close");
+    return [{ ...item, status: "closed" }];
+  });
+  const show = vi.fn(async () => {
+    host("show");
+    return item;
+  });
+  const boardService = {
+    withFilingLock: vi.fn(async (_scope: unknown, work: () => Promise<unknown>) => work()),
+    fileLearningProposal: vi.fn(async (_scope: unknown, proposalId: string) => {
+      host("file");
+      f.filings.push({
+        id: `filing-${f.filings.length}`,
+        ...actor,
+        botId: "bot",
         workspaceId: "workspace",
-        duplicate: false,
+        itemId: "board-a",
+        learningProposalId: proposalId,
+        reused: filed.duplicate,
+      });
+      return {
+        workspaceId: "workspace",
+        duplicate: filed.duplicate,
         item: { ...item, updatedAt: "2026-09-25T12:00:00.000Z" },
-      })),
-      provider: vi.fn(async () => ({ show: vi.fn(async () => item), close })),
-    };
-    const apply = createLearningApplyService({
-      ...f.deps,
-      boardService: boardService as never,
-    });
-    const proposal = await f.proposal(undefined, {
+      };
+    }),
+    provider: vi.fn(async () => ({ show, close })),
+  };
+  const apply = createLearningApplyService({ ...f.deps, boardService: boardService as never });
+  const proposal = () =>
+    f.proposal(undefined, {
       type: "board-item",
       proposedContent: undefined,
       boardItem: {
-        title: "Track recurring failure",
-        description: "The same failure recurred.",
-        acceptanceCriteria: "The failure is covered by a regression test.",
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
       },
     });
+  return { f, apply, boardService, close, show, hostCalls, proposal };
+}
+
+it.each([false, true])(
+  "undoes an unchanged board item and leaves a changed item alone (changed=%s)",
+  async (changed) => {
+    const {
+      f,
+      apply,
+      boardService,
+      close,
+      hostCalls,
+      proposal: create,
+    } = boardFixture({
+      duplicate: false,
+      updatedAt: changed ? "2026-09-25T13:00:00.000Z" : undefined,
+    });
+    const proposal = await create();
     await expect(apply.autoApply(proposal.id, f.grant().id as string)).rejects.toThrow();
     expect(boardService.fileLearningProposal).not.toHaveBeenCalled();
     const applied = await apply.approve(proposal.id, actor);
     expect(applied.proposal).toMatchObject({
       status: "applied",
-      appliedBoardItem: { workspaceId: "workspace", itemId: "board-a" },
+      appliedBoardItem: { workspaceId: "workspace", itemId: "board-a", duplicate: false },
     });
     const undone = await apply.revert(proposal.id, actor);
     if (changed) {
       expect(close).not.toHaveBeenCalled();
-      expect(undone.conflict?.current).toBe("This board item has moved on.");
+      expect(undone.conflict?.current).toBe(
+        "This board item changed after it was filed. Review it on the Board.",
+      );
     } else {
       expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
       expect(undone.proposal.status).toBe("reverted");
     }
+    expect(hostCalls.map((call) => call.call)).toEqual(
+      changed ? ["file", "show"] : ["file", "show", "close"],
+    );
+    expect(hostCalls.every((call) => call.transactions === 0)).toBe(true);
+    expect(boardService.withFilingLock).toHaveBeenCalledTimes(2);
   },
 );
+
+it("undoes a reused, human-created board item by removing only the association", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: true });
+  const proposal = await create();
+  f.filings.push({
+    id: "human",
+    ...actor,
+    botId: null,
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: null,
+    reused: false,
+  });
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({ itemId: "board-a", duplicate: true });
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.conflict).toBeUndefined();
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).not.toHaveBeenCalled();
+  expect(show).not.toHaveBeenCalled();
+  expect(f.filings.map((row) => row.id)).toEqual(["human"]);
+  expect(f.audits.map((row) => row.action)).toEqual(["approve", "revert"]);
+});
+
+it("does not file a board item for a proposal rejected while approval waited", async () => {
+  const { f, apply, boardService, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  boardService.withFilingLock.mockImplementationOnce(async (_scope, work) => {
+    await apply.reject(proposal.id, actor);
+    return work();
+  });
+  await expect(apply.approve(proposal.id, actor)).rejects.toThrow(
+    "This suggestion is no longer pending.",
+  );
+  expect(boardService.fileLearningProposal).not.toHaveBeenCalled();
+  expect(f.proposals[0]).toMatchObject({ status: "rejected" });
+});
 
 it("undoes an approved category edit without overwriting later category changes", async () => {
   const f = fixture();

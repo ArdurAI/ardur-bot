@@ -9,6 +9,7 @@ import type {
   WorkItem,
 } from "@ardurbot/contracts/board";
 import { BoardDeniedError, BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
+import type { Pool } from "@ardurbot/db";
 import { observeBoardItems, Prisma, type PrismaClient } from "@ardurbot/db";
 import { BoardRunner } from "@ardurbot/host-runtime/board/runner";
 import { getLogger } from "@ardurbot/logging";
@@ -34,9 +35,37 @@ export type BoardScope = {
 export type BoardServiceOptions = {
   prisma: PrismaClient;
   dataDir: string;
+  /** Coordinates filings across processes. Without it, filings serialize within this process. */
+  pool?: Pick<Pool, "connect">;
   ownerRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
   localRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
 };
+// Namespace 1380019075 is shared: ids 1-3 are process-wide locks. Filing locks put id 4 in
+// the low three bits and the space hash above them.
+const FILING_LOCK_NAMESPACE = 1_380_019_075;
+const FILING_LOCK_ID = 4;
+const FILING_LOCK_KEY = "(hashtext($2::text) & -8) | $3::integer";
+const FILING_LOCK_WAIT_MS = 15_000;
+const FILING_LOCK_POLL_MS = 250;
+const FILING_BUSY = "Another write is in progress";
+const localFilingLocks = new Map<string, Promise<void>>();
+
+async function withLocalFilingLock<T>(spaceId: string, work: () => Promise<T>): Promise<T> {
+  const previous = localFilingLocks.get(spaceId) ?? Promise.resolve();
+  let release = () => {};
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(() => current);
+  localFilingLocks.set(spaceId, tail);
+  await previous;
+  try {
+    return await work();
+  } finally {
+    release();
+    if (localFilingLocks.get(spaceId) === tail) localFilingLocks.delete(spaceId);
+  }
+}
 export class BoardService {
   constructor(private readonly options: BoardServiceOptions) {}
   async actor(scope: BoardScope) {
@@ -387,46 +416,92 @@ export class BoardService {
     });
     return { enabled: saved.botUpkeep };
   }
-  /** Holds the space row across the title check, reservation and host create. */
-  async withFilingLock<T>(
-    scope: BoardScope,
-    work: (tx: Prisma.TransactionClient) => Promise<T>,
-  ): Promise<T> {
-    return this.options.prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT id FROM spaces WHERE id = ${scope.spaceId} FOR UPDATE`;
-        return work(tx);
-      },
-      { maxWait: 15_000, timeout: 15_000 },
-    );
+  /**
+   * Serializes a space's title check, reservation, host create and metadata. Host commands
+   * can outlast any database transaction, so the lock is a session advisory lock on one
+   * pooled connection. Waiters poll without holding a connection and give up after a bound.
+   */
+  async withFilingLock<T>(scope: BoardScope, work: () => Promise<T>): Promise<T> {
+    const pool = this.options.pool;
+    if (!pool) return withLocalFilingLock(scope.spaceId, work);
+    const key = [FILING_LOCK_NAMESPACE, scope.spaceId, FILING_LOCK_ID];
+    const deadline = Date.now() + FILING_LOCK_WAIT_MS;
+    for (;;) {
+      scope.signal?.throwIfAborted();
+      const client = await pool.connect();
+      let locked = false;
+      let lost = false;
+      try {
+        locked =
+          (
+            await client.query<{ acquired: boolean }>(
+              `SELECT pg_try_advisory_lock($1::integer, ${FILING_LOCK_KEY}) AS acquired`,
+              key,
+            )
+          ).rows[0]?.acquired === true;
+        if (locked) return await work();
+      } finally {
+        if (locked)
+          await client
+            .query(`SELECT pg_advisory_unlock($1::integer, ${FILING_LOCK_KEY})`, key)
+            .catch(() => {
+              lost = true;
+            });
+        // A connection that could not unlock still holds the lock until it closes.
+        client.release(lost);
+      }
+      if (Date.now() >= deadline) throw new BoardError({ code: "busy", message: FILING_BUSY });
+      await new Promise((resolve) => setTimeout(resolve, FILING_LOCK_POLL_MS));
+    }
   }
-  async reserveBotFiling(scope: BoardScope, tx: Prisma.TransactionClient) {
-    if (!scope.runId) return { ok: false as const, message: RUN_FILING_LIMIT };
-    const since = new Date(Date.now() - 60 * 60 * 1000);
-    const runCount = await tx.botBoardFiling.count({
-      where: { spaceId: scope.spaceId, runId: scope.runId },
+  /** Checks the caps and inserts the reservation in one short transaction. */
+  async reserveBotFiling(scope: BoardScope) {
+    const runId = scope.runId;
+    if (!runId) return { ok: false as const, message: RUN_FILING_LIMIT };
+    return this.options.prisma.$transaction(async (tx) => {
+      const runCount = await tx.botBoardFiling.count({
+        where: { spaceId: scope.spaceId, runId },
+      });
+      if (runCount >= RUN_FILING_CAP) return { ok: false as const, message: RUN_FILING_LIMIT };
+      if (await this.spaceFilingCapReached(tx, scope.spaceId))
+        return { ok: false as const, message: SPACE_FILING_LIMIT };
+      const row = await tx.botBoardFiling.create({
+        data: { spaceId: scope.spaceId, runId, botId: scope.botId ?? null },
+      });
+      return { ok: true as const, id: row.id };
     });
-    if (runCount >= RUN_FILING_CAP) return { ok: false as const, message: RUN_FILING_LIMIT };
-    const hourCount = await tx.botBoardFiling.count({
-      where: { spaceId: scope.spaceId, createdAt: { gte: since } },
-    });
-    if (hourCount >= SPACE_FILING_CAP) return { ok: false as const, message: SPACE_FILING_LIMIT };
-    const row = await tx.botBoardFiling.create({
-      data: { spaceId: scope.spaceId, runId: scope.runId, botId: scope.botId ?? null },
-    });
-    return { ok: true as const, id: row.id };
   }
-  async recordFilingItem(
-    tx: Prisma.TransactionClient,
-    filingId: string,
-    workspaceId: string,
-    itemId: string,
-  ) {
-    await tx.botBoardFiling.update({
+  async recordFilingItem(filingId: string, workspaceId: string, itemId: string) {
+    await this.options.prisma.botBoardFiling.update({
       where: { id: filingId },
       data: { workspaceId, itemId },
     });
   }
+  /** Keeps a reservation whose item exists, even partially; otherwise releases it. */
+  async settleFailedFiling(filingId: string, workspaceId: string, error: unknown) {
+    try {
+      if (error instanceof BoardError && error.problem.itemId)
+        await this.recordFilingItem(filingId, workspaceId, error.problem.itemId);
+      else await this.options.prisma.botBoardFiling.delete({ where: { id: filingId } });
+    } catch (settleError) {
+      getLogger().error("board filing cleanup", settleError);
+    }
+  }
+  /** The run's own filing for an item, when an earlier attempt created it. */
+  async runFiling(scope: BoardScope, workspaceId: string, itemId: string) {
+    if (!scope.runId) return null;
+    return this.options.prisma.botBoardFiling.findFirst({
+      where: { spaceId: scope.spaceId, runId: scope.runId, workspaceId, itemId },
+    });
+  }
+  private async spaceFilingCapReached(tx: Prisma.TransactionClient, spaceId: string) {
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const count = await tx.botBoardFiling.count({
+      where: { spaceId, reused: false, createdAt: { gte: since } },
+    });
+    return count >= SPACE_FILING_CAP;
+  }
+  /** Call inside withFilingLock. A retry returns the item this proposal already filed or reused. */
   async fileLearningProposal(
     scope: BoardScope & { botId: string },
     proposalId: string,
@@ -434,8 +509,20 @@ export class BoardService {
       workspaceId?: string;
     },
     secrets: string[],
-    transaction?: Prisma.TransactionClient,
   ) {
+    const prisma = this.options.prisma;
+    const own = await prisma.botBoardFiling.findFirst({
+      where: { spaceId: scope.spaceId, learningProposalId: proposalId },
+    });
+    if (own?.workspaceId && own.itemId) {
+      const provider = await this.provider(scope, own.workspaceId);
+      return {
+        item: await provider.show(own.itemId),
+        duplicate: own.reused,
+        workspaceId: own.workspaceId,
+      };
+    }
+    if (own) await prisma.botBoardFiling.delete({ where: { id: own.id } });
     const workspace = await this.workspace(scope, input.workspaceId);
     const provider = await this.provider(scope, workspace.id);
     const item = {
@@ -443,54 +530,41 @@ export class BoardService {
       description: redactBoardText(input.description ?? "", secrets),
       acceptanceCriteria: redactBoardText(input.acceptanceCriteria ?? "", secrets),
     };
-    const work = async (tx: Prisma.TransactionClient) => {
-      const title = normalizeBoardTitle(item.title);
-      const existing = (await provider.list()).find(
-        (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
-      );
-      if (existing) return { item: existing, duplicate: true, workspaceId: workspace.id };
-      const since = new Date(Date.now() - 60 * 60 * 1000);
-      if (
-        (await tx.botBoardFiling.count({
-          where: { spaceId: scope.spaceId, createdAt: { gte: since } },
-        })) >= SPACE_FILING_CAP
-      )
-        throw new BoardError({ code: "busy", message: SPACE_FILING_LIMIT });
-      const filing = await tx.botBoardFiling.create({
-        data: {
-          spaceId: scope.spaceId,
-          runId: null,
-          botId: scope.botId,
-          workspaceId: workspace.id,
-          learningProposalId: proposalId,
-        },
-      });
-      try {
-        const created = await provider.create({
-          ...item,
-          type: "task",
-          priority: 2,
-          labels: withBotFiledLabel(undefined),
-        });
-        await tx.botBoardFiling.update({
-          where: { id: filing.id },
-          data: { itemId: created.id },
-        });
-        return { item: created, duplicate: false, workspaceId: workspace.id };
-      } catch (error) {
-        if (error instanceof BoardError && error.problem.itemId)
-          await tx.botBoardFiling.update({
-            where: { id: filing.id },
-            data: { itemId: error.problem.itemId },
-          });
-        throw error;
-      }
+    const title = normalizeBoardTitle(item.title);
+    const existing = (await provider.list()).find(
+      (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
+    );
+    const link = {
+      spaceId: scope.spaceId,
+      runId: null,
+      botId: scope.botId,
+      workspaceId: workspace.id,
+      learningProposalId: proposalId,
     };
-    if (transaction) {
-      await transaction.$executeRaw`SELECT id FROM spaces WHERE id = ${scope.spaceId} FOR UPDATE`;
-      return work(transaction);
+    if (existing) {
+      await prisma.botBoardFiling.create({
+        data: { ...link, itemId: existing.id, reused: true },
+      });
+      return { item: existing, duplicate: true, workspaceId: workspace.id };
     }
-    return this.withFilingLock(scope, work);
+    const filing = await prisma.$transaction(async (tx) => {
+      if (await this.spaceFilingCapReached(tx, scope.spaceId))
+        throw new BoardError({ code: "busy", message: SPACE_FILING_LIMIT });
+      return tx.botBoardFiling.create({ data: link });
+    });
+    try {
+      const created = await provider.create({
+        ...item,
+        type: "task",
+        priority: 2,
+        labels: withBotFiledLabel(undefined),
+      });
+      await this.recordFilingItem(filing.id, workspace.id, created.id);
+      return { item: created, duplicate: false, workspaceId: workspace.id };
+    } catch (error) {
+      await this.settleFailedFiling(filing.id, workspace.id, error);
+      throw error;
+    }
   }
   async filingOutcomes(scope: BoardScope) {
     await this.actor(scope);
@@ -514,6 +588,8 @@ export class BoardService {
       LEFT JOIN bots b ON b.id = f."botId" AND b."spaceId" = f."spaceId"
       WHERE f."spaceId" = ${scope.spaceId}
         AND f."botId" IS NOT NULL
+        AND f."itemId" IS NOT NULL
+        AND NOT f.reused
         AND f."createdAt" >= ${since}
       GROUP BY f."botId", b.name
       ORDER BY COALESCE(b.name, 'Bot'), f."botId"

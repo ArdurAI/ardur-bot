@@ -1,11 +1,18 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
 import type { PrismaClient } from "./client.js";
 
-/** Empty reasons and explicit completion words mean done; every other reason stays distinct. */
+const COMPLETION = /\b(?:done|complete|completed|fixed|resolved)\b/iu;
+const NEGATED_COMPLETION =
+  /\b(?:not|never|no|cannot|unable to|(?:can|couldn|won|didn|isn|wasn|hasn|haven)['’]?t)(?:\s+[\w'’]+){0,3}?\s+(?:done|complete|completed|fixed|resolved)\b/iu;
+
+/**
+ * An empty reason or a completion word means done, unless a negation comes up to three
+ * words before any completion word ("not done", "can't get it fixed"). Every other reason,
+ * including "won't fix", is closed otherwise.
+ */
 export function boardFilingOutcome(reason = ""): "completed" | "closed-other" {
-  return !reason.trim() || /\b(done|complete|completed|fixed|resolved)\b/iu.test(reason)
-    ? "completed"
-    : "closed-other";
+  if (!reason.trim()) return "completed";
+  return COMPLETION.test(reason) && !NEGATED_COMPLETION.test(reason) ? "completed" : "closed-other";
 }
 
 /** Beads owns item state. A follower's observed version makes notifications retry-safe. */

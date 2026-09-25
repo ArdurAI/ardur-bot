@@ -24,13 +24,15 @@ import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "../
 const loadWork = async () => {
   const [work, outcomes] = await Promise.all([
     rpc("board/work", {}),
-    rpc("board/filingOutcomes", {}),
+    // A server without filing outcomes still shows the Work summary.
+    rpc("board/filingOutcomes", {}).catch(() => null),
   ]);
+  const filingOutcomes = BoardFilingOutcomeCountSchema.array().safeParse(
+    (outcomes as { bots?: unknown } | null)?.bots,
+  );
   return {
     ...BoardWorkSchema.parse(work),
-    filingOutcomes: BoardFilingOutcomeCountSchema.array().parse(
-      (outcomes as { bots?: unknown }).bots,
-    ),
+    filingOutcomes: filingOutcomes.success ? filingOutcomes.data : [],
   };
 };
 const MobileBoard = lazy(() =>

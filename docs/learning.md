@@ -123,13 +123,18 @@ shows all those revisions. Clearing a source thread purges proposal bodies and e
 the P1-1 database trigger, so a queued grant cannot apply them. It preserves already approved
 memory revisions and content-free action audits.
 
-A review may also propose one board item for a recurring failure or unfinished follow-up across
-runs. Its title, description, acceptance criteria, optional board and evidence remain visible
-until approval. Board-item proposals never use a learning grant. Approval redacts known secrets,
-deduplicates an open title, enforces the board's hourly filing cap, adds `bot-filed`, and records
-the selected item. Undo closes that item with `Undone from Learning` only while it is still open
-and unchanged; otherwise it says “This board item has moved on.” The proposal's observation is
-the recorded board-item outcome from later board reads.
+A review may also propose one board item for an unfinished follow-up from the reviewed run. Cited
+evidence must come from that run, so the validator rejects a board item whose title, description
+or rationale claims the failure recurred. Its title, description, acceptance criteria, optional
+board and evidence remain visible until approval. Board-item proposals never use a learning grant.
+Approval redacts known secrets, deduplicates an open title, enforces the board's hourly filing cap,
+adds `bot-filed`, and records the selected item. Approval, Reject and Undo take the space's filing
+lock, so a proposal rejected while approval waited is never filed. Undo closes a new item with
+`Undone from Learning` only while it is still open and unchanged; otherwise it says “This board
+item changed after it was filed. Review it on the Board.” When approval matched an existing open
+item, the proposal links to it without owning it: Undo removes only that link and never closes
+the item. The proposal's observation is the recorded outcome of the linked item from later board
+reads, whether it was created or reused.
 
 Preferences are restricted to boolean `bot.notifyOnFinish` and `bot.autoSpeak`, both existing
 visible bot settings. Setting history is retained as `preferences/` documents for inspection;

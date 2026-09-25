@@ -162,17 +162,26 @@ reviewer model, and Enable. Enable uses the existing learning configure call. Le
 off until someone turns it on.
 
 Bot-created items keep the actor `bot:<name>`, the label `bot-filed`, and the run
-id in Beads metadata while the setting is on. The server allows 5 new items per run
-and 30 per space each hour, and returns an existing open item when the normalized
-title matches. It redacts that run's secrets from titles, descriptions, acceptance
-criteria, comments and close reasons whether or not the setting is on. Read-only
+id in Beads metadata while the setting is on. The run, bot and filer are written in
+one Beads update; if the same run finds its own item without them, it writes them
+again. The server allows 5 new items per run and 30 per space each hour, and returns
+an existing open item when the normalized title matches. Filings in one space run one
+at a time under a Postgres session advisory lock; the reservation is its own short
+transaction and no Beads command runs inside a database transaction. A filing that
+waits 15 seconds for the lock returns `Another write is in progress`. A failed create
+that left no item removes its reservation. It redacts that run's secrets from titles,
+descriptions, acceptance criteria, labels, assignees, external references, comments
+and close reasons whether or not the setting is on. Read-only
 grants still reject writes. A stale phone confirmation does not make the board
 read-only; the run pauses for confirmation the same way as other consequential tools.
 
 The Work panel and mobile Overview group the last 30 days of filing records by bot
 and show completed, open and otherwise-closed counts. A board read observes returned
 closed items and records the first outcome without another Beads call. An empty close
-reason or a completion word is completed; another reason is closed otherwise. An item
+reason or a completion word (done, complete, fixed, resolved) is completed unless a
+negation comes up to three words before it ("not done", "can't get it fixed"); every
+other reason, including "won't fix", is closed otherwise. A learning proposal that
+links to an existing item records its outcome but is not counted again. An item
 that nobody reads after it closes remains open in this projection until the next read,
 so staleness is unbounded for an abandoned board and otherwise lasts until the next
 15-second foreground board poll or later board access.
@@ -230,7 +239,8 @@ for management and Files access. New mobile strings have Russian and Chinese tra
   queue. Very large boards can exceed these limits and return a structured error.
 - The UI and provider add no runtime dependencies or required hosted service.
   Ordinary model costs still apply when work is sent to a bot.
-- Apply the application migrations through `20260925150000_board_follow_settings`
+- Apply the application migrations through `20260925190000_board_filing_reuse`,
+  which follows `20260925170000_bot_upkeep` and `20260925180000_board_filing_outcomes`,
   before opening Board. Generation and offline tests do not prove a live
   deployment has applied the schema.
 

@@ -116,7 +116,7 @@ import {
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
 } from "@ardurbot/core";
-import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   appendEventInTransaction,
   BotSectionNameConflictError,
@@ -452,6 +452,7 @@ export interface RouterDeps {
   terminals?: ReturnType<typeof createTerminalRoutes>;
   cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
+  pool?: Pick<Pool, "connect">;
   events: ThreadEvents;
   auth: Auth;
   jobs: JobPublisher;

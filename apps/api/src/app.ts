@@ -420,6 +420,7 @@ export async function createApp(
   const shutdown = new AbortController();
   const executor = createRunExecutor({
     prisma,
+    pool: created.pool,
     runtime,
     sandbox,
     memory,
@@ -531,6 +532,7 @@ export async function createApp(
     localImportRequests,
     cloudAgent,
     prisma,
+    pool: created.pool,
     events,
     auth,
     jobs,

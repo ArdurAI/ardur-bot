@@ -76,7 +76,8 @@ async function main() {
   // separate ones. Keep this modest: graphile holds a LISTEN client, and the
   // reconciler and messaging receivers each hold an advisory-lock client for the
   // process lifetime (namespace 1380019075, ids 1 and 2). Board notifications
-  // take a transaction lock (id 3) for one tick and return that client. A larger
+  // take a transaction lock (id 3) for one tick and return that client; board
+  // filings hold a per-space session lock (id 4) for one filing. A larger
   // max just competes for Postgres max_connections (53300).
   const { prisma, pool } = createDb(databaseUrl, {
     poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 8),
@@ -190,6 +191,7 @@ async function main() {
   const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
   const executor = createRunExecutor({
     prisma,
+    pool,
     runtime,
     sandbox,
     memory,

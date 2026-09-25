@@ -72,6 +72,24 @@ it("records a closed filing outcome once and never overwrites it", async () => {
   expect(boardFilingOutcome("No longer needed")).toBe("closed-other");
   expect(boardFilingOutcome("")).toBe("completed");
 });
+it.each([
+  "Not done",
+  "not fixed",
+  "won't fix",
+  "Cannot complete",
+  "can’t complete this",
+  "Has not been resolved",
+  "Didn't get it done",
+  "Done? Not fixed yet.",
+])("classifies the negated close reason %j as closed otherwise", (reason) => {
+  expect(boardFilingOutcome(reason)).toBe("closed-other");
+});
+it.each(["Done", "Fixed in the next build", "Resolved, not a duplicate", "Completed", "  "])(
+  "classifies the close reason %j as completed",
+  (reason) => {
+    expect(boardFilingOutcome(reason)).toBe("completed");
+  },
+);
 it("does not emit after a concurrent observer consumed the version or an unfollow removed it", async () => {
   const { prisma, create, updateMany } = fixture();
   updateMany.mockResolvedValue({ count: 0 });

@@ -24,6 +24,10 @@ const fakes = vi.hoisted(() => ({
 }));
 vi.mock("./api", () => ({ rpc: vi.fn(), selectedSpaceId: () => "space" }));
 vi.mock("./dispatch", () => ({ hasPairedDevice: () => fakes.pairing() }));
+vi.mock("./learning", () => ({
+  loadLearningSettings: async () => ({ enabled: false, canConfigure: true }),
+  enableLearningReview: vi.fn(),
+}));
 vi.mock("expo-secure-store", () => ({
   getItemAsync: async () => null,
   setItemAsync: fakes.save.mockResolvedValue(undefined),
@@ -167,7 +171,9 @@ beforeEach(() => {
           ? []
           : procedure === "board/workspaces"
             ? { workspaces: board.workspaces, problem: null }
-            : item,
+            : procedure === "board/upkeep"
+              ? { enabled: true }
+              : item,
   );
   node = document.createElement("div");
   document.body.append(node);
@@ -388,6 +394,7 @@ it("drops unavailable bot IDs when editing the mobile board allowlist", async ()
   vi.mocked(rpc).mockImplementation(async (procedure) => {
     if (procedure === "me") return { isDeploymentOwner: true };
     if (procedure === "bots/list") return [{ id: "builder", name: "Builder" }];
+    if (procedure === "board/upkeep") return { enabled: true };
     if (procedure === "board/workspaces")
       return {
         workspaces: [

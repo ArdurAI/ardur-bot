@@ -1013,5 +1013,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "This board item is still open.": "此看板事项仍处于开放状态。",
   "This board item was completed.": "此看板事项已完成。",
   "This board item was closed otherwise.": "此看板事项因其他原因关闭。",
-  "This board item has moved on.": "此看板事项已有后续变更。",
+  "This board item changed after it was filed. Review it on the Board.":
+    "此看板事项在创建后已有变更。请在看板上查看。",
 };

@@ -87,25 +87,31 @@ export function createLearningService(deps: {
     return { pendingCount, appliedThisWeek };
   }
   const identity = (actor: Actor) => ({ spaceId: actor.spaceId, userId: actor.userId });
-  async function withBoardOutcome(proposal: ReturnType<typeof proposalView>) {
-    if (!proposal.appliedBoardItem) return proposal;
-    const filing = await deps.prisma.botBoardFiling.findFirst({
-      where: {
-        spaceId: proposal.scope.spaceId,
-        workspaceId: proposal.appliedBoardItem.workspaceId,
-        itemId: proposal.appliedBoardItem.itemId,
-      },
-      select: { closedAt: true, outcome: true },
+  /** Applied board items carry the outcome of the filing, or reuse link, made for them. */
+  async function withBoardOutcomes(spaceId: string, proposals: ReturnType<typeof proposalView>[]) {
+    const ids = new Set(
+      proposals
+        .filter((proposal) => proposal.status === "applied" && proposal.appliedBoardItem)
+        .map((proposal) => proposal.id),
+    );
+    if (!ids.size) return proposals;
+    const filings = await deps.prisma.botBoardFiling.findMany({
+      where: { spaceId, learningProposalId: { in: [...ids] } },
+      select: { learningProposalId: true, closedAt: true, outcome: true },
     });
-    const outcome: "completed" | "closed-other" | null =
-      filing?.outcome === "completed" || filing?.outcome === "closed-other" ? filing.outcome : null;
-    return {
-      ...proposal,
-      boardOutcome: {
-        closedAt: filing?.closedAt?.toISOString() ?? null,
-        outcome,
-      },
-    };
+    const byProposal = new Map(filings.map((filing) => [filing.learningProposalId, filing]));
+    return proposals.map((proposal) => {
+      if (!ids.has(proposal.id)) return proposal;
+      const filing = byProposal.get(proposal.id);
+      const outcome: "completed" | "closed-other" | null =
+        filing?.outcome === "completed" || filing?.outcome === "closed-other"
+          ? filing.outcome
+          : null;
+      return {
+        ...proposal,
+        boardOutcome: { closedAt: filing?.closedAt?.toISOString() ?? null, outcome },
+      };
+    });
   }
   const grants = createLearningGrants(deps.prisma);
   const apply = () => {
@@ -161,7 +167,7 @@ export function createLearningService(deps: {
       const proposal = proposalView(row);
       if (proposal.status === "pending" && new Date(proposal.expiresAt) <= new Date())
         proposal.status = "expired";
-      return withBoardOutcome(proposal);
+      return (await withBoardOutcomes(actor.spaceId, [proposal]))[0]!;
     },
     assertBot: (actor: Actor, botId: string) => learningMember(deps.prisma, identity(actor), botId),
     async curator(actor: Actor) {
@@ -300,12 +306,13 @@ export function createLearningService(deps: {
       return {
         botNames: Object.fromEntries(bots.map((bot) => [bot.id, bot.name])),
         reviews: reviews.map((row) => ReviewExecutionSchema.parse(row)),
-        proposals: await Promise.all(
-          proposals.map(async (row) => {
+        proposals: await withBoardOutcomes(
+          actor.spaceId,
+          proposals.map((row) => {
             const proposal = proposalView(row);
             if (proposal.status === "pending" && new Date(proposal.expiresAt) <= new Date())
               proposal.status = "expired";
-            return withBoardOutcome(proposal);
+            return proposal;
           }),
         ),
         ...counts,

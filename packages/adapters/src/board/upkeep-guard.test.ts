@@ -60,55 +60,152 @@ const item = (title: string, status = "open"): WorkItem =>
     filedBy: null,
   }) as WorkItem;
 
-function service(options?: { open?: WorkItem[]; filings?: number; hourFilings?: number }) {
-  const filings = Array.from({ length: options?.filings ?? 0 }, (_, index) => ({
-    id: `run-${index}`,
-    spaceId: "space",
-    runId: "run",
-    createdAt: new Date(),
-  }));
-  for (let index = 0; index < (options?.hourFilings ?? 0); index += 1) {
-    filings.push({
-      id: `hour-${index}`,
-      spaceId: "space",
-      runId: `other-${index}`,
-      createdAt: new Date(),
-    });
-  }
+type Filing = Record<string, unknown> & { id: string };
+const filingRow = (row: Partial<Filing> & { id: string }): Filing => ({
+  spaceId: "space",
+  runId: "run",
+  botId: null,
+  workspaceId: null,
+  itemId: null,
+  learningProposalId: null,
+  reused: false,
+  closedAt: null,
+  outcome: null,
+  createdAt: new Date(),
+  ...row,
+});
+const filingMatches = (row: Filing, where: Record<string, unknown> = {}) =>
+  Object.entries(where).every(([key, value]) =>
+    value !== null && typeof value === "object" ? true : row[key] === value,
+  );
+
+/** A session advisory lock table shared by every client of one fake pool. */
+function advisoryPool() {
+  const held = new Map<string, number>();
+  const state = { open: 0, maxOpen: 0, connects: 0, destroyed: 0 };
+  const queries: Array<{ sql: string; values: unknown[] }> = [];
+  const pool = {
+    connect: vi.fn(async () => {
+      const client = ++state.connects;
+      state.open += 1;
+      state.maxOpen = Math.max(state.maxOpen, state.open);
+      return {
+        query: vi.fn(async (sql: string, values: unknown[] = []) => {
+          queries.push({ sql, values });
+          const key = String(values[1]);
+          if (sql.includes("pg_try_advisory_lock")) {
+            if (held.has(key)) return { rows: [{ acquired: false }] };
+            held.set(key, client);
+            return { rows: [{ acquired: true }] };
+          }
+          if (sql.includes("pg_advisory_unlock")) {
+            const owned = held.get(key) === client;
+            if (owned) held.delete(key);
+            return { rows: [{ released: owned }] };
+          }
+          throw new Error(`Unexpected query: ${sql}`);
+        }),
+        release: vi.fn((destroy?: unknown) => {
+          state.open -= 1;
+          if (destroy) state.destroyed += 1;
+        }),
+      };
+    }),
+  };
+  return { pool, held, state, queries };
+}
+
+function service(options?: {
+  open?: WorkItem[];
+  filings?: number;
+  hourFilings?: number;
+  pool?: unknown;
+}) {
+  const filings: Filing[] = Array.from({ length: options?.filings ?? 0 }, (_, index) =>
+    filingRow({ id: `run-${index}` }),
+  );
+  for (let index = 0; index < (options?.hourFilings ?? 0); index += 1)
+    filings.push(filingRow({ id: `hour-${index}`, runId: `other-${index}` }));
+  const transactions = { open: 0 };
+  const botBoardFiling = {
+    count: vi.fn(
+      async ({ where }: { where: Record<string, unknown> }) =>
+        filings.filter((row) => filingMatches(row, where)).length,
+    ),
+    findFirst: vi.fn(
+      async ({ where }: { where: Record<string, unknown> }) =>
+        filings.find((row) => filingMatches(row, where)) ?? null,
+    ),
+    create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+      const row = filingRow({ id: `new-${filings.length}`, ...data });
+      filings.push(row);
+      return row;
+    }),
+    update: vi.fn(async ({ where, data }: { where: { id: string }; data: object }) => {
+      const row = filings.find((item) => item.id === where.id);
+      if (!row) throw new Error("Missing filing");
+      Object.assign(row, data);
+      return row;
+    }),
+    delete: vi.fn(async ({ where }: { where: { id: string } }) => {
+      const index = filings.findIndex((row) => row.id === where.id);
+      if (index < 0) throw new Error("Missing filing");
+      filings.splice(index, 1);
+      return { id: where.id };
+    }),
+    deleteMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+      const kept = filings.filter((row) => !filingMatches(row, where));
+      const count = filings.length - kept.length;
+      filings.splice(0, filings.length, ...kept);
+      return { count };
+    }),
+  };
   const prisma = {
-    botBoardFiling: {
-      count: vi.fn(
-        async ({ where }: { where: { runId?: string; spaceId: string; createdAt?: unknown } }) =>
-          filings.filter((row) => (where.runId ? row.runId === where.runId : true)).length,
-      ),
-      create: vi.fn(async ({ data }: { data: { spaceId: string; runId: string } }) => {
-        const row = { id: `new-${filings.length}`, createdAt: new Date(), ...data };
-        filings.push(row);
-        return row;
-      }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: object }) => {
-        const row = filings.find((item) => item.id === where.id);
-        if (!row) throw new Error("Missing filing");
-        Object.assign(row, data);
-        return row;
-      }),
-      delete: vi.fn(async ({ where }: { where: { id: string } }) => {
-        const index = filings.findIndex((row) => row.id === where.id);
-        if (index >= 0) filings.splice(index, 1);
-        return { id: where.id };
-      }),
-    },
+    botBoardFiling,
     run: { findFirst: vi.fn(async () => null) },
     $executeRaw: vi.fn(async () => 1),
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
-      const snapshot = filings.map((row) => ({ ...row }));
-      try {
-        return await fn(prisma);
-      } catch (error) {
-        filings.splice(0, filings.length, ...snapshot);
-        throw error;
-      }
-    }),
+    // Enforces the interactive transaction deadline the way Prisma does.
+    $transaction: vi.fn(
+      async (fn: (tx: unknown) => Promise<unknown>, settings?: { timeout?: number }) => {
+        const snapshot = filings.map((row) => ({ ...row }));
+        let closed = false;
+        const guard = <T extends object>(target: T): T =>
+          new Proxy(target, {
+            get(object, key) {
+              const value = Reflect.get(object, key);
+              if (typeof value !== "function") return value;
+              return (...args: unknown[]) => {
+                if (closed) throw new Error("Transaction already closed");
+                return value.apply(object, args);
+              };
+            },
+          });
+        const tx = guard({
+          botBoardFiling: guard(botBoardFiling),
+          $executeRaw: prisma.$executeRaw,
+        });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        transactions.open += 1;
+        try {
+          return await Promise.race([
+            fn(tx),
+            new Promise((_resolve, reject) => {
+              timer = setTimeout(
+                () => reject(new Error("Transaction already closed: timeout")),
+                settings?.timeout ?? 5_000,
+              );
+            }),
+          ]);
+        } catch (error) {
+          filings.splice(0, filings.length, ...snapshot);
+          throw error;
+        } finally {
+          closed = true;
+          transactions.open -= 1;
+          clearTimeout(timer);
+        }
+      },
+    ),
   };
   const created = item("Task");
   const provider = {
@@ -127,11 +224,15 @@ function service(options?: { open?: WorkItem[]; filings?: number; hourFilings?: 
     claim: vi.fn(),
     link: vi.fn(),
   };
-  const board = new BoardService({ prisma: prisma as never, dataDir: "/fixture" });
+  const board = new BoardService({
+    prisma: prisma as never,
+    dataDir: "/fixture",
+    pool: options?.pool as never,
+  });
   vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
   vi.spyOn(board, "provider").mockResolvedValue(provider as never);
   vi.spyOn(board, "actor").mockResolvedValue("bot:Builder");
-  return { board, provider, prisma };
+  return { board, provider, prisma, filings, transactions };
 }
 
 const scope = { userId: "owner", spaceId: "space", botId: "builder", runId: "run" };
@@ -413,7 +514,8 @@ it("keeps the filing when create reports the item already exists", async () => {
 });
 
 it("serializes same-title filings so only one item is created", async () => {
-  const { board, provider, prisma } = service();
+  const lock = advisoryPool();
+  const { board, provider, prisma } = service({ pool: lock.pool });
   const open: WorkItem[] = [];
   let releaseFirst: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => {
@@ -428,23 +530,6 @@ it("serializes same-title filings so only one item is created", async () => {
     if (createdCount === 1) await gate;
     open.push(created);
     return created;
-  });
-  let chain = Promise.resolve();
-  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
-    const run = chain.then(async () => {
-      const snapshot = [...open];
-      try {
-        return await fn(prisma);
-      } catch (error) {
-        open.splice(0, open.length, ...snapshot);
-        throw error;
-      }
-    });
-    chain = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
   });
   const pending = Promise.all([
     executeBoardTool(
@@ -758,4 +843,230 @@ it("leaves board tools unchanged when upkeep is off", async () => {
     expect.objectContaining({ title: "Task", description: "[redacted]" }),
   );
   expect(provider.noteFiling).not.toHaveBeenCalled();
+});
+
+it.each([true, false])(
+  "redacts labels, assignee and external references on create and update (upkeep=%s)",
+  async (upkeep) => {
+    const { board, provider } = service();
+    await executeBoardTool(
+      board,
+      scope,
+      "board_create",
+      {
+        workspaceId: "workspace",
+        item: {
+          title: "Task",
+          labels: ["ops", "key-sk-test"],
+          assignee: "sk-test",
+          externalRef: "https://tracker.example/sk-test",
+        },
+      },
+      { upkeep, secrets: ["sk-test"] },
+    );
+    expect(provider.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labels: upkeep ? ["ops", "key-[redacted]", "bot-filed"] : ["ops", "key-[redacted]"],
+        assignee: "[redacted]",
+        externalRef: "https://tracker.example/[redacted]",
+      }),
+    );
+    await executeBoardTool(
+      board,
+      scope,
+      "board_update",
+      {
+        workspaceId: "workspace",
+        id: "board-a",
+        patch: { labels: ["sk-test"], assignee: "owner sk-test", externalRef: "sk-test" },
+      },
+      { upkeep, secrets: ["sk-test"] },
+    );
+    expect(provider.update).toHaveBeenCalledWith("board-a", {
+      labels: ["[redacted]"],
+      assignee: "owner [redacted]",
+      externalRef: "[redacted]",
+    });
+  },
+);
+
+it("holds a space session lock, not a transaction, across a create slower than 15 seconds", async () => {
+  vi.useFakeTimers();
+  try {
+    const lock = advisoryPool();
+    const { board, provider, filings, transactions } = service({ pool: lock.pool });
+    const openAt: number[] = [];
+    provider.list.mockImplementation(async () => {
+      openAt.push(transactions.open);
+      return [];
+    });
+    provider.create.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          openAt.push(transactions.open);
+          setTimeout(() => resolve(item("Slow")), 16_000);
+        }),
+    );
+    const outcome = executeBoardTool(
+      board,
+      scope,
+      "board_create",
+      { workspaceId: "workspace", item: { title: "Slow" } },
+      { upkeep: true },
+    ).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(16_000);
+    await expect(outcome).resolves.toMatchObject({ id: "board-a" });
+    expect(provider.create).toHaveBeenCalledOnce();
+    expect(provider.noteFiling).toHaveBeenCalledOnce();
+    expect(openAt).toEqual([0, 0]);
+    expect(filings).toEqual([
+      expect.objectContaining({ runId: "run", workspaceId: "workspace", itemId: "board-a" }),
+    ]);
+    expect(lock.queries.map((query) => query.values)).toEqual([
+      [1_380_019_075, "space", 4],
+      [1_380_019_075, "space", 4],
+    ]);
+    expect(lock.queries[0]?.sql).toContain("pg_try_advisory_lock(");
+    expect(lock.queries[1]?.sql).toContain("pg_advisory_unlock(");
+    expect(lock.held.size).toBe(0);
+    expect(lock.state).toMatchObject({ open: 0, connects: 1, destroyed: 0 });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("waits a bounded time for another filing in the same space, then reports it busy", async () => {
+  vi.useFakeTimers();
+  try {
+    const lock = advisoryPool();
+    lock.held.set("space", 0);
+    const { board, provider, filings } = service({ pool: lock.pool });
+    const outcome = executeBoardTool(
+      board,
+      scope,
+      "board_create",
+      { workspaceId: "workspace", item: { title: "Queued" } },
+      { upkeep: true },
+    ).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(16_000);
+    const error = await outcome;
+    expect(error).toBeInstanceOf(BoardError);
+    expect(error).toMatchObject({
+      problem: { code: "busy", message: "Another write is in progress" },
+    });
+    expect(provider.list).not.toHaveBeenCalled();
+    expect(provider.create).not.toHaveBeenCalled();
+    expect(filings).toEqual([]);
+    expect(lock.state.connects).toBeGreaterThan(1);
+    expect(lock.state).toMatchObject({ open: 0, maxOpen: 1 });
+
+    const other = await executeBoardTool(
+      board,
+      { ...scope, spaceId: "space-2" },
+      "board_create",
+      { workspaceId: "workspace", item: { title: "Elsewhere" } },
+      { upkeep: true },
+    );
+    expect(other).toMatchObject({ id: "board-a" });
+    expect(provider.create).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("deletes the reservation when create fails before any item exists", async () => {
+  const lock = advisoryPool();
+  const { board, provider, filings } = service({ pool: lock.pool });
+  provider.create.mockRejectedValueOnce(
+    new BoardError({ code: "command_failed", message: "Beads could not finish this change." }),
+  );
+  await expect(
+    executeBoardTool(
+      board,
+      scope,
+      "board_create",
+      { workspaceId: "workspace", item: { title: "Rejected" } },
+      { upkeep: true },
+    ),
+  ).rejects.toMatchObject({ problem: { code: "command_failed" } });
+  expect(filings).toEqual([]);
+  expect(lock.held.size).toBe(0);
+});
+
+it("repairs missing filing metadata when the same run finds the item it filed", async () => {
+  const mine = service({ open: [item("Task")] });
+  mine.filings.push(filingRow({ id: "mine", workspaceId: "workspace", itemId: "board-a" }));
+  const result = await executeBoardTool(
+    mine.board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "task" } },
+    { upkeep: true },
+  );
+  expect(mine.provider.noteFiling).toHaveBeenCalledWith("board-a", {
+    runId: "run",
+    botId: "builder",
+    botName: "Builder",
+  });
+  expect(result).toMatchObject({
+    duplicate: true,
+    item: { id: "board-a", filedBy: { runId: "run" } },
+    message: "An open item already has this title: board-a.",
+  });
+  expect(mine.provider.create).not.toHaveBeenCalled();
+
+  const theirs = service({ open: [item("Task")] });
+  theirs.filings.push(
+    filingRow({ id: "theirs", runId: "other", workspaceId: "workspace", itemId: "board-a" }),
+  );
+  await executeBoardTool(
+    theirs.board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "task" } },
+    { upkeep: true },
+  );
+  expect(theirs.provider.noteFiling).not.toHaveBeenCalled();
+});
+
+it("records a proposal's reuse of an open item and returns its own filing on retry", async () => {
+  const learningScope = { userId: "owner", spaceId: "space", botId: "builder" };
+  const reused = service({ open: [item("Recurring failure")] });
+  await reused.board.fileLearningProposal(
+    learningScope,
+    "proposal",
+    { title: "recurring failure", description: "", acceptanceCriteria: "Resolved" },
+    [],
+  );
+  expect(reused.filings).toEqual([
+    expect.objectContaining({
+      runId: null,
+      botId: "builder",
+      workspaceId: "workspace",
+      itemId: "board-a",
+      learningProposalId: "proposal",
+      reused: true,
+    }),
+  ]);
+
+  const filed = service();
+  const shown = item("Task");
+  filed.provider.show.mockResolvedValue(shown);
+  const first = await filed.board.fileLearningProposal(
+    learningScope,
+    "proposal",
+    { title: "Task", description: "", acceptanceCriteria: "Done" },
+    [],
+  );
+  filed.provider.list.mockResolvedValue([]);
+  const retry = await filed.board.fileLearningProposal(
+    learningScope,
+    "proposal",
+    { title: "Task", description: "", acceptanceCriteria: "Done" },
+    [],
+  );
+  expect(filed.provider.create).toHaveBeenCalledOnce();
+  expect(filed.provider.show).toHaveBeenCalledWith("board-a");
+  expect(retry).toEqual({ ...first, item: shown });
+  expect(filed.filings).toHaveLength(1);
 });

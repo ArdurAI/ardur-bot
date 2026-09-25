@@ -6,7 +6,11 @@ import { memoryServiceFixture, serialMemoryLock } from "@ardurbot/testkit/memory
 import { describe, expect, it, vi } from "vitest";
 import { LEARNING_POLICY_VERSION, loadLearningRecords } from "./learning-records.js";
 import type { LearningReviewDependencies } from "./learning-review.js";
-import { reviewLearning, validateLearningCandidate } from "./learning-review.js";
+import {
+  LEARNING_REVIEW_INSTRUCTION,
+  reviewLearning,
+  validateLearningCandidate,
+} from "./learning-review.js";
 
 const pin: RuntimePin = {
   provider: "openai-compatible",
@@ -506,9 +510,9 @@ describe("proposal validation", () => {
       scope,
       target: {},
       boardItem: {
-        title: "Track recurring failure",
-        description: "The integration failed again.",
-        acceptanceCriteria: "The integration succeeds in the regression suite.",
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes in the regression suite.",
       },
       rationale: "The follow-up remains unfinished.",
       evidenceIds: ["outcome"],
@@ -526,5 +530,52 @@ describe("proposal validation", () => {
     };
     expect(validateLearningCandidate(board, { ...input, evidence: [outcome] })).toBe("pending");
     expect(validateLearningCandidate(board, input)).toBe("rejected");
+    const retry = {
+      ...board,
+      boardItem: { ...board.boardItem!, description: "Run the import again after the fix." },
+    };
+    expect(validateLearningCandidate(retry, { ...input, evidence: [outcome] })).toBe("pending");
+  });
+  it.each<{ title?: string; description?: string; rationale?: string }>([
+    { title: "Track recurring failure" },
+    { description: "The integration failed again." },
+    { description: "The export keeps failing." },
+    { rationale: "This happened across runs." },
+  ])("rejects a board item that claims recurrence from one run (%o)", (claim) => {
+    const outcome = {
+      id: "outcome",
+      runId: "run",
+      threadId: "thread",
+      kind: "observed-outcome" as const,
+      sourceClass: "run" as const,
+      eventIds: ["event"],
+      redactionVersion: 1 as const,
+      outcome: { category: "failure" as const, classification: "execution" as const },
+    };
+    const { rationale, ...item } = claim;
+    const board: LearningCandidate = {
+      type: "board-item",
+      scope,
+      target: {},
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+        ...item,
+      },
+      rationale: rationale ?? "The follow-up remains unfinished.",
+      evidenceIds: ["outcome"],
+      confidence: { label: "model estimate", value: 0.7 },
+    };
+    expect(validateLearningCandidate(board, { ...input, evidence: [outcome] })).toBe("rejected");
+  });
+  it("asks for a single-run follow-up, matching the validator", () => {
+    expect(LEARNING_REVIEW_INSTRUCTION).not.toMatch(/recurring|across runs/);
+    expect(LEARNING_REVIEW_INSTRUCTION).toContain(
+      "one board item for an unfinished follow-up from this run",
+    );
+    expect(LEARNING_REVIEW_INSTRUCTION).toContain(
+      "Evidence covers this run only, so a board item never claims a failure recurred.",
+    );
   });
 });

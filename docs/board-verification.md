@@ -692,6 +692,27 @@ bd --json --actor board-owner --sandbox --dolt-auto-commit off -C "$TMP_BOARD" r
 ]
 ```
 
+## Filing metadata in one update — 2026-09-25
+
+`bd update --help` from `bd version 1.2.2` lists the flag as repeatable:
+
+```text
+      --set-metadata stringArray     Set metadata key=value (repeatable, e.g., --set-metadata team=platform)
+```
+
+On a new temporary board initialized as above, one update carried all three
+filing keys, and `show` returned them together:
+
+```sh
+bd --json --actor board-owner --sandbox --dolt-auto-commit off -C "$TMP_BOARD" update board-<id> --set-metadata ardur_run_id=run-1 --set-metadata ardur_bot_id=builder --set-metadata ardur_filed_by=Builder
+```
+
+```json
+{ "ardur_bot_id": "builder", "ardur_run_id": "run-1", "ardur_filed_by": "Builder" }
+```
+
+The temporary board was removed afterwards.
+
 ## Initialization isolation evidence
 
 A separate temporary folder test used a Git repository with a sentinel agents

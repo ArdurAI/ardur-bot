@@ -30,6 +30,8 @@ import type { EncryptedSecretStore } from "./secrets.js";
 import { skillDocumentContext } from "./skill-documents.js";
 
 type Identity = Pick<Actor, "spaceId" | "userId">;
+const BOARD_UNDO_REASON = "Undone from Learning";
+const BOARD_ITEM_CHANGED = "This board item changed after it was filed. Review it on the Board.";
 export interface LearningApplyDependencies {
   prisma: PrismaClient;
   memoryDocuments?: MemoryService;
@@ -298,34 +300,6 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     onCommit: (doc: MemoryDocumentHead, context: MemoryOperationContext) => void,
   ) {
     const actor = { spaceId: context.spaceId, userId: context.userId };
-    if (proposal.type === "board-item") {
-      if (proposal.status !== "applied")
-        throw new Error("This suggestion has no applied board item to undo.");
-      if (!deps.boardService || !proposal.scope.botId || !proposal.appliedBoardItem)
-        throw new Error("This suggestion has no applied board item to undo.");
-      const boardScope = { ...actor, botId: proposal.scope.botId };
-      const provider = await deps.boardService.provider(
-        boardScope,
-        proposal.appliedBoardItem.workspaceId,
-      );
-      const item = await provider.show(proposal.appliedBoardItem.itemId);
-      if (item.status === "closed" || item.updatedAt !== proposal.appliedBoardItem.updatedAt) {
-        await audit("revert-conflict");
-        return {
-          proposal,
-          conflict: {
-            before: "",
-            applied: proposal.appliedBoardItem.itemId,
-            current: "This board item has moved on.",
-            expectedRevision: 0,
-          },
-        };
-      }
-      await provider.close([item.id], "Undone from Learning");
-      proposal.status = "reverted";
-      await audit("revert");
-      return { proposal: await save(tx, proposal) };
-    }
     if (proposal.status !== "applied" || !proposal.documentId || !proposal.appliedRevisionId)
       throw new Error("This suggestion has no applied change to undo.");
     const head = await target(tx, proposal, context, proposal.documentId, true);
@@ -418,9 +392,85 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     onCommit(doc, context);
     return { proposal: saved };
   }
+  async function proposalStatus(id: string, actor: Identity) {
+    const row = await deps.prisma.learningProposal.findFirst({
+      where: { id, ...actor },
+      select: { status: true },
+    });
+    if (!row) throw new IsolationError();
+    return row.status;
+  }
+  /** Files outside the learning transaction; the filing lock also orders reject and Undo. */
+  async function fileBoardItem(
+    id: string,
+    actor: Identity,
+    proposal: LearningProposal,
+    secrets: string[],
+  ) {
+    const service = deps.boardService!;
+    return service.withFilingLock(actor, async () => {
+      if ((await proposalStatus(id, actor)) !== "pending")
+        throw new Error("This suggestion is no longer pending.");
+      const filed = await service.fileLearningProposal(
+        { ...actor, botId: proposal.scope.botId! },
+        proposal.id,
+        proposal.boardItem!,
+        secrets,
+      );
+      return operation(id, actor, async (tx, current, _context, audit) => {
+        if (current.status !== "pending") throw new Error("This suggestion is no longer pending.");
+        current.appliedBoardItem = {
+          workspaceId: filed.workspaceId,
+          itemId: filed.item.id,
+          updatedAt: filed.item.updatedAt,
+          duplicate: filed.duplicate,
+        };
+        current.status = "applied";
+        await audit("approve");
+        return { proposal: await save(tx, current, { appliedAt: new Date() }) };
+      });
+    });
+  }
+  /** Closes the filed item only if nobody changed it since approval. */
+  async function undoBoardItem(id: string, actor: Identity, proposal: LearningProposal) {
+    const service = deps.boardService!;
+    const applied = proposal.appliedBoardItem!;
+    return service.withFilingLock(actor, async () => {
+      if ((await proposalStatus(id, actor)) !== "applied")
+        throw new Error("This suggestion has no applied board item to undo.");
+      const provider = await service.provider(
+        { ...actor, botId: proposal.scope.botId! },
+        applied.workspaceId,
+      );
+      const item = await provider.show(applied.itemId);
+      const undone = item.status === "closed" && item.closeReason === BOARD_UNDO_REASON;
+      const changed = !undone && (item.status === "closed" || item.updatedAt !== applied.updatedAt);
+      if (!undone && !changed) await provider.close([item.id], BOARD_UNDO_REASON);
+      return operation(id, actor, async (tx, current, _context, audit) => {
+        if (current.status !== "applied")
+          throw new Error("This suggestion has no applied board item to undo.");
+        if (changed) {
+          await audit("revert-conflict");
+          return {
+            proposal: current,
+            conflict: {
+              before: "",
+              applied: applied.itemId,
+              current: BOARD_ITEM_CHANGED,
+              expectedRevision: 0,
+            },
+          };
+        }
+        current.status = "reverted";
+        await audit("revert");
+        return { proposal: await save(tx, current) };
+      });
+    });
+  }
   async function apply(id: string, actor: Identity, edits?: LearningEdit, grantId?: string) {
     actor = { spaceId: actor.spaceId, userId: actor.userId };
     let committed: { doc: MemoryDocumentHead; context: MemoryOperationContext } | undefined;
+    let board: { proposal: LearningProposal; secrets: string[] } | undefined;
     const result = await operation(id, actor, async (tx, proposal, context, audit) => {
       if (proposal.status !== "pending") throw new Error("This suggestion is no longer pending.");
       if (new Date(proposal.expiresAt) <= new Date()) {
@@ -511,22 +561,8 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         if (grantId) throw new Error("Approve this board item explicitly.");
         if (edits || !deps.boardService || !proposal.scope.botId || !proposal.boardItem)
           throw new Error("This board item cannot be applied.");
-        const filed = await deps.boardService.fileLearningProposal(
-          { ...actor, botId: proposal.scope.botId },
-          proposal.id,
-          proposal.boardItem,
-          [...(context.knownSecrets ?? [])],
-          tx,
-        );
-        proposal.appliedBoardItem = {
-          workspaceId: filed.workspaceId,
-          itemId: filed.item.id,
-          updatedAt: filed.item.updatedAt,
-          duplicate: filed.duplicate,
-        };
-        proposal.status = "applied";
-        await audit("approve");
-        return { proposal: await save(tx, proposal, { appliedAt: new Date() }) };
+        board = { proposal, secrets: [...(context.knownSecrets ?? [])] };
+        return { proposal };
       }
       if (proposal.operation === "consolidation") {
         if (grantId) throw new Error("Approve consolidation explicitly.");
@@ -651,6 +687,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       return { proposal: saved };
     });
     if (committed) await memory().schedule(committed.doc, committed.context);
+    if (board) return fileBoardItem(id, actor, board.proposal, board.secrets);
     return result;
   }
   return {
@@ -679,30 +716,62 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       });
     },
     async reject(id: string, actor: Identity, _reason?: string) {
-      actor = { spaceId: actor.spaceId, userId: actor.userId };
-      return operation(id, actor, async (tx, proposal, _context, audit) => {
-        if (proposal.status !== "pending") throw new Error("This suggestion is no longer pending.");
-        const row = await tx.learningProposal.findUniqueOrThrow({ where: { id } });
-        for (const fingerprint of new Set([row.fingerprint, proposalFingerprint(proposal)]))
-          await tx.learningSuppression.upsert({
-            where: { spaceId_userId_fingerprint: { ...actor, fingerprint } },
-            create: { ...actor, fingerprint },
-            update: proposal.type === "policy-suggestion" ? { createdAt: new Date() } : {},
-          });
-        proposal.status = "rejected";
-        await audit("reject");
-        return { proposal: await save(tx, proposal) };
+      const identity = { spaceId: actor.spaceId, userId: actor.userId };
+      const reject = () =>
+        operation(id, identity, async (tx, proposal, _context, audit) => {
+          if (proposal.status !== "pending")
+            throw new Error("This suggestion is no longer pending.");
+          const row = await tx.learningProposal.findUniqueOrThrow({ where: { id } });
+          for (const fingerprint of new Set([row.fingerprint, proposalFingerprint(proposal)]))
+            await tx.learningSuppression.upsert({
+              where: { spaceId_userId_fingerprint: { ...identity, fingerprint } },
+              create: { ...identity, fingerprint },
+              update: proposal.type === "policy-suggestion" ? { createdAt: new Date() } : {},
+            });
+          proposal.status = "rejected";
+          await audit("reject");
+          return { proposal: await save(tx, proposal) };
+        });
+      const row = await deps.prisma.learningProposal.findFirst({
+        where: { id, ...identity },
+        select: { body: true },
       });
+      // An approval that already passed its pending check finishes before this reject.
+      const board = (row?.body as { type?: unknown } | undefined)?.type === "board-item";
+      return board && deps.boardService
+        ? deps.boardService.withFilingLock(identity, reject)
+        : reject();
     },
     async revert(id: string, actor: Identity) {
       actor = { spaceId: actor.spaceId, userId: actor.userId };
       let committed: { doc: MemoryDocumentHead; context: MemoryOperationContext } | undefined;
+      let filed: LearningProposal | undefined;
       const result = await operation(id, actor, async (tx, proposal, context, audit) => {
-        return revertChange(tx, proposal, context, audit, (doc, context) => {
-          committed = { doc, context };
+        if (proposal.type !== "board-item")
+          return revertChange(tx, proposal, context, audit, (doc, context) => {
+            committed = { doc, context };
+          });
+        if (
+          proposal.status !== "applied" ||
+          !deps.boardService ||
+          !proposal.scope.botId ||
+          !proposal.appliedBoardItem
+        )
+          throw new Error("This suggestion has no applied board item to undo.");
+        if (!proposal.appliedBoardItem.duplicate) {
+          filed = proposal;
+          return { proposal };
+        }
+        // A reused item belongs to whoever filed it; Undo only removes this proposal's link.
+        await tx.botBoardFiling.deleteMany({
+          where: { spaceId: actor.spaceId, learningProposalId: proposal.id, reused: true },
         });
+        proposal.status = "reverted";
+        await audit("revert");
+        return { proposal: await save(tx, proposal) };
       });
       if (committed) await memory().schedule(committed.doc, committed.context);
+      if (filed) return undoBoardItem(id, actor, filed);
       return result;
     },
   };

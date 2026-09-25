@@ -2227,15 +2227,17 @@ model BotBoardFiling {
   workspaceId String?
   itemId String?
   botId String?
-  learningProposalId String?
+  learningProposalId String? @unique
+  // A learning proposal that matched an existing open item links to it without owning it.
+  reused Boolean @default(false)
   closedAt DateTime?
   outcome String?
   createdAt DateTime @default(now())
 
-  @@unique([workspaceId, itemId])
   @@index([runId])
-  @@index([learningProposalId])
   @@index([spaceId, createdAt])
+  @@index([workspaceId, itemId])
+  // Partial unique index bot_board_filings_workspaceId_itemId_key (one owner per item) is created in SQL.
   @@map("bot_board_filings")
 }
 

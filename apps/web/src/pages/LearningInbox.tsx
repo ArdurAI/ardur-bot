@@ -529,7 +529,7 @@ function LearningCard({
         <div role="alert" className="mt-3 text-sm">
           {proposal.type === "board-item" ? (
             <p>
-              <Trans>This board item has moved on.</Trans>
+              <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
             </p>
           ) : (
             <p>

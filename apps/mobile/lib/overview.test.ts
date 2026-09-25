@@ -4,6 +4,7 @@ import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OverviewScreen from "../app/overview";
+import { rpc } from "./api";
 import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "./overview";
 
 vi.mock("./api", () => ({
@@ -171,6 +172,21 @@ it.each(["needs-sign-in", "not-connected"])(
     expect(node.textContent).toContain("Calendar · Needs sign-in");
   },
 );
+it("renders the Work summary from a server that has no filing outcomes", async () => {
+  const original = vi.mocked(rpc).getMockImplementation()!;
+  vi.mocked(rpc).mockImplementation(async (procedure: string, input?: unknown) => {
+    if (procedure === "board/filingOutcomes") throw new Error("NOT_FOUND");
+    return original(procedure, input);
+  });
+  try {
+    await act(async () => root.render(createElement(OverviewScreen)));
+    expect(node.textContent).toContain("Ready: 0 · In progress: 0 · Blocked: 0");
+    expect(node.textContent).not.toContain("filed");
+    expect(node.textContent).not.toContain("Could not load");
+  } finally {
+    vi.mocked(rpc).mockImplementation(original);
+  }
+});
 it("identifies totals-only usage as records on mobile", async () => {
   const period = { records: 1, requests: 1, inputTokens: 20, outputTokens: 5, cost: null };
   vi.mocked(loadOverviewUsage).mockResolvedValue({

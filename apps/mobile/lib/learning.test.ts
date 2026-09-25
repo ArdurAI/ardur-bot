@@ -195,6 +195,53 @@ it("renders the native list, approves, shows applied copy and supports Undo with
   }
 });
 
+it("says what happened when a filed board item changed before Undo", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    diff: "+Finish the import follow-up",
+    status: "applied",
+    appliedBoardItem: {
+      workspaceId: "workspace",
+      itemId: "board-a",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      duplicate: false,
+    },
+  };
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/journey") return [];
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    if (path === "learning/revert")
+      return {
+        proposal: board,
+        conflict: { before: "", applied: "board-a", current: "", expectedRevision: 0 },
+      };
+    return { reviews: [], proposals: [board], pendingCount: 0, appliedThisWeek: 1 };
+  });
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    await act(async () =>
+      [...container.querySelectorAll("button")].find((b) => b.textContent === "Undo")!.click(),
+    );
+    expect(container.textContent).toContain(
+      "This board item changed after it was filed. Review it on the Board.",
+    );
+    expect(container.textContent).not.toContain("moved on");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it("preserves content that resembles a diff header", () => {
   expect(learningBeforeAfter("--- current\n+++ proposed\n--- current\n+++ proposed")).toEqual({
     before: "-- current",

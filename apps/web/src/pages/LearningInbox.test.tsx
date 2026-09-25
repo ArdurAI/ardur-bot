@@ -193,6 +193,40 @@ it("separates pending copy from applied copy, approves without removing the card
   expect(api.revert).toHaveBeenCalledWith({ proposalId: "proposal" });
   expect(container.textContent).toContain("Undone");
 });
+it("says what happened when a filed board item changed before Undo", async () => {
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    status: "applied",
+    appliedBoardItem: {
+      workspaceId: "workspace",
+      itemId: "board-a",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      duplicate: false,
+    },
+  };
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [board],
+    pendingCount: 0,
+    appliedThisWeek: 1,
+  });
+  api.revert.mockResolvedValue({
+    proposal: board,
+    conflict: { before: "", applied: "board-a", current: "", expectedRevision: 0 },
+  });
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  await click("Undo");
+  expect(container.querySelector("article [role=alert]")?.textContent).toBe(
+    "This board item changed after it was filed. Review it on the Board.",
+  );
+});
 it("disables display-only approval with a sentence and does not fetch evidence until opened", async () => {
   api.list.mockResolvedValue({
     reviews: [],

@@ -1050,5 +1050,6 @@ export const RU_MESSAGES: Record<string, string> = {
   "This board item is still open.": "Эта задача на доске всё ещё открыта.",
   "This board item was completed.": "Эта задача на доске выполнена.",
   "This board item was closed otherwise.": "Эта задача на доске закрыта по другой причине.",
-  "This board item has moved on.": "Эта задача на доске уже изменилась.",
+  "This board item changed after it was filed. Review it on the Board.":
+    "Эта задача на доске изменилась после создания. Проверьте её на доске.",
 };

@@ -342,7 +342,9 @@ export default function Learning() {
                         <View>
                           <Text style={styles.error}>
                             {proposal.type === "board-item"
-                              ? t("This board item has moved on.")
+                              ? t(
+                                  "This board item changed after it was filed. Review it on the Board.",
+                                )
                               : t(
                                   "Later edits overlap this change. Review both versions in History.",
                                 )}
