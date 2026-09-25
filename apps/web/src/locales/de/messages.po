@@ -1518,6 +1518,7 @@ msgid "Compare bots"
 msgstr ""
 
 #: src/pages/CompareStart.tsx
+#: src/pages/Shell.tsx
 msgid "Compare with…"
 msgstr ""
 
@@ -4027,6 +4028,7 @@ msgid "Loading account settings…"
 msgstr ""
 
 #: src/pages/ActivityList.tsx
+#: src/pages/Shell.tsx
 msgid "Loading activity…"
 msgstr "Aktivität wird geladen…"
 

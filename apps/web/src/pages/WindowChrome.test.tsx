@@ -64,7 +64,7 @@ it("registers all four destinations before a direct IDE load and navigates with 
   for (const [key, label, path] of [
     ["1", "Dashboard", "/app"],
     ["2", "Bots", "/app/bots"],
-    ["3", "Board", "/app/team"],
+    ["3", "Board", "/app/board"],
     ["4", "IDE", "/app/ide"],
   ]) {
     await act(async () =>

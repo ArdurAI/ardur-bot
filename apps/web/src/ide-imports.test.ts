@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
-it("keeps Board, IDE, editor, diff and terminal session out of the initial import graph", () => {
+it("keeps optional screens, Dashboard widgets and runtime contracts out of the initial import graph", () => {
   const root = path.dirname(fileURLToPath(import.meta.url));
   const contracts = path.resolve(root, "../../../packages/contracts/src");
   const visit = (directory: string): string[] =>
@@ -52,6 +52,11 @@ it("keeps Board, IDE, editor, diff and terminal session out of the initial impor
   }
   walk(path.join(root, "main.tsx"));
   for (const file of [
+    "pages/ActivityList.tsx",
+    "pages/ChatTaskReview.tsx",
+    "pages/DelegationLines.tsx",
+    "pages/CompareStart.tsx",
+    "pages/ComparePanel.tsx",
     "pages/board/Board.tsx",
     "pages/board/Graph.tsx",
     "pages/board/ItemForm.tsx",
@@ -70,14 +75,11 @@ it("keeps Board, IDE, editor, diff and terminal session out of the initial impor
     "pages/shell/terminal-session.tsx",
   ])
     expect(seen.has(path.join(root, file)), file).toBe(false);
-  for (const file of [
-    "board.ts",
-    "host-bridge.ts",
-    "rpc.ts",
-    "local-import.ts",
-    "dashboard.ts",
-    "features.ts",
-  ])
+  for (const name of ["board", "host-bridge", "rpc", "local-import", "dashboard", "features"])
+    expect(sources.get(path.join(contracts, "index.ts"))).toContain(
+      `export type * from "./${name}.js";`,
+    );
+  for (const file of ["board.ts", "host-bridge.ts", "rpc.ts", "dashboard.ts", "features.ts"])
     expect(seen.has(path.join(contracts, file)), file).toBe(false);
   expect(sources.get(path.join(root, "main.tsx"))).toContain("<BrowserRouter>");
   expect(sources.get(path.join(root, "main.tsx"))).not.toMatch(

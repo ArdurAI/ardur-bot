@@ -210,9 +210,7 @@ import { speaker } from "../lib/tts";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
-import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
-import { CompareStart } from "./CompareStart";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { DashboardPage } from "./dashboard/DashboardPage";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
@@ -260,6 +258,12 @@ const TeamBoard = lazy(() =>
 
 const ProjectBoard = lazy(() =>
   import("./board/Board").then((module) => ({ default: module.Board })),
+);
+const ActivityList = lazy(() =>
+  import("./ActivityList").then((module) => ({ default: module.ActivityList })),
+);
+const CompareStart = lazy(() =>
+  import("./CompareStart").then((module) => ({ default: module.CompareStart })),
 );
 const BotContextMenu = lazy(() =>
   import("./BotContextMenu").then((module) => ({ default: module.BotContextMenu })),
@@ -2746,13 +2750,21 @@ export function ShellPage({
           ) : (
             <>
               {activityMode ? (
-                <ActivityList
-                  onOpenRun={(run) => {
-                    setMobileSidebarOpen(false);
-                    if (run.groupId) navigate(`/app/g/${run.groupId}`);
-                    else navigate(`/app/${run.botId}`);
-                  }}
-                />
+                <Suspense
+                  fallback={
+                    <div className="px-2.5 py-2 text-[13px] text-muted-foreground/80">
+                      <Trans>Loading activity…</Trans>
+                    </div>
+                  }
+                >
+                  <ActivityList
+                    onOpenRun={(run) => {
+                      setMobileSidebarOpen(false);
+                      if (run.groupId) navigate(`/app/g/${run.groupId}`);
+                      else navigate(`/app/${run.botId}`);
+                    }}
+                  />
+                </Suspense>
               ) : null}
               {sidebarGroups.map((group) => {
                 const collapsed = Boolean(group.title) && collapsedSidebarSections.has(group.key);
@@ -5434,18 +5446,26 @@ export const Composer = memo(function Composer({
         </Suspense>
       ) : null}
       {comparisonBotId ? (
-        <CompareStart
-          botId={comparisonBotId}
-          text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
-          files={pendingAttachments.map((item) => item.file)}
-          disabled={disabled || sending}
-          onCreated={() => {
-            setDraft("");
-            setSelectedSkill(null);
-            setSelectedMentions([]);
-            for (const item of pendingAttachments) onRemoveAttachment(item);
-          }}
-        />
+        <Suspense
+          fallback={
+            <Button type="button" variant="ghost" size="sm" disabled>
+              <Trans>Compare with…</Trans>
+            </Button>
+          }
+        >
+          <CompareStart
+            botId={comparisonBotId}
+            text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
+            files={pendingAttachments.map((item) => item.file)}
+            disabled={disabled || sending}
+            onCreated={() => {
+              setDraft("");
+              setSelectedSkill(null);
+              setSelectedMentions([]);
+              for (const item of pendingAttachments) onRemoveAttachment(item);
+            }}
+          />
+        </Suspense>
       ) : null}
       <div className="relative h-8">
         <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
