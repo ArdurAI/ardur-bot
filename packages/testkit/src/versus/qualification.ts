@@ -5,7 +5,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { contentDigest } from "../scoreboard/manifest.js";
-import { budgetTemplate, parseBudget, record, requireValue } from "./budget.js";
+import {
+  budgetTemplate,
+  parseBudget,
+  record,
+  requireValue,
+  validateModelMetadataLabel,
+} from "./budget.js";
 import { writeEvidence } from "./evidence.js";
 import { createTrialDirectory, destroyOwnedDirectory, prepareEnvironment } from "./isolation.js";
 import { diagnoseNativeIsolation } from "./native-diagnostics.js";
@@ -79,7 +85,8 @@ export async function inspectLocalRoute(expected: RouteExpectation, transport = 
     return matches[0]!;
   };
   const tag = matchTag(await metadata("/api/tags"));
-  const version = await metadata("/api/version");
+  const serverVersion = (await metadata("/api/version")).version;
+  validateModelMetadataLabel(serverVersion, "serverVersion");
   const show = await metadata("/api/show", { model: expected.model, verbose: true });
   const details = record(show.details);
   requireValue(details.quantization_level === expected.quantization, "Model quantization drift");
@@ -103,17 +110,14 @@ export async function inspectLocalRoute(expected: RouteExpectation, transport = 
     id: expected.model,
     digest: expected.digest,
     quantization: expected.quantization,
-    serverVersion: String(version.version),
+    serverVersion,
     tokenizerHash: contentDigest(tokenizer),
     templateHash: contentDigest(show.template),
   };
   // Detect a concurrent tag or server change during discovery. Recheck again before
   // admission in a future backend; this observation is not a lasting route lease.
   matchTag(await metadata("/api/tags"));
-  requireValue(
-    (await metadata("/api/version")).version === version.version,
-    "Server version drift",
-  );
+  requireValue((await metadata("/api/version")).version === serverVersion, "Server version drift");
   const budget = parseBudget({
     ...budgetTemplate(),
     contextSize: expected.contextSize,
