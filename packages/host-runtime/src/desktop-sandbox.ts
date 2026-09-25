@@ -160,11 +160,21 @@ export class DesktopSandboxProvider implements SandboxProvider {
     _context: AdapterContext,
   ): Promise<string | null> {
     const box = this.boxFor(computer);
-    return box
-      ? this.opts.restricted
-        ? confinedHostCwd(resolveExecuteCwd(cwd, box.home), this.allowedRoots(box.home))
-        : resolveExecuteCwd(cwd, box.home)
-      : null;
+    if (!box) return null;
+    let candidate = resolveExecuteCwd(cwd, box.home);
+    const missing: string[] = [];
+    for (;;) {
+      try {
+        return path.join(await confinedHostCwd(candidate, this.allowedRoots(box.home)), ...missing);
+      } catch (error) {
+        const parent = path.dirname(candidate);
+        if (this.opts.restricted || !hasErrorCode(error, "ENOENT") || parent === candidate)
+          throw error;
+        // Source mode creates missing directories only when the approved command executes.
+        missing.unshift(path.basename(candidate));
+        candidate = parent;
+      }
+    }
   }
 
   async *execute(
@@ -180,23 +190,27 @@ export class DesktopSandboxProvider implements SandboxProvider {
     }
     if (this.opts.restricted && request.cwd?.split(/[/\\]/u).includes(".."))
       throw new Error("Path escapes registered folders.");
+    const roots = this.allowedRoots(box.home);
+    const sourceRoots = this.opts.restricted
+      ? roots
+      : [...roots, ...(await Promise.all(roots.map((root) => realpath(root))))];
     let cwd = this.opts.restricted
-      ? await confinedHostCwd(resolveExecuteCwd(request.cwd, box.home), this.allowedRoots(box.home))
+      ? await confinedHostCwd(resolveExecuteCwd(request.cwd, box.home), roots)
       : resolveExecuteCwd(request.cwd, box.home);
-    if (!this.opts.restricted && !isAllowedDesktopPath(cwd, this.allowedRoots(box.home))) {
+    if (!this.opts.restricted && !isAllowedDesktopPath(cwd, sourceRoots)) {
       yield { type: "stderr", data: "path is outside this computer's home" };
       yield { type: "exit", code: 1 };
       return;
     }
     if (!this.opts.restricted) {
       try {
-        cwd = await confinedHostCwd(cwd, this.allowedRoots(box.home));
+        cwd = await confinedHostCwd(cwd, roots);
       } catch (error) {
         if (!hasErrorCode(error, "ENOENT")) throw error;
-        const root = this.allowedRoots(box.home).find((root) => isAllowedDesktopPath(cwd, [root]))!;
+        const root = sourceRoots.find((root) => isAllowedDesktopPath(cwd, [root]))!;
         // Preserve source-mode directory preparation without following an escaping symlink.
         await localWorkspaceTarget(root, `${path.relative(root, cwd)}/.host-directory`, false);
-        cwd = await confinedHostCwd(cwd, this.allowedRoots(box.home));
+        cwd = await confinedHostCwd(cwd, roots);
       }
     }
     if (this.opts.restricted && request.argv[0] === "mkdir") {

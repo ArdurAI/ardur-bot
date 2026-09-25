@@ -141,11 +141,11 @@ function redactApprovalText(value: string, secrets: string[]): string {
   const redacted = redactSecrets(value, secrets)
     .replace(/Bearer\s+\S+/gi, "[redacted]")
     .replace(
-      /(?:github_pat_|gh[pousr]_)[A-Za-z0-9_]+|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bsk-[A-Za-z0-9_-]{8,}|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+      /(?:github_pat_|gh[pousr]_)[A-Za-z0-9_]+|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bsk-[A-Za-z0-9_-]{8,}|(?<![\w-])(?=[\w-]*\beyJ[\w-])[\w-]+\.[\w-]+\.[\w-]+/g,
       "[redacted]",
     )
     .replace(
-      /([\w-]*(?:password|passwd|secret|token|credential|authorization|cookie|api[_-]?key|access[_-]?key|private[_-]?key)[\w-]*["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'[^']*'|[^\s,;}]+)/gi,
+      /(?<![\w-])((?=[\w-]*(?:password|passwd|secret|token|credential|authorization|cookie|api[_-]?key|access[_-]?key|private[_-]?key))[\w-]+["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'[^']*'|[^\s,;}]+)/gi,
       "$1[redacted]",
     )
     .replace(/(https?:\/\/)[^/\s@]+@/gi, "$1[redacted]@");
@@ -163,11 +163,10 @@ function redactApprovalArgument(value: string, secrets: string[], previous?: unk
 
 /** Array order, primitive entries and nested payloads are consequential, not summary prose. */
 function arrayApprovalDetail(args: Record<string, unknown>, secrets: string[]): string | undefined {
-  let hasArray = false;
+  if (!containsArray(args)) return undefined;
   const json = JSON.stringify(
     args,
     (key, value) => {
-      if (Array.isArray(value)) hasArray = true;
       if (key && SECRET_ARGUMENT.test(key)) return "[redacted]";
       if (Array.isArray(value)) {
         return value.map((item, index) =>
@@ -178,7 +177,14 @@ function arrayApprovalDetail(args: Record<string, unknown>, secrets: string[]): 
     },
     2,
   );
-  return hasArray ? `Arguments:\n${json}` : undefined;
+  return `Arguments:\n${json}`;
+}
+
+function containsArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) ||
+    (value !== null && typeof value === "object" && Object.values(value).some(containsArray))
+  );
 }
 
 function integrationWritePreview(

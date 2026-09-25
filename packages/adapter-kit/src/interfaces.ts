@@ -112,11 +112,12 @@ export interface SandboxProvider {
   prepare(computer: ComputerRef, context: AdapterContext): Promise<void>;
   /** Describe the executing host once per run, without exposing its environment or credentials. */
   environmentNote?(computer: ComputerRef, context: AdapterContext): Promise<string | undefined>;
-  /** Resolve the same cwd used by execute, before a command launch is recorded. */
+  /** Resolve execute's cwd; activation is allowed unless a read-only lookup opts out. */
   resolveCommandCwd?(
     computer: ComputerRef,
     cwd: string | undefined,
     context: AdapterContext,
+    options?: { activate?: false },
   ): Promise<string | null>;
   execute(
     computer: ComputerRef,

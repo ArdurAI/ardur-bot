@@ -42,7 +42,9 @@ export function createIdeChanges(
       root.kind === "sandbox" &&
       computer?.providerRef &&
       changes.some((change) => change.computerId === root.computerId && change.cwd)
-        ? await deps.sandbox.resolveCommandCwd?.(toComputerRef(computer), undefined, context)
+        ? await deps.sandbox
+            .resolveCommandCwd?.(toComputerRef(computer), undefined, context, { activate: false })
+            .catch(() => null)
         : null;
     const items = changes.flatMap((change) => {
       let relative = change.path;

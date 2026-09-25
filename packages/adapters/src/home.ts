@@ -413,10 +413,12 @@ async function* streamHomeFiles(
     if (exclude(portablePath)) continue;
     const full = await traversalTarget(root, path.join(resolved, entry.name)).catch(() => null);
     if (!full || exclude(path.relative(root, full).split(path.sep).join("/"))) continue;
-    if ((await stat(full)).isDirectory()) {
+    const entryInfo = await stat(full);
+    if (entryInfo.isDirectory()) {
       yield* streamHomeFiles(root, full, signal, exclude, portablePath, visited);
       continue;
     }
+    if (!entryInfo.isFile()) continue;
     const handle = await open(
       full,
       constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
