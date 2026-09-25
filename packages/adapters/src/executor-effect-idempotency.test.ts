@@ -1109,6 +1109,34 @@ describe("command rerun through the authoritative executor", () => {
   });
 });
 
+it.each(["ssh", "remote-docker"] as const)(
+  "does not expose desktop tools on a %s computer with a Docker fallback",
+  async (kind) => {
+    const f = fixture();
+    f.sandboxDescription.capabilities.graphical = true;
+    f.computer.kind = kind;
+    vi.mocked(provisionComputer).mockResolvedValueOnce({
+      id: "computer-1",
+      botId: "home-1",
+      kind,
+      providerRef: "/workspace",
+      connectionId: "remote",
+    });
+    await f.run();
+    const request = f.runtimeRun.mock.calls[0]![0];
+    expect(request.tools).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "computer_observe" })]),
+    );
+    expect(request.tools).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "computer_act" })]),
+    );
+    expect(request.instructions).toContain(
+      "This backend does not provide model-visible graphical control",
+    );
+    expect(request.instructions).not.toContain("Use computer_observe and computer_act");
+  },
+);
+
 function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureCommandBlock {
   return {
     commandId: "command-1",

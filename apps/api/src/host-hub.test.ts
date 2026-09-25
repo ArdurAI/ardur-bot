@@ -11,6 +11,12 @@ const request: HostRequest = {
   scope: { userId: "owner", spaceId: "space", botId: "bot", runId: "run" },
   operation: { op: "computer.exec", homeKey: "bot", argv: ["echo", "ok"] },
 };
+const probe = (id: string): HostRequest => ({
+  ...request,
+  id,
+  scope: { ...request.scope, runId: id },
+  operation: { op: "computer.remote.discover" },
+});
 function wire() {
   const frames: HostFrame[] = [];
   return {
@@ -23,6 +29,33 @@ function wire() {
 }
 
 describe("outbound host hub", () => {
+  it.each(["cancel", "disconnect"])("does not forward a queued probe after %s", async (action) => {
+    const authorize = vi.fn(async () => true);
+    const hub = new HostHub(authorize),
+      host = wire(),
+      worker = wire();
+    hub.attach(host, "owner", "first");
+    try {
+      await hub.request(probe("first"), worker);
+      await hub.request(probe("second"), worker);
+      const queued = hub.request(probe("queued"), worker);
+      expect(host.frames).toHaveLength(2);
+      expect(authorize).toHaveBeenCalledTimes(2);
+      if (action === "cancel") await hub.fromWorker(worker, { v: 1, type: "cancel", id: "queued" });
+      else hub.detach();
+      await queued;
+      if (action === "cancel") await hub.fromHost(host, { v: 1, type: "end", id: "first" });
+      else hub.attach(wire(), "owner", "second");
+      expect(
+        host.frames.filter((frame) => frame.type === "request").map((frame) => frame.id),
+      ).toEqual(["first", "second"]);
+      expect(worker.frames).toContainEqual(
+        expect.objectContaining({ id: "queued", type: "end", problem: expect.any(Object) }),
+      );
+    } finally {
+      hub.detach();
+    }
+  });
   it("round-trips stdout, stderr and exit only to the initiating worker", async () => {
     const hub = new HostHub(async () => true),
       host = wire(),

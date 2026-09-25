@@ -17,6 +17,7 @@ function fixture(defaultTerminal = true) {
   const actor = { userId: "user", spaceId: "space", role: "owner" } as Actor;
   const computer = {
     id: "computer",
+    homeKey: "home",
     userId: "user",
     spaceId: "space",
     scope: "team",
@@ -76,17 +77,50 @@ function fixture(defaultTerminal = true) {
         computer: { findUniqueOrThrow: async () => computer },
       }),
   };
+  const resolveCommandCwd = vi.fn(async (_computer, cwd: string | undefined) => {
+    const root = computer.kind === "ssh" ? "/remote/computers/home" : "/home/ardurbot";
+    return cwd ? `${root}/${cwd}` : root;
+  });
   const routes = createTerminalRoutes({
     prisma: db as unknown as PrismaClient,
     sandbox: {
       terminal: provider,
+      resolveCommandCwd,
       describe: () => ({ capabilities: { interactiveTerminal: defaultTerminal } }),
     } as SandboxProvider,
     trustedOrigin: (origin) => origin === "https://app.example",
   });
-  return { actor, computer, provider, db, routes };
+  return { actor, computer, provider, db, routes, resolveCommandCwd };
 }
 describe("terminal authorization", () => {
+  it.each(["ssh", "remote-docker"])(
+    "opens and authorizes %s terminals at the resolved root",
+    async (kind) => {
+      for (const workspace of [undefined, "computer"] as const) {
+        const f = fixture(false);
+        f.computer.kind = kind;
+        f.computer.connectionId = "saved-connection";
+        const input = { botId: "bot", computerId: "computer", workspace };
+        expect(await f.routes.available(f.actor, input)).toEqual({ available: true });
+        const ticket = await f.routes.ticket(f.actor, input, "auth", "https://app.example");
+        try {
+          const root = kind === "ssh" ? "/remote/computers/home" : "/home/ardurbot";
+          expect(f.provider.open).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.anything(),
+            expect.objectContaining({ workingRoot: workspace ? root : `${root}/bots/bot` }),
+          );
+          await f.routes.gateway!.attach(ticket.ticket, "https://app.example", 0, {
+            send: async () => {},
+            close: () => {},
+          });
+          expect(f.provider.close).not.toHaveBeenCalled();
+        } finally {
+          await f.routes.close(f.actor, { ...input, sessionId: ticket.sessionId });
+        }
+      }
+    },
+  );
   it("uses a saved Docker connection's capability when the default has no terminal", async () => {
     const f = fixture(false);
     const input = { botId: "bot", computerId: "computer" };

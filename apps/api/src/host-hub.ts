@@ -17,10 +17,25 @@ type Pending = {
   calls: Set<string>;
   timer: ReturnType<typeof setTimeout>;
 };
+type QueuedProbe = Pick<Pending, "request" | "worker" | "timer"> & {
+  resolve(): void;
+  reject(error: unknown): void;
+};
+function fleetProbe(request: HostRequest) {
+  const op = request.operation;
+  return (
+    op.op === "computer.remote.discover" ||
+    (op.op === "computer.remote.call" &&
+      ["capacity", "test", "kube.capacity", "kube.namespaces", "kube.version"].includes(
+        op.action.type,
+      ))
+  );
+}
 /** One deployment, one owner, one host generation. Nothing is replayed after detach. */
 export class HostHub {
   private host?: { wire: HostWire; ownerId: string; generation: string };
   private pending = new Map<string, Pending>();
+  private probes = new Map<string, QueuedProbe>();
   private seen = new Set<string>();
   private lostRuns = new Set<string>();
   private completed = new WeakMap<HostWire, Set<string>>();
@@ -60,12 +75,20 @@ export class HostHub {
         .catch(() => pending.worker.close());
     }
     this.pending.clear();
+    for (const [id, probe] of this.probes) {
+      this.lostRuns.add(probe.request.scope.runId);
+      this.cancel(id, probe.worker);
+    }
   }
   async request(request: HostRequest, worker: HostWire) {
     const host = this.host;
+    const probe = fleetProbe(request);
     if (
       !host ||
-      this.pending.size >= HOST_IN_FLIGHT ||
+      (!probe && this.pending.size >= HOST_IN_FLIGHT) ||
+      (probe && this.probes.size >= 128) ||
+      this.pending.has(request.id) ||
+      this.probes.has(request.id) ||
       this.seen.has(request.id) ||
       (this.lostRuns.has(request.scope.runId) && request.operation.op !== "board.run") ||
       this.lostRuns.size >= 100_000
@@ -84,6 +107,13 @@ export class HostHub {
         ),
       });
       return;
+    }
+    if (probe && !this.probeCapacity()) {
+      return new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => this.cancel(request.id, worker), 30_000);
+        timer.unref?.();
+        this.probes.set(request.id, { request, worker, timer, resolve, reject });
+      });
     }
     // Reserve before awaiting database authorization so concurrent opens cannot overbook.
     const pending: Pending = {
@@ -156,6 +186,8 @@ export class HostHub {
   async fromWorker(worker: HostWire, frame: HostFrame) {
     if (frame.type === "request") return this.request(frame, worker);
     if (!("id" in frame)) throw new Error("Unexpected worker frame.");
+    if (frame.type === "cancel" && this.probes.get(frame.id)?.worker === worker)
+      return this.cancel(frame.id, worker);
     const pending = this.pending.get(frame.id);
     if (!pending) {
       // A terminal frame may overtake the consumer's final ACK. Absorb it only
@@ -179,6 +211,20 @@ export class HostHub {
     await this.host?.wire.send(frame);
   }
   cancel(id: string, worker: HostWire) {
+    const probe = this.probes.get(id);
+    if (probe?.worker === worker) {
+      this.probes.delete(id);
+      clearTimeout(probe.timer);
+      void worker
+        .send({
+          v: 1,
+          type: "end",
+          id,
+          problem: hostLostProblem(probe.request, "Host operation stopped — start a new run."),
+        })
+        .then(probe.resolve, probe.reject);
+      return;
+    }
     const pending = this.pending.get(id);
     if (!pending || pending.worker !== worker) return;
     void this.host?.wire.send({ v: 1, type: "cancel", id }).catch(() => this.detach());
@@ -193,6 +239,7 @@ export class HostHub {
     this.finish(id);
   }
   closeWorker(worker: HostWire) {
+    for (const [id, probe] of this.probes) if (probe.worker === worker) this.cancel(id, worker);
     for (const [id, p] of this.pending) if (p.worker === worker) this.cancel(id, worker);
   }
   private finish(id: string) {
@@ -205,5 +252,22 @@ export class HostHub {
       this.completed.set(p.worker, completed);
     }
     this.pending.delete(id);
+    this.drainProbes();
+  }
+  private probeCapacity() {
+    // Keep half the shared slots available for execution, including native runtime starts.
+    return (
+      this.pending.size < HOST_IN_FLIGHT &&
+      [...this.pending.values()].filter((pending) => fleetProbe(pending.request)).length <
+        Math.floor(HOST_IN_FLIGHT / 2)
+    );
+  }
+  private drainProbes() {
+    while (this.host && this.probes.size && this.probeCapacity()) {
+      const probe = this.probes.values().next().value!;
+      this.probes.delete(probe.request.id);
+      clearTimeout(probe.timer);
+      void this.request(probe.request, probe.worker).then(probe.resolve, probe.reject);
+    }
   }
 }

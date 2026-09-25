@@ -14,22 +14,29 @@ import { Prisma } from "@ardurbot/db";
 import type { RouterDeps } from "./router.js";
 
 const catalogs = new WeakMap<PrismaClient, FleetCatalog>();
-export function fleetCatalog(deps: Pick<RouterDeps, "prisma" | "secrets" | "env" | "hostBridge">) {
+export function fleetCatalog(
+  deps: Pick<RouterDeps, "prisma" | "secrets" | "env" | "hostBridge" | "sandbox">,
+) {
   let catalog = catalogs.get(deps.prisma);
   if (!catalog) {
-    catalog = new FleetCatalog(deps.prisma, deps.secrets, {
-      supervisorUrl: deps.env.sandboxSupervisorUrl,
-      supervisorToken: deps.env.sandboxSupervisorToken,
-      ...(deps.hostBridge
-        ? {
-            hostClient: {
-              request: (op, ctx) => deps.hostBridge!.fleetRequest(op, ctx),
-              result: (op, ctx) => deps.hostBridge!.fleetResult(op, ctx),
-              health: async () => deps.hostBridge!.hub.health,
-            },
-          }
-        : {}),
-    });
+    catalog = new FleetCatalog(
+      deps.prisma,
+      deps.secrets,
+      {
+        supervisorUrl: deps.env.sandboxSupervisorUrl,
+        supervisorToken: deps.env.sandboxSupervisorToken,
+        ...(deps.hostBridge
+          ? {
+              hostClient: {
+                request: (op, ctx) => deps.hostBridge!.fleetRequest(op, ctx),
+                result: (op, ctx) => deps.hostBridge!.fleetResult(op, ctx),
+                health: async () => deps.hostBridge!.hub.health,
+              },
+            }
+          : {}),
+      },
+      deps.sandbox,
+    );
     catalogs.set(deps.prisma, catalog);
   }
   return catalog;
@@ -115,11 +122,12 @@ export async function fleetBotPreference(
   context: AdapterContext,
   input: { botId: string; moveAutomatically?: boolean; decision?: "accept" | "decline" },
 ) {
-  const runId = await deps.prisma.$transaction(async (tx) => {
+  const runIds = await deps.prisma.$transaction(async (tx) => {
     const bot = await tx.bot.findFirstOrThrow({
       where: { id: input.botId, spaceId: context.spaceId, userId: context.userId },
     });
-    const pending = bot.pendingPlacement as { runId?: string } | null;
+    if (bot.computerId)
+      await tx.$queryRaw`SELECT id FROM computers WHERE id = ${bot.computerId} FOR UPDATE`;
     await tx.bot.update({
       where: { id: bot.id },
       data: {
@@ -139,27 +147,40 @@ export async function fleetBotPreference(
             : {}),
       },
     });
-    if (pending?.runId && (input.decision || input.moveAutomatically)) {
+    if (!bot.computerId || (!input.decision && !input.moveAutomatically)) return [];
+    const owners = await tx.bot.findMany({
+      where: { computerId: bot.computerId, archivedAt: null },
+    });
+    const declined = owners.some(
+      (owner) => (owner.pendingPlacement as { declined?: boolean } | null)?.declined,
+    );
+    if (!declined && owners.some((owner) => !owner.moveAutomatically && !owner.placementConsent))
+      return [];
+    const where = {
+      spaceId: context.spaceId,
+      bot: { computerId: bot.computerId, spaceId: context.spaceId },
+      status: "waiting_input",
+      runtimeComputer: { equals: Prisma.DbNull },
+      placement: { path: ["status"], equals: "pending" },
+    };
+    const pending = await tx.run.findMany({ where, select: { id: true } });
+    const resumed: string[] = [];
+    for (const run of pending) {
       const changed = await tx.run.updateMany({
-        where: {
-          id: pending.runId,
-          bot: { computerId: bot.computerId, spaceId: context.spaceId, userId: context.userId },
-          status: "waiting_input",
-          runtimeComputer: { equals: Prisma.DbNull },
-        },
+        where: { ...where, id: run.id },
         data: {
           status: "queued",
           startedAt: null,
           leaseOwner: null,
           leaseExpiresAt: null,
-          placement: input.decision === "decline" ? { status: "declined" } : Prisma.DbNull,
+          placement: declined ? { status: "declined" } : Prisma.DbNull,
         },
       });
-      if (changed.count) return pending.runId;
+      if (changed.count) resumed.push(run.id);
     }
-    return null;
+    return resumed;
   });
-  if (runId) await deps.jobs.enqueue(runContinueJob(runId));
+  for (const runId of runIds) await deps.jobs.enqueue(runContinueJob(runId));
   return { ok: true as const };
 }
 export async function testFleetTarget(

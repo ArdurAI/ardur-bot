@@ -65,7 +65,7 @@ function fixture(approved = false) {
       update: vi.fn(),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
-    bot: { update: vi.fn(), updateMany: vi.fn() },
+    bot: { findMany: vi.fn(async () => computer.bots), update: vi.fn(), updateMany: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(prisma),
   };
@@ -134,6 +134,35 @@ it("asks before the first move and leaves the computer untouched", async () => {
   expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
     expect.objectContaining({ data: expect.objectContaining({ status: "waiting_input" }) }),
   );
+});
+it("preserves the first consent request when two bots share a computer", async () => {
+  const f = fixture();
+  const peer = { ...f.computer.bots[0]!, id: "peer" };
+  f.computer.bots.push(peer);
+  const second = { ...f.run, id: "second", botId: peer.id, threadId: "peer-thread" };
+  f.prisma.run.findUniqueOrThrow.mockResolvedValueOnce(f.run).mockResolvedValueOnce(second);
+  f.prisma.bot.update.mockImplementation(async ({ where, data }) => {
+    Object.assign(f.computer.bots.find((bot) => bot.id === where.id)!, data);
+  });
+
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(
+    false,
+  );
+  // The first request is now persisted as a placement wait on the shared computer.
+  f.prisma.run.findFirst.mockResolvedValue({ id: "run" } as never);
+  expect(await placeRunComputer(f.deps, f.catalog, "second", new AbortController().signal)).toBe(
+    true,
+  );
+  expect(f.computer.bots.map((bot) => bot.pendingPlacement)).toEqual([
+    expect.objectContaining({ runId: "run" }),
+    expect.objectContaining({ runId: "run" }),
+  ]);
+  expect(f.prisma.run.updateMany).toHaveBeenCalledTimes(1);
+  expect(replace).not.toHaveBeenCalled();
+  for (const bot of f.computer.bots) bot.placementConsent = true;
+  f.prisma.run.findFirst.mockResolvedValue(null);
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(replace).toHaveBeenCalledOnce();
 });
 it("uses the checkpoint lifecycle before execution and persists the move reason", async () => {
   const f = fixture(true);

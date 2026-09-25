@@ -165,10 +165,15 @@ async function main() {
   integrationSettings.warmDirectories();
   const memoryProviders = new SpaceMemoryProviderResolver(prisma, secrets);
   const home = new LocalAgentHomeStore(dataDir);
-  const fleetPlacementCatalog = new FleetCatalog(prisma, secrets, {
-    supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL,
-    supervisorToken: process.env.SANDBOX_SUPERVISOR_TOKEN,
-  });
+  const fleetPlacementCatalog = new FleetCatalog(
+    prisma,
+    secrets,
+    {
+      supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL,
+      supervisorToken: process.env.SANDBOX_SUPERVISOR_TOKEN,
+    },
+    sandbox,
+  );
   const artifacts = new LocalArtifactStore(dataDir);
   const inMemoryJobs = process.env.WAKEUP_DRIVER === "memory" ? new InMemoryJobQueue() : undefined;
   const jobs: JobPublisher = inMemoryJobs ?? new GraphileJobPublisher(pool);

@@ -286,10 +286,15 @@ export async function createApp(
   const memoryProviders = new SpaceMemoryProviderResolver(prisma, secrets);
   const oauthLogins = new PiOAuthLogins();
   const home = new LocalAgentHomeStore(env.dataDir);
-  const fleetPlacementCatalog = new FleetCatalog(prisma, secrets, {
-    supervisorUrl: env.sandboxSupervisorUrl,
-    supervisorToken: env.sandboxSupervisorToken,
-  });
+  const fleetPlacementCatalog = new FleetCatalog(
+    prisma,
+    secrets,
+    {
+      supervisorUrl: env.sandboxSupervisorUrl,
+      supervisorToken: env.sandboxSupervisorToken,
+    },
+    sandbox,
+  );
   const artifacts = new LocalArtifactStore(env.dataDir);
   const memoryLifecycleDeps = { prisma, secrets, jobs, dataDir: env.dataDir };
   const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);

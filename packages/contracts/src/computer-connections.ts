@@ -64,7 +64,7 @@ export const ComputerConfigurationSchema = z.object({
 });
 export function computerCapabilities(kind: string) {
   return {
-    graphical: !["kubernetes", "ssh", "remote-docker"].includes(kind),
+    graphical: !["desktop", "kubernetes", "ssh", "remote-docker"].includes(kind),
     interactiveTerminal: ["docker", "ssh", "remote-docker"].includes(kind),
   };
 }
