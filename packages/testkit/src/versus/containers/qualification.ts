@@ -74,6 +74,8 @@ export async function qualifyContainers(output: string, standin: boolean) {
     kind: "container-contract-qualification",
     build: build.build,
     image,
+    imageDigest: null as string | null,
+    runtimeRevision: null as string | null,
     cohort: standin ? "scripted-standin" : "hermes-release-linux-arm64",
     realModelCalls: 0,
     imagePulls: 0,
@@ -93,6 +95,8 @@ export async function qualifyContainers(output: string, standin: boolean) {
   const sessions: ContainerSession[] = [];
   try {
     const identity = await inspectImage(image);
+    report.imageDigest = identity.id;
+    report.runtimeRevision = identity.revision;
     if (!standin)
       requireValue(
         identity.revision === HERMES_CONTAINER_REVISION,

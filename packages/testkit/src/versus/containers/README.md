@@ -54,7 +54,8 @@ the read-only root. The launcher, cancel script, and idle probe all use that dir
 names cannot start with `ARDURBOT_`. The lane skips the login profile inside that launcher because
 profile startup forks, and fork stays denied. Cancelling a command signals the guest process
 group and waits until the owned container is gone. A stop that exceeds that wait is uncertain.
-List, read, and write refuse a symlink in any path component before resolving it. PATH remains
+List, read, and write refuse a symlink in any path component before resolving it. Listings,
+exports, and snapshots omit links without following them; only the guest reports them. PATH remains
 the container PATH. Product processes keep a separate user id and the relay's shared-group
 creation mask, so the broker can update files and directories the product creates. Helper
 workspace preparation is an admitted artifact directory; fork and git worktrees stay denied. The
@@ -111,10 +112,14 @@ same revision as the image label and `/opt/hermes/.hermes_build_sha`, and no mis
 (`missingBytes: 0`). Lazy installs stay disabled.
 
 This Hermes build refuses to initialize unless `model.context_length` is at least 64,000. The
-scripted proof therefore declares 64,000 to the product. That declaration is not the approved
-32,768 shared context, and it is above the observed qwen3:8b architecture maximum. The canary
-planner stays blocked on that pin. Rendering outside the captured reply, effective context, and
-real-model tool use remain unqualified. Nothing here enables the guarded live CLI.
+scripted proof therefore declares 64,000 to the product; it serves no model. The canary planner
+requires a declared context between 64,000 and the model's architecture maximum, attested by
+`/api/ps` at planning and again before each trial and model request. The observed qwen3:8b
+architecture maximum is below 64,000. The proposed route, llama3.1:8b with 65,536 tokens, is
+pending owner approval. The planner also requires this report's `product-qualified` status, the
+inspected image digest and revision, and every containment and resource check passed. Rendering
+outside the captured reply, effective context, and real-model tool use remain unqualified.
+Nothing here enables the guarded live CLI.
 
 ## Evidence and cleanup
 

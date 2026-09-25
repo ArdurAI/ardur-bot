@@ -13,6 +13,7 @@ import {
   validateModelMetadataLabel,
 } from "./budget.js";
 import {
+  HERMES_CONTAINER_CHECKS,
   HERMES_CONTAINER_REVISION,
   HERMES_IMAGE,
   HERMES_MINIMUM_CONTEXT_TOKENS,
@@ -23,31 +24,10 @@ import { createTrialDirectory, destroyOwnedDirectory, prepareEnvironment } from 
 import { diagnoseNativeIsolation } from "./native-diagnostics.js";
 import { findExecutable, inspectBuild, inspectHermes, sanitize } from "./provenance.js";
 import { planPairs } from "./scheduler.js";
+import type { RouteExpectation } from "./serving.js";
+import { parseServingContext, readMetadata } from "./serving.js";
 
 const exec = promisify(execFile);
-export interface RouteExpectation {
-  origin: string;
-  model: string;
-  digest: string;
-  quantization: string;
-  contextSize: number;
-}
-
-/** Read-only Ollama serving-state attestation. It never loads or extends a model lease. */
-export function parseServingContext(value: unknown, expected: RouteExpectation): number {
-  const state = record(value);
-  requireValue(Array.isArray(state.models), "Missing serving model inventory");
-  const matches = state.models
-    .map(record)
-    .filter((item) => item.name === expected.model && item.digest === expected.digest);
-  requireValue(matches.length === 1, "Expected model is not uniquely loaded");
-  const context = matches[0]!.context_length;
-  requireValue(
-    typeof context === "number" && Number.isSafeInteger(context) && context > 0,
-    "Loaded model context is unavailable",
-  );
-  return context;
-}
 
 /** Metadata only: no generation, pull, load, copy, create, delete, or keep-alive operation. */
 export async function inspectLocalRoute(expected: RouteExpectation, transport = fetch) {
@@ -72,30 +52,7 @@ export async function inspectLocalRoute(expected: RouteExpectation, transport = 
   const requests: { method: string; path: string }[] = [];
   const metadata = async (route: string, body?: unknown) => {
     requests.push({ method: body ? "POST" : "GET", path: route });
-    const response = await transport(`${expected.origin}${route}`, {
-      method: body ? "POST" : "GET",
-      redirect: "error",
-      signal: AbortSignal.timeout(5000),
-      headers: body ? { "content-type": "application/json" } : {},
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-    requireValue(response.ok, `Metadata unavailable: ${route} (${response.status})`);
-    requireValue(response.body, "Metadata response missing");
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    try {
-      for (;;) {
-        const next = await reader.read();
-        if (next.done) break;
-        size += next.value.length;
-        requireValue(size <= 16 * 1024 * 1024, "Metadata exceeds byte cap");
-        chunks.push(next.value);
-      }
-    } finally {
-      await reader.cancel();
-    }
-    return record(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+    return readMetadata(transport, expected.origin, route, body);
   };
   const matchTag = (value: Record<string, unknown>) => {
     requireValue(Array.isArray(value.models), "Missing model inventory");
@@ -137,8 +94,7 @@ export async function inspectLocalRoute(expected: RouteExpectation, transport = 
     tokenizerHash: contentDigest(tokenizer),
     templateHash: contentDigest(show.template),
   };
-  // Detect a concurrent tag or server change during discovery. Recheck again before
-  // admission in a future backend; this observation is not a lasting route lease.
+  // Detects a concurrent change during discovery only; a live gateway re-reads /api/ps at admission.
   matchTag(await metadata("/api/tags"));
   requireValue((await metadata("/api/version")).version === serverVersion, "Server version drift");
   const budget = parseBudget({
@@ -158,18 +114,19 @@ export async function inspectLocalRoute(expected: RouteExpectation, transport = 
     toolRoundTrip: "not-run",
     effectiveContext,
     generationRequests: 0,
-    settingsQualification: "Local Ollama serving state attests the loaded context length",
+    settingsQualification:
+      "Planning-time /api/ps observation; a live gateway re-reads it before each trial and model request",
   };
 }
 
 const HELP = `Non-generating versus qualification preflight
 
-pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision <40-hex> --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 64000 --out ./artifacts/versus/qualification
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision <40-hex> --endpoint http://127.0.0.1:11434 --model llama3.1:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 65536 --out ./artifacts/versus/qualification
 
 Container cohort planning uses the same metadata checks and writes canary-budget.json.
 It does not start a product, a container, or inference. Approval is never implied:
 
-pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 64000 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11434 --model llama3.1:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 65536 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
 
 Optional: --hermes-executable <path> --hermes-source <path>
 Runs benign OS/interpreter probes and reads local model/Docker metadata only.
@@ -224,11 +181,14 @@ export function parseQualificationArguments(args: string[]) {
   return options;
 }
 
-function gate(report: Record<string, unknown> | null, name: string) {
+function reportChecks(report: Record<string, unknown> | null) {
   const checks = report?.checks;
-  if (!Array.isArray(checks)) return null;
-  const found = checks.find((item) => record(item).name === name);
-  return found ? record(found) : null;
+  return Array.isArray(checks)
+    ? checks.map((item) => (item && typeof item === "object" ? record(item) : {}))
+    : [];
+}
+function gate(report: Record<string, unknown> | null, name: string) {
+  return reportChecks(report).find((item) => item.name === name) ?? null;
 }
 function counterSatisfied(value: unknown) {
   if (!value || typeof value !== "object") return false;
@@ -249,11 +209,21 @@ function counterSatisfied(value: unknown) {
 export function assessContainerCohort(input: {
   approval: string | undefined;
   report: Record<string, unknown> | null;
+  pinnedImage: { id: string; revision: string | null } | null;
+  /** Every failure recorded before planning; any one of them blocks the cohort. */
+  preflightFailures: readonly string[];
   routeContext: number | null;
   architectureMaximum: number | null;
   servingContext: number | null;
 }) {
   const failures: string[] = [];
+  const checks = reportChecks(input.report);
+  const unqualifiedChecks = [
+    ...HERMES_CONTAINER_CHECKS.filter((name) => gate(input.report, name)?.passed !== true),
+    ...checks
+      .filter((check) => check.passed !== true)
+      .map((check) => (typeof check.name === "string" ? check.name : "unnamed-check")),
+  ];
   const disk = gate(input.report, "aggregate-disk-cap");
   const diskEvidence =
     disk?.evidence && typeof disk.evidence === "object" ? record(disk.evidence) : null;
@@ -272,6 +242,14 @@ export function assessContainerCohort(input: {
     manifest?.evidence && typeof manifest.evidence === "object" ? record(manifest.evidence) : null;
   const gates = {
     approval: input.approval === "approved",
+    pinnedImage:
+      input.pinnedImage !== null &&
+      input.pinnedImage.revision === HERMES_CONTAINER_REVISION &&
+      input.report?.status === "product-qualified" &&
+      input.report.image === HERMES_IMAGE &&
+      input.report.imageDigest === input.pinnedImage.id &&
+      input.report.runtimeRevision === HERMES_CONTAINER_REVISION,
+    containmentAndResources: unqualifiedChecks.length === 0,
     aggregateDisk:
       disk?.passed === true &&
       diskEvidence?.mechanism === "tmpfs-size" &&
@@ -302,6 +280,15 @@ export function assessContainerCohort(input: {
   };
   if (!gates.approval) failures.push("Container cohort approval is absent");
   if (!input.report) failures.push("Container qualification report is absent");
+  if (!input.pinnedImage) failures.push("The pinned Hermes image was not inspected");
+  else if (input.report && !gates.pinnedImage)
+    failures.push(
+      `The container report (status ${String(input.report.status)}) is not for the inspected pinned Hermes image and revision`,
+    );
+  if (input.report && !gates.containmentAndResources)
+    failures.push(
+      `Container checks failed or missing: ${[...new Set(unqualifiedChecks)].join(", ")}`,
+    );
   if (!gates.aggregateDisk) failures.push("Aggregate disk cap is not qualified");
   if (!gates.toolAndDescendantAdmission)
     failures.push("Tool and descendant budget admission is not qualified");
@@ -332,7 +319,11 @@ export function assessContainerCohort(input: {
     failures.push(
       `Loaded serving context ${input.servingContext} does not match declared context ${input.routeContext ?? "unobserved"}`,
     );
-  return { ready: failures.length === 0, failures, gates };
+  return {
+    ready: failures.length === 0 && input.preflightFailures.length === 0,
+    failures,
+    gates,
+  };
 }
 
 export async function runQualification(args: string[]) {
@@ -471,6 +462,8 @@ export async function runQualification(args: string[]) {
     const assessment = assessContainerCohort({
       approval: options["--container-cohort-approval"],
       report: containerReport,
+      pinnedImage,
+      preflightFailures: [...failures],
       routeContext: route?.budget.contextSize ?? null,
       architectureMaximum: typeof route?.maximumContext === "number" ? route.maximumContext : null,
       servingContext: typeof route?.effectiveContext === "number" ? route.effectiveContext : null,

@@ -31,22 +31,26 @@ interpreter with `-I -S` (isolated standard library, without importing Hermes). 
 the explicitly selected local model's metadata and checks for the cached computer image:
 
 ```sh
-pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision <approved-40-hex-revision> --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <approved-64-hex-digest> --quantization Q4_K_M --context-size 32768 --out ./artifacts/versus/qualification
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision <approved-40-hex-revision> --endpoint http://127.0.0.1:11434 --model llama3.1:8b --model-digest <approved-64-hex-digest> --quantization Q4_K_M --context-size 65536 --out ./artifacts/versus/qualification
 ```
 
-This is a separate `qualification` sidecar mode, because it opens benign loopback listeners and
+The model and context shown are the proposed route, pending owner approval. This is a separate `qualification` sidecar mode, because it opens benign loopback listeners and
 launches probe subprocesses. It does not weaken the dry-run guarantees. No arguments prints help;
 there is no option to generate, download, start a container, or bypass a failed gate. Exit 2 means
 qualification is blocked, with schema-3 planning reports, `qualification.json`, and an optional
-`canary-budget.json` retained. The metadata request allowlist is `/api/tags`, `/api/version`, and
-`/api/show`; tags and server version are rechecked to catch concurrent changes. Redirects, paid
-origins, absent tokenizer metadata, digest/quantization drift, and oversized responses fail closed.
+`canary-budget.json` retained. The metadata request allowlist is `/api/tags`, `/api/version`,
+`/api/show`, and `/api/ps`; tags and server version are rechecked to catch concurrent changes.
+Redirects, paid origins, absent tokenizer metadata, digest/quantization drift, and oversized
+responses fail closed.
 
 The generated canary budget selects task-01 and task-04 with the frozen analysis seed. Its global
-ceiling is four times the per-run ceiling. The 32,768-token context includes output; the request
+ceiling is four times the per-run ceiling. The declared context includes output; the request
 output cap remains 2,048. These are declared ceilings, not measured consumption. The W0 fixture's
-stricter deadline still applies. A metadata match cannot prove that Ollama's OpenAI transport
-honored the active context: its [documented context configuration](https://docs.ollama.com/api/openai-compatibility)
+stricter deadline still applies. The `/api/ps` context read at planning is a plan, not a lease: a
+live gateway reads `/api/ps` again immediately before admitting each trial and before each model
+request. If the loaded model, digest or context differs from the declared route, it records the
+refusal and sends nothing upstream. A metadata match still cannot prove that Ollama's OpenAI
+transport honored the active context: its [documented context configuration](https://docs.ollama.com/api/openai-compatibility)
 is separate from architectural maximum context. Product tool round trips remain required.
 
 The native diagnosis bisects two startup requirements: literal read access to `/` (without
@@ -77,11 +81,13 @@ pinned image is absent and names the exact pull needing owner approval. When tha
 cached, `--hermes` can exit 0 with `product-qualified`: one scripted broker tool round trip, a
 dependency manifest with no missing package, and the tmpfs disk probe. The stand-in is a scripted
 protocol double in the cached computer image, not an execution of Hermes. The container cohort
-planner reads that report and still refuses the canary until the approved context can be declared
-to Hermes and the active context is attested:
+planner accepts only a `product-qualified` report for the inspected pinned image and revision in
+which every containment and resource check passed. It still refuses the canary until the declared
+context can be given to Hermes and the active context is attested. The route shown is pending
+owner approval:
 
 ```sh
-pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11434 --model qwen3:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 32768 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11434 --model llama3.1:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 65536 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
 ```
 
 `--container-cohort-approval approved` is never the default. Omitting it, or omitting `--lane container`,
@@ -203,14 +209,16 @@ tmpfs cap on its only writable mount and admits every product tool call, helper 
 against the budget file's per-trial counters before the effect. Exceeding either counter refuses
 the effect and records the refusal. The file-fixture adapter remains a separate protocol surface
 without those guarantees. Neither surface supplies full packaged-stack resource or user-paint
-measurements. The scripted Hermes round trip does not prove that the approved 32,768-token context
-can be declared to this image: the image requires at least 64,000.
+measurements. The scripted Hermes round trip does not prove that a declared context is served:
+the image requires at least 64,000 tokens, attested by `/api/ps` at planning and again at admission.
 
 ## Budget approval
 
 The owner must approve the endpoint origin, exact model identity/digest and complete budget file
-before any live inference. `qwen3:8b` is only a candidate. Other research candidates are
-`qwen2.5-coder:7b`, `llama3.1:8b`, `qwen2.5-coder:32b`, and `gpt-oss:20b`; none is qualified here.
+before any live inference. The proposed route, `llama3.1:8b` with a 65,536-token context, is pending
+that approval. The observed `qwen3:8b` architecture maximum is below the 64,000-token Hermes
+minimum. Other research candidates are `qwen2.5-coder:7b`, `qwen2.5-coder:32b`, and `gpt-oss:20b`;
+none is qualified here.
 Inventory discovery is not a successful tool round trip or proof that a server honored settings.
 
 Every field in the emitted version-1 template is required:

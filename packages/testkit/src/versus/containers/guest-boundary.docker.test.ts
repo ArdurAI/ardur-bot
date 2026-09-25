@@ -84,7 +84,7 @@ async function execCode(session: ContainerSession, script: string) {
 }
 
 it.skipIf(!imageReady)(
-  "lists and snapshots links without following them and refuses traversal",
+  "omits links from listings and exports without following them and refuses traversal",
   async () => {
     const opened = await openSession();
     try {
@@ -118,14 +118,15 @@ it.skipIf(!imageReady)(
         expect((error as Error).message).toBe(SYMLINK_REFUSAL);
         expect((error as Error).message.includes("\n")).toBe(false);
       }
-      expect(await computer.listFiles(ref, "", current)).toContainEqual({
-        path: "leak",
-        kind: "link",
-        size: 0,
-      });
+      expect((await computer.listFiles(ref, "", current)).map((entry) => entry.path)).not.toContain(
+        "leak",
+      );
       expect(await opened.session.snapshot()).toMatchObject({
         leak: { kind: "link" },
       });
+      const exported: string[] = [];
+      for await (const file of computer.exportWorkspace(ref)) exported.push(file.path);
+      expect(exported).not.toContain("leak");
       expect((await opened.session.read("state/config.yaml")).toString()).toBe("broker: true\n");
     } finally {
       await opened.close();

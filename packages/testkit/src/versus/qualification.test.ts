@@ -1,13 +1,58 @@
 import { describe, expect, it, vi } from "vitest";
 import { contentDigest } from "../scoreboard/manifest.js";
+import { BudgetLedger } from "./budget.js";
+import {
+  HERMES_CONTAINER_CHECKS,
+  HERMES_CONTAINER_REVISION,
+  HERMES_IMAGE,
+} from "./containers/policy.js";
+import { startGateway } from "./gateway.js";
 import {
   assessContainerCohort,
   inspectLocalRoute,
   parseQualificationArguments,
-  parseServingContext,
   runQualification,
 } from "./qualification.js";
 import { planPairs } from "./scheduler.js";
+import { parseServingContext, ServingWitness } from "./serving.js";
+
+const pinnedImage = {
+  id: `sha256:${contentDigest("synthetic-hermes-image")}`,
+  revision: HERMES_CONTAINER_REVISION,
+};
+function productReport() {
+  const counter = { cap: 2, admitted: 2, nextRefused: true, effectAfterRefusal: false };
+  const evidence: Record<string, unknown> = {
+    "aggregate-disk-cap": { mechanism: "tmpfs-size", capBytes: 8388608, containerAlive: true },
+    "tool-and-descendant-admission": {
+      toolCalls: counter,
+      descendants: { helpers: counter, commands: counter },
+    },
+    "dependency-manifest": { missingPackages: [], missingBytes: 0 },
+  };
+  return {
+    status: "product-qualified",
+    image: HERMES_IMAGE,
+    imageDigest: pinnedImage.id,
+    runtimeRevision: HERMES_CONTAINER_REVISION,
+    realModelCalls: 0,
+    imagePulls: 0,
+    packageDownloads: 0,
+    checks: HERMES_CONTAINER_CHECKS.map((name) => ({
+      name,
+      passed: true,
+      evidence: evidence[name] ?? {},
+    })),
+  };
+}
+const planned = {
+  approval: "approved",
+  pinnedImage,
+  preflightFailures: [] as string[],
+  routeContext: 64000,
+  architectureMaximum: 131072,
+  servingContext: 64000,
+};
 
 const expected = {
   origin: "http://127.0.0.1:11434",
@@ -93,36 +138,9 @@ describe("non-generating live prerequisites", () => {
     ).toThrow("explicit value approved");
   });
   it("keeps the container canary blocked when the approved context is below the Hermes minimum", () => {
-    const counter = { cap: 2, admitted: 2, nextRefused: true, effectAfterRefusal: false };
-    const report = {
-      realModelCalls: 0,
-      imagePulls: 0,
-      packageDownloads: 0,
-      checks: [
-        {
-          name: "aggregate-disk-cap",
-          passed: true,
-          evidence: { mechanism: "tmpfs-size", capBytes: 8388608, containerAlive: true },
-        },
-        {
-          name: "tool-and-descendant-admission",
-          passed: true,
-          evidence: {
-            toolCalls: counter,
-            descendants: { helpers: counter, commands: counter },
-          },
-        },
-        { name: "product-tool-round-trip", passed: true, evidence: {} },
-        {
-          name: "dependency-manifest",
-          passed: true,
-          evidence: { missingPackages: [], missingBytes: 0 },
-        },
-      ],
-    };
     const blocked = assessContainerCohort({
-      approval: "approved",
-      report,
+      ...planned,
+      report: productReport(),
       routeContext: 32768,
       architectureMaximum: 40960,
       servingContext: null,
@@ -135,6 +153,7 @@ describe("non-generating live prerequisites", () => {
     expect(blocked.failures.join("\n")).toContain("active context");
     expect(
       assessContainerCohort({
+        ...planned,
         approval: undefined,
         report: null,
         routeContext: 32768,
@@ -144,52 +163,183 @@ describe("non-generating live prerequisites", () => {
     ).toBe(false);
   });
   it("makes the approved cohort ready only with an attested context inside both bounds", () => {
-    const counter = { cap: 2, admitted: 2, nextRefused: true, effectAfterRefusal: false };
-    const report = {
-      realModelCalls: 0,
-      imagePulls: 0,
-      packageDownloads: 0,
-      checks: [
-        {
-          name: "aggregate-disk-cap",
-          passed: true,
-          evidence: { mechanism: "tmpfs-size", capBytes: 8388608, containerAlive: true },
-        },
-        {
-          name: "tool-and-descendant-admission",
-          passed: true,
-          evidence: {
-            toolCalls: counter,
-            descendants: { helpers: counter, commands: counter },
-          },
-        },
-        { name: "product-tool-round-trip", passed: true, evidence: {} },
-        {
-          name: "dependency-manifest",
-          passed: true,
-          evidence: { missingPackages: [], missingBytes: 0 },
-        },
-      ],
-    };
-    expect(
-      assessContainerCohort({
-        approval: "approved",
-        report,
-        routeContext: 64000,
-        architectureMaximum: 131072,
-        servingContext: 64000,
-      }),
-    ).toMatchObject({ ready: true, failures: [], gates: { contextPin: true } });
+    expect(assessContainerCohort({ ...planned, report: productReport() })).toMatchObject({
+      ready: true,
+      failures: [],
+      gates: { contextPin: true, pinnedImage: true, containmentAndResources: true },
+    });
     for (const servingContext of [null, 32768, 131072])
       expect(
-        assessContainerCohort({
-          approval: "approved",
-          report,
-          routeContext: 64000,
-          architectureMaximum: 131072,
-          servingContext,
-        }).ready,
+        assessContainerCohort({ ...planned, report: productReport(), servingContext }).ready,
       ).toBe(false);
+  });
+  it.each([
+    [
+      "an unqualified status",
+      (report: ReturnType<typeof productReport>) => {
+        report.status = "container-boundary-qualified-product-unqualified";
+      },
+    ],
+    [
+      "a failed status",
+      (report: ReturnType<typeof productReport>) => {
+        report.status = "failed";
+      },
+    ],
+    [
+      "an unrelated image digest",
+      (report: ReturnType<typeof productReport>) => {
+        report.imageDigest = `sha256:${contentDigest("other-image")}`;
+      },
+    ],
+    [
+      "a drifted runtime revision",
+      (report: ReturnType<typeof productReport>) => {
+        report.runtimeRevision = "0".repeat(40);
+      },
+    ],
+    [
+      "a failed containment check",
+      (report: ReturnType<typeof productReport>) => {
+        report.checks.find((check) => check.name === "forbidden-egress")!.passed = false;
+      },
+    ],
+    [
+      "a failed resource check",
+      (report: ReturnType<typeof productReport>) => {
+        report.checks.find((check) => check.name === "memory-limit-kill")!.passed = false;
+      },
+    ],
+    [
+      "a missing containment check",
+      (report: ReturnType<typeof productReport>) => {
+        report.checks = report.checks.filter((check) => check.name !== "outside-write");
+      },
+    ],
+    [
+      "an extra failed check",
+      (report: ReturnType<typeof productReport>) => {
+        report.checks.push({ name: "unlisted-probe", passed: false, evidence: {} });
+      },
+    ],
+  ])("blocks the cohort for %s even when every planning gate passes", (_label, change) => {
+    const report = productReport();
+    change(report);
+    const assessment = assessContainerCohort({ ...planned, report });
+    expect(assessment.ready).toBe(false);
+    expect(assessment.failures).not.toEqual([]);
+  });
+  it("blocks the cohort when the pinned image was not inspected or an earlier step failed", () => {
+    const uninspected = assessContainerCohort({
+      ...planned,
+      report: productReport(),
+      pinnedImage: null,
+    });
+    expect(uninspected.ready).toBe(false);
+    expect(uninspected.failures.join("\n")).toContain("pinned Hermes image was not inspected");
+    expect(
+      assessContainerCohort({
+        ...planned,
+        report: productReport(),
+        pinnedImage: { ...pinnedImage, revision: "0".repeat(40) },
+      }).ready,
+    ).toBe(false);
+    expect(
+      assessContainerCohort({
+        ...planned,
+        report: productReport(),
+        preflightFailures: ["Native isolation: unavailable"],
+      }).ready,
+    ).toBe(false);
+  });
+  it("refuses admission with zero model requests when the context shrinks after planning", async () => {
+    const f = fixture();
+    const route = await inspectLocalRoute(expected, f.transport);
+    expect(
+      assessContainerCohort({
+        ...planned,
+        report: productReport(),
+        routeContext: route.budget.contextSize,
+        servingContext: route.effectiveContext,
+      }).ready,
+    ).toBe(true);
+    const tag = { name: expected.model, digest: expected.digest };
+    const ps = [
+      { models: [{ ...tag, context_length: 32768 }] },
+      { models: [{ ...tag, context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 64000 }] },
+      { models: [] },
+    ];
+    const metadata: string[] = [];
+    const serving = new ServingWitness(route.budget, (async (url: string | URL | Request) => {
+      metadata.push(new URL(String(url)).pathname);
+      return Response.json(ps.shift());
+    }) as typeof fetch);
+    const upstream = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            model: expected.model,
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 1 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const ledger = new BudgetLedger(route.budget);
+    await expect(
+      startGateway({
+        budget: route.budget,
+        ledger,
+        transport: upstream,
+        evidenceKind: "provider-live",
+      }),
+    ).rejects.toThrow("serving-state attestation");
+    const gateway = await startGateway({
+      budget: route.budget,
+      ledger,
+      transport: upstream,
+      evidenceKind: "provider-live",
+      serving,
+    });
+    const send = (url: string) =>
+      fetch(`${url}/chat/completions`, {
+        method: "POST",
+        body: JSON.stringify({
+          model: expected.model,
+          messages: [{ role: "user", content: "synthetic" }],
+        }),
+      });
+    try {
+      await expect(gateway.admit("trial-a")).rejects.toThrow(
+        "Loaded serving context 32768 does not match declared context 64000",
+      );
+      expect(() => gateway.capability("trial-a", "main", () => undefined)).toThrow("not admitted");
+      expect(ledger.snapshot()).toMatchObject({ trials: [], reservations: [] });
+      expect(upstream).not.toHaveBeenCalled();
+      expect(gateway.requests).toEqual([]);
+      expect(serving.observations[0]).toMatchObject({
+        stage: "trial-admission",
+        trialId: "trial-a",
+        declaredContext: 64000,
+        observedContext: 32768,
+        admitted: false,
+      });
+      await gateway.admit("trial-b");
+      const url = gateway.capability("trial-b", "main", () => undefined);
+      expect((await send(url)).status).toBe(200);
+      expect((await send(url)).status).toBe(403);
+      expect(upstream).toHaveBeenCalledTimes(1);
+      expect(serving.observations.map(({ stage, admitted }) => [stage, admitted])).toEqual([
+        ["trial-admission", false],
+        ["trial-admission", true],
+        ["model-request", true],
+        ["model-request", false],
+      ]);
+      expect(metadata).toEqual(["/api/ps", "/api/ps", "/api/ps", "/api/ps"]);
+    } finally {
+      await gateway.close();
+    }
   });
   it("parses recorded serving-state fixtures without loading a model", () => {
     const tag = { name: expected.model, digest: expected.digest };

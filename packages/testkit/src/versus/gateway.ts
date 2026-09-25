@@ -9,6 +9,7 @@ import type { Emit } from "./adapters/types.js";
 import type { Budget, Purpose, Reservation } from "./budget.js";
 import { type BudgetLedger, record, requireValue } from "./budget.js";
 import { sanitize } from "./provenance.js";
+import type { ServingWitness } from "./serving.js";
 
 const categoryNames = [
   "logicalInput",
@@ -130,13 +131,20 @@ export async function startGateway(options: {
   transport?: (url: string, init: RequestInit) => Promise<Response>;
   credential?: () => string | undefined;
   evidenceKind: "virtual" | "provider-live";
+  /** Re-attests the loaded model and context before each trial admission and model request. */
+  serving?: ServingWitness;
 }) {
   const budget = options.ledger.budget;
   requireValue(
     contentDigest(options.budget) === contentDigest(budget),
     "Gateway and admission budget differ",
   );
+  requireValue(
+    options.evidenceKind === "virtual" || options.serving,
+    "Live inference requires serving-state attestation at admission",
+  );
   const capabilities = new Map<string, Capability>();
+  const admitted = new Set<string>();
   const requests: GatewayRequest[] = [];
   const transport = options.transport ?? fetch;
   const server = createServer((request, response) => {
@@ -214,6 +222,7 @@ export async function startGateway(options: {
     };
     delete forward.max_completion_tokens;
     if (body.stream) forward.stream_options = { include_usage: true };
+    await options.serving?.attest("model-request", cap.trialId);
     const remainingMs = options.ledger.remainingMs(cap.trialId);
     const reservation = options.ledger.reserve(cap.trialId, cap.purpose);
     const requestHash = contentDigest(forward);
@@ -363,7 +372,17 @@ export async function startGateway(options: {
   return {
     origin,
     requests,
+    /** Opens the trial's budget only while the serving state still matches the declared route. */
+    async admit(trialId: string) {
+      await options.serving?.attest("trial-admission", trialId);
+      options.ledger.open(trialId);
+      admitted.add(trialId);
+    },
     capability(trialId: string, purpose: Purpose | null, emit: Emit) {
+      requireValue(
+        !options.serving || admitted.has(trialId),
+        "Trial was not admitted against the serving state",
+      );
       const token = `cap_${randomBytes(24).toString("hex")}`;
       capabilities.set(token, { trialId, purpose, emit, controller: new AbortController() });
       return `${origin}/c/${token}/v1`;

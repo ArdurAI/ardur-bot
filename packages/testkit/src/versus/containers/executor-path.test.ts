@@ -12,6 +12,7 @@ import { BudgetLedger } from "../budget.js";
 import { selfTestBudget } from "../self-test.js";
 import { TrialAdmission } from "./admission.js";
 import { ContainerComputer } from "./computer.js";
+import { SYMLINK_REFUSAL } from "./guest.js";
 import type { ContainerSession } from "./session.js";
 
 const route = `http://127.0.0.1:1/c/cap_${"b".repeat(48)}/v1`;
@@ -127,6 +128,62 @@ describe("container executor contract", () => {
       { path: "reports", kind: "dir", size: 0 },
     ]);
     expect(listed.some((entry) => entry.startsWith("list:"))).toBe(true);
+  });
+
+  it("keeps links out of listings, workspace walks, exports and snapshots", async () => {
+    const session = stubSession();
+    const reads: string[] = [];
+    session.file = async (op: string, file: string) => {
+      if (op !== "list") return true;
+      if (file.endsWith("/reports")) return [{ name: "result.json", kind: "file", size: 2 }];
+      return [
+        { name: "reports", kind: "dir", size: 0 },
+        { name: "leak", kind: "link", size: 0 },
+        { name: "notes.txt", kind: "file", size: 4 },
+      ];
+    };
+    session.read = async (file: string) => {
+      reads.push(file);
+      if (file.endsWith("/leak")) throw new Error(SYMLINK_REFUSAL);
+      return Buffer.from("ok");
+    };
+    const guestSnapshot = {
+      "notes.txt": "ok",
+      "reports/result.json": "{}",
+      leak: { kind: "link" },
+    };
+    session.snapshot = async () => guestSnapshot as unknown as Record<string, string>;
+    const budget = selfTestBudget();
+    const ledger = new BudgetLedger(budget);
+    ledger.open("links");
+    const admission = new TrialAdmission("links", ledger, () => undefined, ["shell"]);
+    admission.bindModel(route, budget.model.id);
+    const computer = new ContainerComputer(session, getTask("task-01"), admission);
+    const current = context();
+    const ref = await computer.provision({ botId: "home-1", homePath: "unused" }, current);
+    expect(await computer.listFiles(ref, "", current)).toEqual([
+      { path: "notes.txt", kind: "file", size: 4 },
+      { path: "reports", kind: "dir", size: 0 },
+    ]);
+    const walked: string[] = [];
+    const pending = [""];
+    while (pending.length)
+      for (const entry of await computer.listFiles(ref, pending.pop()!, current)) {
+        if (entry.kind === "dir") pending.push(entry.path);
+        else {
+          await computer.readFile(ref, entry.path, current);
+          walked.push(entry.path);
+        }
+      }
+    expect(walked.sort()).toEqual(["notes.txt", "reports/result.json"]);
+    expect(reads.some((file) => file.endsWith("/leak"))).toBe(false);
+    const exported: string[] = [];
+    for await (const file of computer.exportWorkspace(ref)) exported.push(file.path);
+    expect(exported.sort()).toEqual(["notes.txt", "reports/result.json"]);
+    expect(Object.keys(await computer.snapshotFiles("home-1", "bot-1")).sort()).toEqual([
+      "notes.txt",
+      "reports/result.json",
+    ]);
   });
 
   it("prepares a helper workspace through the production callback without a shell fork", async () => {

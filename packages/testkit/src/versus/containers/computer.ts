@@ -137,21 +137,22 @@ export class ContainerComputer implements SandboxProvider {
           !name.includes("\0"),
         "Container listing unavailable",
       );
+      const kind = record.kind;
       requireValue(
-        record.kind === "file" || record.kind === "dir" || record.kind === "link",
+        kind === "file" || kind === "dir" || kind === "link",
         "Container listing unavailable",
       );
       requireValue(
         typeof record.size === "number" && record.size >= 0,
         "Container listing unavailable",
       );
+      // Consumers read every non-directory entry as content and links are never followed.
+      if (kind === "link") continue;
       entries.push({
         path: relative ? `${relative}/${name}` : name,
-        // The shared product contract predates non-followed links; the controlled lane
-        // retains the runtime kind instead of misreporting a link as file content.
-        kind: record.kind as ComputerFileEntry["kind"],
-        size: record.kind === "dir" ? 0 : record.size,
-        ...(record.kind === "file" && record.executable === true ? { executable: true } : {}),
+        kind,
+        size: kind === "dir" ? 0 : record.size,
+        ...(kind === "file" && record.executable === true ? { executable: true } : {}),
       });
     }
     return entries.sort((left, right) => left.path.localeCompare(right.path));
