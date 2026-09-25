@@ -123,6 +123,14 @@ shows all those revisions. Clearing a source thread purges proposal bodies and e
 the P1-1 database trigger, so a queued grant cannot apply them. It preserves already approved
 memory revisions and content-free action audits.
 
+A review may also propose one board item for a recurring failure or unfinished follow-up across
+runs. Its title, description, acceptance criteria, optional board and evidence remain visible
+until approval. Board-item proposals never use a learning grant. Approval redacts known secrets,
+deduplicates an open title, enforces the board's hourly filing cap, adds `bot-filed`, and records
+the selected item. Undo closes that item with `Undone from Learning` only while it is still open
+and unchanged; otherwise it says “This board item has moved on.” The proposal's observation is
+the recorded board-item outcome from later board reads.
+
 Preferences are restricted to boolean `bot.notifyOnFinish` and `bot.autoSpeak`, both existing
 visible bot settings. Setting history is retained as `preferences/` documents for inspection;
 it is excluded from prompt memory, memory search and semantic delivery. Other preference keys

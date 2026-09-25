@@ -7,14 +7,23 @@ import { FiledBy } from "../board/FiledBy";
 import type { PanelActions, PanelContext } from "./panels";
 
 export function load({ signal, spaceId }: PanelContext) {
-  return rpc.board.work({}, { signal, context: { spaceId } });
+  return Promise.all([
+    rpc.board.work({}, { signal, context: { spaceId } }),
+    rpc.board.filingOutcomes({}, { signal, context: { spaceId } }),
+  ]).then(([work, outcomes]) => ({ ...work, filingOutcomes: outcomes.bots }));
 }
-export default function WorkPanel({ data, openSettings }: { data: BoardWork } & PanelActions) {
+type WorkData = BoardWork & {
+  filingOutcomes: Awaited<ReturnType<typeof load>>["filingOutcomes"];
+};
+export default function WorkPanel({ data, openSettings }: { data: WorkData } & PanelActions) {
   if (!data.workspace)
     return (
-      <Button variant="ghost" onClick={() => openSettings("boards")}>
-        <Trans>Set up a board</Trans>
-      </Button>
+      <div className="space-y-3 text-sm">
+        <Button variant="ghost" onClick={() => openSettings("boards")}>
+          <Trans>Set up a board</Trans>
+        </Button>
+        <FilingOutcomes rows={data.filingOutcomes} />
+      </div>
     );
   return (
     <div className="space-y-3 text-sm">
@@ -54,6 +63,17 @@ export default function WorkPanel({ data, openSettings }: { data: BoardWork } & 
           <Trans>No ready work</Trans>
         </p>
       )}
+      <FilingOutcomes rows={data.filingOutcomes} />
     </div>
   );
+}
+function FilingOutcomes({ rows }: { rows: WorkData["filingOutcomes"] }) {
+  return rows.map((row) => (
+    <p key={row.botId}>
+      <Trans>
+        {row.name} filed {row.filed}: {row.done} done, {row.open} open, {row.other} closed
+        otherwise.
+      </Trans>
+    </p>
+  ));
 }

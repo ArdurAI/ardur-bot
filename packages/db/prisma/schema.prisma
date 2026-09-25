@@ -2223,10 +2223,18 @@ model BotBoardFiling {
   id String @id @default(cuid())
   spaceId String
   space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  runId String
+  runId String?
+  workspaceId String?
+  itemId String?
+  botId String?
+  learningProposalId String?
+  closedAt DateTime?
+  outcome String?
   createdAt DateTime @default(now())
 
+  @@unique([workspaceId, itemId])
   @@index([runId])
+  @@index([learningProposalId])
   @@index([spaceId, createdAt])
   @@map("bot_board_filings")
 }

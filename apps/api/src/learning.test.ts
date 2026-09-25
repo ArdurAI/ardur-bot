@@ -122,6 +122,54 @@ it("lists scoped proposals with separate counts and opens only linked, surviving
   });
 });
 
+it("reports the recorded outcome for an applied board-item proposal", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const service = createLearningService({
+    prisma: {
+      spaceMember: { findUnique: async () => ({ role: "member" }) },
+      bot: { findFirst: async () => ({ id: "bot" }) },
+      learningProposal: {
+        findFirst: async () => ({
+          status: "applied",
+          body: {
+            id: "proposal",
+            type: "board-item",
+            scope: { ...actor, botId: "bot" },
+            target: {},
+            boardItem: {
+              title: "Track recurring failure",
+              description: "The same failure recurred.",
+              acceptanceCriteria: "A regression test covers the failure.",
+            },
+            rationale: "Repeated failure",
+            evidenceIds: ["evidence-a", "evidence-b"],
+            confidence: { label: "model estimate", value: 0.8 },
+            diff: "+Track recurring failure",
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            status: "applied",
+            appliedBoardItem: {
+              workspaceId: "workspace",
+              itemId: "item",
+              updatedAt: "2026-09-25T12:00:00.000Z",
+              duplicate: false,
+            },
+          },
+        }),
+      },
+      botBoardFiling: {
+        findFirst: async () => ({
+          closedAt: new Date("2026-09-25T13:00:00.000Z"),
+          outcome: "completed",
+        }),
+      },
+    } as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  await expect(service.proposal(actor, "proposal")).resolves.toMatchObject({
+    boardOutcome: { closedAt: "2026-09-25T13:00:00.000Z", outcome: "completed" },
+  });
+});
+
 it("keeps content-free audit entries in exports when their document no longer exists", async () => {
   const actor = { spaceId: "space", userId: "user" } as Actor;
   const service = createLearningService({

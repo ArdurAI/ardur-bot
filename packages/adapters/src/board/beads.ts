@@ -99,6 +99,7 @@ export function parseBeadsItem(value: unknown): WorkItem {
     createdAt: str(raw.created_at),
     updatedAt: str(raw.updated_at),
     closedAt: str(raw.closed_at) || null,
+    closeReason: str(raw.close_reason),
     commentCount: num(raw.comment_count, array(raw.comments).length),
     comments: array(raw.comments).map(parseBeadsComment),
     history: [],

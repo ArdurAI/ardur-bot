@@ -569,7 +569,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     home: deps.home,
     dataDir: deps.dataDir,
   });
-  const learning = createLearningService(deps);
+  const learning = createLearningService({ ...deps, boardService: board.service });
   const agentSkills = createAgentSkillsService(deps.prisma, deps.memoryDocuments);
   const localImport = new LocalImportService({
     prisma: deps.prisma,
@@ -5282,6 +5282,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         boardCall(() => board.view(context.actor, input)),
       ),
       work: authed.board.work.handler(({ context }) => boardCall(() => board.work(context.actor))),
+      filingOutcomes: authed.board.filingOutcomes.handler(({ context }) =>
+        boardCall(() => board.service.filingOutcomes(context.actor)),
+      ),
       configure: authed.board.configure.handler(({ context, input }) =>
         boardCall(() => board.service.configure(context.actor, input.workspaceId, input.patch)),
       ),

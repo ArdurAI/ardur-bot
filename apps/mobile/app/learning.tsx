@@ -213,11 +213,13 @@ export default function Learning() {
                         ? t("Proposed consolidation")
                         : proposal.type === "policy-suggestion"
                           ? proposal.rationale
-                          : (proposal.proposedContent
-                              ?.split("\n")
-                              .find((line) => line.trim() && line !== "---") ??
-                            proposal.typedDelta?.key ??
-                            proposal.type)}
+                          : proposal.type === "board-item"
+                            ? proposal.boardItem?.title
+                            : (proposal.proposedContent
+                                ?.split("\n")
+                                .find((line) => line.trim() && line !== "---") ??
+                              proposal.typedDelta?.key ??
+                              proposal.type)}
                   </Text>
                   <Text style={styles.secondary}>
                     {proposal.scope.botId
@@ -241,7 +243,7 @@ export default function Learning() {
                     ) : proposal.status === "applied" ? (
                       <>
                         <Text style={styles.body}>{t("Applied")}</Text>
-                        {proposal.appliedRevisionId ? (
+                        {proposal.appliedRevisionId || proposal.appliedBoardItem ? (
                           <Button
                             title={t("Undo")}
                             disabled={busy}
@@ -283,6 +285,15 @@ export default function Learning() {
                       <Text style={styles.body}>{proposal.rationale}</Text>
                       {proposal.observation ? (
                         <LearningObservationView observation={proposal.observation} />
+                      ) : null}
+                      {proposal.boardOutcome ? (
+                        <Text style={styles.secondary}>
+                          {proposal.boardOutcome.outcome === "completed"
+                            ? t("This board item was completed.")
+                            : proposal.boardOutcome.outcome === "closed-other"
+                              ? t("This board item was closed otherwise.")
+                              : t("This board item is still open.")}
+                        </Text>
                       ) : null}
                       {proposal.confidence ? (
                         <Text style={styles.secondary}>
@@ -330,20 +341,28 @@ export default function Learning() {
                       {conflict ? (
                         <View>
                           <Text style={styles.error}>
-                            {t("Later edits overlap this change. Review both versions in History.")}
+                            {proposal.type === "board-item"
+                              ? t("This board item has moved on.")
+                              : t(
+                                  "Later edits overlap this change. Review both versions in History.",
+                                )}
                           </Text>
-                          <Text style={styles.title}>{t("Before")}</Text>
-                          <Text selectable style={styles.body}>
-                            {conflict.before}
-                          </Text>
-                          <Text style={styles.title}>{t("Applied")}</Text>
-                          <Text selectable style={styles.body}>
-                            {conflict.applied}
-                          </Text>
-                          <Text style={styles.title}>{t("Current")}</Text>
-                          <Text selectable style={styles.body}>
-                            {conflict.current}
-                          </Text>
+                          {proposal.type === "board-item" ? null : (
+                            <>
+                              <Text style={styles.title}>{t("Before")}</Text>
+                              <Text selectable style={styles.body}>
+                                {conflict.before}
+                              </Text>
+                              <Text style={styles.title}>{t("Applied")}</Text>
+                              <Text selectable style={styles.body}>
+                                {conflict.applied}
+                              </Text>
+                              <Text style={styles.title}>{t("Current")}</Text>
+                              <Text selectable style={styles.body}>
+                                {conflict.current}
+                              </Text>
+                            </>
+                          )}
                         </View>
                       ) : null}
                     </View>

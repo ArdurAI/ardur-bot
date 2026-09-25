@@ -14,6 +14,7 @@ import { getDashboardPanels } from "./panels";
 const api = vi.hoisted(() => ({
   team: vi.fn(),
   work: vi.fn(),
+  filingOutcomes: vi.fn(),
   now: vi.fn(),
   runs: vi.fn(),
   thread: vi.fn(),
@@ -32,7 +33,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../../lib/rpc", () => ({
   rpc: {
     team: { board: api.team },
-    board: { work: api.work },
+    board: { work: api.work, filingOutcomes: api.filingOutcomes },
     runs: { list: api.runs },
     threads: { get: api.thread, answer: api.answer, subscribe: api.subscribe },
     host: { status: api.host },
@@ -101,6 +102,7 @@ beforeEach(() => {
   api.usage.mockResolvedValue(summary);
   api.learning.mockResolvedValue({ pendingCount: 0, proposals: [] });
   api.work.mockResolvedValue({ workspace: null, ready: 0, inProgress: 0, blocked: 0, items: [] });
+  api.filingOutcomes.mockResolvedValue({ bots: [] });
   api.features.mockResolvedValue([{ feature: "governance", state: "unavailable" }]);
   node = document.createElement("div");
   document.body.append(node);

@@ -1,6 +1,6 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
 import { expect, it, vi } from "vitest";
-import { observeBoardItems } from "./board-follow.js";
+import { boardFilingOutcome, observeBoardItems } from "./board-follow.js";
 import type { PrismaClient } from "./client.js";
 
 function fixture() {
@@ -15,6 +15,7 @@ function fixture() {
     version: 0,
   };
   const create = vi.fn();
+  const filing = vi.fn(async () => ({ count: 0 }));
   const updateMany = vi.fn(async ({ where, data }) => {
     if (where.version !== follow.version) return { count: 0 };
     Object.assign(follow, { ...data, version: follow.version + 1 });
@@ -22,11 +23,12 @@ function fixture() {
   });
   const prisma = {
     boardFollow: { findMany: vi.fn(async () => [{ ...follow }]) },
+    botBoardFiling: { updateMany: filing },
     $transaction: vi.fn(async (work) =>
       work({ boardFollow: { updateMany }, boardNotification: { create } }),
     ),
   };
-  return { prisma: prisma as unknown as PrismaClient, follow, create, updateMany };
+  return { prisma: prisma as unknown as PrismaClient, follow, create, updateMany, filing };
 }
 const item = (overrides: Partial<WorkItem> = {}) =>
   ({
@@ -56,6 +58,19 @@ it("records status, assignment and comment changes once per observed version", a
   await observeBoardItems(prisma, "board", [item({ ...changed, commentCount: 0 })]);
   await observeBoardItems(prisma, "board", [changed]);
   expect(create).toHaveBeenCalledTimes(1);
+});
+
+it("records a closed filing outcome once and never overwrites it", async () => {
+  const { prisma, filing } = fixture();
+  await observeBoardItems(prisma, "board", [
+    item({ status: "closed", closedAt: "2026-09-25T12:00:00.000Z", closeReason: "Done" }),
+  ]);
+  expect(filing).toHaveBeenCalledWith({
+    where: { workspaceId: "board", itemId: "item", closedAt: null, outcome: null },
+    data: { closedAt: new Date("2026-09-25T12:00:00.000Z"), outcome: "completed" },
+  });
+  expect(boardFilingOutcome("No longer needed")).toBe("closed-other");
+  expect(boardFilingOutcome("")).toBe("completed");
 });
 it("does not emit after a concurrent observer consumed the version or an unfollow removed it", async () => {
   const { prisma, create, updateMany } = fixture();

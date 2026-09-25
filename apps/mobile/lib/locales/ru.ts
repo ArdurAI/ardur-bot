@@ -1045,4 +1045,10 @@ export const RU_MESSAGES: Record<string, string> = {
   "In progress": "В работе",
   Blocked: "Заблокировано",
   Comment: "Комментарий",
+  "{name} filed {filed}: {done} done, {open} open, {other} closed otherwise.":
+    "{name} создал задач: {filed}; выполнено: {done}, открыто: {open}, закрыто иначе: {other}.",
+  "This board item is still open.": "Эта задача на доске всё ещё открыта.",
+  "This board item was completed.": "Эта задача на доске выполнена.",
+  "This board item was closed otherwise.": "Эта задача на доске закрыта по другой причине.",
+  "This board item has moved on.": "Эта задача на доске уже изменилась.",
 };

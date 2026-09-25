@@ -1,6 +1,13 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
 import type { PrismaClient } from "./client.js";
 
+/** Empty reasons and explicit completion words mean done; every other reason stays distinct. */
+export function boardFilingOutcome(reason = ""): "completed" | "closed-other" {
+  return !reason.trim() || /\b(done|complete|completed|fixed|resolved)\b/iu.test(reason)
+    ? "completed"
+    : "closed-other";
+}
+
 /** Beads owns item state. A follower's observed version makes notifications retry-safe. */
 export async function observeBoardItems(
   prisma: PrismaClient,
@@ -9,6 +16,20 @@ export async function observeBoardItems(
 ) {
   if (!items.length) return;
   const byId = new Map(items.map((item) => [item.id, item]));
+  const closed = items.filter((item) => item.status === "closed");
+  for (const item of closed)
+    await prisma.botBoardFiling.updateMany({
+      where: {
+        workspaceId,
+        itemId: item.id,
+        closedAt: null,
+        outcome: null,
+      },
+      data: {
+        closedAt: item.closedAt ? new Date(item.closedAt) : new Date(),
+        outcome: boardFilingOutcome(item.closeReason ?? ""),
+      },
+    });
   const follows = await prisma.boardFollow.findMany({
     where: { workspaceId, itemId: { in: [...byId.keys()] }, workspace: { enabled: true } },
   });

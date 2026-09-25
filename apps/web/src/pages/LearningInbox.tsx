@@ -319,11 +319,13 @@ function LearningCard({
             ? t`Proposed consolidation`
             : proposal.type === "policy-suggestion"
               ? proposal.rationale
-              : (proposal.proposedContent
-                  ?.split("\n")
-                  .find((line) => line.trim() && line !== "---") ??
-                proposal.typedDelta?.key ??
-                proposal.type)}
+              : proposal.type === "board-item"
+                ? proposal.boardItem?.title
+                : (proposal.proposedContent
+                    ?.split("\n")
+                    .find((line) => line.trim() && line !== "---") ??
+                  proposal.typedDelta?.key ??
+                  proposal.type)}
       </p>
       <p className="text-xs text-muted-foreground">
         {proposal.scope.botId
@@ -351,7 +353,11 @@ function LearningCard({
             <Button
               variant="ghost"
               disabled={
-                busy || !!blocked || !!proposal.operation || proposal.type === "policy-suggestion"
+                busy ||
+                !!blocked ||
+                !!proposal.operation ||
+                proposal.type === "policy-suggestion" ||
+                proposal.type === "board-item"
               }
               onClick={() => setEditing((value) => !value)}
             >
@@ -363,7 +369,7 @@ function LearningCard({
             <span className="text-sm">
               <Trans>Applied</Trans>
             </span>
-            {proposal.appliedRevisionId ? (
+            {proposal.appliedRevisionId || proposal.appliedBoardItem ? (
               <Button
                 variant="ghost"
                 disabled={busy}
@@ -440,6 +446,17 @@ function LearningCard({
         {proposal.observation ? (
           <LearningObservationView observation={proposal.observation} />
         ) : null}
+        {proposal.boardOutcome ? (
+          <p>
+            {proposal.boardOutcome.outcome === "completed" ? (
+              <Trans>This board item was completed.</Trans>
+            ) : proposal.boardOutcome.outcome === "closed-other" ? (
+              <Trans>This board item was closed otherwise.</Trans>
+            ) : (
+              <Trans>This board item is still open.</Trans>
+            )}
+          </p>
+        ) : null}
         {proposal.confidence ? (
           <p>
             <Trans>model estimate</Trans>: {Math.round(proposal.confidence.value * 100)}%
@@ -510,21 +527,31 @@ function LearningCard({
       </details>
       {conflict ? (
         <div role="alert" className="mt-3 text-sm">
-          <p>
-            <Trans>Later edits overlap this change. Review both versions in History.</Trans>
-          </p>
-          <p>
-            <Trans>Before</Trans>
-          </p>
-          <pre className="whitespace-pre-wrap">{conflict.before}</pre>
-          <p>
-            <Trans>Applied</Trans>
-          </p>
-          <pre className="whitespace-pre-wrap">{conflict.applied}</pre>
-          <p>
-            <Trans>Current</Trans>
-          </p>
-          <pre className="whitespace-pre-wrap">{conflict.current}</pre>
+          {proposal.type === "board-item" ? (
+            <p>
+              <Trans>This board item has moved on.</Trans>
+            </p>
+          ) : (
+            <p>
+              <Trans>Later edits overlap this change. Review both versions in History.</Trans>
+            </p>
+          )}
+          {proposal.type === "board-item" ? null : (
+            <>
+              <p>
+                <Trans>Before</Trans>
+              </p>
+              <pre className="whitespace-pre-wrap">{conflict.before}</pre>
+              <p>
+                <Trans>Applied</Trans>
+              </p>
+              <pre className="whitespace-pre-wrap">{conflict.applied}</pre>
+              <p>
+                <Trans>Current</Trans>
+              </p>
+              <pre className="whitespace-pre-wrap">{conflict.current}</pre>
+            </>
+          )}
         </div>
       ) : null}
     </article>

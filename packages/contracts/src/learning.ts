@@ -22,10 +22,19 @@ export const LearningProposalTypeSchema = z.enum([
   "memory",
   "skill",
   "preference",
+  "board-item",
   "policy-suggestion",
   "pin-insight",
   "harness-issue",
 ]);
+export const LearningBoardItemSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    description: z.string().max(32_000),
+    acceptanceCriteria: z.string().trim().min(1).max(32_000),
+    workspaceId: z.string().min(1).max(160).optional(),
+  })
+  .strict();
 export const LearningCandidateSchema = z
   .object({
     type: LearningProposalTypeSchema,
@@ -42,6 +51,7 @@ export const LearningCandidateSchema = z
       })
       .strict()
       .optional(),
+    boardItem: LearningBoardItemSchema.optional(),
     rationale: z.string().min(1).max(2000),
     evidenceIds: z.array(z.string()).min(1).max(30),
     confidence: z
@@ -50,8 +60,14 @@ export const LearningCandidateSchema = z
   })
   .strict()
   .refine(
-    (value) => (value.proposedContent !== undefined) !== (value.typedDelta !== undefined),
-    "Provide content or a typed delta.",
+    (value) =>
+      [
+        value.proposedContent !== undefined,
+        value.typedDelta !== undefined,
+        value.boardItem !== undefined,
+      ].filter(Boolean).length === 1 &&
+      (value.type === "board-item") === (value.boardItem !== undefined),
+    "Provide content, a typed delta, or a board item for its matching proposal type.",
   );
 export const ObservationWindowSchema = z.object({
   from: z.string().datetime(),
@@ -167,6 +183,22 @@ export const LearningProposalSchema = z
     appliedRevisionId: z.string().optional(),
     revertedRevisionId: z.string().optional(),
     appliedAt: z.string().datetime().optional(),
+    appliedBoardItem: z
+      .object({
+        workspaceId: z.string(),
+        itemId: z.string(),
+        updatedAt: z.string(),
+        duplicate: z.boolean(),
+      })
+      .strict()
+      .optional(),
+    boardOutcome: z
+      .object({
+        closedAt: z.string().datetime().nullable(),
+        outcome: z.enum(["completed", "closed-other"]).nullable(),
+      })
+      .strict()
+      .optional(),
     documentId: z.string().optional(),
     blockedReason: z.string().optional(),
     settingBefore: z.boolean().optional(),
@@ -181,8 +213,14 @@ export const LearningProposalSchema = z
   })
   .strict()
   .refine(
-    (value) => (value.proposedContent !== undefined) !== (value.typedDelta !== undefined),
-    "Provide content or a typed delta.",
+    (value) =>
+      [
+        value.proposedContent !== undefined,
+        value.typedDelta !== undefined,
+        value.boardItem !== undefined,
+      ].filter(Boolean).length === 1 &&
+      (value.type === "board-item") === (value.boardItem !== undefined),
+    "Provide content, a typed delta, or a board item for its matching proposal type.",
   );
 export type LearningProposal = z.infer<typeof LearningProposalSchema>;
 export type LearningCandidate = z.infer<typeof LearningCandidateSchema>;

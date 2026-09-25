@@ -855,6 +855,55 @@ it("preserves current citations when undoing a category change", async () => {
   });
 });
 
+it.each([false, true])(
+  "undoes an unchanged board item and leaves a changed item alone (changed=%s)",
+  async (changed) => {
+    const f = fixture();
+    const item = {
+      id: "board-a",
+      status: "open",
+      updatedAt: changed ? "2026-09-25T13:00:00.000Z" : "2026-09-25T12:00:00.000Z",
+    };
+    const close = vi.fn(async () => [{ ...item, status: "closed" }]);
+    const boardService = {
+      fileLearningProposal: vi.fn(async () => ({
+        workspaceId: "workspace",
+        duplicate: false,
+        item: { ...item, updatedAt: "2026-09-25T12:00:00.000Z" },
+      })),
+      provider: vi.fn(async () => ({ show: vi.fn(async () => item), close })),
+    };
+    const apply = createLearningApplyService({
+      ...f.deps,
+      boardService: boardService as never,
+    });
+    const proposal = await f.proposal(undefined, {
+      type: "board-item",
+      proposedContent: undefined,
+      boardItem: {
+        title: "Track recurring failure",
+        description: "The same failure recurred.",
+        acceptanceCriteria: "The failure is covered by a regression test.",
+      },
+    });
+    await expect(apply.autoApply(proposal.id, f.grant().id as string)).rejects.toThrow();
+    expect(boardService.fileLearningProposal).not.toHaveBeenCalled();
+    const applied = await apply.approve(proposal.id, actor);
+    expect(applied.proposal).toMatchObject({
+      status: "applied",
+      appliedBoardItem: { workspaceId: "workspace", itemId: "board-a" },
+    });
+    const undone = await apply.revert(proposal.id, actor);
+    if (changed) {
+      expect(close).not.toHaveBeenCalled();
+      expect(undone.conflict?.current).toBe("This board item has moved on.");
+    } else {
+      expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+      expect(undone.proposal.status).toBe("reverted");
+    }
+  },
+);
+
 it("undoes an approved category edit without overwriting later category changes", async () => {
   const f = fixture();
   f.db.reviewExecution.findFirst.mockResolvedValue({

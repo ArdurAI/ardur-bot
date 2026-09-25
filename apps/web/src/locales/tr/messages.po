@@ -66,6 +66,15 @@ msgstr ""
 msgid "{0} documents, {1} revisions"
 msgstr ""
 
+#. placeholder {0}: row.name
+#. placeholder {1}: row.filed
+#. placeholder {2}: row.done
+#. placeholder {3}: row.open
+#. placeholder {4}: row.other
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed otherwise."
+msgstr ""
+
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
 #: src/pages/fleet/FleetSettings.tsx
 msgid "{0} GB free"
@@ -7202,6 +7211,22 @@ msgstr "Düşünüyor"
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
 msgid "This action could not finish; try again."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item has moved on."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item is still open."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed otherwise."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was completed."
 msgstr ""
 
 #: src/pages/shell/provider-error-message.tsx

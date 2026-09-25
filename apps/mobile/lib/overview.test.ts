@@ -7,7 +7,13 @@ import OverviewScreen from "../app/overview";
 import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "./overview";
 
 vi.mock("./api", () => ({
-  rpc: vi.fn(async () => ({ workspace: null, ready: 0, inProgress: 0, blocked: 0, items: [] })),
+  rpc: vi.fn(async (procedure: string) =>
+    procedure === "board/filingOutcomes"
+      ? {
+          bots: [{ botId: "bot", name: "Helper", filed: 3, done: 1, open: 1, other: 1 }],
+        }
+      : { workspace: null, ready: 0, inProgress: 0, blocked: 0, items: [] },
+  ),
 }));
 vi.mock("./overview", () => ({
   loadOverviewConnections: vi.fn(),
@@ -73,6 +79,7 @@ it("renders the three read-only Overview panels and their empty states", async (
   ])
     expect(node.textContent).toContain(text);
   expect(node.textContent).not.toContain("Allow once");
+  expect(node.textContent).toContain("Helper filed 3: 1 done, 1 open, 1 closed otherwise.");
 });
 it("keeps loading and error recovery independent without exposing approval or settings actions", async () => {
   let reject!: (error: Error) => void;

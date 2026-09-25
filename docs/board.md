@@ -169,6 +169,14 @@ criteria, comments and close reasons whether or not the setting is on. Read-only
 grants still reject writes. A stale phone confirmation does not make the board
 read-only; the run pauses for confirmation the same way as other consequential tools.
 
+The Work panel and mobile Overview group the last 30 days of filing records by bot
+and show completed, open and otherwise-closed counts. A board read observes returned
+closed items and records the first outcome without another Beads call. An empty close
+reason or a completion word is completed; another reason is closed otherwise. An item
+that nobody reads after it closes remains open in this projection until the next read,
+so staleness is unbounded for an abandoned board and otherwise lasts until the next
+15-second foreground board poll or later board access.
+
 Send to a bot creates a normal conversation turn containing the item's title,
 description and acceptance criteria. The item becomes in progress, assigned to
 `bot:<bot name>`. Its workspace and item ID are saved on the run before enqueue.

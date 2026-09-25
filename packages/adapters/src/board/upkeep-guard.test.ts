@@ -86,6 +86,12 @@ function service(options?: { open?: WorkItem[]; filings?: number; hourFilings?: 
         filings.push(row);
         return row;
       }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: object }) => {
+        const row = filings.find((item) => item.id === where.id);
+        if (!row) throw new Error("Missing filing");
+        Object.assign(row, data);
+        return row;
+      }),
       delete: vi.fn(async ({ where }: { where: { id: string } }) => {
         const index = filings.findIndex((row) => row.id === where.id);
         if (index >= 0) filings.splice(index, 1);
@@ -122,6 +128,7 @@ function service(options?: { open?: WorkItem[]; filings?: number; hourFilings?: 
     link: vi.fn(),
   };
   const board = new BoardService({ prisma: prisma as never, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
   vi.spyOn(board, "provider").mockResolvedValue(provider as never);
   vi.spyOn(board, "actor").mockResolvedValue("bot:Builder");
   return { board, provider, prisma };
@@ -244,7 +251,7 @@ it("stops a run at 5 filings and a space at 30 filings an hour", async () => {
 });
 
 it("redacts run secrets from titles, bodies and comments and marks bot filings", async () => {
-  const { board, provider } = service();
+  const { board, provider, prisma } = service();
   await executeBoardTool(
     board,
     scope,
@@ -271,6 +278,10 @@ it("redacts run secrets from titles, bodies and comments and marks bot filings",
     runId: "run",
     botId: "builder",
     botName: "Builder",
+  });
+  expect(prisma.botBoardFiling.update).toHaveBeenCalledWith({
+    where: { id: "new-0" },
+    data: { workspaceId: "workspace", itemId: "board-a" },
   });
   await executeBoardTool(
     board,
@@ -382,6 +393,10 @@ it("keeps the filing when create reports the item already exists", async () => {
     ),
   ).rejects.toMatchObject({ problem: { code: "created_incomplete", itemId: "board-new" } });
   expect(prisma.botBoardFiling.delete).not.toHaveBeenCalled();
+  expect(prisma.botBoardFiling.update).toHaveBeenCalledWith({
+    where: { id: "new-4" },
+    data: { workspaceId: "workspace", itemId: "board-new" },
+  });
   provider.create.mockResolvedValue(item("Next"));
   const next = await executeBoardTool(
     board,
@@ -470,6 +485,64 @@ it("serializes same-title filings so only one item is created", async () => {
       }),
     ]),
   );
+});
+
+it("files learning proposals through redaction, dedupe and the hourly cap", async () => {
+  const learningScope = { userId: "owner", spaceId: "space", botId: "builder" };
+  const redacted = service();
+  await redacted.board.fileLearningProposal(
+    learningScope,
+    "proposal",
+    {
+      title: "Rotate sk-test",
+      description: "Remove sk-test",
+      acceptanceCriteria: "sk-test is gone",
+    },
+    ["sk-test"],
+  );
+  expect(redacted.provider.create).toHaveBeenCalledWith({
+    title: "Rotate [redacted]",
+    description: "Remove [redacted]",
+    acceptanceCriteria: "[redacted] is gone",
+    labels: ["bot-filed"],
+    priority: 2,
+    type: "task",
+  });
+  expect(redacted.prisma.botBoardFiling.create).toHaveBeenCalledWith({
+    data: {
+      spaceId: "space",
+      runId: null,
+      botId: "builder",
+      workspaceId: "workspace",
+      learningProposalId: "proposal",
+    },
+  });
+
+  const duplicate = service({ open: [item("Recurring failure")] });
+  await expect(
+    duplicate.board.fileLearningProposal(
+      learningScope,
+      "proposal",
+      {
+        title: " recurring   failure ",
+        description: "",
+        acceptanceCriteria: "Resolved",
+      },
+      [],
+    ),
+  ).resolves.toMatchObject({ duplicate: true, item: { id: "board-a" } });
+  expect(duplicate.provider.create).not.toHaveBeenCalled();
+
+  const capped = service({ hourFilings: 30 });
+  await expect(
+    capped.board.fileLearningProposal(
+      learningScope,
+      "proposal",
+      { title: "New", description: "", acceptanceCriteria: "Resolved" },
+      [],
+    ),
+  ).rejects.toThrow("30 board items");
+  expect(capped.provider.create).not.toHaveBeenCalled();
 });
 
 function workspaceRow(id: string, admitted: boolean, isDefault = false) {

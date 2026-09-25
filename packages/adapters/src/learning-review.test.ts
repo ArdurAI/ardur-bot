@@ -500,4 +500,31 @@ describe("proposal validation", () => {
       }),
     ).toBe("rejected");
   });
+  it("accepts a board item only when it cites an observed outcome", () => {
+    const board: LearningCandidate = {
+      type: "board-item",
+      scope,
+      target: {},
+      boardItem: {
+        title: "Track recurring failure",
+        description: "The integration failed again.",
+        acceptanceCriteria: "The integration succeeds in the regression suite.",
+      },
+      rationale: "The follow-up remains unfinished.",
+      evidenceIds: ["outcome"],
+      confidence: { label: "model estimate", value: 0.7 },
+    };
+    const outcome = {
+      id: "outcome",
+      runId: "run",
+      threadId: "thread",
+      kind: "observed-outcome" as const,
+      sourceClass: "run" as const,
+      eventIds: ["event"],
+      redactionVersion: 1 as const,
+      outcome: { category: "failure" as const, classification: "execution" as const },
+    };
+    expect(validateLearningCandidate(board, { ...input, evidence: [outcome] })).toBe("pending");
+    expect(validateLearningCandidate(board, input)).toBe("rejected");
+  });
 });

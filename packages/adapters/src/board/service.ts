@@ -2,6 +2,7 @@ import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type {
   BoardConfiguration,
+  BoardCreate,
   BoardRun,
   BoardRunResult,
   BoardWorkspace,
@@ -14,10 +15,13 @@ import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
 import {
+  normalizeBoardTitle,
   RUN_FILING_CAP,
   RUN_FILING_LIMIT,
+  redactBoardText,
   SPACE_FILING_CAP,
   SPACE_FILING_LIMIT,
+  withBotFiledLabel,
 } from "./upkeep.js";
 
 export type BoardScope = {
@@ -408,9 +412,122 @@ export class BoardService {
     });
     if (hourCount >= SPACE_FILING_CAP) return { ok: false as const, message: SPACE_FILING_LIMIT };
     const row = await tx.botBoardFiling.create({
-      data: { spaceId: scope.spaceId, runId: scope.runId },
+      data: { spaceId: scope.spaceId, runId: scope.runId, botId: scope.botId ?? null },
     });
     return { ok: true as const, id: row.id };
+  }
+  async recordFilingItem(
+    tx: Prisma.TransactionClient,
+    filingId: string,
+    workspaceId: string,
+    itemId: string,
+  ) {
+    await tx.botBoardFiling.update({
+      where: { id: filingId },
+      data: { workspaceId, itemId },
+    });
+  }
+  async fileLearningProposal(
+    scope: BoardScope & { botId: string },
+    proposalId: string,
+    input: Pick<BoardCreate, "title" | "description" | "acceptanceCriteria"> & {
+      workspaceId?: string;
+    },
+    secrets: string[],
+    transaction?: Prisma.TransactionClient,
+  ) {
+    const workspace = await this.workspace(scope, input.workspaceId);
+    const provider = await this.provider(scope, workspace.id);
+    const item = {
+      title: redactBoardText(input.title, secrets),
+      description: redactBoardText(input.description ?? "", secrets),
+      acceptanceCriteria: redactBoardText(input.acceptanceCriteria ?? "", secrets),
+    };
+    const work = async (tx: Prisma.TransactionClient) => {
+      const title = normalizeBoardTitle(item.title);
+      const existing = (await provider.list()).find(
+        (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
+      );
+      if (existing) return { item: existing, duplicate: true, workspaceId: workspace.id };
+      const since = new Date(Date.now() - 60 * 60 * 1000);
+      if (
+        (await tx.botBoardFiling.count({
+          where: { spaceId: scope.spaceId, createdAt: { gte: since } },
+        })) >= SPACE_FILING_CAP
+      )
+        throw new BoardError({ code: "busy", message: SPACE_FILING_LIMIT });
+      const filing = await tx.botBoardFiling.create({
+        data: {
+          spaceId: scope.spaceId,
+          runId: null,
+          botId: scope.botId,
+          workspaceId: workspace.id,
+          learningProposalId: proposalId,
+        },
+      });
+      try {
+        const created = await provider.create({
+          ...item,
+          type: "task",
+          priority: 2,
+          labels: withBotFiledLabel(undefined),
+        });
+        await tx.botBoardFiling.update({
+          where: { id: filing.id },
+          data: { itemId: created.id },
+        });
+        return { item: created, duplicate: false, workspaceId: workspace.id };
+      } catch (error) {
+        if (error instanceof BoardError && error.problem.itemId)
+          await tx.botBoardFiling.update({
+            where: { id: filing.id },
+            data: { itemId: error.problem.itemId },
+          });
+        throw error;
+      }
+    };
+    if (transaction) {
+      await transaction.$executeRaw`SELECT id FROM spaces WHERE id = ${scope.spaceId} FOR UPDATE`;
+      return work(transaction);
+    }
+    return this.withFilingLock(scope, work);
+  }
+  async filingOutcomes(scope: BoardScope) {
+    await this.actor(scope);
+    const since = new Date(Date.now() - 30 * 86400_000);
+    const rows = await this.options.prisma.$queryRaw<
+      Array<{
+        botId: string;
+        name: string;
+        filed: bigint;
+        done: bigint;
+        open: bigint;
+        other: bigint;
+      }>
+    >(Prisma.sql`
+      SELECT f."botId" AS "botId", COALESCE(b.name, 'Bot') AS name,
+        COUNT(*) AS filed,
+        COUNT(*) FILTER (WHERE f.outcome = 'completed') AS done,
+        COUNT(*) FILTER (WHERE f.outcome IS NULL) AS open,
+        COUNT(*) FILTER (WHERE f.outcome = 'closed-other') AS other
+      FROM bot_board_filings f
+      LEFT JOIN bots b ON b.id = f."botId" AND b."spaceId" = f."spaceId"
+      WHERE f."spaceId" = ${scope.spaceId}
+        AND f."botId" IS NOT NULL
+        AND f."createdAt" >= ${since}
+      GROUP BY f."botId", b.name
+      ORDER BY COALESCE(b.name, 'Bot'), f."botId"
+    `);
+    return {
+      bots: rows.map((row) => ({
+        botId: row.botId,
+        name: row.name,
+        filed: Number(row.filed),
+        done: Number(row.done),
+        open: Number(row.open),
+        other: Number(row.other),
+      })),
+    };
   }
 }
 

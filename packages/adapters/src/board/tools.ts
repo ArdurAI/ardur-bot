@@ -161,6 +161,7 @@ export async function executeBoardTool(
           : {}),
       };
       if (!options.upkeep) return provider.create(item);
+      const resolvedWorkspaceId = (await service.workspace(scope, args.workspaceId)).id;
       const outcome = await service.withFilingLock(scope, async (tx) => {
         const title = normalizeBoardTitle(item.title);
         const existing = (await provider.list()).find(
@@ -180,6 +181,7 @@ export async function executeBoardTool(
         let created: Awaited<ReturnType<typeof provider.create>> | undefined;
         try {
           created = await provider.create({ ...item, labels: withBotFiledLabel(item.labels) });
+          await service.recordFilingItem(tx, reserved.id, resolvedWorkspaceId, created.id);
           if (!scope.runId || !scope.botId || typeof provider.noteFiling !== "function")
             return { kind: "done" as const, value: created };
           const actor = await service.actor(scope);
@@ -192,7 +194,13 @@ export async function executeBoardTool(
             }),
           };
         } catch (error) {
-          if (created || createdIncomplete(error)) return { kind: "incomplete" as const, error };
+          if (created || createdIncomplete(error)) {
+            const itemId =
+              created?.id ?? (error instanceof BoardError ? error.problem.itemId : undefined);
+            if (itemId)
+              await service.recordFilingItem(tx, reserved.id, resolvedWorkspaceId, itemId);
+            return { kind: "incomplete" as const, error };
+          }
           throw error;
         }
       });

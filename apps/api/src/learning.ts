@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
-import type { EncryptedSecretStore } from "@ardurbot/adapters";
+import type { BoardService, EncryptedSecretStore } from "@ardurbot/adapters";
 import {
   createLearningApplyService,
   createLearningGrants,
@@ -29,6 +29,7 @@ export function createLearningService(deps: {
   jobs: JobPublisher;
   memoryDocuments?: MemoryService;
   secrets?: EncryptedSecretStore;
+  boardService?: BoardService;
 }) {
   async function settings(actor: Actor): Promise<SpaceLearningConfig> {
     const member = await learningMember(deps.prisma, {
@@ -86,6 +87,26 @@ export function createLearningService(deps: {
     return { pendingCount, appliedThisWeek };
   }
   const identity = (actor: Actor) => ({ spaceId: actor.spaceId, userId: actor.userId });
+  async function withBoardOutcome(proposal: ReturnType<typeof proposalView>) {
+    if (!proposal.appliedBoardItem) return proposal;
+    const filing = await deps.prisma.botBoardFiling.findFirst({
+      where: {
+        spaceId: proposal.scope.spaceId,
+        workspaceId: proposal.appliedBoardItem.workspaceId,
+        itemId: proposal.appliedBoardItem.itemId,
+      },
+      select: { closedAt: true, outcome: true },
+    });
+    const outcome: "completed" | "closed-other" | null =
+      filing?.outcome === "completed" || filing?.outcome === "closed-other" ? filing.outcome : null;
+    return {
+      ...proposal,
+      boardOutcome: {
+        closedAt: filing?.closedAt?.toISOString() ?? null,
+        outcome,
+      },
+    };
+  }
   const grants = createLearningGrants(deps.prisma);
   const apply = () => {
     if (!deps.secrets) throw new Error("Learning changes are unavailable.");
@@ -140,7 +161,7 @@ export function createLearningService(deps: {
       const proposal = proposalView(row);
       if (proposal.status === "pending" && new Date(proposal.expiresAt) <= new Date())
         proposal.status = "expired";
-      return proposal;
+      return withBoardOutcome(proposal);
     },
     assertBot: (actor: Actor, botId: string) => learningMember(deps.prisma, identity(actor), botId),
     async curator(actor: Actor) {
@@ -279,12 +300,14 @@ export function createLearningService(deps: {
       return {
         botNames: Object.fromEntries(bots.map((bot) => [bot.id, bot.name])),
         reviews: reviews.map((row) => ReviewExecutionSchema.parse(row)),
-        proposals: proposals.map((row) => {
-          const proposal = proposalView(row);
-          if (proposal.status === "pending" && new Date(proposal.expiresAt) <= new Date())
-            proposal.status = "expired";
-          return proposal;
-        }),
+        proposals: await Promise.all(
+          proposals.map(async (row) => {
+            const proposal = proposalView(row);
+            if (proposal.status === "pending" && new Date(proposal.expiresAt) <= new Date())
+              proposal.status = "expired";
+            return withBoardOutcome(proposal);
+          }),
+        ),
         ...counts,
       };
     },

@@ -15,6 +15,7 @@ import { isReadPolicyTool, parseSkillMd, redactLearningText } from "@ardurbot/co
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
+import type { BoardService } from "./board/service.js";
 import {
   learningMember,
   learningScopeKey,
@@ -33,6 +34,7 @@ export interface LearningApplyDependencies {
   prisma: PrismaClient;
   memoryDocuments?: MemoryService;
   secretStore: EncryptedSecretStore;
+  boardService?: BoardService;
 }
 export function proposalView(row: {
   body: unknown;
@@ -296,6 +298,34 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     onCommit: (doc: MemoryDocumentHead, context: MemoryOperationContext) => void,
   ) {
     const actor = { spaceId: context.spaceId, userId: context.userId };
+    if (proposal.type === "board-item") {
+      if (proposal.status !== "applied")
+        throw new Error("This suggestion has no applied board item to undo.");
+      if (!deps.boardService || !proposal.scope.botId || !proposal.appliedBoardItem)
+        throw new Error("This suggestion has no applied board item to undo.");
+      const boardScope = { ...actor, botId: proposal.scope.botId };
+      const provider = await deps.boardService.provider(
+        boardScope,
+        proposal.appliedBoardItem.workspaceId,
+      );
+      const item = await provider.show(proposal.appliedBoardItem.itemId);
+      if (item.status === "closed" || item.updatedAt !== proposal.appliedBoardItem.updatedAt) {
+        await audit("revert-conflict");
+        return {
+          proposal,
+          conflict: {
+            before: "",
+            applied: proposal.appliedBoardItem.itemId,
+            current: "This board item has moved on.",
+            expectedRevision: 0,
+          },
+        };
+      }
+      await provider.close([item.id], "Undone from Learning");
+      proposal.status = "reverted";
+      await audit("revert");
+      return { proposal: await save(tx, proposal) };
+    }
     if (proposal.status !== "applied" || !proposal.documentId || !proposal.appliedRevisionId)
       throw new Error("This suggestion has no applied change to undo.");
     const head = await target(tx, proposal, context, proposal.documentId, true);
@@ -475,6 +505,27 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         proposal.policyRuleId = rule.id;
         proposal.status = "applied";
         await audit("approve-policy");
+        return { proposal: await save(tx, proposal, { appliedAt: new Date() }) };
+      }
+      if (proposal.type === "board-item") {
+        if (grantId) throw new Error("Approve this board item explicitly.");
+        if (edits || !deps.boardService || !proposal.scope.botId || !proposal.boardItem)
+          throw new Error("This board item cannot be applied.");
+        const filed = await deps.boardService.fileLearningProposal(
+          { ...actor, botId: proposal.scope.botId },
+          proposal.id,
+          proposal.boardItem,
+          [...(context.knownSecrets ?? [])],
+          tx,
+        );
+        proposal.appliedBoardItem = {
+          workspaceId: filed.workspaceId,
+          itemId: filed.item.id,
+          updatedAt: filed.item.updatedAt,
+          duplicate: filed.duplicate,
+        };
+        proposal.status = "applied";
+        await audit("approve");
         return { proposal: await save(tx, proposal, { appliedAt: new Date() }) };
       }
       if (proposal.operation === "consolidation") {
