@@ -1,5 +1,5 @@
-import { DEFAULT_USER_PREFERENCES } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
+import { dashboardFixture } from "./dashboard-fixture";
 import { captureScreenshot } from "./helpers";
 
 test.use({ viewport: { width: 1280, height: 900 } });
@@ -7,76 +7,8 @@ test.use({ viewport: { width: 1280, height: 900 } });
 test("Dashboard opens first, preserves Bots navigation and approves through the existing thread action", async ({
   page,
 }, testInfo) => {
-  const now = "2026-09-24T12:00:00.000Z";
+  const fixture = dashboardFixture();
   await page.clock.setFixedTime(new Date("2026-09-24T12:00:30.000Z"));
-  const user = {
-    id: "fixture-user",
-    name: "Owner",
-    email: "owner@example.test",
-    emailVerified: true,
-    createdAt: now,
-    updatedAt: now,
-  };
-  const me = {
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-    spaceId: "space",
-    isDeploymentOwner: true,
-    needsModel: false,
-    defaultProvider: "fake",
-    defaultModel: "fake",
-    computerHost: "docker",
-    canChooseHostComputer: false,
-    sandboxProvider: "fake",
-    avatarStyle: "robot",
-  };
-  const bot = {
-    id: "bot",
-    spaceId: "space",
-    name: "Reviewer",
-    title: "",
-    description: "",
-    instructions: "",
-    color: "slate",
-    notifyOnFinish: false,
-    pinned: false,
-    sectionId: null,
-    archivedAt: null,
-    unread: false,
-    parentBotId: null,
-    memoryScope: null,
-    threadId: "thread",
-    preview: "",
-    status: "idle",
-    computerMode: "team",
-    createdAt: now,
-    updatedAt: now,
-    voiceId: null,
-    autoSpeak: false,
-    modelProvider: null,
-    modelId: null,
-    thinkingLevel: null,
-    teamChatAmbientEnabled: false,
-    teamChatRules: "",
-    webhookConfigured: false,
-    spawnKey: null,
-    runtimeKind: "pi",
-    modelCredentialId: null,
-    pinRevision: 0,
-  };
-  const space = {
-    id: "space",
-    name: "Workspace",
-    isDefault: true,
-    hasContent: true,
-    bots: [bot],
-    groups: [],
-    externalConversations: [],
-    botSections: [],
-  };
-  let answered = false;
-  let approvedInput: unknown;
   let releaseBootstrap!: () => void;
   const bootstrapReady = new Promise<void>((resolve) => {
     releaseBootstrap = resolve;
@@ -92,144 +24,20 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
       await route.continue();
     },
   );
-  const snapshot = () => ({
-    botId: "bot",
-    threadId: "thread",
-    cursor: 0,
-    olderCursor: null,
-    run: answered
-      ? null
-      : {
-          id: "run",
-          botId: "bot",
-          taskId: "task",
-          status: "waiting_input",
-          trigger: "user",
-          createdAt: now,
-          updatedAt: now,
-        },
-    messages: answered
-      ? []
-      : [
-          {
-            id: "message",
-            threadId: "thread",
-            runId: "run",
-            seq: 1,
-            role: "bot",
-            createdAt: now,
-            blocks: [
-              {
-                kind: "ask",
-                text: "Send the draft?",
-                status: "pending",
-                approvalEffectId: "effect",
-                actions: [
-                  { id: "allow", label: "Allow once" },
-                  { id: "deny", label: "Deny" },
-                ],
-              },
-            ],
-          },
-        ],
-  });
-  await page.route("**/api/auth/get-session*", (route) =>
-    route.fulfill({
-      json: {
-        user,
-        session: {
-          id: "session",
-          userId: user.id,
-          token: "fixture-session",
-          expiresAt: "2099-01-01T00:00:00Z",
-          createdAt: now,
-          updatedAt: now,
-        },
-      },
-    }),
-  );
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
   await page.route("**/rpc/**", async (route) => {
     const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
     if (procedure === "bootstrap") await bootstrapReady;
-    const values: Record<string, unknown> = {
-      me,
-      "preferences/get": DEFAULT_USER_PREFERENCES,
-      "notifications/activity": {
-        userId: user.id,
-        preferences: DEFAULT_USER_PREFERENCES,
-        activities: [],
-      },
-      bootstrap: {
-        me,
-        bots: [bot],
-        groups: [],
-        archivedBots: [],
-        archivedGroups: [],
-        botSections: [],
-        thread: snapshot(),
-        routines: [],
-        spaces: [space],
-      },
-      "spaces/list": { current: { ...space, bots: [bot] }, spaces: [space] },
-      "bots/list": [bot],
-      "bots/get": bot,
-      "team/board": { rows: [] },
-      "board/workspaces": { workspaces: [], problem: null },
-      "host/status": { configured: false, connected: false, roots: [], health: null },
-      "routines/overview": { next: [], recent: [] },
-      "usage/summary": {
-        inputTokens: 0,
-        outputTokens: 0,
-        runs: 0,
-        dayStart: now,
-        weekStart: "2026-09-21T00:00:00Z",
-        asOf: now,
-        providers: [],
-      },
-      "learning/list": {
-        pendingCount: 0,
-        appliedThisWeek: 0,
-        proposals: [],
-        reviews: [],
-        botNames: {},
-      },
-      "learning/summary": { pendingCount: 0, appliedThisWeek: 0 },
-      "features/list": [{ feature: "governance", state: "unavailable" }],
-      "threads/get": snapshot(),
-      "threads/head": snapshot(),
-      "runs/list": {
-        runs: answered
-          ? []
-          : [
-              {
-                runId: "run",
-                botId: "bot",
-                botName: "Reviewer",
-                threadId: "thread",
-                groupId: null,
-                groupName: null,
-                status: "waiting_input",
-                trigger: "user",
-                promptSnippet: "Review the draft",
-                updatedAt: now,
-                startedAt: now,
-                notificationsEnabled: false,
-              },
-            ],
-      },
-      "messaging/status": { enabled: false, providers: [], identities: [], openSignup: false },
-      "voice/status": { transcribe: false, synthesize: false },
-      "memory/config": null,
-    };
-    if (procedure === "threads/answer") {
-      approvedInput = route.request().postDataJSON().json;
-      answered = true;
-      await route.fulfill({ json: { json: { ok: true } } });
-    } else if (procedure === "threads/subscribe") {
+    if (procedure === "threads/subscribe") {
       await route.fulfill({ contentType: "text/event-stream", body: "" });
     } else {
       await route.fulfill({
-        json: { json: Object.hasOwn(values, procedure) ? values[procedure] : [] },
+        json: {
+          json: fixture.rpc(
+            procedure,
+            procedure === "threads/answer" ? route.request().postDataJSON().json : undefined,
+          ),
+        },
       });
     }
   });
@@ -267,7 +75,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   await captureScreenshot(page, testInfo, "dashboard-overview");
   await page.getByRole("button", { name: "Allow once", exact: true }).click();
   await expect
-    .poll(() => approvedInput)
+    .poll(() => fixture.approvedInput)
     .toEqual({
       botId: "bot",
       threadId: "thread",
@@ -321,3 +129,97 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   await page.goto("/app/team");
   await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
 });
+
+test("HTTP/1.1 keeps approvals and summary refresh usable with twelve bot threads", async ({
+  page,
+  baseURL,
+}, testInfo) => {
+  test.setTimeout(45_000);
+  const fixture = dashboardFixture(12);
+  let activeStreams = 0;
+  let peakStreams = 0;
+  let summaries = 0;
+  const protocols = new Set<string>();
+  const server = createServer(async (request, response) => {
+    protocols.add(request.httpVersion);
+    const pathname = new URL(request.url!, "http://127.0.0.1").pathname;
+    if (pathname.startsWith("/api/auth/get-session")) {
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify(fixture.session));
+    } else if (pathname.startsWith("/rpc/")) {
+      const procedure = pathname.slice("/rpc/".length);
+      if (procedure === "threads/subscribe") {
+        activeStreams += 1;
+        peakStreams = Math.max(peakStreams, activeStreams);
+        response.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+        });
+        response.write(": connected\n\n");
+        response.on("close", () => {
+          activeStreams -= 1;
+        });
+        return;
+      }
+      let body = "";
+      for await (const chunk of request) body += chunk;
+      if (procedure === "dashboard/now") summaries += 1;
+      response.setHeader("Content-Type", "application/json");
+      response.end(
+        JSON.stringify({ json: fixture.rpc(procedure, body ? JSON.parse(body).json : undefined) }),
+      );
+    } else {
+      try {
+        const upstream = await fetch(new URL(request.url!, baseURL));
+        response.writeHead(upstream.status, {
+          "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream",
+        });
+        response.end(Buffer.from(await upstream.arrayBuffer()));
+      } catch {
+        response.writeHead(502);
+        response.end();
+      }
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing fixture listener");
+  try {
+    await page.clock.install();
+    await page.goto(`http://127.0.0.1:${address.port}/app`);
+    await expect(
+      page.locator('[data-panel="now"]').getByRole("button", { name: "Allow once", exact: true }),
+    ).toBeVisible();
+    // Let every idle bot subscription start before trying to use the same origin again.
+    await page.waitForTimeout(500);
+    await page
+      .locator('[data-panel="now"]')
+      .getByRole("button", { name: "Allow once", exact: true })
+      .click();
+    await expect
+      .poll(() => fixture.approvedInput, { timeout: 5_000 })
+      .toMatchObject({ runId: "run", answer: "allow" });
+    await expect(page.getByText("Nothing running", { exact: true })).toBeVisible();
+    expect(peakStreams).toBeLessThanOrEqual(1);
+    const beforeRefresh = summaries;
+    await page.clock.runFor(15_001);
+    await expect.poll(() => summaries).toBeGreaterThan(beforeRefresh);
+    expect([...protocols]).toEqual(["1.1"]);
+  } finally {
+    await testInfo.attach("dashboard-http1-requests", {
+      body: JSON.stringify({
+        peakStreams,
+        summaries,
+        answered: fixture.approvedInput !== undefined,
+      }),
+      contentType: "application/json",
+    });
+    await page.goto("about:blank");
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+import { createServer } from "node:http";

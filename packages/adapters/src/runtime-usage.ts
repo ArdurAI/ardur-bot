@@ -19,13 +19,27 @@ const keyOf = (event: AgentUsage & { delegationId?: string }) =>
     event.request?.counter.epochId,
   ]);
 
-/** Uses the ledger's arithmetic for local review/helper caps, never summing cumulative snapshots. */
+/** Uses the ledger's arithmetic for local spend; identity-free legacy events remain deltas. */
 export class ObservedUsageTotals {
   private rows = new Map<string, { totals: RequestUsageTotals; receipts: Map<number, string> }>();
   tokens = 0;
   reported = false;
-  observe(usage: AgentUsage & { delegationId?: string }) {
-    if (!usage.request) throw new Error("Usage identity is required");
+  /** Newly measured spend, or null for an unavailable or already counted observation. */
+  observe(
+    usage: AgentUsage & { delegationId?: string },
+  ): Pick<AgentUsage, "inputTokens" | "outputTokens"> | null {
+    if (!usage.request) {
+      if (usage.reported === false) return null;
+      if (
+        ![usage.inputTokens, usage.outputTokens].every(
+          (value) => Number.isInteger(value) && value >= 0 && value <= 2_147_483_647,
+        )
+      )
+        throw new Error("Invalid legacy usage totals");
+      this.tokens += usage.inputTokens + usage.outputTokens;
+      this.reported = true;
+      return { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens };
+    }
     const request = parseRequestUsage(usage.request);
     const key = keyOf(usage);
     const previous = this.rows.get(key);
@@ -33,19 +47,29 @@ export class ObservedUsageTotals {
     const receipt = previous?.receipts.get(request.counter.sequence);
     if (receipt !== undefined) {
       if (receipt !== fingerprint) throw new Error("Conflicting usage observation replay");
-      return;
+      return null;
     }
     const totals = accumulateRequestUsage(previous?.totals ?? null, request);
     const prior = previous
       ? usageTokenTotals(previous.totals.categories, request.reasoningSemantics)
       : { inputTokens: 0, outputTokens: 0 };
     const next = usageTokenTotals(totals.categories, request.reasoningSemantics);
-    this.tokens += next.inputTokens + next.outputTokens - prior.inputTokens - prior.outputTokens;
-    this.reported ||=
-      request.categories.logicalInput !== null || request.categories.output !== null;
+    const delta = {
+      inputTokens: next.inputTokens - prior.inputTokens,
+      outputTokens: next.outputTokens - prior.outputTokens,
+    };
+    const reported = request.categories.logicalInput !== null || request.categories.output !== null;
+    const previouslyReported =
+      previous?.totals.categories.logicalInput != null ||
+      previous?.totals.categories.output != null;
+    this.tokens += delta.inputTokens + delta.outputTokens;
+    this.reported ||= reported;
     const receipts = previous?.receipts ?? new Map<number, string>();
     receipts.set(request.counter.sequence, fingerprint);
     this.rows.set(key, { totals, receipts });
+    return delta.inputTokens || delta.outputTokens || (reported && !previouslyReported)
+      ? delta
+      : null;
   }
 }
 

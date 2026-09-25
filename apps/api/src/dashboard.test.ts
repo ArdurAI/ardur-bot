@@ -28,7 +28,7 @@ describe("dashboard usage", () => {
       "2026-09-21T00:00:00.000Z",
     );
   });
-  it("groups requests and tokens, omits incomplete costs, and fills real zero days", () => {
+  it("groups usage records and tokens, omits incomplete costs, and fills real zero days", () => {
     const result = providerUsage(
       [
         row("local", "2026-09-24T00:00:00Z"),
@@ -41,9 +41,9 @@ describe("dashboard usage", () => {
       now,
     );
     expect(result.map((provider) => provider.provider)).toEqual(["local", "paid"]);
-    expect(result[0]!.today).toEqual({ requests: 1, inputTokens: 20, outputTokens: 5, cost: null });
+    expect(result[0]!.today).toEqual({ records: 1, inputTokens: 20, outputTokens: 5, cost: null });
     expect(result[1]!.today.cost).toBe(0.2);
-    expect(result[1]!.week).toEqual({ requests: 2, inputTokens: 40, outputTokens: 10, cost: null });
+    expect(result[1]!.week).toEqual({ records: 2, inputTokens: 40, outputTokens: 10, cost: null });
     expect(result[1]!.daily.map((day) => day.tokens)).toEqual([0, 0, 25, 0, 0, 25, 25]);
   });
   it("retains the existing lifetime summary fields and bounds the provider query to the actor", async () => {
@@ -107,4 +107,18 @@ it("selects the next three routines and last three actual results within the act
       }),
     }),
   );
+});
+
+it("reports totals-only aggregates as usage records without inventing request identity", () => {
+  const legacy = {
+    ...row("claude-code", now.toISOString()),
+    requestId: null,
+    attemptId: null,
+    categoryCoverage: null,
+    purpose: "legacy",
+  };
+  const [provider] = providerUsage([legacy], now);
+  expect(provider?.today).toMatchObject({ records: 1, inputTokens: 20, outputTokens: 5 });
+  expect(provider?.today).not.toHaveProperty("requests");
+  expect(provider?.daily.at(-1)).toEqual({ date: "2026-09-24", records: 1, tokens: 25 });
 });

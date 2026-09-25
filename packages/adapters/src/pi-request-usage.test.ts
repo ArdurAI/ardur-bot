@@ -88,6 +88,36 @@ describe("Pi raw numeric mappings", () => {
 });
 
 describe("Pi requests through real HTTP/SSE and SDK retry policy", () => {
+  it.each(["openai-compatible", "ollama"])(
+    "preserves the dispatcher transport for a hostname-based %s endpoint",
+    async (provider) => {
+      const server = await startModelEmulator({
+        steps: [
+          {
+            expect() {},
+            response: { type: "text", text: "hostname request completed" },
+            usage: { inputTokens: 100, outputTokens: 30 },
+          },
+        ],
+      });
+      cleanups.push(server.close);
+      const baseUrl = new URL(server.baseUrl);
+      baseUrl.hostname = "localhost";
+      const events = await collect(
+        new PiAgentRuntime().run(
+          run({ ...server.model, provider, baseUrl: baseUrl.href, contextWindow: 8192 }),
+        ),
+      );
+      server.assertComplete();
+      expect(events.at(-1)).toEqual({ type: "done", text: "hostname request completed" });
+      const usage = events.filter((event) => event.type === "usage");
+      expect(totals(usage).tokens).toBe(130);
+      expect(usage.at(-1)?.request?.collection).toMatchObject({
+        outcome: "success",
+        raw: { input: 100, output: 30 },
+      });
+    },
+  );
   it.each([503, 429])(
     "records every retried HTTP %s attempt and its failed usage",
     async (status) => {

@@ -10,6 +10,7 @@ import { proposalDiff } from "./learning-proposal.js";
 import { learningHash } from "./learning-records.js";
 import { learningSecrets } from "./learning-redaction.js";
 import type { LearningReviewDependencies } from "./learning-review.js";
+import { ObservedUsageTotals } from "./runtime-usage.js";
 import { skillDocumentContext } from "./skill-documents.js";
 
 type Config = NonNullable<
@@ -137,6 +138,7 @@ export async function consolidateLearning(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let usageSeen = false;
   let tokens = 0;
+  const usageTotals = new ObservedUsageTotals();
   let status = "failed";
   try {
     const request: AgentRunRequest = {
@@ -168,8 +170,9 @@ export async function consolidateLearning(
           if (controller.signal.aborted || ["tool", "ask", "takeover"].includes(event.type))
             throw new Error("Consolidation stopped.");
           if (event.type === "usage") {
-            usageSeen = true;
-            tokens += event.inputTokens + event.outputTokens;
+            usageTotals.observe(event);
+            usageSeen = usageTotals.reported;
+            tokens = usageTotals.tokens;
           }
           if (event.type === "text") output += event.text;
           if (event.type === "done" && !output) output = event.text ?? "";
