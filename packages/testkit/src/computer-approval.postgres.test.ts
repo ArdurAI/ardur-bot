@@ -3,26 +3,20 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ComposioEmulator, FakeSandboxProvider } from "@ardurbot/adapters";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "./index.js";
-import { type ModelEmulatorStep, startModelEmulator } from "./model-emulator.js";
+import type { ModelEmulatorStep } from "./model-emulator.js";
+import { startModelEmulator } from "./model-emulator.js";
 
 type App = { request: (input: string, init?: RequestInit) => Promise<Response> };
 const databaseAvailable = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
 const fixtureOrigin = "http://127.0.0.1:5173";
 
 describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
-  beforeAll(() => {
-    // Use the existing compatible-endpoint capability declaration so the real
-    // executor exposes computer tools without mocking its model vision gate.
-    vi.stubEnv("ARDURBOT_OPENAI_COMPATIBLE_VISION_MODELS", "offline-fixture");
-  });
-  afterAll(() => vi.unstubAllEnvs());
-
   it.each(["allow", "deny"] as const)(
     "%s enforces the persisted computer action before any sandbox effect",
     async (answer) => {
-      let sandbox: FakeSandboxProvider;
+      const sandbox = new FakeSandboxProvider();
       const approvedArgs = {
         actions: [{ kind: "type", text: "approved clipboard content" }],
         observe: false,
@@ -33,9 +27,10 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
         (request) => {
           const result = request.messages.findLast((message) => message.role === "tool");
           expect(result?.tool_call_id).toBe(id);
-          const body = JSON.parse(String(result?.content));
-          if (answer === "allow") expect(body).toMatchObject({ ok: true, completed: 1 });
-          else expect(JSON.stringify(body)).toMatch(/denied/i);
+          const content = String(result?.content);
+          if (answer === "allow")
+            expect(JSON.parse(content)).toMatchObject({ ok: true, completed: 1 });
+          else expect(content).toMatch(/denied/i);
           // Inspect the provider state while the run still owns its screen;
           // completed runs release that screen and discard its placeholder state.
           const screens = [...sandbox.boxes.values()].flatMap((box) => [...box.screens.values()]);
@@ -100,6 +95,7 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
           webOrigin: fixtureOrigin,
           dataDir,
           sandboxProvider: "fake",
+          sandbox,
           agentRuntime: "pi",
           wakeupDriver: "memory",
           signupsEnabled: "true",
@@ -107,8 +103,11 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
           encryptionKey: "offline-computer-fixture-encryption-key",
         });
         stop = handles.stop;
+        // Brief maintenance has its own model turn; this fixture scripts only
+        // the approval conversation, including its pause and resume.
+        vi.spyOn(handles.executor, "refreshBrief").mockResolvedValue(undefined);
         expect(handles.sandbox).toBeInstanceOf(FakeSandboxProvider);
-        sandbox = handles.sandbox as FakeSandboxProvider;
+        expect(handles.sandbox).toBe(sandbox);
         // Keep the real fake-provider implementation; observe calls and its state
         // independently of the model's claims and the persisted effect record.
         const act = vi.spyOn(sandbox, "act");
@@ -128,6 +127,7 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
           modelId: model.model.id,
           baseUrl: model.baseUrl,
           apiKey: fixtureKey,
+          supportsImages: true,
         });
         const bot = await rpc<{ id: string }>(handles.app, cookie, "bots/create", {
           name: "Computer fixture",

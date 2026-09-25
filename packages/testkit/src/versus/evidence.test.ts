@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { Server, Socket } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parsePerformanceEvidenceReport } from "../performance-report.js";
 import { gradeOutcome } from "../scoreboard/graders/outcome.js";
 import { contentDigest, SCOREBOARD_MANIFEST } from "../scoreboard/manifest.js";
@@ -12,9 +12,18 @@ import { referenceSolution } from "../scoreboard/tasks/reference.js";
 import { parseArguments, runCli } from "./cli.js";
 import { validateEvidenceDirectory, writeEvidence } from "./evidence.js";
 import { blindPacket, gradeBlind } from "./grading.js";
+import * as provenance from "./provenance.js";
 import { inspectBuild, inspectHermes } from "./provenance.js";
 import { planPairs } from "./scheduler.js";
 import { runOfflineSelfTest, selfTestBudget } from "./self-test.js";
+
+// Inspect real Git objects and source bytes in a self-contained fixture. The
+// checkout running these offline tests may have no parent or research baseline.
+vi.mock("./manifest.js", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  RESEARCH_BASELINE: "refs/tags/research-baseline",
+}));
+const inspectRepositoryBuild = inspectBuild;
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -27,6 +36,71 @@ async function directory() {
   return root;
 }
 describe("zero-inference dry run", () => {
+  let repository: string;
+  beforeAll(async () => {
+    repository = await fs.mkdtemp(path.join(tmpdir(), "versus-build-fixture-"));
+    const sources = path.join(repository, "packages/testkit/src/versus");
+    await fs.mkdir(sources, { recursive: true });
+    await fs.writeFile(path.join(repository, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    const source = path.join(sources, "fixture.ts");
+    await fs.writeFile(source, 'export const revision = "baseline";\n');
+    const git = (...args: string[]) =>
+      childProcess.execFileSync(
+        "git",
+        [
+          "-c",
+          "user.name=Fixture",
+          "-c",
+          "user.email=fixture@example.test",
+          "-c",
+          "commit.gpgsign=false",
+          "-c",
+          "core.hooksPath=/dev/null",
+          ...args,
+        ],
+        { cwd: repository, stdio: "ignore" },
+      );
+    git("init");
+    git("add", ".");
+    git("commit", "-m", "Research baseline fixture");
+    git("update-ref", "refs/tags/research-baseline", "HEAD");
+    await fs.writeFile(source, 'export const revision = "candidate";\n');
+    git("commit", "-am", "Candidate fixture");
+  });
+  beforeEach(() => {
+    vi.spyOn(provenance, "inspectBuild").mockImplementation(() =>
+      inspectRepositoryBuild(repository),
+    );
+  });
+  afterAll(async () => {
+    await fs.rm(repository, { recursive: true, force: true });
+  });
+
+  it("labels non-generating qualification separately and forbids trial observations", async () => {
+    const out = await directory();
+    const input = {
+      mode: "qualification" as const,
+      build: await inspectBuild(),
+      hermes: (await inspectHermes()).identity,
+      plan: planPairs(selfTestBudget().cohort),
+      budget: selfTestBudget(),
+      trials: [],
+      results: [],
+      prerequisites: ["Hard resource enforcement remains unqualified"],
+      launchPlan: { startsProducts: false },
+      protocolResults: { productLaunches: 0, modelCalls: 0, status: "blocked" },
+    };
+    await writeEvidence(out, input);
+    await validateEvidenceDirectory(out);
+    const manifest = JSON.parse(await fs.readFile(path.join(out, "versus-manifest.json"), "utf8"));
+    expect(manifest.mode).toBe("qualification");
+    const checksums = JSON.parse(await fs.readFile(path.join(out, "checksums.json"), "utf8"));
+    expect(checksums.map((item: { name: string }) => item.name)).toContain("qualification.json");
+    expect(checksums.map((item: { name: string }) => item.name)).toContain("canary-budget.json");
+    await expect(writeEvidence(out, { ...input, trials: [{} as never] })).rejects.toThrow(
+      "cannot contain product trials",
+    );
+  });
   it("rejects accidental live invocation before any product startup", async () => {
     const spawn = vi.spyOn(childProcess, "spawn").mockImplementation(() => {
       throw new Error("Unexpected subprocess");

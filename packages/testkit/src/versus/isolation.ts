@@ -149,6 +149,11 @@ export function nativeProfile(policy: NativePolicy) {
     "(allow process-fork)",
     "(allow signal (target self))",
     "(allow sysctl-read)",
+    // The native startup control needs the root directory itself on current macOS.
+    // A literal grants no recursive access to its children.
+    '(allow file-read* (literal "/"))',
+    // Apple's curl initializes LibreSSL before an HTTP connection as well.
+    '(allow file-read-data (literal "/private/etc/ssl/openssl.cnf"))',
     ...[
       "/System",
       "/usr/lib",
@@ -181,7 +186,7 @@ export interface IsolationResult {
   limits: string[];
   diagnostic?: string;
 }
-const validProofs = new WeakSet<object>();
+const validProofs = new WeakMap<object, string>();
 export interface IsolationProof {
   result: IsolationResult;
   profilePath: string;
@@ -189,8 +194,19 @@ export interface IsolationProof {
 }
 export function assertIsolation(proof: IsolationProof, policy: NativePolicy) {
   requireValue(
-    validProofs.has(proof) && proof.result.passed && proof.policyHash === contentDigest(policy),
+    validProofs.get(proof) === contentDigest(policy) &&
+      proof.result.passed &&
+      proof.policyHash === contentDigest(policy),
     "Isolation preflight failed or policy changed",
+  );
+}
+
+/** Filesystem/network canaries cannot authorize a process with unbounded resource exposure. */
+export function assertNativeProductIsolation(proof: IsolationProof, policy: NativePolicy) {
+  assertIsolation(proof, policy);
+  requireValue(
+    proof.result.resourceEnforcement !== "watchdog-only",
+    "Native product launch requires hard process-tree CPU, memory, pids and aggregate disk enforcement; canaries alone are insufficient",
   );
 }
 
@@ -294,7 +310,7 @@ export async function proveNativeIsolation(policy: NativePolicy): Promise<Isolat
       checks[`exact-${name}`] = exactMarkers.has(name);
     checks["exact-canary-port-revoked"] = exactMarkers.has("canary-port-revoked");
     result.passed = Object.values(checks).every(Boolean);
-    if (result.passed) validProofs.add(proof);
+    if (result.passed) validProofs.set(proof, proof.policyHash);
   } catch (error) {
     checks["sandbox-execution"] = false;
     result.passed = false;
@@ -317,5 +333,9 @@ export async function proveNativeIsolation(policy: NativePolicy): Promise<Isolat
     for (const name of ["input-canary", "write-canary", "escape-canary"])
       await rm(path.join(policy.root, name), { force: true });
   }
+  Object.freeze(result.checks);
+  Object.freeze(result.limits);
+  Object.freeze(result);
+  Object.freeze(proof);
   return proof;
 }

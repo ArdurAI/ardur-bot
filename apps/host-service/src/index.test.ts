@@ -6,7 +6,9 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   close: vi.fn(),
   sockets: [] as EventEmitter[],
+  process: { on: vi.fn(), once: vi.fn(), send: vi.fn(), exit: vi.fn() },
 }));
+vi.mock("node:process", () => ({ default: mocks.process }));
 vi.mock("@ardurbot/host-runtime/desktop-sandbox-win32-path", () => ({
   installWin32NativeApi: vi.fn(),
 }));
@@ -33,29 +35,21 @@ vi.mock("ws", () => ({
   },
 }));
 
-const events = [
-  "message",
-  "disconnect",
-  "SIGTERM",
-  "SIGINT",
-  "uncaughtException",
-  "unhandledRejection",
-] as const;
-const processEvents: EventEmitter = process;
-const original = new Map(events.map((event) => [event, processEvents.listeners(event)]));
+// The service owns its child-process IPC. Vitest's worker IPC must not configure
+// or stop it, and service state messages must not be sent to the test runner.
+const processEvents = new EventEmitter();
 beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
+  mocks.process.on.mockImplementation((event, listener) => processEvents.on(event, listener));
+  mocks.process.once.mockImplementation((event, listener) => processEvents.once(event, listener));
   vi.useFakeTimers();
   vi.setSystemTime(0);
   mocks.sockets.length = 0;
   vi.stubGlobal("fetch", mocks.read);
 });
 afterEach(() => {
-  for (const event of events)
-    for (const listener of processEvents.listeners(event))
-      if (!original.get(event)!.includes(listener))
-        processEvents.removeListener(event, listener as (...args: unknown[]) => void);
+  processEvents.removeAllListeners();
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -77,7 +71,7 @@ const registrations = [
 async function connect() {
   mocks.read.mockResolvedValueOnce(Response.json(registrations));
   await import("./index.js");
-  process.emit(
+  processEvents.emit(
     "message",
     {
       apiUrl: "https://example.test",
@@ -143,7 +137,7 @@ it.each(["network", "server"])(
 it("does not retry a permanent configuration failure during initial connection", async () => {
   mocks.read.mockImplementation(async () => new Response(null, { status: 401 }));
   await import("./index.js");
-  process.emit(
+  processEvents.emit(
     "message",
     {
       apiUrl: "https://example.test",
@@ -158,4 +152,16 @@ it("does not retry a permanent configuration failure during initial connection",
   expect(mocks.configureMcp).toHaveBeenCalledWith([]);
   expect(mocks.close).toHaveBeenCalled();
   expect(mocks.sockets).toHaveLength(0);
+  expect(mocks.process.send).toHaveBeenCalledWith({ type: "host-state", connected: false });
+  expect(mocks.process.exit).not.toHaveBeenCalled();
+});
+
+it("closes the agent and exits only after the shutdown grace period", async () => {
+  await connect();
+  processEvents.emit("message", { type: "stop" });
+  expect(mocks.close).toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1499);
+  expect(mocks.process.exit).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(mocks.process.exit).toHaveBeenCalledExactlyOnceWith(0);
 });

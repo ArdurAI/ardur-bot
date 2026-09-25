@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { lstat, open, opendir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import type {
   LocalImportCategory,
   LocalImportItem,
@@ -456,6 +456,9 @@ export class LocalImportScanner {
         const info = await lstat(resolved);
         if (!info.isFile() || info.nlink > 1 || info.size > 64 * 1024 * 1024)
           throw new Error("Unsupported database.");
+        // SQLite is optional until a database is scanned; loading it at host startup
+        // emits an experimental-module warning on supported Node 22 releases.
+        const { DatabaseSync } = await import("node:sqlite");
         db = new DatabaseSync(resolved, {
           readOnly: true,
           enableDoubleQuotedStringLiterals: false,

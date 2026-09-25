@@ -414,7 +414,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       resourceIdCalls.map(([procedure, input]) => expectDenied(app, intruder, procedure, input)),
     );
 
-    expect(await rpc<unknown[]>(app, intruder, "memory/list", { botId: ownerBot.id })).toEqual([]);
+    expect((await raw(app, intruder, "memory/list", { botId: ownerBot.id })).status).toBe(403);
     expect(await rpc<string>(app, intruder, "memory/exportMarkdown", { botId: ownerBot.id })).toBe(
       "",
     );
@@ -1185,8 +1185,9 @@ describeWithDatabase("API authorization and resource isolation", () => {
       (await raw(app, cookie, "bots/update", { ...update, thinkingLevel: "xhigh" })).status,
     ).toBe(400);
     await rpc(app, cookie, "models/connect", { ...connection, reasoning: false });
+    // Request a new effort. Re-saving the existing pin is deliberately idempotent.
     expect(
-      (await raw(app, cookie, "bots/update", { ...update, thinkingLevel: "low" })).status,
+      (await raw(app, cookie, "bots/update", { ...update, thinkingLevel: "medium" })).status,
     ).toBe(400);
     expect(
       await rpc(app, cookie, "bots/update", { ...update, thinkingLevel: "off" }),

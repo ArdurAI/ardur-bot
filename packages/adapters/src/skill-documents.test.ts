@@ -7,7 +7,9 @@ import {
   assertSkillWritable,
   commitSkillDocument,
   hydrateAgentSkills,
+  hydrateBuiltinSkills,
   knowledgeHash,
+  readSkillDocument,
   skillDocumentContext,
 } from "./skill-documents.js";
 import { listAgentSkillRecords, skillReadFromTool } from "./skill-tools.js";
@@ -45,6 +47,59 @@ function fixture() {
 }
 
 describe("skill document lifecycle", () => {
+  it("reuses the identical builtin snapshot created between lookup and commit", async () => {
+    const { service } = fixture();
+    const commit = service.commit.bind(service);
+    const racedCommit = vi.spyOn(service, "commit").mockImplementationOnce(async (input, ctx) => {
+      await commit(input, ctx);
+      throw new MemoryAccessError();
+    });
+    const [skill] = await hydrateBuiltinSkills(service, owner, [
+      { name: "Steps", content: "Use numbered steps." },
+    ]);
+    expect(skill).toMatchObject({ activeRevision: 1, content: "Use numbered steps." });
+    expect(racedCommit).toHaveBeenCalledTimes(1);
+    const bundle = await service.exportBundle(skillDocumentContext(owner));
+    expect(bundle.documents).toHaveLength(1);
+    expect(bundle.documents[0]?.revisions).toHaveLength(1);
+    expect(bundle.documents[0]?.id).toBe(skill?.documentId);
+  });
+  it.each(["agent", "taught"] as const)(
+    "preserves access denials for %s documents",
+    async (kind) => {
+      const { service } = fixture();
+      const commit = service.commit.bind(service);
+      const denied = new MemoryAccessError();
+      vi.spyOn(service, "commit").mockImplementationOnce(async (input, ctx) => {
+        await commit(input, ctx);
+        throw denied;
+      });
+      await expect(
+        readSkillDocument(service, owner, { id: "steps", content: "Steps" }, kind),
+      ).rejects.toBe(denied);
+    },
+  );
+  it.each(["missing", "different", "deleted", "other-user"])(
+    "does not recover a builtin denial from a %s snapshot",
+    async (state) => {
+      const { service } = fixture();
+      const commit = service.commit.bind(service);
+      const denied = new MemoryAccessError();
+      vi.spyOn(service, "commit").mockImplementationOnce(async (input, ctx) => {
+        if (state !== "missing") {
+          const head = await commit(
+            { ...input, content: state === "different" ? "Changed" : input.content },
+            state === "other-user" ? { ...ctx, userId: "other-user" } : ctx,
+          );
+          if (state === "deleted") await service.delete(head.id, head.revision, ctx);
+        }
+        throw denied;
+      });
+      await expect(
+        hydrateBuiltinSkills(service, owner, [{ name: "Steps", content: "Steps" }]),
+      ).rejects.toBe(denied);
+    },
+  );
   it("migrates once, rejects stale edits, restores as a new revision, and lists the active head", async () => {
     const f = fixture();
     const ctx = skillDocumentContext(owner);

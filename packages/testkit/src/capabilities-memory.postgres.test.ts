@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { ComposioEmulator } from "@ardurbot/adapters";
 import type { CapabilitySettings, LearningProposal, MemoryPage } from "@ardurbot/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "./index.js";
 import { startModelEmulator } from "./model-emulator.js";
 
@@ -75,6 +75,8 @@ describe.skipIf(!databaseAvailable)("capabilities and memory through persisted R
         encryptionKey: "offline-capmem-fixture-encryption-key",
       });
       stop = handles.stop;
+      // Background brief turns are separate from the finite task conversation.
+      vi.spyOn(handles.executor, "refreshBrief").mockResolvedValue(undefined);
       const signup = await handles.app.request("/api/auth/sign-up/email", {
         method: "POST",
         headers: { "content-type": "application/json", origin },

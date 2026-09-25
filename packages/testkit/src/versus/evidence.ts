@@ -35,7 +35,7 @@ export interface EvidenceTrial extends TaskTrialEvidence {
 }
 type Build = Awaited<ReturnType<typeof inspectBuild>>;
 export interface EvidenceInput {
-  mode: "dry-run" | "self-test" | "live";
+  mode: "dry-run" | "self-test" | "qualification" | "live";
   build: Build;
   hermes: HermesIdentity;
   plan: PairPlan[];
@@ -49,6 +49,10 @@ export interface EvidenceInput {
   budgetEvidence?: unknown;
 }
 export async function writeEvidence(output: string, input: EvidenceInput) {
+  requireValue(
+    input.mode !== "qualification" || (!input.trials.length && !input.results.length),
+    "Non-generating qualification cannot contain product trials or performance results",
+  );
   // Evidence is append-only by invocation. Reusing an output directory must never
   // mix a previous successful result with a later failure.
   await mkdir(output, { recursive: true, mode: 0o700 });
@@ -105,6 +109,10 @@ export async function writeEvidence(output: string, input: EvidenceInput) {
     },
   };
   await readable("source-provenance.json", provenance);
+  if (input.mode === "qualification") {
+    await readable("qualification.json", input.protocolResults ?? null);
+    if (input.budget) await readable("canary-budget.json", input.budget);
+  }
   const histories = [...new Set(input.plan.map((pair) => pair.history))];
   const reportFiles = PRODUCTS.flatMap((product) =>
     histories.map((history) => ({
@@ -379,7 +387,9 @@ export async function writeEvidence(output: string, input: EvidenceInput) {
   const index = [
     `# Versus ${input.mode}`,
     "",
-    `Model calls: ${input.mode === "live" ? "see gateway ledger" : "0"}. Live qualification: ${input.mode === "live" ? "see cohort evidence" : "not run"}.`,
+    input.mode === "qualification"
+      ? "Model calls: 0. Non-generating preflight: see qualification.json. Product/model qualification: not run."
+      : `Model calls: ${input.mode === "live" ? "see gateway ledger" : "0"}. Live qualification: ${input.mode === "live" ? "see cohort evidence" : "not run"}.`,
     "",
     "Both schema-3 reports preserve the frozen W0 registry. Unmeasured fields remain incomplete. T0 contracts establish protocol behavior, not product quality or performance.",
     "",
@@ -394,9 +404,9 @@ export async function writeEvidence(output: string, input: EvidenceInput) {
     "",
     ...input.prerequisites.map((reason) => `- ${sanitize(reason)}`),
     "",
-    "## Live authorization",
+    "## Live prerequisites",
     "",
-    "Approve the numeric loopback endpoint, exact model digest/quantization and finite budget file. Native confinement, protocol qualification, resource enforcement, and complete route pinning must pass before either product starts. No automatic budget expansion or model installation is permitted.",
+    "Use the owner-approved numeric loopback endpoint, exact model digest/quantization and finite budget file. Native confinement, protocol qualification, resource enforcement, and complete route pinning must pass before either product starts. No automatic budget expansion or model installation is permitted.",
     "",
   ].join("\n");
   await writeFile(path.join(output, "index.md"), index, { flag: "wx", mode: 0o600 });
