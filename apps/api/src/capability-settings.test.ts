@@ -59,38 +59,43 @@ describe("space capability authority", () => {
     expect(f.prisma.space.update).not.toHaveBeenCalled();
     expect(queue).not.toHaveBeenCalled();
   });
-  it("queues a confirmed space-scoped change with no engine fields", async () => {
-    const f = fixture();
-    await f.service.network(actor, {
-      computerId: "computer",
-      networkEgress: false,
-      confirmed: true,
-    });
-    expect(f.prisma.computer.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "computer", spaceId: "space" } }),
-    );
-    expect(queue).toHaveBeenCalledWith(expect.anything(), "computer", "bot", "update", {
-      networkEgress: false,
-      confirmed: true,
-    });
-    expect(f.computer.networkEgress).toBe(true);
-    await expect(
-      f.service.network(actor, {
-        computerId: "computer",
-        networkEgress: false,
-        confirmed: false,
-      } as never),
-    ).rejects.toThrow();
-    await expect(
-      f.service.network(actor, {
+  it.each(["docker", "remote-docker"])(
+    "queues a confirmed %s change with no engine fields",
+    async (kind) => {
+      const f = fixture();
+      f.computer.kind = kind;
+      expect((await f.service.settings(actor)).computers[0]?.supported).toBe(true);
+      await f.service.network(actor, {
         computerId: "computer",
         networkEgress: false,
         confirmed: true,
-        connectionId: "foreign",
-      } as never),
-    ).rejects.toThrow();
-    expect(queue).toHaveBeenCalledTimes(1);
-  });
+      });
+      expect(f.prisma.computer.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "computer", spaceId: "space" } }),
+      );
+      expect(queue).toHaveBeenCalledWith(expect.anything(), "computer", "bot", "update", {
+        networkEgress: false,
+        confirmed: true,
+      });
+      expect(f.computer.networkEgress).toBe(true);
+      await expect(
+        f.service.network(actor, {
+          computerId: "computer",
+          networkEgress: false,
+          confirmed: false,
+        } as never),
+      ).rejects.toThrow();
+      await expect(
+        f.service.network(actor, {
+          computerId: "computer",
+          networkEgress: false,
+          confirmed: true,
+          connectionId: "foreign",
+        } as never),
+      ).rejects.toThrow();
+      expect(queue).toHaveBeenCalledTimes(1);
+    },
+  );
   it("labels Kubernetes unsupported when enforcement cannot be detected", async () => {
     const f = fixture();
     f.computer.kind = "kubernetes";

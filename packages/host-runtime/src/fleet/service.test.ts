@@ -20,6 +20,38 @@ const settings = ComputerConnectionSettingsSchema.parse({
   ssh: { host: "computer.invalid", user: "runner" },
 });
 
+it("preserves provision network policy and file preview options at the host boundary", async () => {
+  const service = new FleetService("/unused", "fixture-encryption-material");
+  const provision = vi.fn(async () => ({}));
+  const readFile = vi.fn(async () => new Uint8Array());
+  vi.spyOn(service, "provider").mockReturnValue({
+    describe: () => ({ id: "remote-docker" }),
+    provision,
+    readFile,
+  } as unknown as SandboxProvider);
+  const operation: RemoteComputerCall = {
+    op: "computer.remote.call",
+    connectionId: "connection",
+    homeKey: "home",
+    settings: ComputerConnectionSettingsSchema.parse({ engine: "docker" }),
+    action: { type: "provision", imageProfile: "base", networkEgress: false },
+  };
+  await service.call(operation, context, vi.fn());
+  expect(provision).toHaveBeenCalledWith(
+    expect.objectContaining({ networkEgress: false }),
+    context,
+  );
+  await service.call(
+    { ...operation, action: { type: "files.read", path: "notes.txt", maxBytes: 2, preview: true } },
+    context,
+    vi.fn(),
+  );
+  expect(readFile).toHaveBeenCalledWith(expect.any(Object), "notes.txt", context, {
+    maxBytes: 2,
+    preview: true,
+  });
+});
+
 it("binds terminal control to its connection, home, space and unexpired lease", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "fleet-service-"));
   const service = new FleetService(root, "fixture-encryption-material");

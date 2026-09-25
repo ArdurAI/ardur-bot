@@ -65,7 +65,7 @@ export async function discoverEngineSocket(
   if (platform === "darwin") {
     for (const candidate of [".orbstack/run/docker.sock", ".colima/default/docker.sock"]) {
       const socket = path.join(homedir(), candidate);
-      if (exists(socket)) return socket;
+      if (await probe(socket)) return socket;
     }
     try {
       const machines = JSON.parse(machineInspect()) as {

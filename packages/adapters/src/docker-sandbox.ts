@@ -194,6 +194,10 @@ export class DockerSandboxProvider implements SandboxProvider {
     }>(res, context.signal);
   }
 
+  async supportsNetworkEgress() {
+    return true;
+  }
+
   async provision(
     request: {
       botId: string;

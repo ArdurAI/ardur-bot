@@ -126,13 +126,20 @@ export class RemoteFleetSandbox implements SandboxProvider {
   async test(context: AdapterContext) {
     return this.result("capacity", { type: "test" }, context);
   }
+  async supportsNetworkEgress() {
+    return this.settings.engine === "docker" || this.settings.engine === "podman";
+  }
   async provision(
     request: Parameters<SandboxProvider["provision"]>[0],
     context: AdapterContext,
   ): Promise<ComputerRef> {
     return (await this.result(
       request.botId,
-      { type: "provision", imageProfile: request.imageProfile ?? "base" },
+      {
+        type: "provision",
+        imageProfile: request.imageProfile ?? "base",
+        networkEgress: request.networkEgress,
+      },
       context,
     )) as ComputerRef;
   }
@@ -176,7 +183,7 @@ export class RemoteFleetSandbox implements SandboxProvider {
     computer: ComputerRef,
     path: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     const bytes: Buffer[] = [];
     for await (const frame of this.request(
@@ -184,6 +191,7 @@ export class RemoteFleetSandbox implements SandboxProvider {
       {
         type: "files.read",
         path,
+        preview: options?.preview,
         maxBytes: Math.min(options?.maxBytes ?? HOST_FILE_BYTES, HOST_FILE_BYTES),
       },
       context,

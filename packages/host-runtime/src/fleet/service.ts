@@ -174,6 +174,7 @@ export class FleetService {
               homePath: "",
               imageProfile: action.imageProfile,
               connectionId: operation.connectionId,
+              networkEgress: action.networkEgress,
             },
             context,
           ),
@@ -200,6 +201,7 @@ export class FleetService {
           Buffer.from(
             await provider.readFile(computer, action.path, context, {
               maxBytes: action.maxBytes ?? HOST_FILE_BYTES,
+              preview: action.preview,
             }),
           ).toString("base64"),
         );

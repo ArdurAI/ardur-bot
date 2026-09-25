@@ -198,5 +198,5 @@ Shared contracts, routing, capacity and run placement are small hooks into exist
 `SshSandboxProvider` participates in `sandbox-conformance.test.ts` with fake SSH/SFTP transport.
 `fleet.spec.ts` captures the fleet screen for CI; link its resulting artifact when publishing a PR.
 Native-only mobile rendering has deterministic tests rather than an unrelated web screenshot.
-The migration is `20260924100000_fleet` and uses mapped table names. No commit or rename is required
-by the feature, and no merge, deployment or publication is part of this implementation.
+The migration is `20260925100000_fleet` and uses mapped table names. Its timestamp places it after
+the existing customization migrations; their SQL is unchanged.

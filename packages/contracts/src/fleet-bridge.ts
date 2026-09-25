@@ -38,6 +38,7 @@ export const RemoteComputerActionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("provision"),
     imageProfile: ComputerProfileSchema.default("base"),
+    networkEgress: z.boolean().optional(),
   }),
   z.strictObject({ type: z.enum(["prepare", "sleep", "destroy", "snapshot", "export"]) }),
   z.strictObject({ type: z.literal("cwd"), cwd: path.optional() }),
@@ -53,6 +54,7 @@ export const RemoteComputerActionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("files.read"),
     path,
+    preview: z.boolean().optional(),
     maxBytes: z
       .number()
       .int()

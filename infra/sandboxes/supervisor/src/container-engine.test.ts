@@ -9,6 +9,22 @@ import {
 } from "./container-engine.js";
 
 describe("Podman compatibility", () => {
+  it.each([".orbstack/run/docker.sock", ".colima/default/docker.sock"])(
+    "probes the %s socket before selecting it",
+    async (suffix) => {
+      const probe = vi.fn(async (socket: string) => socket.endsWith(suffix));
+      expect(
+        await discoverEngineSocket(
+          {},
+          "darwin",
+          probe,
+          () => "[]",
+          () => "[]",
+        ),
+      ).toMatch(new RegExp(`${suffix.replaceAll(".", "\\.")}$`));
+      expect(probe).toHaveBeenCalledWith(expect.stringContaining(suffix));
+    },
+  );
   it("prefers a reachable active Docker context over a stale conventional socket", async () => {
     const probe = vi.fn(async (socket: string) => socket === "/tmp/active-engine.sock");
     const context = () =>

@@ -11,38 +11,52 @@ const context: AdapterContext = {
   spaceId: "space",
   signal: new AbortController().signal,
 };
-it("provisions an engine-owned home without published ports or host bind mounts", async () => {
-  const run = vi.fn(async () => ({ code: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) }));
-  const provider = new FleetDockerSandboxProvider(
-    ComputerConnectionSettingsSchema.parse({
-      engine: "docker",
-      endpoint: "unix:///fixture/engine.sock",
-    }),
-    { run, start: vi.fn() } as FleetProcess,
-  );
-  const computer = await provider.provision({ botId: "bot", homePath: "/ignored" }, context);
-  const calls = run.mock.calls as unknown as [string, string[]][];
-  const argv = calls.find(([, args]) => args.includes("create") && args.includes("--cap-drop"))![1];
-  expect(argv).toEqual(
-    expect.arrayContaining([
-      "--host",
-      "unix:///fixture/engine.sock",
-      "--cap-drop",
-      "ALL",
-      "--security-opt",
-      "no-new-privileges",
-      "1000:1000",
-      "--cpus",
-      "2",
-      "--memory",
-      "2147483648",
-    ]),
-  );
-  expect(argv).not.toContain("--publish");
-  expect(argv.join(" ")).not.toContain("type=bind");
-  expect(computer).toMatchObject({ kind: "remote-docker", fresh: true });
-  expect(calls.some(([, args]) => args.includes("pull"))).toBe(false);
-});
+it.each([true, false])(
+  "provisions an engine-owned home with network egress = %s",
+  async (networkEgress) => {
+    const run = vi.fn(async () => ({ code: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) }));
+    const provider = new FleetDockerSandboxProvider(
+      ComputerConnectionSettingsSchema.parse({
+        engine: "docker",
+        endpoint: "unix:///fixture/engine.sock",
+      }),
+      { run, start: vi.fn() } as FleetProcess,
+    );
+    const computer = await provider.provision(
+      { botId: "bot", homePath: "/ignored", networkEgress },
+      context,
+    );
+    const calls = run.mock.calls as unknown as [string, string[]][];
+    const argv = calls.find(
+      ([, args]) => args.includes("create") && args.includes("--cap-drop"),
+    )![1];
+    expect(argv).toEqual(
+      expect.arrayContaining([
+        "--host",
+        "unix:///fixture/engine.sock",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "1000:1000",
+        "--cpus",
+        "2",
+        "--memory",
+        "2147483648",
+      ]),
+    );
+    expect(argv).not.toContain("--publish");
+    expect(argv.join(" ")).not.toContain("type=bind");
+    expect(computer).toMatchObject({ kind: "remote-docker", fresh: true, networkEgress });
+    if (!networkEgress)
+      expect(argv.slice(argv.indexOf("--network"), argv.indexOf("--network") + 2)).toEqual([
+        "--network",
+        "none",
+      ]);
+    else expect(argv).not.toContain("--network");
+    expect(calls.some(([, args]) => args.includes("pull"))).toBe(false);
+  },
+);
 it("refuses to reuse an engine volume without matching ownership labels", async () => {
   const run = vi.fn(async (_name: string, args: string[]) => ({
     code: 0,

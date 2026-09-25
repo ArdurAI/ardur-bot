@@ -262,7 +262,6 @@ export async function createApp(
       prisma,
       secrets,
     });
-  const hostBridge = new HostBridge(prisma, env.encryptionKey);
   const mcpOAuth = new McpOAuthBroker(prisma, secrets, remoteConnectors);
   const integrationConnections = new IntegrationConnections(
     prisma,

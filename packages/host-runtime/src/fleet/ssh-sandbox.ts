@@ -118,6 +118,8 @@ export class SshSandboxProvider extends LinuxFleetSandbox {
     request: Parameters<SandboxProvider["provision"]>[0],
     context: AdapterContext,
   ): Promise<ComputerRef> {
+    if (request.networkEgress === false)
+      throw new Error("Network isolation is not available on SSH computers.");
     const key = fleetComputerKey(context.spaceId, request.botId);
     const home = JSON.parse(
       (
@@ -197,6 +199,7 @@ export class SshSandboxProvider extends LinuxFleetSandbox {
     context: AdapterContext,
     maxBytes: number,
     executable = false,
+    preview = false,
   ) {
     fleetPath(relative);
     const root = await this.root(computer, context);
@@ -232,7 +235,7 @@ export class SshSandboxProvider extends LinuxFleetSandbox {
             "-c",
             LINUX_FILE_SCRIPT,
             root,
-            "stage-read",
+            preview ? "stage-preview" : "stage-read",
             relative,
             String(maxBytes),
             "false",
@@ -295,7 +298,7 @@ export class SshSandboxProvider extends LinuxFleetSandbox {
     computer: ComputerRef,
     relative: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     return this.sftp(
       computer,
@@ -303,6 +306,8 @@ export class SshSandboxProvider extends LinuxFleetSandbox {
       relative,
       context,
       Math.min(options?.maxBytes ?? 16 * 1024 * 1024, 16 * 1024 * 1024),
+      false,
+      options?.preview,
     );
   }
   override async writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext) {

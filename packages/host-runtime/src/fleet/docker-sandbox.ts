@@ -176,6 +176,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
     ) as {
       Config: { Image: string; Labels?: Record<string, string> };
       State?: { Running?: boolean };
+      HostConfig?: { NetworkMode?: string };
     }[];
     const record = details[0];
     if (
@@ -215,6 +216,9 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
     // Never pull, build, or substitute an image during placement.
     await this.engine(["image", "inspect", image], context);
     const existing = await this.owned(name, context);
+    const networkEgress = request.networkEgress ?? true;
+    if (existing && (existing.HostConfig?.NetworkMode !== "none") !== networkEgress)
+      throw new Error("The computer network differs from its saved setting; confirm an update.");
     if (existing && existing.Config.Image !== image)
       throw new Error(
         "The computer image differs from its saved profile; confirm an update in Computers.",
@@ -249,6 +253,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
           "--user",
           "1000:1000",
           ...engineLimits(this.settings),
+          ...(!networkEgress ? ["--network", "none"] : []),
           "--mount",
           `type=volume,src=${name}-home,dst=/home/ardurbot`,
           "--workdir",
@@ -268,12 +273,16 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       botId: request.botId,
       connectionId: request.connectionId,
       imageProfile: request.imageProfile,
+      networkEgress,
       fresh: !existing,
     };
   }
   async root(computer: ComputerRef, context: AdapterContext) {
     this.name(computer, context);
     return "/home/ardurbot";
+  }
+  async supportsNetworkEgress() {
+    return true;
   }
   async call(
     computer: ComputerRef,

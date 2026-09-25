@@ -62,7 +62,7 @@ export function isKubernetesMaintenanceCommand(argv: string[]) {
   if (argv[0] === "python3" && argv[1] === "-c" && argv[2] === KUBERNETES_FILE_SCRIPT) {
     return (
       argv.length === 8 &&
-      ["read", "write", "list"].includes(argv[3]!) &&
+      ["read", "preview", "write", "list"].includes(argv[3]!) &&
       relative(argv[4]!) &&
       argv[5] === "" &&
       /^\d+$/.test(argv[6]!) &&

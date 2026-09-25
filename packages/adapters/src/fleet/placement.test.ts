@@ -30,6 +30,7 @@ function fixture(approved = false) {
     id: "computer",
     homeKey: "home",
     state: "running",
+    networkEgress: true,
     kind: "desktop",
     imageProfile: "base",
     connectionId: null,
@@ -88,7 +89,11 @@ function fixture(approved = false) {
       bots: [],
     },
   ];
-  const catalog = { list: vi.fn(async () => ({ targets, defaultTargetId: "host" })) };
+  const supportsNetworkEgress = vi.fn(async () => false);
+  const catalog = {
+    list: vi.fn(async () => ({ targets, defaultTargetId: "host" })),
+    connections: { resolve: vi.fn(async () => ({ supportsNetworkEgress })) },
+  };
   const deps = {
     prisma: prisma as unknown as PrismaClient,
     home: {} as AgentHomeStore,
@@ -96,9 +101,25 @@ function fixture(approved = false) {
     jobs: {} as JobPublisher,
     events: { append: vi.fn(), notify: vi.fn(async () => undefined) } as unknown as ThreadEvents,
   };
-  return { prisma, run, computer, deps, catalog: catalog as unknown as FleetCatalog };
+  return {
+    prisma,
+    run,
+    computer,
+    deps,
+    supportsNetworkEgress,
+    catalog: catalog as unknown as FleetCatalog,
+  };
 }
 afterEach(() => vi.clearAllMocks());
+it("does not move a network-isolated computer to a target that cannot enforce its policy", async () => {
+  const f = fixture(true);
+  f.computer.networkEgress = false;
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(replace).not.toHaveBeenCalled();
+  f.supportsNetworkEgress.mockResolvedValue(true);
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(replace).toHaveBeenCalledOnce();
+});
 it("asks before the first move and leaves the computer untouched", async () => {
   const f = fixture();
   expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(

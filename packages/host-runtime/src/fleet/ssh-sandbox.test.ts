@@ -72,6 +72,15 @@ it("round trips executable and binary checkpoints, confines paths, and keeps a h
     };
     await provider.writeFile(computer, file, context);
     expect(await provider.readFile(computer, file.path, context)).toEqual(file.content);
+    await expect(
+      provider.readFile(computer, file.path, context, { maxBytes: 2 }),
+    ).rejects.toThrow();
+    expect(
+      await provider.readFile(computer, file.path, context, { maxBytes: 2, preview: true }),
+    ).toEqual(file.content.slice(0, 2));
+    await expect(
+      provider.provision({ botId: "isolated", homePath: "", networkEgress: false }, context),
+    ).rejects.toThrow("Network isolation");
     expect(await provider.listFiles(computer, "nested", context)).toEqual([
       { path: file.path, kind: "file", size: 4, executable: true },
     ]);

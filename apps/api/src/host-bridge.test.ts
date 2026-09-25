@@ -368,6 +368,14 @@ it("grants owner editor files only inside current roots and never accepts a work
   expect(worker.send).toHaveBeenCalledWith(
     expect.objectContaining({ type: "end", problem: expect.any(Object) }),
   );
+  worker.send.mockClear();
+  await bridge.hub.request(
+    { ...granted, id: "forged-maintenance", operation: { ...operation, maintenanceId: "update" } },
+    worker,
+  );
+  expect(worker.send).toHaveBeenCalledWith(
+    expect.objectContaining({ type: "end", problem: expect.any(Object) }),
+  );
   registration.hostRoots = [];
   await expect(bridge.ownerFile(actor, operation)).rejects.toThrow("unavailable");
   bridge.hub.detach();

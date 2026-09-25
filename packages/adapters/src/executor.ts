@@ -1301,7 +1301,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               outcome: "failed",
               error: "The computer could not move. Check Computers and retry.",
             });
-            if (failed?.continuationRunId)
+            if (failed !== false && failed.continuationRunId)
               await deps.jobs.enqueue(runContinueJob(failed.continuationRunId));
           }
           return;

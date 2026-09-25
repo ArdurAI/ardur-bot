@@ -142,10 +142,17 @@ export abstract class LinuxFleetSandbox implements SandboxProvider {
     computer: ComputerRef,
     relative: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     return new Uint8Array(
-      await this.file(computer, "read", relative, context, undefined, options?.maxBytes),
+      await this.file(
+        computer,
+        options?.preview ? "preview" : "read",
+        relative,
+        context,
+        undefined,
+        options?.maxBytes,
+      ),
     );
   }
   async writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext) {

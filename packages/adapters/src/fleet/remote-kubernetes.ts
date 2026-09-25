@@ -144,7 +144,7 @@ export class HostKubernetesSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     path: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     return this.provider(computer.botId, context).readFile(computer, path, context, options);
   }

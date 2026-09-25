@@ -203,12 +203,14 @@ export class HostBridge {
     }
     if (owner) {
       const op = request.operation;
-      if (!op.op.startsWith("computer.files.") || !("path" in op)) return false;
+      if (!op.op.startsWith("computer.files.") || !("path" in op) || typeof op.path !== "string")
+        return false;
+      const filePath = op.path;
       const paths = this.hub.health?.platform === "win32" ? path.win32 : path.posix;
       return (
-        paths.isAbsolute(op.path) &&
+        paths.isAbsolute(filePath) &&
         registration.hostRoots.some((root) => {
-          const relative = paths.relative(root, op.path);
+          const relative = paths.relative(root, filePath);
           return (
             relative === "" ||
             (!relative.startsWith(`..${paths.sep}`) &&

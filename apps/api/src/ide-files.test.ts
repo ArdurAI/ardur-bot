@@ -65,6 +65,22 @@ async function fixture() {
   return { files, sandbox, computer, db, home, ref, context, input };
 }
 describe("IDE file operations", () => {
+  it("keeps a provider-limited preview read-only instead of overwriting the unread tail", async () => {
+    const f = await fixture();
+    const write = vi.spyOn(f.sandbox, "writeFile");
+    vi.spyOn(f.sandbox, "readFile").mockResolvedValue(new TextEncoder().encode("bef"));
+    const current = await f.files.read(actor, f.input);
+    expect(current).toMatchObject({ content: "bef", size: 7, readOnly: true });
+    expect(
+      await f.files.save(actor, {
+        ...f.input,
+        version: current.version,
+        content: "after",
+        approved: true,
+      }),
+    ).toMatchObject({ saved: false });
+    expect(write).not.toHaveBeenCalled();
+  });
   it("keeps valid siblings and counts unsupported filenames", async () => {
     const f = await fixture();
     vi.spyOn(f.sandbox, "listFiles").mockResolvedValue([

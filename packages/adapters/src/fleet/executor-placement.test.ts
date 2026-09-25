@@ -1,8 +1,15 @@
 import { expect, it, vi } from "vitest";
 import { createRunExecutor } from "../executor.js";
 
+// Admission has its own concurrency tests; these fixtures isolate placement before computer work.
+vi.mock("../context/concurrency.js", () => ({
+  claimBotRun: (prisma: unknown, input: { claim: (tx: unknown) => Promise<unknown> }) =>
+    input.claim(prisma),
+}));
+
 function fixture(cancelled = false) {
   const run = {
+    createdAt: new Date("2026-09-24T00:00:00Z"),
     id: "run",
     botId: "bot",
     userId: "owner",

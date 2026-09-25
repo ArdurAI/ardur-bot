@@ -50,9 +50,34 @@ export async function placeRunComputer(
   const fleet = await catalog.list(context);
   const from =
     computer.connectionId ?? (computer.kind === "desktop" ? "host" : fleet.defaultTargetId);
-  const candidates = fleet.targets.filter(
+  let candidates = fleet.targets.filter(
     (target) => target.connectionId !== null || target.id === fleet.defaultTargetId,
   );
+  if (computer.networkEgress === false) {
+    const supported = new Set([from]);
+    for (const target of candidates) {
+      if (target.id === from || target.state !== "connected" || target.kind === "host") continue;
+      const provider = target.connectionId
+        ? await catalog.connections.resolve(target.connectionId, context)
+        : deps.sandbox;
+      if (
+        await provider
+          .supportsNetworkEgress?.(
+            {
+              id: computer.id,
+              botId: computer.homeKey,
+              providerRef: computer.providerRef ?? "",
+              connectionId: target.connectionId,
+              kind: target.kind === "kubernetes" ? "kubernetes" : "docker",
+            },
+            context,
+          )
+          .catch(() => false)
+      )
+        supported.add(target.id);
+    }
+    candidates = candidates.filter((target) => supported.has(target.id));
+  }
   const decision = choosePlacement(policy, from, candidates);
   if (!decision) return true;
   const owners = computer.bots.filter((bot) => bot.archivedAt === null);

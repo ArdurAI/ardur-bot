@@ -60,12 +60,13 @@ try:
    out.append({'path':'/'.join(parts+[name]),'kind':'dir' if stat.S_ISDIR(info.st_mode) else 'file','size':0 if stat.S_ISDIR(info.st_mode) else info.st_size,**({'executable':True} if stat.S_ISREG(info.st_mode) and info.st_mode & 0o111 else {})})
    if len(out)>4096: raise ValueError('Directory too large')
   print(json.dumps(out))
- elif operation in ('read','stage-read'):
+ elif operation in ('read','stage-read','preview','stage-preview'):
   f=os.open(parts[-1],os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
   with os.fdopen(f,'rb') as stream:
    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode): raise ValueError('Not a regular file')
    data=stream.read(limit+1)
-   if len(data)>limit: raise ValueError('File exceeds limit')
+   if len(data)>limit and operation not in ('preview','stage-preview'): raise ValueError('File exceeds limit')
+   data=data[:limit]
    if stage:
     staged=os.open(stage,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
     with os.fdopen(staged,'wb') as output: output.write(data)
