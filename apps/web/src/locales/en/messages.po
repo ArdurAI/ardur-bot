@@ -195,6 +195,10 @@ msgstr "@{0}"
 msgid "1 run at this pin; hosted providers may bill per run"
 msgstr "1 run at this pin; hosted providers may bill per run"
 
+#: src/components/Context.tsx
+msgid "7 days"
+msgstr "7 days"
+
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
 msgstr "A bit of everything"
@@ -428,7 +432,7 @@ msgstr "Added"
 msgid "Adding…"
 msgstr "Adding…"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -475,6 +479,7 @@ msgid "All categories"
 msgstr "All categories"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/integrations/manage/ToolPermissions.tsx
 msgid "Allow"
 msgstr "Allow"
 
@@ -721,6 +726,10 @@ msgstr "Arguments"
 msgid "Artifacts"
 msgstr "Artifacts"
 
+#: src/components/integrations/manage/ToolPermissions.tsx
+msgid "Ask"
+msgstr "Ask"
+
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "Ask a bot"
@@ -903,6 +912,10 @@ msgstr "Beta"
 msgid "Binary file"
 msgstr "Binary file"
 
+#: src/components/integrations/manage/ToolPermissions.tsx
+msgid "Block"
+msgstr "Block"
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Block link copied."
 msgstr "Block link copied."
@@ -983,6 +996,10 @@ msgstr "Brain label"
 msgid "Branch"
 msgstr "Branch"
 
+#: src/components/Context.tsx
+msgid "Brief"
+msgstr "Brief"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Browse extensions"
 msgstr "Browse extensions"
@@ -1013,6 +1030,10 @@ msgstr "by {0}"
 msgid "by you"
 msgstr "by you"
 
+#: src/components/Context.tsx
+msgid "Cache hits"
+msgstr "Cache hits"
+
 #: src/pages/CallView.tsx
 msgid "Call"
 msgstr "Call"
@@ -1024,7 +1045,8 @@ msgstr "Can't reach the server."
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/Context.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
@@ -1255,10 +1277,6 @@ msgstr "Claude Code (your claude sign-in)"
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Claude subscriptions are not supported here yet; use an API key."
-msgstr "Claude subscriptions are not supported here yet; use an API key."
-
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
 msgstr "Clear"
@@ -1277,10 +1295,12 @@ msgstr "Clear conversation"
 msgid "Clearing…"
 msgstr "Clearing…"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Client ID"
 msgstr "Client ID"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Client secret"
 msgstr "Client secret"
@@ -1391,7 +1411,6 @@ msgstr "Color"
 msgid "Color {color}"
 msgstr "Color {color}"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Coming soon"
 msgstr "Coming soon"
@@ -1426,7 +1445,6 @@ msgstr "Completed"
 msgid "Completion not recorded"
 msgstr "Completion not recorded"
 
-#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1485,6 +1503,10 @@ msgstr "Computers are unavailable; reconnect and try again."
 msgid "Computers that can run tasks with access to local files, computer use, browser use, and local MCPs"
 msgstr "Computers that can run tasks with access to local files, computer use, browser use, and local MCPs"
 
+#: src/components/Context.tsx
+msgid "Concurrent runs"
+msgstr "Concurrent runs"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
 msgstr "Configure"
@@ -1528,7 +1550,7 @@ msgstr "Conflict: {0}"
 msgid "Confluence space keys or IDs"
 msgstr "Confluence space keys or IDs"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -1568,6 +1590,10 @@ msgstr "Connect MCP server “{name}”"
 msgid "Connect OAuth"
 msgstr "Connect OAuth"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Connect remote account"
+msgstr "Connect remote account"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
 msgstr "Connect this provider to use it as your personal model."
@@ -1575,10 +1601,6 @@ msgstr "Connect this provider to use it as your personal model."
 #: src/pages/PluginsOverlay.tsx
 msgid "Connect Treg"
 msgstr "Connect Treg"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Connect your account."
-msgstr "Connect your account."
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1653,6 +1675,11 @@ msgstr "Connectors"
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr "Consolidation uses the review connection and may incur model charges. Approval is required."
 
+#: src/components/Context.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Context"
+msgstr "Context"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1680,6 +1707,10 @@ msgstr "Continue with email"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Controls how connector tools are loaded in new conversations."
 msgstr "Controls how connector tools are loaded in new conversations."
+
+#: src/pages/GroupPanel.tsx
+msgid "Coordinator"
+msgstr "Coordinator"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Coordinator bot"
@@ -1792,6 +1823,7 @@ msgstr "Could not check browsers; try Recheck."
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "Could not check teaching status. Refresh the view to continue."
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not check this computer."
 msgstr "Could not check this computer."
@@ -1830,8 +1862,7 @@ msgstr "Could not complete this action."
 msgid "Could not connect"
 msgstr "Could not connect"
 
-#: src/components/composer/ComposerMenu.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Could not connect or load integrations."
 msgstr "Could not connect or load integrations."
 
@@ -1982,6 +2013,10 @@ msgstr "Could not load comparisons; retry."
 msgid "Could not load computers."
 msgstr "Could not load computers."
 
+#: src/components/Context.tsx
+msgid "Could not load data"
+msgstr "Could not load data"
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
 msgstr "Could not load destinations."
@@ -2060,7 +2095,7 @@ msgstr "Could not load the last check."
 msgid "Could not load the server configuration."
 msgstr "Could not load the server configuration."
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Could not load this account’s tools."
 msgstr "Could not load this account’s tools."
 
@@ -2188,6 +2223,10 @@ msgstr "Could not save Auto Review"
 msgid "Could not save capabilities. Try again."
 msgstr "Could not save capabilities. Try again."
 
+#: src/components/Context.tsx
+msgid "Could not save changes"
+msgstr "Could not save changes"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Could not save changes. Try again."
 msgstr "Could not save changes. Try again."
@@ -2304,6 +2343,10 @@ msgstr "Could not submit this answer"
 msgid "Could not take control"
 msgstr "Could not take control"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Could not test this integration."
+msgstr "Could not test this integration."
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not update"
 msgstr "Could not update"
@@ -2382,10 +2425,6 @@ msgstr "Create a kind cluster: kind create cluster --name ardurbot"
 #: src/pages/shell/dialogs.tsx
 msgid "Create a section and move {0} into it."
 msgstr "Create a section and move {0} into it."
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Create a token"
-msgstr "Create a token"
 
 #: src/pages/Auth.tsx
 msgid "Create account"
@@ -2627,6 +2666,7 @@ msgstr "Description"
 msgid "Design"
 msgstr "Design"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Desktop"
 msgstr "Desktop"
@@ -2649,6 +2689,7 @@ msgstr "Desktop update"
 msgid "Destination scope"
 msgstr "Destination scope"
 
+#: src/components/AskCard.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -2848,6 +2889,7 @@ msgstr "e.g. Hivenet Agent, Presales, Timesheets bot"
 msgid "Earlier message"
 msgstr "Earlier message"
 
+#: src/components/Context.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr "Edit"
@@ -3114,7 +3156,7 @@ msgstr "Find models"
 msgid "Finding…"
 msgstr "Finding…"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr "Fine-grained token"
 
@@ -3124,7 +3166,7 @@ msgstr "Fine-grained token"
 msgid "Finish signing in at <0>{0}</0>. The final page may not load; paste its URL or code here."
 msgstr "Finish signing in at <0>{0}</0>. The final page may not load; paste its URL or code here."
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Finish signing in in your browser."
 msgstr "Finish signing in in your browser."
 
@@ -3212,17 +3254,13 @@ msgstr "Git repository"
 msgid "Git URL"
 msgstr "Git URL"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "GitLab host"
 msgstr "GitLab host"
 
 #: src/pages/LearningTimeline.tsx
 msgid "Grant"
 msgstr "Grant"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Grant only the repositories and permissions this bot needs."
-msgstr "Grant only the repositories and permissions this bot needs."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Granted"
@@ -3232,6 +3270,10 @@ msgstr "Granted"
 #: src/pages/Shell.tsx
 msgid "Group"
 msgstr "Group"
+
+#: src/components/Context.tsx
+msgid "Group brief"
+msgstr "Group brief"
 
 #: src/pages/GroupPanel.tsx
 msgid "Group settings"
@@ -3537,6 +3579,10 @@ msgstr "Isolated"
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
 msgstr "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
 
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Jev needs a TypeSafe API key."
+msgstr "Jev needs a TypeSafe API key."
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Jira project keys"
 msgstr "Jira project keys"
@@ -3606,6 +3652,10 @@ msgstr "Language"
 msgid "Last check"
 msgstr "Last check"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Last checked"
+msgstr "Last checked"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
 msgstr "Last present"
@@ -3614,6 +3664,11 @@ msgstr "Last present"
 msgid "Last seen"
 msgstr "Last seen"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Last successful call"
+msgstr "Last successful call"
+
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Last used"
 msgstr "Last used"
@@ -3665,6 +3720,10 @@ msgstr "Learning views"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Leave"
 msgstr "Leave"
+
+#: src/components/Context.tsx
+msgid "Left unchanged: {reason}"
+msgstr "Left unchanged: {reason}"
 
 #: src/pages/system/DispatchSetting.tsx
 msgid "Let paired phones and chat accounts dispatch, steer, and approve work in this space."
@@ -3827,7 +3886,7 @@ msgstr "low — quick, with a little checking"
 msgid "Make sure nothing is still running on this computer."
 msgstr "Make sure nothing is still running on this computer."
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4096,9 +4155,17 @@ msgstr "Model name"
 msgid "Model options"
 msgstr "Model options"
 
+#: src/components/Context.tsx
+msgid "Model or memory unavailable"
+msgstr "Model or memory unavailable"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "Model spend uses your provider keys."
+
+#: src/components/Context.tsx
+msgid "Model unavailable"
+msgstr "Model unavailable"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
@@ -4202,6 +4269,14 @@ msgstr "Needs input"
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Needs reconnection"
 msgstr "Needs reconnection"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Needs sign-in"
+msgstr "Needs sign-in"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Needs sign-in on this computer"
+msgstr "Needs sign-in on this computer"
 
 #: src/lib/run-status-label.ts
 msgid "Needs takeover"
@@ -4409,6 +4484,7 @@ msgid "No uploaded files"
 msgstr "No uploaded files"
 
 #: src/pages/customize/McpDiagnostics.tsx
+#: src/pages/GroupPanel.tsx
 msgid "None"
 msgstr "None"
 
@@ -4428,6 +4504,10 @@ msgstr "not available"
 msgid "Not available on this computer"
 msgstr "Not available on this computer"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Not checked"
+msgstr "Not checked"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
 msgstr "Not connected"
@@ -4435,6 +4515,10 @@ msgstr "Not connected"
 #: src/pages/LearningObservation.tsx
 msgid "Not enough runs to tell"
 msgstr "Not enough runs to tell"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not found on this computer"
+msgstr "Not found on this computer"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Not granted"
@@ -4470,6 +4554,10 @@ msgstr "Not running — open the desktop app"
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr "Not set up"
+
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Not used"
+msgstr "Not used"
 
 #: src/pages/settings/PluginsSection.tsx
 msgid "Nothing installed yet"
@@ -4602,11 +4690,15 @@ msgstr "Open Accessibility settings"
 msgid "Open Ardur Bot"
 msgstr "Open Ardur Bot"
 
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Open bot settings"
+msgstr "Open bot settings"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
 msgstr "Open chat links in the desktop app."
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Open documentation"
 msgstr "Open documentation"
 
@@ -4649,6 +4741,10 @@ msgstr "Open System Settings"
 #: src/pages/shell/command-palette.tsx
 msgid "Open terminal"
 msgstr "Open terminal"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Open the desktop app to check this computer."
+msgstr "Open the desktop app to check this computer."
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Open the desktop app to manage extensions."
@@ -4726,6 +4822,10 @@ msgstr "Other"
 msgid "Other model…"
 msgstr "Other model…"
 
+#: src/components/Context.tsx
+msgid "Owner edited recently"
+msgstr "Owner edited recently"
+
 #: src/pages/NotFound.tsx
 msgid "Page not found"
 msgstr "Page not found"
@@ -4794,6 +4894,11 @@ msgstr "Paste your API key"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Paused"
+
+#. placeholder {0}: tool.id
+#: src/components/integrations/manage/ToolPermissions.tsx
+msgid "Permission for {0}"
+msgstr "Permission for {0}"
 
 #: src/pages/LearningInbox.tsx
 msgid "Personal"
@@ -4970,6 +5075,10 @@ msgstr "Push notifications on your phone."
 msgid "Pushed"
 msgstr "Pushed"
 
+#: src/components/Context.tsx
+msgid "Queue wait"
+msgstr "Queue wait"
+
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -5034,11 +5143,15 @@ msgstr "Recall only"
 msgid "Recent"
 msgstr "Recent"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Recent errors"
+msgstr "Recent errors"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Recheck"
 msgstr "Recheck"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/terminal-session.tsx
 msgid "Reconnect"
@@ -5154,6 +5267,14 @@ msgstr "Release interrupted computer?"
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"
 msgstr "Reload"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Remote MCP URL"
+msgstr "Remote MCP URL"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Remote setup"
+msgstr "Remote setup"
 
 #: src/components/ApprovalRulesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
@@ -5393,6 +5514,7 @@ msgstr "Restoring your workspace"
 msgid "Restricted"
 msgstr "Restricted"
 
+#: src/components/Context.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
@@ -5456,7 +5578,6 @@ msgstr "Review model: {0}. Model usage may incur charges."
 msgid "Review saved copy"
 msgstr "Review saved copy"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/customize/McpDefaults.tsx
@@ -5464,7 +5585,6 @@ msgstr "Review saved copy"
 msgid "Review tools"
 msgstr "Review tools"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Review tools before your bots can use this account."
 msgstr "Review tools before your bots can use this account."
@@ -5500,6 +5620,10 @@ msgstr "Revoke"
 msgid "Revoked"
 msgstr "Revoked"
 
+#: src/components/Context.tsx
+msgid "Rewritten {time}"
+msgstr "Rewritten {time}"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Robot"
 msgstr "Robot"
@@ -5511,6 +5635,10 @@ msgstr "Room guidance"
 #: src/pages/RoutineEditor.tsx
 msgid "Rotate key"
 msgstr "Rotate key"
+
+#: src/components/Context.tsx
+msgid "Routed by default"
+msgstr "Routed by default"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/Shell.tsx
@@ -5604,6 +5732,7 @@ msgid "Sans"
 msgstr "Sans"
 
 #: src/components/AskCard.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
@@ -5700,6 +5829,10 @@ msgstr "Say something. Silence sends it."
 msgid "Say yes or no, or answer in a sentence."
 msgstr "Say yes or no, or answer in a sentence."
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Scopes"
+msgstr "Scopes"
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Screen"
 msgstr "Screen"
@@ -5735,7 +5868,7 @@ msgstr "Search bots and switch conversations"
 msgid "Search by domain"
 msgstr "Search by domain"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Search integrations"
 msgstr "Search integrations"
 
@@ -5784,6 +5917,10 @@ msgstr "Select output"
 #: src/components/ThreadCommandBlock.tsx
 msgid "Select the text to copy it."
 msgstr "Select the text to copy it."
+
+#: src/pages/ide/dialogs.tsx
+msgid "Selection shortened to 32,000 characters."
+msgstr "Selection shortened to 32,000 characters."
 
 #: src/pages/memory/MemoryComposer.tsx
 #: src/pages/Shell.tsx
@@ -5978,10 +6115,6 @@ msgstr "Sign in to Ardur Bot"
 msgid "Sign in to use quick access."
 msgstr "Sign in to use quick access."
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Sign in with GitHub"
-msgstr "Sign in with GitHub"
-
 #: src/pages/account/AccountTables.tsx
 msgid "Sign out"
 msgstr "Sign out"
@@ -5995,13 +6128,17 @@ msgstr "Sign up"
 msgid "Sign-in expired. Connect Codex again."
 msgstr "Sign-in expired. Connect Codex again."
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
-msgstr "Sign-in needs a pre-registered app; use a fine-grained token instead."
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Sign-in timed out."
+msgstr "Sign-in timed out."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr "Signed in"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Signed in on this computer as {identity}"
+msgstr "Signed in on this computer as {identity}"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -6045,6 +6182,10 @@ msgstr "Slash commands"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "Software update"
+
+#: src/pages/ide/IdePage.tsx
+msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
+msgstr "Some entries have unsupported names and are hidden ({hiddenCount})."
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
@@ -6261,6 +6402,10 @@ msgstr "Take control to open a terminal"
 msgid "task"
 msgstr "task"
 
+#: src/components/Context.tsx
+msgid "Task budget reached"
+msgstr "Task budget reached"
+
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
 msgstr "Task contracts"
@@ -6323,6 +6468,7 @@ msgstr "Terminal could not open; try again"
 msgid "Terminal is not available on this computer"
 msgstr "Terminal is not available on this computer"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
@@ -6356,7 +6502,7 @@ msgstr "The API did not come back. Refresh this page."
 msgid "The bot is working — wait or stop it"
 msgstr "The bot is working — wait or stop it"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr "The connection was cancelled."
 
@@ -6389,6 +6535,7 @@ msgstr "This action could not finish; try again."
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 
+#: src/pages/memory/MemoryComposer.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot may only run locally — change the pin or the space policy"
 msgstr "This bot may only run locally — change the pin or the space policy"
@@ -6421,6 +6568,7 @@ msgstr "This command is not available to this account."
 msgid "this computer"
 msgstr "this computer"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
@@ -6484,7 +6632,7 @@ msgstr "This server is managed by a plugin"
 msgid "This server is managed by an extension"
 msgstr "This server is managed by an extension"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "This service needs client registration before you can connect."
 msgstr "This service needs client registration before you can connect."
 
@@ -6504,6 +6652,10 @@ msgstr "This suggestion cannot be approved here."
 msgid "Time of day"
 msgstr "Time of day"
 
+#: src/components/Context.tsx
+msgid "Time to first token"
+msgstr "Time to first token"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Timeline"
@@ -6513,9 +6665,17 @@ msgstr "Timeline"
 msgid "Title"
 msgstr "Title"
 
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
+msgstr "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
+
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "To:"
+
+#: src/components/Context.tsx
+msgid "Today"
+msgstr "Today"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -6538,6 +6698,7 @@ msgstr "Tool access mode"
 msgid "Tool sources"
 msgstr "Tool sources"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Tools"
 msgstr "Tools"
@@ -6567,7 +6728,7 @@ msgstr "Treg token"
 msgid "Trusted folders"
 msgstr "Trusted folders"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -6737,13 +6898,17 @@ msgstr "Use {hostLabel}"
 msgid "Use a found model"
 msgstr "Use a found model"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"
 msgstr "Use a token"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
 msgstr "Use default guidance"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Use for bots on this computer"
+msgstr "Use for bots on this computer"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Use recommended"
@@ -6758,10 +6923,6 @@ msgstr "Use this location"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "Use this model"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Use your GitLab host"
-msgstr "Use your GitLab host"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
@@ -6817,6 +6978,7 @@ msgstr "Waiting…"
 msgid "We'll provide a prompt you can use to fetch the memory from your other account."
 msgstr "We'll provide a prompt you can use to fetch the memory from your other account."
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Web"
 msgstr "Web"
@@ -6935,6 +7097,10 @@ msgstr "Working on {0} for {1}"
 msgid "Working…"
 msgstr "Working…"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Workspace"
+msgstr "Workspace"
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr "Workspace or server ID"
@@ -6967,10 +7133,6 @@ msgstr "You can close this window."
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "You have control"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Your account is connected."
-msgstr "Your account is connected."
 
 #. placeholder {0}: state.storage.path
 #: src/pages/system/SystemPage.tsx

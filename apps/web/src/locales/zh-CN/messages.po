@@ -195,6 +195,10 @@ msgstr "@{0}"
 msgid "1 run at this pin; hosted providers may bill per run"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "7 days"
+msgstr "7 天"
+
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
 msgstr "什么都做一点"
@@ -428,7 +432,7 @@ msgstr ""
 msgid "Adding…"
 msgstr "正在添加…"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -475,6 +479,7 @@ msgid "All categories"
 msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/integrations/manage/ToolPermissions.tsx
 msgid "Allow"
 msgstr ""
 
@@ -721,6 +726,10 @@ msgstr "参数"
 msgid "Artifacts"
 msgstr ""
 
+#: src/components/integrations/manage/ToolPermissions.tsx
+msgid "Ask"
+msgstr ""
+
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "Ask a bot"
@@ -903,6 +912,10 @@ msgstr ""
 msgid "Binary file"
 msgstr ""
 
+#: src/components/integrations/manage/ToolPermissions.tsx
+msgid "Block"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 msgid "Block link copied."
 msgstr ""
@@ -983,6 +996,10 @@ msgstr ""
 msgid "Branch"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Brief"
+msgstr "简报"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Browse extensions"
 msgstr ""
@@ -1013,6 +1030,10 @@ msgstr ""
 msgid "by you"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Cache hits"
+msgstr "缓存命中"
+
 #: src/pages/CallView.tsx
 msgid "Call"
 msgstr "通话"
@@ -1024,7 +1045,8 @@ msgstr "无法连接服务器。"
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/Context.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
@@ -1255,10 +1277,6 @@ msgstr ""
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Claude subscriptions are not supported here yet; use an API key."
-msgstr ""
-
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
 msgstr "清空"
@@ -1277,10 +1295,12 @@ msgstr "清空对话"
 msgid "Clearing…"
 msgstr "正在清空…"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Client ID"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Client secret"
 msgstr ""
@@ -1391,7 +1411,6 @@ msgstr "颜色"
 msgid "Color {color}"
 msgstr "颜色 {color}"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Coming soon"
 msgstr "即将推出"
@@ -1426,7 +1445,6 @@ msgstr ""
 msgid "Completion not recorded"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1485,6 +1503,10 @@ msgstr ""
 msgid "Computers that can run tasks with access to local files, computer use, browser use, and local MCPs"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Concurrent runs"
+msgstr "并发运行"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
 msgstr ""
@@ -1528,7 +1550,7 @@ msgstr ""
 msgid "Confluence space keys or IDs"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -1568,6 +1590,10 @@ msgstr "连接 MCP 服务器“{name}”"
 msgid "Connect OAuth"
 msgstr "连接 OAuth"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Connect remote account"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
 msgstr "连接此提供方，作为你的个人模型。"
@@ -1575,10 +1601,6 @@ msgstr "连接此提供方，作为你的个人模型。"
 #: src/pages/PluginsOverlay.tsx
 msgid "Connect Treg"
 msgstr "连接 Treg"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Connect your account."
-msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1653,6 +1675,11 @@ msgstr ""
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
 
+#: src/components/Context.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Context"
+msgstr "上下文"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1680,6 +1707,10 @@ msgstr "使用邮箱继续"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Controls how connector tools are loaded in new conversations."
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Coordinator"
+msgstr "协调者"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Coordinator bot"
@@ -1792,6 +1823,7 @@ msgstr ""
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not check this computer."
 msgstr ""
@@ -1830,8 +1862,7 @@ msgstr ""
 msgid "Could not connect"
 msgstr "无法连接"
 
-#: src/components/composer/ComposerMenu.tsx
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
 
@@ -1982,6 +2013,10 @@ msgstr ""
 msgid "Could not load computers."
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Could not load data"
+msgstr "无法加载数据"
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
 msgstr ""
@@ -2060,7 +2095,7 @@ msgstr ""
 msgid "Could not load the server configuration."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -2188,6 +2223,10 @@ msgstr "无法保存自动审核"
 msgid "Could not save capabilities. Try again."
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Could not save changes"
+msgstr "无法保存更改"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Could not save changes. Try again."
 msgstr ""
@@ -2304,6 +2343,10 @@ msgstr "无法提交此回答"
 msgid "Could not take control"
 msgstr "无法接管"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Could not test this integration."
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not update"
 msgstr "无法更新"
@@ -2382,10 +2425,6 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Create a section and move {0} into it."
 msgstr "创建分组并把 {0} 移入。"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Create a token"
-msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Create account"
@@ -2627,6 +2666,7 @@ msgstr "描述"
 msgid "Design"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Desktop"
 msgstr ""
@@ -2649,6 +2689,7 @@ msgstr ""
 msgid "Destination scope"
 msgstr ""
 
+#: src/components/AskCard.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -2848,6 +2889,7 @@ msgstr "例如 Hivenet Agent、Presales、工时表机器人"
 msgid "Earlier message"
 msgstr "更早的消息"
 
+#: src/components/Context.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
@@ -3114,7 +3156,7 @@ msgstr "查找模型"
 msgid "Finding…"
 msgstr "正在查找…"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr ""
 
@@ -3124,7 +3166,7 @@ msgstr ""
 msgid "Finish signing in at <0>{0}</0>. The final page may not load; paste its URL or code here."
 msgstr "在 <0>{0}</0> 完成登录。最后一页可能无法加载；把 URL 或代码粘贴到这里。"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Finish signing in in your browser."
 msgstr ""
 
@@ -3212,16 +3254,12 @@ msgstr ""
 msgid "Git URL"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "GitLab host"
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
 msgid "Grant"
-msgstr ""
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Grant only the repositories and permissions this bot needs."
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -3232,6 +3270,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Group"
 msgstr "群组"
+
+#: src/components/Context.tsx
+msgid "Group brief"
+msgstr "群组简报"
 
 #: src/pages/GroupPanel.tsx
 msgid "Group settings"
@@ -3537,6 +3579,10 @@ msgstr "隔离"
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
 msgstr "它的对话、文件和例行任务将被永久删除。它创建的 Bot 仍留在列表中。"
 
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Jev needs a TypeSafe API key."
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Jira project keys"
 msgstr ""
@@ -3606,6 +3652,10 @@ msgstr "语言"
 msgid "Last check"
 msgstr ""
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Last checked"
+msgstr ""
+
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
 msgstr ""
@@ -3614,6 +3664,11 @@ msgstr ""
 msgid "Last seen"
 msgstr ""
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Last successful call"
+msgstr ""
+
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Last used"
 msgstr ""
@@ -3665,6 +3720,10 @@ msgstr ""
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Leave"
 msgstr "退出"
+
+#: src/components/Context.tsx
+msgid "Left unchanged: {reason}"
+msgstr "保持不变：{reason}"
 
 #: src/pages/system/DispatchSetting.tsx
 msgid "Let paired phones and chat accounts dispatch, steer, and approve work in this space."
@@ -3827,7 +3886,7 @@ msgstr ""
 msgid "Make sure nothing is still running on this computer."
 msgstr "请确认这台电脑上没有仍在运行的任务。"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4096,9 +4155,17 @@ msgstr ""
 msgid "Model options"
 msgstr "模型选项"
 
+#: src/components/Context.tsx
+msgid "Model or memory unavailable"
+msgstr "模型或记忆不可用"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "模型费用使用你的提供方密钥。"
+
+#: src/components/Context.tsx
+msgid "Model unavailable"
+msgstr "模型不可用"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
@@ -4201,6 +4268,14 @@ msgstr "需要输入"
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Needs reconnection"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Needs sign-in"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Needs sign-in on this computer"
 msgstr ""
 
 #: src/lib/run-status-label.ts
@@ -4409,8 +4484,9 @@ msgid "No uploaded files"
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
+#: src/pages/GroupPanel.tsx
 msgid "None"
-msgstr ""
+msgstr "无"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -4428,12 +4504,20 @@ msgstr ""
 msgid "Not available on this computer"
 msgstr ""
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Not checked"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Not connected"
 msgstr "未连接"
 
 #: src/pages/LearningObservation.tsx
 msgid "Not enough runs to tell"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not found on this computer"
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -4469,6 +4553,10 @@ msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
+msgstr ""
+
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Not used"
 msgstr ""
 
 #: src/pages/settings/PluginsSection.tsx
@@ -4602,11 +4690,15 @@ msgstr ""
 msgid "Open Ardur Bot"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Open bot settings"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Open documentation"
 msgstr ""
 
@@ -4648,6 +4740,10 @@ msgstr ""
 
 #: src/pages/shell/command-palette.tsx
 msgid "Open terminal"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Open the desktop app to check this computer."
 msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
@@ -4726,6 +4822,10 @@ msgstr ""
 msgid "Other model…"
 msgstr "其他模型…"
 
+#: src/components/Context.tsx
+msgid "Owner edited recently"
+msgstr "所有者最近编辑过"
+
 #: src/pages/NotFound.tsx
 msgid "Page not found"
 msgstr ""
@@ -4794,6 +4894,11 @@ msgstr "粘贴你的 API 密钥"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "已暂停"
+
+#. placeholder {0}: tool.id
+#: src/components/integrations/manage/ToolPermissions.tsx
+msgid "Permission for {0}"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Personal"
@@ -4970,6 +5075,10 @@ msgstr ""
 msgid "Pushed"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Queue wait"
+msgstr "排队等待"
+
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -5034,11 +5143,15 @@ msgstr ""
 msgid "Recent"
 msgstr "最近"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Recent errors"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "Recheck"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/terminal-session.tsx
 msgid "Reconnect"
@@ -5153,6 +5266,14 @@ msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Remote MCP URL"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Remote setup"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
@@ -5393,6 +5514,7 @@ msgstr ""
 msgid "Restricted"
 msgstr ""
 
+#: src/components/Context.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
@@ -5456,7 +5578,6 @@ msgstr ""
 msgid "Review saved copy"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/customize/McpDefaults.tsx
@@ -5464,7 +5585,6 @@ msgstr ""
 msgid "Review tools"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Review tools before your bots can use this account."
 msgstr ""
@@ -5500,6 +5620,10 @@ msgstr "撤销"
 msgid "Revoked"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Rewritten {time}"
+msgstr "已重写 {time}"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Robot"
 msgstr "机器人"
@@ -5511,6 +5635,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Rotate key"
 msgstr "轮换密钥"
+
+#: src/components/Context.tsx
+msgid "Routed by default"
+msgstr "按默认规则路由"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/Shell.tsx
@@ -5604,6 +5732,7 @@ msgid "Sans"
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
@@ -5700,6 +5829,10 @@ msgstr "说点什么。静音即发送。"
 msgid "Say yes or no, or answer in a sentence."
 msgstr "回答是或否，或一句话说明。"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Scopes"
+msgstr ""
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Screen"
 msgstr ""
@@ -5735,7 +5868,7 @@ msgstr ""
 msgid "Search by domain"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Search integrations"
 msgstr ""
 
@@ -5784,6 +5917,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Select the text to copy it."
 msgstr ""
+
+#: src/pages/ide/dialogs.tsx
+msgid "Selection shortened to 32,000 characters."
+msgstr "所选内容已缩短至 32,000 个字符。"
 
 #: src/pages/memory/MemoryComposer.tsx
 #: src/pages/Shell.tsx
@@ -5978,10 +6115,6 @@ msgstr "登录 Ardur Bot"
 msgid "Sign in to use quick access."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Sign in with GitHub"
-msgstr ""
-
 #: src/pages/account/AccountTables.tsx
 msgid "Sign out"
 msgstr ""
@@ -5995,12 +6128,16 @@ msgstr "注册"
 msgid "Sign-in expired. Connect Codex again."
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Sign-in needs a pre-registered app; use a fine-grained token instead."
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Sign-in timed out."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Signed in on this computer as {identity}"
 msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
@@ -6045,6 +6182,10 @@ msgstr ""
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "软件更新"
+
+#: src/pages/ide/IdePage.tsx
+msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
+msgstr "部分条目的名称不受支持，已隐藏（{hiddenCount}）。"
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
@@ -6261,6 +6402,10 @@ msgstr ""
 msgid "task"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Task budget reached"
+msgstr "任务预算已用尽"
+
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
 msgstr ""
@@ -6323,6 +6468,7 @@ msgstr ""
 msgid "Terminal is not available on this computer"
 msgstr ""
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Test"
@@ -6356,7 +6502,7 @@ msgstr "API 未恢复。请刷新此页面。"
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
 
@@ -6389,6 +6535,7 @@ msgstr ""
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
 
+#: src/pages/memory/MemoryComposer.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot may only run locally — change the pin or the space policy"
 msgstr ""
@@ -6421,6 +6568,7 @@ msgstr ""
 msgid "this computer"
 msgstr "这台电脑"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
@@ -6484,7 +6632,7 @@ msgstr ""
 msgid "This server is managed by an extension"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "This service needs client registration before you can connect."
 msgstr ""
 
@@ -6504,6 +6652,10 @@ msgstr ""
 msgid "Time of day"
 msgstr "时间"
 
+#: src/components/Context.tsx
+msgid "Time to first token"
+msgstr "首个词元耗时"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Timeline"
@@ -6513,9 +6665,17 @@ msgstr ""
 msgid "Title"
 msgstr "标题"
 
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
+msgstr ""
+
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "至:"
+
+#: src/components/Context.tsx
+msgid "Today"
+msgstr "今天"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -6538,6 +6698,7 @@ msgstr ""
 msgid "Tool sources"
 msgstr "工具源"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Tools"
 msgstr ""
@@ -6567,7 +6728,7 @@ msgstr "Treg token"
 msgid "Trusted folders"
 msgstr ""
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -6737,12 +6898,16 @@ msgstr "使用 {hostLabel}"
 msgid "Use a found model"
 msgstr "使用找到的模型"
 
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
+#: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"
 msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Use for bots on this computer"
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -6758,10 +6923,6 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "使用此模型"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Use your GitLab host"
-msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
@@ -6817,6 +6978,7 @@ msgstr "等待中…"
 msgid "We'll provide a prompt you can use to fetch the memory from your other account."
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Web"
 msgstr ""
@@ -6935,6 +7097,10 @@ msgstr ""
 msgid "Working…"
 msgstr "处理中…"
 
+#: src/components/integrations/manage/IntegrationDetails.tsx
+msgid "Workspace"
+msgstr ""
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr ""
@@ -6967,10 +7133,6 @@ msgstr "可以关闭此窗口。"
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "你已接管"
-
-#: src/components/integrations/catalog/IntegrationCatalog.tsx
-msgid "Your account is connected."
-msgstr ""
 
 #. placeholder {0}: state.storage.path
 #: src/pages/system/SystemPage.tsx

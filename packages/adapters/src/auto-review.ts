@@ -86,6 +86,14 @@ function isVerifierKind(value: string | undefined): value is "jev" | "scripted" 
  * otherwise the existing LLM checker. `scripted` is the offline test adapter.
  * Any other value remains the LLM provider id (openrouter, anthropic, …).
  */
+export function autoReviewConfigurationWarning(
+  env: NodeJS.ProcessEnv = process.env,
+): "jev-key-missing" | undefined {
+  return env.ARDURBOT_AUTO_REVIEW_PROVIDER?.trim().toLowerCase() === "jev" && !typesafeApiKey(env)
+    ? "jev-key-missing"
+    : undefined;
+}
+
 export function resolveAutoReviewProviderKind(
   env: NodeJS.ProcessEnv = process.env,
 ): AutoReviewProviderKind {

@@ -1,9 +1,15 @@
-import type { Bot, BotMcpServer, IntegrationManifest, McpServer } from "@ardurbot/contracts";
+import type {
+  Bot,
+  BotMcpServer,
+  IntegrationManifest,
+  McpServer,
+  SpaceToolPolicies,
+} from "@ardurbot/contracts";
 import { Button, Checkbox, Dialog, DialogContent, DialogTitle } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../../../lib/rpc";
-import { ToolPicker } from "./ToolPicker";
+import { ToolPermissions } from "../manage/ToolPermissions";
 
 /** Existing custom servers use the same explicit picker, without a trusted catalog policy. */
 export function McpToolReview({
@@ -28,12 +34,34 @@ export function McpToolReview({
       .map((bot) => bot.id),
   );
   const [toolIds, setToolIds] = useState<string[]>([]);
+  const [spaceToolPolicies, setSpaceToolPolicies] = useState<SpaceToolPolicies>(
+    server.spaceToolPolicies ?? {},
+  );
+  const [savedPolicies, setSavedPolicies] = useState<SpaceToolPolicies>(
+    server.spaceToolPolicies ?? {},
+  );
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const load = async () => {
     setError(false);
+    setManifest(null);
     try {
-      setManifest(await rpc.mcp.servers.tools({ serverId: server.id }));
+      const manifest = await rpc.mcp.servers.tools({ serverId: server.id });
+      const current = (await rpc.mcp.assignments.all()).filter(
+        (entry) => entry.serverId === server.id,
+      );
+      setBotIds(current.map((entry) => entry.botId));
+      setToolIds(
+        current.length && current.every((entry) => !entry.needsReview && !entry.allowAllTools)
+          ? current[0]!.allowedTools.filter((id) =>
+              current.every((entry) => entry.allowedTools.includes(id)),
+            )
+          : [],
+      );
+      const latest = (await rpc.mcp.servers.list()).find((entry) => entry.id === server.id);
+      setSpaceToolPolicies(latest?.spaceToolPolicies ?? {});
+      setSavedPolicies(latest?.spaceToolPolicies ?? {});
+      setManifest(manifest);
     } catch {
       setError(true);
     }
@@ -45,25 +73,14 @@ export function McpToolReview({
     setBusy(true);
     setError(false);
     try {
-      for (const bot of bots) {
-        const current = (assignments[bot.id] ?? []).filter((entry) => entry.serverId !== server.id);
-        await rpc.mcp.assignments.replace({
-          botId: bot.id,
-          assignments: [
-            ...current,
-            ...(botIds.includes(bot.id)
-              ? [
-                  {
-                    serverId: server.id,
-                    allowAllTools: false,
-                    needsReview: false,
-                    allowedTools: toolIds,
-                  },
-                ]
-              : []),
-          ],
-        });
-      }
+      await rpc.mcp.servers.permissions({
+        serverId: server.id,
+        botIds,
+        toolIds,
+        ...(JSON.stringify(spaceToolPolicies) === JSON.stringify(savedPolicies)
+          ? {}
+          : { spaceToolPolicies }),
+      });
       await onSaved();
       onClose();
     } catch {
@@ -107,11 +124,13 @@ export function McpToolReview({
           ))}
         </fieldset>
         {manifest ? (
-          <ToolPicker
+          <ToolPermissions
             manifest={manifest}
             selected={toolIds}
             onChange={setToolIds}
             disabled={busy}
+            spaceToolPolicies={spaceToolPolicies}
+            onPolicyChange={setSpaceToolPolicies}
           />
         ) : null}
         <Button disabled={busy || !manifest} onClick={() => void save()}>{t`Save`}</Button>

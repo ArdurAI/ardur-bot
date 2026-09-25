@@ -97,6 +97,18 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
     download: () => ipcRenderer.invoke("desktop.update.download"),
     install: () => ipcRenderer.invoke("desktop.update.install"),
   },
+  integrations: {
+    open: (url) => ipcRenderer.invoke("desktop.integrations.open", url),
+    focus: () => ipcRenderer.invoke("desktop.integrations.focus"),
+    onReturn: (listener) => {
+      const handler = (_event, id) => {
+        if (typeof id === "string") listener(id);
+      };
+      ipcRenderer.on("desktop.integrations.return", handler);
+      void ipcRenderer.invoke("desktop.integrations.ready").catch(() => undefined);
+      return () => ipcRenderer.off("desktop.integrations.return", handler);
+    },
+  },
   oauth: {
     open: (url) => ipcRenderer.invoke("desktop.oauth.open", url),
     cancel: (url) => ipcRenderer.invoke("desktop.oauth.cancel", url),

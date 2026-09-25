@@ -60,6 +60,24 @@ afterEach(() => {
 });
 
 describe("mobile API authentication", () => {
+  it.each([
+    "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
+    "This bot may only run locally — change the pin or the space policy",
+  ])("decodes a memory refusal from the real oRPC envelope: %s", async (message) => {
+    paired.loadHome.mockResolvedValue(null);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse(
+          { json: { defined: false, code: "BAD_REQUEST", status: 400, message } },
+          { status: 400 },
+        ),
+      ),
+    );
+    await expect(
+      rpc("memory/propose", { intent: "edit", text: "Use short answers.", requestId: "test" }),
+    ).rejects.toThrow(message);
+  });
   beforeEach(async () => {
     vi.restoreAllMocks();
     vi.mocked(SecureStore.getItemAsync).mockReset();
@@ -2022,12 +2040,14 @@ describe("mobile thread event reduction", () => {
     expect(next?.cursor).toBe(11);
   });
 
-  it("preserves ask actions and runId on created messages", () => {
+  it("preserves full approval text, presentation, actions and runId on created messages", () => {
     const initial = snapshot();
     const askBlock = {
       kind: "ask",
-      text: "Review before writing",
-      detail: "title: Result",
+      text: `'gh' 'issue' 'create' '--body' '${"x".repeat(4000)}' '--title' '${"y".repeat(4000)} tail'`,
+      detail: "Identity: fixture-account\nWorking directory: '/workspace'\n[redacted]",
+      preformatted: true,
+      approvalEffectId: "effect",
       status: "pending",
       actions: [
         { id: "allow", label: "Allow once" },

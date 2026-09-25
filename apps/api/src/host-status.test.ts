@@ -49,3 +49,7 @@ it("never probes a packaged API container, another user's host, or a container-o
   expect(await sourceHostStatus(prisma, "owner", "fake")).toBeNull();
   expect(fake.inspect).not.toHaveBeenCalled();
 });
+
+vi.mock("@ardurbot/host-runtime/host-integrations", () => ({
+  inspectHostIntegrations: async () => [],
+}));

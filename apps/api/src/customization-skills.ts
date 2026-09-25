@@ -4,16 +4,16 @@ import path from "node:path";
 import { hydrateAgentSkills } from "@ardurbot/adapters";
 import type { Actor, CustomizationSkill } from "@ardurbot/contracts";
 import { CustomizationCatalogSchema } from "@ardurbot/contracts";
-import catalog from "@ardurbot/contracts/customization-catalog" with { type: "json" };
-import { parseSkillMd } from "@ardurbot/core";
-import type { AgentSkill, TaughtSkill } from "@ardurbot/db";
-import { IsolationError } from "@ardurbot/db";
-import type { BundleFile } from "../../desktop/src/extensions/files.js";
+import type { BundleFile } from "@ardurbot/contracts/bundles/files";
 import {
   bundleDocument,
   validateBundleFiles,
   writeBundleFiles,
-} from "../../desktop/src/extensions/files.js";
+} from "@ardurbot/contracts/bundles/files";
+import catalog from "@ardurbot/contracts/customization-catalog" with { type: "json" };
+import { parseSkillMd } from "@ardurbot/core";
+import type { AgentSkill, TaughtSkill } from "@ardurbot/db";
+import { IsolationError } from "@ardurbot/db";
 import { createAgentSkillsService } from "./agent-skills.js";
 import type { RouterDeps } from "./router.js";
 import { createTaughtSkillsService } from "./taught-skills.js";
@@ -117,9 +117,8 @@ export function createCustomizationSkills(deps: RouterDeps) {
         where: { ...scope(actor), id: input.id },
       });
       if (source?.bundleId) {
-        await deps.prisma.agentSkill.updateMany({
-          where: { ...scope(actor), id: input.id },
-          data: { bundleId: null, enabled: false },
+        await deps.prisma.agentSkill.deleteMany({
+          where: { ...scope(actor), id: input.id, bundleId: source.bundleId },
         });
         const retained = await deps.prisma.agentSkill.count({
           where: { ...scope(actor), bundleId: source.bundleId },

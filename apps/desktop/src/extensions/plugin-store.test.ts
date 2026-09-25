@@ -1,5 +1,5 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -77,15 +77,65 @@ describe("native plugin recovery", () => {
     expect(f.rows).toEqual([]);
     expect(await readdir(f.root)).toEqual(["plugins.enc"]);
   });
-  it("retains an uncertain install until its request expires, then cleans it up", async () => {
+  it("immediately rolls back files and the journal when the remote install never commits", async () => {
     const f = await fixture();
     f.registry.install.mockRejectedValueOnce(new Error("Disconnected"));
     await expect(f.store.install("preview")).rejects.toThrow("Disconnected");
+    expect(await readdir(f.root)).toEqual(["plugins.enc"]);
+    const journal = Buffer.from(await readFile(path.join(f.root, "plugins.enc"), "utf8"), "base64");
+    expect(JSON.parse(f.storage.decryptString(journal))).toEqual([]);
+    expect(f.registry.uninstall).not.toHaveBeenCalled();
+    await f.store.recover();
+    expect(await readdir(f.root)).toEqual(["plugins.enc"]);
+  });
+  it("retains an in-flight install after a crash until its request expires", async () => {
+    const f = await fixture();
+    const id = randomUUID();
+    await mkdir(path.join(f.root, id));
+    await writeFile(
+      path.join(f.root, "plugins.enc"),
+      f.storage
+        .encryptString(JSON.stringify([{ id, state: "installing", createdAt: 0 }]))
+        .toString("base64"),
+    );
     await f.store.recover();
     expect(await readdir(f.root)).toHaveLength(2);
     f.advance();
     await f.store.recover();
     expect(await readdir(f.root)).toEqual(["plugins.enc"]);
+  });
+  it.each(["lookup", "uninstall"])(
+    "cleans local files even when remote rollback fails at %s",
+    async (failure) => {
+      const f = await fixture();
+      f.registry.install.mockImplementationOnce(async (_preview, _directory, id) => {
+        f.rows.push({ id, state: "installed" });
+        throw new Error("Install disconnected");
+      });
+      if (failure === "lookup")
+        f.registry.installed.mockRejectedValueOnce(new Error("Lookup disconnected"));
+      else f.registry.uninstall.mockRejectedValueOnce(new Error("Uninstall disconnected"));
+      await expect(f.store.install("preview")).rejects.toThrow("disconnected");
+      expect(await readdir(f.root)).toEqual(["plugins.enc"]);
+      const journal = Buffer.from(
+        await readFile(path.join(f.root, "plugins.enc"), "utf8"),
+        "base64",
+      );
+      expect(JSON.parse(f.storage.decryptString(journal))).toMatchObject([
+        { id: f.rows[0]!.id, state: "removing" },
+      ]);
+      await f.store.recover();
+      expect(f.rows).toEqual([]);
+    },
+  );
+  it("removes partial extraction after a rejected bundle without attempting remote uninstall", async () => {
+    const f = await fixture();
+    f.registry.files.mockResolvedValueOnce([{ path: "../escape", bytes: Buffer.from("invalid") }]);
+    await expect(f.store.install("preview")).rejects.toThrow("unsafe");
+    expect(f.registry.install).not.toHaveBeenCalled();
+    expect(f.registry.uninstall).not.toHaveBeenCalled();
+    const journal = Buffer.from(await readFile(path.join(f.root, "plugins.enc"), "utf8"), "base64");
+    expect(JSON.parse(f.storage.decryptString(journal))).toEqual([]);
   });
   it("retries interrupted removal and refuses unreadable recovery records", async () => {
     const f = await fixture();

@@ -1,9 +1,11 @@
 import type { McpServer } from "@ardurbot/contracts";
+import { SpaceToolPoliciesSchema } from "@ardurbot/contracts";
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 
 export function mcpServerDto(
   row: {
     catalogId?: string | null;
+    spaceToolPolicies?: unknown;
     managedBy?: string | null;
     managedId?: string | null;
     placement?: string;
@@ -37,6 +39,7 @@ export function mcpServerDto(
       ? Object.keys(row.headers)
       : [];
   return {
+    spaceToolPolicies: SpaceToolPoliciesSchema.safeParse(row.spaceToolPolicies).data ?? {},
     catalogId: row.catalogId ?? null,
     id: row.id,
     spaceId: row.spaceId,

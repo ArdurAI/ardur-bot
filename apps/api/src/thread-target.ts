@@ -1,12 +1,19 @@
 import { type JobPublisher, runContinueJob, type SandboxProvider } from "@ardurbot/adapter-kit";
-import { cancelComputerRunWork, screenLeaseIdForRun, toComputerRef } from "@ardurbot/adapters";
+import {
+  cancelComputerRunWork,
+  routeIncoming,
+  screenLeaseIdForRun,
+  toComputerRef,
+} from "@ardurbot/adapters";
 import {
   type Actor,
+  ContextSnapshotSchema,
   GROUP_MEMBER_MIN,
   type GroupMember,
   type MessageBlock,
   MessageBlock as MessageBlockSchema,
   type MessageReaction,
+  RoutingRuleSchema,
   type RunStatus,
   RunTriggerSchema,
   RuntimeInfoSchema,
@@ -15,9 +22,9 @@ import {
 } from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
+  hasMentionToken,
   isActive,
   projectMessages,
-  resolveGroupTargetBotIds,
   runFailureError,
 } from "@ardurbot/core";
 import { deriveMessageQuote } from "@ardurbot/core/message-quote";
@@ -351,7 +358,7 @@ export async function threadSnapshot(
       }),
       deps.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR SHARE`;
-        const [messagePage, last, waitingRun, busyOrFailed] = await Promise.all([
+        const [messagePage, last, waitingRun, busyOrFailed, contextRun] = await Promise.all([
           loadMessagePage(tx, target.threadId, undefined, THREAD_MESSAGE_PAGE_SIZE),
           tx.event.findFirst({
             where: { threadId: target.threadId },
@@ -377,6 +384,10 @@ export async function threadSnapshot(
             },
             // The id tiebreak keeps ordering deterministic under equal
             // timestamps, matching the supersession probe below.
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          }),
+          tx.run.findFirst({
+            where: { threadId: target.threadId, comparisonId: null },
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           }),
         ]);
@@ -421,6 +432,7 @@ export async function threadSnapshot(
               })
             : [];
         return {
+          contextRun,
           messagePage,
           last,
           run: currentRun,
@@ -432,6 +444,7 @@ export async function threadSnapshot(
     return {
       botId: target.botId,
       threadId: target.threadId,
+      contextRun: core.contextRun ? mapRun(core.contextRun) : null,
       cursor: core.last?.seq ?? -1,
       messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents),
       olderCursor: core.messagePage.olderCursor,
@@ -526,6 +539,11 @@ export async function threadSnapshot(
         : primaryActiveRun
           ? mapRun(primaryActiveRun)
           : null,
+    contextRun: primaryActiveRun
+      ? mapRun(primaryActiveRun)
+      : core.terminalRun
+        ? mapRun(core.terminalRun)
+        : null,
     activeRuns: core.activeRuns.map(mapRun),
   };
 }
@@ -591,6 +609,8 @@ function mapRun(run: {
   modelId: string | null;
   runtimePin?: unknown;
   runtimeInfo?: unknown;
+  contextSnapshot?: unknown;
+  routingRule?: unknown;
   error: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -604,6 +624,8 @@ function mapRun(run: {
     status: run.status as never,
     trigger: RunTriggerSchema.parse(run.trigger),
     routineId: run.routineId ?? null,
+    contextSnapshot: ContextSnapshotSchema.safeParse(run.contextSnapshot).data ?? null,
+    routingRule: RoutingRuleSchema.safeParse(run.routingRule).data ?? null,
     runtimeInfo: RuntimeInfoSchema.safeParse(run.runtimeInfo).data ?? null,
     runtimePin: RuntimePinSchema.safeParse(run.runtimePin).data ?? null,
     modelProvider: run.modelProvider,
@@ -846,11 +868,48 @@ export async function sendThreadMessage(
       const members = await lockAndLoadGroupMembers(tx, actor, target);
       const memberBotIds = members.map((member) => member.botId);
       const mentionTargets = splitMentionTargets(input.mentions);
-      const targetBotIds = resolveGroupTargetBotIds({
+      const [groupRouting, spaceRouting, replyTarget, lastRun] = await Promise.all([
+        tx.chatGroup.findUnique({
+          where: { id: target.groupId },
+          select: { coordinatorBotId: true },
+        }),
+        tx.space.findUnique({ where: { id: actor.spaceId }, select: { coordinatorBotId: true } }),
+        input.replyToMessageId
+          ? tx.message.findFirst({
+              where: { id: input.replyToMessageId, threadId: target.threadId },
+              select: { botId: true },
+            })
+          : Promise.resolve(null),
+        tx.run.findFirst({
+          where: { threadId: target.threadId, spaceId: actor.spaceId, userId: actor.userId },
+          orderBy: { createdAt: "desc" },
+        }),
+      ]);
+      const explicit = members.filter(
+        (member) =>
+          mentionTargets.botMentionIds.includes(member.botId) ||
+          hasMentionToken(input.text ?? "", member.name) ||
+          hasMentionToken(input.text ?? "", "everyone"),
+      );
+      const routed = routeIncoming({
         text: input.text ?? "",
-        members: members.map((member) => ({ id: member.botId, name: member.name })),
-        explicitMentions: mentionTargets.botMentionIds,
+        bots: members.map((member) => ({
+          botId: member.botId,
+          name: member.name,
+          threadId: target.threadId,
+        })),
+        mentionBotIds: explicit.map((member) => member.botId),
+        replyTo: replyTarget?.botId
+          ? { botId: replyTarget.botId, threadId: target.threadId }
+          : null,
+        groupCoordinatorId: groupRouting?.coordinatorBotId,
+        lastActiveThread: lastRun ? { botId: lastRun.botId, threadId: target.threadId } : null,
+        spaceCoordinatorId: spaceRouting?.coordinatorBotId,
       });
+      if (!routed) throw new IsolationError("Group send did not resolve a target");
+      const targetBotIds = explicit.length
+        ? explicit.map((member) => member.botId)
+        : [routed.botId];
       const { blocks: attachmentBlocks, artifacts } = await resolveGroupSendAttachments(
         { prisma: tx },
         actor,
@@ -954,6 +1013,7 @@ export async function sendThreadMessage(
             userId: actor.userId,
             status: "queued",
             trigger: "user",
+            routingRule: routed.rule,
             clientNonce: sendRunClientNonce(input.clientNonce, message.id, botId),
             sourceMessageId: message.id,
           },

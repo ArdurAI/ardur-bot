@@ -79,7 +79,7 @@ describe("host login environment", () => {
     expect(result.env).not.toHaveProperty("GH_TOKEN");
     expect(fake.spawn).toHaveBeenCalledWith(
       "/bin/zsh",
-      ["-lc", 'printf "\\0%s\\0" "$PATH"'],
+      ["-lc", expect.stringContaining("AWS_PROFILE")],
       expect.objectContaining({
         env: expect.objectContaining({ HOME: "/fixture/home", SHELL: "/bin/zsh" }),
         shell: false,
@@ -160,7 +160,6 @@ describe("host login environment", () => {
       "API_KEY",
       "PASSWORD",
       "CREDENTIAL",
-      "AWS_PROFILE",
       "AWS_ACCESS_KEY_ID",
       "GOOGLE_APPLICATION_CREDENTIALS",
       "ANTHROPIC_API_KEY",
@@ -341,4 +340,28 @@ describe("host inventory", () => {
       "[redacted] [email]",
     );
   });
+});
+
+it("keeps nonsecret CLI selectors from the login shell while refusing credential and injection fields", async () => {
+  fake.spawn.mockReturnValue(
+    child(
+      "banner\n\0PATH=/fixture/bin\0\0AWS_PROFILE=test-profile\0\0KUBECONFIG=/fixture/kube-config\0\0AWS_SECRET_ACCESS_KEY=fake-never-import\0",
+    ),
+  );
+  const result = await captureHostEnvironment(
+    { PATH: "/usr/bin", SHELL: "/bin/zsh" },
+    "darwin",
+    "/fixture/home",
+  );
+  expect(result.env).toMatchObject({
+    AWS_PROFILE: "test-profile",
+    KUBECONFIG: "/fixture/kube-config",
+  });
+  expect(result.env).not.toHaveProperty("AWS_SECRET_ACCESS_KEY");
+  expect(
+    filterHostEnvironment({
+      JENKINS_URL: "https://user:fake-password@jenkins.example.test",
+      AWS_PROFILE: "test-profile",
+    }),
+  ).toEqual({ AWS_PROFILE: "test-profile" });
 });

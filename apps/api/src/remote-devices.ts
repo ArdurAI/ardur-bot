@@ -1,6 +1,6 @@
 import type { JobPublisher } from "@ardurbot/adapter-kit";
 import { runContinueJob } from "@ardurbot/adapter-kit";
-import { validateDeviceApproval } from "@ardurbot/adapters";
+import { admitRoutedDispatch as admitDispatch, validateDeviceApproval } from "@ardurbot/adapters";
 import type { Actor, DeviceScope, PairingPayload } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
@@ -13,7 +13,6 @@ import {
 import { effectiveRemoteAuthority } from "@ardurbot/core";
 import type { DeviceGrant, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
-  admitDispatch,
   auditDevice,
   authenticateDevice,
   completeDevicePairing,
@@ -192,6 +191,9 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "team/board",
   "comparisons/list",
   "comparisons/get",
+  "briefs/list",
+  "context/settings",
+  "metrics/context",
 ]);
 function publicGrant(grant: DeviceGrant) {
   return {

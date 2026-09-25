@@ -16,6 +16,13 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
 } from "./computer-connections.js";
+import {
+  BriefSchema,
+  ConcurrentRunsSchema,
+  ContextBudgetsSchema,
+  ContextMetricsSchema,
+  ContextSettingsSchema,
+} from "./context.js";
 import { customizationContract } from "./customization.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
@@ -225,7 +232,9 @@ function createIdeContract() {
     roots: oc.output(z.array(IdeRootSchema)),
     list: oc
       .input(z.object({ rootId: Id, path: IdePathSchema.default("") }))
-      .output(z.array(IdeEntrySchema)),
+      .output(
+        z.object({ entries: z.array(IdeEntrySchema), hiddenCount: z.number().int().nonnegative() }),
+      ),
     read: oc.input(z.object({ rootId: Id, path: IdePathSchema.min(1) })).output(IdeFileSchema),
     save: oc
       .input(
@@ -301,6 +310,36 @@ export const appContract = {
     setDispatch: oc
       .input(z.object({ enabled: z.boolean() }))
       .output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+  },
+  metrics: {
+    context: oc
+      .input(z.object({ botId: Id.optional(), groupId: Id.optional() }))
+      .output(ContextMetricsSchema),
+  },
+  context: {
+    settings: oc.input(z.object({ botId: Id })).output(ContextSettingsSchema),
+    configure: oc
+      .input(
+        z.object({
+          budgets: ContextBudgetsSchema.optional(),
+          concurrentRuns: ConcurrentRunsSchema.optional(),
+          coordinatorBotId: Id.nullable().optional(),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+  },
+  briefs: {
+    list: oc.input(z.object({ botId: Id, groupId: Id.optional() })).output(z.array(BriefSchema)),
+    update: oc
+      .input(
+        z.object({
+          botId: Id,
+          groupId: Id.nullable().optional(),
+          content: z.string().max(6000),
+          expectedRevision: z.number().int().nonnegative(),
+        }),
+      )
+      .output(z.object({ revision: z.number().int().positive() })),
   },
   spaces: {
     list: oc.output(SpaceNavigationSchema),
@@ -940,6 +979,7 @@ export const appContract = {
   },
   integrations: {
     list: oc.output(IntegrationCatalogListSchema),
+    status: oc.input(z.object({ connectionId: Id })).output(IntegrationConnectionSchema),
     connect: oc
       .input(
         z.object({
@@ -953,7 +993,19 @@ export const appContract = {
             .max(16_384)
             .regex(/^[^\s]+$/)
             .optional(),
-          authKind: z.enum(["oauth", "token"]).optional(),
+          authKind: z.enum(["oauth", "token", "host"]).optional(),
+          oauthClient: z
+            .object({
+              clientId: z
+                .string()
+                .trim()
+                .min(1)
+                .max(1024)
+                .regex(/^[^\s]+$/),
+              clientSecret: z.string().min(1).max(16384).optional(),
+            })
+            .strict()
+            .optional(),
         }),
       )
       .output(
@@ -994,6 +1046,16 @@ export const appContract = {
   },
   mcp: {
     servers: {
+      permissions: oc
+        .input(
+          z.object({
+            serverId: Id,
+            botIds: z.array(Id).max(100),
+            toolIds: z.array(z.string().min(1).max(200)).max(500),
+            spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
+          }),
+        )
+        .output(z.array(IntegrationGrantSchema)),
       tools: oc.input(z.object({ serverId: Id })).output(IntegrationManifestSchema),
       list: oc.output(z.array(McpServerSchema)),
       create: oc.input(McpServerConfigInput).output(McpServerSchema),

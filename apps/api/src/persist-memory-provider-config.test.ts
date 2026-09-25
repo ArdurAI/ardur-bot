@@ -59,6 +59,7 @@ function makeDeps(
     $queryRaw: vi.fn().mockResolvedValue([]),
     $executeRaw: vi.fn().mockResolvedValue(0),
     bot: { findMany: vi.fn().mockResolvedValue([]) },
+    chatGroup: { findMany: vi.fn().mockResolvedValue([]) },
     memoryDocument: {
       findMany: vi.fn().mockResolvedValue([]),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),

@@ -2,6 +2,7 @@ import type {
   Bot,
   BotSection,
   ComputerMode,
+  ContextSnapshot,
   Feedback,
   Group,
   Me,
@@ -29,6 +30,7 @@ import {
   readBoundedJsonResponse,
   reduceCommandMessages,
   reduceLiveMessageBlocks,
+  reduceRunContext,
   runFailureError,
   signupRequiresEmailVerification,
   takeLiveMessage,
@@ -643,7 +645,15 @@ export async function rpc<T>(
       throw abortReason(error);
     });
     if (!res.ok || parsed.error) {
-      const message = parsed.error?.message ?? `rpc ${proc} failed`;
+      const payload = parsed.json;
+      const message =
+        parsed.error?.message ??
+        (payload &&
+        typeof payload === "object" &&
+        "message" in payload &&
+        typeof payload.message === "string"
+          ? payload.message
+          : `rpc ${proc} failed`);
       const unauthorized = res.status === 401 || /unauthorized/i.test(message);
       // After a delete where SecureStore could not clear the stale id, restart
       // reloads it and the first RPCs 401. Probe once without a Space header:
@@ -793,6 +803,7 @@ export type MobileGroup = Pick<
   | "unread"
   | "updatedAt"
   | "members"
+  | "coordinatorBotId"
 > &
   Partial<Pick<Group, "spaceId">>;
 
@@ -815,7 +826,10 @@ export type MobileSnapshot = {
     runtimeProblem?: RuntimeProblem;
     runtimePin?: RuntimePin | null;
     runtimeInfo?: RuntimeInfo | null;
+    contextSnapshot?: ContextSnapshot | null;
+    routingRule?: string | null;
   } | null;
+  contextRun?: MobileSnapshot["run"];
   activeRuns?: Array<{ id: string; botId?: string; status: string }>;
   members?: MobileGroup["members"];
   computer?: {
@@ -986,6 +1000,7 @@ export function applyMobileThreadEvent(
   event: ThreadEvent,
 ): MobileSnapshot | null {
   if (!prev) return prev;
+  if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
   if (isCommandEvent(event.type))
     return {
@@ -1019,6 +1034,7 @@ export function applyMobileThreadEvent(
       messages: [],
       olderCursor: null,
       run: null,
+      contextRun: null,
       activeRuns: [],
     };
   }

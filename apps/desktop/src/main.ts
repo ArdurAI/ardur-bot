@@ -4,28 +4,21 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopReachability, DesktopSetup } from "@ardurbot/contracts";
 import { LOCAL_SETTINGS_PAGE } from "@ardurbot/contracts/local-settings";
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  Menu,
-  net,
-  type Session,
-  session,
-  shell,
-} from "electron";
-import {
-  DesktopUpdateController,
-  type ElectronAutoUpdater,
-  LAUNCH_CHECK_DELAY_MS,
-} from "./auto-update.js";
+import type { Session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "electron";
+import type { ElectronAutoUpdater } from "./auto-update.js";
+import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
 import { openBrowserAuth } from "./browser-auth.js";
 import { cliVersion } from "./cli.js";
 import { installDevices } from "./devices-ipc.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
 import { installCustomizationIpc } from "./extensions/ipc.js";
 import { installHostService } from "./host-service-ipc.js";
+import {
+  focusIntegration,
+  integrationReturnId,
+  registerIntegrationProtocol,
+} from "./integration-return.js";
 import { requestLocalSettings } from "./local-settings.js";
 import {
   LocalStackController,
@@ -148,7 +141,23 @@ if (PERFORMANCE_USER_DATA) {
   app.setPath("sessionData", path.join(PERFORMANCE_USER_DATA, "session"));
 }
 if (!app.requestSingleInstanceLock()) process.exit(0);
-app.on("second-instance", () => app.emit("activate"));
+let pendingIntegrationReturn: string | null = null;
+function returnToIntegration(value: string) {
+  const id = integrationReturnId(value);
+  if (id === null) return;
+  pendingIntegrationReturn = id;
+  app.emit("activate");
+  focusIntegration(mainWindow, id);
+}
+app.on("second-instance", (_event, argv) => {
+  const link = argv.find((arg) => arg.startsWith("ardurbot:"));
+  if (link) returnToIntegration(link);
+  else app.emit("activate");
+});
+app.on("open-url", (event, value) => {
+  event.preventDefault();
+  returnToIntegration(value);
+});
 
 app.once("will-finish-launching", () => markOnce("rk:main:will-finish-launching"));
 app.once("ready", () => markOnce("rk:main:ready"));
@@ -986,10 +995,10 @@ function commitPendingAppSwitch() {
  * Undo an open that could not be persisted. When a prior session exists, restore
  * it. On first run keep the connected window so the user can retry save.
  */
-function abandonPendingAppSwitch(
+async function abandonPendingAppSwitch(
   previousSetup: DesktopSetup | null,
   previousUrl: string | null,
-): "restored" | "kept" {
+): Promise<"restored" | "kept"> {
   const previous = pendingPreviousWindow;
   pendingPreviousWindow = null;
   if (previous !== null && !previous.isDestroyed()) {
@@ -998,6 +1007,7 @@ function abandonPendingAppSwitch(
     if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;
+    if (previousUrl !== null) await hostService?.activate(previousUrl);
     // If setup was already closed (e.g. during a slow write), make the restored
     // session visible — otherwise macOS can be left with no shown window.
     if (setupWindow === null || setupWindow.isDestroyed()) {
@@ -1050,7 +1060,7 @@ async function recoverFromCrashedSave(
   previousSetup: DesktopSetup | null,
   previousUrl: string | null,
 ): Promise<string> {
-  const outcome = abandonPendingAppSwitch(previousSetup, previousUrl);
+  const outcome = await abandonPendingAppSwitch(previousSetup, previousUrl);
   await rollbackSetupFile(userDataDir, previousSetup);
   if (outcome === "kept") {
     if (mainWindow !== null && !mainWindow.isDestroyed()) mainWindow.destroy();
@@ -1075,6 +1085,9 @@ function safeOrigin(targetUrl: string) {
 }
 
 app.whenReady().then(async () => {
+  registerIntegrationProtocol(app);
+  const initialLink = process.argv.find((arg) => arg.startsWith("ardurbot:"));
+  if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
   installCustomizationIpc({ window: () => mainWindow, target: () => currentTargetUrl });
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
   hostService = installHostService({
@@ -1137,6 +1150,30 @@ app.whenReady().then(async () => {
     browserAuthAttempts.clear();
   };
   app.on("before-quit", cancelBrowserAuth);
+  ipcMain.handle("desktop.integrations.open", async (event, value: unknown) => {
+    if (
+      !fromMainWindow(event) ||
+      event.senderFrame !== event.sender.mainFrame ||
+      typeof value !== "string" ||
+      value.length > 16384
+    )
+      throw new Error("Invalid sign-in request.");
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password)
+      throw new Error("Invalid sign-in address.");
+    await shell.openExternal(url.href);
+  });
+  ipcMain.handle("desktop.integrations.focus", (event) => {
+    if (fromMainWindow(event) && event.senderFrame === event.sender.mainFrame)
+      focusIntegration(mainWindow, "");
+  });
+  ipcMain.handle("desktop.integrations.ready", (event) => {
+    if (!fromMainWindow(event) || event.senderFrame !== event.sender.mainFrame) return;
+    if (pendingIntegrationReturn !== null) {
+      focusIntegration(mainWindow, pendingIntegrationReturn);
+      pendingIntegrationReturn = null;
+    }
+  });
   ipcMain.handle("desktop.oauth.open", async (event, url: unknown) => {
     if (
       (!fromMainWindow(event) &&
@@ -1397,7 +1434,7 @@ app.whenReady().then(async () => {
         }
         return { ok: true };
       } catch {
-        const outcome = abandonPendingAppSwitch(previousSetup, previousUrl);
+        const outcome = await abandonPendingAppSwitch(previousSetup, previousUrl);
         return {
           ok: false,
           error:

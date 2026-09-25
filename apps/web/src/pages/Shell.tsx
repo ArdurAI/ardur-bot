@@ -136,6 +136,7 @@ import {
   computersAreUnavailable,
 } from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
+import { RunContext } from "../components/ContextEntry";
 import type { PendingAttachment } from "../components/composer/attachments";
 import { prepareComposerAttachments } from "../components/composer/attachments";
 import { ComposerTools } from "../components/composer/ComposerTools";
@@ -372,6 +373,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [modelFocusRequest, setModelFocusRequest] = useState(0);
+  const [runtimeFocusRequest, setRuntimeFocusRequest] = useState(0);
   useEffect(() => {
     if (panel !== "settings") setModelFocusRequest(0);
   }, [panel]);
@@ -2145,6 +2147,16 @@ export function ShellPage({ team = false }: { team?: boolean }) {
     writeBotsSidebarCollapsed(userId, collapsed);
   }
 
+  useEffect(
+    () =>
+      desktopBridge()?.integrations?.onReturn((id) => {
+        setIntegrationFocus(id || undefined);
+        setSettingsSection("integrations");
+        setSettingsOpen(true);
+      }),
+    [],
+  );
+
   const [settingsProvider, setSettingsProvider] = useState<string | undefined>();
   function openSettings(
     section: SettingsSection = "general",
@@ -3250,6 +3262,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                 onClick={openBotModelSettings}
               />
             ) : null}
+            <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
           <div className="flex items-center gap-1">
             {!inGroup && active ? (
@@ -3587,6 +3600,7 @@ export function ShellPage({ team = false }: { team?: boolean }) {
                 key={active.id}
                 bot={active}
                 modelFocusRequest={modelFocusRequest}
+                runtimeFocusRequest={runtimeFocusRequest}
                 modelSettings={modelSettings}
                 memoryProviderConfigured={memoryProviderConfig != null}
                 onSkillsChange={setAgentSkills}
@@ -4159,6 +4173,15 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             initialSection={settingsSection}
             initialIntegration={integrationFocus}
             initialProvider={settingsProvider}
+            onOpenBotRuntime={
+              active
+                ? () => {
+                    setSettingsOpen(false);
+                    setRuntimeFocusRequest((value) => value + 1);
+                    setPanel("settings");
+                  }
+                : undefined
+            }
             avatarStyle={bootstrapMe?.avatarStyle ?? "robot"}
             isDeploymentOwner={bootstrapMe?.isDeploymentOwner === true}
             sandboxProvider={bootstrapMe?.sandboxProvider}

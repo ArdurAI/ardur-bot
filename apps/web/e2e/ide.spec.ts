@@ -49,17 +49,20 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
     else if (operation === "ide/roots") result = roots;
     else if (operation === "bots/list") result = bots;
     else if (operation === "ide/list")
-      result =
-        input.path === "src"
-          ? [{ path: "src/main.ts", kind: "file", size: 40 }]
-          : [
-              { path: "src", kind: "dir", size: 0 },
-              ...["large.ts", "read-only.txt", "binary.bin"].map((path) => ({
-                path,
-                kind: "file",
-                size: files.get(path)!.length,
-              })),
-            ];
+      result = {
+        hiddenCount: input.path === "" ? 2 : 0,
+        entries:
+          input.path === "src"
+            ? [{ path: "src/main.ts", kind: "file", size: 40 }]
+            : [
+                { path: "src", kind: "dir", size: 0 },
+                ...["large.ts", "read-only.txt", "binary.bin"].map((path) => ({
+                  path,
+                  kind: "file",
+                  size: files.get(path)!.length,
+                })),
+              ],
+      };
     else if (operation === "ide/read")
       result = {
         path: input.path,
@@ -138,6 +141,7 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
     }),
   );
   await page.addInitScript(() => {
+    performance.setResourceTimingBufferSize(10_000);
     const observer = new MutationObserver(() => {
       if (
         document.querySelector('[data-ide-editor][aria-label="large.ts"]') &&
@@ -166,6 +170,10 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
   ).toBe(false);
   await page.goto("/app/ide");
   await expect(page.getByRole("heading", { name: "IDE", exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText(
+    "Some entries have unsupported names and are hidden (2).",
+  );
+  await captureScreenshot(page, testInfo, "ide-hidden-entries");
   const divider = page.getByRole("separator", { name: "IDE", exact: true });
   const bounds = (await divider.boundingBox())!;
   await page.mouse.move(bounds.x + 2, bounds.y + 40);
@@ -211,6 +219,16 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
     botId: bots[0]!.id,
     text: "Explain this\n\n/workspace/project/src/main.ts:1-1\n\nconst answer = 42;",
   });
+  await page.getByRole("tab", { name: "large.ts", exact: true }).click();
+  await page.locator('[data-ide-editor][aria-label="large.ts"]').focus();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("ControlOrMeta+Shift+a");
+  await expect(page.getByRole("dialog").getByRole("status")).toHaveText(
+    "Selection shortened to 32,000 characters.",
+  );
+  await captureScreenshot(page, testInfo, "ide-selection-limit");
+  await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "main.ts", exact: true }).click();
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await page.getByRole("tab", { name: "Changes", exact: true }).click();
   await page

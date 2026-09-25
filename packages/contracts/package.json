@@ -14,9 +14,14 @@
     "./local-settings": "./src/local-settings.js",
     "./runtime-pins": "./src/runtime-pins.ts",
     "./host-bridge": "./src/host-bridge.ts",
-    "./customization-catalog": "./src/customization-catalog.json",
     "./host-environment": "./src/host-environment.js",
-    "./host-registration-identity": "./src/host-registration-identity.js"
+    "./host-integrations": "./src/host-integrations.ts",
+    "./customization-catalog": "./src/customization-catalog.json",
+    "./host-registration-identity": "./src/host-registration-identity.js",
+    "./bundles/files": "./src/bundles/files.js",
+    "./bundles/manifest": "./src/bundles/manifest.js",
+    "./bundles/plugins": "./src/bundles/plugins.js",
+    "./bundles/zip": "./src/bundles/zip.js"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",

@@ -9,6 +9,7 @@ export default function ModelsSection(props: SettingsPageProps) {
       </div>
       <ModelSettingsOverlay
         embedded
+        onOpenBotRuntime={props.onOpenBotRuntime}
         initialProvider={props.initialProvider}
         onClose={props.onClose}
       />

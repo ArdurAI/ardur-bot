@@ -387,7 +387,7 @@ describe("MCP transport seam", () => {
         fallbackToSse: false,
         network: TEST_NETWORK,
       }),
-    ).rejects.toThrow("Reconnect this server");
+    ).rejects.toThrow("Needs sign-in");
 
     expect(provider.tokens()).toBeUndefined();
     expect(persisted.length).toBeGreaterThanOrEqual(1);
@@ -438,7 +438,7 @@ describe("MCP transport seam", () => {
           fallbackToSse: false,
           urlPolicy: { allowHttpLocalhost: true },
         }),
-      ).rejects.toThrow("Reconnect this server");
+      ).rejects.toThrow("Needs sign-in");
     } finally {
       await session.close();
       await new Promise((resolve) => server.close(resolve));
@@ -657,4 +657,62 @@ describe("MCP transport seam", () => {
     ).rejects.toThrow("fetch failed");
     expect(inner).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("managed MCP token recovery", () => {
+  it.each([false, true])(
+    "refreshes once after a 401 (second rejection: %s)",
+    async (rejectAgain) => {
+      const refresh = vi.fn(async () => ({
+        tokens: { access_token: "fake-fresh", token_type: "bearer", expires_in: 3600 },
+        obtainedAt: Date.now(),
+      }));
+      const rejected = vi.fn();
+      const provider = new StoredMcpOAuthProvider(
+        "server",
+        { oauth: { tokens: { access_token: "fake-old", token_type: "bearer" } } },
+        async () => undefined,
+        { refresh, rejected },
+      );
+      const headers: string[] = [];
+      const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const request = new Request(input, init);
+        const auth = request.headers.get("authorization") ?? "";
+        headers.push(auth);
+        if (auth === "Bearer fake-old" || rejectAgain) return new Response(null, { status: 401 });
+        if (request.method !== "POST") return new Response(null, { status: 405 });
+        const message = await request.json();
+        if (message.method === "initialize")
+          return Response.json({
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              protocolVersion: "2025-11-25",
+              capabilities: {},
+              serverInfo: { name: "fake", version: "1" },
+            },
+          });
+        return new Response(null, { status: 202 });
+      });
+      const session = new McpSession();
+      const connect = session.connectRemote({
+        url: "https://mcp.example.test/mcp",
+        authProvider: provider,
+        fallbackToSse: false,
+        network: { ...TEST_NETWORK, fetch },
+      });
+      if (rejectAgain) {
+        await expect(connect).rejects.toThrow("invalid_token");
+        expect(rejected).toHaveBeenCalledOnce();
+        expect(headers).toEqual(["Bearer fake-old", "Bearer fake-fresh"]);
+      } else {
+        await connect;
+        expect(headers[0]).toBe("Bearer fake-old");
+        expect(headers.slice(1).every((header) => header === "Bearer fake-fresh")).toBe(true);
+        expect(rejected).not.toHaveBeenCalled();
+      }
+      expect(refresh).toHaveBeenCalledExactlyOnceWith(true);
+      await session.close();
+    },
+  );
 });

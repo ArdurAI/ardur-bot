@@ -1,6 +1,11 @@
 vi.mock("./delegation-execution.js", () => ({
   checkDelegationExecution: vi.fn(async () => undefined),
 }));
+// Admission has its own multi-worker tests; these cases isolate execution and recovery.
+vi.mock("./context/concurrency.js", () => ({
+  claimBotRun: (prisma: unknown, input: { claim: (tx: unknown) => Promise<unknown> }) =>
+    input.claim(prisma),
+}));
 
 import type { MessageBlock } from "@ardurbot/contracts";
 import { ONCE_ROUTINE_CRON } from "@ardurbot/core";
@@ -1106,6 +1111,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "queued",
           checkpoint: "takeover-skipped",
@@ -1160,6 +1166,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "waiting_takeover",
           checkpoint: null,
@@ -1201,6 +1208,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "queued",
           checkpoint: "takeover-skipped",
@@ -1261,6 +1269,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "waiting_takeover",
           checkpoint: null,
@@ -1319,6 +1328,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "waiting_takeover",
           checkpoint: null,
@@ -1361,6 +1371,7 @@ description: Prepare standup notes
     });
     const run = {
       id: "run-1",
+      createdAt: new Date("2026-09-24T12:00:00Z"),
       botId: "bot-1",
       threadId: "thread-1",
       taskId: "task-1",

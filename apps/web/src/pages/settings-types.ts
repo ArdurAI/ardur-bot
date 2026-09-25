@@ -31,6 +31,7 @@ export type SettingsPageProps = {
   name: string;
   usage?: { runs: number; inputTokens: number; outputTokens: number } | null;
   initialProvider?: string;
+  onOpenBotRuntime?: () => void;
   initialIntegration?: string;
   avatarStyle: AvatarStyle;
   onAvatarStyleChange: (style: AvatarStyle) => Promise<void>;

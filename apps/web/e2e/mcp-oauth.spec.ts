@@ -1,5 +1,6 @@
 import type { McpServer } from "@ardurbot/contracts";
-import { expect, type Route, test } from "@playwright/test";
+import type { Route } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { MCP_OAUTH_CHANNEL } from "../src/lib/mcp-connect";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
@@ -52,7 +53,7 @@ test("connects an MCP server through the OAuth popup callback", async ({ page },
     expect(route.request().postDataJSON()).toEqual({
       json: {
         serverId: server.id,
-        redirectUri: `${browserOrigin}/mcp/oauth/callback`,
+        redirectUri: `${browserOrigin}/api/oauth/done`,
       },
     });
     await route.fulfill({

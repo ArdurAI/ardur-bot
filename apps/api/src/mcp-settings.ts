@@ -11,6 +11,7 @@ import { ORPCError } from "@orpc/server";
 import type * as z from "zod";
 import type { HostBridge } from "./host-bridge.js";
 import { mcpServerDto } from "./mcp-server-dto.js";
+import { createOwnerPreviews } from "./pending-previews.js";
 
 type Owner = Pick<Actor, "spaceId" | "userId">;
 type Material = {
@@ -107,16 +108,13 @@ export function createMcpSettings(deps: {
   secrets: EncryptedSecretStore;
   hostBridge?: HostBridge;
 }) {
-  const previews = new Map<
-    string,
-    {
-      owner: Owner;
-      revision: string;
-      config: LocalServerConfig;
-      redactions: Record<string, string[]>;
-      expires: number;
-    }
-  >();
+  const previews = createOwnerPreviews<{
+    owner: Owner;
+    revision: string;
+    config: LocalServerConfig;
+    redactions: Record<string, string[]>;
+    expires: number;
+  }>();
   async function requireHostOwner(owner: Owner) {
     const deployment = await deps.prisma.deploymentSettings.findUnique({
       where: { id: "default" },
@@ -280,6 +278,8 @@ export function createMcpSettings(deps: {
       });
       if (!row) throw new IsolationError();
       if (row.placement === "host") {
+        const diagnostics = McpDiagnosticsSchema.safeParse(row.diagnostics).data;
+        if (!row.enabled && diagnostics?.status === "error") return diagnostics;
         if (
           !row.enabled ||
           !deps.hostBridge ||
@@ -370,10 +370,10 @@ export function createMcpSettings(deps: {
           server.secret = prior.secret;
         }
       }
-      for (const [id, preview] of previews) if (preview.expires < Date.now()) previews.delete(id);
-      if (previews.size >= 128) throw new ORPCError("TOO_MANY_REQUESTS");
+      const pending = previews(owner);
+      if (pending.size >= 128) throw new ORPCError("TOO_MANY_REQUESTS");
       const id = randomUUID();
-      previews.set(id, {
+      pending.set(id, {
         owner,
         revision: input.revision,
         config,
@@ -384,18 +384,14 @@ export function createMcpSettings(deps: {
     },
     async apply(owner: Owner, previewId: string, placement: "host" | "worker" = "worker") {
       if (placement === "host") await requireHostOwner(owner);
-      const preview = previews.get(previewId);
+      const preview = previews(owner).get(previewId);
       if (
         !preview ||
-        preview.expires < Date.now() ||
+        preview.expires <= Date.now() ||
         preview.owner.userId !== owner.userId ||
         preview.owner.spaceId !== owner.spaceId
       )
         throw new IsolationError();
-      await stopHost(
-        owner,
-        (await localRows(owner)).filter((row) => !row.managedBy && !row.catalogId),
-      );
       const changed = await deps.prisma.$transaction(
         async (tx) => {
           const lock = `${owner.spaceId}:${owner.userId}`;
@@ -406,6 +402,7 @@ export function createMcpSettings(deps: {
               message: "The server configuration changed. Reload it and try again.",
             });
           const editable = rows.filter((row) => !row.managedBy && !row.catalogId);
+          await stopHost(owner, editable);
           await removeRows(
             editable.filter((row) => !preview.config.mcpServers[row.slug]),
             tx,
@@ -457,7 +454,7 @@ export function createMcpSettings(deps: {
         },
         { isolationLevel: "Serializable" },
       );
-      previews.delete(previewId);
+      previews(owner).delete(previewId);
       await Promise.all(changed.map((row) => McpConnector.invalidateConnection(row.id, owner)));
       return { ok: true as const };
     },

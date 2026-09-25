@@ -27,6 +27,22 @@ const catalog = [
   { id: "local-fixture", name: "Local service", transport: "stdio", available: false },
 ] as IntegrationDescriptor[];
 describe("connector table data", () => {
+  it("groups local and remote connections into one catalog row and retains recovery status", () => {
+    const connections = [
+      { id: "local", catalogId: "fixture-catalog", transport: "host-cli", state: "connected" },
+      {
+        id: "remote",
+        catalogId: "fixture-catalog",
+        transport: "streamable_http",
+        state: "needs-sign-in",
+      },
+    ] as IntegrationConnection[];
+    const rows = connectorRows({ catalog, connections, servers: [], catalogTab: true });
+    expect(rows.filter((row) => row.catalogId === "fixture-catalog")).toEqual([
+      expect.objectContaining({ id: "remote", status: "reconnect", name: "Included service" }),
+    ]);
+    expect(connectorRows({ catalog, connections, servers: [] })[0]?.type).toBe("desktop");
+  });
   it("keeps product ownership during independent catalog and server refreshes", () => {
     expect(
       connectorRows({

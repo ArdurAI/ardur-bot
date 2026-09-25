@@ -23,7 +23,7 @@ export function integrationToolKind(id: string, description: string): "read" | "
 }
 
 export function approvalFor(
-  descriptor: IntegrationDescriptor,
+  descriptor: Pick<IntegrationDescriptor, "available" | "toolPolicies">,
   toolId: string,
   args: Record<string, unknown>,
   description = "",

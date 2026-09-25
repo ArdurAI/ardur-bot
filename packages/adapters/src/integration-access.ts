@@ -1,4 +1,4 @@
-import type { AdapterContext, ConnectorRoute } from "@ardurbot/adapter-kit";
+import type { AdapterContext, ConnectorRoute, SandboxProvider } from "@ardurbot/adapter-kit";
 import {
   IntegrationManifestSchema,
   IntegrationResourceConstraintsSchema,
@@ -9,6 +9,7 @@ import type { IntegrationApproval } from "@ardurbot/core";
 import { approvalFor, effectiveTools, integrationToolKind } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import type { IntegrationApprovalAction } from "./approval-ask.js";
+import { prepareHostCommandApproval } from "./host-integration-tools.js";
 import { integrationById } from "./integration-catalog.js";
 import { oauthMaterialSecrets } from "./mcp-oauth.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -67,6 +68,7 @@ export async function integrationApprovalDetailsForCall(
   context: Pick<AdapterContext, "spaceId" | "userId" | "botId">,
   args: Record<string, unknown>,
   secretStore?: EncryptedSecretStore,
+  sandbox?: SandboxProvider,
 ): Promise<
   | {
       approval: IntegrationApproval;
@@ -90,9 +92,15 @@ export async function integrationApprovalDetailsForCall(
   });
   if (!assignment || !grantedMcpTools(assignment, [route.toolName]).length)
     return { approval: "disabled" };
-  if (!assignment.server.catalogId) return undefined;
+  if (!assignment.server.catalogId && !assignment.server.manifest) return undefined;
   if (route.resourceRevision !== assignment.server.revision) return { approval: "disabled" };
-  const descriptor = integrationById(assignment.server.catalogId);
+  const descriptor = assignment.server.catalogId
+    ? integrationById(assignment.server.catalogId)
+    : {
+        name: assignment.server.name,
+        available: true,
+        toolPolicies: {},
+      };
   const manifest = IntegrationManifestSchema.safeParse(assignment.server.manifest);
   if (!descriptor || !manifest.success) return { approval: "disabled" };
   const tool = manifest.data.tools.find((tool) => tool.id === route.toolName);
@@ -111,7 +119,27 @@ export async function integrationApprovalDetailsForCall(
   return {
     secrets,
     approval: approvalFor(descriptor, tool.id, args, tool.description, policies.data ?? {}),
-    integration: { vendorName: descriptor.name, toolId: tool.id, description: tool.description },
+    integration: {
+      vendorName: descriptor.name,
+      toolId: tool.id,
+      description: tool.description,
+      ...(assignment.server.transport === "host-cli" && tool.id === "execute_command"
+        ? { hostCommandRequired: true }
+        : {}),
+      ...(assignment.server.transport === "host-cli" && tool.id === "execute_command" && sandbox
+        ? {
+            hostCommand: (
+              await prepareHostCommandApproval(
+                prisma,
+                sandbox,
+                assignment.server,
+                args,
+                context as AdapterContext,
+              )
+            ).approval,
+          }
+        : {}),
+    },
   };
 }
 

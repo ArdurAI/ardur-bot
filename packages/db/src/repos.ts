@@ -41,6 +41,7 @@ function mapBot(
     instructions: string;
     color: string;
     notifyOnFinish: boolean;
+    concurrentRuns?: number | null;
     pinned: boolean;
     sectionId: string | null;
     archivedAt: Date | null;
@@ -79,6 +80,7 @@ function mapBot(
     instructions: bot.instructions,
     color: bot.color,
     notifyOnFinish: bot.notifyOnFinish,
+    concurrentRuns: bot.concurrentRuns ?? null,
     pinned: bot.pinned,
     sectionId: bot.sectionId,
     archivedAt: bot.archivedAt?.toISOString() ?? null,
