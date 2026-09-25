@@ -3,6 +3,7 @@ import { choosePlacement, PlacementSettingsSchema } from "@ardurbot/contracts/fl
 import { appendEventInTransaction, createThreadMessageInTransaction, Prisma } from "@ardurbot/db";
 import { ComputerBusyError, replaceComputer } from "../computer-lifecycle.js";
 import type { FleetCatalog } from "./catalog.js";
+import { fleetComputerTargetId } from "./catalog.js";
 
 type Deps = Parameters<typeof replaceComputer>[0];
 /** Called before the first computer lease/tool effect, never on a resumed run snapshot. */
@@ -48,10 +49,10 @@ export async function placeRunComputer(
     signal,
   };
   const fleet = await catalog.list(context);
-  const from =
-    computer.connectionId ?? (computer.kind === "desktop" ? "host" : fleet.defaultTargetId);
+  const from = fleetComputerTargetId(computer, fleet);
   let candidates = fleet.targets.filter(
-    (target) => target.connectionId !== null || target.id === fleet.defaultTargetId,
+    (target) =>
+      target.connectionId !== null || target.id === fleet.defaultTargetId || target.id === from,
   );
   if (computer.networkEgress === false) {
     const supported = new Set([from]);

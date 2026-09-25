@@ -1,8 +1,10 @@
 import type { NotificationProvider } from "@ardurbot/adapter-kit";
-import type { PrismaClient } from "@ardurbot/db";
+import type { Pool, PrismaClient } from "@ardurbot/db";
 import { getUserPreferences } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
-import type { ReconciliationLeadership } from "../job-reconciler.js";
+
+const BOARD_NOTIFICATION_LOCK_NAMESPACE = 1_380_019_075;
+const BOARD_NOTIFICATION_LOCK_ID = 3;
 
 /** A batch has one shared deadline; an optional push service cannot extend it per row. */
 export async function deliverBoardNotifications(
@@ -76,11 +78,41 @@ export async function deliverBoardNotifications(
   }
 }
 
-/** Push delivery has its own leadership and schedule, outside run recovery. */
+/**
+ * One tick holds a transaction advisory lock and then returns the client.
+ * Periodic delivery does not keep a session lock for the process lifetime.
+ */
+async function deliverWithLock(pool: Pick<Pool, "connect">, deliver: () => Promise<void>) {
+  const client = await pool.connect();
+  let released = false;
+  const finish = (destroy = false) => {
+    if (released) return;
+    released = true;
+    client.release(destroy);
+  };
+  try {
+    await client.query("BEGIN");
+    try {
+      const result = await client.query<{ acquired: boolean }>(
+        "SELECT pg_try_advisory_xact_lock($1::integer, $2::integer) AS acquired",
+        [BOARD_NOTIFICATION_LOCK_NAMESPACE, BOARD_NOTIFICATION_LOCK_ID],
+      );
+      if (result.rows[0]?.acquired === true) await deliver();
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => finish(true));
+      throw error;
+    }
+  } finally {
+    finish();
+  }
+}
+
+/** Push delivery has its own schedule, outside run recovery. */
 export function createBoardNotificationDelivery(deps: {
   prisma: PrismaClient;
   notifications: NotificationProvider;
-  leadership: ReconciliationLeadership;
+  pool: Pick<Pool, "connect">;
 }) {
   let timer: ReturnType<typeof setInterval> | undefined;
   let running: Promise<void> | undefined;
@@ -91,10 +123,9 @@ export function createBoardNotificationDelivery(deps: {
     const abort = new AbortController();
     controller = abort;
     const deadline = setTimeout(() => abort.abort(), 15_000);
-    running = (async () => {
-      if (await deps.leadership.tryAcquire())
-        await deliverBoardNotifications(deps.prisma, deps.notifications, abort.signal);
-    })()
+    running = deliverWithLock(deps.pool, () =>
+      deliverBoardNotifications(deps.prisma, deps.notifications, abort.signal),
+    )
       .catch((error) => getLogger().error("board notification delivery", error))
       .finally(() => {
         clearTimeout(deadline);
@@ -115,7 +146,6 @@ export function createBoardNotificationDelivery(deps: {
       clearInterval(timer);
       controller?.abort();
       await running;
-      await deps.leadership.release();
     },
   };
 }

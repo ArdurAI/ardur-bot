@@ -23,8 +23,9 @@ describe.skipIf(!databaseUrl)("production reply redaction on disposable PostgreS
     async (leaks) => {
       const task = getTask("task-23");
       const directory = await mkdtemp(path.join(tmpdir(), "scoreboard-reply-test-"));
+      const previousDatabaseUrl = process.env.DATABASE_URL;
+      process.env.DATABASE_URL = databaseUrl!;
       vi.stubEnv("HOME", directory);
-      vi.stubEnv("DATABASE_URL", databaseUrl!);
       const actions: ModelEmulatorResponse[] = [
         ...Object.keys(task.files).map((file, index) => ({
           type: "tool" as const,
@@ -103,6 +104,8 @@ describe.skipIf(!databaseUrl)("production reply redaction on disposable PostgreS
         restoreNetwork();
         await provider.close();
         vi.unstubAllEnvs();
+        if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+        else process.env.DATABASE_URL = previousDatabaseUrl;
         await rm(directory, { recursive: true, force: true });
       }
     },

@@ -178,6 +178,94 @@ describe("client trace", () => {
     expect(clientTraceSnapshot()!.points.at(-1)!.boundary).toBe("client.text.painted");
   });
 
+  it("does not credit a resumed run's older bot message for the next streaming progress event", () => {
+    globalThis.__ardurTrace = { capacity: 20 };
+    const tick = frames();
+    const resumed = snapshot(40);
+    resumed.messages = [
+      {
+        id: "older-message",
+        threadId: "thread-a",
+        seq: 2,
+        runId: "run-a",
+        role: "bot",
+        blocks: [{ kind: "text", text: "earlier answer" }],
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    ];
+    receiveTraceEvent(event("thread.progress", 40, { text: "new text", streaming: true }));
+    paintThreadTrace(resumed);
+    tick();
+    tick();
+    expect(clientTraceSnapshot()!.points.map((point) => point.boundary)).toEqual([
+      "client.received",
+    ]);
+    const painted = snapshot(40);
+    painted.messages = [
+      ...resumed.messages,
+      {
+        id: "progress:run-a",
+        threadId: "thread-a",
+        seq: 40,
+        runId: "run-a",
+        role: "bot",
+        blocks: [{ kind: "progress", text: "new text" }],
+        createdAt: "2026-01-01T00:00:01Z",
+      },
+    ];
+    paintThreadTrace(painted);
+    tick();
+    tick();
+    expect(clientTraceSnapshot()!.points.at(-1)!.boundary).toBe("client.text.painted");
+  });
+
+  it("records a streaming progress message id and does not paint an older visible row", () => {
+    globalThis.__ardurTrace = { capacity: 20 };
+    const tick = frames();
+    const resumed = snapshot(40);
+    resumed.messages = [
+      {
+        id: "older-message",
+        threadId: "thread-a",
+        seq: 100,
+        runId: "run-a",
+        role: "bot",
+        blocks: [{ kind: "text", text: "earlier answer" }],
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    ];
+    receiveTraceEvent(
+      event("thread.progress", 40, {
+        text: "new text",
+        streaming: true,
+        messageId: "fresh",
+      }),
+    );
+    paintThreadTrace(resumed);
+    tick();
+    tick();
+    expect(clientTraceSnapshot()!.points.map((point) => point.boundary)).toEqual([
+      "client.received",
+    ]);
+    const named = snapshot(40);
+    named.messages = [
+      ...resumed.messages,
+      {
+        id: "fresh",
+        threadId: "thread-a",
+        seq: 3,
+        runId: "run-a",
+        role: "bot",
+        blocks: [{ kind: "text", text: "new text" }],
+        createdAt: "2026-01-01T00:00:01Z",
+      },
+    ];
+    paintThreadTrace(named);
+    tick();
+    tick();
+    expect(clientTraceSnapshot()!.points.at(-1)!.boundary).toBe("client.text.painted");
+  });
+
   it("does not mistake an older message from the same run for the pending durable message", () => {
     globalThis.__ardurTrace = { capacity: 20 };
     const tick = frames();
