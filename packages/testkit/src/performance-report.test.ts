@@ -33,7 +33,7 @@ import {
   SCOREBOARD_MANIFEST,
   TASK_DEFINITIONS,
 } from "./scoreboard/manifest.js";
-import { collectTraceEvidence } from "./scoreboard/trace-collector.js";
+import { collectTraceEvidence, LOCAL_TRACE_BOUNDARIES } from "./scoreboard/trace-collector.js";
 
 describe("performance report statistics", () => {
   it("summarizes a distribution without mutating it", () => {
@@ -647,18 +647,31 @@ describe("task, experiment and recovery evidence", () => {
     expect(() => parsePerformanceEvidenceReport(report, "matrix-finding")).not.toThrow();
   });
   it("accepts a complete crash from the matrix adapter only with trace links", () => {
-    const phase = (processId: string, boundary: "admission.started" | "terminal.committed") => {
-      const buffer = createTraceBuffer({ processId, now: () => 10 });
-      buffer.record(
-        "fixture-run",
-        boundary,
-        boundary === "terminal.committed" ? { outcome: "success" } : {},
-      );
-      return collectTraceEvidence([buffer.snapshot()], {
-        sessionId: "matrix-fault",
-        pairId: null,
-        requiredBoundaries: [],
-      });
+    const stored = LOCAL_TRACE_BOUNDARIES;
+    const phase = (processId: string, points: readonly (typeof stored)[number][]) => {
+      const buffer = createTraceBuffer({ processId, now: () => 1 });
+      let at = 0;
+      for (const boundary of points) {
+        const operation =
+          boundary.startsWith("provider.") || boundary.startsWith("tool.")
+            ? { operationId: boundary.startsWith("tool.") ? "tool-1" : "provider-1", attempt: 0 }
+            : {};
+        buffer.record(
+          "fixture-run",
+          boundary,
+          boundary === "terminal.committed" ? { outcome: "success" } : operation,
+          at,
+        );
+        at += 1;
+      }
+      return {
+        ...collectTraceEvidence([buffer.snapshot()], {
+          sessionId: "matrix-fault",
+          pairId: null,
+          requiredBoundaries: stored,
+        }),
+        requiredBoundaries: [...stored],
+      };
     };
     const crash = {
       id: "crash-04",
@@ -667,10 +680,15 @@ describe("task, experiment and recovery evidence", () => {
       status: "passed" as const,
       checks: { killedAtBoundary: true, noDuplicateEffect: true },
       measurements: {
-        before: { trace: phase("interrupted-worker", "admission.started") },
+        before: {
+          trace: phase(
+            "interrupted-worker",
+            stored.filter((boundary) => boundary !== "terminal.committed"),
+          ),
+        },
         after: {
           autonomousCompletion: false,
-          trace: phase("recovered-worker", "terminal.committed"),
+          trace: phase("recovered-worker", ["terminal.committed"]),
         },
       },
       coverage: [],

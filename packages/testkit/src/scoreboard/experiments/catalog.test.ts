@@ -1,10 +1,11 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { TraceBoundary } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import { createTraceBuffer } from "../../../../adapters/src/scoreboard-trace.js";
 import { CRASH_BOUNDARIES, contentDigest, EXPERIMENT_DEFINITIONS } from "../manifest.js";
-import { collectTraceEvidence } from "../trace-collector.js";
+import { collectTraceEvidence, LOCAL_TRACE_BOUNDARIES } from "../trace-collector.js";
 import type { MatrixResult } from "./catalog.js";
 import { experimentCoverage, matrixExitCode, matrixPlan } from "./catalog.js";
 import { matrixEvidence, writeMatrixArtifact, writeMatrixEvidence } from "./evidence.js";
@@ -12,37 +13,74 @@ import { classifyMemoryScale } from "./memory.js";
 
 /** Adds the trace each fault-worker phase reports for one durable run. */
 function traced(result: MatrixResult, run: string): MatrixResult {
-  const phase = (
-    processId: string,
-    record: (buffer: ReturnType<typeof createTraceBuffer>) => void,
-  ) => {
-    const buffer = createTraceBuffer({ processId, now: () => 10 });
-    record(buffer);
-    return collectTraceEvidence([buffer.snapshot()], {
-      sessionId: "matrix-fault",
-      pairId: null,
-      requiredBoundaries: [],
-    });
-  };
+  const earlier = LOCAL_TRACE_BOUNDARIES.filter((boundary) => boundary !== "terminal.committed");
   return {
     ...result,
     measurements: {
       ...result.measurements,
       before: {
-        trace: phase(`${run}-interrupted`, (buffer) =>
-          buffer.record(run, "admission.started", undefined, 0),
-        ),
+        trace: phaseTrace(`${run}-interrupted`, run, earlier, LOCAL_TRACE_BOUNDARIES),
       },
       after: {
         ...(result.measurements.after as object),
-        trace: phase(`${run}-recovered`, (buffer) =>
-          buffer.record(run, "terminal.committed", { outcome: "success" }),
-        ),
+        trace: phaseTrace(`${run}-recovered`, run, ["terminal.committed"], LOCAL_TRACE_BOUNDARIES),
       },
     },
   };
 }
 
+function crashAttempt(
+  id: "crash-03" | "crash-04",
+  measurements: MatrixResult["measurements"],
+): MatrixResult {
+  return {
+    id,
+    experiment: "O9",
+    tier: "T1",
+    status: "passed",
+    checks: { killedAtBoundary: true, noDuplicateEffect: true },
+    measurements,
+    coverage: [],
+    gaps: [],
+  };
+}
+function phaseTrace(
+  processId: string,
+  run: string,
+  points: readonly TraceBoundary[],
+  recorded: readonly TraceBoundary[],
+  options: { capacity?: number } = {},
+) {
+  const buffer = createTraceBuffer({
+    processId,
+    capacity: options.capacity,
+    now: () => 1,
+  });
+  let at = 0;
+  for (const boundary of points) {
+    const operation =
+      boundary.startsWith("provider.") || boundary.startsWith("tool.")
+        ? { operationId: boundary.startsWith("tool.") ? "tool-1" : "provider-1", attempt: 0 }
+        : {};
+    buffer.record(
+      run,
+      boundary,
+      boundary === "terminal.committed" ? { outcome: "success" } : operation,
+      at,
+    );
+    at += 1;
+  }
+  if (options.capacity !== undefined && points.length > options.capacity)
+    expect(buffer.snapshot().counters.dropped).toBe(points.length - options.capacity);
+  return {
+    ...collectTraceEvidence([buffer.snapshot()], {
+      sessionId: "matrix-fault",
+      pairId: null,
+      requiredBoundaries: recorded,
+    }),
+    requiredBoundaries: [...recorded],
+  };
+}
 describe("matrix selection and evidence", () => {
   it("keeps absent canonical crash results unknown and observed safety failures failed", () => {
     const empty = matrixEvidence([]);
@@ -243,6 +281,106 @@ describe("matrix selection and evidence", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+  it("leaves a one-sided interrupt or recovery trace unlinked", () => {
+    const terminal = (processId: string) =>
+      phaseTrace(processId, "run-one-sided", ["terminal.committed"], LOCAL_TRACE_BOUNDARIES);
+    const crash = (measurements: MatrixResult["measurements"]) =>
+      matrixEvidence([crashAttempt("crash-04", measurements)]).crashes.find(
+        (row) => row.id === "crash-04",
+      );
+    for (const row of [
+      crash({
+        before: { trace: terminal("interrupted-worker") },
+        after: { autonomousCompletion: false },
+      }),
+      crash({
+        after: { autonomousCompletion: false, trace: terminal("recovered-worker") },
+      }),
+    ])
+      expect(row).toEqual({
+        id: "crash-04",
+        status: "incomplete",
+        missingReason: "trace-links-missing",
+        recovery: null,
+        safetyPassed: null,
+        taskCompleted: null,
+        traceIds: [],
+      });
+  });
+  it.each([
+    [
+      "admission points only",
+      ["admission.started", "admission.committed"],
+      ["admission.committed"],
+      undefined,
+    ],
+    [
+      "two terminal points",
+      ["terminal.committed"],
+      ["admission.started", "terminal.committed"],
+      undefined,
+    ],
+    [
+      "a buffer that dropped the terminal point",
+      ["admission.started", "terminal.committed"],
+      ["admission.committed"],
+      1,
+    ],
+  ] as const)("leaves a pair with %s unlinked", (_label, before, after, capacity) => {
+    const crash = matrixEvidence([
+      crashAttempt("crash-04", {
+        before: {
+          trace: phaseTrace(
+            "interrupted-worker",
+            "run-pair",
+            before,
+            LOCAL_TRACE_BOUNDARIES,
+            capacity ? { capacity } : {},
+          ),
+        },
+        after: {
+          autonomousCompletion: false,
+          trace: phaseTrace("recovered-worker", "run-pair", after, LOCAL_TRACE_BOUNDARIES),
+        },
+      }),
+    ]).crashes.find((row) => row.id === "crash-04");
+    expect(crash).toEqual({
+      id: "crash-04",
+      status: "incomplete",
+      missingReason: "trace-links-missing",
+      recovery: null,
+      safetyPassed: null,
+      taskCompleted: null,
+      traceIds: [],
+    });
+  });
+  it("accepts a collector-complete pair under the stored boundaries", () => {
+    const stored = LOCAL_TRACE_BOUNDARIES;
+    const crash = matrixEvidence([
+      crashAttempt("crash-04", {
+        before: {
+          trace: phaseTrace(
+            "interrupted-worker",
+            "run-pair",
+            stored.filter((boundary) => boundary !== "terminal.committed"),
+            stored,
+          ),
+        },
+        after: {
+          autonomousCompletion: false,
+          trace: phaseTrace("recovered-worker", "run-pair", ["terminal.committed"], stored),
+        },
+      }),
+    ]).crashes.find((row) => row.id === "crash-04");
+    expect(crash).toMatchObject({
+      status: "complete",
+      missingReason: null,
+      recovery: "explicit-uncertainty",
+      safetyPassed: true,
+      taskCompleted: false,
+    });
+    expect(crash?.traceIds).toHaveLength(1);
   });
   it("retains every canonical experiment, variant and owner without marking declarations passed", () => {
     const coverage = experimentCoverage();

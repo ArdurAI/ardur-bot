@@ -44,13 +44,16 @@ const FIXTURE_PIN = {
 };
 let activeTrace: ReturnType<typeof startScoreboardTrace> | undefined;
 function traceEvidence() {
-  return activeTrace
-    ? collectTraceEvidence([activeTrace.snapshot()], {
-        sessionId: "matrix-fault",
-        pairId: null,
-        requiredBoundaries: LOCAL_TRACE_BOUNDARIES,
-      })
-    : null;
+  if (!activeTrace) return null;
+  const requiredBoundaries = LOCAL_TRACE_BOUNDARIES;
+  return {
+    ...collectTraceEvidence([activeTrace.snapshot()], {
+      sessionId: "matrix-fault",
+      pairId: null,
+      requiredBoundaries,
+    }),
+    requiredBoundaries,
+  };
 }
 export async function reached(measurements: Record<string, unknown>) {
   process.send?.({

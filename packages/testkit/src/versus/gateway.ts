@@ -96,6 +96,22 @@ export class UsageCounter {
   }
 }
 
+function assertServingWitness(budget: Budget, serving: ServingWitness | undefined) {
+  if (!serving) return;
+  const identity = serving.identity();
+  if (
+    identity.model === budget.model.id &&
+    identity.digest === budget.model.digest &&
+    identity.contextSize === budget.contextSize
+  )
+    return;
+  const error = new Error(
+    "Serving witness model, digest, or context does not match the gateway budget",
+  ) as Error & { code: string };
+  error.code = "serving-witness-mismatch";
+  throw error;
+}
+
 export async function readJson(request: IncomingMessage, maxBytes = 1024 * 1024) {
   const chunks: Buffer[] = [];
   let bytes = 0;
@@ -143,6 +159,7 @@ export async function startGateway(options: {
     options.evidenceKind === "virtual" || options.serving,
     "Live inference requires serving-state attestation at admission",
   );
+  assertServingWitness(budget, options.serving);
   const capabilities = new Map<string, Capability>();
   const admitted = new Set<string>();
   const requests: GatewayRequest[] = [];
@@ -167,6 +184,7 @@ export async function startGateway(options: {
     );
     const cap = route ? capabilities.get(route[1]!) : undefined;
     requireValue(cap && !cap.controller.signal.aborted, "Unknown or revoked trial capability");
+    assertServingWitness(budget, options.serving);
     options.ledger.remainingMs(cap.trialId);
     if (request.method === "GET" && route![2] === "models") {
       response.setHeader("content-type", "application/json");
@@ -374,6 +392,7 @@ export async function startGateway(options: {
     requests,
     /** Opens the trial's budget only while the serving state still matches the declared route. */
     async admit(trialId: string) {
+      assertServingWitness(budget, options.serving);
       await options.serving?.attest("trial-admission", trialId);
       options.ledger.open(trialId);
       admitted.add(trialId);

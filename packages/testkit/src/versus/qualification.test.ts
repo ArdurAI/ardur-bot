@@ -341,6 +341,119 @@ describe("non-generating live prerequisites", () => {
       await gateway.close();
     }
   });
+  it("refuses a serving witness built for a different model, digest, or context", async () => {
+    const f = fixture();
+    const route = await inspectLocalRoute(expected, f.transport);
+    const upstream = vi.fn(async () => new Response("not-called", { status: 500 }));
+    const ps = {
+      models: [{ name: expected.model, digest: expected.digest, context_length: 64000 }],
+    };
+    const metadata = (async () => Response.json(ps)) as typeof fetch;
+    const altered = (field: "model" | "digest" | "context") => {
+      if (field === "context") return { ...route.budget, contextSize: 32768 };
+      return {
+        ...route.budget,
+        model: {
+          ...route.budget.model,
+          ...(field === "model" ? { id: "other:8b" } : { digest: contentDigest("other-model") }),
+        },
+      };
+    };
+    for (const field of ["model", "digest", "context"] as const) {
+      const ledger = new BudgetLedger(route.budget);
+      await expect(
+        startGateway({
+          budget: route.budget,
+          ledger,
+          transport: upstream,
+          evidenceKind: "provider-live",
+          serving: new ServingWitness(altered(field), metadata),
+        }),
+      ).rejects.toMatchObject({ code: "serving-witness-mismatch" });
+    }
+    expect(upstream).not.toHaveBeenCalled();
+    const serving = new ServingWitness(route.budget, metadata);
+    const identity = serving as ServingWitness & {
+      identity: () => { model: string; digest: string; contextSize: number };
+    };
+    const ledger = new BudgetLedger(route.budget);
+    const gateway = await startGateway({
+      budget: route.budget,
+      ledger,
+      transport: upstream,
+      evidenceKind: "provider-live",
+      serving,
+    });
+    const send = (url: string) =>
+      fetch(`${url}/chat/completions`, {
+        method: "POST",
+        body: JSON.stringify({
+          model: expected.model,
+          messages: [{ role: "user", content: "synthetic" }],
+        }),
+      });
+    upstream.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            model: expected.model,
+            choices: [],
+            usage: { prompt_tokens: 3, completion_tokens: 1 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    try {
+      identity.identity = () => ({
+        model: "other:8b",
+        digest: route.budget.model.digest,
+        contextSize: route.budget.contextSize,
+      });
+      await expect(gateway.admit("trial-split")).rejects.toMatchObject({
+        code: "serving-witness-mismatch",
+      });
+      expect(ledger.snapshot()).toMatchObject({ trials: [], reservations: [] });
+      identity.identity = () => ({
+        model: route.budget.model.id,
+        digest: contentDigest("other-model"),
+        contextSize: route.budget.contextSize,
+      });
+      await expect(gateway.admit("trial-digest")).rejects.toMatchObject({
+        code: "serving-witness-mismatch",
+      });
+      identity.identity = () => ({
+        model: route.budget.model.id,
+        digest: route.budget.model.digest,
+        contextSize: 32768,
+      });
+      await expect(gateway.admit("trial-context")).rejects.toMatchObject({
+        code: "serving-witness-mismatch",
+      });
+      identity.identity = () => ({
+        model: route.budget.model.id,
+        digest: route.budget.model.digest,
+        contextSize: route.budget.contextSize,
+      });
+      await gateway.admit("trial-match");
+      const url = gateway.capability("trial-match", "main", () => undefined);
+      identity.identity = () => ({
+        model: "other:8b",
+        digest: route.budget.model.digest,
+        contextSize: route.budget.contextSize,
+      });
+      expect((await send(url)).status).toBe(403);
+      expect(upstream).not.toHaveBeenCalled();
+      identity.identity = () => ({
+        model: route.budget.model.id,
+        digest: route.budget.model.digest,
+        contextSize: route.budget.contextSize,
+      });
+      expect((await send(url)).status).toBe(200);
+      expect(upstream).toHaveBeenCalledTimes(1);
+    } finally {
+      await gateway.close();
+    }
+  });
   it("parses recorded serving-state fixtures without loading a model", () => {
     const tag = { name: expected.model, digest: expected.digest };
     expect(

@@ -136,9 +136,14 @@ scoreboard workflow. Revoke and pin controls are separate attempts (`crash-03-re
 leaves the crash incomplete with the missing control named. An unsafe effect observed by any
 attempt forces `safetyPassed` to false, even when the base attempt is incomplete. A complete crash
 also cites the traces of every durable run it drove: the interrupted and recovering processes of
-each attempt merge into one trace artifact, written beside the fragments. Without those links the
-crash stays incomplete as `trace-links-missing`. An incomplete crash must not record a recovery or
-a passed safety result. The evidence schema stays the existing crash keys.
+each attempt merge into one trace artifact, written beside the fragments. Each process must
+contribute at least one batch. Those batches are collected again with the required boundaries
+stored for that trace, or with the local trace boundaries when that is the list the fault worker
+recorded. An empty boundary list is never substituted. The merged trace is accepted only when
+collection is complete: exactly one terminal point, every required boundary present, and no batch
+that dropped or invalidated a point. One process alone, admission points alone, two terminal
+points, or a dropped terminal stay `trace-links-missing`. An incomplete crash must not record a
+recovery or a passed safety result. The evidence schema stays the existing crash keys.
 Detailed probe results are supplemental raw evidence, not a replacement release schema. All
 experiment variants remain incomplete until their full acceptance closes.
 

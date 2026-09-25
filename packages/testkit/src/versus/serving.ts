@@ -85,6 +85,14 @@ export class ServingWitness {
       contextSize: budget.contextSize,
     };
   }
+  /** Model, digest and context copied from the budget this witness was built to attest. */
+  identity(): { model: string; digest: string; contextSize: number } {
+    return {
+      model: this.route.model,
+      digest: this.route.digest,
+      contextSize: this.route.contextSize,
+    };
+  }
   async attest(stage: ServingObservation["stage"], trialId: string) {
     const observation: ServingObservation = {
       stage,

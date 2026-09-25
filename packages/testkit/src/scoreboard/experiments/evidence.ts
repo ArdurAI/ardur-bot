@@ -2,7 +2,8 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { TraceBatch } from "@ardurbot/contracts";
+import type { TraceBatch, TraceBoundary } from "@ardurbot/contracts";
+import { TRACE_BOUNDARIES } from "@ardurbot/contracts";
 import type {
   CrashEvidence,
   ExperimentEvidence,
@@ -14,7 +15,7 @@ import {
   contentDigest,
   EXPERIMENT_DEFINITIONS,
 } from "../manifest.js";
-import { collectTraceEvidence } from "../trace-collector.js";
+import { collectTraceEvidence, LOCAL_TRACE_BOUNDARIES } from "../trace-collector.js";
 import type { MatrixResult } from "./catalog.js";
 
 const CRASH_CONTROLS: Record<string, readonly string[]> = {
@@ -30,25 +31,69 @@ function observedUnsafe(result: MatrixResult | undefined) {
     (result.status === "finding" || Object.values(result.checks).includes(false))
   );
 }
-/** Trace batches the interrupted and the recovering process each reported for this attempt. */
-function phaseBatches(result: MatrixResult): TraceBatch[] {
-  return (["before", "after"] as const).flatMap((phase) => {
-    const batches = (
-      result.measurements[phase] as { trace?: { raw?: { batches?: unknown } } | null } | undefined
-    )?.trace?.raw?.batches;
-    return Array.isArray(batches) ? (batches as TraceBatch[]) : [];
-  });
+const boundaryNames = new Set<string>(TRACE_BOUNDARIES);
+interface PhaseTrace {
+  raw?: { batches?: unknown };
+  requiredBoundaries?: unknown;
 }
-/** One fragment per crash, so the interrupted and recovering phases of a run share one trace id. */
+function phaseTrace(result: MatrixResult, phase: "before" | "after"): PhaseTrace | undefined {
+  const measurements = result.measurements[phase];
+  if (!measurements || typeof measurements !== "object") return undefined;
+  const trace = (measurements as { trace?: unknown }).trace;
+  if (!trace || typeof trace !== "object") return undefined;
+  return trace as PhaseTrace;
+}
+function batchesOf(trace: PhaseTrace | undefined): TraceBatch[] {
+  const batches = trace?.raw?.batches;
+  return Array.isArray(batches) ? (batches as TraceBatch[]) : [];
+}
+/** A missing list means the fault worker's local boundaries. An empty or unknown list is unusable. */
+function recordedBoundaries(value: unknown): readonly TraceBoundary[] | null | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some((item) => typeof item !== "string" || !boundaryNames.has(item))
+  )
+    return null;
+  return value as TraceBoundary[];
+}
+function sameBoundaries(left: readonly TraceBoundary[], right: readonly TraceBoundary[]) {
+  return left.length === right.length && left.every((boundary, index) => boundary === right[index]);
+}
+/**
+ * Both processes must contribute a batch. The merged trace is complete only when recollection
+ * under the stored boundaries reports exactly one terminal, no missing boundary, and no drop.
+ */
 function crashTraces(boundaryId: string, attempts: readonly MatrixResult[]) {
-  if (!attempts.every((attempt) => phaseBatches(attempt).some((batch) => batch.points.length)))
+  const phases = attempts.flatMap((attempt) =>
+    (["before", "after"] as const).map((phase) => {
+      const trace = phaseTrace(attempt, phase);
+      return { batches: batchesOf(trace), recorded: recordedBoundaries(trace?.requiredBoundaries) };
+    }),
+  );
+  if (
+    phases.some(
+      (phase) => phase.recorded === null || !phase.batches.some((batch) => batch.points.length),
+    )
+  )
+    return null;
+  const boundaries = phases.map((phase) => phase.recorded ?? LOCAL_TRACE_BOUNDARIES);
+  const requiredBoundaries = boundaries[0];
+  if (!requiredBoundaries || boundaries.some((list) => !sameBoundaries(requiredBoundaries, list)))
     return null;
   try {
-    return collectTraceEvidence(attempts.flatMap(phaseBatches), {
-      sessionId: boundaryId,
-      pairId: null,
-      requiredBoundaries: [],
-    });
+    const fragment = collectTraceEvidence(
+      phases.flatMap((phase) => phase.batches),
+      { sessionId: boundaryId, pairId: null, requiredBoundaries },
+    );
+    if (
+      fragment.derived.length === 0 ||
+      fragment.coverage.dropped ||
+      fragment.derived.some((trace) => !trace.complete)
+    )
+      return null;
+    return fragment;
   } catch {
     return null;
   }
