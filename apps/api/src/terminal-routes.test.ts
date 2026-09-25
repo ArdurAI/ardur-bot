@@ -1,5 +1,6 @@
 import type { SandboxProvider, TerminalProvider } from "@ardurbot/adapter-kit";
 import type { Actor } from "@ardurbot/contracts";
+import { TERMINAL_ENDED } from "@ardurbot/contracts";
 import type * as Db from "@ardurbot/db";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -140,4 +141,61 @@ describe("terminal authorization", () => {
     expect(f.provider.close).toHaveBeenCalled();
     expect(f.provider.write).not.toHaveBeenCalled();
   });
+});
+
+it("returns the actionable admission reason without opening a second terminal", async () => {
+  const f = fixture();
+  const input = { botId: "bot", computerId: "computer" };
+  const first = await f.routes.ticket(f.actor, input, "auth", "https://app.example");
+  try {
+    await expect(
+      f.routes.ticket(f.actor, input, "auth", "https://app.example"),
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "A terminal is already open. Close it before opening another.",
+    });
+    expect(f.provider.open).toHaveBeenCalledOnce();
+  } finally {
+    await f.routes.close(f.actor, { ...input, sessionId: first.sessionId });
+  }
+});
+
+it("reports an expired terminal session without blaming the caller's valid control lease", async () => {
+  const f = fixture();
+  await expect(
+    f.routes.ticket(
+      f.actor,
+      { botId: "bot", computerId: "computer", sessionId: "expired" },
+      "auth",
+      "https://app.example",
+    ),
+  ).rejects.toMatchObject({ code: "CONFLICT", message: TERMINAL_ENDED });
+  expect(f.provider.open).not.toHaveBeenCalled();
+});
+
+it("opens an IDE terminal at the computer root while chat retains the bot working directory", async () => {
+  const ide = fixture();
+  await ide.routes.ticket(
+    ide.actor,
+    { botId: "bot", computerId: "computer", workspace: "computer" },
+    "auth",
+    "https://app.example",
+  );
+  expect(ide.provider.open).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.anything(),
+    expect.objectContaining({ workingRoot: "/home/ardurbot" }),
+  );
+  const chat = fixture();
+  await chat.routes.ticket(
+    chat.actor,
+    { botId: "bot", computerId: "computer" },
+    "auth",
+    "https://app.example",
+  );
+  expect(chat.provider.open).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.anything(),
+    expect.objectContaining({ workingRoot: "/home/ardurbot/bots/bot" }),
+  );
 });

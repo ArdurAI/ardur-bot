@@ -1,8 +1,10 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
+import { hostRegistrationIdentityText } from "@ardurbot/contracts/host-registration-identity";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface HostServiceConfig {
@@ -11,11 +13,36 @@ export interface HostServiceConfig {
   root: string;
   hostRoots: string[];
 }
+
+export class HostLifecyclePreferences {
+  keepRunning = true;
+  constructor(private readonly file: string) {}
+  async load() {
+    const text = await readPrivateFile(this.file, 1024);
+    if (text !== null) {
+      try {
+        this.keepRunning = JSON.parse(text).keepRunning !== false;
+      } catch {
+        this.keepRunning = true;
+      }
+    }
+  }
+  async setKeepRunning(enabled: boolean) {
+    await mkdir(path.dirname(this.file), { recursive: true, mode: 0o700 });
+    await writePrivateFile(this.file, JSON.stringify({ keepRunning: enabled }));
+    this.keepRunning = enabled;
+  }
+}
 export interface HostSecretStorage {
   isEncryptionAvailable(): boolean;
   getSelectedStorageBackend?(): string;
   encryptString(value: string): Buffer;
   decryptString(value: Buffer): string;
+}
+/** Works with existing encrypted pairings without exposing their token or stored verifier. */
+export function hostServiceIdentity(config: HostServiceConfig) {
+  const tokenHash = createHash("sha256").update(config.token).digest("hex");
+  return createHash("sha256").update(hostRegistrationIdentityText(tokenHash)).digest("hex");
 }
 export function hostStorageAvailable(storage: HostSecretStorage, platform = process.platform) {
   return (

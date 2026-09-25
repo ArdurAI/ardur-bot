@@ -1,9 +1,13 @@
-import { EncryptedSecretStore } from "@ardurbot/adapters";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { DockerSandboxProvider, EncryptedSecretStore } from "@ardurbot/adapters";
+import {
+  ComputerConnectionSettingsSchema,
+  ComputerEngineUnavailableError,
+} from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   listComputerConnections,
+  computerEngineInfo,
   saveComputerConnection,
   validateComputerConfiguration,
 } from "./computer-settings.js";
@@ -78,4 +82,20 @@ describe("computer connection settings", () => {
     });
     expect(tx.secret.create).not.toHaveBeenCalled();
   });
+});
+
+it("returns the actionable engine reason as a client-visible service failure", async () => {
+  const failure = new ComputerEngineUnavailableError({
+    error: "engine-unavailable",
+    engine: "docker",
+    socket: "/fixture/docker.sock",
+  });
+  const probe = vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockRejectedValue(failure);
+  try {
+    await expect(
+      computerEngineInfo({ prisma: {} as PrismaClient, env: {} }, null, context),
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE", message: failure.message });
+  } finally {
+    probe.mockRestore();
+  }
 });

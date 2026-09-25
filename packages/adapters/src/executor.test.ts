@@ -1,6 +1,11 @@
 vi.mock("./delegation-execution.js", () => ({
   checkDelegationExecution: vi.fn(async () => undefined),
 }));
+// Admission has its own multi-worker tests; these cases isolate execution and recovery.
+vi.mock("./context/concurrency.js", () => ({
+  claimBotRun: (prisma: unknown, input: { claim: (tx: unknown) => Promise<unknown> }) =>
+    input.claim(prisma),
+}));
 
 import type { MessageBlock } from "@ardurbot/contracts";
 import { ONCE_ROUTINE_CRON } from "@ardurbot/core";
@@ -1106,6 +1111,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "queued",
           checkpoint: "takeover-skipped",
@@ -1160,6 +1166,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "waiting_takeover",
           checkpoint: null,
@@ -1201,6 +1208,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "queued",
           checkpoint: "takeover-skipped",
@@ -1261,6 +1269,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "waiting_takeover",
           checkpoint: null,
@@ -1319,6 +1328,7 @@ description: Prepare standup notes
       run: {
         findUnique: vi.fn(async () => ({
           id: "run-1",
+          createdAt: new Date("2026-09-24T12:00:00Z"),
           botId: "bot-1",
           status: "waiting_takeover",
           checkpoint: null,
@@ -1361,6 +1371,7 @@ description: Prepare standup notes
     });
     const run = {
       id: "run-1",
+      createdAt: new Date("2026-09-24T12:00:00Z"),
       botId: "bot-1",
       threadId: "thread-1",
       taskId: "task-1",
@@ -1791,4 +1802,38 @@ description: Prepare standup notes
       thinkingLevel: "high",
     });
   });
+});
+
+it("resolves a native Codex bot without the space's inherited hosted OAuth credential", async () => {
+  const lookup = vi.fn(async () => ({ provider: "openai-codex", secretId: "hosted-secret" }));
+  const load = vi.fn();
+  const prisma = {
+    bot: {
+      findFirst: vi.fn(async () => ({
+        runtimeKind: "codex-app-server",
+        modelProvider: "openai-codex",
+        modelId: "gpt-6-astra",
+        thinkingLevel: "xhigh",
+        modelCredentialId: "native:codex-app-server",
+        modelPinRevision: 1,
+      })),
+    },
+    userModelCredential: { findFirst: lookup },
+    spaceModelPreference: { findFirst: lookup },
+    secret: { findFirst: load },
+  } as unknown as PrismaClient;
+  const executor = createRunExecutor({ prisma, secretStore: { load } } as unknown as Parameters<
+    typeof createRunExecutor
+  >[0]);
+  const model = await executor.resolveModel({ userId: "user", spaceId: "space", botId: "bot" });
+  expect(model).toMatchObject({
+    kind: "resolved",
+    provider: "openai-codex",
+    id: "gpt-6-astra",
+    thinkingLevel: "xhigh",
+  });
+  expect(model).not.toHaveProperty("oauth");
+  expect(model).not.toHaveProperty("apiKey");
+  expect(lookup).not.toHaveBeenCalled();
+  expect(load).not.toHaveBeenCalled();
 });

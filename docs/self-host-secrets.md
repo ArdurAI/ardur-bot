@@ -76,6 +76,11 @@ From `.env.images.example` (images installer). Leave blank if unused:
 | `SMTP_URL` / `EMAIL_FROM` | Password-recovery email |
 | Messaging tokens (Slack, Telegram, …) | Only if you enable those surfaces |
 
+If `ARDURBOT_AUTO_REVIEW_PROVIDER=jev` is selected while `TYPESAFE_API_KEY` is
+empty, Auto Review shows “Jev needs a TypeSafe API key.” and the API logs it once.
+The existing LLM checker remains the fallback; this configuration warning does
+not approve actions or bypass Ask-first rules.
+
 Blank optional keys are normal for a minimal published-images boot. Pipedream
 Connect keys appear only in source/Compose `.env.example`, not the images
 example.
@@ -103,6 +108,27 @@ later" item.
   still holds Postgres data will desynchronize passwords and encryption.
 - Moving hosts: copy `.env` and volumes together; treat `.env` as secret
   material in transit.
+
+## Integration OAuth and host accounts
+
+The API owns `/api/oauth/done`. Route that path to the API at the configured
+public web origin and register the exact resulting HTTPS callback URL with
+providers that require registration. Local development can use the provider's
+permitted loopback callback. The callback resolves the owner from expiring state,
+not browser cookies; do not require a separate web login on this route.
+
+GitHub and Azure can use a pre-registered OAuth client through the connection's
+advanced fields. Client secrets, PKCE and refresh tokens use the existing
+encrypted secret store. Existing deployment-level GitHub registration is retained
+for compatibility. Do not print registration responses or callback query strings
+in proxy logs. The API's request logger records paths without OAuth query values.
+
+Host integration accounts use existing CLI configuration/keychains. The database
+stores only the selected identity, workspace and tool grants. No CLI token is
+exported into an API secret or environment variable. The owner remains responsible
+for CLI sign-in and its refresh mechanism. See
+[integration lifecycle](./decisions/integration-lifecycle.md) and
+[host environment](./host-service.md#owner-environment-and-tool-inventory).
 
 ## Related
 

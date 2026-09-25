@@ -1,10 +1,17 @@
+// Admission is verified separately; these fixtures isolate tool policy and replay.
+vi.mock("./context/concurrency.js", () => ({
+  claimBotRun: (prisma: unknown, input: { claim: (tx: unknown) => Promise<unknown> }) =>
+    input.claim(prisma),
+}));
+
 import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
-import type { CommandBlock as FixtureCommandBlock } from "@ardurbot/contracts";
+import type { CommandBlock as FixtureCommandBlock, MessageBlock } from "@ardurbot/contracts";
 import type { ActionApprovalRule } from "@ardurbot/core";
 import {
   legacyScopedToolEffectIdempotencyKey,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
+import type { MemoryService } from "@ardurbot/memory";
 import { describe, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "./auto-review.js";
 import { commandComputerFingerprint } from "./command-replay.js";
@@ -52,7 +59,7 @@ type ToolCall = {
   executionId: string;
 };
 
-function fixture(runId = "run-1") {
+function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
   const effects: Effect[] = [];
   const results: unknown[] = [];
   const scratchpadRows: Array<{
@@ -67,6 +74,7 @@ function fixture(runId = "run-1") {
     updatedAt: Date;
   }> = [];
   const run = {
+    createdAt: new Date("2026-09-24T12:00:00Z"),
     id: runId,
     botId: "bot-1",
     threadId: "thread-1",
@@ -75,6 +83,7 @@ function fixture(runId = "run-1") {
     userId: "user-1",
     status: "queued",
     trigger: "user",
+    sourceMessageId: null as string | null,
     leaseFence: 0,
     commandReplayId: null as string | null,
   };
@@ -138,7 +147,17 @@ function fixture(runId = "run-1") {
   const replayRequest = { command: "pnpm test", cwd: "/workspace" };
   const prisma = {
     delegationRoot: { findUnique: vi.fn(async () => null) },
-    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+    botBrief: { updateMany: vi.fn(async () => ({ count: 0 })) },
+    runKnowledgeExposure: { createMany: vi.fn(async () => ({ count: 1 })) },
+    space: {
+      findUnique: vi.fn(async () => ({ allowedModelDestinations: null })),
+      findUniqueOrThrow: vi.fn(async () => ({
+        botInstructions: "",
+        botInstructionsAuthorId: null as string | null,
+        botInstructionsRevision: 0,
+      })),
+    },
+    user: { findUniqueOrThrow: vi.fn(async () => ({ displayName: "", workType: "" })) },
 
     $queryRaw: vi.fn(async () => [{ acquired: true }]),
     computer: {
@@ -177,6 +196,7 @@ function fixture(runId = "run-1") {
         name: "Assistant",
         title: "Assistant",
         description: "Test assistant",
+        instructions: "",
         computerId: "computer-1",
         computer,
       })),
@@ -187,8 +207,20 @@ function fixture(runId = "run-1") {
       update: vi.fn(),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
-    thread: { findUniqueOrThrow: vi.fn(async () => ({ id: run.threadId, groupId: null })) },
-    message: { findMany: vi.fn(async () => []) },
+    thread: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: run.threadId,
+        groupId: null as string | null,
+        externalConversationId: null,
+        historyCompactionSummary: "",
+        historyCompactedUpToSeq: null as number | null,
+      })),
+    },
+    message: {
+      findFirst: vi.fn(async () => null),
+      findUnique: vi.fn(async () => ({ blocks: [] as MessageBlock[] })),
+      findMany: vi.fn(async () => []),
+    },
     task: {
       findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Update shared state" })),
     },
@@ -268,6 +300,8 @@ function fixture(runId = "run-1") {
   const resolveCommandCwd = vi.fn(async () => "/workspace");
   const sandboxDescription = { capabilities: { graphical: false } };
   const events = { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun };
+  const memoryRead = vi.fn(async () => ({ documents: [] }));
+  const memorySearch = vi.fn(async () => []);
   const executor = createRunExecutor({
     prisma,
     secretStore: { load: () => "test-key" },
@@ -285,12 +319,13 @@ function fixture(runId = "run-1") {
     },
     memory: {
       describe: () => ({ capabilities: {} }),
-      read: async () => ({ documents: [] }),
-      search: async () => [],
+      read: memoryRead,
+      search: memorySearch,
       commit: memoryCommit,
       exportMarkdown: async function* () {},
     },
     memoryProviders: { resolve: async () => null },
+    memoryDocuments,
     events,
     jobs: { enqueue: vi.fn(async () => undefined) },
     secrets: [],
@@ -313,6 +348,8 @@ function fixture(runId = "run-1") {
     results,
     scratchpadRows,
     memoryCommit,
+    memoryRead,
+    memorySearch,
     setCalls(next: ToolCall[]) {
       calls = next;
     },
@@ -327,6 +364,118 @@ function fixture(runId = "run-1") {
 }
 
 describe("mutating tool effect idempotency keys", () => {
+  it("keeps private context out of a shared messaging run on a personal thread", async () => {
+    const list = vi.fn(async () => ({
+      items: [
+        {
+          path: "briefs/direct.md",
+          content: "PRIVATE_BRIEF",
+        },
+      ],
+    }));
+    const f = fixture("channel-run", {
+      list,
+      generation: async () => 0,
+      exportBundle: async () => ({ documents: [] }),
+      commit: async (input: { path: string; content: string }) => ({
+        ...input,
+        id: "skill-document",
+        revision: 1,
+      }),
+    } as unknown as MemoryService);
+    f.runRecord.trigger = "messaging";
+    f.runRecord.sourceMessageId = "channel-message";
+    f.prisma.message.findUnique.mockResolvedValue({
+      blocks: [
+        {
+          kind: "channel_message",
+          provider: "fake",
+          channelId: "shared-channel",
+          fromAddress: "sender",
+          fromLabel: "Sender",
+          text: "Recall our previous decision",
+          hop: 0,
+        },
+      ],
+    });
+    f.prisma.thread.findUniqueOrThrow.mockResolvedValue({
+      id: "thread-1",
+      groupId: null,
+      externalConversationId: null,
+      historyCompactionSummary: "PRIVATE_SUMMARY",
+      historyCompactedUpToSeq: 5,
+    });
+    f.prisma.task.findUniqueOrThrow.mockResolvedValue({
+      id: "task-1",
+      prompt: "Recall our previous decision",
+    });
+    f.prisma.space.findUniqueOrThrow.mockResolvedValue({
+      botInstructions: "PRIVATE_ACCOUNT_INSTRUCTIONS",
+      botInstructionsAuthorId: "owner",
+      botInstructionsRevision: 1,
+    });
+    f.prisma.user.findUniqueOrThrow.mockResolvedValue({
+      displayName: "PRIVATE_PROFILE",
+      workType: "research",
+    });
+    await f.run();
+    const request = f.runtimeRun.mock.calls[0]![0];
+    const input = JSON.stringify({
+      instructions: request.instructions,
+      prompt: request.prompt,
+      history: request.history,
+    });
+    expect(input).not.toContain("PRIVATE_");
+    expect(list).not.toHaveBeenCalledWith(
+      expect.objectContaining({ scope: "group" }),
+      expect.anything(),
+    );
+    expect(f.memoryRead).not.toHaveBeenCalled();
+    expect(f.memorySearch).not.toHaveBeenCalled();
+    expect(f.prisma.scratchpadItem.findMany).not.toHaveBeenCalled();
+    expect(f.runRecord).toHaveProperty(
+      "contextSnapshot",
+      expect.objectContaining({
+        layers: expect.objectContaining({ brief: 0, summary: 0, recall: 0 }),
+        recallRan: false,
+      }),
+    );
+  });
+  it("passes a human-authored account snapshot after the bot instructions and retains it on resume", async () => {
+    const f = fixture();
+    const bot = await f.prisma.bot.findUniqueOrThrow();
+    f.prisma.bot.findUniqueOrThrow.mockResolvedValue({
+      ...bot,
+      instructions: "Bot-specific rule.",
+    });
+    f.prisma.user.findUniqueOrThrow.mockResolvedValue({
+      displayName: "Captain",
+      workType: "research",
+    });
+    f.prisma.space.findUniqueOrThrow.mockResolvedValue({
+      botInstructions: "Use concise answers.",
+      botInstructionsAuthorId: "owner",
+      botInstructionsRevision: 3,
+    });
+    await f.run();
+    const instructions = f.runtimeRun.mock.calls[0]![0].instructions;
+    expect(instructions.indexOf("Bot-specific rule.")).toBeLessThan(
+      instructions.indexOf("Use concise answers."),
+    );
+    expect(instructions).toContain("human-authored");
+    expect(f.runRecord).toHaveProperty("accountInstructionContext", {
+      displayName: "Captain",
+      workType: "research",
+      instructions: "Use concise answers.",
+      actorId: "owner",
+      revision: 3,
+      origin: "human-settings",
+    });
+    f.prisma.user.findUniqueOrThrow.mockResolvedValue({ displayName: "Changed", workType: "" });
+    await f.run();
+    expect(f.runtimeRun.mock.calls[1]![0].instructions).toContain('Address the user as "Captain"');
+    expect(f.prisma.user.findUniqueOrThrow).toHaveBeenCalledOnce();
+  });
   it("executes different tools that share a reused provider tool-call id", async () => {
     const f = fixture("run-a");
     f.setCalls([
@@ -633,6 +782,42 @@ describe("mutating tool effect idempotency keys", () => {
   });
 });
 
+it("accumulates runtime evidence without losing it on later callbacks", async () => {
+  const f = fixture();
+  f.runtimeRun.mockImplementation(async function* (request) {
+    await request.onRuntimeInfo?.({
+      runtimeKind: "pi",
+      effortAttested: false,
+      effortAttestationReason: "Not reported",
+    });
+    await request.onRuntimeInfo?.({ runtimeKind: "pi", reportedModel: "executed-model" });
+    await request.onRuntimeInfo?.({
+      runtimeKind: "pi",
+      effortAttested: true,
+      effortAttestationReason: null,
+    });
+    await request.onRuntimeInfo?.({ runtimeKind: "pi", sessionId: "session" });
+    yield { type: "done" as const, text: "Done" };
+  });
+  await f.run();
+  const snapshots = f.prisma.run.updateMany.mock.calls
+    .map(([call]) => call.data.runtimeInfo)
+    .filter(Boolean);
+  expect(snapshots).toContainEqual(
+    expect.objectContaining({
+      effortAttested: false,
+      effortAttestationReason: "Not reported",
+      reportedModel: "executed-model",
+    }),
+  );
+  expect(snapshots.at(-1)).toMatchObject({
+    effortAttested: true,
+    effortAttestationReason: null,
+    reportedModel: "executed-model",
+    sessionId: "session",
+  });
+});
+
 it("persists a sanitized typed provider failure through the executor", async () => {
   const f = fixture();
   f.runtimeRun.mockImplementation(async function* () {
@@ -870,7 +1055,7 @@ it("gives a host run one inventory and launches its command without reloading a 
   f.setCalls([{ name: "shell", args: { command: "gh auth status" }, executionId: "host-command" }]);
   await f.run();
   expect(f.environmentNote).toHaveBeenCalledOnce();
-  expect(f.runtimeRun.mock.calls[0]![0].instructions).toContain(
+  expect(f.runtimeRun.mock.calls[0]![0].prompt).toContain(
     "Tools on this computer: gh 2.80.0 (signed in).",
   );
   expect(f.sandboxExecute).toHaveBeenCalledWith(

@@ -21,6 +21,7 @@ import {
   PORTABLE_TRANSFER_BATCH_BYTES,
   shouldSkipPortableWorkspaceFile,
 } from "./computer-workspace.js";
+import { readFilePreview } from "./file-preview.js";
 import { LinuxDesktop, PREPARE_LINUX_DESKTOP } from "./linux-desktop.js";
 
 const E2B_WORKSPACE = "/home/user/ardurbot-home";
@@ -289,8 +290,17 @@ export class E2BSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     filePath: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
+    if (options?.preview && options.maxBytes !== undefined)
+      return readFilePreview(
+        this,
+        computer,
+        E2B_WORKSPACE,
+        normalizeWorkspacePath(filePath),
+        context,
+        options.maxBytes,
+      );
     const desktop = await this.box(computer);
     const target = workspacePath(E2B_WORKSPACE, filePath);
     if (options?.maxBytes !== undefined) {

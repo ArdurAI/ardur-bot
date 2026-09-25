@@ -1,4 +1,24 @@
-import type { ModelCatalogEntry } from "@ardurbot/contracts";
+import type { ModelCatalogEntry, RuntimePin } from "@ardurbot/contracts";
+
+const providerNames: Record<string, string> = {
+  "openai-compatible": "OpenAI-compatible",
+  "openai-codex": "ChatGPT",
+  "vercel-ai-gateway": "Vercel AI Gateway",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  openrouter: "OpenRouter",
+  google: "Google",
+  ollama: "Ollama",
+};
+
+export function formatModelPin(
+  pin: Pick<RuntimePin, "provider" | "modelId">,
+  effort: string | null,
+): string {
+  return [pin.provider ? (providerNames[pin.provider] ?? pin.provider) : null, pin.modelId, effort]
+    .filter((part) => part?.trim())
+    .join(" · ");
+}
 
 export const POPULAR_MODEL_PROVIDER_IDS = [
   "openrouter",

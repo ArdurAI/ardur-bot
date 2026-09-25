@@ -66,6 +66,7 @@ export function createDispatchClient(
   native: NativeDevices,
   storage: DeviceStorage,
   status: (text: string | null) => void = () => undefined,
+  platform?: "ios" | "android" | "web" | "windows" | "macos",
 ) {
   const loadHome = async (): Promise<PairedHome | null> => {
     const stored = await storage.get(DEVICE_HOME_KEY);
@@ -183,6 +184,12 @@ export function createDispatchClient(
         challenge,
         instanceId: payload.instanceId,
         deviceName: "Phone",
+        ...(platform
+          ? {
+              platform:
+                platform === "windows" ? "win32" : platform === "macos" ? "darwin" : platform,
+            }
+          : {}),
         devicePublicKey: keys.publicKey,
         presencePublicKey: keys.presencePublicKey,
         signature,

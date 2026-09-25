@@ -1,5 +1,6 @@
 import type { MessageBlock } from "@ardurbot/contracts";
 import { abortableDelay } from "@ardurbot/core";
+import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, Text, View, type ViewProps } from "react-native";
 import { rpc } from "../lib/api";
@@ -19,6 +20,7 @@ export function AppConnectCard({
   onAccessibilityAction?: ViewProps["onAccessibilityAction"];
 }) {
   const { t } = useI18n();
+  const router = useRouter();
   const tokens = useMobileTokens();
   const [busy, setBusy] = useState(false);
   const [localStatus, setLocalStatus] = useState<"pending" | "connected">(block.status);
@@ -30,6 +32,10 @@ export function AppConnectCard({
   useEffect(() => () => connectionAttempt.current?.abort(), []);
 
   async function authorize() {
+    if (block.connectorId === "trusted-catalog") {
+      router.push("/integrations");
+      return;
+    }
     connectionAttempt.current?.abort();
     const controller = new AbortController();
     connectionAttempt.current = controller;

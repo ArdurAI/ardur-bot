@@ -4,10 +4,12 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import { LoadingState } from "./components/ai/primitives";
+import { PreferencesProvider } from "./components/PreferencesProvider";
 import { ShellSkeleton } from "./components/ShellSkeleton";
 import { authClient } from "./lib/auth";
 import { authReturnPath } from "./lib/auth-return-path";
 import { markAfterPaint, markOnce } from "./lib/performance";
+import { resetPreferences } from "./lib/preferences";
 import {
   holdUnreachableGate,
   sessionGate,
@@ -20,6 +22,9 @@ import { McpOAuthCallbackPage } from "./pages/McpOAuthCallback";
 import { SharedCommandPage, SharedCommandSignIn } from "./pages/SharedCommand";
 import { ShellPage } from "./pages/Shell";
 import { useOpenTo } from "./pages/shell/open-to";
+import { QuickComposer } from "./pages/system/QuickComposer";
+
+const IdePage = lazy(() => import("./pages/ide/IdePage"));
 
 const AuthPage = lazy(() =>
   import("./pages/Auth").then((module) => ({ default: module.AuthPage })),
@@ -33,6 +38,7 @@ const OnboardingPage = lazy(() =>
 const WelcomePage = lazy(() =>
   import("./pages/Welcome").then((module) => ({ default: module.WelcomePage })),
 );
+const NotFoundPage = lazy(() => import("./pages/NotFound"));
 
 export function App() {
   if (window.location.pathname === LOCAL_SETTINGS_PAGE) return <LocalSettingsPage />;
@@ -44,6 +50,9 @@ function SessionApp() {
   const signInDestination = authReturnPath(searchParams.get("next"));
   const session = authClient.useSession();
   const gate = sessionGate(session);
+  useEffect(() => {
+    if (gate === "anonymous") resetPreferences();
+  }, [gate]);
   const [holdingUnreachable, setHoldingUnreachable] = useState(false);
   const nextHolding = holdUnreachableGate(gate, holdingUnreachable);
   if (nextHolding !== holdingUnreachable) setHoldingUnreachable(nextHolding);
@@ -71,10 +80,14 @@ function SessionApp() {
   }
 
   const user = session.data?.user;
-  return (
+  const content = (
     <div className="h-full" data-ardurbot-app-state="ready">
       <Suspense fallback={<div className="h-full bg-background" />}>
         <Routes>
+          <Route
+            path="/desktop/quick-access"
+            element={<QuickComposer signedIn={Boolean(user)} />}
+          />
           <Route
             path="/commands/:runId/:commandId"
             element={user ? <SharedCommandPage /> : <SharedCommandSignIn />}
@@ -116,6 +129,10 @@ function SessionApp() {
             }
           />
           <Route
+            path="/app/ide"
+            element={user ? <IdePage /> : <Navigate to="/sign-in" replace />}
+          />
+          <Route
             path="/app/team"
             element={user ? <StartPage team /> : <Navigate to="/sign-in" replace />}
           />
@@ -135,9 +152,17 @@ function SessionApp() {
             path="/app/:botId"
             element={user ? <StartPage /> : <Navigate to="/sign-in" replace />}
           />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </div>
+  );
+  return user ? (
+    <PreferencesProvider key={user.id} userId={user.id}>
+      {content}
+    </PreferencesProvider>
+  ) : (
+    content
   );
 }
 

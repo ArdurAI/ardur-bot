@@ -1,9 +1,15 @@
 import type { SandboxProvider } from "@ardurbot/adapter-kit";
-import { hasActiveComputerControl, toComputerRef, withComputerAdmission } from "@ardurbot/adapters";
+import {
+  ComputerAdmissionError,
+  hasActiveComputerControl,
+  toComputerRef,
+  withComputerAdmission,
+} from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { TERMINAL_UNAVAILABLE } from "@ardurbot/contracts";
+import { TERMINAL_ENDED, TERMINAL_UNAVAILABLE } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError, requireMembership } from "@ardurbot/db";
+import { ORPCError } from "@orpc/server";
 import type { TerminalGrant } from "./terminal-gateway.js";
 import { TerminalGateway } from "./terminal-gateway.js";
 
@@ -103,7 +109,7 @@ export function createTerminalRoutes(deps: {
     },
     async ticket(
       actor: Actor,
-      input: { botId: string; computerId: string; sessionId?: string },
+      input: { botId: string; computerId: string; sessionId?: string; workspace?: "computer" },
       authSessionId: string | undefined,
       origin: string | undefined,
     ) {
@@ -131,7 +137,9 @@ export function createTerminalRoutes(deps: {
                 (session) => session.grant.computerId === input.computerId,
               )
             )
-              throw new Error("A terminal is already open.");
+              throw new ComputerAdmissionError(
+                "A terminal is already open. Close it before opening another.",
+              );
             if (!input.sessionId) {
               computer = await deps.prisma.computer.update({
                 where: { id: computer.id, controlLeaseId: computer.controlLeaseId },
@@ -157,7 +165,7 @@ export function createTerminalRoutes(deps: {
                 generation: computer.providerRef!,
                 expiresAt: computer.controlLeaseExpiresAt!.getTime(),
                 workingRoot:
-                  computer.scope === "team"
+                  computer.scope === "team" && input.workspace !== "computer"
                     ? `/home/ardurbot/bots/${input.botId}`
                     : "/home/ardurbot",
               },
@@ -167,7 +175,7 @@ export function createTerminalRoutes(deps: {
           },
           true,
         );
-      } catch {
+      } catch (error) {
         if (!requestAudited) {
           await deps.prisma.terminalAudit.create({
             data: {
@@ -194,7 +202,15 @@ export function createTerminalRoutes(deps: {
             },
           });
         }
-        throw new Error("Terminal could not open; take control and try again.");
+        if (error instanceof ComputerAdmissionError)
+          throw new ORPCError("CONFLICT", { message: error.message });
+        if (error instanceof Error && error.message === TERMINAL_UNAVAILABLE)
+          throw new ORPCError("BAD_REQUEST", { message: TERMINAL_UNAVAILABLE });
+        if (error instanceof Error && error.message === TERMINAL_ENDED)
+          throw new ORPCError("CONFLICT", { message: TERMINAL_ENDED });
+        throw new ORPCError("FORBIDDEN", {
+          message: "Take control of the computer, then open a terminal.",
+        });
       }
     },
   };

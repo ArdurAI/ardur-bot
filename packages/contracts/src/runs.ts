@@ -1,6 +1,6 @@
 import * as z from "zod";
 import { DelegationRecordSchema } from "./delegation.js";
-import { Id, RunStatus } from "./ids.js";
+import { Id, RunStatus, RunTriggerSchema } from "./ids.js";
 
 export const RunActivityRowSchema = z.object({
   rootTaskId: Id.optional(),
@@ -17,19 +17,7 @@ export const RunActivityRowSchema = z.object({
     .optional(),
   externalThread: z.boolean().optional(),
   status: RunStatus,
-  trigger: z.enum([
-    "user",
-    "routine",
-    "resume",
-    "follow_up",
-    "reaction",
-    "spawn",
-    "skill",
-    "bot_message",
-    "webhook",
-    "messaging",
-    "cloud_agent",
-  ]),
+  trigger: RunTriggerSchema,
   notificationsEnabled: z.boolean(),
   promptSnippet: z.string(),
   updatedAt: z.string(),
@@ -42,3 +30,11 @@ export const RunsListOutputSchema = z.object({
   runs: z.array(RunActivityRowSchema),
 });
 export type RunsListOutput = z.infer<typeof RunsListOutputSchema>;
+
+export const RoutineRunSchema = z.object({
+  id: Id,
+  status: RunStatus,
+  createdAt: z.string(),
+  completedAt: z.string().nullable(),
+});
+export type RoutineRun = z.infer<typeof RoutineRunSchema>;

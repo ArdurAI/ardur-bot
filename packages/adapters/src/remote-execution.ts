@@ -19,6 +19,7 @@ import {
   deviceDigest,
   evaluateRemoteExecution,
   loadRemoteAuthority,
+  requireDispatchEnabled,
 } from "@ardurbot/db";
 import type { BoundApprovalRoute } from "./approval-effect.js";
 import { boundDirectApprovalDetails, catalogApprovalDetails } from "./approval-effect.js";
@@ -162,6 +163,7 @@ export async function validateDeviceApproval(
     }),
     tx.run.findUnique({ where: { id: effect.runId } }),
   ]);
+  if (grant) await requireDispatchEnabled(tx, grant.spaceId);
   const route = approvalRequestRoute(effect.request);
   if (!binding || !route)
     throw new DeviceRequestError("This older approval must be answered at home.");

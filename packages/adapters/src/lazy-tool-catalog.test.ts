@@ -122,12 +122,11 @@ describe("lazy tool catalog", () => {
   it("embeds a compact name index in the search description when it fits", () => {
     const entries = catalogEntries(multiGroupTools());
     const [search] = lazyCatalogTools("connectors", "mcp", "MCP", entries);
-    expect(search?.description).toContain("gmail:");
-    expect(search?.description).toContain("list, read, send");
-    expect(search?.description).toContain("hubspot:");
-    expect(search?.description).toContain("get_deal, list_contacts");
+    expect(search?.description).toContain("mcp__gmail__");
+    expect(search?.description).toContain("Send mail");
+    expect(search?.description).toContain("mcp__hubspot__get_deal: Get deal");
+    expect(search?.description).toContain("mcp__hubspot__list_contacts: List contacts");
     expect(search?.description).not.toContain("inputSchema");
-    expect(search?.description).not.toContain("Send mail");
   });
 
   it("returns an empty catalog as an empty tool list", () => {

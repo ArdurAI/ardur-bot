@@ -1,5 +1,5 @@
 import type { TeamRow } from "@ardurbot/contracts";
-import { sortTeamRows, TEAM_REFRESH_MS } from "@ardurbot/core";
+import { runtimeEffortLabel, sortTeamRows, TEAM_REFRESH_MS } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
@@ -248,7 +248,10 @@ export function TeamBoardRow({ row, refresh }: { row: TeamRow; refresh: () => Pr
                 <dt>
                   <Trans>Effort</Trans>
                 </dt>
-                <dd>{row.executing.pin.effort ?? "—"}</dd>
+                <dd>
+                  {runtimeEffortLabel(row.executing.pin, row.executing.runtimeInfo, t`requested`) ??
+                    "—"}
+                </dd>
                 <dt>
                   <Trans>Runtime</Trans>
                 </dt>

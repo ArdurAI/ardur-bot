@@ -3,18 +3,22 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput } from "react-native";
 import { BotMemberPicker } from "../components/bot-member-picker";
+import { ContextSection } from "../components/context-section";
 import { type MobileBot, type MobileGroup, rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
-import { useMobileTokens } from "../lib/native";
+import { presentMessageActionSheet } from "../lib/message-action-sheet";
+import { useMobileTokens, useResolvedAppearance } from "../lib/native";
 
 export default function GroupSettingsScreen() {
   const { t } = useI18n();
   const tokens = useMobileTokens();
+  const colorScheme = useResolvedAppearance();
   const router = useRouter();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [group, setGroup] = useState<MobileGroup | null>(null);
   const [bots, setBots] = useState<MobileBot[]>([]);
   const [name, setName] = useState("");
+  const [coordinator, setCoordinator] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -31,6 +35,7 @@ export default function GroupSettingsScreen() {
         if (!nextGroup) throw new Error(t("Group not found"));
         setGroup(nextGroup);
         setName(nextGroup.name);
+        setCoordinator(nextGroup.coordinatorBotId ?? null);
         setSelected(nextGroup.members.map((member) => member.botId));
         setBots(nextBots.filter((bot) => !bot.archivedAt));
       })
@@ -42,11 +47,19 @@ export default function GroupSettingsScreen() {
     setPending(true);
     setError(null);
     try {
-      const input: { groupId: string; name?: string; botIds?: string[] } = { groupId };
+      const input: {
+        groupId: string;
+        name?: string;
+        botIds?: string[];
+        coordinatorBotId?: string | null;
+      } = {
+        groupId,
+        coordinatorBotId: coordinator && selected.includes(coordinator) ? coordinator : null,
+      };
       if (name.trim() !== group.name) input.name = name.trim();
       const memberIds = group.members.map((member) => member.botId).join(",");
       if (selected.join(",") !== memberIds) input.botIds = selected;
-      if (input.name || input.botIds) await rpc("groups/update", input);
+      await rpc("groups/update", input);
       router.back();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Could not save group"));
@@ -106,6 +119,29 @@ export default function GroupSettingsScreen() {
           onChange={setSelected}
           disabled={pending}
         />
+        <Pressable
+          accessibilityRole="button"
+          onPress={() =>
+            presentMessageActionSheet({
+              title: t("Coordinator"),
+              cancel: t("Cancel"),
+              more: t("More"),
+              colorScheme,
+              actions: [
+                { text: t("None"), onPress: () => setCoordinator(null) },
+                ...bots
+                  .filter((bot) => selected.includes(bot.id))
+                  .map((bot) => ({ text: bot.name, onPress: () => setCoordinator(bot.id) })),
+              ],
+            })
+          }
+        >
+          <Text style={{ color: tokens.foreground }}>
+            {t("Coordinator")}:{" "}
+            {bots.find((bot) => bot.id === coordinator && selected.includes(bot.id))?.name ??
+              t("None")}
+          </Text>
+        </Pressable>
         {error ? <Text style={{ color: tokens.destructive, marginTop: 12 }}>{error}</Text> : null}
         <Pressable
           onPress={() => void save()}
@@ -147,6 +183,16 @@ export default function GroupSettingsScreen() {
         >
           <Text style={{ color: tokens.destructive, fontSize: 16 }}>{t("Delete group")}</Text>
         </Pressable>
+        <Text style={{ color: tokens.mutedForeground }}>{t("Context")}</Text>
+        {group?.members.map((member) => (
+          <ContextSection
+            key={member.botId}
+            botId={member.botId}
+            groupId={groupId}
+            label={member.name}
+            settings={false}
+          />
+        ))}
       </ScrollView>
     </>
   );

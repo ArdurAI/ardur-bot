@@ -1,0 +1,50 @@
+{
+  "baselineCommit": "cd4f634d95dceb04bced6016673cc486bdba2cdd",
+  "node": "26.7.0",
+  "pnpm": "9.15.0",
+  "gzipLevel": 9,
+  "initial": {
+    "baseline": 412550,
+    "withIDE": 412690,
+    "delta": 140,
+    "limit": 1024
+  },
+  "lazyChunks": [
+    {
+      "id": "chunk:ide-codemirror",
+      "file": "assets/ide-codemirror-C5e0snCm.js",
+      "lazy": true,
+      "dynamic": false,
+      "raw": 718868,
+      "gzip": 251495
+    },
+    {
+      "id": "src/pages/ide/IdePage.tsx",
+      "file": "assets/IdePage-BzRFu1nk.js",
+      "lazy": true,
+      "dynamic": true,
+      "raw": 24484,
+      "gzip": 8379
+    },
+    {
+      "id": "src/pages/ide/diff.tsx",
+      "file": "assets/diff-CBHCT_qy.js",
+      "lazy": true,
+      "dynamic": true,
+      "raw": 1267,
+      "gzip": 533
+    },
+    {
+      "id": "src/pages/shell/terminal-session.tsx",
+      "file": "assets/terminal-session-SeZ66_Nn.js",
+      "lazy": true,
+      "dynamic": true,
+      "raw": 370820,
+      "gzip": 93906
+    }
+  ],
+  "notes": [
+    "The API ide-files implementation is server-only and absent from the browser graph.",
+    "The former terminal dynamic entry is now inside the lazy terminal-session entry."
+  ]
+}

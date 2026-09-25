@@ -88,6 +88,7 @@ async function main() {
     if (integration) {
       const suites = [
         "packages/testkit/src/pi-offline.postgres.test.ts",
+        "packages/testkit/src/capabilities-memory.postgres.test.ts",
         "packages/testkit/src/computer-approval.postgres.test.ts",
         "packages/testkit/src/eval-history.postgres.test.ts",
         "packages/testkit/src/eval-customer-support.postgres.test.ts",

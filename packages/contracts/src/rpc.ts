@@ -1,7 +1,14 @@
 import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
+import { accountContract } from "./account.js";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
+import {
+  CapabilityPreferencesPatchSchema,
+  CapabilityPreferencesSchema,
+  CapabilitySettingsSchema,
+  ComputerNetworkInputSchema,
+} from "./capability-settings.js";
 import { CommandBlockSchema } from "./command-blocks.js";
 import { ComparisonExportSchema, comparisonsContract } from "./comparison.js";
 import {
@@ -10,6 +17,14 @@ import {
   ComputerConnectionSettingsSchema,
 } from "./computer-connections.js";
 import { dashboardContract, RoutineOverviewSchema, UsageSummarySchema } from "./dashboard.js";
+import {
+  BriefSchema,
+  ConcurrentRunsSchema,
+  ContextBudgetsSchema,
+  ContextMetricsSchema,
+  ContextSettingsSchema,
+} from "./context.js";
+import { customizationContract } from "./customization.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
 import {
@@ -39,7 +54,6 @@ import {
   CreateRoutineInput,
   CreateScratchpadItemInput,
   DeploymentSettingsSchema,
-  ExportManifestSchema,
   ExternalConversationPolicySchema,
   GroupDetailSchema,
   GroupSchema,
@@ -86,6 +100,14 @@ import {
 import { ProductEventSchema } from "./events.js";
 import { featuresContract } from "./features.js";
 import { HostStatusSchema } from "./host-bridge.js";
+import {
+  IDE_FILE_BYTES,
+  IdeChangeSchema,
+  IdeEntrySchema,
+  IdeFileSchema,
+  IdePathSchema,
+  IdeRootSchema,
+} from "./ide.js";
 import { Id, IsoDate } from "./ids.js";
 import {
   IntegrationCatalogListSchema,
@@ -127,10 +149,17 @@ import {
   MemoryScopeRemapSchema,
   MemorySyncStateSchema,
 } from "./memory-documents.js";
+import { MemoryIntentInputSchema } from "./memory-intent.js";
 import { channelPairingContract } from "./messaging-actions.js";
 import { OllamaPullProgressSchema, OllamaStatusSchema } from "./ollama.js";
+import {
+  NotificationActivitySchema,
+  PreferencesPatchSchema,
+  UserPreferencesSchema,
+} from "./preferences.js";
+import { ExportDownloadSchema } from "./privacy.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
-import { RunsListOutputSchema } from "./runs.js";
+import { RoutineRunSchema, RunsListOutputSchema } from "./runs.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
@@ -198,9 +227,53 @@ const threadSendInput = threadTarget
   });
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
+// Keep IDE-only construction removable from the browser contracts barrel.
+const ideContract = /* @__PURE__ */ createIdeContract();
+function createIdeContract() {
+  return {
+    roots: oc.output(z.array(IdeRootSchema)),
+    list: oc
+      .input(z.object({ rootId: Id, path: IdePathSchema.default("") }))
+      .output(
+        z.object({ entries: z.array(IdeEntrySchema), hiddenCount: z.number().int().nonnegative() }),
+      ),
+    read: oc.input(z.object({ rootId: Id, path: IdePathSchema.min(1) })).output(IdeFileSchema),
+    save: oc
+      .input(
+        z.object({
+          rootId: Id,
+          path: IdePathSchema.min(1),
+          content: z.string().max(IDE_FILE_BYTES),
+          version: z.string().regex(/^[a-f0-9]{64}$/),
+          approved: z.boolean().default(false),
+        }),
+      )
+      .output(
+        z.object({
+          saved: z.boolean(),
+          approvalRequired: z.boolean(),
+          version: z.string().optional(),
+          reason: z.string().optional(),
+        }),
+      ),
+    changes: oc
+      .input(
+        z.object({
+          rootId: Id,
+          since: z.iso.datetime(),
+          until: z.iso.datetime(),
+          cursor: Id.optional(),
+        }),
+      )
+      .output(z.object({ items: z.array(IdeChangeSchema), nextCursor: Id.nullable() })),
+  };
+}
+
 export const appContract = {
   features: featuresContract,
   dashboard: dashboardContract,
+  ...customizationContract,
+  account: accountContract,
   channelPairing: channelPairingContract,
   devices: devicesContract,
   pairing: pairingContract,
@@ -231,7 +304,46 @@ export const appContract = {
   health: oc.output(z.object({ ok: z.literal(true), version: z.string() })),
   me: oc.output(MeSchema),
   preferences: {
-    update: oc.input(z.object({ avatarStyle: AvatarStyleSchema })).output(MeSchema),
+    get: oc.output(UserPreferencesSchema),
+    update: oc
+      .input(PreferencesPatchSchema.extend({ avatarStyle: AvatarStyleSchema.optional() }))
+      .output(MeSchema.extend({ preferences: UserPreferencesSchema })),
+  },
+  system: {
+    dispatch: oc.output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+    setDispatch: oc
+      .input(z.object({ enabled: z.boolean() }))
+      .output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+  },
+  metrics: {
+    context: oc
+      .input(z.object({ botId: Id.optional(), groupId: Id.optional() }))
+      .output(ContextMetricsSchema),
+  },
+  context: {
+    settings: oc.input(z.object({ botId: Id })).output(ContextSettingsSchema),
+    configure: oc
+      .input(
+        z.object({
+          budgets: ContextBudgetsSchema.optional(),
+          concurrentRuns: ConcurrentRunsSchema.optional(),
+          coordinatorBotId: Id.nullable().optional(),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+  },
+  briefs: {
+    list: oc.input(z.object({ botId: Id, groupId: Id.optional() })).output(z.array(BriefSchema)),
+    update: oc
+      .input(
+        z.object({
+          botId: Id,
+          groupId: Id.nullable().optional(),
+          content: z.string().max(6000),
+          expectedRevision: z.number().int().nonnegative(),
+        }),
+      )
+      .output(z.object({ revision: z.number().int().positive() })),
   },
   spaces: {
     list: oc.output(SpaceNavigationSchema),
@@ -435,6 +547,7 @@ export const appContract = {
     markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
     markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
   },
+  ide: ideContract,
   terminal: {
     close: oc
       .input(z.object({ botId: Id, computerId: Id, sessionId: Id }))
@@ -443,7 +556,14 @@ export const appContract = {
       .input(z.object({ botId: Id, computerId: Id }))
       .output(z.object({ available: z.boolean() })),
     ticket: oc
-      .input(z.object({ botId: Id, computerId: Id, sessionId: Id.optional() }))
+      .input(
+        z.object({
+          botId: Id,
+          computerId: Id,
+          sessionId: Id.optional(),
+          workspace: z.literal("computer").optional(),
+        }),
+      )
       .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
   },
   computer: {
@@ -522,6 +642,7 @@ export const appContract = {
     heartbeat: oc.input(botId).output(z.object({ ok: z.literal(true) })),
   },
   memory: {
+    propose: oc.input(MemoryIntentInputSchema).output(z.array(LearningProposalSchema)),
     remember: oc
       .input(
         z.object({
@@ -653,6 +774,7 @@ export const appContract = {
   },
   routines: {
     overview: oc.output(RoutineOverviewSchema),
+    history: oc.input(z.object({ routineId: Id })).output(z.array(RoutineRunSchema)),
     list: oc.input(botId).output(z.array(RoutineSchema)),
     create: oc.input(CreateRoutineInput).output(RoutineSchema),
     update: oc
@@ -835,6 +957,11 @@ export const appContract = {
     remove: oc.input(z.object({ skillId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   capabilities: {
+    settings: oc.output(CapabilitySettingsSchema),
+    configure: oc.input(CapabilityPreferencesPatchSchema).output(CapabilityPreferencesSchema),
+    network: oc
+      .input(ComputerNetworkInputSchema)
+      .output(z.object({ id: z.string(), status: z.string() })),
     list: oc.output(z.array(CapabilityInstallSchema)),
     catalogSearch: oc
       .input(
@@ -864,6 +991,7 @@ export const appContract = {
   },
   integrations: {
     list: oc.output(IntegrationCatalogListSchema),
+    status: oc.input(z.object({ connectionId: Id })).output(IntegrationConnectionSchema),
     connect: oc
       .input(
         z.object({
@@ -877,7 +1005,19 @@ export const appContract = {
             .max(16_384)
             .regex(/^[^\s]+$/)
             .optional(),
-          authKind: z.enum(["oauth", "token"]).optional(),
+          authKind: z.enum(["oauth", "token", "host"]).optional(),
+          oauthClient: z
+            .object({
+              clientId: z
+                .string()
+                .trim()
+                .min(1)
+                .max(1024)
+                .regex(/^[^\s]+$/),
+              clientSecret: z.string().min(1).max(16384).optional(),
+            })
+            .strict()
+            .optional(),
         }),
       )
       .output(
@@ -918,6 +1058,16 @@ export const appContract = {
   },
   mcp: {
     servers: {
+      permissions: oc
+        .input(
+          z.object({
+            serverId: Id,
+            botIds: z.array(Id).max(100),
+            toolIds: z.array(z.string().min(1).max(200)).max(500),
+            spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
+          }),
+        )
+        .output(z.array(IntegrationGrantSchema)),
       tools: oc.input(z.object({ serverId: Id })).output(IntegrationManifestSchema),
       list: oc.output(z.array(McpServerSchema)),
       create: oc.input(McpServerConfigInput).output(McpServerSchema),
@@ -926,6 +1076,7 @@ export const appContract = {
           z.union([
             z.object({ id: Id, config: McpServerConfigInput }),
             z.object({ id: Id, secret: z.string().min(1).max(16384) }),
+            z.object({ id: Id, enabled: z.boolean() }),
           ]),
         )
         .output(McpServerSchema),
@@ -1077,6 +1228,12 @@ export const appContract = {
     set: oc.input(z.object({ enabled: z.boolean() })).output(ActionAutoReviewSettingsSchema),
   },
   artifacts: {
+    uploaded: oc
+      .input(z.object({ cursor: Id.optional() }))
+      .output(z.object({ items: z.array(ArtifactSchema), cursor: Id.nullable() })),
+    deleteUploaded: oc
+      .input(z.object({ artifactId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
     list: oc.input(botId).output(z.array(ArtifactSchema)),
     create: oc
       .input(
@@ -1096,10 +1253,19 @@ export const appContract = {
     summary: oc.output(UsageSummarySchema),
   },
   export: {
+    account: oc.output(ExportDownloadSchema),
     comparison: oc.input(z.object({ id: Id })).output(ComparisonExportSchema),
-    bot: oc.input(botId).output(ExportManifestSchema),
+    bot: oc.input(botId).output(ExportDownloadSchema),
   },
   notifications: {
+    activity: oc.output(
+      z.object({
+        userId: Id,
+        preferences: UserPreferencesSchema,
+        activities: z.array(NotificationActivitySchema),
+      }),
+    ),
+    capabilities: oc.output(z.object({ dispatchPush: z.boolean() })),
     registerPush: oc
       .input(z.object({ token: z.string().min(8).max(512) }))
       .output(z.object({ ok: z.literal(true) })),

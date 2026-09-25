@@ -107,9 +107,12 @@ node scripts/bundle-budget.mjs apps/web/dist docs/performance/bundle-baseline.js
 pnpm --filter @ardurbot/web exec playwright test --config playwright.performance.config.ts
 ```
 
-`perf:compare` continues to support the original packaged-desktop schema and also compares the
-smaller offline reports. It warns above 20%, rejects direct interpretation across different machine
-classes, and does not fail a merge. `node --import tsx` avoids the CLI's unnecessary IPC listener;
+`perf:compare` continues to read the original packaged-desktop schema and smaller offline reports.
+The proxy comparator warns above both **5% and 25 ms** and rejects mismatched machines, missing or
+extra metrics, negative values and empty samples. Historical summaries remain diagnostics; they
+cannot establish paired release evidence. Use the direct comparator below when consuming its
+distinct exit codes. The older `perf:compare` wrapper does not preserve a nonzero child exit code.
+Development checks remain advisory. `node --import tsx` avoids the CLI's unnecessary IPC listener;
 the full desktop benchmark still needs Docker and a display.
 
 `scripts/bundle-budget.mjs` generalizes the original terminal measurement without renaming or
@@ -118,8 +121,94 @@ and manifest entries, gzips each initial JavaScript file once, and warns above *
 bytes**. It compares every recorded lazy boundary, including uniquely identified shared chunks,
 against the current graph. Eager loading or a missing boundary emits a warning even below the size
 budget. A deliberate removal needs review before updating the baseline; automatically accepting a
-new manifest would hide that regression. CSS, fonts, and other non-JavaScript assets are excluded
-from this particular budget.
+new manifest would hide that regression. It also inventories total renderer bytes, CSS and fonts,
+including deferred files, separately from initial gzip JavaScript. Comparable artifact categories
+warn above **5%** growth. Main/preload/host bundles, ASAR, native modules, installers, downloads and
+installed footprints must be supplied by the packaged collector; absent categories stay incomplete.
+
+## Paired verdicts and policy calibration
+
+The schema-3 comparator consumes checksum envelopes from
+`createPerformanceEvidenceEnvelope` in `packages/testkit/src/performance-report.ts`. It uses the
+existing manifest, parsers, comparability checks and required-evidence selection. Both baselines are
+mandatory:
+
+```sh
+node scripts/performance-budget.mjs parent.json candidate.json fixed-release.json policy.json
+```
+
+Standard output is JSON; standard error is a brief human summary. Exit **0** means the selected
+evidence passes, **1** means a known regression or safety failure, and **2** means incomplete or
+inconclusive evidence. Every result retains raw report envelopes, comparisons and machine-readable
+reasons. A required release invocation must also require `mode: "release"` and
+`releaseEligible: true`; a commit pass is advisory and cannot authorize publication. This comparator
+does not install a publication gate or replace human acceptance.
+
+Create a policy using `createBudgetPolicy(required, options)` in
+`packages/testkit/src/scoreboard/statistics.ts`. Options bind the environment hash, exact scenario,
+commit/release mode, analysis seed and resample count. Required IDs come from the existing manifest.
+Declare nominal queue load to enable its absolute target, the tool termination deadline separately
+from Stop acknowledgement, and an explicit retained-session growth envelope. Retained memory also
+requires the two-hour soak evidence. Required metrics without a declared budget stay incomplete;
+diagnostic-only metrics check coverage without asserting a numeric improvement.
+
+Policies start proposed. Before collecting a release candidate, call
+`freezeBudgetPolicy(proposed, calibrationReportEnvelopes, frozenAt)` with at least two distinct,
+clean A/A reports of the same build and scenario. They must satisfy the sample plan, required
+coverage and unchanged numeric budgets. The result includes the calibration reports and a policy
+digest. Persist and pin that digest before candidate collection. Evaluation revalidates calibration,
+rejects policy mutation, requires calibration timestamps before the freeze and the candidate
+timestamp after it. Thresholds are never fitted to candidate results. The workflow must establish
+trusted chronology and verify the referenced raw/build bytes; a checksum alone is not an attestation.
+No production policy is calibrated merely by adding these functions or passing synthetic tests.
+
+The retained proposed values come from `SCOREBOARD_MANIFEST.proposedGates`:
+
+| Guardrail | Budget |
+| --- | --- |
+| Commit timing warning | Increase above both 5% and 25 ms |
+| Release timing | Adjusted upper bound at most max(10% of baseline, 25 ms) |
+| Healthy-path p95 | Acknowledgement 100 ms; safe content to paint 50 ms; nominal queue 250 ms; Stop acknowledgement 1,000 ms |
+| Prompt tokens | max(5%, 128 tokens), including retries and compaction |
+| Warm cache-token ratio | Drop at most five percentage points |
+| Initial gzip JS | Growth at most 10,240 bytes; protected lazy boundaries remain deferred |
+| Total artifact categories | Growth at most 5%, per platform, against parent and fixed release |
+| Idle / peak memory | max(10%, 32 MiB) / max(15%, 64 MiB), with identical accounting |
+| Measured energy | Growth at most 10%; missing required energy cannot pass |
+| Critical safety | No wrong pin, unauthorized or duplicate effect, lost work, false completion, invalid recovery or critical fact loss |
+
+The comparator bootstraps whole paired sessions with a fixed Mulberry32 analysis seed. A pair ID
+identifies the same observation across builds; a session ID groups dependent observations. The
+mapping between baseline and candidate sessions must be one-to-one. Reordering input arrays cannot
+change a result. P50/p95 estimates and two-sided percentile intervals are reported for all outcomes
+and each populated outcome stratum. Changed success/failure pairings are incomplete rather than a
+chance to report a faster failure. No observation, failed attempt or slow valid sample is removed.
+
+Bonferroni allocation divides the 5% error budget across predeclared families, family members, both
+baselines, two relative statistics plus an absolute target, and all six outcome strata. This is
+conservative; each bootstrap tail must have at least ten expected resamples or analysis is
+incomplete. The default 20,000 resamples suits a single required metric; larger selections must
+declare more resamples before collection. All timing scenarios require at least 20 independent
+pairs in commit mode, 200 for release replay/live, and conservatively 100 for release T2 strata.
+Populated outcome strata must meet the same minimum. Tails from short commit runs remain provisional.
+The statistical method is an approximation whose adequacy must be checked during real calibration;
+it does not imply exact finite-sample confidence coverage. See the primary
+[bootstrap method documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html)
+and [Bonferroni interval definition](https://www.itl.nist.gov/div898/handbook/prc/section4/prc473.htm).
+
+A negative degradation interval means improvement, an upper bound inside the margin means within
+budget, a lower bound beyond it means regression, and an overlapping interval is inconclusive.
+Exact equality is within budget, with only floating-point roundoff absorbed at the boundary.
+Safety and lazy-boundary failures block deterministically even when timing improves. A difference
+between distribution percentiles describes a shift; it is never called harness overhead. Collectors
+must derive overhead from each trace before aggregation.
+
+Two-file proxy and schema-1/2 desktop inputs remain readable but return incomplete because summaries
+do not supply paired raw evidence. `bundle-budget.mjs` with no baseline measures assets only. With
+parent and fixed-release files it returns static diagnostics; schema-3 evidence is still required
+for calibration, artifact provenance and a release pass. Missing native platforms, energy
+instruments or live-provider evidence remain explicit gaps. W0-9 owns immutable indexing, trusted
+policy selection, artifact-byte verification and release workflow integration.
 
 The `performance` workflow uses the production Vite build with synthetic auth/RPC responses and a
 fake streamed provider; it has no Docker or hosted-provider dependency. It measures five fresh

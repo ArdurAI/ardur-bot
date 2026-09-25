@@ -10,7 +10,6 @@ import {
 import type { ChatInstallation, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   acceptChatEvent,
-  admitDispatch,
   auditDevice,
   authenticateChannel,
   DeviceRequestError,
@@ -19,8 +18,10 @@ import {
   findChatReplyTask,
   redeemChannelPairing,
   requestDispatchStop,
+  requireDispatchEnabled,
 } from "@ardurbot/db";
 import { approvalRequestRoute, validateDeviceApproval } from "../remote-execution.js";
+import { admitRoutedDispatch as admitDispatch } from "../routing/dispatch.js";
 
 export function createMessagingDispatch(deps: {
   prisma: PrismaClient;
@@ -83,6 +84,8 @@ export function createMessagingDispatch(deps: {
           await reply(installation, event, CHAT_COPY.pair);
           return;
         }
+        if (event.action || event.text.trim().toLowerCase() !== "stop")
+          await requireDispatchEnabled(prisma, grant.spaceId);
         if (event.action) {
           const match = /^(allow|deny):([a-f0-9-]{36})$/.exec(event.action);
           if (!match) {
@@ -273,7 +276,11 @@ export function createMessagingDispatch(deps: {
                 ? await prisma.externalEffect.findUnique({ where: { id: binding.effectId } })
                 : null;
               const route = approvalRequestRoute(effect?.request);
-              let card: ChatCard = { text: CHAT_COPY.stronger };
+              let card: ChatCard = {
+                text: ask.preformatted
+                  ? [ask.text, ask.detail, CHAT_COPY.stronger].filter(Boolean).join("\n")
+                  : CHAT_COPY.stronger,
+              };
               if (ask.input === "secret") card = { text: CHAT_COPY.secrets };
               else if (!ask.approvalEffectId && !ask.actions?.length)
                 card = { text: [ask.text, ask.detail].filter(Boolean).join("\n") };

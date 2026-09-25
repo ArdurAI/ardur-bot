@@ -36,18 +36,23 @@ describe("desktop preload bridge", () => {
     expect(globalName).toBe("ardurbotDesktop");
     expect(bridge.platform).toBe("linux");
     expect(Object.keys(bridge).sort()).toEqual([
+      "customization",
       "devices",
       "host",
+      "integrations",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
     expect(Object.keys(bridge.window).sort()).toEqual([
       "close",
       "minimize",
+      "setUnsavedChanges",
       "state",
       "toggleMaximize",
     ]);
@@ -58,6 +63,7 @@ describe("desktop preload bridge", () => {
       "addRoot",
       "clear",
       "removeRoot",
+      "setKeepRunning",
       "setup",
       "state",
     ]);
@@ -94,12 +100,16 @@ describe("desktop preload bridge", () => {
     const { exposeInMainWorld } = runPreload("preload.cjs");
     const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, Record<string, unknown>];
     expect(Object.keys(bridge).sort()).toEqual([
+      "customization",
       "devices",
       "host",
+      "integrations",
       "localSettings",
       "memoryFolders",
+      "notifications",
       "oauth",
       "platform",
+      "system",
       "update",
       "window",
     ]);
@@ -123,6 +133,36 @@ describe("desktop preload bridge", () => {
 
     unsubscribe();
     expect(off).toHaveBeenCalledWith("desktop.oauth.callback", expect.any(Function));
+  });
+  it("exposes fixed customization operations and resolves dropped files inside preload", async () => {
+    const { invoke, exposeInMainWorld } = runPreload("preload.cjs");
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, ArdurBotDesktop];
+    expect(Object.keys(bridge.customization!).sort()).toEqual([
+      "addMarketplace",
+      "applyConfig",
+      "cancel",
+      "configure",
+      "importSkills",
+      "info",
+      "install",
+      "installPlugin",
+      "list",
+      "prepare",
+      "prepareDrop",
+      "recoverPlugins",
+      "selectPaths",
+      "uninstall",
+      "uninstallPlugin",
+    ]);
+    await bridge.customization!.prepareDrop("space", {
+      name: "extension.mcpb",
+      path: "/fixture/extension.mcpb",
+    });
+    expect(invoke).toHaveBeenCalledExactlyOnceWith(
+      "desktop.customization.prepareDrop",
+      "space",
+      "/fixture/extension.mcpb",
+    );
   });
 });
 
@@ -170,4 +210,11 @@ describe("setup preload bridge", () => {
     handler({}, { phase: "pulling" });
     expect(listener).toHaveBeenCalledWith({ phase: "pulling" });
   });
+});
+
+it("turns a safe folder reply into a renderer error without logging it again", async () => {
+  const invoke = vi.fn(async () => ({ error: "Set up this computer first." }));
+  const { exposeInMainWorld } = runPreload("preload.cjs", { invoke });
+  const bridge = exposeInMainWorld.mock.calls[0]![1] as ArdurBotDesktop;
+  await expect(bridge.host!.addRoot()).rejects.toThrow("Set up this computer first.");
 });

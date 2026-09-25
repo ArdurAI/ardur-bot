@@ -36,6 +36,7 @@ import type {
   ConnectorEvent,
   ConnectorTool,
   ControlLeaseRef,
+  HomeArchiveFile,
   MemoryCapabilities,
   MemoryCommitRequest,
   MemoryExportRequest,
@@ -91,6 +92,7 @@ export interface SandboxProvider {
     context: AdapterContext,
   ): Promise<PageBrowserResult>;
   /** Allocate or reconnect the computer, returning its reference before fallible setup. */
+  supportsNetworkEgress?(computer: ComputerRef, context: AdapterContext): Promise<boolean>;
   provision(
     request: {
       botId: string;
@@ -99,6 +101,7 @@ export interface SandboxProvider {
       providerKind?: ComputerRef["kind"];
       imageProfile?: ComputerRef["imageProfile"];
       connectionId?: string | null;
+      networkEgress?: boolean;
     },
     context: AdapterContext,
   ): Promise<ComputerRef>;
@@ -154,7 +157,7 @@ export interface SandboxProvider {
     computer: ComputerRef,
     path: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ): Promise<Uint8Array>;
   writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext): Promise<void>;
   exportWorkspace(computer: ComputerRef, context: AdapterContext): AsyncIterable<PortableFile>;
@@ -282,11 +285,16 @@ export interface AgentHomeStore {
   commit(botId: string, src: string, context: AdapterContext): Promise<string>;
   restore(botId: string, revision: string, dest: string, context: AdapterContext): Promise<void>;
   exportHome(botId: string, context: AdapterContext): AsyncIterable<PortableFile>;
+  streamHome?(
+    homeKey: string,
+    context: AdapterContext,
+    exclude: (path: string) => boolean,
+  ): AsyncIterable<HomeArchiveFile>;
   readFile(
     botId: string,
     path: string,
     context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ): Promise<string>;
   writeFile(botId: string, path: string, content: string, context: AdapterContext): Promise<void>;
   list(

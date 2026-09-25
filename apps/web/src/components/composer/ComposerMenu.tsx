@@ -15,7 +15,6 @@ import {
 } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
-import { connectIntegration } from "../../lib/connect-integration";
 import {
   refreshIntegrationCatalog,
   subscribeIntegrationCatalog,
@@ -45,6 +44,7 @@ export default function ComposerMenu(props: ComposerMenuProps) {
     connections: [],
   });
   const [servers, setServers] = useState<McpServer[]>([]);
+  const [reconnectCount, setReconnectCount] = useState(0);
   useEffect(() => {
     let active = true;
     const unsubscribe = subscribeIntegrationCatalog((value) => {
@@ -78,27 +78,27 @@ export default function ComposerMenu(props: ComposerMenuProps) {
       active = false;
     };
   }, [props.open, props.onError, t]);
-  const reconnectCount = integrations.connections.filter(
-    (connection) => connection.state !== "connected",
-  ).length;
-  async function selectConnector(
-    descriptor: IntegrationDescriptor,
-    connection: IntegrationConnection,
-  ) {
+  useEffect(() => {
+    if (!props.open) return;
+    let active = true;
+    void rpc.connectors
+      .summary()
+      .then((summary) => {
+        if (active) setReconnectCount(summary.needingReconnection);
+      })
+      .catch(() => {
+        if (active) props.onError(t`Could not load integrations`);
+      });
+    return () => {
+      active = false;
+    };
+  }, [props.open, integrations.connections, props.onError, t]);
+  function selectConnector(descriptor: IntegrationDescriptor, connection: IntegrationConnection) {
     if (connection.state === "connected") {
       props.onMention({ kind: "mcp", id: connection.id, name: descriptor.name });
       return;
     }
-    if (descriptor.authKind === "token" || connection.state === "needs-client-registration") {
-      props.onManage(connection.id);
-      return;
-    }
-    try {
-      await connectIntegration(descriptor, connection);
-      await refreshIntegrationCatalog();
-    } catch {
-      props.onError(t`Could not connect or load integrations.`);
-    }
+    props.onManage(connection.id);
   }
   return (
     <DropdownMenuContent
@@ -118,7 +118,7 @@ export default function ComposerMenu(props: ComposerMenuProps) {
       <DropdownMenuItem onClick={props.onSlash}>{t`Slash commands`}</DropdownMenuItem>
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>
-          {t`Connectors`}
+          {t`Integrations`}
           {reconnectCount > 0 ? (
             <span className="text-xs text-muted-foreground">
               ({t`${reconnectCount} need reconnection`})

@@ -2,6 +2,7 @@ import { Button } from "@ardurbot/ui-web";
 import { Trans } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { IntegrationSetup } from "../components/integrations/IntegrationSetup";
+import { desktopBridge } from "../lib/desktop";
 import { rpc } from "../lib/rpc";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
 import { OpenToSetting } from "./shell/OpenToSetting";
@@ -10,12 +11,22 @@ export function LocalSettingsPage() {
   const [section, setSection] = useState<"models" | "integrations" | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
+  const hasLocalSettings = !!desktopBridge()?.localSettings;
   useEffect(() => {
+    if (!hasLocalSettings) return;
+    let active = true;
     void rpc.integrationSetup
       .get()
-      .then(() => setReady(true))
-      .catch(() => setError(true));
-  }, []);
+      .then(() => {
+        if (active) setReady(true);
+      })
+      .catch(() => {
+        if (active) setError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [hasLocalSettings]);
   return (
     <main className="h-full overflow-auto bg-background px-6 py-12">
       <div className="mx-auto max-w-xl space-y-6">
@@ -23,12 +34,13 @@ export function LocalSettingsPage() {
           <Trans>Local Server Settings</Trans>
         </h1>
         <OpenToSetting />
-        {error ? (
+        {!hasLocalSettings ? (
           <p role="alert">
-            <Trans>
-              Could not open local settings. Start the local server and create its owner account,
-              then try again.
-            </Trans>
+            <Trans>Open local settings from the desktop app on the server’s computer.</Trans>
+          </p>
+        ) : error ? (
+          <p role="alert">
+            <Trans>Could not reach the local server. Start it and try again.</Trans>
           </p>
         ) : null}
         {ready ? (

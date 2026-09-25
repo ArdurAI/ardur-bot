@@ -54,12 +54,12 @@ describe("MCP browser consent", () => {
     expect(await result).toBe("connected");
     expect(begin).toHaveBeenCalledWith({
       serverId: "connection",
-      redirectUri: "https://app.example.test/mcp/oauth/callback",
+      redirectUri: "https://app.example.test/api/oauth/done",
     });
     expect(channel.close).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
   });
-  it("navigates a pre-opened popup and reports closure as cancellation", async () => {
+  it("keeps waiting after a provider severs the popup opener", async () => {
     const result = waitForMcpOauth(
       "https://auth.example.test/authorize",
       popup as unknown as Window,
@@ -68,7 +68,8 @@ describe("MCP browser consent", () => {
     expect(popup.location.href).toBe("https://auth.example.test/authorize");
     popup.closed = true;
     await vi.advanceTimersByTimeAsync(500);
-    expect(await result).toBe("cancelled");
+    channel.onmessage?.({ data: { type: "mcp-oauth-complete", sessionId: "ours" } });
+    expect(await result).toBe("connected");
     expect(vi.getTimerCount()).toBe(0);
   });
   it("keeps the server session alive when popup blocking requires full-page navigation", async () => {
@@ -79,7 +80,7 @@ describe("MCP browser consent", () => {
   });
   it("cancels a consent window that times out", async () => {
     const result = waitForMcpOauth("https://auth.example.test/authorize");
-    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.advanceTimersByTimeAsync(600_000);
     expect(await result).toBe("cancelled");
     expect(popup.close).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);

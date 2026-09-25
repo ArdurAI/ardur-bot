@@ -12,6 +12,9 @@ it("attributes the usage record and its event to the same run", async () => {
     { provider: "fixture", model: "fixture", inputTokens: 10, outputTokens: 20 },
   );
   expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: run.id }) });
+  expect(create).toHaveBeenCalledWith({
+    data: expect.objectContaining({ purpose: "legacy", coverage: "partial" }),
+  });
   expect(append).toHaveBeenCalledWith(
     expect.objectContaining({
       type: "usage.recorded",
