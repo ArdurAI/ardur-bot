@@ -464,6 +464,12 @@ export async function createApp(
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
+        reconcileBriefs: () =>
+          jobs.enqueue({
+            name: "briefs.maintain",
+            payload: {},
+            replaceKey: "briefs.maintain:drain",
+          }),
       })
     : undefined;
   reconciler?.start();

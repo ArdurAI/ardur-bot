@@ -15,6 +15,7 @@ export const NotificationActivitySchema = z.object({
   category: NotificationPreferencesSchema.keyof(),
   status: z.enum(["completed", "failed", "waiting_input", "waiting_takeover"]),
   updatedAt: z.string(),
+  occurredAt: z.string().optional(),
   enabled: z.boolean(),
 });
 export type NotificationActivity = z.infer<typeof NotificationActivitySchema>;

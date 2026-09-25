@@ -1,4 +1,5 @@
 import path from "node:path";
+import { toComputerRef } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { IdePathSchema } from "@ardurbot/contracts";
 import { eventFileChanges } from "@ardurbot/core";
@@ -8,14 +9,14 @@ import { ideHostPaths } from "./ide-files.js";
 import type { RouterDeps } from "./router.js";
 
 export function createIdeChanges(
-  deps: Pick<RouterDeps, "prisma">,
+  deps: Pick<RouterDeps, "prisma" | "sandbox">,
   files: ReturnType<typeof createIdeFiles>,
 ) {
   return async (
     actor: Actor,
     input: { rootId: string; since: string; until: string; cursor?: string },
   ) => {
-    const { root } = await files.resolve(actor, input.rootId);
+    const { root, computer, context } = await files.resolve(actor, input.rootId);
     const since = new Date(input.since),
       until = new Date(input.until);
     if (
@@ -36,33 +37,39 @@ export function createIdeChanges(
       take: 201,
       ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
     });
-    const items = events
-      .slice(0, 200)
-      .flatMap(eventFileChanges)
-      .flatMap((change) => {
-        let relative = change.path;
-        if (root.kind === "host") {
-          const paths = ideHostPaths(root.path);
-          const absolute = paths.isAbsolute(change.path)
-            ? change.path
-            : change.cwd && paths.isAbsolute(change.cwd)
-              ? paths.join(change.cwd, change.path)
-              : null;
-          if (!absolute) return [];
-          relative = paths.relative(root.path, absolute).split(paths.sep).join("/");
-        } else {
-          if (change.computerId !== root.computerId) return [];
-          if (change.cwd) {
-            const cwd = change.cwd.replace(/^\/home\/(?:ardurbot|user\/ardurbot-home)(?:\/|$)/, "");
-            if (cwd.startsWith("/")) return [];
-            relative = path.posix.join(cwd, change.path);
-          }
+    const changes = events.slice(0, 200).flatMap(eventFileChanges);
+    const home =
+      root.kind === "sandbox" &&
+      computer?.providerRef &&
+      changes.some((change) => change.computerId === root.computerId && change.cwd)
+        ? await deps.sandbox.resolveCommandCwd?.(toComputerRef(computer), undefined, context)
+        : null;
+    const items = changes.flatMap((change) => {
+      let relative = change.path;
+      if (root.kind === "host") {
+        const paths = ideHostPaths(root.path);
+        const absolute = paths.isAbsolute(change.path)
+          ? change.path
+          : change.cwd && paths.isAbsolute(change.cwd)
+            ? paths.join(change.cwd, change.path)
+            : null;
+        if (!absolute) return [];
+        relative = paths.relative(root.path, absolute).split(paths.sep).join("/");
+      } else {
+        if (change.computerId !== root.computerId) return [];
+        if (change.cwd) {
+          if (home == null || path.posix.isAbsolute(home) !== path.posix.isAbsolute(change.cwd))
+            return [];
+          const cwd = path.posix.relative(home, change.cwd);
+          if (cwd === ".." || cwd.startsWith("../")) return [];
+          relative = path.posix.join(cwd, change.path);
         }
-        const parsed = IdePathSchema.safeParse(relative);
-        if (!parsed.success || !relative) return [];
-        const { computerId: _computer, cwd: _cwd, ...item } = change;
-        return [{ ...item, path: relative }];
-      });
+      }
+      const parsed = IdePathSchema.safeParse(relative);
+      if (!parsed.success || !relative) return [];
+      const { computerId: _computer, cwd: _cwd, ...item } = change;
+      return [{ ...item, path: relative }];
+    });
     return { items, nextCursor: events.length > 200 ? events[199]!.id : null };
   };
 }

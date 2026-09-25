@@ -10,7 +10,6 @@ import {
 import type { ChatInstallation, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   acceptChatEvent,
-  admitDispatch,
   auditDevice,
   authenticateChannel,
   DeviceRequestError,
@@ -22,6 +21,7 @@ import {
   requireDispatchEnabled,
 } from "@ardurbot/db";
 import { approvalRequestRoute, validateDeviceApproval } from "../remote-execution.js";
+import { admitRoutedDispatch as admitDispatch } from "../routing/dispatch.js";
 
 export function createMessagingDispatch(deps: {
   prisma: PrismaClient;
@@ -276,7 +276,11 @@ export function createMessagingDispatch(deps: {
                 ? await prisma.externalEffect.findUnique({ where: { id: binding.effectId } })
                 : null;
               const route = approvalRequestRoute(effect?.request);
-              let card: ChatCard = { text: CHAT_COPY.stronger };
+              let card: ChatCard = {
+                text: ask.preformatted
+                  ? [ask.text, ask.detail, CHAT_COPY.stronger].filter(Boolean).join("\n")
+                  : CHAT_COPY.stronger,
+              };
               if (ask.input === "secret") card = { text: CHAT_COPY.secrets };
               else if (!ask.approvalEffectId && !ask.actions?.length)
                 card = { text: [ask.text, ask.detail].filter(Boolean).join("\n") };

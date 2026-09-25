@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { AgentUsage, RequestUsageObservation } from "@ardurbot/adapter-kit";
+import type { ContextSnapshot } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { createDb } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
 import { recordRunUsage } from "./run-usage.js";
 
 const databaseUrl = process.env.USAGE_LEDGER_TEST_DATABASE_URL;
@@ -132,9 +134,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
 
   it("counts 20 concurrent duplicate deliveries once across independent clients", async () => {
     const f = await fixture();
-    await Promise.all(
+    const measurements = await Promise.all(
       Array.from({ length: 20 }, (_, i) => f.record(f.usage(), i % 2 ? db.prisma : peer.prisma)),
     );
+    expect(measurements.filter(Boolean)).toEqual([{ inputTokens: 100, cachedTokens: 30 }]);
     expect(await f.root()).toMatchObject({ usedTokens: 150, reservedTokens: 0 });
     const rows = await f.rows();
     expect(rows).toHaveLength(1);
@@ -168,15 +171,33 @@ postgres("request ledger on disposable PostgreSQL", () => {
   });
   it("applies only a cumulative correction delta and permits an old exact replay", async () => {
     const f = await fixture();
+    const snapshot: ContextSnapshot = {
+      layers: { stable: 0, brief: 0, summary: 0, messages: 0, recall: 0, message: 0 },
+      recallRan: false,
+      recallCalls: 0,
+      cachedTokens: null,
+      inputTokens: null,
+      queueWaitMs: null,
+      timeToFirstTokenMs: null,
+      routingRule: null,
+    };
     const first = f.usage({ counter: { mode: "cumulative", epochId: "epoch", sequence: 0 } });
-    await f.record(first);
+    recordContextUsage(snapshot, await f.record(first));
     const next = f.usage({
       counter: { mode: "cumulative", epochId: "epoch", sequence: 1 },
-      categories: { ...f.request.categories, logicalInput: 120, uncachedInput: 80, output: 60 },
+      categories: {
+        ...f.request.categories,
+        logicalInput: 120,
+        uncachedInput: 70,
+        cacheReadInput: 40,
+        output: 60,
+      },
     });
-    await f.record(next);
-    await f.record(first);
-    await f.record(next);
+    const resumed = resumeContextSnapshot(snapshot, snapshot);
+    recordContextUsage(resumed, await f.record(next));
+    recordContextUsage(resumed, await f.record(first));
+    recordContextUsage(resumed, await f.record(next));
+    expect(resumed).toMatchObject({ inputTokens: 120, cachedTokens: 40 });
     expect(await f.root()).toMatchObject({ usedTokens: 180 });
     const rows = await f.rows();
     expect(rows).toHaveLength(1);
@@ -190,6 +211,15 @@ postgres("request ledger on disposable PostgreSQL", () => {
       { inputTokens: 100, outputTokens: 50 },
       { inputTokens: 20, outputTokens: 10 },
     ]);
+  });
+  it("keeps summary and detached learning spend out of primary run metrics", async () => {
+    const f = await fixture();
+    expect(await f.record(f.usage({ purpose: "summary" }))).toBeNull();
+    expect(
+      await f.record(f.usage({ requestId: "learning", purpose: "detached-learning" })),
+    ).toBeNull();
+    expect(await f.rows()).toHaveLength(2);
+    expect(await f.root()).toMatchObject({ usedTokens: 150 });
   });
   it("accepts out-of-order delta observations once", async () => {
     const f = await fixture();

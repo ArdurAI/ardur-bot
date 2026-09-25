@@ -130,14 +130,16 @@ beforeEach(async () => {
       botId: "bot",
     },
   ]);
-  api.list.mockImplementation(async ({ path }) =>
-    path === ""
-      ? [
-          { path: "src", kind: "dir", size: 0 },
-          { path: "readme.md", kind: "file", size: 5 },
-        ]
-      : [{ path: "src/main.ts", kind: "file", size: 20 }],
-  );
+  api.list.mockImplementation(async ({ path }) => ({
+    hiddenCount: 0,
+    entries:
+      path === ""
+        ? [
+            { path: "src", kind: "dir", size: 0 },
+            { path: "readme.md", kind: "file", size: 5 },
+          ]
+        : [{ path: "src/main.ts", kind: "file", size: 20 }],
+  }));
   api.read.mockImplementation(async ({ path }) => ({
     path,
     content: "first\nsecond\nthird",
@@ -176,6 +178,91 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("IDE page", () => {
+  it("shows the hidden entry count and keeps supported siblings usable", async () => {
+    api.list.mockResolvedValueOnce({
+      entries: [{ path: "src/main.ts", kind: "file", size: 20 }],
+      hiddenCount: 2,
+    });
+    await click("src");
+    expect(host.textContent).toContain("Some entries have unsupported names and are hidden (2).");
+    await click("main.ts");
+    expect(host.querySelector("textarea[data-editor]")).not.toBeNull();
+  });
+  it("blocks closing, switching computers and navigating while a save is in flight", async () => {
+    await click("readme.md");
+    await type(host.querySelector("textarea[data-editor]")!, "pending save");
+    let finish!: (value: unknown) => void;
+    api.save.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    vi.mocked(window.confirm).mockReturnValue(true);
+    await click("Save");
+    expect(button("Close readme.md").disabled).toBe(true);
+    const computer = host.querySelector<HTMLSelectElement>('select[aria-label="Computer"]')!;
+    expect(computer.disabled).toBe(true);
+    await click("Close readme.md");
+    await act(async () => {
+      computer.dispatchEvent(new Event("change", { bubbles: true }));
+      host.querySelector<HTMLAnchorElement>('a[href="/app"]')!.click();
+    });
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe("/app/ide");
+    expect(host.querySelector("textarea[data-editor]")).not.toBeNull();
+    await act(async () =>
+      finish({ saved: true, approvalRequired: false, version: "b".repeat(64) }),
+    );
+    expect(button("Close readme.md").disabled).toBe(false);
+    await click("Close readme.md");
+    expect(host.querySelector("textarea[data-editor]")).toBeNull();
+  });
+  it("polls only the open Changes drawer without opening per-bot streams", async () => {
+    expect(api.head).not.toHaveBeenCalled();
+    expect(api.subscribe).not.toHaveBeenCalled();
+    expect(api.changes).not.toHaveBeenCalled();
+    await click("Changes");
+    expect(api.changes).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers();
+    try {
+      // Closing cancels the pending refresh; reopening schedules it with this clock.
+      await act(async () => button("Changes").click());
+      await act(async () => button("Changes").click());
+      const calls = api.changes.mock.calls.length;
+      await act(async () => vi.advanceTimersByTimeAsync(10_000));
+      expect(api.changes).toHaveBeenCalledTimes(calls + 1);
+      await act(async () => button("Changes").click());
+      await act(async () => vi.advanceTimersByTimeAsync(30_000));
+      expect(api.changes).toHaveBeenCalledTimes(calls + 1);
+      expect(api.subscribe).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("bounds a large Ask a bot selection and shows the truncation before sending", async () => {
+    await click("readme.md");
+    const area = host.querySelector<HTMLTextAreaElement>("textarea[data-editor]")!;
+    await type(area, `${"x".repeat(32_000)}OMITTED`);
+    area.setSelectionRange(0, area.value.length);
+    await click("Ask a bot");
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain(
+      "Selection shortened to 32,000 characters.",
+    );
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain("/readme.md:1-1");
+    await type(host.querySelector('textarea[aria-label="Ask a bot"]')!, "Explain");
+    await act(async () =>
+      host
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const sent = api.send.mock.calls[0]![0].text;
+    expect(sent).toContain("/readme.md:1-1");
+    expect(sent).toContain("Selection shortened to 32,000 characters.");
+    expect(sent).toContain("x".repeat(32_000));
+    expect(sent).not.toContain("OMITTED");
+    expect(sent.length).toBeLessThan(32_200);
+  });
   it("loads tree directories on expansion, edits and saves a tab, and preserves a refusal", async () => {
     expect(api.list.mock.calls.map(([value]) => value.path)).toEqual([""]);
     await click("src");

@@ -106,12 +106,23 @@ observation shape. Callers remain responsible for safe identifiers and price-sou
 
 ## Runtime and trace handoff
 
-W0-3 must populate and preserve `AgentRuntimeEvent.request` and `recordHelperUsage`'s
+W0-3 must populate `AgentRuntimeEvent.request` and `recordHelperUsage`'s
 `AgentUsage.request` for normal/resumed turns, retries, helpers, summaries, delegated work and
-detached learning. The current executor still forwards legacy event totals; forwarding the new
-request field and mapping provider counters are W0-3 work. Legacy production behavior remains
-runnable until those collectors land. Do not send both a legacy and request-level observation
-for the same spend.
+detached learning. The executor forwards request observations intact. `recordRunUsage` returns
+only newly persisted primary-call input/cache deltas for the Chief of Staff run metrics; exact
+replays return null and cumulative corrections return only their increase. Summary, helper and
+detached-learning spend does not inflate primary-turn context metrics. A delegated run retains
+its own primary-call measurements. Legacy production behavior remains runnable until provider
+collectors land. Do not send both a legacy and request-level observation for the same spend.
+
+Brief maintenance records through the same ledger with purpose `summary`. Each actual model
+invocation has a distinct identity. Supplied request observations retain their counters and
+categories under an invocation namespace; legacy totals receive delta sequences with unknown
+cache/reasoning detail and null prices. Delivery replay of an identified observation deduplicates;
+a fresh maintenance invocation remains billed. Legacy runtime events without identity cannot
+distinguish duplicate delivery from a second observation. Context snapshots are best-effort
+diagnostics, saved after ledger persistence: an interrupted snapshot write can omit a measurement,
+but retrying the observation cannot increment metrics or budgets twice.
 
 The trace collector uses durable receipts for observation identity and the request row for its
 latest normalized totals. Export one request-delta total per request/attempt/epoch, or explicitly

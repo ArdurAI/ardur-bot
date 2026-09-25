@@ -1,5 +1,7 @@
-import type { MessageBlock } from "@ardurbot/contracts";
+import type { HostCommandApproval, MessageBlock } from "@ardurbot/contracts";
+import { looksLikeChatSecret } from "@ardurbot/contracts";
 import { integrationToolKind, redactSecrets } from "@ardurbot/core";
+import { shellQuote } from "@ardurbot/core/node/desktop-runtime";
 
 const MAX_APPROVAL_SUMMARY_LENGTH = 500;
 const MAX_APPROVAL_DETAIL_LENGTH = 4_000;
@@ -8,6 +10,8 @@ export type IntegrationApprovalAction = {
   vendorName: string;
   toolId: string;
   description: string;
+  hostCommand?: HostCommandApproval;
+  hostCommandRequired?: boolean;
 };
 
 export function buildApprovalAskBlock(
@@ -20,7 +24,7 @@ export function buildApprovalAskBlock(
     allowAlways?: boolean;
     integration?: IntegrationApprovalAction;
   },
-): MessageBlock {
+): Extract<MessageBlock, { kind: "ask" }> {
   const hidden = [...secrets];
   function collect(value: unknown, depth = 0) {
     if (!value || typeof value !== "object" || depth > 12) return;
@@ -35,6 +39,34 @@ export function buildApprovalAskBlock(
     }
   }
   collect(args);
+  const hostCommand = options?.integration?.hostCommand;
+  if (options?.integration?.hostCommandRequired && !hostCommand)
+    throw new Error("The command preview is unavailable. Request approval again.");
+  if (hostCommand) {
+    return {
+      kind: "ask",
+      approvalEffectId: effectId,
+      preformatted: true,
+      text: hostCommand.argv
+        .map((arg, index, argv) => shellQuote(redactApprovalArgument(arg, hidden, argv[index - 1])))
+        .join(" "),
+      detail: [
+        `Identity: ${redactApprovalText(hostCommand.identity, hidden)}`,
+        hostCommand.workspace === null
+          ? undefined
+          : `Workspace: ${redactApprovalText(hostCommand.workspace, hidden)}`,
+        `Working directory: ${shellQuote(redactApprovalText(hostCommand.cwd, hidden))}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      status: "pending",
+      actions: [
+        { id: "allow", label: "Allow once" },
+        { id: "deny", label: "Deny" },
+      ],
+    };
+  }
+  const arrayDetail = arrayApprovalDetail(args, hidden);
   const integrationWrite =
     options?.integration &&
     (integrationToolKind(options.integration.toolId, options.integration.description) === "write" ||
@@ -56,6 +88,7 @@ export function buildApprovalAskBlock(
       ? [...new Set([options.integration.toolId, toolName])].join(" · ")
       : undefined,
     preview ? preview.detail : formatApprovalDetail(toolName, args, options?.reviewReason),
+    arrayDetail,
   ]
     .filter(Boolean)
     .join("\n");
@@ -74,7 +107,12 @@ export function buildApprovalAskBlock(
       ),
       MAX_APPROVAL_SUMMARY_LENGTH,
     ),
-    detail: safeDetail ? truncate(safeDetail, MAX_APPROVAL_DETAIL_LENGTH) : undefined,
+    detail: safeDetail
+      ? arrayDetail
+        ? safeDetail
+        : truncate(safeDetail, MAX_APPROVAL_DETAIL_LENGTH)
+      : undefined,
+    ...(arrayDetail ? { preformatted: true } : {}),
     status: "pending",
     actions: preview
       ? [
@@ -94,6 +132,53 @@ export function buildApprovalAskBlock(
             { id: "deny", label: "Deny" },
           ],
   };
+}
+
+const SECRET_ARGUMENT =
+  /password|passwd|secret|token|credential|authorization|cookie|(?:api|access|private|client)[_-]?key/i;
+
+function redactApprovalText(value: string, secrets: string[]): string {
+  const redacted = redactSecrets(value, secrets)
+    .replace(/Bearer\s+\S+/gi, "[redacted]")
+    .replace(
+      /(?:github_pat_|gh[pousr]_)[A-Za-z0-9_]+|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bsk-[A-Za-z0-9_-]{8,}|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+      "[redacted]",
+    )
+    .replace(
+      /([\w-]*(?:password|passwd|secret|token|credential|authorization|cookie|api[_-]?key|access[_-]?key|private[_-]?key)[\w-]*["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'[^']*'|[^\s,;}]+)/gi,
+      "$1[redacted]",
+    )
+    .replace(/(https?:\/\/)[^/\s@]+@/gi, "$1[redacted]@");
+  return looksLikeChatSecret(redacted.replaceAll("[redacted]", "")) ? "[redacted]" : redacted;
+}
+
+function redactApprovalArgument(value: string, secrets: string[], previous?: unknown): string {
+  return typeof previous === "string" &&
+    /^-/.test(previous) &&
+    !previous.includes("=") &&
+    SECRET_ARGUMENT.test(previous)
+    ? "[redacted]"
+    : redactApprovalText(value, secrets);
+}
+
+/** Array order, primitive entries and nested payloads are consequential, not summary prose. */
+function arrayApprovalDetail(args: Record<string, unknown>, secrets: string[]): string | undefined {
+  let hasArray = false;
+  const json = JSON.stringify(
+    args,
+    (key, value) => {
+      if (Array.isArray(value)) hasArray = true;
+      if (key && SECRET_ARGUMENT.test(key)) return "[redacted]";
+      if (Array.isArray(value)) {
+        return value.map((item, index) =>
+          typeof item === "string" ? redactApprovalArgument(item, secrets, value[index - 1]) : item,
+        );
+      }
+      return typeof value === "string" ? redactApprovalText(value, secrets) : value;
+    },
+    2,
+  );
+  return hasArray ? `Arguments:\n${json}` : undefined;
 }
 
 function integrationWritePreview(

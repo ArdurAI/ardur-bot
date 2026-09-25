@@ -4,6 +4,25 @@ import { describe, expect, it, vi } from "vitest";
 import { NotificationActivityTracker, notify, runNotificationCategory } from "./notifications.js";
 
 describe("notification preference gate", () => {
+  it("delivers a second input occurrence between polls while ignoring mirror writes", () => {
+    const tracker = new NotificationActivityTracker();
+    const row = {
+      id: "run",
+      name: "Bot",
+      threadId: "thread",
+      category: "approvalsNeeded" as const,
+      status: "waiting_input" as const,
+      updatedAt: "2026-09-24T00:00:00Z",
+      occurredAt: "2026-09-24T00:00:00Z",
+      enabled: true,
+    };
+    tracker.accept([]);
+    expect(tracker.accept([row])).toEqual([row]);
+    expect(tracker.accept([{ ...row, updatedAt: "2026-09-24T00:00:01Z" }])).toEqual([]);
+    const next = { ...row, updatedAt: "2026-09-24T00:00:02Z", occurredAt: "2026-09-24T00:00:02Z" };
+    expect(tracker.accept([next])).toEqual([next]);
+    expect(tracker.accept([next])).toEqual([]);
+  });
   it.each<NotificationCategory>([
     "responseCompletions",
     "routines",

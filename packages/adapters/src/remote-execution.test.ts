@@ -1,4 +1,5 @@
 import type { SandboxProvider } from "@ardurbot/adapter-kit";
+import type { HostCommandApproval } from "@ardurbot/contracts";
 import { ALL_DEVICE_SCOPES, canonicalDispatchJson } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { deviceDigest } from "@ardurbot/db";
@@ -104,6 +105,47 @@ function fixture() {
   };
 }
 describe("executor device boundary", () => {
+  it.each(["program", "argv", "identity", "workspace", "cwd", "computerId"])(
+    "binds device approval to the unredacted host %s",
+    async (field) => {
+      const f = fixture();
+      const hostCommand: HostCommandApproval = {
+        id: "github",
+        argv: ["gh", "issue", "create", "--title", "ghp_fixturevalue123"],
+        identity: "fixture-account",
+        workspace: null,
+        cwd: "/workspace",
+        computerId: "computer",
+      };
+      f.effect.request = boundDirectApprovalRequest(
+        {
+          connectorId: "mcp",
+          resourceId: "connector",
+          resourceRevision: 2,
+          toolName: "execute_command",
+          hostCommand,
+        },
+        { args: hostCommand.argv.slice(1) },
+        REMOTE_APPROVAL_MARKER,
+      );
+      f.binding.requestFingerprint = deviceDigest(canonicalDispatchJson(f.effect.request));
+      f.answer.requestFingerprint = f.binding.requestFingerprint;
+      if (field === "program") hostCommand.argv[0] = "glab";
+      else if (field === "argv") hostCommand.argv[4] = "ghp_otherfixture456";
+      else if (field === "identity") hostCommand.identity = "other-fixture-account";
+      else if (field === "workspace") hostCommand.workspace = "other-workspace";
+      else if (field === "cwd") hostCommand.cwd = "/other-workspace";
+      else hostCommand.computerId = "other-computer";
+      await expect(validateDeviceApproval(f.db, f.effect, f.answer)).rejects.toThrow(
+        "changed or expired",
+      );
+      f.binding.answeredByGrantId = "phone";
+      await expect(
+        revalidateDeviceApprovalExecution(f.db, f.effect.id, f.run.id, "execute_command"),
+      ).rejects.toThrow("changed or expired");
+      expect(f.tx.deviceApprovalBinding.updateMany).not.toHaveBeenCalled();
+    },
+  );
   it("pauses a deploy the bot may run, then permits it with presence, and blocks after revocation", async () => {
     const f = fixture();
     f.grant.lastPresenceAt = new Date(0);

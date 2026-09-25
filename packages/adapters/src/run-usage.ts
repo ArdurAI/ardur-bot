@@ -19,7 +19,14 @@ type UsageDependencies = {
   events: Pick<ThreadEvents, "append"> & Partial<Pick<ThreadEvents, "notify">>;
 };
 
-export async function recordRunUsage(deps: UsageDependencies, run: UsageRun, usage: AgentUsage) {
+/** Only newly persisted primary-call measurements belong in the run's context metrics. */
+export type RecordedContextUsage = { inputTokens: number; cachedTokens: number | null };
+
+export async function recordRunUsage(
+  deps: UsageDependencies,
+  run: UsageRun,
+  usage: AgentUsage,
+): Promise<RecordedContextUsage | null> {
   if (usage.request) return recordRequestUsage(deps, run, usage);
   // Legacy callers lack stable observation identity. Preserve totals without claiming deduplication.
   if (
@@ -76,6 +83,9 @@ export async function recordRunUsage(deps: UsageDependencies, run: UsageRun, usa
       pricingProvenance: null,
     },
   });
+  return usage.reported === false || (delegation && delegation.runId !== run.id)
+    ? null
+    : { inputTokens: usage.inputTokens, cachedTokens: usage.cachedTokens ?? null };
 }
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -244,33 +254,53 @@ async function recordRequestUsage(deps: UsageDependencies, run: UsageRun, usage:
         }
         // Cancelled runs still incurred spend; the existing history fence forbids new thread events.
         const latestRun = await tx.run.findUniqueOrThrow({ where: { id: run.id } });
-        if (latestRun.status === "cancelled") return null;
-        return appendEventInTransaction(tx, {
-          spaceId: run.spaceId,
-          threadId: run.threadId,
-          botId: run.botId,
-          runId: run.id,
-          type: "usage.recorded",
-          payload: {
-            usageId: record.id,
-            observationId: receipt.id,
-            ...identity,
-            inputTokens: inputDelta,
-            outputTokens: outputDelta,
-            cost: null,
-            pricingProvenance: null,
-            requestId: request.requestId,
-            attemptId: request.attemptId,
-            purpose: request.purpose,
-            coverage: data.coverage,
-          },
-        });
+        const event =
+          latestRun.status === "cancelled"
+            ? null
+            : await appendEventInTransaction(tx, {
+                spaceId: run.spaceId,
+                threadId: run.threadId,
+                botId: run.botId,
+                runId: run.id,
+                type: "usage.recorded",
+                payload: {
+                  usageId: record.id,
+                  observationId: receipt.id,
+                  ...identity,
+                  inputTokens: inputDelta,
+                  outputTokens: outputDelta,
+                  cost: null,
+                  pricingProvenance: null,
+                  requestId: request.requestId,
+                  attemptId: request.attemptId,
+                  purpose: request.purpose,
+                  coverage: data.coverage,
+                },
+              });
+        return {
+          event,
+          contextUsage:
+            (!delegation || delegation.runId === run.id) &&
+            !currentRun.comparisonId &&
+            ["main", "retry", "delegated"].includes(request.purpose) &&
+            categories.logicalInput !== null
+              ? {
+                  inputTokens: inputDelta,
+                  cachedTokens:
+                    totals.categoryCoverage.logicalInput === "complete" &&
+                    totals.categoryCoverage.cacheReadInput === "complete"
+                      ? categories.cacheReadInput! - (existing?.cacheReadInputTokens ?? 0)
+                      : null,
+                }
+              : null,
+        };
       },
       { isolationLevel: "ReadCommitted" },
     ),
   );
   // Durable events are recovered by the existing cursor polling when notification is unavailable.
-  if (result) await deps.events.notify?.(run.threadId, result.seq);
+  if (result?.event) await deps.events.notify?.(run.threadId, result.event.seq);
+  return result?.contextUsage ?? null;
 }
 
 /** Callers hold admission/settlement's root lock for this transaction. */

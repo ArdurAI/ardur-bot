@@ -1,8 +1,9 @@
 import { type Bot, GROUP_MEMBER_MAX, GROUP_MEMBER_MIN, type Group } from "@ardurbot/contracts";
-import { BotAvatar, Button, Input } from "@ardurbot/ui-web";
+import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
 import { useId, useMemo, useState } from "react";
+import { BotContext } from "../components/ContextEntry";
 
 function validSelection(name: string, selected: readonly string[]) {
   return (
@@ -155,12 +156,18 @@ export function GroupSettings({
 }: {
   group: Group;
   bots: Bot[];
-  onSave: (input: { name?: string; botIds?: string[] }) => Promise<void>;
+  onSave: (input: {
+    name?: string;
+    botIds?: string[];
+    coordinatorBotId?: string | null;
+  }) => Promise<void>;
   onRemove: () => Promise<void>;
 }) {
   const { t } = useLingui();
   const nameId = useId();
+  const coordinatorId = useId();
   const [name, setName] = useState(group.name);
+  const [coordinator, setCoordinator] = useState(group.coordinatorBotId ?? "");
   const [selected, setSelected] = useState(group.members.map((member) => member.botId));
   const [pending, setPending] = useState<"save" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -186,6 +193,7 @@ export function GroupSettings({
 
   function save() {
     return onSave({
+      coordinatorBotId: selected.includes(coordinator) ? coordinator : null,
       name: name.trim() !== group.name ? name.trim() : undefined,
       botIds: sameMembers(
         selected,
@@ -228,6 +236,26 @@ export function GroupSettings({
         onChange={setSelected}
         maxHeight="max-h-[240px]"
       />
+      <label htmlFor={coordinatorId} className="mt-4 block text-sm text-muted-foreground">
+        <Trans>Coordinator</Trans>
+        <NativeSelect
+          id={coordinatorId}
+          aria-label={t`Coordinator`}
+          value={selected.includes(coordinator) ? coordinator : ""}
+          onChange={(event) => setCoordinator(event.target.value)}
+        >
+          <NativeSelectOption value="">
+            <Trans>None</Trans>
+          </NativeSelectOption>
+          {bots
+            .filter((bot) => selected.includes(bot.id))
+            .map((bot) => (
+              <NativeSelectOption key={bot.id} value={bot.id}>
+                {bot.name}
+              </NativeSelectOption>
+            ))}
+        </NativeSelect>
+      </label>
       <Button
         className="mt-5 w-full"
         disabled={pending !== null || !validSelection(name, selected)}
@@ -235,6 +263,18 @@ export function GroupSettings({
       >
         {pending === "save" ? <Trans>Saving…</Trans> : <Trans>Save</Trans>}
       </Button>
+      <div className="mt-4 text-sm text-muted-foreground">
+        <Trans>Context</Trans>
+      </div>
+      {group.members.map((member) => (
+        <BotContext
+          key={member.botId}
+          botId={member.botId}
+          groupId={group.id}
+          label={member.name}
+          showSettings={false}
+        />
+      ))}
       <Button
         variant="destructive"
         className="mt-4 w-full"

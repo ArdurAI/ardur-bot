@@ -195,6 +195,10 @@ msgstr "@{0}"
 msgid "1 run at this pin; hosted providers may bill per run"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "7 days"
+msgstr "7 дней"
+
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
 msgstr ""
@@ -985,6 +989,10 @@ msgstr ""
 msgid "Branch"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Brief"
+msgstr "Сводка"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Browse extensions"
 msgstr ""
@@ -1015,6 +1023,10 @@ msgstr ""
 msgid "by you"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Cache hits"
+msgstr "Попадания в кэш"
+
 #: src/pages/CallView.tsx
 msgid "Call"
 msgstr "Вызов"
@@ -1026,6 +1038,7 @@ msgstr "Не удаётся связаться с сервером."
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -1482,6 +1495,10 @@ msgstr ""
 msgid "Computers that can run tasks with access to local files, computer use, browser use, and local MCPs"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Concurrent runs"
+msgstr "Одновременные запуски"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
 msgstr ""
@@ -1650,6 +1667,11 @@ msgstr ""
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
 
+#: src/components/Context.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Context"
+msgstr "Контекст"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1677,6 +1699,10 @@ msgstr "Продолжить по электронной почте"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Controls how connector tools are loaded in new conversations."
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Coordinator"
+msgstr "Координатор"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Coordinator bot"
@@ -1979,6 +2005,10 @@ msgstr ""
 msgid "Could not load computers."
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Could not load data"
+msgstr "Не удалось загрузить данные"
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
 msgstr ""
@@ -2180,6 +2210,10 @@ msgstr "Не удалось сохранить автообзор."
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Could not save capabilities. Try again."
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Could not save changes"
+msgstr "Не удалось сохранить изменения"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Could not save changes. Try again."
@@ -2643,6 +2677,7 @@ msgstr "Обновление настольного приложения"
 msgid "Destination scope"
 msgstr ""
 
+#: src/components/AskCard.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -2842,6 +2877,7 @@ msgstr "напр. Hivenet Agent, Presales, бот табелей"
 msgid "Earlier message"
 msgstr "Предыдущее сообщение"
 
+#: src/components/Context.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
@@ -3218,6 +3254,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Group"
 msgstr "Группа"
+
+#: src/components/Context.tsx
+msgid "Group brief"
+msgstr "Сводка группы"
 
 #: src/pages/GroupPanel.tsx
 msgid "Group settings"
@@ -3663,6 +3703,10 @@ msgstr ""
 msgid "Leave"
 msgstr "Выйти"
 
+#: src/components/Context.tsx
+msgid "Left unchanged: {reason}"
+msgstr "Без изменений: {reason}"
+
 #: src/pages/system/DispatchSetting.tsx
 msgid "Let paired phones and chat accounts dispatch, steer, and approve work in this space."
 msgstr ""
@@ -4090,9 +4134,17 @@ msgstr ""
 msgid "Model options"
 msgstr "Варианты модели"
 
+#: src/components/Context.tsx
+msgid "Model or memory unavailable"
+msgstr "Модель или память недоступна"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "Расходы на модель оплачиваются ключами вашего провайдера."
+
+#: src/components/Context.tsx
+msgid "Model unavailable"
+msgstr "Модель недоступна"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
@@ -4413,8 +4465,9 @@ msgid "No uploaded files"
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
+#: src/pages/GroupPanel.tsx
 msgid "None"
-msgstr ""
+msgstr "Нет"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -4745,6 +4798,10 @@ msgstr ""
 msgid "Other model…"
 msgstr "Другая модель…"
 
+#: src/components/Context.tsx
+msgid "Owner edited recently"
+msgstr "Недавно изменено владельцем"
+
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
 msgstr "Инцидент PagerDuty"
@@ -4988,6 +5045,10 @@ msgstr ""
 #: src/pages/MemoryHistory.tsx
 msgid "Pushed"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Queue wait"
+msgstr "Ожидание в очереди"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
@@ -5424,6 +5485,7 @@ msgstr "Восстановление вашего рабочего простр�
 msgid "Restricted"
 msgstr ""
 
+#: src/components/Context.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
@@ -5528,6 +5590,10 @@ msgstr "Отозвать"
 msgid "Revoked"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Rewritten {time}"
+msgstr "Переписано {time}"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Robot"
 msgstr "Робот"
@@ -5539,6 +5605,10 @@ msgstr "Инструкции для комнаты"
 #: src/pages/RoutineEditor.tsx
 msgid "Rotate key"
 msgstr "Сменить ключ"
+
+#: src/components/Context.tsx
+msgid "Routed by default"
+msgstr "Направлено по умолчанию"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/Shell.tsx
@@ -5632,6 +5702,7 @@ msgid "Sans"
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
@@ -5816,6 +5887,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Select the text to copy it."
 msgstr ""
+
+#: src/pages/ide/dialogs.tsx
+msgid "Selection shortened to 32,000 characters."
+msgstr "Выделение сокращено до 32 000 символов."
 
 #: src/pages/memory/MemoryComposer.tsx
 #: src/pages/Shell.tsx
@@ -6078,6 +6153,10 @@ msgstr ""
 msgid "Software update"
 msgstr "Обновление программного обеспечения"
 
+#: src/pages/ide/IdePage.tsx
+msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
+msgstr "Некоторые записи имеют неподдерживаемые имена и скрыты ({hiddenCount})."
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
 msgstr ""
@@ -6293,6 +6372,10 @@ msgstr ""
 msgid "task"
 msgstr ""
 
+#: src/components/Context.tsx
+msgid "Task budget reached"
+msgstr "Бюджет задачи исчерпан"
+
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
 msgstr ""
@@ -6421,6 +6504,7 @@ msgstr ""
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
 
+#: src/pages/memory/MemoryComposer.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot may only run locally — change the pin or the space policy"
 msgstr ""
@@ -6537,6 +6621,10 @@ msgstr ""
 msgid "Time of day"
 msgstr "Время суток"
 
+#: src/components/Context.tsx
+msgid "Time to first token"
+msgstr "Время до первого токена"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Timeline"
@@ -6553,6 +6641,10 @@ msgstr ""
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "К:"
+
+#: src/components/Context.tsx
+msgid "Today"
+msgstr "Сегодня"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"

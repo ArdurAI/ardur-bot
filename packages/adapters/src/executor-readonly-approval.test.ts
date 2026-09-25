@@ -1,4 +1,11 @@
+// Admission is verified separately; these fixtures isolate tool policy and replay.
+vi.mock("./context/concurrency.js", () => ({
+  claimBotRun: (prisma: unknown, input: { claim: (tx: unknown) => Promise<unknown> }) =>
+    input.claim(prisma),
+}));
+
 import type {
+  AdapterContext,
   AgentRunRequest,
   AutoReviewProvider,
   ConnectorCall,
@@ -16,6 +23,9 @@ import { isApprovalPausedResult } from "./approval-effect.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
 import { catalogEntries, resolveCatalogCall } from "./lazy-tool-catalog.js";
+import { approvalRequestRoute } from "./remote-execution.js";
+
+vi.mock("./runtimes/native-host.js", () => ({ nativeHostOwner: async () => true }));
 
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
@@ -60,6 +70,7 @@ function fixture({
   },
   shutdownSignal,
   integration = false,
+  host = false,
 }: {
   name?: string;
   catalog?: boolean;
@@ -71,16 +82,24 @@ function fixture({
   bot?: { name: string; title: string; description: string };
   shutdownSignal?: AbortSignal;
   integration?: boolean;
+  host?: boolean;
 } = {}) {
   const tool: ConnectorTool = {
     name,
     description: "Read an item",
     readOnly: true,
-    inputSchema: {
-      type: "object",
-      properties: { id: { type: "string" } },
-      required: ["id"],
-    },
+    inputSchema: host
+      ? {
+          type: "object",
+          properties: { args: { type: "array", items: { type: "string" } } },
+          required: ["args"],
+          additionalProperties: false,
+        }
+      : {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
     route: {
       connectorId: integration ? "mcp" : "demo",
       resourceId: "resource-1",
@@ -95,6 +114,7 @@ function fixture({
     server: {
       enabled: true,
       catalogId: "github",
+      transport: host ? "host-cli" : "remote-http",
       connectionState: "connected",
       revision: 1,
       spaceAllowedTools: [name],
@@ -102,7 +122,8 @@ function fixture({
       manifest: {
         capturedAt: "2026-09-23T00:00:00.000Z",
         serverVersion: null,
-        account: null,
+        account: host ? "fixture-account" : null,
+        workspace: null as string | null,
         tools: [
           { id: name, description: "Synthetic test tool", inputSchemaDigest: "a".repeat(64) },
         ],
@@ -112,6 +133,7 @@ function fixture({
   const effects: Effect[] = [];
   const results: unknown[] = [];
   const run = {
+    createdAt: new Date("2026-09-24T12:00:00Z"),
     id: "run-1",
     botId: "bot-1",
     threadId: "thread-1",
@@ -202,6 +224,9 @@ function fixture({
       }),
     },
     bot: {
+      findFirst: vi.fn(async () => ({
+        computer: { id: "computer-1", kind: "desktop", providerRef: "/workspace" },
+      })),
       findUniqueOrThrow: vi.fn(async () => ({
         id: run.botId,
         name: bot.name,
@@ -249,12 +274,23 @@ function fixture({
     return true;
   });
   const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
-  const execute = vi.fn(async function* (call: ConnectorCall): AsyncGenerator<ConnectorEvent> {
+  const execute = vi.fn(async function* (
+    call: ConnectorCall,
+    _context: AdapterContext,
+  ): AsyncGenerator<ConnectorEvent> {
     yield { type: "result" as const, data: { item: call.args.id } };
   });
   let calls: Array<{ args: Record<string, unknown>; executionId: string }> = [
-    { args: name === "shell" ? { command: "pnpm test" } : { id: "item-1" }, executionId: "call-1" },
+    {
+      args: host
+        ? { args: ["issue", "list"] }
+        : name === "shell"
+          ? { command: "pnpm test" }
+          : { id: "item-1" },
+      executionId: "call-1",
+    },
   ];
+  const cwd = { value: "/workspace" };
   const runtimeRun = vi.fn(async function* (request: AgentRunRequest) {
     for (const call of calls) {
       const result = await request.executeTool!(
@@ -287,7 +323,10 @@ function fixture({
         catalog ? resolveCatalogCall(call, catalogEntries([tool])) : undefined,
       execute,
     },
-    sandbox: { describe: () => ({ capabilities: { graphical: false } }) },
+    sandbox: {
+      describe: () => ({ capabilities: { graphical: false } }),
+      resolveCommandCwd: async () => cwd.value,
+    },
     memory: { read: async () => ({ documents: [] }) },
     memoryProviders: { resolve: async () => null },
     events: { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun },
@@ -297,6 +336,7 @@ function fixture({
     shutdownSignal,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
   return {
+    cwd,
     grant,
     effects,
     results,
@@ -318,6 +358,73 @@ function fixture({
 describe("connector read-only metadata and approval enforcement", () => {
   beforeEach(() => {
     reviewMock.mockReset();
+  });
+
+  describe.each([false, true])("host command catalog = %s", (catalog) => {
+    it("asks for a read command despite an allow rule and passes only the bound snapshot after approval", async () => {
+      const f = fixture({
+        name: "execute_command",
+        catalog,
+        integration: true,
+        host: true,
+        autoReview: true,
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "execute_command" }],
+      });
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(reviewMock).not.toHaveBeenCalled();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              text: "'gh' 'issue' 'list'",
+              preformatted: true,
+              detail: "Identity: fixture-account\nWorking directory: '/workspace'",
+            }),
+          ],
+        }),
+      );
+      const snapshot = approvalRequestRoute(f.effects[0]!.request)?.hostCommand;
+      expect(snapshot).toMatchObject({
+        argv: ["gh", "issue", "list"],
+        identity: "fixture-account",
+        cwd: "/workspace",
+      });
+      f.effects[0]!.status = "approved";
+      await f.run();
+      expect(f.execute).toHaveBeenCalledOnce();
+      expect(f.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ args: { args: ["issue", "list"] } }),
+        expect.objectContaining({ hostCommandApproval: snapshot }),
+      );
+      expect(f.effects[0]!.status).toBe("completed");
+    });
+    it.each(["argv", "program", "identity", "workspace", "cwd", "legacy", "transport"])(
+      "refuses a resumed approval after %s changes",
+      async (changed) => {
+        const f = fixture({ name: "execute_command", catalog, integration: true, host: true });
+        await f.run();
+        f.effects[0]!.status = "approved";
+        if (changed === "argv")
+          f.setCalls([
+            {
+              args: { args: ["issue", "create", "--title", "Unapproved"] },
+              executionId: "new-call",
+            },
+          ]);
+        if (changed === "program") f.grant.server.catalogId = "gitlab";
+        if (changed === "transport") f.grant.server.transport = "remote-http";
+        if (changed === "identity") f.grant.server.manifest.account = "other-fixture-account";
+        if (changed === "workspace") f.grant.server.manifest.workspace = "other-workspace";
+        if (changed === "cwd") f.cwd.value = "/other-workspace";
+        if (changed === "legacy") delete approvalRequestRoute(f.effects[0]!.request)!.hostCommand;
+        await f.run();
+        expect(f.execute).not.toHaveBeenCalled();
+        expect(f.results.at(-1)).toEqual({
+          error: "This command changed or has no bound approval. Review it again.",
+        });
+      },
+    );
   });
 
   it.each(["shell", "write_file"])(
