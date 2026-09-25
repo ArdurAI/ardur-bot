@@ -193,7 +193,7 @@ export class McpReauthorizationRequiredError extends Error {
 export class McpOAuthUnavailableError extends Error {
   readonly code = "MCP_OAUTH_UNAVAILABLE";
   constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : "Browser sign-in is unavailable.", { cause });
+    super(cause instanceof Error ? cause.message : "Needs sign-in.", { cause });
     this.name = "McpOAuthUnavailableError";
   }
 }
