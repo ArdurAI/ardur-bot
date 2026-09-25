@@ -21,6 +21,7 @@ import {
   BoardRunResultSchema,
   WorkItemSchema,
 } from "@ardurbot/contracts/board";
+import { getLogger } from "@ardurbot/logging";
 import { z } from "zod";
 
 export type BoardTransport = (request: BoardRun) => Promise<BoardRunResult>;
@@ -95,7 +96,12 @@ export function parseBeadsItem(value: unknown): WorkItem {
 }
 export class BeadsBoardProvider implements ProjectBoardProvider {
   constructor(
-    private readonly options: { workspace: BoardWorkspace; actor: string; run: BoardTransport },
+    private readonly options: {
+      workspace: BoardWorkspace;
+      actor: string;
+      run: BoardTransport;
+      observe?: (items: WorkItem[]) => Promise<void>;
+    },
   ) {}
   private target() {
     const workspace = this.options.workspace;
@@ -133,14 +139,17 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
   }
   private async items(argv: string[], actor?: string) {
     const data = await this.json(argv, actor);
+    let items: WorkItem[];
     try {
-      return (data == null ? [] : Array.isArray(data) ? data : [data]).map(parseBeadsItem);
+      items = (data == null ? [] : Array.isArray(data) ? data : [data]).map(parseBeadsItem);
     } catch {
       throw new BoardError({
         code: "invalid_response",
         message: "Beads returned an unreadable work item.",
       });
     }
+    await this.options.observe?.(items);
+    return items;
   }
   private filter(input: BoardFilter = {}, ready = false) {
     const filter = BoardFilterSchema.parse(input);
@@ -241,7 +250,10 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
   }
   async comment(id: string, text: string) {
     BoardItemIdSchema.parse(id);
-    return parseBeadsComment(await this.json(["comments", "add", "--", id, text]));
+    const comment = parseBeadsComment(await this.json(["comments", "add", "--", id, text]));
+    if (this.options.observe)
+      await this.show(id).catch((error) => getLogger().error("board comment observation", error));
+    return comment;
   }
   async link(from: string, to: string, type: string) {
     BoardItemIdSchema.parse(from);

@@ -256,9 +256,6 @@ const TeamBoard = lazy(() =>
   import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
 );
 
-const ProjectBoard = lazy(() =>
-  import("./board/Board").then((module) => ({ default: module.Board })),
-);
 const ActivityList = lazy(() =>
   import("./ActivityList").then((module) => ({ default: module.ActivityList })),
 );
@@ -346,7 +343,8 @@ export function ShellPage({
   board?: boolean;
   dashboard?: boolean;
 }) {
-  const TaskPage = board ? ProjectBoard : TeamBoard;
+  dashboard ||= board;
+  const TaskPage = TeamBoard;
   const { t } = useLingui();
   const teamView = useRef(team || board || dashboard);
   teamView.current = team || board || dashboard;
@@ -2623,17 +2621,6 @@ export function ShellPage({
             : "md:w-[316px]"
         }`}
       >
-        <Button
-          variant="ghost"
-          className="m-2"
-          aria-pressed={board}
-          onClick={() => {
-            navigate("/app/board");
-            setMobileSidebarOpen(false);
-          }}
-        >
-          <Trans>Board</Trans>
-        </Button>
         {bots.length >= 2 ? (
           <Button
             variant="ghost"
@@ -3241,7 +3228,7 @@ export function ShellPage({
           />
         </main>
       ) : null}
-      {team || board ? (
+      {team ? (
         <main
           aria-hidden={mobileSidebarOpen || undefined}
           inert={mobileSidebarOpen}
@@ -3253,7 +3240,6 @@ export function ShellPage({
             }
           >
             <TaskPage
-              bots={bots}
               key={bootstrapMe?.spaceId}
               navigation={
                 <Button

@@ -74,11 +74,13 @@ afterEach(async () => {
 });
 it.each([
   ["/app", "dashboard"],
+  ["/app/board?workspace=board&item=item-1", "dashboard"],
+  ["/app?view=board", "dashboard"],
   ["/app/bots", "bots:list"],
   ["/app/bot-id?m=message", "bots:bot-id"],
   ["/app/g/group-id", "bots:group-id"],
   ["/app/team", "team"],
-  ["/app/board", "board"],
+  ["/app/board", "dashboard"],
 ])("preserves %s", async (path, expected) => {
   await act(async () =>
     root.render(

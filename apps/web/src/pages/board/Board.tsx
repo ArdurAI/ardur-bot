@@ -1,13 +1,19 @@
 import type { Bot } from "@ardurbot/contracts";
 import type {
   BoardFilter,
-  BoardGraph,
+  BoardPatch,
   BoardProblem,
   BoardSnapshot,
   BoardWorkspace,
   WorkItem,
 } from "@ardurbot/contracts/board";
-import { BOARD_TYPES, BoardCreateSchema, boardColumn } from "@ardurbot/contracts/board";
+import {
+  BOARD_STATUSES,
+  BOARD_TYPES,
+  BoardCreateSchema,
+  BoardFilterSchema,
+  BoardPatchSchema,
+} from "@ardurbot/contracts/board";
 import {
   Button,
   Dialog,
@@ -21,29 +27,54 @@ import {
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { LoadingState } from "../../components/ai/primitives";
 import { rpc } from "../../lib/rpc";
+import { BoardColumns } from "./BoardColumns";
 import { DependencyGraph } from "./Graph";
 import { ItemForm } from "./ItemForm";
+
+export { BoardColumns } from "./BoardColumns";
 
 const empty: BoardSnapshot = { items: [], readyIds: [], blockedIds: [] };
 export function Board({
   navigation,
-  bots = [],
+  bots: initialBots = [],
+  openSettings,
+  scope = "",
+  spaceId,
 }: {
   navigation?: ReactNode;
+  openSettings?: () => void;
+  scope?: string;
+  spaceId?: string;
   bots?: Pick<Bot, "id" | "name">[];
 }) {
   const { t } = useLingui();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const requestedWorkspace = params.get("workspace") ?? params.get("workspaceId") ?? undefined;
+  const itemId = params.get("item") ?? params.get("itemId") ?? params.get("id") ?? undefined;
+  const storageKey = `ardurbot:board-filters:${scope}`;
+  const [saved] = useState(() => {
+    try {
+      const value = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
+      return value && typeof value === "object" ? value : {};
+    } catch {
+      return {};
+    }
+  });
+  const [bots, setBots] = useState(initialBots);
   const closeSwitchId = useId();
   const [workspaces, setWorkspaces] = useState<BoardWorkspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [problem, setProblem] = useState<BoardProblem | null>(null);
   const [snapshot, setSnapshot] = useState(empty);
-  const [filter, setFilter] = useState<BoardFilter>({});
-  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<BoardFilter>(
+    () => BoardFilterSchema.safeParse(saved.filter).data ?? {},
+  );
+  const [search, setSearch] = useState(typeof saved.search === "string" ? saved.search : "");
+  const [botFilter, setBotFilter] = useState(typeof saved.botId === "string" ? saved.botId : "");
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -52,78 +83,189 @@ export function Board({
   const [editing, setEditing] = useState(false);
   const [comment, setComment] = useState("");
   const [botId, setBotId] = useState(bots[0]?.id ?? "");
-  const [graph, setGraph] = useState<BoardGraph | null>(null);
   const [view, setView] = useState("board");
   const [exportPath, setExportPath] = useState("");
-  const [preview, setPreview] = useState(false);
+  const [followingIds, setFollowingIds] = useState<string[]>([]);
+  const [optimistic, setOptimistic] = useState<WorkItem | null>(null);
+  const [undo, setUndo] = useState<{
+    workspaceId: string;
+    id: string;
+    patch: BoardPatch;
+  } | null>(null);
+  const pending = useRef<Promise<void> | null>(null);
+  const controller = useRef<AbortController | null>(null);
+  const mutation = useRef(false);
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ filter, search, botId: botFilter }));
+    } catch {
+      /* Storage can be unavailable. */
+    }
+  }, [storageKey, filter, search, botFilter]);
   const epoch = useRef(0);
   const catalog = snapshot.allItems ?? snapshot.items;
   const workspace = workspaces.find((row) => row.id === workspaceId);
-  const loadWorkspaces = useCallback(async () => {
-    const result = await rpc.board.workspaces({});
-    setWorkspaces(result.workspaces);
-    setProblem(result.problem);
-    setWorkspaceId((current) =>
-      result.workspaces.some((row) => row.id === current)
-        ? current
-        : (result.workspaces.find((row) => row.kind === "space")?.id ?? ""),
-    );
-    setLoaded(true);
-  }, []);
-  useEffect(() => {
-    void loadWorkspaces().catch((e) => {
-      setError(e.message);
-      setLoaded(true);
-    });
-  }, [loadWorkspaces]);
   const refresh = useCallback(async () => {
-    if (!workspaceId || !workspace?.initialized) return;
-    const ticket = ++epoch.current;
-    const result = await rpc.board.snapshot({ workspaceId, filter, search: search || undefined });
-    if (ticket === epoch.current) {
-      setSnapshot(result);
-      setError("");
-    }
-    if (view === "graph") {
-      const nextGraph = await rpc.board.graph({ workspaceId, rootId: filter.parent });
-      if (ticket === epoch.current) setGraph(nextGraph);
-    }
-  }, [workspaceId, workspace?.initialized, filter, search, view]);
+    if (pending.current) return pending.current;
+    const abort = controller.current;
+    if (!abort || abort.signal.aborted) return;
+    const ticket = epoch.current;
+    const request = rpc.board
+      .view(
+        { workspaceId: requestedWorkspace, itemId },
+        { signal: abort.signal, context: { spaceId } },
+      )
+      .then((result) => {
+        if (abort.signal.aborted || ticket !== epoch.current) return;
+        setWorkspaces(result.workspaces);
+        setWorkspaceId(result.workspaceId ?? "");
+        setSnapshot(result.snapshot);
+        setSelected(result.selected);
+        setFollowingIds(result.followingIds);
+        setBots(result.bots);
+        setProblem(result.problem);
+        setError("");
+        setLoaded(true);
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) {
+          setError(t`Could not load Board; retry.`);
+          setLoaded(true);
+        }
+      })
+      .finally(() => {
+        if (pending.current === request) pending.current = null;
+      });
+    pending.current = request;
+    return request;
+  }, [requestedWorkspace, itemId, spaceId, t]);
   useEffect(() => {
-    setSnapshot(empty);
-    setSelected(null);
-    setGraph(null);
-    setExportPath("");
-    const timer = setTimeout(() => void refresh().catch((e) => setError(e.message)), 200);
-    const interval = setInterval(() => void refresh().catch((e) => setError(e.message)), 15_000);
+    const abort = new AbortController();
+    controller.current = abort;
+    ++epoch.current;
+    const poll = async () => {
+      // Await a cancelled prior selection before opening the next request.
+      await pending.current;
+      if (!abort.signal.aborted && !document.hidden && !mutation.current) await refresh();
+    };
+    void poll();
+    const interval = setInterval(() => {
+      if (!pending.current) void poll();
+    }, 15_000);
+    document.addEventListener("visibilitychange", poll);
     return () => {
-      ++epoch.current;
-      clearTimeout(timer);
+      abort.abort();
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", poll);
     };
   }, [refresh]);
-  const act = async (work: () => Promise<unknown>) => {
-    setBusy(true);
-    setError("");
-    try {
-      await work();
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t`Could not update this item.`);
-    } finally {
-      setBusy(false);
-    }
+  const loadWorkspaces = refresh;
+  const reload = async () => {
+    await pending.current;
+    await refresh();
   };
   const open = async (id: string) => {
     setEditing(false);
     setComment("");
-    setSelected(await rpc.board.show({ workspaceId, id }));
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("workspace", workspaceId);
+      next.set("item", id);
+      return next;
+    });
+  };
+  const move = async (id: string, status: NonNullable<BoardPatch["status"]>) => {
+    if (mutation.current) return;
+    const item = catalog.find((row) => row.id === id);
+    if (!item) return;
+    const oldStatus = BoardPatchSchema.shape.status.safeParse(item.status);
+    mutation.current = true;
+    setBusy(true);
+    setError("");
+    setOptimistic({
+      ...item,
+      status,
+      deferUntil: null,
+      closedAt: status === "closed" ? new Date().toISOString() : null,
+    });
+    try {
+      await rpc.board.update({ workspaceId, id, patch: { status, deferUntil: null } });
+      if (oldStatus.success)
+        setUndo({
+          workspaceId,
+          id,
+          patch: { status: oldStatus.data, deferUntil: item.deferUntil },
+        });
+      await reload();
+    } catch {
+      setError(t`Could not update this item.`);
+    } finally {
+      setOptimistic(null);
+      setBusy(false);
+      mutation.current = false;
+    }
+  };
+  const act = async (work: () => Promise<unknown>) => {
+    if (mutation.current) return;
+    mutation.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await work();
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t`Could not update this item.`);
+    } finally {
+      setBusy(false);
+      mutation.current = false;
+    }
   };
   const updateFilter = (key: keyof BoardFilter, value: string) =>
     setFilter((previous) => ({ ...previous, [key]: value || undefined }));
   const chosenBot = bots.find((bot) => bot.id === botId) ?? bots[0];
+  const visible: BoardSnapshot = {
+    ...snapshot,
+    items: snapshot.items
+      .map((item) => (item.id === optimistic?.id ? optimistic : item))
+      .filter(
+        (item) =>
+          (!search ||
+            `${item.title} ${item.description} ${item.id}`
+              .toLowerCase()
+              .includes(search.toLowerCase())) &&
+          (!botFilter ||
+            item.assignee === `bot:${bots.find((bot) => bot.id === botFilter)?.name}`) &&
+          Object.entries(filter).every(
+            ([key, value]) =>
+              !value ||
+              (key === "label"
+                ? item.labels.includes(value)
+                : item[key as "type" | "assignee" | "parent" | "status"] === value),
+          ),
+      ),
+    readyIds: optimistic
+      ? [
+          ...snapshot.readyIds.filter((id) => id !== optimistic.id),
+          ...(optimistic.status === "open" ? [optimistic.id] : []),
+        ]
+      : snapshot.readyIds,
+    blockedIds: optimistic
+      ? [
+          ...snapshot.blockedIds.filter((id) => id !== optimistic.id),
+          ...(optimistic.status === "blocked" ? [optimistic.id] : []),
+        ]
+      : snapshot.blockedIds,
+  };
+  const currentGraph = {
+    items: visible.items,
+    edges: visible.items.flatMap((item) =>
+      item.dependencies
+        .filter((edge) => edge.direction === "outgoing")
+        .map((edge) => ({ from: item.id, to: edge.id, type: edge.type })),
+    ),
+  };
   return (
-    <section className="relative min-h-0 flex-1 overflow-auto p-4" aria-label={t`Board`}>
+    <section className="relative min-h-0 flex-1" aria-label={t`Board`}>
       <header className="mb-4 flex flex-wrap items-center gap-2">
         {navigation}
         <h1 className="text-lg font-medium">
@@ -133,10 +275,14 @@ export function Board({
           <NativeSelect
             aria-label={t`Board`}
             value={workspaceId}
-            onChange={(e) => setWorkspaceId(e.target.value)}
+            onChange={(e) => {
+              setParams({ view: "board", workspace: e.target.value });
+              setSelected(null);
+              setSnapshot(empty);
+            }}
           >
             {workspaces
-              .filter((row) => row.enabled)
+              .filter((row) => row.enabled && row.initialized)
               .map((row) => (
                 <option key={row.id} value={row.id}>
                   {row.name}
@@ -193,15 +339,15 @@ export function Board({
         </div>
       ) : null}
       {exportPath ? <output className="my-2 block break-all text-sm">{exportPath}</output> : null}
-      {workspace && !workspace.initialized ? (
-        <>
-          <p className="mb-2">
-            <Trans>This folder has no board</Trans>
+      {loaded && !workspace ? (
+        <div className="space-y-2">
+          <p>
+            <Trans>No board</Trans>
           </p>
-          <Button onClick={() => setPreview(true)}>
-            <Trans>Start a board in this folder</Trans>
+          <Button onClick={openSettings}>
+            <Trans>Set up a board</Trans>
           </Button>
-        </>
+        </div>
       ) : null}
       {workspace?.initialized ? (
         <>
@@ -240,6 +386,18 @@ export function Board({
               onChange={(e) => updateFilter("assignee", e.target.value)}
             />
             <NativeSelect
+              aria-label={t`Bot`}
+              value={botFilter}
+              onChange={(event) => setBotFilter(event.target.value)}
+            >
+              <option value="">{t`Bot`}</option>
+              {bots.map((bot) => (
+                <option key={bot.id} value={bot.id}>
+                  {bot.name}
+                </option>
+              ))}
+            </NativeSelect>
+            <NativeSelect
               aria-label={t`Epic`}
               value={filter.parent ?? ""}
               onChange={(e) => updateFilter("parent", e.target.value)}
@@ -263,8 +421,8 @@ export function Board({
               <option value="epics">{t`Epics`}</option>
             </NativeSelect>
           </div>
-          {view === "graph" && graph ? (
-            <DependencyGraph graph={graph} onOpen={(id) => void act(() => open(id))} />
+          {view === "graph" ? (
+            <DependencyGraph graph={currentGraph} onOpen={(id) => void act(() => open(id))} />
           ) : view === "epics" ? (
             <div className="space-y-2">
               {catalog
@@ -300,42 +458,27 @@ export function Board({
                 })}
             </div>
           ) : (
-            <BoardColumns snapshot={snapshot} onOpen={(id) => void act(() => open(id))} />
+            <BoardColumns
+              snapshot={visible}
+              onOpen={(id) => void open(id)}
+              busy={busy}
+              onMove={(id, status) => void move(id, status)}
+              onAdd={async (title, status) => {
+                let created: WorkItem | undefined;
+                await act(async () => {
+                  created = await rpc.board.create({
+                    workspaceId,
+                    item: { title, type: "task", priority: 2 },
+                  });
+                  if (status !== "open")
+                    await rpc.board.update({ workspaceId, id: created.id, patch: { status } });
+                });
+                if (!created) throw new Error("create failed");
+              }}
+            />
           )}
         </>
       ) : null}
-      <Dialog open={preview} onOpenChange={setPreview}>
-        <DialogContent>
-          <DialogTitle>
-            <Trans>Start a board in this folder</Trans>
-          </DialogTitle>
-          {error ? (
-            <p role="alert" className="text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <p className="break-all">{workspace?.path}/.beads/</p>
-          <p className="text-sm text-muted-foreground">
-            <Trans>
-              Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md,
-              interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay
-              unchanged.
-            </Trans>
-          </p>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                await rpc.board.start({ workspaceId });
-                setPreview(false);
-                await loadWorkspaces();
-              })
-            }
-          >
-            <Trans>Start a board in this folder</Trans>
-          </Button>
-        </DialogContent>
-      </Dialog>
       <Dialog open={newItem} onOpenChange={setNewItem}>
         <DialogContent className="max-h-full overflow-auto sm:max-w-xl">
           <DialogTitle>
@@ -355,7 +498,14 @@ export function Board({
       <Dialog
         open={selected !== null}
         onOpenChange={(open) => {
-          if (!open) setSelected(null);
+          if (!open) {
+            setSelected(null);
+            setParams((previous) => {
+              const next = new URLSearchParams(previous);
+              for (const key of ["item", "itemId", "id"]) next.delete(key);
+              return next;
+            });
+          }
         }}
       >
         <DialogContent className="inset-y-0 left-auto right-0 top-0 h-full max-w-full translate-x-0 translate-y-0 overflow-auto rounded-none sm:max-w-xl">
@@ -397,6 +547,52 @@ export function Board({
                   </Button>
                 </>
               )}
+              <NativeSelect
+                aria-label={t`Status`}
+                value={optimistic?.id === selected.id ? optimistic.status : selected.status}
+                disabled={busy}
+                onChange={(event) =>
+                  void move(selected.id, BoardPatchSchema.shape.status.parse(event.target.value)!)
+                }
+              >
+                {BOARD_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {status === "open"
+                      ? t`Ready`
+                      : status === "in_progress"
+                        ? t`In progress`
+                        : status === "blocked"
+                          ? t`Blocked`
+                          : status === "closed"
+                            ? t`Done`
+                            : status === "deferred"
+                              ? t`Deferred`
+                              : status === "pinned"
+                                ? t`Pinned`
+                                : t`Hooked`}
+                  </option>
+                ))}
+              </NativeSelect>
+              <Button
+                variant="outline"
+                disabled={busy}
+                aria-pressed={followingIds.includes(selected.id)}
+                onClick={() =>
+                  void act(async () => {
+                    await rpc.board.follow({
+                      workspaceId,
+                      id: selected.id,
+                      following: !followingIds.includes(selected.id),
+                    });
+                  })
+                }
+              >
+                {followingIds.includes(selected.id) ? (
+                  <Trans>Unfollow</Trans>
+                ) : (
+                  <Trans>Follow</Trans>
+                )}
+              </Button>
               <div className="flex flex-wrap gap-2">
                 <Button
                   disabled={busy || selected.status === "closed"}
@@ -525,7 +721,7 @@ export function Board({
                   onClick={() =>
                     void act(async () => {
                       await rpc.board.comment({ workspaceId, id: selected.id, text: comment });
-                      await open(selected.id);
+                      setComment("");
                     })
                   }
                 >
@@ -536,52 +732,29 @@ export function Board({
           ) : null}
         </DialogContent>
       </Dialog>
-    </section>
-  );
-}
-export function BoardColumns({
-  snapshot,
-  onOpen,
-}: {
-  snapshot: BoardSnapshot;
-  onOpen: (id: string) => void;
-}) {
-  const columns = [
-    { id: "ready", label: <Trans>Ready</Trans> },
-    { id: "in_progress", label: <Trans>In progress</Trans> },
-    { id: "blocked", label: <Trans>Blocked</Trans> },
-    { id: "deferred", label: <Trans>Deferred</Trans> },
-    { id: "done", label: <Trans>Done</Trans> },
-  ];
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      {columns.map((column) => (
-        <section
-          key={column.id}
-          data-board-column={column.id}
-          className="min-h-40 rounded-lg bg-muted/40 p-2"
+      {undo ? (
+        <div
+          role="status"
+          className="fixed bottom-4 end-4 z-50 flex items-center gap-3 rounded-lg border border-border bg-card p-3 shadow-sm"
         >
-          <h2 className="mb-3 text-sm font-medium">{column.label}</h2>
-          <div className="space-y-2">
-            {snapshot.items
-              .filter((item) => boardColumn(item, snapshot) === column.id)
-              .map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  onClick={() => onOpen(item.id)}
-                  className="w-full rounded-lg border border-border bg-card p-3 text-start shadow-sm focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  <span className="block font-medium">{item.title}</span>
-                  <span className="mt-2 block text-xs text-muted-foreground">
-                    {item.id} · P{item.priority}
-                    {item.assignee ? ` · ${item.assignee}` : ""}
-                  </span>
-                </button>
-              ))}
-          </div>
-        </section>
-      ))}
-    </div>
+          <Trans>Item updated</Trans>
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() =>
+              void act(async () => {
+                await rpc.board.update(undo);
+                setUndo(null);
+              })
+            }
+          >
+            <Trans>Undo</Trans>
+          </Button>
+          <Button variant="ghost" onClick={() => setUndo(null)}>
+            <Trans>Dismiss</Trans>
+          </Button>
+        </div>
+      ) : null}
+    </section>
   );
 }

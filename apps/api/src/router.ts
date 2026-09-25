@@ -5278,6 +5278,16 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
     },
     board: {
+      view: authed.board.view.handler(({ context, input }) =>
+        boardCall(() => board.view(context.actor, input)),
+      ),
+      work: authed.board.work.handler(({ context }) => boardCall(() => board.work(context.actor))),
+      configure: authed.board.configure.handler(({ context, input }) =>
+        boardCall(() => board.service.configure(context.actor, input.workspaceId, input.patch)),
+      ),
+      follow: authed.board.follow.handler(({ context, input }) =>
+        boardCall(() => board.follow(context.actor, input)),
+      ),
       workspaces: authed.board.workspaces.handler(({ context }) =>
         boardCall(() => board.service.workspaces(context.actor)),
       ),

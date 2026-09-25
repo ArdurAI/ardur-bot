@@ -135,6 +135,43 @@ export function dashboardFixture(botCount = 1) {
           },
         ],
   });
+  const boardWorkspace = {
+    id: "board",
+    name: "Planning",
+    kind: "space",
+    path: "/fixture/board",
+    prefix: "work",
+    enabled: true,
+    initialized: true,
+    isDefault: true,
+    allowAllBots: true,
+    allowedBotIds: [],
+  };
+  const boardItem = {
+    id: "work-1",
+    title: "Plan next step",
+    description: "Check the work",
+    acceptanceCriteria: "",
+    type: "task",
+    status: "open",
+    priority: 2,
+    assignee: null,
+    labels: [],
+    parent: null,
+    dependencies: [],
+    dueAt: null,
+    deferUntil: null,
+    estimateMinutes: null,
+    externalRef: null,
+    createdAt: now,
+    updatedAt: now,
+    closedAt: null,
+    commentCount: 0,
+    comments: [],
+    history: [],
+    closeWhenDone: false,
+  };
+  let following = false;
   return {
     get approvedInput() {
       return approvedInput;
@@ -151,6 +188,23 @@ export function dashboardFixture(botCount = 1) {
       },
     },
     rpc(procedure: string, input?: unknown): unknown {
+      const boardInput = input as
+        | { itemId?: string; id?: string; patch?: { status?: string }; following?: boolean }
+        | undefined;
+      if (procedure === "board/update") {
+        boardItem.status = boardInput?.patch?.status ?? boardItem.status;
+        return { ...boardItem };
+      }
+      if (procedure === "board/follow") {
+        following = boardInput?.following === true;
+        return { following };
+      }
+      const boardSnapshot = {
+        items: [{ ...boardItem }],
+        allItems: [{ ...boardItem }],
+        readyIds: boardItem.status === "open" ? [boardItem.id] : [],
+        blockedIds: boardItem.status === "blocked" ? [boardItem.id] : [],
+      };
       const values: Record<string, unknown> = {
         me,
         "preferences/get": DEFAULT_USER_PREFERENCES,
@@ -174,7 +228,23 @@ export function dashboardFixture(botCount = 1) {
         "bots/list": [bot],
         "bots/get": bot,
         "team/board": { rows },
-        "board/workspaces": { workspaces: [], problem: null },
+        "board/workspaces": { workspaces: [boardWorkspace], problem: null },
+        "board/work": {
+          workspace: boardWorkspace,
+          ready: boardItem.status === "open" ? 1 : 0,
+          inProgress: boardItem.status === "in_progress" ? 1 : 0,
+          blocked: boardItem.status === "blocked" ? 1 : 0,
+          items: boardItem.status === "open" ? [{ ...boardItem }] : [],
+        },
+        "board/view": {
+          workspaces: [boardWorkspace],
+          workspaceId: "board",
+          snapshot: boardSnapshot,
+          selected: boardInput?.itemId ? { ...boardItem } : null,
+          followingIds: following ? [boardItem.id] : [],
+          bots: [bot],
+          problem: null,
+        },
         "host/status": { configured: false, connected: false, roots: [], health: null },
         "routines/overview": { next: [], recent: [] },
         "usage/summary": {

@@ -682,11 +682,12 @@ export interface ArtifactPut {
 }
 
 export interface NotificationMessage {
-  kind: "completion" | "failure" | "help" | "takeover";
+  kind: "completion" | "failure" | "help" | "takeover" | "board";
   title: string;
   body: string;
   botId: string;
   threadId: string;
+  board?: { spaceId: string; workspaceId: string; itemId: string };
 }
 
 /** A product-authored transactional email, independent of its delivery vendor. */

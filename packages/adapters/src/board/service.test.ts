@@ -15,6 +15,11 @@ function fixture() {
     path: "/fixture/board/space",
     prefix: "board",
     enabled: true,
+    initialized: true,
+    name: null,
+    isDefault: true,
+    allowAllBots: true,
+    allowedBotIds: [] as string[],
   };
   const prisma = {
     deploymentSettings: {
@@ -28,6 +33,7 @@ function fixture() {
         computer: { kind: "desktop", connectionId: null },
       })),
     },
+    boardFollow: { findMany: vi.fn(async () => []) },
     boardWorkspace: { findFirst: vi.fn(async () => workspace) },
     run: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   };
@@ -214,4 +220,59 @@ it("records an outcome once and closes only with both saved and current permissi
   await finishBoardRun(deps, scope, "Checks passed");
   expect(provider.close).not.toHaveBeenCalled();
   await expect(finishBoardRun(deps, { ...scope, spaceId: "foreign" }, "")).rejects.toThrow("space");
+});
+
+it("rejects bot access outside the configured board allowlist", async () => {
+  const { service, workspace } = fixture();
+  workspace.allowAllBots = false;
+  await expect(service.provider(scope, "workspace")).rejects.toThrow("not allowed");
+  workspace.allowedBotIds.push(scope.botId);
+  await expect(service.workspace(scope, "workspace")).resolves.toMatchObject({ id: "workspace" });
+});
+it("discovers uninitialized boards without creating their Beads files", async () => {
+  const { prisma, service, workspace } = fixture();
+  const uninitialized = { ...workspace, initialized: false, name: "Board" };
+  Object.assign(prisma, { space: { findUniqueOrThrow: vi.fn(async () => ({ name: "Space" })) } });
+  Object.assign(prisma.boardWorkspace, { upsert: vi.fn(async () => uninitialized) });
+  const run = vi
+    .spyOn(service, "run")
+    .mockResolvedValue({ ok: true, workspaces: [{ ...uninitialized, kind: "space" }] });
+  expect(await service.workspaces({ userId: "owner", spaceId: "space" })).toMatchObject({
+    workspaces: [{ initialized: false }],
+    problem: null,
+  });
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(run.mock.calls[0]?.[0].action).toBe("discover");
+});
+it("requires owner and scope for configuration, and serializes default changes", async () => {
+  const { prisma, service, workspace } = fixture();
+  const update = vi.fn(async ({ data }: { data: object }) => ({ ...workspace, ...data }));
+  const updateMany = vi.fn();
+  const lock = vi.fn();
+  Object.assign(prisma, {
+    $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>) =>
+      work({ $queryRaw: lock, boardWorkspace: { update, updateMany } }),
+    ),
+  });
+  await service.configure({ userId: "owner", spaceId: "space" }, "workspace", {
+    isDefault: true,
+    name: "Planning",
+  });
+  expect(lock).toHaveBeenCalled();
+  expect(updateMany).toHaveBeenCalledWith({
+    where: { spaceId: "space", ownerUserId: "owner", isDefault: true },
+    data: { isDefault: false },
+  });
+  await service.configure({ userId: "owner", spaceId: "space" }, "workspace", { enabled: false });
+  expect(update).toHaveBeenLastCalledWith({
+    where: { id: "workspace" },
+    data: { enabled: false, isDefault: false },
+  });
+  prisma.boardWorkspace.findFirst.mockResolvedValueOnce(null as never);
+  await expect(
+    service.configure({ userId: "owner", spaceId: "space" }, "foreign", { name: "Changed" }),
+  ).rejects.toThrow("unavailable");
+  await expect(service.configure(scope, "workspace", { name: "Changed" })).rejects.toThrow(
+    "Settings",
+  );
 });

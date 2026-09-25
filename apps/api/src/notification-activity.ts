@@ -54,5 +54,41 @@ export async function notificationActivity(prisma: PrismaClient, actor: Actor) {
         preferences.notifications[category],
     };
   });
+  const deployment = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
+  const boardRows =
+    deployment?.ownerUserId === actor.userId
+      ? await prisma.boardNotification.findMany({
+          where: {
+            follow: {
+              userId: actor.userId,
+              workspace: {
+                enabled: true,
+                ownerUserId: actor.userId,
+                space: { memberships: { some: { userId: actor.userId } } },
+              },
+            },
+          },
+          include: { follow: { include: { workspace: { select: { spaceId: true } } } } },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 100,
+        })
+      : [];
+  for (const row of boardRows)
+    activities.push({
+      id: row.id,
+      name: row.title,
+      threadId: `board:${row.follow.workspaceId}:${row.follow.itemId}`,
+      category: "responseCompletions",
+      status: "board_changed",
+      updatedAt: row.createdAt.toISOString(),
+      occurredAt: row.createdAt.toISOString(),
+      enabled: preferences.notifications.responseCompletions,
+      board: {
+        spaceId: row.follow.workspace.spaceId,
+        workspaceId: row.follow.workspaceId,
+        itemId: row.follow.itemId,
+      },
+    });
+  activities.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return { userId: actor.userId, preferences, activities };
 }

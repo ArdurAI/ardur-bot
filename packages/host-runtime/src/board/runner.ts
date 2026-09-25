@@ -284,6 +284,9 @@ export class BoardRunner {
             if (typeof stored?.value === "string") prefix = stored.value;
           }
           workspaces.push({
+            isDefault: false,
+            allowAllBots: true,
+            allowedBotIds: [],
             id: createHash("sha256").update(spaceId).update("\0").update(root).digest("hex"),
             kind: index === 0 ? "space" : "folder",
             path: root,

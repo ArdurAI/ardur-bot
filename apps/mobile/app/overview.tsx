@@ -1,9 +1,10 @@
 import type { ConnectionOverview, UsagePeriod, UsageSummary } from "@ardurbot/contracts";
+import { BoardWorkSchema } from "@ardurbot/contracts/board";
 import type { OverviewNow } from "@ardurbot/core";
 import { activeDelegations, TEAM_REFRESH_MS } from "@ardurbot/core";
-import { Stack, useFocusEffect } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import type { ReactNode } from "react";
-import { useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -13,26 +14,84 @@ import {
   Text,
   View,
 } from "react-native";
+import { rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "../lib/overview";
 
+const loadWork = async () => BoardWorkSchema.parse(await rpc("board/work", {}));
+const MobileBoard = lazy(() =>
+  import("../components/board-view").then((module) => ({ default: module.MobileBoard })),
+);
 export default function OverviewScreen() {
   const { t } = useI18n();
   const tokens = useMobileTokens();
+  const params = useLocalSearchParams<{ view?: string }>();
+  const router = useRouter();
+  const board = params.view === "board";
   return (
-    <ScrollView style={{ backgroundColor: tokens.background }} contentContainerStyle={styles.page}>
-      <Stack.Screen options={{ title: t("Overview") }} />
-      <OverviewPanel title={t("Now")} load={loadOverviewNow}>
-        {(data) => <Now data={data} />}
-      </OverviewPanel>
-      <OverviewPanel title={t("Connections")} load={loadOverviewConnections}>
-        {(data) => <Connections data={data} />}
-      </OverviewPanel>
-      <OverviewPanel title={t("Usage")} load={loadOverviewUsage}>
-        {(data) => <Usage data={data} />}
-      </OverviewPanel>
-    </ScrollView>
+    <View style={{ flex: 1, backgroundColor: tokens.background }}>
+      <Stack.Screen options={{ title: board ? t("Board") : t("Dashboard") }} />
+      <View style={{ flexDirection: "row", paddingHorizontal: 16 }}>
+        <Button
+          title={t("Overview")}
+          disabled={!board}
+          onPress={() => router.setParams({ view: "overview", item: "" })}
+        />
+        <Button
+          title={t("Board")}
+          disabled={board}
+          onPress={() => router.setParams({ view: "board" })}
+        />
+      </View>
+      {board ? (
+        <Suspense fallback={<ActivityIndicator />}>
+          <MobileBoard />
+        </Suspense>
+      ) : (
+        <ScrollView contentContainerStyle={styles.page}>
+          <OverviewPanel title={t("Now")} load={loadOverviewNow}>
+            {(data) => <Now data={data} />}
+          </OverviewPanel>
+          <OverviewPanel title={t("Work")} load={loadWork}>
+            {(data) => (
+              <View style={styles.lines}>
+                <Line>
+                  {t("Ready")}: {data.ready} · {t("In progress")}: {data.inProgress} ·{" "}
+                  {t("Blocked")}: {data.blocked}
+                </Line>
+                {data.items.map((item) => (
+                  <Button
+                    key={item.id}
+                    title={item.title}
+                    onPress={() =>
+                      router.setParams({
+                        view: "board",
+                        workspace: data.workspace?.id,
+                        item: item.id,
+                      })
+                    }
+                  />
+                ))}
+                {!data.workspace ? (
+                  <Button
+                    title={t("Set up a board")}
+                    onPress={() => router.push("/boards-settings")}
+                  />
+                ) : null}
+              </View>
+            )}
+          </OverviewPanel>
+          <Button title={t("Team")} onPress={() => router.push("/team")} />
+          <OverviewPanel title={t("Connections")} load={loadOverviewConnections}>
+            {(data) => <Connections data={data} />}
+          </OverviewPanel>
+          <OverviewPanel title={t("Usage")} load={loadOverviewUsage}>
+            {(data) => <Usage data={data} />}
+          </OverviewPanel>
+        </ScrollView>
+      )}
+    </View>
   );
 }
 function OverviewPanel<T>({
