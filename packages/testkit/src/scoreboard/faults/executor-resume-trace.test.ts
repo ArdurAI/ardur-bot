@@ -13,6 +13,7 @@ afterEach(() => {
 const RUN = "run-resume";
 const ORIGINAL = `${RUN}:destination.write:0`;
 const MINTED = `${RUN}:destination.write:1`;
+const DIGEST = "a".repeat(64);
 
 function capture(processId: string, timeOrigin: number, record: () => void) {
   const trace = startScoreboardTrace({ processId, timeOrigin, now: () => 1 });
@@ -37,7 +38,8 @@ it("records a resumed tool finish with the original id and the next fence", () =
       fence: nextFence(attempt),
       name: "destination.write",
       executionId: MINTED,
-      unfinished: [{ name: "destination.write", executionId: ORIGINAL }],
+      argumentDigest: DIGEST,
+      unfinished: [{ name: "destination.write", executionId: ORIGINAL, argumentDigest: DIGEST }],
     });
     finishRecordedTool({
       runId: RUN,
@@ -76,6 +78,7 @@ it("leaves a finish recorded under a new id interrupted", () => {
       fence: nextFence(attempt),
       name: "destination.write",
       executionId: MINTED,
+      argumentDigest: DIGEST,
       unfinished: [],
     });
     finishRecordedTool({
@@ -106,6 +109,7 @@ function traceStart(attempt: number) {
     fence: attempt,
     name: "destination.write",
     executionId: ORIGINAL,
+    argumentDigest: DIGEST,
     unfinished: [],
   });
 }

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   AdapterContext,
   AgentHomeStore,
@@ -396,6 +396,29 @@ import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
 export interface InFlightTool {
   name: string;
   executionId: string;
+  /** sha256 of the canonical arguments. Calls without a digest cannot be claimed. */
+  argumentDigest: string;
+}
+
+/** Stable identity of a tool's arguments. Key order does not change the digest. */
+export function toolArgumentDigest(args: Record<string, unknown>): string {
+  return createHash("sha256").update(stableJsonValue(args)).digest("hex");
+}
+
+/**
+ * Removes the earliest open call with this name and argument digest.
+ * Identical calls are claimed in the order they were recorded.
+ */
+export function takeUnfinishedTool(
+  unfinished: InFlightTool[],
+  name: string,
+  argumentDigest: string,
+): InFlightTool | undefined {
+  const index = unfinished.findIndex(
+    (tool) => tool.name === name && tool.argumentDigest === argumentDigest,
+  );
+  if (index < 0) return undefined;
+  return unfinished.splice(index, 1)[0];
 }
 
 /**
@@ -408,10 +431,10 @@ export function beginRecordedTool(input: {
   fence: number;
   name: string;
   executionId: string;
+  argumentDigest: string;
   unfinished: InFlightTool[];
 }): { operationId: string; resumed: boolean } {
-  const index = input.unfinished.findIndex((tool) => tool.name === input.name);
-  const prior = index >= 0 ? input.unfinished.splice(index, 1)[0] : undefined;
+  const prior = takeUnfinishedTool(input.unfinished, input.name, input.argumentDigest);
   const operationId = prior?.executionId ?? input.executionId;
   if (!prior) {
     tracePoint(input.runId, "tool.started", {
@@ -422,6 +445,26 @@ export function beginRecordedTool(input: {
   return { operationId, resumed: prior !== undefined };
 }
 
+function argumentDigestFromCalled(record: {
+  executionId: string;
+  argumentDigest?: unknown;
+  args?: unknown;
+  arguments?: unknown;
+}): string {
+  if (typeof record.argumentDigest === "string" && /^[a-f0-9]{64}$/.test(record.argumentDigest)) {
+    return record.argumentDigest;
+  }
+  const args = record.args ?? record.arguments;
+  if (args && typeof args === "object" && !Array.isArray(args)) {
+    try {
+      return toolArgumentDigest(args as Record<string, unknown>);
+    } catch {
+      return `unclaimable:${record.executionId}`;
+    }
+  }
+  return `unclaimable:${record.executionId}`;
+}
+
 /** Called events that never received a completion, in call order. */
 export function unfinishedToolCalls(
   events: readonly { type: string; payload: unknown }[],
@@ -430,10 +473,25 @@ export function unfinishedToolCalls(
   for (const event of events) {
     if (event.type !== "agent.tool.called" && event.type !== "agent.tool.completed") continue;
     if (!event.payload || typeof event.payload !== "object") continue;
-    const record = event.payload as { name?: unknown; executionId?: unknown };
+    const record = event.payload as {
+      name?: unknown;
+      executionId?: unknown;
+      argumentDigest?: unknown;
+      args?: unknown;
+      arguments?: unknown;
+    };
     if (typeof record.name !== "string" || typeof record.executionId !== "string") continue;
     if (event.type === "agent.tool.called") {
-      open.push({ name: record.name, executionId: record.executionId });
+      open.push({
+        name: record.name,
+        executionId: record.executionId,
+        argumentDigest: argumentDigestFromCalled({
+          executionId: record.executionId,
+          argumentDigest: record.argumentDigest,
+          args: record.args,
+          arguments: record.arguments,
+        }),
+      });
       continue;
     }
     const finished = open.findIndex((tool) => tool.executionId === record.executionId);
@@ -4386,19 +4444,47 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : [];
           const unfinishedTools = unfinishedToolCalls(priorToolEvents);
           const resumedIds = new Map<string, string>();
+          const claims = new Map<
+            string,
+            { operationId: string; resumed: boolean; argumentDigest: string; traced: boolean }
+          >();
+          // The minted id is only the runtime's handle. A resumed call keeps the open id.
+          const claimRecordedTool = (
+            name: string,
+            args: Record<string, unknown>,
+            executionId: string,
+            trace: boolean,
+          ) => {
+            const existing = claims.get(executionId);
+            if (existing) {
+              if (trace && !existing.traced && !existing.resumed) {
+                tracePoint(runId, "tool.started", {
+                  attempt: fence,
+                  operationId: existing.operationId,
+                });
+                existing.traced = true;
+              }
+              return existing;
+            }
+            const argumentDigest = toolArgumentDigest(args);
+            const prior = takeUnfinishedTool(unfinishedTools, name, argumentDigest);
+            const operationId = prior?.executionId ?? executionId;
+            const resumed = prior !== undefined;
+            const traced = trace && !resumed;
+            if (traced) {
+              tracePoint(runId, "tool.started", { attempt: fence, operationId });
+            }
+            const stored = { operationId, resumed, argumentDigest, traced };
+            claims.set(executionId, stored);
+            resumedIds.set(executionId, operationId);
+            return stored;
+          };
           const recordedApplyTool = async (
             name: string,
             args: Record<string, unknown>,
             executionId: string,
           ) => {
-            const claim = beginRecordedTool({
-              runId,
-              fence,
-              name,
-              executionId,
-              unfinished: unfinishedTools,
-            });
-            resumedIds.set(executionId, claim.operationId);
+            const claim = claimRecordedTool(name, args, executionId, true);
             try {
               const result = await commandRecording.invoke(name, args, executionId, applyTool);
               briefToolResults = appendBriefToolResult(briefToolResults, name, result, runSecrets);
@@ -4931,14 +5017,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (event.name !== "message_user") {
                 await publishMidTurnNarration();
               }
-              await deps.events.append({
-                spaceId: run.spaceId,
-                threadId: thread.id,
-                botId: bot.id,
-                type: "agent.tool.called",
-                runId,
-                payload: { name: event.name, executionId: event.executionId },
-              });
+              const claim = claimRecordedTool(event.name, event.args, event.executionId, false);
+              // A resumed call already has agent.tool.called. Discard the minted id.
+              if (!claim.resumed) {
+                await deps.events.append({
+                  spaceId: run.spaceId,
+                  threadId: thread.id,
+                  botId: bot.id,
+                  type: "agent.tool.called",
+                  runId,
+                  payload: {
+                    name: event.name,
+                    executionId: claim.operationId,
+                    argumentDigest: claim.argumentDigest,
+                  },
+                });
+              }
               pendingToolNames.push(event.name);
               tryFlushPendingTools();
               const loopGuard = advanceToolCallLoopGuard(toolCallStreak, event.name, event.args);
