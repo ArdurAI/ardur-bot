@@ -27,6 +27,19 @@ import {
   summarize,
 } from "../performance-report.js";
 
+// Canonical collection is opt-in and never loads owner dotenv state or falls back to dev Electron.
+if (process.argv.includes("--canonical")) {
+  try {
+    const { runPackagedCli } = await import("../scoreboard/packaged/cli.js");
+    process.exit(await runPackagedCli(process.argv.slice(2)));
+  } catch {
+    console.error(
+      "Canonical collection incomplete. Check explicit inputs and isolated runner prerequisites.",
+    );
+    process.exit(2);
+  }
+}
+
 loadRootEnv();
 
 const root = path.resolve(import.meta.dirname, "../../../..");
