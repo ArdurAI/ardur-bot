@@ -13,7 +13,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
-import type { ComputerSecretLoader } from "./computer-connections.js";
+import type { ComputerIdentity, ComputerSecretLoader } from "./computer-connections.js";
 import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import {
@@ -29,39 +29,57 @@ export function sandboxKindForBot(envKind: string, computerHost: string | null |
   return envKind;
 }
 
+function lazy<T>(create: () => T) {
+  let value: T | undefined;
+  return () => {
+    value ??= create();
+    return value;
+  };
+}
+
 export function createRunSandbox(
   kind: string,
   opts: SandboxProviderOptions & { prisma?: PrismaClient; secrets?: ComputerSecretLoader },
 ): SandboxProvider {
-  const selected =
-    kind === "desktop"
-      ? usesHostBridge()
-        ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
-        : new DesktopSandboxProvider({ root: opts.dataDir, hostRoots: [homedir()] })
-      : createSandboxProvider(kind, opts);
+  // Local engines are built on first use: a non-Docker deployment may have no supervisor token.
+  const host = lazy(() =>
+    usesHostBridge()
+      ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
+      : new DesktopSandboxProvider({ root: opts.dataDir, hostRoots: [homedir()] }),
+  );
+  const selected = kind === "desktop" ? host() : createSandboxProvider(kind, opts);
+  const docker =
+    kind === "docker" ? () => selected : lazy(() => createSandboxProvider("docker", opts));
   const primary =
     opts.prisma && opts.secrets
       ? new ConnectedSandboxProvider(
           selected,
           new ComputerConnections(opts.prisma, opts.secrets, opts),
+          { docker, host },
         )
       : selected;
   if (kind !== "docker" || !opts.prisma) return primary;
-  return new HostAwareSandbox(
-    primary,
-    usesHostBridge()
-      ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
-      : new DesktopSandboxProvider({
-          root: opts.dataDir,
-          hostRoots: [homedir()],
-        }),
-    async () => {
-      const settings = await opts.prisma!.deploymentSettings.findUnique({
-        where: { id: "default" },
-      });
-      return settings?.computerHost === "this-mac";
-    },
-  );
+  return new HostAwareSandbox(primary, host(), async () => {
+    const settings = await opts.prisma!.deploymentSettings.findUnique({
+      where: { id: "default" },
+    });
+    return settings?.computerHost === "this-mac";
+  });
+}
+
+export type ComputerRouter = HostAwareSandbox | ConnectedSandboxProvider;
+
+export function isComputerRouter(provider: SandboxProvider): provider is ComputerRouter {
+  return provider instanceof HostAwareSandbox || provider instanceof ConnectedSandboxProvider;
+}
+
+/** The concrete provider that owns an existing computer. */
+export function owningSandbox(
+  provider: SandboxProvider,
+  computer: ComputerIdentity,
+  context: AdapterContext,
+): Promise<SandboxProvider> {
+  return isComputerRouter(provider) ? provider.owner(computer, context) : Promise.resolve(provider);
 }
 
 export class HostAwareSandbox implements SandboxProvider {
@@ -92,10 +110,7 @@ export class HostAwareSandbox implements SandboxProvider {
   }
 
   async capacity(context: AdapterContext) {
-    return (
-      ((await this.hostEnabled()) ? this.host : this.isolated).capacity?.(context) ??
-      unknownCapacity()
-    );
+    return this.route({}, await this.hostEnabled()).capacity?.(context) ?? unknownCapacity();
   }
 
   describe() {
@@ -103,24 +118,26 @@ export class HostAwareSandbox implements SandboxProvider {
   }
 
   /**
-   * Kind that will actually run. An existing computer follows route(); a placement
-   * target follows provision(), which uses the desktop host for every connectionless
-   * computer while This Mac is selected.
+   * This Mac runs connectionless desktop computers. When a new machine is being chosen,
+   * pass the This Mac setting instead: it then decides for every connectionless computer.
    */
-  async routedKind(
-    subject: { connectionId?: string | null; kind?: string | null },
-    side: "computer" | "target",
-  ): Promise<string> {
-    if (side === "computer") {
-      return (subject.kind === "desktop" ? this.host : this.isolated).describe().id;
-    }
-    const provider =
-      !subject.connectionId && (await this.hostEnabled()) ? this.host : this.isolated;
-    return provider.describe().id;
+  private route(subject: ComputerIdentity, hostSelected?: boolean) {
+    return !subject.connectionId && (hostSelected ?? subject.kind === "desktop")
+      ? this.host
+      : this.isolated;
   }
 
-  private route(computer: ComputerRef) {
-    return computer.kind === "desktop" ? this.host : this.isolated;
+  owner(computer: ComputerIdentity, context: AdapterContext): Promise<SandboxProvider> {
+    return owningSandbox(this.route(computer), computer, context);
+  }
+
+  /** Reads This Mac once, so a move provisions where it was checked. */
+  async target(
+    subject: { connectionId?: string | null },
+    context: AdapterContext,
+  ): Promise<SandboxProvider> {
+    const provider = this.route(subject, await this.hostEnabled());
+    return isComputerRouter(provider) ? provider.target(subject, context) : provider;
   }
 
   async supportsNetworkEgress(computer: ComputerRef, context: AdapterContext) {
@@ -138,13 +155,17 @@ export class HostAwareSandbox implements SandboxProvider {
     },
     context: AdapterContext,
   ) {
-    const provider =
-      !request.connectionId && (await this.hostEnabled()) ? this.host : this.isolated;
-    const providerKind = provider.describe().id;
+    const provider = this.route(
+      { connectionId: request.connectionId, kind: request.providerKind },
+      request.providerRef ? undefined : await this.hostEnabled(),
+    );
+    const sameKind = request.providerKind === provider.describe().id;
     return provider.provision(
       {
         ...request,
-        providerRef: request.providerKind === providerKind ? request.providerRef : undefined,
+        // Another kind's machine cannot be reused, and its kind must not re-route the request.
+        providerRef: sameKind ? request.providerRef : undefined,
+        providerKind: sameKind ? request.providerKind : undefined,
       },
       context,
     );

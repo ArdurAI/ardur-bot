@@ -55,6 +55,13 @@ Threshold mode keeps the current target while it has at least the configured amo
 memory. It never chooses an unknown, stale, disconnected, or merely discovered target. Ties stay
 where they are. CPU load is reported separately and is not treated as memory capacity.
 
+Automatic moves are paused across engines: until verified migration lands, a move stays on the
+same kind of computer, such as between Docker engines or between Linux machines. Moving work to
+another engine remains the goal. It waits because today's move removes the old computer before
+the new one has accepted the workspace. Verified migration will start the destination, import and
+verify the workspace, point the computer at it, and only then remove the old one. A person can
+still move a computer between engines by changing its connection in Settings.
+
 `placeRunComputer` runs before the first computer execution lease and before tool effects. It
 never moves an existing run snapshot. A first move pauses for that bot's consent unless `Move
 automatically` is enabled. The conversation links to Computers while consent is pending.
@@ -67,13 +74,21 @@ and no other run is active. Use private computers for independently placed workl
 runtime pins retain their existing host restriction; placement never changes a runtime or model
 pin to make a destination work. Explicit connection changes retain the chosen destination;
 automatic placement evaluates first use after creation or replacement at the next new run.
-The deployment's saved default remains the meaning of an empty connection binding.
+
+Every run, reset, update, recovery, sleep, screen and terminal operation uses the computer's own
+engine: its saved connection, otherwise local Docker for a Docker computer, This Mac for a host
+computer, and the deployment's saved default for any other kind. Changing the default therefore
+does not strand an existing local computer. In a Docker deployment, a computer that has not
+started yet follows the current This Mac choice.
 
 Moves reserve the computer using the existing maintenance record, save a checkpoint with the old
-connection, destroy the old computer, then provision and restore with the new connection. A failed
-checkpoint prevents teardown. A failed restore leaves the durable checkpoint and a failed
-maintenance record available for recovery. The run's `placement` snapshot and a conversation
-message retain `Moved to {computer}: {reason}`. There is no live process migration.
+connection, destroy the old computer, then provision and restore with the new connection. The
+destination is resolved once before the checkpoint, so switching This Mac during a move does not
+change where the new computer starts. Once the old computer is gone, the record names the
+destination, so a failed start is retried there. A failed checkpoint prevents teardown. A failed
+restore leaves the durable checkpoint and a failed maintenance record available for recovery. The
+run's `placement` snapshot and a conversation message retain `Moved to {computer}: {reason}`.
+There is no live process migration.
 
 Capacity is a recent observation, not a reservation. Kubernetes totals do not guarantee that a
 single node, a volume topology, or quota can satisfy a pod. SSH uses the remote account's existing
@@ -138,13 +153,14 @@ infrastructure charges; the feature does not provision machines or purchase serv
    workflow. Add and test it. Confirm pod/PVC ownership labels and persisted files. Remove
    metrics access temporarily on a disposable fixture and confirm CPU load is unknown while
    capacity based on requests remains available. Do not change production cluster permissions.
-7. Return a private, Pi-runtime bot to **This Mac**, create a small marker file, and set Placement
-   to **Prefer the most free memory**. Use a connected Linux target that reports more free
-   memory. Start new work, accept **Move** once, and confirm the Team board and fleet assignment
-   change, the marker survives, and the conversation records the reason. For threshold mode,
-   use a test threshold above the Mac's currently reported free memory and below the destination's
-   free memory; there is no need to deliberately exhaust the machine. Confirm a running command
-   stays on its original computer and the next new run evaluates placement.
+7. Put a private, Pi-runtime bot on one Linux machine, create a small marker file, and set
+   Placement to **Prefer the most free memory**. Use a second connected Linux machine that reports
+   more free memory. Start new work, accept **Move** once, and confirm the Team board and fleet
+   assignment change, the marker survives, and the conversation records the reason. For threshold
+   mode, use a test threshold above the first machine's reported free memory and below the
+   destination's free memory; there is no need to deliberately exhaust the machine. Confirm a
+   running command stays on its original computer and the next new run evaluates placement.
+   Confirm a Docker or This Mac computer is not moved automatically to a Linux machine.
 8. Open mobile account settings. Confirm the same computers, assignments and free-memory bars,
    with no Add, Test, placement or credential controls. Disconnect a test target and confirm
    that stale/unknown capacity does not become a placement candidate.

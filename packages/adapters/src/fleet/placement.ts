@@ -59,9 +59,7 @@ export async function placeRunComputer(
     const supported = new Set([from]);
     for (const target of candidates) {
       if (target.id === from || target.state !== "connected" || target.kind === "host") continue;
-      const provider = target.connectionId
-        ? await catalog.connections.resolve(target.connectionId, context)
-        : deps.sandbox;
+      const provider = await catalog.resolveTarget(target, context);
       if (
         await provider
           .supportsNetworkEgress?.(

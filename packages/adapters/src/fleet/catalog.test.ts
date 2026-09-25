@@ -4,20 +4,101 @@ import path from "node:path";
 import type {
   AdapterContext,
   AgentHomeStore,
+  ComputerRef,
   JobPublisher,
+  ProcessEvent,
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import { choosePlacement, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { afterEach, expect, it, vi } from "vitest";
+import { ComputerConnections } from "../computer-connections.js";
+import { provisionComputer, replaceComputer } from "../computer-lifecycle.js";
 import { performComputerUpdate } from "../computer-update.js";
 import { DesktopSandboxProvider } from "../desktop-sandbox.js";
 import { DockerSandboxProvider } from "../docker-sandbox.js";
 import { FakeSandboxProvider } from "../fake-sandbox.js";
 import { LocalAgentHomeStore } from "../home.js";
 import { createRunSandbox, HostAwareSandbox } from "../host-aware-sandbox.js";
+import { KubernetesSandboxProvider } from "../kubernetes-sandbox.js";
+import { FakeKubernetesApi } from "../kubernetes-test-api.js";
 import { FleetCatalog } from "./catalog.js";
 import { placeRunComputer } from "./placement.js";
+
+function storedComputer(overrides: Record<string, unknown> = {}) {
+  const row = {
+    id: "computer",
+    homeKey: "home",
+    providerRef: "docker-computer" as string | null,
+    state: "running",
+    networkEgress: true,
+    kind: "docker",
+    imageProfile: "base",
+    connectionId: null as string | null,
+    maintenanceId: null as string | null,
+    controlHolder: "none",
+    controlLeaseId: null,
+    controlLeaseExpiresAt: null,
+    controlBotId: null,
+    controlRunId: null,
+    scope: "dedicated",
+    spaceId: "space",
+    updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+    homeRevision: "1",
+    ...overrides,
+  };
+  return {
+    row,
+    findUniqueOrThrow: vi.fn(async () => ({ ...row })),
+    updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+      Object.assign(row, data);
+      return { count: 1 };
+    }),
+  };
+}
+
+function localDocker(ref: Partial<ComputerRef> = {}) {
+  return {
+    provision: vi.spyOn(DockerSandboxProvider.prototype, "provision").mockResolvedValue({
+      id: "docker-computer",
+      botId: "home",
+      kind: "docker",
+      providerRef: "docker-computer",
+      connectionId: null,
+      fresh: false,
+      ...ref,
+    }),
+    prepare: vi.spyOn(DockerSandboxProvider.prototype, "prepare").mockResolvedValue(undefined),
+    execute: vi
+      .spyOn(DockerSandboxProvider.prototype, "execute")
+      .mockImplementation(async function* (): AsyncGenerator<ProcessEvent> {
+        yield { type: "exit", code: 0 };
+      }),
+    writeFile: vi.spyOn(DockerSandboxProvider.prototype, "writeFile").mockResolvedValue(undefined),
+    releaseScreen: vi
+      .spyOn(DockerSandboxProvider.prototype, "releaseScreen")
+      .mockResolvedValue(undefined),
+    stop: vi.spyOn(DockerSandboxProvider.prototype, "stop").mockResolvedValue(undefined),
+    destroy: vi.spyOn(DockerSandboxProvider.prototype, "destroy").mockResolvedValue(undefined),
+  };
+}
+
+function kubernetesDefault(prisma: unknown) {
+  const api = new FakeKubernetesApi();
+  const sandbox = createRunSandbox("kubernetes", {
+    kubernetes: {
+      api,
+      settings: ComputerConnectionSettingsSchema.parse({
+        engine: "kubernetes",
+        context: "cluster",
+      }),
+    },
+    prisma: prisma as PrismaClient,
+    secrets: { load: () => "" },
+  });
+  return { api, sandbox };
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -519,6 +600,327 @@ it("completes a Settings connection change from Docker to Kubernetes and refuses
       .find(([file]) => file === "notes/keep.txt");
     expect(saved && new TextDecoder().decode(saved[1].content)).toBe("saved");
   } finally {
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+const movingBot = {
+  id: "bot",
+  name: "Bot",
+  runtimeKind: "pi",
+  archivedAt: null,
+  placementConsent: true,
+  moveAutomatically: true,
+  pendingPlacement: null,
+};
+
+function runRow(computer: Record<string, unknown>, placement: unknown = null) {
+  return {
+    id: "run",
+    userId: "owner",
+    spaceId: "space",
+    botId: "bot",
+    threadId: "thread",
+    runtimeComputer: null,
+    placement,
+    leaseOwner: "worker",
+    leaseFence: 1,
+    bot: { ...movingBot, computer: { ...computer, bots: [movingBot] } },
+  };
+}
+
+const runContext: AdapterContext = {
+  userId: "owner",
+  spaceId: "space",
+  botId: "bot",
+  runId: "run",
+  operationId: "run",
+  traceId: "run",
+  signal: new AbortController().signal,
+};
+
+it.each([
+  ["placement finds no engine of the same kind", null],
+  ["the owner declined the move", { status: "declined" }],
+])(
+  "runs a local Docker computer on Docker under a Kubernetes default when %s",
+  async (_reason, placement) => {
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+    const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-local-docker-"));
+    vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockResolvedValue({
+      name: "docker",
+      rootless: false,
+      version: "test",
+      os: "linux",
+      capacity: { ...unknownCapacity(), source: "docker", memoryFree: 512 * 1024 ** 2 },
+    });
+    const docker = localDocker();
+    const computer = storedComputer({ scope: "team" });
+    const prisma = {
+      connection: { findMany: async () => [] },
+      bot: { findMany: async () => [{ ...movingBot, computer: computer.row }] },
+      space: { findUniqueOrThrow: async () => ({ placement: { mode: "free-memory" } }) },
+      deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+      run: { findUniqueOrThrow: async () => runRow(computer.row, placement) },
+      computer,
+    };
+    const { api, sandbox } = kubernetesDefault(prisma);
+    vi.spyOn(sandbox, "capacity").mockResolvedValue({
+      ...unknownCapacity(),
+      source: "kubernetes-metrics",
+      memoryFree: 32 * 1024 ** 3,
+    });
+    const deps = {
+      prisma: prisma as unknown as PrismaClient,
+      home: new LocalAgentHomeStore(homeRoot),
+      sandbox,
+      jobs: {} as JobPublisher,
+      events: {} as ThreadEvents,
+    };
+    try {
+      const catalog = new FleetCatalog(deps.prisma, { load: () => "" }, {}, sandbox);
+      expect(await placeRunComputer(deps, catalog, "run", runContext.signal)).toBe(true);
+      const ref = await provisionComputer(deps, "computer", runContext, "bot");
+      const events: ProcessEvent[] = [];
+      for await (const event of sandbox.execute(ref, { argv: ["true"] }, runContext))
+        events.push(event);
+      await sandbox.writeFile(ref, { path: "notes.txt", content: new Uint8Array() }, runContext);
+      await sandbox.releaseScreen?.(ref, runContext);
+      await sandbox.stop(ref, runContext);
+      expect(events).toEqual([{ type: "exit", code: 0 }]);
+      expect(docker.provision).toHaveBeenCalledWith(
+        expect.objectContaining({ providerRef: "docker-computer", providerKind: "docker" }),
+        runContext,
+      );
+      for (const call of [
+        docker.prepare,
+        docker.execute,
+        docker.writeFile,
+        docker.releaseScreen,
+        docker.stop,
+      ])
+        expect(call).toHaveBeenCalled();
+      expect(api.requests).toEqual([]);
+      expect(computer.row).toMatchObject({
+        state: "running",
+        kind: "docker",
+        providerRef: "docker-computer",
+      });
+    } finally {
+      api.dispose();
+      await rm(homeRoot, { recursive: true, force: true });
+    }
+  },
+);
+
+it("resets a local Docker computer under a Kubernetes default through Docker", async () => {
+  const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-local-reset-"));
+  const docker = localDocker({ id: "docker-new", providerRef: "docker-new", fresh: true });
+  const computer = storedComputer();
+  const prisma = { computer, run: { findFirst: async () => null } };
+  const { api, sandbox } = kubernetesDefault(prisma);
+  const context = { ...runContext, runId: undefined, operationId: "reset", traceId: "reset" };
+  try {
+    await replaceComputer(
+      {
+        prisma: prisma as unknown as PrismaClient,
+        home: new LocalAgentHomeStore(homeRoot),
+        sandbox,
+        jobs: {} as JobPublisher,
+        events: {} as ThreadEvents,
+      },
+      "computer",
+      "reset",
+      context,
+    );
+    expect(docker.destroy).toHaveBeenCalledWith(
+      expect.objectContaining({ providerRef: "docker-computer", kind: "docker" }),
+      context,
+    );
+    expect(docker.provision).toHaveBeenCalledOnce();
+    expect(api.requests).toEqual([]);
+    expect(computer.row).toMatchObject({
+      state: "running",
+      kind: "docker",
+      providerRef: "docker-new",
+    });
+  } finally {
+    api.dispose();
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+function savedPodman(onDestroy: () => void = () => undefined) {
+  return {
+    describe: () => ({ id: "docker" }),
+    capacity: async () => ({
+      ...unknownCapacity(),
+      source: "docker" as const,
+      memoryFree: 512 * 1024 ** 2,
+    }),
+    async *exportWorkspace() {
+      yield { path: "notes/keep.txt", content: new TextEncoder().encode("saved") };
+    },
+    releaseScreen: async () => undefined,
+    destroy: vi.fn(async () => onDestroy()),
+  } as unknown as SandboxProvider & { destroy: ReturnType<typeof vi.fn> };
+}
+
+it("provisions an automatic move where it was checked when This Mac turns on mid-move", async () => {
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-frozen-move-"));
+  let computerHost: string | null = null;
+  vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockResolvedValue({
+    name: "docker",
+    rootless: false,
+    version: "test",
+    os: "linux",
+    capacity: { ...unknownCapacity(), source: "docker", memoryFree: 32 * 1024 ** 3 },
+  });
+  const docker = localDocker({ id: "docker-new", providerRef: "docker-new", fresh: true });
+  const hostProvision = vi
+    .spyOn(DesktopSandboxProvider.prototype, "provision")
+    .mockRejectedValue(new Error("This Mac must not receive the move"));
+  const podman = savedPodman(() => {
+    computerHost = "this-mac";
+  });
+  vi.spyOn(ComputerConnections.prototype, "resolve").mockResolvedValue(podman);
+  const computer = storedComputer({ connectionId: "engine", providerRef: "podman-computer" });
+  const prisma = {
+    connection: {
+      findMany: async () => [
+        {
+          id: "engine",
+          displayName: "Podman",
+          status: "connected",
+          metadata: { engine: "podman", socket: "/tmp/podman.sock" },
+        },
+      ],
+    },
+    bot: {
+      findMany: async () => [{ ...movingBot, computer: computer.row }],
+      updateMany: async () => ({ count: 1 }),
+    },
+    space: {
+      findUniqueOrThrow: async () => ({ placement: { mode: "threshold", minimumFreeGb: 4 } }),
+    },
+    deploymentSettings: { findUnique: async () => ({ computerHost }) },
+    run: {
+      findUniqueOrThrow: async () => runRow(computer.row),
+      findFirst: async ({ where }: { where: { id?: unknown } }) =>
+        where.id === "run"
+          ? { id: "run", runtimeComputer: null, placement: { status: "moving" } }
+          : null,
+      findUnique: async () => ({
+        status: "running",
+        startedAt: new Date(),
+        originDeviceGrantId: null,
+        remoteRootTaskId: null,
+        delegationId: null,
+      }),
+      updateMany: async () => ({ count: 1 }),
+    },
+    computer,
+    computerUpdate: {
+      create: async () => ({ id: "move" }),
+      update: async () => ({}),
+      updateMany: async () => ({ count: 1 }),
+    },
+    thread: { update: async () => ({ nextEventSeq: 2, nextMessageSeq: 2 }) },
+    message: { create: async () => ({ id: "message" }) },
+    event: { create: async () => ({ seq: 1, type: "thread.message.created" }) },
+    $queryRaw: async () => [],
+    $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(prisma),
+  };
+  const sandbox = createRunSandbox("docker", {
+    prisma: prisma as unknown as PrismaClient,
+    secrets: { load: () => "" },
+  });
+  const catalog = new FleetCatalog(
+    prisma as unknown as PrismaClient,
+    { load: () => "" },
+    {},
+    sandbox,
+  );
+  try {
+    const moved = await placeRunComputer(
+      {
+        prisma: prisma as unknown as PrismaClient,
+        home: new LocalAgentHomeStore(homeRoot),
+        sandbox,
+        jobs: {} as JobPublisher,
+        events: { notify: vi.fn(async () => undefined) } as unknown as ThreadEvents,
+      },
+      catalog,
+      "run",
+      runContext.signal,
+    );
+    expect(podman.destroy).toHaveBeenCalledOnce();
+    expect(computerHost).toBe("this-mac");
+    expect(hostProvision).not.toHaveBeenCalled();
+    expect(docker.provision).toHaveBeenCalledOnce();
+    expect(moved).toBe(true);
+    expect(computer.row).toMatchObject({
+      state: "running",
+      kind: "docker",
+      connectionId: null,
+      providerRef: "docker-new",
+    });
+  } finally {
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+it("keeps a failed Settings move to the deployment default pointed at that engine", async () => {
+  const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-failed-settings-move-"));
+  const podman = savedPodman();
+  vi.spyOn(ComputerConnections.prototype, "resolve").mockResolvedValue(podman);
+  const computer = storedComputer({
+    connectionId: "engine",
+    providerRef: "podman-computer",
+    maintenanceId: "update-1",
+  });
+  const prisma = { computer, run: { findFirst: async () => null } };
+  const { api, sandbox } = kubernetesDefault(prisma);
+  vi.spyOn(KubernetesSandboxProvider.prototype, "provision").mockRejectedValue(
+    new Error("cluster is full"),
+  );
+  const catalog = new FleetCatalog(
+    prisma as unknown as PrismaClient,
+    { load: () => "" },
+    {},
+    sandbox,
+  );
+  const context = { ...runContext, runId: undefined, operationId: "update-1" };
+  try {
+    const routing = await catalog.resolveReplacementRouting(
+      computer.row,
+      { connectionId: null },
+      context,
+    );
+    await expect(
+      replaceComputer(
+        {
+          prisma: prisma as unknown as PrismaClient,
+          home: new LocalAgentHomeStore(homeRoot),
+          sandbox,
+          jobs: {} as JobPublisher,
+          events: {} as ThreadEvents,
+        },
+        "computer",
+        "update",
+        context,
+        "none",
+        undefined,
+        { imageProfile: "base", connectionId: null },
+        routing,
+      ),
+    ).rejects.toThrow("cluster is full");
+    expect(podman.destroy).toHaveBeenCalledOnce();
+    expect(computer.row).toMatchObject({ state: "error", connectionId: null, kind: "kubernetes" });
+    await expect(catalog.resolveComputer(computer.row, context)).resolves.toBe(routing.target);
+  } finally {
+    api.dispose();
     await rm(homeRoot, { recursive: true, force: true });
   }
 });

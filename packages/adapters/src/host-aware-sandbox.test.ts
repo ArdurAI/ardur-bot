@@ -145,6 +145,81 @@ describe("host-aware sandbox", () => {
     await sandbox.destroy(computer, ctx);
   });
 
+  it.each([
+    ["desktop", false, "host"],
+    ["docker", true, "isolated"],
+  ] as const)(
+    "keeps an existing %s computer on its own provider when This Mac is %s",
+    async (kind, enabled, owner) => {
+      const providers = { isolated: new FakeSandboxProvider(), host: new FakeSandboxProvider() };
+      const described = providers.host.describe();
+      vi.spyOn(providers.isolated, "describe").mockReturnValue({ ...described, id: "docker" });
+      vi.spyOn(providers.host, "describe").mockReturnValue({ ...described, id: "desktop" });
+      const provisions = {
+        isolated: vi.spyOn(providers.isolated, "provision"),
+        host: vi.spyOn(providers.host, "provision"),
+      };
+      const sandbox = new HostAwareSandbox(providers.isolated, providers.host, async () => enabled);
+      const computer: ComputerRef = { id: "computer", providerRef: "ref", botId: "bot", kind };
+      await sandbox.provision(
+        { botId: "bot", homePath: "/tmp/bot", providerRef: "ref", providerKind: kind },
+        ctx,
+      );
+      expect(provisions[owner]).toHaveBeenCalledWith(
+        expect.objectContaining({ providerRef: "ref" }),
+        ctx,
+      );
+      expect(provisions[owner === "host" ? "isolated" : "host"]).not.toHaveBeenCalled();
+      const prepare = vi.spyOn(providers[owner], "prepare").mockResolvedValue(undefined);
+      await sandbox.prepare(computer, ctx);
+      expect(prepare).toHaveBeenCalledWith(computer, ctx);
+    },
+  );
+
+  it.each([
+    [false, "docker"],
+    [true, "desktop"],
+  ] as const)(
+    "starts a computer without a machine where This Mac is set (%s)",
+    async (enabled, expected) => {
+      vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+      const provisions = {
+        docker: vi.spyOn(DockerSandboxProvider.prototype, "provision").mockResolvedValue({
+          id: "container",
+          botId: "bot",
+          kind: "docker",
+          providerRef: "container",
+        }),
+        desktop: vi.spyOn(DesktopSandboxProvider.prototype, "provision").mockResolvedValue({
+          id: "host",
+          botId: "bot",
+          kind: "desktop",
+          providerRef: "host",
+        }),
+      };
+      const sandbox = createRunSandbox("docker", {
+        prisma: {
+          deploymentSettings: {
+            findUnique: async () => ({ computerHost: enabled ? "this-mac" : null }),
+          },
+        } as unknown as PrismaClient,
+        secrets: { load: () => "" },
+      });
+      try {
+        for (const providerKind of ["docker", "desktop"] as const) {
+          const computer = await sandbox.provision(
+            { botId: "bot", homePath: "/tmp/bot", providerKind },
+            ctx,
+          );
+          expect(computer.kind).toBe(expected);
+        }
+        expect(provisions[expected === "docker" ? "desktop" : "docker"]).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it("maps the Linux bot home cwd onto the desktop home", async () => {
     const desktop = new DesktopSandboxProvider();
     const computer = await desktop.provision({ botId: "alias", homePath: "/tmp/alias" }, ctx);

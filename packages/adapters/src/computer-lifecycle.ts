@@ -27,6 +27,7 @@ import {
   restoreComputerWorkspace,
 } from "./computer-workspace.js";
 import { resolveAgentHomePath } from "./home.js";
+import { owningSandbox } from "./host-aware-sandbox.js";
 
 type ComputerUpdateProgress = (
   stage: Exclude<ComputerUpdate["stage"], "preparing">,
@@ -672,8 +673,6 @@ export async function replaceComputer(
     target: SandboxProvider;
   },
 ): Promise<ComputerRef> {
-  const sourceSandbox = routing?.source ?? deps.sandbox;
-  const targetSandbox = routing?.target ?? deps.sandbox;
   let placementRunId: string | undefined;
   if (configuration?.placementRunId) {
     const run = await deps.prisma.run.findFirst({
@@ -750,6 +749,8 @@ export async function replaceComputer(
     if (activeBootRun) throw new ComputerBusyError();
   }
 
+  const sourceSandbox = routing?.source ?? (await owningSandbox(deps.sandbox, existing, context));
+  const targetSandbox = routing?.target ?? sourceSandbox;
   const previousState = existing.state;
   const now = new Date();
   const claimStamp = new Date(Math.max(now.getTime(), existing.updatedAt.getTime() + 1));
@@ -851,6 +852,8 @@ export async function replaceComputer(
                 : {}),
             }
           : {}),
+        // Once the source is gone, a retry must reach the chosen destination, not revive it.
+        ...(targetSandbox !== sourceSandbox ? { kind: targetSandbox.describe().id } : {}),
         state: "stopped",
         providerRef: null,
         controlHolder: "none",

@@ -47,7 +47,7 @@ The E2B adapter uses `@e2b/desktop` for machine lifecycle, shell commands, files
 
 ## Daytona backend
 
-The database stores the provider kind and opaque `providerRef`. That reference is an acceleration path, not durable data. It is passed back only to the same provider kind. A missing machine or a provider-kind change creates a replacement and restores its workspace through the provider-neutral contract.
+The database stores the provider kind and opaque `providerRef`. That reference is an acceleration path, not durable data. It is passed back only to the same provider kind. A missing machine or a provider-kind change creates a replacement and restores its workspace through the provider-neutral contract. A computer without a saved connection keeps its kind's provider when the deployment default changes: Docker computers stay on local Docker and host computers on This Mac; other kinds follow the new default.
 
 ## Box backend
 

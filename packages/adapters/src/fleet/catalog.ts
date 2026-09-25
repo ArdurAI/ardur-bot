@@ -3,10 +3,11 @@ import type { FleetTarget } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import { PlacementSettingsSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
-import type { ComputerSecretLoader } from "../computer-connections.js";
-import { ComputerConnections } from "../computer-connections.js";
+import type { ComputerIdentity, ComputerSecretLoader } from "../computer-connections.js";
+import { ComputerConnections, ConnectedSandboxProvider } from "../computer-connections.js";
 import { DockerSandboxProvider } from "../docker-sandbox.js";
-import { HostAwareSandbox, sandboxKindForBot } from "../host-aware-sandbox.js";
+import type { ComputerRouter } from "../host-aware-sandbox.js";
+import { isComputerRouter, sandboxKindForBot } from "../host-aware-sandbox.js";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "../sandbox-factory.js";
 import { hostCapacity } from "./service.js";
@@ -37,6 +38,7 @@ export class FleetCatalog {
     this.diagnostics.set(id, details);
   }
   private readonly docker: DockerSandboxProvider;
+  private readonly routing: ComputerRouter;
   constructor(
     private readonly prisma: PrismaClient,
     secrets: ComputerSecretLoader,
@@ -44,36 +46,38 @@ export class FleetCatalog {
     private readonly fallback: SandboxProvider,
   ) {
     this.connections = new ComputerConnections(prisma, secrets, options);
-    this.docker = new DockerSandboxProvider(
+    const docker = new DockerSandboxProvider(
       options.supervisorUrl ?? "http://127.0.0.1:7091",
       options.supervisorToken,
     );
+    this.docker = docker;
+    this.routing = isComputerRouter(fallback)
+      ? fallback
+      : new ConnectedSandboxProvider(fallback, this.connections, { docker: () => docker });
   }
-  async resolveComputer(
-    computer: { connectionId?: string | null; kind?: string | null },
+  /** Same owner the run sandbox uses for every operation on this computer. */
+  resolveComputer(computer: ComputerIdentity, context: AdapterContext): Promise<SandboxProvider> {
+    return this.routing.owner(computer, context);
+  }
+  /** Built-in local rows hold one kind; connection rows and the default create new computers. */
+  resolveTarget(
+    target: Pick<FleetTarget, "kind" | "connectionId">,
     context: AdapterContext,
   ): Promise<SandboxProvider> {
-    if (computer.connectionId) return this.connections.resolve(computer.connectionId, context);
-    return computer.kind === "docker" ? this.docker : this.fallback;
-  }
-  async resolveTarget(
-    target: Pick<FleetTarget, "id" | "connectionId">,
-    context: AdapterContext,
-  ): Promise<SandboxProvider> {
-    if (target.connectionId) return this.connections.resolve(target.connectionId, context);
-    return target.id === "docker" ? this.docker : this.fallback;
+    if (!target.connectionId && (target.kind === "host" || target.kind === "docker"))
+      return this.resolveComputer({ kind: target.kind === "host" ? "desktop" : "docker" }, context);
+    return this.routing.target(target, context);
   }
   async compatibleTargets(
-    computer: { connectionId?: string | null; kind?: string | null },
+    computer: ComputerIdentity,
     targets: FleetTarget[],
     context: AdapterContext,
   ): Promise<FleetTarget[]> {
-    const source = await this.resolveComputer(computer, context);
-    const sourceKind = await this.effectiveSandboxKind(source, computer, "computer");
+    const sourceKind = (await this.resolveComputer(computer, context)).describe().id;
     const compatible = await Promise.all(
       targets.map(async (target) => {
         const targetKind = await this.resolveTarget(target, context)
-          .then((provider) => this.effectiveSandboxKind(provider, target, "target"))
+          .then((provider) => provider.describe().id)
           .catch(() => null);
         return targetKind === sourceKind ? target : null;
       }),
@@ -81,46 +85,33 @@ export class FleetCatalog {
     return compatible.filter((target): target is FleetTarget => target !== null);
   }
   async resolveReplacementRouting(
-    computer: { connectionId?: string | null; kind?: string | null },
+    computer: ComputerIdentity,
     configuration: { connectionId?: string | null; targetId?: string },
     context: AdapterContext,
     listedFleet?: Awaited<ReturnType<FleetCatalog["list"]>>,
   ): Promise<{ source: SandboxProvider; target: SandboxProvider }> {
     const source = await this.resolveComputer(computer, context);
-    if (
-      configuration.targetId === undefined &&
-      (configuration.connectionId === undefined ||
-        configuration.connectionId === computer.connectionId)
-    ) {
-      return { source, target: source };
+    if (configuration.targetId === undefined) {
+      if (
+        configuration.connectionId === undefined ||
+        configuration.connectionId === computer.connectionId
+      )
+        return { source, target: source };
+      // A Settings connection change is already confirmed and may cross kinds.
+      const target = await this.routing.target(
+        { connectionId: configuration.connectionId },
+        context,
+      );
+      return { source, target };
     }
-    const target = configuration.targetId
-      ? (listedFleet ?? (await this.list(context))).targets.find(
-          (candidate) => candidate.id === configuration.targetId,
-        )
-      : {
-          id: configuration.connectionId ?? "default",
-          connectionId: configuration.connectionId ?? null,
-        };
-    if (!target) throw new Error("Computer replacement target is unavailable");
-    const targetProvider = await this.resolveTarget(target, context);
-    // Automatic placement carries a target id and must stay on one running kind.
-    // A Settings connection change is already confirmed and may cross kinds.
-    if (configuration.targetId !== undefined) {
-      const sourceKind = await this.effectiveSandboxKind(source, computer, "computer");
-      const targetKind = await this.effectiveSandboxKind(targetProvider, target, "target");
-      if (sourceKind !== targetKind) throw new Error("Computer replacement target is unavailable");
-    }
-    return { source, target: targetProvider };
-  }
-  private async effectiveSandboxKind(
-    provider: SandboxProvider,
-    subject: { connectionId?: string | null; kind?: string | null },
-    side: "computer" | "target",
-  ): Promise<string> {
-    return provider instanceof HostAwareSandbox
-      ? provider.routedKind(subject, side)
-      : provider.describe().id;
+    const row = (listedFleet ?? (await this.list(context))).targets.find(
+      (candidate) => candidate.id === configuration.targetId,
+    );
+    const target = row && (await this.resolveTarget(row, context));
+    // Automatic placement stays on one kind of computer until verified migration lands.
+    if (!target || target.describe().id !== source.describe().id)
+      throw new Error("Computer replacement target is unavailable");
+    return { source, target };
   }
   async testDefault(context: AdapterContext) {
     const deployment = await this.prisma.deploymentSettings.findUnique({
@@ -257,7 +248,7 @@ export class FleetCatalog {
       const targetId = fleetComputerTargetId(bot.computer, { defaultTargetId, targets });
       targets.find((target) => target.id === targetId)?.bots.push({ id: bot.id, name: bot.name });
     }
-    // The null binding means the saved deployment default. Do not silently change it to reach a host.
+    // A null binding keeps the computer's own kind. Do not silently change it to reach a host.
     return {
       targets,
       bots,

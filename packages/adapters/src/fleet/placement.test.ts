@@ -92,10 +92,12 @@ function fixture(approved = false) {
   ];
   const supportsNetworkEgress = vi.fn(async () => false);
   const sourceSandbox = { describe: () => ({ id: "desktop" }) } as SandboxProvider;
-  const targetSandbox = { describe: () => ({ id: "ssh" }) } as SandboxProvider;
+  const targetSandbox = {
+    describe: () => ({ id: "ssh" }),
+    supportsNetworkEgress,
+  } as unknown as SandboxProvider;
   const catalog = {
     list: vi.fn(async () => ({ targets, defaultTargetId: "host" })),
-    connections: { resolve: vi.fn(async () => ({ supportsNetworkEgress })) },
     compatibleTargets: vi.fn(async (_computer, candidates) => candidates),
     resolveComputer: vi.fn(async () => sourceSandbox),
     resolveTarget: vi.fn(async () => targetSandbox),
