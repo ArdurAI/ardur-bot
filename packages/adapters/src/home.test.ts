@@ -1,4 +1,5 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,6 +28,31 @@ async function fixture() {
 }
 
 describe("LocalAgentHomeStore path containment", () => {
+  it.skipIf(process.platform === "win32")(
+    "streams regular files beside a listening Unix socket",
+    async () => {
+      const { store, home } = await fixture();
+      await writeFile(path.join(home, "regular.txt"), "exported");
+      const server = createServer();
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(path.join(home, "worker.sock"), resolve);
+      });
+      try {
+        const files = [];
+        for await (const file of store.streamHome("bot-1", context, () => false)) {
+          const chunks: Uint8Array[] = [];
+          for await (const chunk of file.content) chunks.push(chunk);
+          files.push({ path: file.path, content: Buffer.concat(chunks).toString() });
+        }
+        expect(files).toEqual([{ path: "regular.txt", content: "exported" }]);
+      } finally {
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
+    },
+  );
   it("keeps revision metadata external without reserving a workspace file name", async () => {
     const { root, store } = await fixture();
     const source = path.join(root, "checkpoint-source");

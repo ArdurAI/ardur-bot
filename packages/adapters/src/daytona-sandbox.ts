@@ -150,8 +150,18 @@ export class DaytonaSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     cwd: string | undefined,
     _context: AdapterContext,
+    options?: { activate?: false },
   ): Promise<string | null> {
-    return daytonaCwd(await this.workspaceRoot(await this.box(computer)), cwd);
+    if (options?.activate !== false) {
+      return daytonaCwd(await this.workspaceRoot(await this.box(computer)), cwd);
+    }
+    const id = computer.providerRef || computer.id;
+    const cached = this.workspaceRoots.get(id);
+    if (cached) return daytonaCwd(cached, cwd);
+    // Resolving history must never activate a stopped computer.
+    const sandbox = this.boxes.get(id) ?? (await this.client.get(id));
+    if (sandbox.state !== SandboxState.STARTED) return null;
+    return daytonaCwd(await this.workspaceRoot(sandbox), cwd);
   }
 
   async *execute(

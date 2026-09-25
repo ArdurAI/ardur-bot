@@ -7,8 +7,9 @@ import { PassThrough } from "node:stream";
 import type { CommandRequest, ProcessEvent } from "@ardurbot/adapter-kit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const fake = vi.hoisted(() => ({ spawn: vi.fn(), environment: vi.fn() }));
+const fake = vi.hoisted(() => ({ spawn: vi.fn(), environment: vi.fn(), verify: vi.fn() }));
 vi.mock("node:child_process", () => ({ spawn: fake.spawn }));
+vi.mock("./host-integrations.js", () => ({ verifyHostIntegration: fake.verify }));
 vi.mock("./host-environment.js", async (original) => ({
   ...(await original<object>()),
   getHostEnvironment: fake.environment,
@@ -27,11 +28,12 @@ const context = {
 const roots: string[] = [];
 beforeEach(() => {
   fake.spawn.mockReset();
+  fake.verify.mockReset();
 });
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-async function fixture(restricted: boolean) {
+async function fixture(restricted: boolean, linked = false) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "host-command-")));
   roots.push(root);
   for (const name of ["bash", "echo", "gh"]) {
@@ -48,10 +50,14 @@ async function fixture(restricted: boolean) {
       AWS_PROFILE: "placeholder",
     }),
   });
-  const provider = new DesktopSandboxProvider({ root, restricted });
+  const data = path.join(root, "data");
+  if (linked) await symlink(root, data, "junction");
+  const provider = new DesktopSandboxProvider({ root: linked ? data : root, restricted });
   const computer = await provider.provision({ botId: "bot", homePath: "ignored" }, context);
   return {
     root,
+    provider,
+    computer,
     home: computer.providerRef,
     async execute(request: CommandRequest) {
       const events: ProcessEvent[] = [];
@@ -60,6 +66,36 @@ async function fixture(restricted: boolean) {
     },
   };
 }
+it("executes a freshly approved source-mode command through a stable symlinked data directory", async () => {
+  const { provider, computer, execute, home } = await fixture(false, true);
+  const cwd = await provider.resolveCommandCwd(computer, undefined, context);
+  expect(cwd).toBe(await realpath(home));
+  fake.spawn.mockImplementation(() => processStub());
+  expect(
+    await execute({
+      argv: ["gh", "issue", "list"],
+      cwd: cwd!,
+      hostIntegration: { id: "github", identity: "fixture-account", workspace: null },
+    }),
+  ).toContainEqual({ type: "exit", code: 0 });
+  expect(fake.verify).toHaveBeenCalledOnce();
+  expect(fake.spawn.mock.calls[0]![2].cwd).toBe(cwd);
+});
+it("resolves a future source-mode directory without creating it during preview", async () => {
+  const { provider, computer, execute, home } = await fixture(false, true);
+  const cwd = await provider.resolveCommandCwd(computer, "nested/folder", context);
+  expect(cwd).toBe(path.join(await realpath(home), "nested/folder"));
+  expect(await readdir(home)).not.toContain("nested");
+  fake.spawn.mockImplementation(() => processStub());
+  expect(
+    await execute({
+      argv: ["gh", "issue", "list"],
+      cwd: cwd!,
+      hostIntegration: { id: "github", identity: "fixture-account", workspace: null },
+    }),
+  ).toContainEqual({ type: "exit", code: 0 });
+  expect(fake.spawn.mock.calls[0]![2].cwd).toBe(cwd);
+});
 function processStub(error?: string, code: number | null = 0) {
   const child = new EventEmitter() as ChildProcess;
   Object.assign(child, { stdout: new PassThrough(), stderr: new PassThrough(), kill: vi.fn() });

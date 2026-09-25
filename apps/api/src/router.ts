@@ -568,6 +568,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     prisma: deps.prisma,
     documents: deps.memoryDocuments!,
   });
+  const importOwner = ({ spaceId, userId }: Actor) => ({ spaceId, userId });
 
   const authed = os.use(async ({ context, next }) => {
     if (!context.actor) throw new ORPCError("UNAUTHORIZED");
@@ -2596,20 +2597,24 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     localImport: {
       credentials: authed.localImport.credentials.handler(async ({ context, input }) => {
-        await assertLocalImportOwner(deps.prisma, context.actor);
-        return saveImportedServerCredentials(deps.prisma, deps.secrets, context.actor, input);
+        const owner = importOwner(context.actor);
+        await assertLocalImportOwner(deps.prisma, owner);
+        return saveImportedServerCredentials(deps.prisma, deps.secrets, owner, input);
       }),
-      status: authed.localImport.status.handler(({ context }) => localImport.status(context.actor)),
+      status: authed.localImport.status.handler(({ context }) =>
+        localImport.status(importOwner(context.actor)),
+      ),
       configure: authed.localImport.configure.handler(({ context, input }) =>
-        localImport.configure(context.actor, input),
+        localImport.configure(importOwner(context.actor), input),
       ),
       run: authed.localImport.run.handler(async ({ context, input }) => {
-        await assertLocalImportOwner(deps.prisma, context.actor);
+        const owner = importOwner(context.actor);
+        await assertLocalImportOwner(deps.prisma, owner);
         if (!deps.localImportRequests)
           throw new ORPCError("SERVICE_UNAVAILABLE", {
             message: "The import worker is unavailable.",
           });
-        return deps.localImportRequests.run(context.actor, input);
+        return deps.localImportRequests.run(owner, input);
       }),
     },
     memory: {

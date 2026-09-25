@@ -14,6 +14,8 @@ export function effectiveRemoteAuthority(authority: RemoteAuthority): DeviceScop
 
 // Positive allowlist: connector naming, model hints and approval exemptions are not risk evidence.
 const ORDINARY_TOOLS = new Set([
+  "board_ready",
+  "board_show",
   "computer_observe",
   "browser_snapshot",
   "list_files",

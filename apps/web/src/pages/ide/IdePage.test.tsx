@@ -185,6 +185,22 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("IDE page", () => {
+  it("refreshes the tree and Quick Open after shell file changes with Changes closed", async () => {
+    expect(button("readme.md")).toBeDefined();
+    api.list.mockResolvedValue({
+      hiddenCount: 0,
+      entries: [{ path: "created.txt", kind: "file", size: 4 }],
+    });
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    await tick();
+    expect(button("readme.md")).toBeUndefined();
+    expect(button("created.txt")).toBeDefined();
+    await click("Open");
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain("created.txt");
+    expect(host.querySelector('[role="dialog"]')?.textContent).not.toContain("readme.md");
+    expect(api.changes).not.toHaveBeenCalled();
+    expect(api.subscribe).not.toHaveBeenCalled();
+  });
   it("shows the hidden entry count and keeps supported siblings usable", async () => {
     api.list.mockResolvedValueOnce({
       entries: [{ path: "src/main.ts", kind: "file", size: 20 }],

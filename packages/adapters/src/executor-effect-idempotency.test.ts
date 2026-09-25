@@ -12,8 +12,10 @@ import {
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
 import type { MemoryService } from "@ardurbot/memory";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "./auto-review.js";
+import { parseBeadsItem } from "./board/beads.js";
+import { BoardService } from "./board/service.js";
 import { commandComputerFingerprint } from "./command-replay.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { acquireComputerExecutionLease, provisionComputer } from "./computer-lifecycle.js";
@@ -86,6 +88,11 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     sourceMessageId: null as string | null,
     leaseFence: 0,
     commandReplayId: null as string | null,
+    boardItemId: null as string | null,
+    boardWorkspaceId: null as string | null,
+    boardCloseWhenDone: false,
+    boardCommentedAt: null as Date | null,
+    cancelRequestedAt: null as Date | null,
   };
   const memoryCommit = vi.fn(async () => ({ revision: "rev-1" }));
   const externalEffect = {
@@ -185,6 +192,9 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
       findFirst: vi.fn(async () => run),
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
+      update: vi.fn(async ({ data }: { data: Record<string, unknown> }) =>
+        Object.assign(run, data),
+      ),
       updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         Object.assign(run, data);
         return { count: 1 };
@@ -281,7 +291,11 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     run.status = "waiting_input";
     return true;
   });
-  const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
+  const finalizeRun = vi.fn(
+    async (_input: { outcome: string }): Promise<{ continuationRunId: string | null } | false> => ({
+      continuationRunId: null,
+    }),
+  );
   let calls: ToolCall[] = [];
   const runtimeRun = vi.fn(async function* (
     request: AgentRunRequest,
@@ -362,6 +376,76 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     },
   };
 }
+
+describe("Board outcome finalization", () => {
+  afterEach(() => vi.restoreAllMocks());
+  function boardRun() {
+    const f = fixture();
+    Object.assign(f.runRecord, {
+      boardItemId: "board-a",
+      boardWorkspaceId: "workspace",
+      boardCloseWhenDone: true,
+    });
+    const provider = {
+      show: vi.fn(async () =>
+        parseBeadsItem({ id: "board-a", title: "Task", metadata: { ardur_close_when_done: true } }),
+      ),
+      comment: vi.fn(),
+      close: vi.fn(),
+    };
+    vi.spyOn(BoardService.prototype, "provider").mockResolvedValue(provider as never);
+    return { ...f, provider };
+  }
+  it.each(["cancelled", "lease-lost", "transaction-failure"])(
+    "does not publish completion when finalization loses to %s",
+    async (race) => {
+      const f = boardRun();
+      f.finalizeRun.mockImplementation(async () => {
+        if (race === "transaction-failure") throw new Error("Finalization unavailable");
+        if (race === "cancelled") {
+          f.runRecord.status = "cancelled";
+          f.runRecord.cancelRequestedAt = new Date();
+        } else f.runRecord.leaseFence++;
+        return false;
+      });
+      const execution = f.executor.continueRun(f.runRecord.id, "worker-1");
+      if (race === "transaction-failure")
+        await expect(execution).rejects.toThrow("Run setup failed; retrying");
+      else await execution;
+      expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "completed" }));
+      expect(f.provider.comment).not.toHaveBeenCalled();
+      expect(f.provider.close).not.toHaveBeenCalled();
+      expect(f.runRecord.boardCommentedAt).toBeNull();
+    },
+  );
+  it.each(["completed", "failed"])(
+    "publishes a persisted %s outcome after finalization",
+    async (status) => {
+      const f = boardRun();
+      const order: string[] = [];
+      if (status === "failed")
+        f.runtimeRun.mockImplementation(() => {
+          throw new Error("Runtime failed");
+        });
+      f.finalizeRun.mockImplementation(async ({ outcome }) => {
+        order.push("finalized");
+        f.runRecord.status = outcome;
+        return { continuationRunId: null };
+      });
+      f.provider.comment.mockImplementation(async () => {
+        order.push(f.runRecord.status);
+      });
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+      expect(order).toEqual(["finalized", status]);
+      expect(f.provider.comment).toHaveBeenCalledWith(
+        "board-a",
+        expect.stringContaining(status === "completed" ? "Completed" : "Failed"),
+      );
+      expect(f.provider.close).toHaveBeenCalledTimes(status === "completed" ? 1 : 0);
+      expect(f.runRecord.boardCommentedAt).toBeInstanceOf(Date);
+    },
+  );
+});
 
 describe("mutating tool effect idempotency keys", () => {
   it("keeps private context out of a shared messaging run on a personal thread", async () => {

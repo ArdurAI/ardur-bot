@@ -1,5 +1,6 @@
 import type { ProjectBoardProvider } from "@ardurbot/adapter-kit";
 import type {
+  BoardClaimFilter,
   BoardComment,
   BoardCreate,
   BoardFilter,
@@ -11,6 +12,7 @@ import type {
   WorkItem,
 } from "@ardurbot/contracts/board";
 import {
+  BoardClaimFilterSchema,
   BoardCreateSchema,
   BoardError,
   BoardFilterSchema,
@@ -226,11 +228,11 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     if (Object.keys(parsed).length) await this.json(["update", id, ...this.fields(parsed)]);
     return this.show(id);
   }
-  async claim(idOrFilter: string | BoardFilter, actor: string) {
+  async claim(idOrFilter: string | BoardClaimFilter, actor: string) {
     const argv =
       typeof idOrFilter === "string"
         ? ["update", BoardItemIdSchema.parse(idOrFilter), "--claim"]
-        : ["ready", "--claim", ...this.filter(idOrFilter, true)];
+        : ["ready", "--claim", ...this.filter(BoardClaimFilterSchema.parse(idOrFilter), true)];
     return (await this.items(argv, actor))[0] ?? null;
   }
   async close(ids: string[], reason: string) {

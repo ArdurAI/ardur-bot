@@ -101,6 +101,18 @@ it("serializes all workspace operations including concurrent writes", async () =
     expect(call.argv).toContain("-C");
   }
 });
+it.each([
+  ["show", "other-item"],
+  ["update", "other-item", "--title", "Changed"],
+])("refuses prefix routing before executing %s", async (...argv) => {
+  const f = await fixture();
+  await writeFile(
+    path.join(f.workspace.path, ".beads", "routes.jsonl"),
+    `${JSON.stringify({ prefix: "other-", path: "../outside" })}\n`,
+  );
+  await expect(f.command(argv)).rejects.toMatchObject({ problem: { code: "forbidden" } });
+  await expect(f.calls()).rejects.toMatchObject({ code: "ENOENT" });
+});
 it("returns structured missing-binary, unsupported-version, timeout and external-lock problems", async () => {
   expect(supportedBeadsVersion("bd version 1.2.2")).toBe("1.2.2");
   for (const version of ["0.59.0", "1.1.9", "2.0.0", "unknown"])

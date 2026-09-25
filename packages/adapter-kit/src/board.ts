@@ -1,4 +1,5 @@
 import type {
+  BoardClaimFilter,
   BoardComment,
   BoardCreate,
   BoardFilter,
@@ -17,7 +18,7 @@ export interface ProjectBoardProvider {
   show(id: string): Promise<WorkItem>;
   create(input: BoardCreate): Promise<WorkItem>;
   update(id: string, patch: BoardPatch): Promise<WorkItem>;
-  claim(idOrFilter: string | BoardFilter, actor: string): Promise<WorkItem | null>;
+  claim(idOrFilter: string | BoardClaimFilter, actor: string): Promise<WorkItem | null>;
   close(ids: string[], reason: string): Promise<WorkItem[]>;
   comment(id: string, text: string): Promise<BoardComment>;
   link(from: string, to: string, type: string): Promise<void>;

@@ -28,7 +28,7 @@ export class LocalImportRequests {
     try {
       await this.jobs.enqueue({
         name: "local-import.run",
-        payload: { requestId, ...owner, action },
+        payload: { requestId, spaceId: owner.spaceId, userId: owner.userId, action },
         replaceKey: `local-import:${requestId}`,
       });
       return await result;
