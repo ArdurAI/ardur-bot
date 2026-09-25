@@ -19,6 +19,21 @@ export async function learningAction(action: "approve" | "reject" | "revert", pr
 export async function loadLearningSettings() {
   return SpaceLearningConfigSchema.parse(await rpc("learning/settings", {}));
 }
+export async function enableLearningReview(settings: {
+  reviewerPin: unknown;
+  destination: unknown;
+  consolidationEnabled: boolean;
+  budgets: unknown;
+}) {
+  return SpaceLearningConfigSchema.parse(
+    await rpc("learning/configure", {
+      enabled: true,
+      reviewerPin: settings.reviewerPin ?? settings.destination,
+      consolidationEnabled: settings.consolidationEnabled,
+      budgets: settings.budgets,
+    }),
+  );
+}
 export async function loadLearningEvidence(proposalId: string, evidenceId: string) {
   return ProposalEvidenceSchema.parse(await rpc("learning/evidence", { proposalId, evidenceId }));
 }

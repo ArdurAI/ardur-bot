@@ -406,6 +406,27 @@ describe("Settings integration catalog", () => {
     expect(button("Try again")).toBeDefined();
   });
 
+  it("keeps a built-in app's row when a raw server uses its address", async () => {
+    api.servers.mockImplementation(async () => [
+      {
+        id: "raw-server",
+        name: "Self-added server",
+        endpoint: "https://example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "connected",
+        connectionState: "not-connected",
+        catalogId: null,
+      },
+    ]);
+    await mount();
+    const githubRow = [...container.querySelectorAll("tbody tr")].find((entry) =>
+      entry.textContent?.includes("GitHub"),
+    );
+    expect(githubRow?.textContent).not.toContain("Manage");
+    expect(container.textContent).not.toContain("Self-added server");
+  });
+
   it("renders Find apps and keeps public search closed until it is opened", async () => {
     await mount();
     expect(container.querySelector('[aria-label="Search apps"]')).toBeNull();

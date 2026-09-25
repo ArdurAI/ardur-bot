@@ -1630,14 +1630,14 @@ export function ShellPage({
       next.delete("routine");
       setSearchParams(next, { replace: true });
     }
-    if (messageId) {
-      void jumpToMessage({ botId: active.id, messageId }).finally(() => {
+    if (messageId && botId && active.id === botId) {
+      void jumpToMessage({ botId, messageId }).finally(() => {
         const next = new URLSearchParams(searchParams);
         next.delete("m");
         setSearchParams(next, { replace: true });
       });
     }
-  }, [active?.id, groupId, inGroup, routines, routinesBotId, searchParams, setSearchParams]);
+  }, [active?.id, botId, groupId, inGroup, routines, routinesBotId, searchParams, setSearchParams]);
   const activeSnapshot = inGroup
     ? snapshot?.groupId === groupId
       ? snapshot

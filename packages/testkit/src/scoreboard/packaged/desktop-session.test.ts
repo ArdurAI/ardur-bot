@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import type { ElectronAuthCookie } from "./desktop-session.js";
 import {
   electronAuthCookie,
   persistentAuthCookies,
+  primeDesktopWindowSession,
   SYNTHETIC_AUTH_LIFETIME_SECONDS,
   selectPrimingCookieStore,
 } from "./desktop-session.js";
@@ -56,5 +59,58 @@ describe("desktop priming session", () => {
     expect(() => selectPrimingCookieStore({ browserContext, webContentsSession: null })).toThrow(
       /window session/,
     );
+  });
+
+  it("flushes Electron cookie records on the priming window the stack evaluates", async () => {
+    const cookies = persistentAuthCookies(
+      "better-auth.session_token=synthetic-token; better-auth.session_data=synthetic-data",
+      "http://127.0.0.1:4010",
+      1_700_000_000_000,
+    );
+    const events: string[] = [];
+    const received: ElectronAuthCookie[] = [];
+    await primeDesktopWindowSession(
+      {
+        evaluate: async (pageFunction, details) => {
+          await pageFunction(
+            {
+              isDestroyed: () => false,
+              webContents: {
+                isDestroyed: () => false,
+                session: {
+                  cookies: {
+                    set: async (item) => {
+                      received.push(item);
+                      events.push(`set:${item.name}`);
+                    },
+                    flushStore: async () => {
+                      events.push("flush");
+                    },
+                  },
+                },
+              },
+            },
+            details,
+          );
+        },
+      },
+      cookies,
+    );
+    expect(events).toEqual([
+      "set:better-auth.session_token",
+      "set:better-auth.session_data",
+      "flush",
+    ]);
+    expect(received).toHaveLength(2);
+    for (const [index, stored] of received.entries()) {
+      expect(stored.expirationDate).toBe(cookies[index]!.expires);
+      expect(stored.sameSite).toBe("lax");
+      expect(stored.httpOnly).toBe(true);
+      expect(stored.path).toBe("/");
+      expect(stored.url).toBe("http://127.0.0.1:4010");
+      expect(stored).not.toHaveProperty("expires");
+    }
+    const stack = readFileSync(new URL("./local-stack.ts", import.meta.url), "utf8");
+    expect(stack).toContain("primeDesktopWindowSession(primingWindow, records)");
   });
 });

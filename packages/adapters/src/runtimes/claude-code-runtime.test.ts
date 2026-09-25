@@ -35,6 +35,10 @@ const init = {
   session_id: "session",
   tools: ["mcp__ardur__read_file"],
 };
+const effortHelp = `
+Usage: claude [options]
+  --effort <level>  Set thinking effort (low, medium, high, xhigh, max)
+`;
 describe("Claude stream-json boundary", () => {
   it("retains failed result spend and ignores duplicate aggregate results", () => {
     const parser = new ClaudeStreamParser(pin);
@@ -200,10 +204,10 @@ it("keeps the host compatibility catalog aligned with the pinned built-in catalo
   expect(claudeModels()).toEqual(expected);
 });
 
-it.each(["2.1.259", "2.1.280", "2.1.281"])(
+it.each(["2.1.259", "2.1.282", "2.1.999"])(
   "offers each model's documented efforts on %s",
   (version) => {
-    for (const model of claudeModels(version)) {
+    for (const model of claudeModels(version, effortHelp)) {
       expect(model.efforts).toEqual(
         ["claude-opus-4-6", "claude-sonnet-4-6"].includes(model.id)
           ? ["low", "medium", "high", "max"]
@@ -213,19 +217,22 @@ it.each(["2.1.259", "2.1.280", "2.1.281"])(
   },
 );
 
-it.each([
-  undefined,
-  "",
-  "garbage",
-  "2.1.258",
-  "2.1.282",
-  "2.2.0",
-  "3.1.281",
-  "2.1.281-beta",
-  "2.1.281+build",
-])("keeps only low for unchecked version %s", (version) => {
+it.each([undefined, "", "garbage", "2.1.258", "3.1.281", "2.1.281-beta", "2.1.281+build"])(
+  "keeps only low for unchecked version %s",
+  (version) => {
+    expect(
+      claudeModels(version).every(
+        (model) => model.efforts.length === 1 && model.efforts[0] === "low",
+      ),
+    ).toBe(true);
+  },
+);
+it("keeps only low when help does not advertise effort values", () => {
+  expect(claudeModels("2.1.282", "Usage: claude [options]\n")).toEqual(
+    expect.arrayContaining([expect.objectContaining({ efforts: ["low"] })]),
+  );
   expect(
-    claudeModels(version).every(
+    claudeModels("2.1.282", "Usage: claude [options]\n").every(
       (model) => model.efforts.length === 1 && model.efforts[0] === "low",
     ),
   ).toBe(true);

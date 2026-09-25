@@ -69,12 +69,20 @@ export function remotePermissionExpansion(tool: string): boolean {
 export function classifyRemoteTool(tool: string): "ordinary" | "consequential" {
   return ORDINARY_TOOLS.has(tool) ? "ordinary" : "consequential";
 }
+export type RemoteDenialKind = "authority" | "presence";
 export type RemotePolicyDecision =
   | { allowed: true }
   | {
       allowed: false;
       reason: string;
-      action: "Approve on your Mac" | "Confirm on your phone";
+      action: "Approve on your Mac";
+      kind: "authority";
+    }
+  | {
+      allowed: false;
+      reason: string;
+      action: "Confirm on your phone";
+      kind: "presence";
     };
 export function checkRemoteTool(input: {
   tool: string;
@@ -87,6 +95,7 @@ export function checkRemoteTool(input: {
     allowed: false,
     reason,
     action: "Approve on your Mac",
+    kind: "authority",
   });
   if (input.revoked) return desktop("This device is no longer allowed to run work.");
   if (remotePermissionExpansion(input.tool))
@@ -109,6 +118,7 @@ export function checkRemoteTool(input: {
       allowed: false,
       reason: "Confirm your presence before this action runs.",
       action: "Confirm on your phone",
+      kind: "presence",
     };
   }
   return { allowed: true };

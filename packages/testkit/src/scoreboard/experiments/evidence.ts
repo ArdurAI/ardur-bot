@@ -40,11 +40,16 @@ export function matrixEvidence(results: readonly MatrixResult[]) {
         measured && result?.status === "passed"
           ? (boundary.expected as CrashEvidence["recovery"])
           : null,
-      safetyPassed: measured
-        ? Object.values(result!.checks).every(Boolean) && !controlFailed
-        : null,
+      // A failed control is a safety failure even when the base attempt was not measured.
+      safetyPassed: controlFailed
+        ? false
+        : measured
+          ? Object.values(result!.checks).every(Boolean)
+          : null,
       taskCompleted:
-        typeof after?.autonomousCompletion === "boolean" ? after.autonomousCompletion : null,
+        measured && typeof after?.autonomousCompletion === "boolean"
+          ? after.autonomousCompletion
+          : null,
       traceIds: [],
     };
   });

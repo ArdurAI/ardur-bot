@@ -29,6 +29,13 @@ import {
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { isToolPauseResult } from "./approval-effect.js";
 import { builtinAgentTools, DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
+
+/** Pi advertises the run's tool list. An empty list falls back to the built-in catalog. */
+export function agentToolsForRequest(tools: AgentRunRequest["tools"]): ConnectorTool[] {
+  if (tools === "none") return [];
+  return tools.length ? tools : builtinAgentTools;
+}
+
 import { markStablePrefix } from "./context/provider-cache.js";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
 import {
@@ -246,8 +253,7 @@ export class PiAgentRuntime implements AgentRuntime {
             ),
           );
         }
-        const toolDefs =
-          request.tools === "none" ? [] : request.tools.length ? request.tools : builtinAgentTools;
+        const toolDefs = agentToolsForRequest(request.tools);
         const nestedAgents = new Set<Agent>();
         const completionModel = modelForCompletion(model, request.model.maxTokens);
         trackedBudget = toolCallBudgetFor(request.runId);
@@ -1180,13 +1186,9 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   }
   const subagentModel = modelForCompletion(selectedModel.model, requestModel.maxTokens);
 
-  const childDefs = (
-    host.request.tools === "none"
-      ? []
-      : host.request.tools.length
-        ? host.request.tools
-        : builtinAgentTools
-  ).filter((tool) => !DELEGATION_TOOL_NAMES.has(tool.name));
+  const childDefs = agentToolsForRequest(host.request.tools).filter(
+    (tool) => !DELEGATION_TOOL_NAMES.has(tool.name),
+  );
   const helperSignal = AbortSignal.any([
     host.signal,
     AbortSignal.timeout(Math.max(1, new Date(admission.deadlineAt).getTime() - Date.now())),

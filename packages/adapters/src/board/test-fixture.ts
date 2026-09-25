@@ -1,4 +1,13 @@
-import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { BoardRun, BoardWorkspace } from "@ardurbot/contracts/board";
@@ -35,7 +44,12 @@ export async function boardFixture(overrides: NodeJS.ProcessEnv = {}, timeoutMs?
     allowedBotIds: [],
     initialized: true,
   };
+  // A board is recognized by its settings file, as a real Beads init leaves it.
   await mkdir(path.join(workspace.path, ".beads"), { recursive: true });
+  await writeFile(
+    path.join(workspace.path, ".beads", "metadata.json"),
+    JSON.stringify({ dolt_mode: "embedded" }),
+  );
   const requests: BoardRun[] = [];
   const run = (request: BoardRun) => {
     requests.push(request);

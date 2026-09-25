@@ -9,6 +9,7 @@ import {
   Button,
   FlatList,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +18,7 @@ import {
 } from "react-native";
 import { rpc, selectedSpaceId } from "../lib/api";
 import { hasPairedDevice } from "../lib/dispatch";
+import { filingDestination } from "../lib/filing-destination";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 
@@ -336,6 +338,18 @@ export function MobileBoard() {
                   {item.id} · P{item.priority}
                   {item.assignee ? ` · ${item.assignee}` : ""}
                 </Text>
+                {item.filedBy ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    onPress={() => {
+                      if (item.filedBy) router.push(filingDestination(item.filedBy));
+                    }}
+                  >
+                    <Text style={foreground}>
+                      {t("Filed by {name}", { name: item.filedBy.botName })}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             )}
           />
@@ -375,6 +389,18 @@ export function MobileBoard() {
               <Text accessibilityRole="header" style={[styles.title, foreground]}>
                 {selected.title}
               </Text>
+              {selected.filedBy ? (
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => {
+                    if (selected.filedBy) router.push(filingDestination(selected.filedBy));
+                  }}
+                >
+                  <Text style={foreground}>
+                    {t("Filed by {name}", { name: selected.filedBy.botName })}
+                  </Text>
+                </Pressable>
+              ) : null}
               <Text style={foreground}>{selected.description}</Text>
               {selected.acceptanceCriteria ? (
                 <>

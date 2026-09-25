@@ -6,6 +6,7 @@ import { requestedBotPin } from "./pin-resolution.js";
 import { RuntimeRegistry } from "./runtime-registry.js";
 import { claudeModels } from "./runtimes/claude-code-runtime.js";
 
+const effortHelp = "--effort <level>  Effort (low, medium, high, xhigh, max)";
 const pin: RuntimePin = {
   runtimeKind: "claude-code",
   provider: "anthropic",
@@ -26,17 +27,14 @@ describe("runtime pin selection", () => {
             runtimeKind: "claude-code",
             available: true,
             version,
-            models: claudeModels(version),
+            models: claudeModels(version, effortHelp),
           }),
         },
       });
       for (const modelId of ["claude-opus-4-6", "claude-opus-5"]) {
         for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
           const result = await registry.resolve({ ...pin, modelId, effort }, "desktop", true);
-          const offered =
-            version === "2.1.282"
-              ? effort === "low"
-              : modelId !== "claude-opus-4-6" || effort !== "xhigh";
+          const offered = modelId !== "claude-opus-4-6" || effort !== "xhigh";
           expect(result).toMatchObject(
             offered ? { runtime } : { code: "pin-effort-unsupported", pin: { modelId, effort } },
           );
