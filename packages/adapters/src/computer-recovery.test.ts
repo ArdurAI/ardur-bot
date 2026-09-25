@@ -4,6 +4,7 @@ import path from "node:path";
 import type { AdapterContext, JobPublisher, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { extendActiveComputerControl } from "./computer-control.js";
 import { ComputerBusyError, provisionComputer, replaceComputer } from "./computer-lifecycle.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
@@ -40,20 +41,23 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
     homeKey: "bot",
     scope: "dedicated",
     state: "running",
+    provisioningId: null as string | null,
     providerRef: first.providerRef as string | null,
     kind: first.kind,
     controlHolder: "none",
-    controlLeaseId: null,
+    controlLeaseId: null as string | null,
+    controlLeaseExpiresAt: null as Date | null,
+    controlBotId: null as string | null,
     maintenanceId: null as string | null,
     homeRevision: "saved",
     updatedAt: new Date("2024-01-01T00:00:00.000Z"),
   };
   // Model the atomic scalar predicates used by claims, including stale references
-  // and the updatedAt claim stamp used for booting reclaim / end-of-boot writes.
+  // as well as stale-claim timestamps and the separate end-of-boot ownership token.
   const computer = {
     findUniqueOrThrow: vi.fn(async () => ({ ...row })),
     updateMany: vi.fn(async ({ where, data }) => {
-      const matches = ["id", "state", "providerRef", "kind", "updatedAt"].every(
+      const matches = ["id", "state", "providerRef", "kind", "updatedAt", "provisioningId"].every(
         (key) => !(key in where) || where[key] === row[key as keyof typeof row],
       );
       if (!matches) return { count: 0 };
@@ -80,6 +84,91 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
 }
 
 describe("computer recovery preserves live work", () => {
+  it.each([false, true])(
+    "finishes reconnect after a teaching lease renewal (provider fails: %s)",
+    async (fails) => {
+      const { deps, row, first } = await fixture();
+      Object.assign(row, {
+        controlHolder: "user",
+        controlLeaseId: "teaching-lease",
+        controlBotId: "bot",
+        controlLeaseExpiresAt: new Date(Date.now() + 60_000),
+      });
+      deps.jobs = { enqueue: vi.fn().mockResolvedValue(undefined) } as unknown as JobPublisher;
+      const failure = new Error("provider preparation failed");
+      const destroy = vi.spyOn(deps.sandbox, "destroy");
+      vi.spyOn(deps.sandbox, "prepare").mockImplementation(async () => {
+        expect(row.state).toBe("booting");
+        const claimedAt = row.updatedAt;
+        expect(
+          await extendActiveComputerControl(
+            deps.prisma,
+            deps.jobs,
+            row,
+            "bot",
+            new Date(Date.now() + 30 * 60_000),
+          ),
+        ).toBe(true);
+        expect(row.updatedAt.getTime()).toBeGreaterThan(claimedAt.getTime());
+        if (fails) throw failure;
+      });
+
+      const reconnect = provisionComputer(deps, row.id, context);
+      if (fails) await expect(reconnect).rejects.toBe(failure);
+      else await expect(reconnect).resolves.toMatchObject({ providerRef: first.providerRef });
+      expect(row.state).toBe("running");
+      expect(row.provisioningId).toBeNull();
+      expect(row.controlHolder).toBe("user");
+      expect(row.controlLeaseId).toBe("teaching-lease");
+      expect(destroy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("cannot activate or clear a newer provisioning owner's claim", async () => {
+    const { deps, row } = await fixture();
+    const destroy = vi.spyOn(deps.sandbox, "destroy");
+    vi.spyOn(deps.sandbox, "prepare").mockImplementation(async () => {
+      expect(row.provisioningId).toEqual(expect.any(String));
+      row.provisioningId = "new-owner";
+    });
+    await expect(provisionComputer(deps, row.id, context)).rejects.toBeInstanceOf(
+      ComputerBusyError,
+    );
+    expect(row.state).toBe("booting");
+    expect(row.provisioningId).toBe("new-owner");
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it("preserves a teaching control release during a fresh boot", async () => {
+    const { deps, row } = await fixture();
+    Object.assign(row, {
+      state: "stopped",
+      controlHolder: "user",
+      controlLeaseId: "teaching-lease",
+      controlBotId: "bot",
+      controlLeaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    vi.spyOn(deps.sandbox, "prepare").mockImplementation(async () => {
+      await deps.prisma.computer.updateMany({
+        where: { id: row.id },
+        data: {
+          controlHolder: "bot",
+          controlLeaseId: null,
+          controlLeaseExpiresAt: null,
+          controlBotId: null,
+        },
+      });
+    });
+    await provisionComputer(deps, row.id, context);
+    expect(row).toMatchObject({
+      state: "running",
+      provisioningId: null,
+      controlHolder: "bot",
+      controlLeaseId: null,
+      controlBotId: null,
+    });
+  });
+
   it("blocks competing maintenance and boots while an update owns the computer", async () => {
     const { deps, row } = await fixture();
     row.maintenanceId = "other-update";
