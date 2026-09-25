@@ -25,7 +25,11 @@ export async function loadLearningRecords(prisma: PrismaClient, runId: string) {
       orderBy: { seq: "asc" },
       take: 300,
     }),
-    prisma.usageRecord.findMany({ where: { runId: run.id, spaceId: run.spaceId }, take: 100 }),
+    // A review's own metering must not alter the source it is checking for staleness.
+    prisma.usageRecord.findMany({
+      where: { runId: run.id, spaceId: run.spaceId, purpose: { not: "detached-learning" } },
+      take: 100,
+    }),
     prisma.externalEffect.findMany({
       where: { runId: run.id, spaceId: run.spaceId, status: "denied" },
       select: { id: true },

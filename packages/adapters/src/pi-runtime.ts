@@ -44,8 +44,8 @@ import {
   registerOpenAiCompatibleCatalog,
   registerOpenAiCompatibleRuntime,
 } from "./pi-openai-compatible-provider.js";
+import { observePiUsage } from "./pi-request-usage.js";
 import {
-  billedPromptTokens,
   clipToolResultContent,
   clipToolResultText,
   MODEL_STREAM_MAX_RETRIES,
@@ -59,6 +59,7 @@ import {
   type PiSessionRecorder,
 } from "./pi-session.js";
 import { classifyProviderError, ProviderError } from "./provider-error.js";
+import { ObservedUsageTotals } from "./runtime-usage.js";
 import { textContentArg } from "./tool-text.js";
 
 const running = new Map<string, { controller: AbortController; work: Promise<void> }>();
@@ -316,18 +317,26 @@ export class PiAgentRuntime implements AgentRuntime {
           sessionId: conversationSessionId(request.threadId, request.botId),
           steeringMode: "all",
           streamFn: (m, ctx, options) =>
-            models.streamSimple(m, ctx, {
-              ...reliableStreamOptions(m, options, request.model.maxTokens),
-              ...(m.api === "anthropic-messages" && request.stablePrefix
-                ? {
-                    onPayload: async (payload: unknown) =>
-                      markStablePrefix(
-                        (await options?.onPayload?.(payload, m)) ?? payload,
-                        request.stablePrefix!,
-                      ),
-                  }
-                : {}),
-            }),
+            observePiUsage(
+              m,
+              {
+                ...reliableStreamOptions(m, options, request.model.maxTokens),
+                ...(m.api === "anthropic-messages" && request.stablePrefix
+                  ? {
+                      onPayload: async (payload: unknown) =>
+                        markStablePrefix(
+                          (await options?.onPayload?.(payload, m)) ?? payload,
+                          request.stablePrefix!,
+                        ),
+                    }
+                  : {}),
+              },
+              (next) => models.streamSimple(m, ctx, next),
+              (usage) => {
+                host.usageRequestId = usage.request?.requestId;
+                queue.push({ type: "usage", ...usage });
+              },
+            ),
           getApiKey: async () => apiKey,
           transformContext: async (messages) =>
             pruneComputerScreenshotContext(
@@ -448,24 +457,6 @@ export class PiAgentRuntime implements AgentRuntime {
             if (text && !streamed) {
               streamed = text;
               queue.push({ type: "text", text });
-            }
-            if ("usage" in event.message && event.message.usage) {
-              queue.push({
-                type: "usage",
-                reported: Object.values(billedPromptTokens(event.message.usage)).some(
-                  (value) => value > 0,
-                ),
-                ...billedPromptTokens(event.message.usage),
-                ...(typeof event.message.usage.cacheRead === "number" &&
-                (event.message.usage.cacheRead > 0 ||
-                  ["anthropic", "openai", "azure-openai-responses", "openai-codex"].includes(
-                    model.provider,
-                  ))
-                  ? { cachedTokens: event.message.usage.cacheRead }
-                  : {}),
-                provider: model.provider,
-                model: model.id,
-              });
             }
           }
         });
@@ -1215,13 +1206,27 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     apiKey: selectedModel.apiKey,
     depth: 1,
   };
+  const totals = new ObservedUsageTotals();
+  let usageWrites = Promise.resolve();
   const nested = new Agent({
     sessionId: conversationSessionId(host.request.threadId, host.request.botId, agentId),
     streamFn: (m, ctx, options) =>
-      selectedModel.models.streamSimple(
+      observePiUsage(
         m,
-        ctx,
         reliableStreamOptions(m, options, requestModel.maxTokens),
+        (next) => selectedModel.models.streamSimple(m, ctx, next),
+        (usage) => {
+          totals.observe(usage);
+          if (totals.tokens >= admission.tokens) nested.abort();
+          if (host.request.recordHelperUsage) {
+            usageWrites = usageWrites.then(() =>
+              host.request.recordHelperUsage!(delegationId, usage),
+            );
+            // Preserve the failure for settlement without an unhandled rejection during streaming.
+            void usageWrites.catch(() => undefined);
+          } else host.queue.push({ type: "usage", delegationId, ...usage });
+        },
+        { purpose: "helper", parentRequestId: host.usageRequestId },
       ),
     getApiKey: async () => selectedModel.apiKey,
     transformContext: async (messages) =>
@@ -1246,8 +1251,6 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   });
   host.nestedAgents.add(nested);
 
-  const usageWrites: Promise<void>[] = [];
-  let consumedTokens = 0;
   let streamed = "";
   let lastPush = 0;
   nested.subscribe((event) => {
@@ -1284,15 +1287,6 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     if (event.type === "message_end" && event.message.role === "assistant") {
       const text = assistantText(event.message);
       if (text && !streamed) streamed = text;
-      if ("usage" in event.message && event.message.usage) {
-        const used = billedPromptTokens(event.message.usage);
-        consumedTokens += used.inputTokens + used.outputTokens;
-        if (consumedTokens >= admission.tokens) nested.abort();
-        const usage = { ...used, provider: subagentModel.provider, model: subagentModel.id };
-        if (host.request.recordHelperUsage)
-          usageWrites.push(host.request.recordHelperUsage(delegationId, usage));
-        else host.queue.push({ type: "usage", delegationId, ...usage });
-      }
     }
   });
 
@@ -1358,7 +1352,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   } finally {
     host.nestedAgents.delete(nested);
     try {
-      await Promise.all(usageWrites);
+      await usageWrites;
       if (!nestedHost.pausePending)
         await host.request.finishHelper?.(
           delegationId,
@@ -1816,6 +1810,7 @@ interface EventQueue {
 }
 
 interface ToolHost {
+  usageRequestId?: string;
   queue: EventQueue;
   request: AgentRunRequest;
   models: Models;

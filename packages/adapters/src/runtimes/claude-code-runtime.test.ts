@@ -36,6 +36,38 @@ const init = {
   tools: ["mcp__ardur__read_file"],
 };
 describe("Claude stream-json boundary", () => {
+  it("retains failed result spend and ignores duplicate aggregate results", () => {
+    const parser = new ClaudeStreamParser(pin);
+    parser.parse(init);
+    const failure = {
+      type: "result",
+      is_error: true,
+      modelUsage: {
+        [pin.modelId!]: {
+          inputTokens: 12,
+          cacheReadInputTokens: 80,
+          cacheCreationInputTokens: 20,
+          outputTokens: 8,
+        },
+      },
+      errors: ["untrusted diagnostic"],
+    };
+    expect(() => parser.parse(failure)).toThrow("Claude Code could not finish");
+    const receipts = parser.drainUsage();
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({
+      inputTokens: 112,
+      outputTokens: 8,
+      request: {
+        collection: {
+          outcome: "failed",
+          raw: { input: 12, cacheRead: 80, cacheWrite: 20, output: 8 },
+        },
+      },
+    });
+    expect(parser.parse(failure)).toEqual([]);
+    expect(JSON.stringify(receipts)).not.toContain("untrusted diagnostic");
+  });
   it("parses text once, skips tool observations, and ends only on success", () => {
     const parser = new ClaudeStreamParser(pin);
     expect(parser.parse(init)).toEqual([]);
@@ -67,7 +99,15 @@ describe("Claude stream-json boundary", () => {
         is_error: false,
         modelUsage: { [pin.modelId!]: {} },
       }),
-    ).toEqual([{ type: "done" }]);
+    ).toEqual([
+      expect.objectContaining({
+        type: "usage",
+        request: expect.objectContaining({
+          collection: expect.objectContaining({ outcome: "success", availability: "unavailable" }),
+        }),
+      }),
+      { type: "done" },
+    ]);
     expect(parser.sessionId).toBe("session");
   });
   it("rejects builtin tools before allowing any MCP effect", () => {
@@ -85,7 +125,11 @@ describe("Claude stream-json boundary", () => {
     expect(parser.initialized).toBe(false);
     expect(() => parser.parse({ type: "result", subtype: "success" })).toThrow();
     expect(() =>
-      parser.parse({ type: "result", is_error: true, errors: ["private-output"] }),
+      new ClaudeStreamParser(pin).parse({
+        type: "result",
+        is_error: true,
+        errors: ["private-output"],
+      }),
     ).toThrow("Claude Code could not finish");
   });
   it("uses documented tool isolation and a scoped resume id without passing credentials", () => {
@@ -236,17 +280,36 @@ it("retains reported token usage without inventing cost", () => {
     parser.parse({
       type: "result",
       subtype: "success",
-      modelUsage: { [pin.modelId!]: { inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 2 } },
+      modelUsage: {
+        [pin.modelId!]: {
+          inputTokens: 10,
+          outputTokens: 5,
+          cacheReadInputTokens: 2,
+          cacheCreationInputTokens: 0,
+        },
+      },
     }),
   ).toEqual([
-    {
+    expect.objectContaining({
       type: "usage",
       provider: "anthropic",
       model: pin.modelId,
       inputTokens: 12,
       outputTokens: 5,
       cachedTokens: 2,
-    },
+      request: expect.objectContaining({
+        cost: null,
+        pricingProvenance: null,
+        categories: {
+          logicalInput: 12,
+          uncachedInput: 10,
+          cacheReadInput: 2,
+          cacheWriteInput: 0,
+          output: 5,
+          reasoning: null,
+        },
+      }),
+    }),
     { type: "done" },
   ]);
 });

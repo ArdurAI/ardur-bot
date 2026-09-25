@@ -45,6 +45,665 @@
           "tools": [
             {
               "function": {
+                "description": "List open work without active blockers on this computer. Omit workspaceId for this run's dispatched board, or the space board otherwise.",
+                "name": "board_ready",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "filter": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "parent": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "deferred",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pinned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "hooked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Read a board item, acceptance criteria, dependencies and comments.",
+                "name": "board_show",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Create a work item. Dependencies identify prerequisites for the new item.",
+                "name": "board_create",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "item": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "acceptanceCriteria": {
+                          "type": "string"
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "deferUntil": {
+                          "type": "string"
+                        },
+                        "dependencies": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "anyOf": [
+                                  {
+                                    "const": "blocks",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "tracks",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "related",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "parent-child",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "discovered-from",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "until",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "caused-by",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "validates",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "relates-to",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "supersedes",
+                                    "type": "string"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["id", "type"],
+                            "type": "object"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "dueAt": {
+                          "type": "string"
+                        },
+                        "estimateMinutes": {
+                          "type": "number"
+                        },
+                        "externalRef": {
+                          "type": "string"
+                        },
+                        "labels": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "parent": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["title", "type", "priority"],
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["item"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Update a work item on this computer's board.",
+                "name": "board_update",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "patch": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "acceptanceCriteria": {
+                          "type": "string"
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "deferUntil": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "dueAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "estimateMinutes": {
+                          "type": "number"
+                        },
+                        "externalRef": {
+                          "type": "string"
+                        },
+                        "labels": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "parent": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "priority": {
+                          "type": "number"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "deferred",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pinned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "hooked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "patch"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Atomically claim an item, or the first ready item matching a filter, as this bot. Filters cannot include assignee; claim assigned items by ID.",
+                "name": "board_claim",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "filter": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string"
+                        },
+                        "parent": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "deferred",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pinned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "hooked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Close work items with a reason when asked to close them.",
+                "name": "board_close",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "ids": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 50,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["ids", "reason"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Record an outcome or question on a work item.",
+                "name": "board_comment",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "text"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Link from a dependent item to its prerequisite; blocks means from is blocked by to.",
+                "name": "board_link",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "const": "blocks",
+                          "type": "string"
+                        },
+                        {
+                          "const": "tracks",
+                          "type": "string"
+                        },
+                        {
+                          "const": "related",
+                          "type": "string"
+                        },
+                        {
+                          "const": "parent-child",
+                          "type": "string"
+                        },
+                        {
+                          "const": "discovered-from",
+                          "type": "string"
+                        },
+                        {
+                          "const": "until",
+                          "type": "string"
+                        },
+                        {
+                          "const": "caused-by",
+                          "type": "string"
+                        },
+                        {
+                          "const": "validates",
+                          "type": "string"
+                        },
+                        {
+                          "const": "relates-to",
+                          "type": "string"
+                        },
+                        {
+                          "const": "supersedes",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["from", "to", "type"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
                 "description": "Update this task card quietly; blocked needs a reason and an action.",
                 "name": "report_progress",
                 "parameters": {
@@ -1559,6 +2218,665 @@
             "include_usage": true
           },
           "tools": [
+            {
+              "function": {
+                "description": "List open work without active blockers on this computer. Omit workspaceId for this run's dispatched board, or the space board otherwise.",
+                "name": "board_ready",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "filter": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "parent": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "deferred",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pinned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "hooked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Read a board item, acceptance criteria, dependencies and comments.",
+                "name": "board_show",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Create a work item. Dependencies identify prerequisites for the new item.",
+                "name": "board_create",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "item": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "acceptanceCriteria": {
+                          "type": "string"
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "deferUntil": {
+                          "type": "string"
+                        },
+                        "dependencies": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "anyOf": [
+                                  {
+                                    "const": "blocks",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "tracks",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "related",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "parent-child",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "discovered-from",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "until",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "caused-by",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "validates",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "relates-to",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "supersedes",
+                                    "type": "string"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["id", "type"],
+                            "type": "object"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "dueAt": {
+                          "type": "string"
+                        },
+                        "estimateMinutes": {
+                          "type": "number"
+                        },
+                        "externalRef": {
+                          "type": "string"
+                        },
+                        "labels": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "parent": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["title", "type", "priority"],
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["item"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Update a work item on this computer's board.",
+                "name": "board_update",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "patch": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "acceptanceCriteria": {
+                          "type": "string"
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "deferUntil": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "dueAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "estimateMinutes": {
+                          "type": "number"
+                        },
+                        "externalRef": {
+                          "type": "string"
+                        },
+                        "labels": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "parent": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "priority": {
+                          "type": "number"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "deferred",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pinned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "hooked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "patch"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Atomically claim an item, or the first ready item matching a filter, as this bot. Filters cannot include assignee; claim assigned items by ID.",
+                "name": "board_claim",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "filter": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string"
+                        },
+                        "parent": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "deferred",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pinned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "hooked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Close work items with a reason when asked to close them.",
+                "name": "board_close",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "ids": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 50,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["ids", "reason"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Record an outcome or question on a work item.",
+                "name": "board_comment",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "text"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Link from a dependent item to its prerequisite; blocks means from is blocked by to.",
+                "name": "board_link",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "const": "blocks",
+                          "type": "string"
+                        },
+                        {
+                          "const": "tracks",
+                          "type": "string"
+                        },
+                        {
+                          "const": "related",
+                          "type": "string"
+                        },
+                        {
+                          "const": "parent-child",
+                          "type": "string"
+                        },
+                        {
+                          "const": "discovered-from",
+                          "type": "string"
+                        },
+                        {
+                          "const": "until",
+                          "type": "string"
+                        },
+                        {
+                          "const": "caused-by",
+                          "type": "string"
+                        },
+                        {
+                          "const": "validates",
+                          "type": "string"
+                        },
+                        {
+                          "const": "relates-to",
+                          "type": "string"
+                        },
+                        {
+                          "const": "supersedes",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["from", "to", "type"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
             {
               "function": {
                 "description": "Update this task card quietly; blocked needs a reason and an action.",
@@ -3094,6 +4412,665 @@
             "include_usage": true
           },
           "tools": [
+            {
+              "function": {
+                "description": "List open work without active blockers on this computer. Omit workspaceId for this run's dispatched board, or the space board otherwise.",
+                "name": "board_ready",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "filter": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "parent": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "deferred",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pinned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "hooked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Read a board item, acceptance criteria, dependencies and comments.",
+                "name": "board_show",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Create a work item. Dependencies identify prerequisites for the new item.",
+                "name": "board_create",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "item": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "acceptanceCriteria": {
+                          "type": "string"
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "deferUntil": {
+                          "type": "string"
+                        },
+                        "dependencies": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "anyOf": [
+                                  {
+                                    "const": "blocks",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "tracks",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "related",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "parent-child",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "discovered-from",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "until",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "caused-by",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "validates",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "relates-to",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "supersedes",
+                                    "type": "string"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["id", "type"],
+                            "type": "object"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "dueAt": {
+                          "type": "string"
+                        },
+                        "estimateMinutes": {
+                          "type": "number"
+                        },
+                        "externalRef": {
+                          "type": "string"
+                        },
+                        "labels": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "parent": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["title", "type", "priority"],
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["item"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Update a work item on this computer's board.",
+                "name": "board_update",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "patch": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "acceptanceCriteria": {
+                          "type": "string"
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "deferUntil": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "dueAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "estimateMinutes": {
+                          "type": "number"
+                        },
+                        "externalRef": {
+                          "type": "string"
+                        },
+                        "labels": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "parent": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "priority": {
+                          "type": "number"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "deferred",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pinned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "hooked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "patch"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Atomically claim an item, or the first ready item matching a filter, as this bot. Filters cannot include assignee; claim assigned items by ID.",
+                "name": "board_claim",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "filter": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "label": {
+                          "type": "string"
+                        },
+                        "parent": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "open",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "deferred",
+                              "type": "string"
+                            },
+                            {
+                              "const": "closed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pinned",
+                              "type": "string"
+                            },
+                            {
+                              "const": "hooked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "type": {
+                          "anyOf": [
+                            {
+                              "const": "task",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bug",
+                              "type": "string"
+                            },
+                            {
+                              "const": "feature",
+                              "type": "string"
+                            },
+                            {
+                              "const": "epic",
+                              "type": "string"
+                            },
+                            {
+                              "const": "chore",
+                              "type": "string"
+                            },
+                            {
+                              "const": "decision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "spike",
+                              "type": "string"
+                            },
+                            {
+                              "const": "story",
+                              "type": "string"
+                            },
+                            {
+                              "const": "milestone",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Close work items with a reason when asked to close them.",
+                "name": "board_close",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "ids": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 50,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["ids", "reason"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Record an outcome or question on a work item.",
+                "name": "board_comment",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "text"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
+            {
+              "function": {
+                "description": "Link from a dependent item to its prerequisite; blocks means from is blocked by to.",
+                "name": "board_link",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "const": "blocks",
+                          "type": "string"
+                        },
+                        {
+                          "const": "tracks",
+                          "type": "string"
+                        },
+                        {
+                          "const": "related",
+                          "type": "string"
+                        },
+                        {
+                          "const": "parent-child",
+                          "type": "string"
+                        },
+                        {
+                          "const": "discovered-from",
+                          "type": "string"
+                        },
+                        {
+                          "const": "until",
+                          "type": "string"
+                        },
+                        {
+                          "const": "caused-by",
+                          "type": "string"
+                        },
+                        {
+                          "const": "validates",
+                          "type": "string"
+                        },
+                        {
+                          "const": "relates-to",
+                          "type": "string"
+                        },
+                        {
+                          "const": "supersedes",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "workspaceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["from", "to", "type"],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            },
             {
               "function": {
                 "description": "Update this task card quietly; blocked needs a reason and an action.",

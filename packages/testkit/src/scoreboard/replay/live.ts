@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import type { Json } from "../tasks/catalog.js";
 
 export interface LiveRoute {
@@ -69,6 +70,13 @@ export async function runBoundedLive<T>(options: {
   )
     throw new Error("T3 route must be fully pinned");
   const controller = new AbortController();
+  const deadline = performance.now() + options.budget.milliseconds;
+  const checkDeadline = () => {
+    if (performance.now() >= deadline) {
+      controller.abort();
+      throw new Error("T3 time budget exhausted");
+    }
+  };
   let usedRequests = 0;
   let reservedTokens = 0;
   let finished = false;
@@ -84,9 +92,11 @@ export async function runBoundedLive<T>(options: {
     const result = await Promise.race([
       options.run(async (request) => {
         if (finished || controller.signal.aborted) throw new Error("T3 run is closed");
+        checkDeadline();
         if (JSON.stringify(request.route) !== routeKey)
           throw new Error("T3 route substitution refused");
         const inputTokens = options.counter.count(request);
+        checkDeadline();
         if (
           !Number.isSafeInteger(inputTokens) ||
           inputTokens < 0 ||
@@ -111,7 +121,9 @@ export async function runBoundedLive<T>(options: {
         };
         attempts.push(attempt);
         try {
+          checkDeadline();
           const value = await options.transport(request, controller.signal);
+          checkDeadline();
           attempt.outcome = "completed";
           return value;
         } catch (error) {
@@ -121,6 +133,7 @@ export async function runBoundedLive<T>(options: {
       }, controller.signal),
       timeout,
     ]);
+    checkDeadline();
     if (attempts.some((attempt) => attempt.outcome === "started"))
       throw new Error("T3 runner returned with outstanding provider requests");
     return {

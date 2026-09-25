@@ -2,7 +2,8 @@
 
 The ledger supports the builder and team lead who need trustworthy spend by run and root task.
 `recordRunUsage` retains its totals-only call shape and accepts an optional `AgentUsage.request`.
-The request contract is defined in `packages/adapter-kit/src/types.ts`; normalization lives in
+The request types are exposed by `packages/adapter-kit/src/types.ts`; the shared strict wire schema
+is in `packages/contracts/src/request-usage.ts`, and ledger validation lives in
 `packages/adapters/src/request-usage.ts`. Runtime collectors supply normalized facts. The ledger
 does not select models, authorize tools, parse provider responses, or estimate subscription prices.
 
@@ -103,6 +104,68 @@ rows and sums. Run deletion still sets `runId` null without deleting spend; bot/
 and the pin snapshot remain. Space deletion removes the usage records and cascades to receipts.
 No prompt, tool result, raw provider response, credential value, or transcript is accepted in the
 observation shape. Callers remain responsible for safe identifiers and price-source labels.
+
+## Runtime collection and coverage
+
+`RequestUsageCollector` in `packages/adapter-kit/src/usage-collection.ts` produces a started receipt,
+cumulative numeric observations, and a terminal receipt for each observable attempt. A terminal
+receipt retains the same counters; it does not charge them again. Optional `collection` metadata
+records a mapping version, scope, outcome, availability, whitelisted raw numeric categories, and
+explicit limitations. It carries no provider payload or prompt. Unpriced collection always leaves
+cost and pricing provenance null. A process killed before receipt delivery can still leave an
+unsettled started receipt; recovery of that uncertainty requires separate crash acceptance.
+
+`observePiUsage` in `packages/adapters/src/pi-request-usage.ts` observes HTTP responses consumed by
+the installed Pi SDK through its fetch hook. It preserves retry, transport and timeout options.
+Each HTTP retry gets its own attempt ID under the logical request; helpers retain their admitted
+delegation and the parent request ID. A bounded pass-through reads usage fields from HTTP JSON/SSE
+without retaining payloads. Oversized or unavailable transport detail remains explicit. Other
+transports retain a runtime-call receipt and only positive SDK-normalized lower bounds: the SDK's
+initialized zeros cannot establish measured zero. Request-level coverage on those routes is unknown.
+
+Anthropic's uncached input, cache reads and cache creation are additive. OpenAI input includes cache
+subsets; reported reasoning is a subset of output. Missing fields remain null, including omitted
+cache-write or reasoning counts. `normalizeUsageCounts` rejects negative, fractional, nonfinite,
+overflowing and contradictory counters. These mappings follow the documented
+[Anthropic categories](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) and
+[OpenAI caching fields](https://developers.openai.com/api/docs/guides/prompt-caching).
+
+`ClaudeStreamParser` records attested `modelUsage` even on an error result and ignores repeated
+results. Its scope is a native turn: internal retries, helpers and native compaction are not
+individually exposed. `CodexUsageCollector` also has native-turn scope. A fresh thread starts at a
+zero boundary; a resumed thread needs a matching usage notification observed before `turn/start`.
+Without it, the collector records unavailable usage instead of charging lifetime totals. It
+subtracts the verified boundary, ignores duplicates and other turns, and freezes at the known
+lower bound after a decreasing counter. Such totals have partial coverage. The documented
+[Codex notification contract](https://raw.githubusercontent.com/openai/codex/main/codex-rs/app-server-protocol/schema/typescript/v2/ThreadTokenUsageUpdatedNotification.ts)
+identifies the thread and turn, while its
+[counter structure](https://raw.githubusercontent.com/openai/codex/main/codex-rs/app-server-protocol/schema/typescript/v2/TokenUsageBreakdown.ts)
+describes the supplied categories. Replay tests verify this mapping; installed native versions
+still require acceptance.
+
+After Codex reports completion, a `thread/read` response bounds draining of already delivered
+final usage. The collector does not claim that future notifications cannot arrive after this
+boundary. A failed boundary check is explicit. Real CLI ordering remains a live acceptance item.
+
+`accountRuntimeUsage` in `packages/adapters/src/runtime-usage.ts` persists usage before executor
+consumer fences can discard it. Cancellation drains queued accounting after tool work has been
+aborted, without releasing further text or tool events. Failure or cancellation without totals
+produces an unavailable receipt, not measured zero. Existing totals-only runtimes receive a
+runtime-call identity with limited coverage. Scripted and command-replay execution retain their
+existing path.
+
+Background handlers connect Ardur summaries and detached reviews to `recordRunUsage`. New
+`history.compact` jobs carry `sourceRunId`; older queued jobs select the latest run within the same
+thread, bot, space and user before spending. Without a scoped source, compaction leaves history
+intact. Summary spend survives a failed summary or a rejected generation update. Reviews keep the
+same model, reservations, prompts and tool prohibition. Detached review usage is excluded from
+`loadLearningRecords` so its own metering cannot invalidate the reviewed source watermark.
+
+Category completeness, request attribution and live-route coverage are different denominators.
+A complete turn aggregate cannot prove that every internal native request was observed. The live
+attribution target is at least 99%; replay results do not establish that target. No client UI or
+translation catalog is changed by these collectors, and no new database migration is needed:
+collection metadata uses W0-2's immutable JSON receipt column.
 
 ## Runtime and trace handoff
 

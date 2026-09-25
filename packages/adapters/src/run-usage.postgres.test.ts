@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { AgentUsage, RequestUsageObservation } from "@ardurbot/adapter-kit";
+import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import type { ContextSnapshot } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { createDb } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
+import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
+import { loadLearningRecords } from "./learning-records.js";
+import type { RecordedContextUsage } from "./run-usage.js";
 import { recordRunUsage } from "./run-usage.js";
+import { accountRuntimeUsage } from "./runtime-usage.js";
 
 const databaseUrl = process.env.USAGE_LEDGER_TEST_DATABASE_URL;
 const postgres = databaseUrl ? describe.sequential : describe.skip;
@@ -160,6 +164,91 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(rows[0]!.observations[0]!.observation).toEqual(f.request);
     expect(await db.prisma.event.count({ where: { runId: f.id, type: "usage.recorded" } })).toBe(1);
   });
+  it("persists runtime lifecycle receipts, raw categories and cancelled spend exactly once", async () => {
+    const f = await fixture();
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      inputSemantics: "additive-cache-categories",
+      mappingVersion: "fixture-wire-v1",
+    });
+    const started = collector.start();
+    const measured = collector.snapshot({ input: 12, cacheRead: 80, cacheWrite: 20, output: 8 });
+    const ended = collector.finish("cancelled");
+    await db.prisma.run.update({ where: { id: f.id }, data: { status: "cancelled" } });
+    const stream = accountRuntimeUsage(
+      (async function* () {
+        yield usageEvent(started);
+        yield usageEvent(measured);
+        yield usageEvent(measured);
+        yield usageEvent(ended);
+      })(),
+      {
+        provider: "fixture",
+        model: "fixture",
+        record: async (usage) => {
+          await f.record(usage);
+        },
+      },
+    );
+    for await (const _ of stream) {
+      /* no user-visible output */
+    }
+    const rows = await f.rows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      inputTokens: 112,
+      outputTokens: 8,
+      cacheReadInputTokens: 80,
+      cacheWriteInputTokens: 20,
+      reasoningTokens: null,
+      cost: null,
+    });
+    expect(rows[0]!.observations).toHaveLength(3);
+    expect(rows[0]!.observations.map((receipt) => receipt.observation)).toContainEqual(
+      expect.objectContaining({
+        collection: expect.objectContaining({
+          outcome: "cancelled",
+          mappingVersion: "fixture-wire-v1",
+          raw: { input: 12, cacheRead: 80, cacheWrite: 20, output: 8 },
+        }),
+      }),
+    );
+    expect(await f.root()).toMatchObject({ usedTokens: 120 });
+    expect(await db.prisma.event.count({ where: { runId: f.id } })).toBe(0);
+  });
+  it("retains lower bounds but withdraws complete coverage after a counter discontinuity", async () => {
+    const f = await fixture();
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      inputSemantics: "total-with-cache-subsets",
+      mappingVersion: "fixture-wire-v1",
+    });
+    await f.record(collector.start());
+    await f.record(
+      collector.snapshot({ input: 100, cacheRead: 60, cacheWrite: 10, output: 20, reasoning: 8 }),
+    );
+    collector.limit("counter-discontinuity");
+    await f.record(collector.finish("failed"));
+    expect((await f.rows())[0]).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 20,
+      coverage: "partial",
+      categoryCoverage: { logicalInput: "partial", output: "partial" },
+    });
+    expect(await f.root()).toMatchObject({ usedTokens: 120 });
+  });
+  it("keeps detached metering out of the review source watermark while preserving source-change fences", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({ where: { id: f.id }, data: { status: "completed" } });
+    await f.record();
+    const before = await loadLearningRecords(db.prisma, f.id);
+    await f.record(f.usage({ requestId: "review", purpose: "detached-learning" }));
+    expect((await loadLearningRecords(db.prisma, f.id))?.watermark).toBe(before?.watermark);
+    await f.record(f.usage({ requestId: "late-primary" }));
+    expect((await loadLearningRecords(db.prisma, f.id))?.watermark).not.toBe(before?.watermark);
+  });
   it("bills distinct retry attempts and epochs while retaining the requested pin", async () => {
     const f = await fixture();
     await f.record();
@@ -210,6 +299,135 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(events.map((event) => event.payload)).toMatchObject([
       { inputTokens: 100, outputTokens: 50 },
       { inputTokens: 20, outputTokens: 10 },
+    ]);
+  });
+  it.each([0, 30])(
+    "delivers %i early cached tokens when cumulative runtime input becomes known",
+    async (cachedTokens) => {
+      const f = await fixture();
+      const snapshot: ContextSnapshot = {
+        layers: { stable: 0, brief: 0, summary: 0, messages: 0, recall: 0, message: 0 },
+        recallRan: false,
+        recallCalls: 0,
+        cachedTokens: null,
+        inputTokens: null,
+        queueWaitMs: null,
+        timeToFirstTokenMs: null,
+        routingRule: null,
+      };
+      const early = f.usage({
+        counter: { mode: "cumulative", epochId: "epoch", sequence: 0 },
+        categories: {
+          ...f.request.categories,
+          logicalInput: null,
+          uncachedInput: null,
+          cacheReadInput: cachedTokens,
+        },
+      });
+      const complete = f.usage({
+        counter: { mode: "cumulative", epochId: "epoch", sequence: 1 },
+        categories: {
+          ...f.request.categories,
+          uncachedInput: 90 - cachedTokens,
+          cacheReadInput: cachedTokens,
+        },
+      });
+      const delivered: Array<RecordedContextUsage | null> = [];
+      const stream = accountRuntimeUsage(
+        (async function* () {
+          yield usageEvent(early);
+          expect(snapshot).toMatchObject({ inputTokens: null, cachedTokens: null });
+          expect((await f.rows())[0]).toMatchObject({
+            logicalInputTokens: null,
+            cacheReadInputTokens: cachedTokens,
+          });
+          yield usageEvent(early);
+          yield usageEvent(complete);
+          yield usageEvent(complete);
+        })(),
+        {
+          provider: "fixture",
+          model: "fixture",
+          record: async (usage) => {
+            const accepted = await f.record(usage);
+            delivered.push(accepted);
+            recordContextUsage(snapshot, accepted);
+          },
+        },
+      );
+      for await (const _ of stream) {
+        /* accounting has no user-visible output */
+      }
+      expect(delivered).toEqual([null, null, { inputTokens: 100, cachedTokens }, null]);
+      expect(snapshot).toMatchObject({ inputTokens: 100, cachedTokens });
+      expect(
+        aggregateContext(
+          [{ botId: f.id, groupId: null, createdAt: f.run.createdAt, contextSnapshot: snapshot }],
+          f.run.createdAt,
+        )[0],
+      ).toMatchObject({ measuredCacheRuns: 1, cacheHitRatio: cachedTokens / 100 });
+      expect(await f.root()).toMatchObject({ usedTokens: 150 });
+      const rows = await f.rows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.observations).toHaveLength(2);
+    },
+  );
+  it("keeps cache coverage unknown after a partial input measurement reaches context", async () => {
+    const f = await fixture();
+    const snapshot: ContextSnapshot = {
+      layers: { stable: 0, brief: 0, summary: 0, messages: 0, recall: 0, message: 0 },
+      recallRan: false,
+      recallCalls: 0,
+      cachedTokens: null,
+      inputTokens: null,
+      queueWaitMs: null,
+      timeToFirstTokenMs: null,
+      routingRule: null,
+    };
+    recordContextUsage(
+      snapshot,
+      await f.record(f.usage({ counter: { mode: "cumulative", epochId: "epoch", sequence: 0 } })),
+    );
+    expect(snapshot).toMatchObject({ inputTokens: 100, cachedTokens: 30 });
+    recordContextUsage(
+      snapshot,
+      await f.record(
+        f.usage({
+          counter: { mode: "cumulative", epochId: "epoch", sequence: 1 },
+          categories: {
+            ...f.request.categories,
+            logicalInput: null,
+            uncachedInput: null,
+            cacheReadInput: 50,
+          },
+        }),
+      ),
+    );
+    expect(snapshot).toMatchObject({ inputTokens: 100, cachedTokens: null });
+    recordContextUsage(
+      snapshot,
+      await f.record(
+        f.usage({
+          counter: { mode: "cumulative", epochId: "epoch", sequence: 2 },
+          categories: {
+            ...f.request.categories,
+            logicalInput: 200,
+            uncachedInput: 140,
+            cacheReadInput: 50,
+          },
+        }),
+      ),
+    );
+    expect(snapshot).toMatchObject({ inputTokens: 200, cachedTokens: null });
+    expect(
+      aggregateContext(
+        [{ botId: f.id, groupId: null, createdAt: f.run.createdAt, contextSnapshot: snapshot }],
+        f.run.createdAt,
+      )[0],
+    ).toMatchObject({ measuredCacheRuns: 0, cacheHitRatio: null });
+    expect(await f.root()).toMatchObject({ usedTokens: 250 });
+    expect(await f.rows()).toMatchObject([
+      { logicalInputTokens: 200, cacheReadInputTokens: 50, coverage: "complete" },
     ]);
   });
   it("keeps summary and detached learning spend out of primary run metrics", async () => {
