@@ -14,7 +14,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
-import { unknownCapacity } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
 import {
   Daytona,

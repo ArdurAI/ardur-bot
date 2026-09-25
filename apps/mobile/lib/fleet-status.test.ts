@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { unknownCapacity } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { ReactNode } from "react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";

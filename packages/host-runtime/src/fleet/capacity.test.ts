@@ -1,4 +1,4 @@
-import { unknownCapacity } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import { expect, it, vi } from "vitest";
 import { cachedCapacity, dockerCapacity, hostCapacity, parseLinuxCapacity } from "./capacity.js";
 

@@ -17,12 +17,11 @@ import type {
   ScreenSession,
 } from "@ardurbot/adapter-kit";
 import {
-  CapacitySnapshotSchema,
   ComputerEngineUnavailableError,
   ComputerEngineUnavailableSchema,
   profileCommandError,
-  unknownCapacity,
 } from "@ardurbot/contracts";
+import { CapacitySnapshotSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
 import { boundedSandboxCommandTimeoutMs, resolveSupervisorToken } from "@ardurbot/core";
 import { cachedCapacity } from "@ardurbot/host-runtime/fleet/capacity";
 import { outgoingCorrelationHeaders } from "@ardurbot/logging";

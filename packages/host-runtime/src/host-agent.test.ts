@@ -5,6 +5,7 @@ import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import type { HostFrame, HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
 import { decodeHostFrame, encodeHostFrame, HOST_WINDOW } from "@ardurbot/contracts/host-bridge";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BoardRunner } from "./board/runner.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostAgent } from "./host-agent.js";
 import { HostMcpServers } from "./host-mcp.js";
@@ -52,6 +53,29 @@ afterEach(async () => {
   for (const agent of agents.splice(0)) agent.close();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   vi.restoreAllMocks();
+});
+it("streams board JSON from the owner's runner without provisioning a bot computer", async () => {
+  const stdout = JSON.stringify([{ title: "x".repeat(60_000) }]);
+  const run = vi.spyOn(BoardRunner.prototype, "run").mockResolvedValue({ ok: true, stdout });
+  const provision = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
+  const { agent, frames } = await fixture();
+  const board = {
+    action: "command" as const,
+    actor: "Owner",
+    workspace: { kind: "space" as const },
+    argv: ["ready"],
+  };
+  await agent.receive(request({ op: "board.run", request: board }));
+  await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
+  expect(run).toHaveBeenCalledWith(board, "space", expect.any(AbortSignal));
+  expect(provision).not.toHaveBeenCalled();
+  expect(
+    frames
+      .filter((frame) => frame.type === "stream" && frame.channel === "stdout")
+      .map((frame) => (frame.type === "stream" ? frame.data : ""))
+      .join(""),
+  ).toBe(stdout);
+  expect(frames).toContainEqual(expect.objectContaining({ channel: "result", data: { ok: true } }));
 });
 const request = (operation: HostOperation): HostRequest => ({
   v: 1,

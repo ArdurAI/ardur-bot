@@ -10,7 +10,7 @@ import type {
   SandboxProvider,
   ScreenRequest,
 } from "@ardurbot/adapter-kit";
-import { unknownCapacity } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 
 export const NO_SANDBOX_MESSAGE =
   "Computers unavailable. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or use e2b, daytona, or box with its API key.";

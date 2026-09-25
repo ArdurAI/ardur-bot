@@ -3,6 +3,7 @@ import * as z from "zod";
 import { accountContract } from "./account.js";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
+import { boardContract } from "./board.js";
 import {
   CapabilityPreferencesPatchSchema,
   CapabilityPreferencesSchema,
@@ -296,6 +297,7 @@ function createFleetContract() {
 }
 
 export const appContract = {
+  board: boardContract,
   localImport: {
     credentials: oc
       .input(

@@ -46,6 +46,7 @@ import {
   PipedreamConnector,
   PostgresRealtimeFanout,
   pipedreamConfigFromEnv,
+  reconcileBoardOutcomes,
   reconcileCloudAgents,
   reconcileComputerUpdates,
   reconcileMemoryDelivery,
@@ -228,6 +229,7 @@ async function main() {
 
   // Includes the proposal-only learning.review handler; all mutations stay in the regular executor.
   const jobHandlers = createBackgroundJobHandlers({
+    dataDir,
     executor,
     prisma,
     sandbox,
@@ -275,6 +277,7 @@ async function main() {
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
     reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
+    reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir }),
   });
   reconciler.start();
   const chatReceivers = createMessagingReceivers({

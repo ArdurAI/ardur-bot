@@ -57,6 +57,7 @@ import {
   piSessionsRoot,
   placeRunComputer,
   pushTokenPath,
+  reconcileBoardOutcomes,
   reconcileCloudAgents,
   reconcileComputerUpdates,
   reconcileMemoryDelivery,
@@ -461,6 +462,7 @@ export async function createApp(
   });
 
   const jobHandlers = createBackgroundJobHandlers({
+    dataDir: env.dataDir,
     executor,
     prisma,
     sandbox,
@@ -492,6 +494,7 @@ export async function createApp(
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
+        reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir: env.dataDir }),
         reconcileLocalImport: async () => {
           await jobs.enqueue({
             name: "local-import.refresh",

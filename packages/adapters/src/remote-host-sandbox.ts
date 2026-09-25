@@ -6,7 +6,7 @@ import type {
   PortableFile,
   ProcessEvent,
 } from "@ardurbot/adapter-kit";
-import { unknownCapacity } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import {
   HOST_FILE_BYTES,
   HostEnvironmentSchema,

@@ -4,7 +4,8 @@ import type {
   SandboxProvider,
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
-import { ComputerConnectionSettingsSchema, unknownCapacity } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { HostKubernetesSandboxProvider } from "./fleet/remote-kubernetes.js";

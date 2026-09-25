@@ -1,7 +1,7 @@
 import { statfs } from "node:fs/promises";
 import { cpus, freemem, homedir, loadavg, totalmem } from "node:os";
 import type { CapacitySnapshot } from "@ardurbot/contracts";
-import { CapacitySnapshotSchema, unknownCapacity } from "@ardurbot/contracts";
+import { CapacitySnapshotSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
 
 export function cachedCapacity(sample: () => Promise<CapacitySnapshot>, now = Date.now) {
   let value: Promise<CapacitySnapshot> | undefined;

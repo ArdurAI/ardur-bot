@@ -2,7 +2,8 @@ import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ComputerRef, ProcessEvent, SandboxProvider } from "@ardurbot/adapter-kit";
-import { ComputerConnectionSettingsSchema, SshSettingsSchema } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { SshSettingsSchema } from "@ardurbot/contracts/fleet";
 import { SshSandboxProvider } from "@ardurbot/host-runtime/fleet/ssh-sandbox";
 import { fakeSshTransport } from "@ardurbot/host-runtime/fleet/test-process";
 import { describe, expect, it, vi } from "vitest";

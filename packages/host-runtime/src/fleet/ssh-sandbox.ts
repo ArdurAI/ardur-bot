@@ -8,7 +8,7 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { SshSettings } from "@ardurbot/contracts";
-import { SshSettingsSchema } from "@ardurbot/contracts";
+import { SshSettingsSchema } from "@ardurbot/contracts/fleet";
 import { fleetPath } from "./archive.js";
 import { cachedCapacity, LINUX_CAPACITY_COMMAND, parseLinuxCapacity } from "./capacity.js";
 import { FLEET_LINUX_CAPABILITIES, fleetComputerKey, LinuxFleetSandbox } from "./linux-sandbox.js";

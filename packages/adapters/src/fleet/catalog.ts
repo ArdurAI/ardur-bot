@@ -1,10 +1,7 @@
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { FleetTarget } from "@ardurbot/contracts";
-import {
-  ComputerConnectionSettingsSchema,
-  PlacementSettingsSchema,
-  unknownCapacity,
-} from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { PlacementSettingsSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerSecretLoader } from "../computer-connections.js";
 import { ComputerConnections } from "../computer-connections.js";

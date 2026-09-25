@@ -3,12 +3,12 @@ import type { AdapterContext } from "@ardurbot/adapter-kit";
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import { discoverFleet, FleetCatalog, localFleetService } from "@ardurbot/adapters";
 import type { FleetTarget } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import {
-  ComputerConnectionSettingsSchema,
   FleetTargetSchema,
   PlacementDecisionSchema,
   PlacementSettingsSchema,
-} from "@ardurbot/contracts";
+} from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import { Prisma } from "@ardurbot/db";
 import type { RouterDeps } from "./router.js";

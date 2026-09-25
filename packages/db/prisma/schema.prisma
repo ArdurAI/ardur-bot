@@ -187,6 +187,8 @@ model Member {
 
 model Space {
   placement Json?
+  boardWorkspaces BoardWorkspace[]
+  boardCommands BoardCommand[]
   localImportConfigs LocalImportConfig[]
   contextBudgets Json?
   concurrentRuns Int @default(3)
@@ -618,6 +620,11 @@ model Task {
 
 model Run {
   placement Json?
+  boardWorkspaceId String?
+  boardWorkspace BoardWorkspace? @relation(fields: [boardWorkspaceId], references: [id], onDelete: SetNull)
+  boardItemId String?
+  boardCloseWhenDone Boolean @default(false)
+  boardCommentedAt DateTime?
   contextSnapshot Json?
   routingRule String?
   queueWaitMs Int?
@@ -677,6 +684,7 @@ model Run {
   @@index([status, updatedAt, id])
   @@index([userId, updatedAt, id])
   @@index([botOutcomeReturnedAt, status])
+  @@index([boardCommentedAt, status, updatedAt])
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
   @@index([spaceId, userId, createdAt])
@@ -2117,6 +2125,40 @@ model ComparisonExecution {
   selectedRunIds String[] @default([])
   @@unique([comparisonId, position])
   @@map("comparison_executions")
+}
+
+model BoardWorkspace {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  ownerUserId String
+  kind String
+  path String
+  prefix String
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  runs Run[]
+
+  @@unique([spaceId, path])
+  @@index([spaceId, enabled])
+  @@map("board_workspaces")
+}
+
+// Short-lived source-mode RPC transport. The board itself remains in Beads.
+model BoardCommand {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId String
+  request Json
+  result Json?
+  status String @default("queued")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("board_commands")
 }
 
 model LocalImportConfig {

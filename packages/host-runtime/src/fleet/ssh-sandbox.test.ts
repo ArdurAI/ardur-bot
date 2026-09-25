@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AdapterContext, PortableFile } from "@ardurbot/adapter-kit";
-import { SshSettingsSchema } from "@ardurbot/contracts";
+import { SshSettingsSchema } from "@ardurbot/contracts/fleet";
 import { expect, it } from "vitest";
 import { readFleetArchive, writeFleetArchive } from "./archive.js";
 import { remoteArgv } from "./process.js";

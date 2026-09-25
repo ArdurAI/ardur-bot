@@ -1,5 +1,5 @@
 import type { AdapterContext } from "@ardurbot/adapter-kit";
-import { choosePlacement, PlacementSettingsSchema } from "@ardurbot/contracts";
+import { choosePlacement, PlacementSettingsSchema } from "@ardurbot/contracts/fleet";
 import { appendEventInTransaction, createThreadMessageInTransaction, Prisma } from "@ardurbot/db";
 import { ComputerBusyError, replaceComputer } from "../computer-lifecycle.js";
 import type { FleetCatalog } from "./catalog.js";

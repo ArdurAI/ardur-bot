@@ -11,7 +11,7 @@ import type {
   SandboxProvider,
   ScreenRequest,
 } from "@ardurbot/adapter-kit";
-import { unknownCapacity } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerSecretLoader } from "./computer-connections.js";
 import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";

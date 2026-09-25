@@ -1,5 +1,5 @@
 import type { CapacitySnapshot } from "@ardurbot/contracts";
-import { unknownCapacity } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 
 type Resources = Record<string, string | undefined>;
 type Container = { resources?: { requests?: Resources }; restartPolicy?: string };

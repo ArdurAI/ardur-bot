@@ -11,7 +11,8 @@ import type {
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings, RemoteComputerAction } from "@ardurbot/contracts";
-import { CapacitySnapshotSchema, HOST_FILE_BYTES, unknownCapacity } from "@ardurbot/contracts";
+import { CapacitySnapshotSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
+import { HOST_FILE_BYTES } from "@ardurbot/contracts/host-bridge";
 import {
   FLEET_LINUX_CAPABILITIES,
   fleetComputerKey,

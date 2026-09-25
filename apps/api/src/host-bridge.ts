@@ -5,6 +5,8 @@ import type { Duplex } from "node:stream";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { Actor } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import type { BoardRun, BoardRunResult } from "@ardurbot/contracts/board";
+import { BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
 import type { HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
 import { HOST_WRITE_FRAME_BYTES, HostOperationSchema } from "@ardurbot/contracts/host-bridge";
 import { RuntimePinSchema } from "@ardurbot/contracts/runtime-pins";
@@ -26,6 +28,7 @@ export function hostTokenHash(token: string) {
 export class HostBridge {
   readonly hub: HostHub;
   private readonly fleetRequests = new Map<string, string>();
+  private readonly ownerBoardRequests = new Set<string>();
   private readonly ownerFiles = new WeakMap<HostRequest, Actor>();
   private readonly settingsRequests = new WeakSet<HostRequest>();
   constructor(
@@ -132,6 +135,168 @@ export class HostBridge {
       if (frame.channel === "result") result = frame.data;
     return result;
   }
+  async runBoard(
+    input: BoardRun,
+    scope: { userId: string; spaceId: string; signal?: AbortSignal },
+  ): Promise<BoardRunResult> {
+    const id = randomUUID();
+    const request: HostRequest = {
+      v: 1,
+      type: "request",
+      id,
+      scope: { userId: scope.userId, spaceId: scope.spaceId, botId: "board", runId: id },
+      operation: { op: "board.run", request: input },
+    };
+    this.ownerBoardRequests.add(id);
+    let wire: HostWire | undefined;
+    const abort = () => {
+      if (wire) this.hub.cancel(id, wire);
+    };
+    try {
+      scope.signal?.throwIfAborted();
+      return await new Promise<BoardRunResult>((resolve, reject) => {
+        let stdout = "";
+        let result: BoardRunResult | undefined;
+        wire = {
+          close: () =>
+            reject(
+              new BoardError({
+                code: "command_failed",
+                message: "Open the desktop app to use this board.",
+              }),
+            ),
+          send: async (frame) => {
+            if (frame.type === "stream") {
+              if (frame.channel === "stdout") stdout += String(frame.data);
+              if (frame.channel === "result") result = BoardRunResultSchema.parse(frame.data);
+              await this.hub.fromWorker(wire!, { v: 1, type: "ack", id, seq: frame.seq });
+            } else if (frame.type === "end") {
+              if (frame.problem || !result)
+                reject(
+                  new BoardError({
+                    code: "command_failed",
+                    message: "Open the desktop app to use this board.",
+                  }),
+                );
+              else resolve(result.ok && stdout ? { ...result, stdout } : result);
+            }
+          },
+        };
+        scope.signal?.addEventListener("abort", abort, { once: true });
+        void this.hub.request(request, wire).catch(reject);
+      });
+    } finally {
+      this.ownerBoardRequests.delete(id);
+      scope.signal?.removeEventListener("abort", abort);
+      if (wire) this.hub.closeWorker(wire);
+    }
+  }
+  private async authorizeBoard(request: HostRequest, ownerId: string, generation: string) {
+    if (request.operation.op !== "board.run") return false;
+    const op = request.operation.request;
+    const [registration, deployment, member] = await Promise.all([
+      this.prisma.hostRegistration.findUnique({ where: { id: "default" } }),
+      this.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+      this.prisma.spaceMember.findUnique({
+        where: { spaceId_userId: { spaceId: request.scope.spaceId, userId: ownerId } },
+      }),
+    ]);
+    if (
+      registration?.generation !== generation ||
+      registration.userId !== ownerId ||
+      deployment?.ownerUserId !== ownerId ||
+      !member
+    )
+      return false;
+    const manual = this.ownerBoardRequests.has(request.id);
+    if (manual) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: ownerId },
+        select: { name: true },
+      });
+      if (op.actor !== (user?.name.trim() || "Owner")) return false;
+    } else {
+      if (op.action === "export" || (op.action === "init" && op.workspace?.kind !== "space"))
+        return false;
+      let run = await this.prisma.run.findFirst({
+        where: {
+          id: request.scope.runId,
+          botId: request.scope.botId,
+          spaceId: request.scope.spaceId,
+          userId: ownerId,
+          status: "running",
+          cancelRequestedAt: null,
+        },
+        include: { bot: { include: { computer: true } } },
+      });
+      if (!run) {
+        run = await this.prisma.run.findFirst({
+          where: {
+            id: request.scope.runId,
+            botId: request.scope.botId,
+            spaceId: request.scope.spaceId,
+            userId: ownerId,
+            status: { in: ["completed", "failed", "cancelled"] },
+            boardCommentedAt: null,
+          },
+          include: { bot: { include: { computer: true } } },
+        });
+        if (!run?.boardItemId || op.action !== "command" || op.workspaceId !== run.boardWorkspaceId)
+          return false;
+        const argv = op.argv;
+        const read =
+          JSON.stringify(argv) ===
+            JSON.stringify([
+              "show",
+              "--include-comments",
+              "--include-dependents",
+              run.boardItemId,
+            ]) ||
+          JSON.stringify(argv) === JSON.stringify(["history", run.boardItemId, "--limit", "100"]);
+        const comment =
+          argv.length === 5 &&
+          argv[0] === "comments" &&
+          argv[1] === "add" &&
+          argv[2] === "--" &&
+          argv[3] === run.boardItemId &&
+          argv[4]?.startsWith(`[Run ${run.id}] `);
+        const close =
+          run.status === "completed" &&
+          run.boardCloseWhenDone &&
+          JSON.stringify(argv) ===
+            JSON.stringify(["close", run.boardItemId, "--reason", "Bot reported done"]);
+        if (!read && !comment && !close) return false;
+      }
+      if (
+        !run ||
+        run.bot.spaceId !== request.scope.spaceId ||
+        op.actor !== `bot:${run.bot.name}` ||
+        (run.bot.computer?.kind !== "desktop" &&
+          (deployment.computerHost !== "this-mac" || run.bot.computer?.connectionId))
+      )
+        return false;
+    }
+    if (op.action === "discover") return true;
+    if (!op.workspaceId || !op.workspace) return false;
+    const workspace = await this.prisma.boardWorkspace.findFirst({
+      where: {
+        id: op.workspaceId,
+        spaceId: request.scope.spaceId,
+        ownerUserId: ownerId,
+        enabled: true,
+      },
+    });
+    if (
+      !workspace ||
+      workspace.kind !== op.workspace.kind ||
+      (op.action === "init" && workspace.prefix !== op.prefix)
+    )
+      return false;
+    return (
+      op.workspace.kind === "space" ||
+      (op.workspace.path === workspace.path && registration.hostRoots.includes(workspace.path))
+    );
+  }
   /** In-process grants cannot be supplied by a worker or a renderer. No bot run is fabricated. */
   async ownerFile(actor: Actor, operation: HostOperation, signal?: AbortSignal) {
     if (!actor.isDeploymentOwner || !operation.op.startsWith("computer.files."))
@@ -182,6 +347,8 @@ export class HostBridge {
   }
   private async authorize(request: HostRequest, ownerId: string, generation: string) {
     if (request.scope.userId !== ownerId) return false;
+    if (request.operation.op === "board.run")
+      return this.authorizeBoard(request, ownerId, generation);
     if (request.operation.op === "import.scan" || request.operation.op === "import.read") {
       // Owner settings jobs have no bot or run. An ordinary run cannot acquire this scope.
       if (request.scope.botId !== "owner-import" || !request.scope.runId.startsWith("import-"))

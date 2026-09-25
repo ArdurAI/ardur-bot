@@ -18,7 +18,8 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings } from "@ardurbot/contracts";
-import { computerImage, profileCommandError, unknownCapacity } from "@ardurbot/contracts";
+import { computerImage, profileCommandError } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
 import { cachedCapacity } from "@ardurbot/host-runtime/fleet/capacity";
 import { normalizeWorkspacePath } from "./computer-support.js";

@@ -254,6 +254,9 @@ import { SystemDictation } from "./system/SystemDictation";
 import { TeamBoard } from "./TeamBoard";
 import { WindowChrome } from "./WindowChrome";
 
+const ProjectBoard = lazy(() =>
+  import("./board/Board").then((module) => ({ default: module.Board })),
+);
 const BotContextMenu = lazy(() =>
   import("./BotContextMenu").then((module) => ({ default: module.BotContextMenu })),
 );
@@ -326,10 +329,11 @@ function readCollapsedSidebarSections(userId: string | null | undefined): Set<st
   }
 }
 
-export function ShellPage({ team = false }: { team?: boolean }) {
+export function ShellPage({ team = false, board = false }: { team?: boolean; board?: boolean }) {
+  const TaskPage = board ? ProjectBoard : TeamBoard;
   const { t } = useLingui();
-  const teamView = useRef(team);
-  teamView.current = team;
+  const teamView = useRef(team || board);
+  teamView.current = team || board;
   const { botId, groupId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -652,7 +656,8 @@ export function ShellPage({ team = false }: { team?: boolean }) {
   const autoSpokenBotId = useRef<string | null>(null);
 
   const inGroup = Boolean(groupId);
-  const active = team || inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
+  const active =
+    team || board || inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
   computerOpenRef.current = computerOpen;
@@ -2591,6 +2596,17 @@ export function ShellPage({ team = false }: { team?: boolean }) {
             : "md:w-[316px]"
         }`}
       >
+        <Button
+          variant="ghost"
+          className="m-2"
+          aria-pressed={board}
+          onClick={() => {
+            navigate("/app/board");
+            setMobileSidebarOpen(false);
+          }}
+        >
+          <Trans>Board</Trans>
+        </Button>
         {bots.length >= 2 ? (
           <Button
             variant="ghost"
@@ -3177,35 +3193,38 @@ export function ShellPage({ team = false }: { team?: boolean }) {
         }}
       />
 
-      {team ? (
+      {team || board ? (
         <main
           aria-hidden={mobileSidebarOpen || undefined}
           inert={mobileSidebarOpen}
           className="flex min-w-0 flex-1 flex-col bg-background"
         >
-          <TeamBoard
-            key={bootstrapMe?.spaceId}
-            navigation={
-              <Button
-                variant="ghost"
-                size="icon"
-                className={botsSidebarCollapsed ? "" : "md:hidden"}
-                aria-label={t`Open navigation`}
-                onClick={() => {
-                  setMobileSidebarOpen(window.matchMedia("(max-width: 767px)").matches);
-                  setBotsSidebarCollapsedPref(false);
-                }}
-              >
-                <Menu size={19} />
-              </Button>
-            }
-          />
+          <Suspense fallback={<div className="h-full bg-background" />}>
+            <TaskPage
+              bots={bots}
+              key={bootstrapMe?.spaceId}
+              navigation={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={botsSidebarCollapsed ? "" : "md:hidden"}
+                  aria-label={t`Open navigation`}
+                  onClick={() => {
+                    setMobileSidebarOpen(window.matchMedia("(max-width: 767px)").matches);
+                    setBotsSidebarCollapsedPref(false);
+                  }}
+                >
+                  <Menu size={19} />
+                </Button>
+              }
+            />
+          </Suspense>
         </main>
       ) : null}
       <main
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
-        className={`${team ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
+        className={`${team || board ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
           <div className="flex min-w-0 items-center gap-2">

@@ -8,7 +8,7 @@ import type {
   HostOperation,
   RemoteComputerCall,
 } from "@ardurbot/contracts";
-import { HOST_FILE_BYTES } from "@ardurbot/contracts";
+import { HOST_FILE_BYTES } from "@ardurbot/contracts/host-bridge";
 import type { EngineCredentials } from "./docker-sandbox.js";
 import { FleetDockerSandboxProvider } from "./docker-sandbox.js";
 import { HostKubernetesConnection } from "./kubernetes.js";

@@ -1,5 +1,5 @@
 import type { AgentHomeStore, JobPublisher, SandboxProvider } from "@ardurbot/adapter-kit";
-import { unknownCapacity } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { afterEach, expect, it, vi } from "vitest";
 import type { FleetCatalog } from "./catalog.js";

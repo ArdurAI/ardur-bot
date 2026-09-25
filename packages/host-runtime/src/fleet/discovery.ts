@@ -2,7 +2,11 @@ import { existsSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import type { FleetTarget } from "@ardurbot/contracts";
-import { EngineEndpointSchema, SshSettingsSchema, unknownCapacity } from "@ardurbot/contracts";
+import {
+  EngineEndpointSchema,
+  SshSettingsSchema,
+  unknownCapacity,
+} from "@ardurbot/contracts/fleet";
 import type { FleetProcess } from "./process.js";
 import { systemFleetProcess } from "./process.js";
 

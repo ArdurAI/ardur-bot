@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { BoardRunSchema } from "./board.js";
 import { CapacitySnapshotSchema } from "./fleet.js";
 import {
   RemoteComputerCallSchema,
@@ -151,6 +152,7 @@ export type HostMcpRegistration = z.infer<typeof HostMcpRegistrationSchema>;
 const mcpTarget = { serverId: id, revision: z.number().int().positive() };
 export const HostOperationSchema = /* @__PURE__ */ (() =>
   z.discriminatedUnion("op", [
+    z.strictObject({ op: z.literal("board.run"), request: BoardRunSchema }),
     z.strictObject({ op: z.literal("import.scan"), roots: LocalImportRootsSchema.optional() }),
     z.strictObject({
       op: z.literal("import.read"),

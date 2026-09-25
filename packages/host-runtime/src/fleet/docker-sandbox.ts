@@ -3,11 +3,8 @@ import { tmpdir, userInfo } from "node:os";
 import path from "node:path";
 import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings, SshSettings } from "@ardurbot/contracts";
-import {
-  ComputerConnectionSettingsSchema,
-  computerImage,
-  SshSettingsSchema,
-} from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema, computerImage } from "@ardurbot/contracts";
+import { SshSettingsSchema } from "@ardurbot/contracts/fleet";
 import {
   cachedCapacity,
   dockerCapacity,
