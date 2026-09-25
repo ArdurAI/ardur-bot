@@ -654,6 +654,41 @@ describe("MCP OAuth", () => {
     expect(requestedUrls.every((url) => !url.includes("attacker.example.test"))).toBe(true);
   });
 
+  it("reports a sign-in challenge that offers no browser authorization", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
+        logicalHref(input, init) === "https://mcp.example.test/mcp"
+          ? new Response(null, { status: 401 })
+          : new Response("not found", { status: 404 }),
+      ),
+    );
+    const prisma = {
+      mcpServer: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "server-1",
+          endpoint: "https://mcp.example.test/mcp",
+          secretId: null,
+          catalogId: null,
+        }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      secret: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+      mcpOAuthSession: oauthSessionStore(),
+      $transaction: vi.fn().mockResolvedValue([]),
+    };
+    const broker = new McpOAuthBroker(prisma as never, { put: vi.fn() } as never, TEST_NETWORK);
+
+    await expect(
+      broker.begin({
+        serverId: "server-1",
+        spaceId: "workspace-1",
+        userId: "user-1",
+        redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+      }),
+    ).rejects.toMatchObject({ code: "MCP_OAUTH_UNAVAILABLE" });
+  });
+
   it("retries safe OAuth discovery reads without replaying DCR writes", async () => {
     const requests: string[] = [];
     vi.stubGlobal(

@@ -8,6 +8,7 @@ export function integrationFailure(error: unknown): string {
   const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
   if (code === "MCP_REAUTHORIZATION_REQUIRED")
     return error instanceof Error ? error.message : "Needs sign-in.";
+  if (code === "MCP_OAUTH_UNAVAILABLE") return "Needs sign-in (oauth_unavailable).";
   return "Could not reach this integration. Try again.";
 }
 

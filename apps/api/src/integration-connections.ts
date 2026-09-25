@@ -185,13 +185,31 @@ export class IntegrationConnections {
   }
 
   async beginAuthorization(actor: Owner, input: { serverId: string; redirectUri: string }) {
-    await this.owned(actor, input.serverId);
-    const started = await this.oauth.begin({
-      ...input,
-      spaceId: actor.spaceId,
-      userId: actor.userId,
-    });
+    const server = await this.owned(actor, input.serverId);
+    let started: Awaited<ReturnType<McpOAuthBroker["begin"]>>;
+    try {
+      started = await this.oauth.begin({
+        ...input,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+      });
+    } catch (error) {
+      if (!server.catalogId) await this.recordFailure(actor, server, error);
+      throw error;
+    }
     if (started.status !== "authorization_required") await this.capture(actor, input.serverId);
+    else if (!server.catalogId)
+      // An earlier result must not read as the outcome of this pending sign-in.
+      await this.prisma.mcpServer.updateMany({
+        where: {
+          id: server.id,
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          enabled: true,
+          revision: server.revision,
+        },
+        data: { connectionState: "not-connected" },
+      });
     return started;
   }
 
@@ -419,45 +437,51 @@ export class IntegrationConnections {
       });
       await McpConnector.invalidateConnection(id, actor);
     } catch (error) {
-      const message = integrationFailure(error);
-      await this.prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${id}))`;
-        const where = {
-          id,
-          spaceId: actor.spaceId,
-          userId: actor.userId,
-          enabled: true,
-          revision: server.revision,
-        };
-        const current = await tx.mcpServer.findFirst({ where });
-        if (!current || current.revision !== server.revision) return;
-        // A rejected older token must not invalidate a successful concurrent refresh.
-        if (
-          error instanceof McpReauthorizationRequiredError &&
-          current.secretId !== server.secretId &&
-          current.connectionState === "connected"
-        )
-          return;
-        await tx.mcpServer.updateMany({
-          where,
-          data: {
-            ...(message.startsWith("Needs sign-in")
-              ? { connectionState: "needs-sign-in" }
-              : current.connectionState === "connected"
-                ? {}
-                : { connectionState: "discovery-failed" }),
-            lastCheckedAt: new Date(),
-            lastError: message,
-            recentErrors: [
-              ...(Array.isArray(current.recentErrors) ? current.recentErrors : []),
-              { at: new Date().toISOString(), message },
-            ].slice(-10),
-          },
-        });
-      });
+      await this.recordFailure(actor, server, error);
       if (!server.catalogId)
         throw new Error("Could not connect this server. Check its configuration and try again.");
     }
+  }
+
+  private async recordFailure(actor: Owner, server: McpServer, error: unknown) {
+    const message = integrationFailure(error);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${server.id}))`;
+      const where = {
+        id: server.id,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        revision: server.revision,
+      };
+      const current = await tx.mcpServer.findFirst({ where });
+      if (!current || current.revision !== server.revision) return;
+      // A rejected older token must not invalidate a successful concurrent refresh.
+      if (
+        error instanceof McpReauthorizationRequiredError &&
+        current.secretId !== server.secretId &&
+        current.connectionState === "connected"
+      )
+        return;
+      await tx.mcpServer.updateMany({
+        where,
+        data: {
+          // A catalog health check keeps its connection through a failed read; a custom
+          // server shows the result of the discovery the owner just ran.
+          ...(message.startsWith("Needs sign-in")
+            ? { connectionState: "needs-sign-in" }
+            : current.connectionState === "connected" && server.catalogId
+              ? {}
+              : { connectionState: "discovery-failed" }),
+          lastCheckedAt: new Date(),
+          lastError: message,
+          recentErrors: [
+            ...(Array.isArray(current.recentErrors) ? current.recentErrors : []),
+            { at: new Date().toISOString(), message },
+          ].slice(-10),
+        },
+      });
+    });
   }
 
   async expireConsent(actor?: Owner) {

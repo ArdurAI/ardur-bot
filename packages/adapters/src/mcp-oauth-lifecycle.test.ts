@@ -29,7 +29,10 @@ function material(): OAuthMaterial {
     },
   };
 }
-async function fixture(response: () => Promise<Response>) {
+async function fixture(
+  response: () => Promise<Response>,
+  overrides: { catalogId?: string | null; connectionState?: string } = {},
+) {
   const secrets = new EncryptedSecretStore(randomBytes(32).toString("hex"));
   const context = {
     ...actor,
@@ -46,8 +49,9 @@ async function fixture(response: () => Promise<Response>) {
     revision: 1,
     enabled: true,
     secretId: initial.id,
-    catalogId: "notion",
+    catalogId: "notion" as string | null,
     connectionState: "connected",
+    ...overrides,
   };
   let lock = Promise.resolve();
   const db = {
@@ -56,6 +60,13 @@ async function fixture(response: () => Promise<Response>) {
       update: vi.fn(async ({ data }) => {
         server = { ...server, ...data };
         return server;
+      }),
+      updateMany: vi.fn(async ({ where, data }) => {
+        const matches = Object.entries(where).every(
+          ([key, value]) => server[key as keyof typeof server] === value,
+        );
+        if (matches) server = { ...server, ...data };
+        return { count: matches ? 1 : 0 };
       }),
     },
     secret: {
@@ -69,7 +80,7 @@ async function fixture(response: () => Promise<Response>) {
         return { count: 1 };
       }),
     },
-    mcpOAuthSession: { findFirst: vi.fn() },
+    mcpOAuthSession: { findFirst: vi.fn(), deleteMany: vi.fn(async () => ({ count: 1 })) },
     $executeRaw: vi.fn(),
     $transaction: vi.fn((fn) => {
       const next = lock.then(() => fn(db));
@@ -85,9 +96,11 @@ async function fixture(response: () => Promise<Response>) {
   const provider = async () => (await broker.providerFor(server, actor)) as StoredMcpOAuthProvider;
   return {
     broker,
+    context,
     db,
     fetch,
     provider,
+    secrets,
     server: () => server,
     persisted: () =>
       JSON.parse(
@@ -176,5 +189,29 @@ describe("managed OAuth lifecycle", () => {
     await expect(
       f.broker.completeRedirect({ state: "missing", code: "fake-code" }),
     ).rejects.toThrow("expired");
+  });
+  it.each([
+    ["declines", { error: "access_denied" }, "cancelled"],
+    ["fails", { code: "fake-code" }, "needs-sign-in"],
+  ])("records the outcome when a custom server's sign-in %s", async (_, callback, state) => {
+    const f = await fixture(async () => Response.json({}), {
+      catalogId: null,
+      connectionState: "not-connected",
+    });
+    const pending = await f.secrets.put("{}", f.context, "state");
+    f.db.mcpOAuthSession.findFirst.mockResolvedValue({
+      id: "state",
+      ...actor,
+      serverId: "connection",
+      oauthCiphertext: pending.ciphertext,
+    });
+    vi.spyOn(f.broker, "complete").mockRejectedValue(new Error("fake-token-exchange"));
+    await expect(f.broker.completeRedirect({ state: "state", ...callback })).rejects.toThrow(
+      "sign-in failed",
+    );
+    expect(f.server()).toMatchObject({
+      connectionState: state,
+      lastError: "Could not complete sign-in. Connect again.",
+    });
   });
 });

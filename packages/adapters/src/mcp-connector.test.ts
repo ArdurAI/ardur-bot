@@ -175,6 +175,33 @@ describe("MCP connector session cache", () => {
       await connector.close();
     }
   });
+  it.each([
+    ["a rejected static token", "secret-1", { secret: "fake-token" }],
+    ["a sign-in challenge", null, null],
+  ])("requires sign-in when a custom server answers %s with 401", async (_, secretId, stored) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("fake-private-provider-response", { status: 401 })),
+    );
+    const prisma = {
+      secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
+    };
+    const connector = new McpConnector(
+      prisma as never,
+      { load: () => JSON.stringify(stored) } as never,
+      { network: TEST_NETWORK },
+    );
+    try {
+      await expect(
+        connector.inspectServer(
+          { ...SERVER, catalogId: null, secretId } as never,
+          { userId: "u1", spaceId: "w1", signal: new AbortController().signal } as never,
+        ),
+      ).rejects.toMatchObject({ code: "MCP_REAUTHORIZATION_REQUIRED" });
+    } finally {
+      await connector.close();
+    }
+  });
   it("keeps large MCP schemas out of the initial runtime tool catalog", async () => {
     const state = {
       failNext: false,

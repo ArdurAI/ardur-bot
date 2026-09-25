@@ -12,7 +12,7 @@ export type McpOauthResult =
 
 /** Run the browser OAuth popup flow for an MCP server: request an
  * authorization URL, open the popup, and wait until the callback page
- * broadcasts completion or the API reports the completed connection.
+ * broadcasts completion or the API records the sign-in's outcome.
  *
  * The BroadcastChannel (not window.opener) is the completion signal because
  * provider login pages with COOP sever the opener link. */
@@ -22,18 +22,22 @@ export async function connectMcpOauth(serverId: string): Promise<McpOauthResult>
     redirectUri: `${window.location.origin}/api/oauth/done`,
   });
   if (started.status !== "authorization_required") return started.status;
-  return waitForMcpOauth(started.authorizationUrl, undefined, started.sessionId, async () =>
-    (await rpc.mcp.servers.list()).some(
-      (server) => server.id === serverId && server.oauthStatus === "connected",
-    ),
-  );
+  return waitForMcpOauth(started.authorizationUrl, undefined, started.sessionId, async () => {
+    // The API holds a pending sign-in at "not-connected" until the callback records a result.
+    const state = (await rpc.mcp.servers.list()).find(
+      (server) => server.id === serverId,
+    )?.connectionState;
+    if (state === "connected" || state === "discovery-failed") return "connected";
+    if (state === "needs-sign-in" || state === "cancelled") return "cancelled";
+    return null;
+  });
 }
 
 export async function waitForMcpOauth(
   authorizationUrl: string,
   existingPopup?: Window | null,
   sessionId?: string | null,
-  isConnected?: () => Promise<boolean>,
+  outcome?: () => Promise<McpOauthResult | null>,
 ): Promise<McpOauthResult> {
   const desktop = desktopBridge()?.integrations;
   if (desktop) await desktop.open(authorizationUrl);
@@ -64,14 +68,14 @@ export async function waitForMcpOauth(
     };
     let polling = false;
     pollTimer = window.setInterval(() => {
-      if (!isConnected || polling) return;
+      if (!outcome || polling) return;
       polling = true;
-      void isConnected()
-        .then(async (connected) => {
-          if (!connected || settled) return;
+      void outcome()
+        .then(async (result) => {
+          if (!result || settled) return;
           popup?.close();
           await desktop?.focus();
-          finish("connected");
+          finish(result);
         })
         .catch(() => undefined)
         .finally(() => {

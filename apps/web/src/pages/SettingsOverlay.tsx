@@ -65,6 +65,11 @@ export function SettingsOverlay({
   );
   const Page = active.component;
   useEffect(() => setSection(initialSection), [initialSection]);
+  const linkedItem = props.initialIntegration;
+  useEffect(() => {
+    setInitialItem(linkedItem);
+    if (linkedItem) setSection(initialSection);
+  }, [linkedItem, initialSection]);
   function navigate(next: SettingsSection, item?: string) {
     if (busy) return;
     const registration = available.find((item) => item.id === next);

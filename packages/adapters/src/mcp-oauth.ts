@@ -13,6 +13,7 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { transientIntegrationError } from "./integration-lifecycle.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -185,6 +186,15 @@ export class McpReauthorizationRequiredError extends Error {
   ) {
     super(`Needs sign-in (${reason}).`);
     this.name = "McpReauthorizationRequiredError";
+  }
+}
+
+/** The server demanded sign-in, but browser authorization could not start. */
+export class McpOAuthUnavailableError extends Error {
+  readonly code = "MCP_OAUTH_UNAVAILABLE";
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : "Browser sign-in is unavailable.", { cause });
+    this.name = "McpOAuthUnavailableError";
   }
 }
 
@@ -524,6 +534,20 @@ export class McpOAuthBroker {
           },
         });
       }
+      // Custom servers wait in "not-connected" while their sign-in is pending.
+      await this.prisma.mcpServer.updateMany({
+        where: {
+          id: session.serverId,
+          ...actor,
+          enabled: true,
+          catalogId: null,
+          connectionState: "not-connected",
+        },
+        data: {
+          connectionState: input.error === "access_denied" ? "cancelled" : "needs-sign-in",
+          lastError: "Could not complete sign-in. Connect again.",
+        },
+      });
       throw new Error("MCP OAuth sign-in failed");
     }
   }
@@ -710,17 +734,26 @@ export class McpOAuthBroker {
     // invalidates dead tokens when a refresh is rejected with invalid_grant.
     const endpoint = new URL(server.endpoint);
     const networkFetch = oauthFetch(server.endpoint, this.network, loaded.material);
+    let challenged = false;
     const transport = new StreamableHTTPClientTransport(endpoint, {
       requestInit: { headers: networkFetch.headers },
       authProvider: provider,
-      fetch: networkFetch.fetch,
+      fetch: async (url, init) => {
+        const response = await networkFetch.fetch(url, init);
+        if (response.status === 401) challenged = true;
+        return response;
+      },
     });
     const client = new Client({ name: "ardurbot-oauth", version: "0.1.0" });
     const signal = AbortSignal.timeout(15_000);
     try {
       await client.connect(transport, { signal, timeout: 15_000 });
     } catch (error) {
-      if (!authorizationUrl) throw error;
+      const transient =
+        transientIntegrationError(error) ||
+        (error instanceof Error && transientIntegrationError(error.cause));
+      if (!authorizationUrl)
+        throw challenged && !transient ? new McpOAuthUnavailableError(error) : error;
     } finally {
       await client.close().catch(() => undefined);
       await networkFetch.close().catch(() => undefined);

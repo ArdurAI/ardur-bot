@@ -445,6 +445,50 @@ describe("catalog connection lifecycle", () => {
     expect(JSON.stringify(f.row().recentErrors)).not.toContain("fake-secret");
     expect(inspect).toHaveBeenCalledTimes(2);
   });
+  it.each([
+    ["an auth failure", new McpReauthorizationRequiredError("connection"), "needs-sign-in"],
+    ["any other failure", new Error("fake-secret"), "discovery-failed"],
+  ])("records %s on every custom server discovery", async (_, failure, state) => {
+    const f = fixture();
+    f.setRow({ catalogId: null });
+    vi.spyOn(McpConnector.prototype, "inspectServer")
+      .mockResolvedValueOnce(manifest)
+      .mockRejectedValueOnce(failure);
+    await f.service.capture(actor, "connection");
+    expect(f.row().connectionState).toBe("connected");
+    await expect(f.service.capture(actor, "connection")).rejects.toThrow();
+    expect(f.row().connectionState).toBe(state);
+    expect(JSON.stringify(f.row())).not.toContain("fake-secret");
+  });
+  it("clears a custom server's earlier result while its browser sign-in is pending", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: null, connectionState: "discovery-failed" });
+    await f.service.beginAuthorization(actor, {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    });
+    expect(f.row().connectionState).toBe("not-connected");
+  });
+  it.each([
+    [
+      "a sign-in challenge without browser authorization",
+      Object.assign(new Error("fake-provider-response"), { code: "MCP_OAUTH_UNAVAILABLE" }),
+      "needs-sign-in",
+    ],
+    ["any other probe failure", new Error("fake-provider-response"), "discovery-failed"],
+  ])("records %s when a custom server's OAuth probe fails", async (_, failure, state) => {
+    const f = fixture();
+    f.setRow({ catalogId: null });
+    f.oauth.begin.mockRejectedValue(failure);
+    await expect(
+      f.service.beginAuthorization(actor, {
+        serverId: "connection",
+        redirectUri: "https://app.example.test/mcp/oauth/callback",
+      }),
+    ).rejects.toBe(failure);
+    expect(f.row().connectionState).toBe(state);
+    expect(JSON.stringify(f.row())).not.toContain("fake-provider-response");
+  });
   it("requires a new explicit review when an assigned tool definition changes", async () => {
     const f = fixture();
     await f.service.assign(actor, {

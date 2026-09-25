@@ -51,9 +51,9 @@ type PendingSession = { revision: number; promise: Promise<McpSessionPort> };
 
 function connectionError(error: unknown, server: McpServer, material?: OAuthMaterial): unknown {
   if (
-    server.catalogId &&
     !material?.oauth &&
-    Object.keys(material?.headers ?? {}).some((key) => key.toLowerCase() === "authorization") &&
+    (!server.catalogId ||
+      Object.keys(material?.headers ?? {}).some((key) => key.toLowerCase() === "authorization")) &&
     error &&
     typeof error === "object" &&
     "code" in error &&

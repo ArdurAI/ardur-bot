@@ -197,11 +197,7 @@ export function IntegrationSetup({
       ) : null}
       {choice === "direct" ? (
         <Suspense fallback={null}>
-          <DirectMcpSearch
-            botId={botId}
-            secret={apiKey}
-            onConnected={(id) => onServerConnected?.(id)}
-          />
+          <DirectMcpSearch botId={botId} onConnected={(id) => onServerConnected?.(id)} />
         </Suspense>
       ) : null}
       {choice === "executor" ? (
@@ -231,13 +227,13 @@ export function IntegrationSetup({
             disabled={busy || !endpoint.trim()}
             onClick={() =>
               void run(async () => {
-                const id = await connectRemoteMcp({
+                const outcome = await connectRemoteMcp({
                   name: "Executor",
                   endpoint,
-                  secret: apiKey,
+                  credential: apiKey.trim() ? { value: apiKey } : undefined,
                   botId,
                 });
-                if (id) onServerConnected?.(id);
+                if (typeof outcome === "object") onServerConnected?.(outcome.serverId);
               })
             }
           >

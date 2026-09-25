@@ -1691,6 +1691,7 @@ msgstr "서버에서 설정됨"
 msgid "Confirm"
 msgstr "확인"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -2815,6 +2816,7 @@ msgstr ""
 msgid "Deferred"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -5867,7 +5869,6 @@ msgid "Remote setup"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
-#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/SkillsPage.tsx

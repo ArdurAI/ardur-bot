@@ -9,16 +9,21 @@ import { useState } from "react";
 import { rpc } from "../../lib/rpc";
 import { connectRemoteMcp, normalizedEndpoint } from "./connect-remote-mcp";
 
+type Target = {
+  name: string;
+  endpoint: string;
+  surface?: IntegrationCatalogSurface;
+  descriptor?: IntegrationDescriptor;
+};
+
 export function DirectMcpSearch({
   botId,
   catalog = [],
-  secret = "",
   onConnectCatalog,
   onConnected,
 }: {
   botId?: string;
   catalog?: IntegrationDescriptor[];
-  secret?: string;
   onConnectCatalog?: (descriptor: IntegrationDescriptor) => Promise<boolean>;
   onConnected?: (serverId: string) => void | Promise<void>;
 }) {
@@ -27,11 +32,12 @@ export function DirectMcpSearch({
   const [results, setResults] = useState<IntegrationCatalogResult[]>([]);
   const [searched, setSearched] = useState(false);
   const [endpoint, setEndpoint] = useState("");
-  const [token, setToken] = useState("");
+  const [urlToken, setUrlToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<"search" | "connect" | null>(null);
   const [connected, setConnected] = useState<string[]>([]);
-  const [credentialFor, setCredentialFor] = useState<string | null>(null);
+  // A credential belongs to the one result it was typed for.
+  const [credential, setCredential] = useState<{ endpoint: string; value: string } | null>(null);
   const remoteResults = [
     ...new Map(
       results.flatMap((result) =>
@@ -73,37 +79,41 @@ export function DirectMcpSearch({
     }
   }
 
-  async function connect(
-    name: string,
-    url: string,
-    surface?: IntegrationCatalogSurface,
-    descriptor?: IntegrationDescriptor,
-    customToken = "",
-  ) {
-    const authType = surface?.auth?.type ?? "oauth";
-    if (!descriptor && (authType === "bearer" || authType === "header") && !customToken.trim()) {
-      setCredentialFor(url);
+  async function connect(target: Target, token: string) {
+    const auth = target.surface?.auth;
+    if (credential && credential.endpoint !== target.endpoint) setCredential(null);
+    if (
+      !target.descriptor &&
+      (auth?.type === "bearer" || auth?.type === "header") &&
+      !token.trim()
+    ) {
+      setCredential({ endpoint: target.endpoint, value: "" });
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      if (descriptor) {
-        if (await onConnectCatalog?.(descriptor)) setConnected((current) => [...current, url]);
+      if (target.descriptor) {
+        if (await onConnectCatalog?.(target.descriptor))
+          setConnected((current) => [...current, target.endpoint]);
         return;
       }
-      const id = await connectRemoteMcp({
-        name,
-        endpoint: url,
-        authType,
-        secret: authType === "none" ? undefined : customToken || secret,
+      const outcome = await connectRemoteMcp({
+        name: target.name,
+        endpoint: target.endpoint,
         botId,
+        auth: auth?.type === "none" ? "none" : auth?.type === "mixed" ? "mixed" : "oauth",
+        credential: token.trim() ? { value: token, headerName: auth?.headerName } : undefined,
       });
-      if (!id) return;
-      setConnected((current) => [...current, url]);
-      setCredentialFor(null);
-      setToken("");
-      await onConnected?.(id);
+      if (outcome === "needs-credential") {
+        setCredential({ endpoint: target.endpoint, value: "" });
+        return;
+      }
+      if (outcome === "cancelled") return;
+      setConnected((current) => [...current, target.endpoint]);
+      setCredential(null);
+      setUrlToken("");
+      await onConnected?.(outcome.serverId);
     } catch {
       setError("connect");
     } finally {
@@ -139,24 +149,24 @@ export function DirectMcpSearch({
               disabled={busy || connected.includes(result.endpoint)}
               onClick={() =>
                 void connect(
-                  result.name,
-                  result.endpoint,
-                  result.surface,
-                  result.descriptor,
-                  credentialFor === result.endpoint ? token : "",
+                  result,
+                  credential?.endpoint === result.endpoint ? credential.value : "",
                 )
               }
             >
               {connected.includes(result.endpoint) ? t`Connected` : t`Connect`}
             </Button>
           </div>
-          {credentialFor === result.endpoint ? (
+          {credential?.endpoint === result.endpoint ? (
             <Input
               type="password"
               autoComplete="off"
               aria-label={t`Credential`}
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
+              placeholder={result.surface.auth?.headerName ?? undefined}
+              value={credential.value}
+              onChange={(event) =>
+                setCredential({ endpoint: result.endpoint, value: event.target.value })
+              }
             />
           ) : null}
         </div>
@@ -174,10 +184,7 @@ export function DirectMcpSearch({
           <Input
             aria-label={t`Server URL`}
             value={endpoint}
-            onChange={(event) => {
-              setEndpoint(event.target.value);
-              setCredentialFor(null);
-            }}
+            onChange={(event) => setEndpoint(event.target.value)}
             placeholder="https://example.com/mcp"
           />
           {typedDescriptor ? (
@@ -187,30 +194,19 @@ export function DirectMcpSearch({
             type="password"
             autoComplete="off"
             aria-label={t`Access token (optional)`}
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
+            value={urlToken}
+            onChange={(event) => setUrlToken(event.target.value)}
           />
           <Button
             disabled={busy || !endpoint.trim()}
             onClick={() =>
               void connect(
-                typedDescriptor?.name ?? "MCP server",
-                endpoint.trim(),
-                token.trim()
-                  ? {
-                      kind: "mcp",
-                      slug: "custom",
-                      source: endpoint.trim(),
-                      auth: { type: "bearer", headerName: null, note: null },
-                    }
-                  : {
-                      kind: "mcp",
-                      slug: "custom",
-                      source: endpoint.trim(),
-                      auth: { type: "none", headerName: null, note: null },
-                    },
-                typedDescriptor,
-                token,
+                {
+                  name: typedDescriptor?.name ?? "MCP server",
+                  endpoint: endpoint.trim(),
+                  descriptor: typedDescriptor,
+                },
+                urlToken,
               )
             }
           >

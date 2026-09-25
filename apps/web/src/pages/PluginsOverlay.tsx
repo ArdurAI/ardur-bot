@@ -368,7 +368,17 @@ export function PluginsOverlay({
     setSourceName(result.name);
     setSourceUrl(surface.source);
     setCredential("");
-    setAuthType(surface.auth?.type ?? "none");
+    const auth = surface.auth;
+    // Installed sources cannot run a browser sign-in, so OAuth listings take a token.
+    setAuthType(
+      !auth
+        ? "none"
+        : auth.type === "oauth" || auth.type === "mixed"
+          ? auth.headerName
+            ? "header"
+            : "bearer"
+          : auth.type,
+    );
     setAuthName(surface.auth?.headerName ?? "x-api-key");
     setSourceHint(surface.auth?.note ?? null);
     setSourceError(null);

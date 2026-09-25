@@ -43,16 +43,16 @@ export function IntegrationCards({
   const [clients, setClients] = useState<
     Record<string, { clientId: string; clientSecret?: string }>
   >({});
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const popup = useRef<Window | null>(null);
-  const requestGeneration = useRef(0);
+  const requests = useRef<PageRequests>({ generation: 0, inFlight: 0 });
   useEffect(() => {
     onBusyChange?.(busy !== null);
     return () => onBusyChange?.(false);
   }, [busy, onBusyChange]);
   const refresh = async () => {
-    const generation = ++requestGeneration.current;
-    const value = await readIntegrationPage();
-    if (generation !== requestGeneration.current) return;
+    const value = await readLatestIntegrationPage(requests.current);
+    if (!value) return;
     setData(value.catalog);
     setRemoteServers(value.servers);
     setError(false);
@@ -60,21 +60,22 @@ export function IntegrationCards({
   useEffect(() => {
     let active = true;
     const load = () => {
-      const generation = ++requestGeneration.current;
-      void readIntegrationPage()
+      void readLatestIntegrationPage(requests.current)
         .then((value) => {
-          if (!active || generation !== requestGeneration.current) return;
+          if (!active || !value) return;
           setData(value.catalog);
           setRemoteServers(value.servers);
         })
         .catch(() => {
-          if (active && generation === requestGeneration.current) setError(true);
+          if (active) setError(true);
         });
     };
     load();
     const channel = new BroadcastChannel(MCP_OAUTH_CHANNEL);
     channel.onmessage = load;
-    const timer = window.setInterval(load, 5000);
+    const timer = window.setInterval(() => {
+      if (!requests.current.inFlight) load();
+    }, 5000);
     return () => {
       active = false;
       channel.close();
@@ -138,6 +139,11 @@ export function IntegrationCards({
     }
   }
   async function removeCustom(server: McpServer) {
+    if (confirmingDelete !== server.id) {
+      setConfirmingDelete(server.id);
+      return;
+    }
+    setConfirmingDelete(null);
     setBusy(server.id);
     setError(false);
     try {
@@ -299,10 +305,12 @@ export function IntegrationCards({
                   onClick={() => onOpenMcp?.(server.id)}
                 >{t`Manage`}</Button>
                 <Button
-                  variant="outline"
+                  variant={confirmingDelete === server.id ? "destructive" : "outline"}
                   disabled={busy !== null}
                   onClick={() => void removeCustom(server)}
-                >{t`Remove`}</Button>
+                >
+                  {confirmingDelete === server.id ? t`Confirm delete` : t`Delete`}
+                </Button>
               </div>
             );
           }
@@ -494,12 +502,24 @@ export function IntegrationCards({
   );
 }
 
-async function readIntegrationPage() {
-  const [catalog, servers] = await Promise.all([
-    refreshIntegrationCatalog(),
-    rpc.mcp.servers.list(),
-  ]);
-  return { catalog, servers };
+type PageRequests = { generation: number; inFlight: number };
+
+/** Resolves null when a newer read started before this one finished. */
+async function readLatestIntegrationPage(requests: PageRequests) {
+  const generation = ++requests.generation;
+  requests.inFlight += 1;
+  try {
+    const [catalog, servers] = await Promise.all([
+      refreshIntegrationCatalog(),
+      rpc.mcp.servers.list(),
+    ]);
+    return generation === requests.generation ? { catalog, servers } : null;
+  } catch (error) {
+    if (generation === requests.generation) throw error;
+    return null;
+  } finally {
+    requests.inFlight -= 1;
+  }
 }
 
 /**

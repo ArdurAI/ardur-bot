@@ -616,7 +616,7 @@ describe("Settings integration catalog", () => {
     expect(container.textContent).not.toContain("Connected");
   });
 
-  it("keeps a custom connected row after remounting with no linked in-memory state", async () => {
+  it("shows a custom server's recorded discovery failure even when it holds OAuth tokens", async () => {
     api.servers.mockResolvedValue([
       {
         id: "persisted-server",
@@ -624,22 +624,20 @@ describe("Settings integration catalog", () => {
         endpoint: "https://custom.example.test/mcp",
         transport: "streamable_http",
         enabled: true,
-        oauthStatus: "none",
-        connectionState: "connected",
+        oauthStatus: "connected",
+        connectionState: "discovery-failed",
         catalogId: null,
       },
     ]);
     await mount();
-    expect(container.textContent).toContain("Persisted server");
-    expect(container.textContent).toContain("Connected");
-    await act(async () => root.unmount());
-    root = createRoot(container);
-    await mount();
-    expect(container.textContent).toContain("Persisted server");
-    expect(container.textContent).toContain("Connected");
+    const row = [...container.querySelectorAll("tbody tr")].find((entry) =>
+      entry.textContent?.includes("Persisted server"),
+    );
+    expect(row?.textContent).not.toContain("Connected");
+    expect(button("Reconnect")).toBeDefined();
   });
 
-  it("offers Reconnect, Manage, and Remove for a failed custom server", async () => {
+  it("offers Reconnect, Manage, and a confirmed Delete for a failed custom server", async () => {
     const onOpenMcp = vi.fn();
     api.servers.mockResolvedValue([
       {
@@ -657,8 +655,170 @@ describe("Settings integration catalog", () => {
     expect(button("Reconnect")).toBeDefined();
     await click(button("Manage"));
     expect(onOpenMcp).toHaveBeenCalledWith("failed-custom");
-    await click(button("Remove"));
-    expect(api.remove).toHaveBeenCalledWith({ id: "failed-custom" });
+    await click(button("Delete"));
+    expect(api.remove).not.toHaveBeenCalled();
+    await click(button("Confirm delete"));
+    expect(api.remove).toHaveBeenCalledExactlyOnceWith({ id: "failed-custom" });
+  });
+
+  it("does not start a poll while a list request is in flight", async () => {
+    const polls: Array<() => void> = [];
+    const setInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, ms?: number) => {
+      if (ms !== 5000) return setInterval(handler, ms);
+      polls.push(handler);
+      return 0;
+    }) as typeof window.setInterval);
+    let resolveFirst!: (value: Array<Record<string, unknown>>) => void;
+    api.servers.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    await mount();
+    expect(api.servers).toHaveBeenCalledTimes(1);
+    await act(async () => polls[0]!());
+    expect(api.servers).toHaveBeenCalledTimes(1);
+    await act(async () =>
+      resolveFirst([
+        {
+          id: "slow-server",
+          name: "Slow server",
+          endpoint: "https://slow.example.test/mcp",
+          transport: "streamable_http",
+          enabled: true,
+          oauthStatus: "none",
+          connectionState: "connected",
+          catalogId: null,
+        },
+      ]),
+    );
+    expect(container.textContent).toContain("Slow server");
+    await act(async () => polls[0]!());
+    expect(api.servers).toHaveBeenCalledTimes(2);
+  });
+
+  it("never carries one result's credential to another result", async () => {
+    const added = createdServers();
+    await openResults([
+      listing("Alpha", "https://alpha.example.test/mcp", bearer),
+      listing("Beta", "https://beta.example.test/mcp", bearer),
+    ]);
+    await click(resultConnect("Alpha")!);
+    await fill("Credential", "synthetic-alpha");
+    await click(resultConnect("Beta")!);
+    expect(container.querySelectorAll('[aria-label="Credential"]')).toHaveLength(1);
+    expect(container.querySelector<HTMLInputElement>('[aria-label="Credential"]')?.value).toBe("");
+    await fill("Credential", "synthetic-beta");
+    await click(resultConnect("Beta")!);
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        endpoint: "https://beta.example.test/mcp",
+        secret: "synthetic-beta",
+      }),
+    );
+    expect(added).toHaveLength(1);
+  });
+
+  it("reuses a saved server only when its whole address, including the query, matches", async () => {
+    const added = createdServers([
+      {
+        id: "saved",
+        slug: "saved",
+        name: "Workspace A",
+        description: "",
+        endpoint: "https://mcp.example.test/mcp?workspace=a&region=eu",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "none",
+        connectionState: "connected",
+        catalogId: null,
+      },
+    ]);
+    await openResults([
+      listing("Workspace B", "https://mcp.example.test/mcp?workspace=b", bearer),
+      listing("Workspace A again", "https://MCP.example.test/mcp/?region=eu&workspace=a", bearer),
+    ]);
+    await click(resultConnect("Workspace B")!);
+    await fill("Credential", "synthetic-b");
+    await click(resultConnect("Workspace B")!);
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        endpoint: "https://mcp.example.test/mcp?workspace=b",
+        secret: "synthetic-b",
+      }),
+    );
+    expect(api.update).not.toHaveBeenCalled();
+    await click(resultConnect("Workspace A again")!);
+    await fill("Credential", "synthetic-a");
+    await click(resultConnect("Workspace A again")!);
+    expect(api.update).toHaveBeenCalledExactlyOnceWith({ id: "saved", secret: "synthetic-a" });
+    expect(added).toHaveLength(2);
+  });
+
+  it("sends a header credential under the advertised header name", async () => {
+    createdServers();
+    await openResults([
+      listing("Keyed", "https://keyed.example.test/mcp", {
+        type: "header",
+        headerName: "x-api-key",
+        note: null,
+      }),
+    ]);
+    await click(resultConnect("Keyed")!);
+    expect(
+      container.querySelector<HTMLInputElement>('[aria-label="Credential"]')?.placeholder,
+    ).toBe("x-api-key");
+    await fill("Credential", "synthetic-key");
+    await click(resultConnect("Keyed")!);
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ headers: { "x-api-key": "synthetic-key" } }),
+    );
+    expect(api.create.mock.calls[0]![0]).not.toHaveProperty("secret");
+    expect(api.tools).toHaveBeenCalledOnce();
+    expect(api.oauth).not.toHaveBeenCalled();
+  });
+
+  it("signs in first for a mixed listing and asks for a token only when sign-in is unavailable", async () => {
+    const added = createdServers();
+    api.oauth.mockImplementationOnce(async (serverId: string) => {
+      added.find((server) => server.id === serverId)!.connectionState = "needs-sign-in";
+      throw new Error("fake-provider-response");
+    });
+    await openResults([
+      listing("Either", "https://either.example.test/mcp", {
+        type: "mixed",
+        headerName: null,
+        note: null,
+      }),
+    ]);
+    await click(resultConnect("Either")!);
+    expect(api.oauth).toHaveBeenCalledExactlyOnceWith("created-1");
+    expect(api.remove).toHaveBeenCalledWith({ id: "created-1" });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    await fill("Credential", "synthetic-token");
+    await click(resultConnect("Either")!);
+    expect(api.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ secret: "synthetic-token" }),
+    );
+    expect(api.tools).toHaveBeenCalledExactlyOnceWith({ serverId: "created-2" });
+    expect(api.oauth).toHaveBeenCalledOnce();
+    expect(resultConnect("Either")).toBeUndefined();
+  });
+
+  it("starts the sign-in probe for a typed URL without a token", async () => {
+    createdServers();
+    await mount();
+    await click(button("Find apps"));
+    await fill("Server URL", "https://typed.example.test/mcp");
+    const form = container.querySelector('[aria-label="Server URL"]')!.parentElement!;
+    await click(button("Connect", form));
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.not.objectContaining({ secret: expect.anything() }),
+    );
+    expect(api.oauth).toHaveBeenCalledExactlyOnceWith("created-1");
+    expect(api.tools).not.toHaveBeenCalled();
   });
 
   it("ignores an older server-list response that resolves after a refresh", async () => {
@@ -768,6 +928,72 @@ const publicResult = {
     },
   ],
 };
+
+const bearer = { type: "bearer", headerName: null, note: null };
+
+function listing(name: string, source: string, auth: Record<string, unknown> | null = null) {
+  const slug = name.toLowerCase().replaceAll(" ", "-");
+  return {
+    ...publicResult,
+    domain: `${slug}.example.test`,
+    name,
+    surfaces: [{ kind: "mcp" as const, slug, source, auth }],
+  };
+}
+
+async function openResults(results: unknown[]) {
+  api.catalogSearch.mockResolvedValue({ enabled: true, results });
+  await mount();
+  await click(button("Find apps"));
+  await fill("Search apps", "app");
+  await click(button("Search integrations.sh"));
+}
+
+type ServerFixture = Record<string, unknown> & { id: string; connectionState: string };
+
+/** A server list the API mocks keep in step: discovery and sign-in record "connected". */
+function createdServers(initial: ServerFixture[] = []) {
+  const servers = [...initial];
+  let created = 0;
+  api.servers.mockImplementation(async () => servers);
+  api.create.mockImplementation(async (input: { name: string; endpoint: string }) => {
+    created += 1;
+    const server = {
+      id: `created-${created}`,
+      slug: `created-${created}`,
+      name: input.name,
+      description: "",
+      endpoint: input.endpoint,
+      transport: "streamable_http",
+      enabled: true,
+      oauthStatus: "none",
+      connectionState: "not-connected",
+      catalogId: null,
+    };
+    servers.push(server);
+    return server;
+  });
+  const record = (serverId: string) => {
+    const server = servers.find((entry) => entry.id === serverId);
+    if (server) server.connectionState = "connected";
+  };
+  api.tools.mockImplementation(async ({ serverId }: { serverId: string }) => {
+    record(serverId);
+    return { capturedAt: "", serverVersion: null, account: null, tools: [] };
+  });
+  api.oauth.mockImplementation(async (serverId: string) => {
+    record(serverId);
+    return "connected";
+  });
+  api.remove.mockImplementation(async ({ id }: { id: string }) => {
+    servers.splice(
+      servers.findIndex((entry) => entry.id === id),
+      1,
+    );
+    return { ok: true };
+  });
+  return servers;
+}
 
 function resultConnect(name: string) {
   const label = [...container.querySelectorAll("span")].find((node) => node.textContent === name);
