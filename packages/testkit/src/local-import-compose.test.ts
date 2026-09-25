@@ -39,5 +39,17 @@ describe.runIf(composeAvailable)("Compose import callback routing", () => {
     );
     expect(config.services.api).toBeDefined();
     expect(config.services.worker.environment.API_INTERNAL_URL).toBe("http://api:3100");
+    for (const key of [
+      "DATABASE_URL",
+      "HTTP_PROXY",
+      "HTTPS_PROXY",
+      "NO_PROXY",
+      "http_proxy",
+      "https_proxy",
+      "no_proxy",
+    ]) {
+      expect(config.services.api.environment[key]).toBeDefined();
+      expect(config.services.worker.environment[key]).toBe(config.services.api.environment[key]);
+    }
   });
 });
