@@ -4,6 +4,7 @@ import { contentDigest } from "../../scoreboard/manifest.js";
 import { BudgetLedger } from "../budget.js";
 import { selfTestBudget } from "../self-test.js";
 import { TrialAdmission } from "./admission.js";
+import { probeToolAndHelperCaps } from "./command-probe.js";
 import type { ContainerInspection } from "./policy.js";
 import {
   COMPUTER_IMAGE,
@@ -11,6 +12,7 @@ import {
   containerPolicy,
   validateContainerInspection,
 } from "./policy.js";
+import { assessAggregateDisk } from "./product-roundtrip.js";
 import { assertContainerProof } from "./session.js";
 
 function inspected() {
@@ -209,6 +211,61 @@ function runtimeFixture() {
   };
   return { budget, ledger, admission, start, request, effect, helper, emit };
 }
+describe("per-trial budget caps", () => {
+  it("admits tool calls and helpers up to the budget counters and records the next refusal", async () => {
+    const budget = selfTestBudget();
+    budget.perTrial.toolCalls = 3;
+    budget.perTrial.descendants = 2;
+    const result = await probeToolAndHelperCaps(budget);
+    expect(result.toolCalls).toMatchObject({
+      cap: 3,
+      admitted: 3,
+      nextRefused: true,
+      refusal: "budget-exhausted: toolCalls",
+      effectAfterRefusal: false,
+    });
+    expect(result.helpers).toMatchObject({
+      cap: 2,
+      admitted: 2,
+      nextRefused: true,
+      refusal: "budget-exhausted: descendants",
+      effectAfterRefusal: false,
+    });
+  });
+});
+
+describe("aggregate disk evidence", () => {
+  it("requires the mounted tmpfs cap and a live container after the refused write", () => {
+    const mount =
+      "tmpfs /opt/data tmpfs rw,nosuid,nodev,noexec,relatime,size=8192k,mode=770,uid=65531,gid=65532,inode64 0 0";
+    const probe = {
+      enospc: true,
+      sizes: [3145728, 5000000],
+      aggregateBytes: 8145728,
+      mount,
+    };
+    const passed = assessAggregateDisk({ code: 0, probe, capBytes: 8388608, followUpCode: 0 });
+    expect(passed.passed).toBe(true);
+    expect(passed.evidence).toMatchObject({
+      mechanism: "tmpfs-size",
+      capBytes: 8388608,
+      mountedCapBytes: 8388608,
+      containerAlive: true,
+    });
+    expect(
+      assessAggregateDisk({ code: 0, probe, capBytes: 8388608, followUpCode: null }).passed,
+    ).toBe(false);
+    expect(
+      assessAggregateDisk({
+        code: 0,
+        probe: { ...probe, mount: mount.replace("size=8192k", "size=16384k") },
+        capBytes: 8388608,
+        followUpCode: 0,
+      }).passed,
+    ).toBe(false);
+  });
+});
+
 describe("pre-effect and descendant admission", () => {
   it("charges before dispatch, scopes the exact intent, and never dispatches after budget denial", async () => {
     const f = runtimeFixture(),

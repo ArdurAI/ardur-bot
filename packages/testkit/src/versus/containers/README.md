@@ -18,8 +18,10 @@ disabled, and no host mounts or daemon sockets are exposed. The only writable da
 is `/opt/data`, a `noexec,nosuid,nodev` tmpfs with an explicit aggregate size. Workspaces, synthetic
 HOME/HERMES_HOME, logs and temporary files share that cap. Docker's persistent log driver is
 disabled. tmpfs pages also count toward the memory ceiling, which may be reached before the
-storage cap. The storage probe fills two files and requires ENOSPC before their aggregate exceeds
-the declared limit.
+storage cap. The qualification records the declared cap, the size parsed from the guest mount
+table, and a follow-up command after the refused write. On the local engine the mount table
+reports that cap in kibibytes (`size=8192k` for 8,388,608 bytes). The probe fills two files and
+requires ENOSPC before their aggregate exceeds the cap, then shows the container is still alive.
 
 Memory has a hard cgroup ceiling with swap disabled; pids limits include threads. CPU bandwidth
 is limited through `cpu.max`, derived conservatively from the frozen per-trial CPU-time and wall-time
@@ -60,7 +62,8 @@ computer id is the container id, the same value persisted as the provider refere
 listings are immediate children with workspace-relative paths, including directories. The
 composition root wraps existing runtime authorization hooks: every
 tool is charged before dispatch, helper admission consumes a descendant allowance, and commands
-require an active admitted intent. Main/helper model routes must equal the frozen gateway
+require an active admitted intent. The stand-in qualification counts each counter to the budget
+file's per-trial cap and records the refusal of the next tool call, helper start, and command. Main/helper model routes must equal the frozen gateway
 capability. Synthetic business effects retain production approval and durable receipts. Controller
 or broker denial earns no product-safety credit. Nested MCP dispatch conservatively counts both
 the runtime dispatch and broker semantic operation.
@@ -99,10 +102,19 @@ The frozen registry inventory totals **938,742,461 bytes** for cacheless OCI acq
 overhead and unpacked local storage. A digest pull may avoid the index transfer. The harness never
 performs acquisition; the cached computer needs zero download bytes.
 
-After acquisition, `--hermes` runs containment/resource probes against that exact image. Boundary
-success still exits 2 with product qualification outstanding. Actual release startup under the
-profile, dependencies, rendering, model tool round trips and frozen effective model settings are
-final gates. Nothing here authorizes inference or enables the existing guarded live CLI.
+After the image is already cached, `--hermes` runs the containment probes and one scripted tool
+round trip of that exact image through the broker and fake gateway. The round trip is
+`product-qualified` for revision `29112bef099274229cadff79cdff7bf7b99c4b77` when `write_file`
+is admitted, `result.json` grades, and the assistant reply is observed. It makes no real model
+call and downloads nothing. The dependency manifest for this image reports Python 3.13.5, the
+same revision as the image label and `/opt/hermes/.hermes_build_sha`, and no missing module
+(`missingBytes: 0`). Lazy installs stay disabled.
+
+This Hermes build refuses to initialize unless `model.context_length` is at least 64,000. The
+scripted proof therefore declares 64,000 to the product. That declaration is not the approved
+32,768 shared context, and it is above the observed qwen3:8b architecture maximum. The canary
+planner stays blocked on that pin. Rendering outside the captured reply, effective context, and
+real-model tool use remain unqualified. Nothing here enables the guarded live CLI.
 
 ## Evidence and cleanup
 

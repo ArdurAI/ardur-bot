@@ -7,7 +7,7 @@ import { qualifyContainers } from "./qualification.js";
 
 const inspectImage = vi.hoisted(() => vi.fn());
 vi.mock("./session.js", () => ({ inspectImage }));
-vi.mock("./command-probe.js", () => ({ probeCommandAdmission: vi.fn() }));
+vi.mock("./command-probe.js", () => ({ probeBudgetAdmission: vi.fn() }));
 vi.mock("../provenance.js", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   inspectBuild: async () => ({ build: { commit: "synthetic-build", dirty: false } }),
