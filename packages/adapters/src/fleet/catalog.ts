@@ -11,6 +11,25 @@ import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "../sandbox-factory.js";
 import { hostCapacity } from "./service.js";
 
+/** Built-in row for a computer with no saved connection. Local Docker keeps its own row. */
+export function fleetComputerTargetId(
+  computer: { connectionId?: string | null; kind?: string | null } | null | undefined,
+  fleet: {
+    defaultTargetId: string;
+    targets: Array<{ id: string; kind: string; connectionId: string | null }>;
+  },
+): string {
+  if (computer?.connectionId) return computer.connectionId;
+  if (computer?.kind === "desktop") return "host";
+  if (computer?.kind === "docker") {
+    return (
+      fleet.targets.find((target) => target.connectionId === null && target.kind === "docker")
+        ?.id ?? fleet.defaultTargetId
+    );
+  }
+  return fleet.defaultTargetId;
+}
+
 export class FleetCatalog {
   readonly connections: ComputerConnections;
   private readonly diagnostics = new Map<string, { version?: string; os?: string }>();
@@ -91,32 +110,43 @@ export class FleetCatalog {
       },
     ];
     // Keep the deployment default visible even when the owner has selected a host computer.
+    // Desktop already has a separate Docker row. Any other non-Docker default needs one too,
+    // so a local Docker computer is not listed on the fallback's capacity.
+    const defaultRowIsDocker = defaultTargetId === "host" || defaultKind === "docker";
     let dockerState: FleetTarget["state"] = "connected";
     const dockerSnapshot =
-      defaultTargetId === "default"
+      defaultRowIsDocker && defaultTargetId === "default"
         ? defaultCapacity
         : await this.docker.capacity().catch(() => {
             dockerState = "unavailable";
             return unknownCapacity();
           });
-    targets.push({
-      ...this.diagnostics.get("default"),
-      id: "default",
-      name:
-        defaultTargetId === "host" || defaultKind === "docker"
-          ? "Docker on this Mac"
-          : "Default computer",
-      kind:
-        defaultTargetId === "host" || defaultKind === "docker"
-          ? "docker"
-          : defaultKind === "kubernetes"
-            ? "kubernetes"
-            : "default",
+    const dockerRow = {
+      id: defaultRowIsDocker ? "default" : "docker",
+      name: "Docker on this Mac",
+      kind: "docker" as const,
       connectionId: null,
-      state: dockerSnapshot.source === "not-reported" ? "unavailable" : dockerState,
+      state: (dockerSnapshot.source === "not-reported"
+        ? "unavailable"
+        : dockerState) as FleetTarget["state"],
       capacity: dockerSnapshot,
       bots: [],
-    });
+    };
+    if (defaultRowIsDocker) {
+      targets.push({ ...this.diagnostics.get("default"), ...dockerRow });
+    } else {
+      targets.push({
+        ...this.diagnostics.get("default"),
+        id: "default",
+        name: "Default computer",
+        kind: defaultKind === "kubernetes" ? "kubernetes" : "default",
+        connectionId: null,
+        state: defaultCapacity.source === "not-reported" ? "unavailable" : "connected",
+        capacity: defaultCapacity,
+        bots: [],
+      });
+      targets.push(dockerRow);
+    }
     // Bound per-list work; the shared host bridge also reserves slots for execution.
     for (let offset = 0; offset < rows.length; offset += 4) {
       const entries = await Promise.all(
@@ -151,8 +181,7 @@ export class FleetCatalog {
       targets.push(...entries);
     }
     for (const bot of bots) {
-      const targetId =
-        bot.computer?.connectionId ?? (bot.computer?.kind === "desktop" ? "host" : defaultTargetId);
+      const targetId = fleetComputerTargetId(bot.computer, { defaultTargetId, targets });
       targets.find((target) => target.id === targetId)?.bots.push({ id: bot.id, name: bot.name });
     }
     // The null binding means the saved deployment default. Do not silently change it to reach a host.

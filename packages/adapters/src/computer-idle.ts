@@ -13,11 +13,19 @@ import { toComputerRef } from "./computer-lifecycle.js";
 import { checkpointComputerWorkspace } from "./computer-workspace.js";
 
 export const DEFAULT_SANDBOX_IDLE_MS = 10 * 60 * 1000;
-const BACKGROUND_WORK_MARKER_PREFIX = "/tmp/ardurbot-background-";
 const BACKGROUND_WORK_IDLE_SENTINEL = "ardurbot-background-idle";
+// The launcher, cancel, and idle probe must share one directory. TMPDIR is not that
+// directory: a shell can see a different TMPDIR than the probe.
+const backgroundMarkerDirectory = [
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion
+  'marker_dir="${ARDURBOT_BACKGROUND_DIR:-/tmp}"',
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion
+  'marker_dir="${marker_dir%/}"',
+];
 
 const backgroundWorkMarker = [
-  `marker="${BACKGROUND_WORK_MARKER_PREFIX}$1-$2-$3"`,
+  ...backgroundMarkerDirectory,
+  'marker="$marker_dir/ardurbot-background-$1-$2-$3"',
   "set -o noclobber",
   'exec 9>"$marker" || exit 1',
   "set +o noclobber",
@@ -28,12 +36,33 @@ export const HOST_BACKGROUND_WORK_LAUNCH = [...backgroundWorkMarker, 'exec bash 
   "\n",
 );
 
+/** The argv the executor uses to wrap one admitted shell command. */
+export function backgroundShellArgv(
+  computerId: string,
+  runId: string,
+  launchId: string,
+  command: string,
+  host = false,
+): string[] {
+  return [
+    "bash",
+    "-c",
+    host ? HOST_BACKGROUND_WORK_LAUNCH : BACKGROUND_WORK_LAUNCH,
+    "ardurbot-background-launch",
+    computerId,
+    runId,
+    launchId,
+    command,
+  ];
+}
+
 /** Terminate background shell wrappers for one cancelled run. Browser teardown stays screen-scoped. */
 export const CANCEL_COMPUTER_RUN_WORK = [
   'computerId="$1"',
   'runId="$2"',
   '[ -n "$computerId" ] && [ -n "$runId" ] || exit 0',
-  `prefix="${BACKGROUND_WORK_MARKER_PREFIX}$computerId-$runId-"`,
+  ...backgroundMarkerDirectory,
+  'prefix="$marker_dir/ardurbot-background-$computerId-$runId-"',
   // Match the timeout wrapper cmdline (still contains the launch tag after exec into the user command).
   `pkill -TERM -f "ardurbot-background-launch $computerId $runId " 2>/dev/null || true`,
   "if [ -d /proc ]; then",
@@ -144,7 +173,8 @@ export async function cancelComputerRunWork(
 }
 
 export const BACKGROUND_WORK_PROBE = [
-  `prefix="${BACKGROUND_WORK_MARKER_PREFIX}$1-"`,
+  ...backgroundMarkerDirectory,
+  'prefix="$marker_dir/ardurbot-background-$1-"',
   `idle() { printf '${BACKGROUND_WORK_IDLE_SENTINEL}\\n'; exit 1; }`,
   'markers=("$prefix"*)',
   "if [ -d /proc ]; then",

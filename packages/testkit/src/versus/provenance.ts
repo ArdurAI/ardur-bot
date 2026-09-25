@@ -144,13 +144,18 @@ export async function inspectHermes(
 }
 
 async function sourceFiles(directory: string): Promise<string[]> {
-  const found: string[] = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const target = path.join(directory, entry.name);
-    if (entry.isDirectory()) found.push(...(await sourceFiles(target)));
-    else if (entry.isFile() && /\.(ts|json|md)$/.test(entry.name)) found.push(target);
+  try {
+    const found: string[] = [];
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) found.push(...(await sourceFiles(target)));
+      else if (entry.isFile() && /\.(ts|json|md)$/.test(entry.name)) found.push(target);
+    }
+    return found;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
   }
-  return found;
 }
 export async function inspectBuild(root = repositoryRoot) {
   const commit = git(root, ["rev-parse", "HEAD"]);
@@ -169,7 +174,14 @@ export async function inspectBuild(root = repositoryRoot) {
     "packages/memory/src",
     "apps/api/src",
   ];
-  const tracked = git(root, [
+  const sourceFile = (file: string) =>
+    /\.(ts|json)$/.test(file) ||
+    (file.startsWith("packages/testkit/src/versus/") && file.endsWith(".md"));
+  // HEAD still names a path after it is staged for deletion, when the index and worktree no longer do.
+  const headTracked = git(root, ["ls-tree", "-r", "--name-only", "HEAD", "--", ...sourceRoots])
+    .split("\n")
+    .filter(sourceFile);
+  const indexed = git(root, [
     "ls-files",
     "--cached",
     "--others",
@@ -178,10 +190,11 @@ export async function inspectBuild(root = repositoryRoot) {
     ...sourceRoots,
   ])
     .split("\n")
-    .filter((file) => /\.(ts|json)$/.test(file));
+    .filter(sourceFile);
   const files = [
     ...new Set([
-      ...tracked,
+      ...headTracked,
+      ...indexed,
       ...(await sourceFiles(path.join(root, "packages/testkit/src/versus"))).map((file) =>
         path.relative(root, file),
       ),

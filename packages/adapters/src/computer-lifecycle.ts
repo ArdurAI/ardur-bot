@@ -149,12 +149,13 @@ export class ComputerBusyError extends Error {
  * renews the lease, and expireComputerControl keeps controlLeaseId when
  * provider revocation fails so reconciliation can retry. Either change fails
  * this compare-and-swap. A non-null lease id is left for that release path.
- * The boot claim stays on provisioningId, so a control write's updatedAt
- * cannot cancel activation.
+ * The activation stamp is preserved explicitly so this cleanup cannot move a
+ * concurrent replacement or idle-suspension fence.
  */
 async function clearFreshBootControlIfUnchanged(
   prisma: PrismaClient,
   computerId: string,
+  activationStamp: Date,
   observed: {
     controlHolder: string;
     controlLeaseExpiresAt: Date | null;
@@ -166,6 +167,9 @@ async function clearFreshBootControlIfUnchanged(
   await prisma.computer.updateMany({
     where: {
       id: computerId,
+      state: "running",
+      provisioningId: null,
+      updatedAt: activationStamp,
       controlHolder: observed.controlHolder,
       controlLeaseId: null,
       controlLeaseExpiresAt: observed.controlLeaseExpiresAt ?? null,
@@ -178,6 +182,7 @@ async function clearFreshBootControlIfUnchanged(
       controlLeaseExpiresAt: null,
       controlBotId: null,
       controlRunId: null,
+      updatedAt: activationStamp,
     },
   });
 }
@@ -364,6 +369,7 @@ export async function provisionComputer(
       context.botId,
       context,
     );
+    const activationStamp = new Date(Math.max(Date.now(), claimStamp.getTime() + 1));
     const activated = await deps.prisma.computer.updateMany({
       where: {
         id: computerId,
@@ -378,14 +384,26 @@ export async function provisionComputer(
         provisioningId: null,
         providerRef: ref.providerRef,
         kind: ref.kind,
+        updatedAt: activationStamp,
       },
     });
     if (activated.count !== 1) {
       throw new ComputerBusyError();
     }
     bootActivated = true;
-    if (!reconnecting) {
-      await clearFreshBootControlIfUnchanged(deps.prisma, computerId, existing, controlHolder);
+    const retryingStaleUserControl =
+      reconnecting &&
+      existing.controlHolder === "user" &&
+      existing.controlLeaseId === null &&
+      !hasActiveComputerControl(existing);
+    if (!reconnecting || retryingStaleUserControl) {
+      await clearFreshBootControlIfUnchanged(
+        deps.prisma,
+        computerId,
+        activationStamp,
+        existing,
+        controlHolder,
+      );
     }
     return ref;
   } catch (error) {

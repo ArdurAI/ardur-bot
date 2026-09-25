@@ -2,6 +2,7 @@ import type {
   IntegrationCatalogList,
   IntegrationConnection,
   IntegrationDescriptor,
+  McpServer,
 } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
@@ -14,6 +15,7 @@ import type { CatalogTab } from "../../../pages/customize/CustomizeControls";
 import { CustomizeToolbar } from "../../../pages/customize/CustomizeControls";
 import { connectorRows } from "../../../pages/customize/connector-rows";
 import { IntegrationTable } from "../../../pages/customize/IntegrationTable";
+import { DirectMcpSearch } from "../DirectMcpSearch";
 import { IntegrationDetails } from "../manage/IntegrationDetails";
 
 export function IntegrationCards({
@@ -26,7 +28,10 @@ export function IntegrationCards({
   const { t } = useLingui();
   const [tab, setTab] = useState<CatalogTab>("catalog");
   const [query, setQuery] = useState("");
+  const [finding, setFinding] = useState(false);
   const [data, setData] = useState<IntegrationCatalogList>({ catalog: [], connections: [] });
+  const [remoteServers, setRemoteServers] = useState<McpServer[]>([]);
+  const [linked, setLinked] = useState<ReadonlySet<string>>(() => new Set());
   const [selected, setSelected] = useState<string | null>(reconnectId ?? null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -42,15 +47,19 @@ export function IntegrationCards({
     return () => onBusyChange?.(false);
   }, [busy, onBusyChange]);
   const refresh = async () => {
-    setData(await refreshIntegrationCatalog());
+    const value = await readIntegrationPage();
+    setData(value.catalog);
+    setRemoteServers(value.servers);
     setError(false);
   };
   useEffect(() => {
     let active = true;
     const load = () => {
-      void refreshIntegrationCatalog()
+      void readIntegrationPage()
         .then((value) => {
-          if (active) setData(value);
+          if (!active) return;
+          setData(value.catalog);
+          setRemoteServers(value.servers);
         })
         .catch(() => {
           if (active) setError(true);
@@ -118,14 +127,16 @@ export function IntegrationCards({
       setBusy(null);
     }
   }
-  const active = data.connections.find(
+  const added = remoteAdditions(data, remoteServers, linked);
+  const listed = { ...data, connections: [...data.connections, ...added.connections] };
+  const active = listed.connections.find(
     (row) =>
       row.id === selected &&
       row.state !== "awaiting-consent" &&
       row.state !== "not-connected" &&
       row.state !== "cancelled",
   );
-  const descriptor = data.catalog.find((entry) => entry.id === active?.catalogId);
+  const descriptor = listed.catalog.find((entry) => entry.id === active?.catalogId);
   if (active && descriptor)
     return (
       <IntegrationDetails
@@ -162,13 +173,38 @@ export function IntegrationCards({
         return null;
     }
   }
-  const rows = connectorRows({ ...data, servers: [], catalogTab: true }).filter(
+  const rows = [
+    ...connectorRows({ ...listed, servers: [], catalogTab: true }),
+    ...connectorRows({ catalog: [], connections: [], servers: added.extra }),
+  ].filter(
     (row) =>
       (tab === "catalog" || !row.id.startsWith("catalog:")) &&
       row.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
   );
   return (
     <div className="space-y-4" data-testid="integration-catalog">
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          aria-expanded={finding}
+          onClick={() => setFinding((open) => !open)}
+        >
+          {t`Find apps`}
+        </Button>
+      </div>
+      {finding ? (
+        <DirectMcpSearch
+          onConnected={async (id) => {
+            setLinked((current) => new Set(current).add(id));
+            try {
+              await refresh();
+            } catch {
+              setError(true);
+            }
+          }}
+        />
+      ) : null}
       <CustomizeToolbar
         tab={tab}
         onTab={setTab}
@@ -189,15 +225,15 @@ export function IntegrationCards({
         rows={rows}
         busy={busy}
         onConnect={(row) => {
-          const entry = data.catalog.find((item) => item.id === row.catalogId);
+          const entry = listed.catalog.find((item) => item.id === row.catalogId);
           if (entry)
             void connect(
               entry,
-              data.connections.find((item) => item.id === row.id),
+              listed.connections.find((item) => item.id === row.id),
             );
         }}
         renderType={(row) => {
-          const entry = data.catalog.find((item) => item.id === row.catalogId);
+          const entry = listed.catalog.find((item) => item.id === row.catalogId);
           return entry?.hostCli && (entry.endpoint || entry.id === "azure") ? (
             <span>
               {t`Desktop`} / {t`Web`}
@@ -207,14 +243,15 @@ export function IntegrationCards({
           );
         }}
         renderActions={(row) => {
-          const entry = data.catalog.find((item) => item.id === row.catalogId)!;
-          const remote = data.connections.find(
+          const entry = listed.catalog.find((item) => item.id === row.catalogId);
+          if (!entry) return null;
+          const remote = listed.connections.find(
             (row) => row.catalogId === entry.id && row.transport !== "host-cli",
           );
-          const local = data.connections.find(
+          const local = listed.connections.find(
             (row) => row.catalogId === entry.id && row.transport === "host-cli",
           );
-          const hostIdentity = data.hostSignIns?.find((row) => row.id === entry.id);
+          const hostIdentity = listed.hostSignIns?.find((row) => row.id === entry.id);
           const identity = hostIdentity?.identity;
           const manage = (row: IntegrationConnection) => (
             <Button variant="outline" onClick={() => setSelected(row.id)}>{t`Manage`}</Button>
@@ -394,4 +431,77 @@ export function IntegrationCards({
       />
     </div>
   );
+}
+
+async function readIntegrationPage() {
+  const [catalog, servers] = await Promise.all([
+    refreshIntegrationCatalog(),
+    rpc.mcp.servers.list(),
+  ]);
+  return { catalog, servers };
+}
+
+/** integrations.list omits remote servers that have no catalog id. */
+function remoteAdditions(
+  data: IntegrationCatalogList,
+  servers: McpServer[],
+  linked: ReadonlySet<string>,
+) {
+  const connections: IntegrationConnection[] = [];
+  const extra: McpServer[] = [];
+  const known = new Set(data.connections.map((row) => row.id));
+  for (const server of servers) {
+    if (known.has(server.id)) continue;
+    const state = liveRemoteState(server, linked);
+    if (!state) continue;
+    const descriptor = data.catalog.find(
+      (entry) =>
+        entry.id === server.catalogId ||
+        (Boolean(entry.endpoint) && entry.endpoint === server.endpoint),
+    );
+    const represented =
+      descriptor &&
+      (data.connections.some(
+        (row) => row.catalogId === descriptor.id && row.transport !== "host-cli",
+      ) ||
+        connections.some((row) => row.catalogId === descriptor.id));
+    if (represented) continue;
+    if (descriptor) {
+      connections.push({
+        id: server.id,
+        catalogId: descriptor.id,
+        state,
+        needsReview: false,
+        spaceToolPolicies: {},
+        manifest: null,
+        transport: server.transport,
+      });
+    } else if (!server.catalogId) {
+      extra.push(
+        state === "connected"
+          ? { ...server, enabled: true, oauthStatus: "connected", connectionState: "connected" }
+          : { ...server, enabled: true, oauthStatus: "reconnect", connectionState: state },
+      );
+    }
+  }
+  return { connections, extra };
+}
+
+function liveRemoteState(
+  server: McpServer,
+  linked: ReadonlySet<string>,
+): IntegrationConnection["state"] | null {
+  if (server.managedBy) return null;
+  if (server.transport !== "streamable_http" && server.transport !== "sse") return null;
+  if (!server.enabled && !linked.has(server.id)) return null;
+  if (
+    linked.has(server.id) ||
+    server.oauthStatus === "connected" ||
+    server.connectionState === "connected"
+  )
+    return "connected";
+  if (server.oauthStatus === "reconnect" || server.connectionState === "needs-sign-in")
+    return "needs-sign-in";
+  if (server.connectionState === "discovery-failed") return "discovery-failed";
+  return null;
 }
