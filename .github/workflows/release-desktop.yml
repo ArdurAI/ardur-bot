@@ -9,10 +9,15 @@ on:
         description: Existing v-prefixed tag to package from dev
         required: true
         type: string
+      evidence_waiver:
+        description: Reason to publish this preview without measured performance evidence
+        required: false
+        type: string
+        default: ""
 
 permissions:
-  actions: read
   contents: read
+  actions: read
 
 concurrency:
   group: release-desktop
@@ -126,6 +131,7 @@ jobs:
       common_runner_sha: ${{ needs.validate.outputs.sha }}
       attempt: "1"
       release_version: ${{ needs.validate.outputs.version }}
+      evidence_waiver: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}
 
   publish:
     name: Publish unsigned pre-release

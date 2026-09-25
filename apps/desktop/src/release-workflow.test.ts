@@ -21,7 +21,7 @@ describe("unsigned desktop release contract", () => {
   });
   it("pins third-party actions and includes every platform without certificates", () => {
     for (const match of workflow.matchAll(/uses:\s+([^\s#]+)/g))
-      expect(match[1]).toMatch(/@[0-9a-f]{40}$/);
+      if (!match[1]?.startsWith("./")) expect(match[1]).toMatch(/@[0-9a-f]{40}$/);
     expect(workflow).toContain("platform: win, arch: x64");
     for (const platform of ["mac", "linux"])
       for (const arch of ["x64", "arm64"])

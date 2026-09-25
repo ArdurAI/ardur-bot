@@ -20,6 +20,7 @@ import { inventoryArtifact } from "../packages/testkit/src/scoreboard/resources/
 import {
   createBudgetPolicy,
   freezeBudgetPolicy,
+  metricBudget,
 } from "../packages/testkit/src/scoreboard/statistics.ts";
 import { releaseNotes } from "./desktop-release.mjs";
 import {
@@ -28,11 +29,15 @@ import {
   auditCommits,
   baselineMeasurementPlan,
   COMMIT_OBJECT_RETENTION_DAYS,
+  durableIndexScope,
   evidenceFor,
+  findPriorIndexArtifact,
+  indexJobHistory,
   parseRevListParents,
   planEvidenceRecords,
   pruneCommitObjects,
   RELEASE_EVIDENCE_RETENTION,
+  RELEASE_POLICY_SHA256,
   REQUIRED_RELEASE_TARGETS,
   readIndex,
   renderScoreboardNotes,
@@ -40,6 +45,7 @@ import {
   SCOREBOARD_INDEX_RELATIVE_PATH,
   samplePlanFor,
   selectCommitRange,
+  verifyPublicationBytes,
   WORKFLOW_ARTIFACT_RETENTION_DAYS,
 } from "./scoreboard-index.mjs";
 
@@ -71,6 +77,7 @@ on:
       mode:
       gate:
       release_version:
+      evidence_waiver:
 concurrency:
   cancel-in-progress: false
 jobs:
@@ -85,6 +92,7 @@ jobs:
       - run: node scripts/desktop-release-assets.mjs version source publication/release-ready
       - env:
           SCOREBOARD_ARTIFACTS: publication/release-ready
+          SCOREBOARD_WAIVER: \${{ inputs.evidence_waiver }}
         run: node scripts/scoreboard-index.mjs release-gate
   index:
     needs: budgets
@@ -93,6 +101,8 @@ jobs:
       group: scoreboard-index-\${{ github.ref }}
       cancel-in-progress: false
     steps:
+      - id: prior
+        run: node scripts/scoreboard-index.mjs prior-index >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           run-id: prior-run
@@ -102,12 +112,19 @@ jobs:
           SCOREBOARD_HEAD: github.event.pull_request.head.sha
           SCOREBOARD_PENDING: needs.budgets.outputs.pending_reason
         run: node scripts/scoreboard-index.mjs index-push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: \${{ steps.prior.outputs.artifact_name }}
       - run: node scripts/scoreboard-index.mjs baseline-decision
       - run: echo retention-days: 90
       - run: echo Measure current revision and retain traces
       - run: echo .context/performance/scoreboard-index
 `;
 const goodRelease = `
+on:
+  workflow_dispatch:
+    inputs:
+      evidence_waiver:
 concurrency:
   cancel-in-progress: false
 jobs:
@@ -116,6 +133,7 @@ jobs:
     uses: ./.github/workflows/performance.yml
     with:
       gate: required
+      evidence_waiver: \${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}
   publish:
     needs: [validate, build, evidence]
     steps:
@@ -332,6 +350,46 @@ function energyPair(binding: {
   };
 }
 
+const SAFETY_COUNTS = [
+  "m11.lazy-boundary-violations",
+  "m13.duplicate-effects",
+  "m13.false-completion",
+  "m13.lost-accepted-work",
+  "m13.unauthorized-effects",
+  "m13.wrong-pin",
+];
+
+function fixtureReleasePolicy(extraGuardrails: { id: string; metricIds: string[] }[] = []) {
+  const selection = { taskIds: [], experimentIds: [], crashBoundaryIds: [], usage: false };
+  return {
+    schemaVersion: 1,
+    suiteVersion: SCOREBOARD_MANIFEST.suiteVersion,
+    manifestHash: contentDigest(SCOREBOARD_MANIFEST),
+    releaseTargets: [...REQUIRED_RELEASE_TARGETS],
+    budget: {
+      mode: "release",
+      required: { metricIds: ["m13.wrong-pin"], ...selection },
+      declarations: {
+        nominalQueue: false,
+        retainedSessionGrowthBytes: null,
+        toolTerminationDeadlineMs: null,
+      },
+      seed: 0x51c0ab1e,
+      resamples: 20_000,
+    },
+    guardrails: [
+      { id: "fixture-safety", metricIds: ["m13.wrong-pin"], ...selection },
+      ...extraGuardrails.map((guardrail) => ({ ...guardrail, ...selection })),
+    ],
+  };
+}
+
+async function writeReleasePolicy(root: string, policy: unknown) {
+  const bytes = `${JSON.stringify(policy, null, 2)}\n`;
+  await writeFile(path.join(root, "release-policy.json"), bytes);
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
 async function writeReleaseCase(count: number, withEnergy: boolean) {
   const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-release-"));
   const artifactRoot = path.join(root, "artifacts");
@@ -405,6 +463,7 @@ async function writeReleaseCase(count: number, withEnergy: boolean) {
     JSON.stringify(createPerformanceEvidenceEnvelope(fixed)),
   );
   await writeFile(path.join(reportsRoot, "policy.json"), JSON.stringify(policy));
+  await writeReleasePolicy(root, fixtureReleasePolicy());
   if (withEnergy) {
     await writeFile(
       path.join(reportsRoot, "energy.json"),
@@ -436,8 +495,13 @@ async function writeReleaseCase(count: number, withEnergy: boolean) {
   return { root, artifactRoot, reportsRoot };
 }
 
-async function gate(caseRoot: Awaited<ReturnType<typeof writeReleaseCase>>, indexName = "index") {
+async function gate(
+  caseRoot: Awaited<ReturnType<typeof writeReleaseCase>>,
+  indexName = "index",
+  extra: Record<string, string> = {},
+) {
   const outputPath = path.join(caseRoot.root, "gate.json");
+  const releasePolicyPath = path.join(caseRoot.root, "release-policy.json");
   const code = await runReleaseGate({
     artifactRoot: caseRoot.artifactRoot,
     reportsRoot: caseRoot.reportsRoot,
@@ -449,6 +513,11 @@ async function gate(caseRoot: Awaited<ReturnType<typeof writeReleaseCase>>, inde
     runnerCommit: A,
     environment: "release-packaged",
     indexedAt: "2026-09-25T00:00:00.000Z",
+    releasePolicyPath,
+    releasePolicySha256: createHash("sha256")
+      .update(await readFile(releasePolicyPath))
+      .digest("hex"),
+    ...extra,
   });
   const parsed = JSON.parse(await readFile(outputPath, "utf8"));
   return { code, gate: parsed, indexRoot: path.join(caseRoot.root, indexName) };
@@ -994,6 +1063,10 @@ describe("release publication gate", () => {
       const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-stage-"));
       await cp(passing.artifactRoot, path.join(root, "artifacts"), { recursive: true });
       await cp(passing.reportsRoot, path.join(root, "reports"), { recursive: true });
+      await cp(
+        path.join(passing.root, "release-policy.json"),
+        path.join(root, "release-policy.json"),
+      );
       return {
         root,
         artifactRoot: path.join(root, "artifacts"),
@@ -1038,6 +1111,10 @@ describe("release publication gate", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-probe-"));
     await cp(passing.artifactRoot, path.join(root, "artifacts"), { recursive: true });
     await cp(passing.reportsRoot, path.join(root, "reports"), { recursive: true });
+    await cp(
+      path.join(passing.root, "release-policy.json"),
+      path.join(root, "release-policy.json"),
+    );
     return {
       root,
       artifactRoot: path.join(root, "artifacts"),
@@ -1229,6 +1306,595 @@ describe("release publication gate", () => {
       await rm(refusedCase.root, { recursive: true, force: true });
     }
   }, 60_000);
+
+  const codes = (value: { reasons: { code: string }[] }) =>
+    value.reasons.map((reason) => reason.code);
+  const WAIVER = "Physical release runners are not provisioned";
+
+  async function stageWithoutEvidence() {
+    const staged = await stagePassing();
+    await rm(staged.reportsRoot, { recursive: true, force: true });
+    await mkdir(staged.reportsRoot);
+    await rm(path.join(staged.artifactRoot, "scoreboard-candidate.json"));
+    return staged;
+  }
+
+  function releaseGateCli(
+    caseRoot: Awaited<ReturnType<typeof stagePassing>>,
+    env: Record<string, string>,
+    indexName: string,
+  ) {
+    const outputPath = path.join(caseRoot.root, `${indexName}.json`);
+    const result = spawnSync(process.execPath, ["scripts/scoreboard-index.mjs", "release-gate"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        SCOREBOARD_ARTIFACTS: caseRoot.artifactRoot,
+        SCOREBOARD_REPORTS: caseRoot.reportsRoot,
+        SCOREBOARD_OUTPUT: outputPath,
+        SCOREBOARD_INDEX: path.join(caseRoot.root, indexName),
+        SCOREBOARD_CANDIDATE: A,
+        SCOREBOARD_BASE: B,
+        SCOREBOARD_FIXED: C,
+        SCOREBOARD_RUNNER: A,
+        SCOREBOARD_ENVIRONMENT: "release-packaged",
+        SCOREBOARD_WAIVER: "",
+        GITHUB_EVENT_NAME: "push",
+        GITHUB_TRIGGERING_ACTOR: "release-operator",
+        ...env,
+      },
+    });
+    return {
+      status: result.status,
+      gate: JSON.parse(readFileSync(outputPath, "utf8")),
+      indexRoot: path.join(caseRoot.root, indexName),
+    };
+  }
+
+  it("still refuses a release with neither reports nor a waiver", async () => {
+    const bare = await stageWithoutEvidence();
+    try {
+      const result = await gate(bare, "index-bare");
+      expect(result.code).not.toBe(0);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(codes(result.gate)).toContain("reports-missing");
+      const records = await readIndex(result.indexRoot);
+      expect(records.map((record) => [record.status, record.pendingReason])).toEqual([
+        ["pending", "reports-missing"],
+      ]);
+      expect(() => renderScoreboardNotes(result.gate)).toThrow();
+    } finally {
+      await rm(bare.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("publishes a dispatched preview without evidence only under a recorded waiver", async () => {
+    const bare = await stageWithoutEvidence();
+    try {
+      const result = await gate(bare, "index-waived", {
+        waiver: `  ${WAIVER}.  `,
+        trigger: "workflow_dispatch",
+        actor: "release-operator",
+      });
+      expect(result.code).toBe(0);
+      expect(result.gate).toMatchObject({
+        path: "waiver",
+        allowPublication: true,
+        reasons: [],
+        waiver: { reason: WAIVER, actor: "release-operator" },
+      });
+      expect(result.gate).not.toHaveProperty("rows");
+      expect(result.gate).not.toHaveProperty("observedSamples");
+      const records = await readIndex(result.indexRoot);
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        status: "waived",
+        tier: "release",
+        role: "candidate",
+        commit: A,
+        pendingReason: null,
+        reportDigest: null,
+        observedSamples: null,
+        waiver: { reason: WAIVER, actor: "release-operator" },
+      });
+      expect(records[0]?.artifactDigests).toHaveLength(result.gate.distributedDigests.length);
+      await verifyPublicationBytes(bare.artifactRoot, result.gate);
+      const notes = releaseNotes(["feat: fixture"], result.gate);
+      const evidence = notes.split("## Performance evidence\n\n")[1] ?? "";
+      expect(evidence.split("\n")[0]).toBe(
+        `This preview was published without measured performance evidence: ${WAIVER}.`,
+      );
+      expect(notes).not.toMatch(/Measured evidence|\| Metric|Observed samples|within-budget/);
+    } finally {
+      await rm(bare.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses a waiver on a tag push and reads the trigger from GitHub", async () => {
+    const bare = await stageWithoutEvidence();
+    try {
+      const pushed = releaseGateCli(bare, { SCOREBOARD_WAIVER: WAIVER }, "index-push-waiver");
+      expect(pushed.status).toBe(1);
+      expect(pushed.gate.allowPublication).toBe(false);
+      expect(codes(pushed.gate)).toContain("waiver-not-permitted");
+      const refused = await readIndex(pushed.indexRoot);
+      expect(refused.map((record) => record.status)).toEqual(["refused"]);
+      expect(refused[0]?.gateCodes).toContain("waiver-not-permitted");
+      expect(refused[0]?.waiver).toBeNull();
+      expect(() => renderScoreboardNotes(pushed.gate)).toThrow();
+      const dispatched = releaseGateCli(
+        bare,
+        { SCOREBOARD_WAIVER: WAIVER, GITHUB_EVENT_NAME: "workflow_dispatch" },
+        "index-dispatch-waiver",
+      );
+      expect(dispatched.status).toBe(0);
+      expect((await readIndex(dispatched.indexRoot))[0]?.waiver).toEqual({
+        reason: WAIVER,
+        actor: "release-operator",
+      });
+    } finally {
+      await rm(bare.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses an unsafe waiver and a waiver beside measured evidence", async () => {
+    const bare = await stageWithoutEvidence();
+    const measured = await stagePassing();
+    try {
+      const unsafe = [
+        "   ",
+        "Ask @maintainer",
+        "See [notes](https://example.invalid)",
+        "first line\nsecond line",
+        "x".repeat(201),
+      ];
+      for (const [index, waiver] of unsafe.entries()) {
+        const result = await gate(bare, `index-invalid-${index}`, {
+          waiver,
+          trigger: "workflow_dispatch",
+          actor: "release-operator",
+        });
+        expect(result.code).toBe(1);
+        expect(codes(result.gate)).toEqual(["invalid-waiver"]);
+      }
+      const actor = await gate(bare, "index-invalid-actor", {
+        waiver: WAIVER,
+        trigger: "workflow_dispatch",
+        actor: "not a login",
+      });
+      expect(codes(actor.gate)).toEqual(["invalid-waiver"]);
+      const both = await gate(measured, "index-waiver-evidence", {
+        waiver: WAIVER,
+        trigger: "workflow_dispatch",
+        actor: "release-operator",
+      });
+      expect(both.code).toBe(1);
+      expect(codes(both.gate)).toContain("waiver-with-evidence");
+      expect(
+        (await readIndex(both.indexRoot)).some((record) =>
+          ["measured", "waived"].includes(record.status),
+        ),
+      ).toBe(false);
+    } finally {
+      await rm(bare.root, { recursive: true, force: true });
+      await rm(measured.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses a supplied policy that differs from the committed release policy", async () => {
+    const probe = await stagePassing();
+    try {
+      const result = releaseGateCli(probe, {}, "index-committed-policy");
+      expect(result.status).toBe(1);
+      expect(codes(result.gate)).toContain("release-policy-mismatch");
+      expect(result.gate.releasePolicySha256).toBe(RELEASE_POLICY_SHA256);
+      expect(
+        (await readIndex(result.indexRoot)).some((record) => record.status === "measured"),
+      ).toBe(false);
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses a release policy whose bytes differ from the pinned digest", async () => {
+    const probe = await stagePassing();
+    try {
+      const pinned = createHash("sha256")
+        .update(await readFile(path.join(probe.root, "release-policy.json")))
+        .digest("hex");
+      const tampered = fixtureReleasePolicy();
+      tampered.guardrails = [];
+      await writeReleasePolicy(probe.root, tampered);
+      const result = await gate(probe, "index-unpinned", { releasePolicySha256: pinned });
+      expect(result.code).toBe(1);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(codes(result.gate)).toContain("release-policy-unpinned");
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("blocks publication while a mandatory guardrail is unknown", async () => {
+    const probe = await stagePassing();
+    try {
+      await writeReleasePolicy(
+        probe.root,
+        fixtureReleasePolicy([
+          { id: "effect-safety", metricIds: ["m13.unauthorized-effects", "m13.wrong-pin"] },
+        ]),
+      );
+      const result = await gate(probe, "index-unknown-guardrail");
+      expect(result.code).toBe(2);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(result.gate.reasons).toContainEqual(
+        expect.objectContaining({ code: "mandatory-evidence-unknown", scope: "effect-safety" }),
+      );
+      const records = await readIndex(result.indexRoot);
+      expect(records.map((record) => [record.status, record.pendingReason])).toEqual([
+        ["pending", "mandatory-evidence-unknown"],
+      ]);
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("committed release policy", () => {
+  it("pins every SCOREBOARD release guardrail and a feasible budget selection", () => {
+    const bytes = readFileSync(new URL("../docs/performance/release-policy.json", import.meta.url));
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(RELEASE_POLICY_SHA256);
+    const policy = JSON.parse(bytes.toString("utf8"));
+    expect(policy.manifestHash).toBe(contentDigest(SCOREBOARD_MANIFEST));
+    expect(policy.suiteVersion).toBe(SCOREBOARD_MANIFEST.suiteVersion);
+    expect(policy.releaseTargets).toEqual(REQUIRED_RELEASE_TARGETS);
+    const guardrails = policy.guardrails as {
+      id: string;
+      metricIds: string[];
+      taskIds: string[];
+      crashBoundaryIds: string[];
+      usage: boolean;
+    }[];
+    expect(guardrails.map((guardrail) => guardrail.id)).toEqual([
+      "effect-safety",
+      "deterministic-tasks",
+      "recovery",
+      "latency",
+      "absolute-targets",
+      "prompt-tokens",
+      "cache-compaction",
+      "bundle",
+      "memory",
+      "energy",
+    ]);
+    const covered = new Set(guardrails.flatMap((guardrail) => guardrail.metricIds));
+    for (const id of SAFETY_COUNTS) expect(covered.has(id)).toBe(true);
+    const required = policy.budget.required;
+    expect([...covered].sort()).toEqual(
+      [...new Set([...required.metricIds, ...SAFETY_COUNTS])].sort(),
+    );
+    expect(guardrails.flatMap((guardrail) => guardrail.taskIds)).toEqual(
+      TASK_DEFINITIONS.map((task) => task.id),
+    );
+    expect(required.taskIds).toEqual(TASK_DEFINITIONS.map((task) => task.id));
+    expect(guardrails.flatMap((guardrail) => guardrail.crashBoundaryIds)).toEqual(
+      CRASH_BOUNDARIES.map((boundary) => boundary.id),
+    );
+    expect(required.crashBoundaryIds).toEqual(CRASH_BOUNDARIES.map((boundary) => boundary.id));
+    expect(required.usage).toBe(true);
+    expect(guardrails.find((guardrail) => guardrail.id === "prompt-tokens")?.usage).toBe(true);
+    expect(policy.budget.declarations).toEqual({
+      nominalQueue: true,
+      retainedSessionGrowthBytes: null,
+      toolTerminationDeadlineMs: null,
+    });
+    const report = syntheticReport(1, "policy-shape");
+    const envelope = createBudgetPolicy(required, {
+      mode: policy.budget.mode,
+      environmentHash: report.environmentHash,
+      scenario: report.scenario,
+      seed: policy.budget.seed,
+      resamples: policy.budget.resamples,
+      ...policy.budget.declarations,
+    });
+    const family = (id: string) =>
+      METRIC_DEFINITIONS.find((definition) => definition.id === id)!.familyId;
+    for (const id of required.metricIds as string[]) {
+      const definition = METRIC_DEFINITIONS.find((item) => item.id === id)!;
+      if (metricBudget(definition, envelope.policy).kind !== "statistical") continue;
+      const members = required.metricIds.filter(
+        (other: string) => family(other) === definition.familyId,
+      ).length;
+      const alpha = (1 - 0.95) / (envelope.policy.familyIds.length * members * 2 * 3 * 6);
+      expect((policy.budget.resamples * alpha) / 2).toBeGreaterThanOrEqual(10);
+    }
+  });
+});
+
+function fixtureGit(cwd: string, args: string[], date = "2026-09-01T00:00:00Z") {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: os.devNull,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_AUTHOR_NAME: "Scoreboard Fixture",
+      GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+      GIT_COMMITTER_NAME: "Scoreboard Fixture",
+      GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+      GIT_AUTHOR_DATE: date,
+      GIT_COMMITTER_DATE: date,
+    },
+  });
+  if (result.status !== 0) throw new Error(`git ${args[0]} failed: ${result.stderr}`);
+  return result.stdout.trim();
+}
+
+async function fixtureCommit(cwd: string, file: string, date?: string) {
+  await mkdir(path.dirname(path.join(cwd, file)), { recursive: true });
+  await writeFile(path.join(cwd, file), `${file}\n`);
+  fixtureGit(cwd, ["add", file], date);
+  fixtureGit(cwd, ["commit", "-q", "-m", file], date);
+  return fixtureGit(cwd, ["rev-parse", "HEAD"]);
+}
+
+describe("commit enumeration", () => {
+  it("indexes a push whose queued run was cancelled, following first parents", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-enumerate-"));
+    const work = path.join(root, "repo");
+    const transport = path.join(root, "transport");
+    await mkdir(work);
+    try {
+      fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      const c0 = await fixtureCommit(work, "c0");
+      const c1 = await fixtureCommit(work, "c1");
+      const c2 = await fixtureCommit(work, "c2");
+      const push = (before: string, head: string, indexRoot: string) =>
+        spawnSync(
+          process.execPath,
+          [path.join(repo, "scripts/scoreboard-index.mjs"), "index-push"],
+          {
+            cwd: work,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              SCOREBOARD_BEFORE: before,
+              SCOREBOARD_BASE: "",
+              SCOREBOARD_HEAD: head,
+              SCOREBOARD_RUNNER: head,
+              SCOREBOARD_MODE: "commit",
+              SCOREBOARD_ROOT: indexRoot,
+            },
+          },
+        );
+      expect(push(c0, c2, transport).status).toBe(0);
+      const c3 = await fixtureCommit(work, "c3");
+      fixtureGit(work, ["checkout", "-q", "-b", "side"]);
+      const side = await fixtureCommit(work, "side");
+      fixtureGit(work, ["checkout", "-q", "dev"]);
+      const c4 = await fixtureCommit(work, "c4");
+      fixtureGit(work, ["merge", "-q", "--no-ff", "side", "-m", "merge side"]);
+      const merge = fixtureGit(work, ["rev-parse", "HEAD"]);
+      const c6 = await fixtureCommit(work, "c6");
+      const restored = path.join(root, "restored");
+      const restore = spawnSync(
+        process.execPath,
+        [
+          "scripts/scoreboard-index.mjs",
+          "restore-index",
+          "--source",
+          transport,
+          "--root",
+          restored,
+          "--missing-reason",
+          "first-run",
+        ],
+        { cwd: repo, encoding: "utf8" },
+      );
+      expect(restore.status).toBe(0);
+      const third = push(c3, c6, restored);
+      expect(third.status).toBe(0);
+      const records = await readIndex(restored);
+      expect(records.map((record) => record.commit)).toEqual([c1, c2, c3, c4, merge, c6]);
+      expect(records.some((record) => record.commit === side)).toBe(false);
+      expect(records.find((record) => record.commit === merge)?.parentCommit).toBe(c4);
+      expect(push(c3, c6, restored).status).toBe(0);
+      expect(await readIndex(restored)).toHaveLength(6);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("prior index chain", () => {
+  const NOW = new Date("2026-09-25T00:00:00.000Z");
+  const REPOSITORY = "ArdurAI/ardur-bot";
+  type Run = {
+    id: number;
+    event: string;
+    head_branch: string;
+    head_sha: string;
+    conclusion: string;
+    created_at: string;
+    head_repository: { full_name: string };
+  };
+  const run = (id: number, createdAt: string, overrides: Partial<Run> = {}): Run => ({
+    id,
+    event: "push",
+    head_branch: "dev",
+    head_sha: String(id).padStart(40, "0"),
+    conclusion: "success",
+    created_at: createdAt,
+    head_repository: { full_name: REPOSITORY },
+    ...overrides,
+  });
+  const artifact = (runId: number, expired: boolean) => ({
+    id: runId * 10,
+    name: "scoreboard-index",
+    expired,
+    workflow_run: { id: runId },
+  });
+
+  function fakeGitHub(
+    runs: Run[],
+    artifacts: Record<number, ReturnType<typeof artifact>[]>,
+    pageSize = 100,
+  ) {
+    const calls: { pathname: string; query: Record<string, string | number> }[] = [];
+    const request = async (pathname: string, query: Record<string, string | number>) => {
+      calls.push({ pathname, query });
+      if (pathname.endsWith("/runs")) {
+        const page = Number(query.page);
+        const workflowRuns = runs.slice((page - 1) * pageSize, page * pageSize);
+        return { total_count: runs.length, workflow_runs: workflowRuns };
+      }
+      const id = Number(/\/runs\/(\d+)\/artifacts$/.exec(pathname)?.[1]);
+      const list = artifacts[id] ?? [];
+      return { total_count: list.length, artifacts: list };
+    };
+    return { request, calls };
+  }
+
+  const find = (
+    github: ReturnType<typeof fakeGitHub>,
+    options: {
+      pageSize?: number;
+      hasIndexJob?: (sha: string) => boolean;
+      indexJobPredates?: (date: Date) => boolean;
+    } = {},
+  ) =>
+    findPriorIndexArtifact({
+      repository: REPOSITORY,
+      branch: "dev",
+      request: github.request,
+      now: NOW,
+      hasIndexJob: () => true,
+      indexJobPredates: () => false,
+      ...options,
+    });
+
+  it("walks back through every page to the newest live artifact", async () => {
+    const github = fakeGitHub(
+      [
+        run(30, "2026-09-20T00:00:00Z"),
+        run(10, "2026-09-01T00:00:00Z"),
+        run(20, "2026-09-10T00:00:00Z"),
+      ],
+      { 10: [artifact(10, false)], 20: [artifact(20, false)] },
+      2,
+    );
+    const result = await find(github, { pageSize: 2 });
+    expect(result.runId).toBe(20);
+    const listings = github.calls.filter((call) => call.pathname.endsWith("/runs"));
+    expect(listings.map((call) => call.query.page)).toEqual([1, 2]);
+    expect(listings[0]?.pathname).toBe(
+      `/repos/${REPOSITORY}/actions/workflows/performance.yml/runs`,
+    );
+    expect(listings[0]?.query).toMatchObject({
+      branch: "dev",
+      event: "push",
+      status: "success",
+      created: ">=2026-06-26",
+      per_page: 2,
+    });
+    const lookups = github.calls.filter((call) => call.pathname.endsWith("/artifacts"));
+    expect(lookups.map((call) => call.pathname)).toEqual([
+      `/repos/${REPOSITORY}/actions/runs/30/artifacts`,
+      `/repos/${REPOSITORY}/actions/runs/20/artifacts`,
+    ]);
+    expect(lookups[0]?.query).toMatchObject({ name: "scoreboard-index" });
+  });
+
+  it("labels a first run, an expired chain and a missing artifact truthfully", async () => {
+    await expect(find(fakeGitHub([], {}))).resolves.toEqual({
+      runId: null,
+      missingReason: "first-run",
+    });
+    await expect(find(fakeGitHub([], {}), { indexJobPredates: () => true })).resolves.toEqual({
+      runId: null,
+      missingReason: "expired-after-90-days-inactivity",
+    });
+    await expect(
+      find(fakeGitHub([run(5, "2026-07-01T00:00:00Z")], { 5: [artifact(5, true)] })),
+    ).resolves.toEqual({ runId: null, missingReason: "expired-after-90-days-inactivity" });
+    await expect(find(fakeGitHub([run(6, "2026-09-01T00:00:00Z")], {}))).resolves.toEqual({
+      runId: null,
+      missingReason: "prior-artifact-missing",
+    });
+    const predating = fakeGitHub([run(7, "2026-09-01T00:00:00Z")], { 7: [artifact(7, false)] });
+    await expect(find(predating, { hasIndexJob: () => false })).resolves.toEqual({
+      runId: null,
+      missingReason: "first-run",
+    });
+    expect(predating.calls.some((call) => call.pathname.endsWith("/artifacts"))).toBe(false);
+  });
+
+  it("never restores from a fork branch named dev or a pull request run", async () => {
+    const github = fakeGitHub(
+      [
+        run(40, "2026-09-20T00:00:00Z", {
+          event: "pull_request",
+          head_repository: { full_name: "someone/ardur-bot" },
+        }),
+        run(41, "2026-09-19T00:00:00Z", { head_repository: { full_name: "someone/ardur-bot" } }),
+        run(42, "2026-09-18T00:00:00Z", { event: "pull_request" }),
+      ],
+      { 40: [artifact(40, false)], 41: [artifact(41, false)], 42: [artifact(42, false)] },
+    );
+    await expect(find(github)).resolves.toEqual({ runId: null, missingReason: "first-run" });
+    expect(github.calls.some((call) => call.pathname.endsWith("/artifacts"))).toBe(false);
+    expect(durableIndexScope({ eventName: "push", ref: "refs/heads/dev" })).toBe(true);
+    expect(durableIndexScope({ eventName: "push", ref: "refs/heads/main" })).toBe(true);
+    for (const scope of [
+      { eventName: "pull_request", ref: "refs/pull/7/merge" },
+      { eventName: "pull_request", ref: "refs/heads/dev" },
+      { eventName: "workflow_dispatch", ref: "refs/heads/dev" },
+      { eventName: "push", ref: "refs/heads/feature" },
+      { eventName: "push", ref: "refs/tags/v1.0.0" },
+    ])
+      expect(durableIndexScope(scope)).toBe(false);
+    const cli = spawnSync(process.execPath, ["scripts/scoreboard-index.mjs", "prior-index"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: "pull_request",
+        GITHUB_REF: "refs/pull/7/merge",
+        GITHUB_REPOSITORY: REPOSITORY,
+        GITHUB_API_URL: "http://127.0.0.1:9",
+        GH_TOKEN: "",
+      },
+    });
+    expect(cli.status).toBe(0);
+    expect(cli.stdout.split("\n").filter(Boolean)).toEqual([
+      "durable=false",
+      "run_id=",
+      "missing_reason=non-durable-check",
+      "artifact_name=scoreboard-index-check",
+    ]);
+  });
+
+  it("proves a first run from git history that predates the retention window", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-history-"));
+    try {
+      fixtureGit(root, ["init", "-q", "-b", "dev"]);
+      const old = await fixtureCommit(root, "README.md", "2026-01-01T00:00:00Z");
+      const added = await fixtureCommit(
+        root,
+        "scripts/scoreboard-index.mjs",
+        "2026-09-01T00:00:00Z",
+      );
+      const history = indexJobHistory(root);
+      expect(history.hasIndexJob(old)).toBe(false);
+      expect(history.hasIndexJob(added)).toBe(true);
+      expect(history.indexJobPredates(new Date("2026-06-26T00:00:00.000Z"))).toBe(false);
+      expect(history.indexJobPredates(new Date("2026-09-02T00:00:00.000Z"))).toBe(true);
+      expect(history.hasIndexJob("not-a-commit")).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("workflow contracts", () => {
@@ -1289,6 +1955,33 @@ describe("workflow contracts", () => {
     expect(() => assertWorkflowContracts(goodPerformance, noCleanup)).toThrow(/draft/);
   });
 
+  it("passes a waiver to the gate only from a manual dispatch", () => {
+    const guarded = `\${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}`;
+    const unguarded = goodRelease.replace(guarded, `\${{ inputs.evidence_waiver }}`);
+    expect(() => assertWorkflowContracts(goodPerformance, unguarded)).toThrow(/waiver/);
+    const unseen = goodPerformance.replace(`SCOREBOARD_WAIVER: \${{ inputs.evidence_waiver }}`, "");
+    expect(() => assertWorkflowContracts(unseen, goodRelease)).toThrow(/waiver/);
+    expect(releaseYaml).toContain(`evidence_waiver: ${guarded}`);
+  });
+
+  it("rejects an index lookup that trusts the newest run or uploads a check as durable", () => {
+    const newest = goodPerformance.replace(
+      "prior-index >>",
+      "prior-index --jq '.workflow_runs[0].id' >>",
+    );
+    expect(() => assertWorkflowContracts(newest, goodRelease)).toThrow(/newest run/);
+    const branch = goodPerformance.replace(
+      'run: node scripts/scoreboard-index.mjs prior-index >> "$GITHUB_OUTPUT"',
+      `run: gh api -f branch="\${{ github.head_ref }}"`,
+    );
+    expect(() => assertWorkflowContracts(branch, goodRelease)).toThrow(/prior-index/);
+    const durable = goodPerformance.replace(
+      `name: \${{ steps.prior.outputs.artifact_name }}`,
+      "name: scoreboard-index",
+    );
+    expect(() => assertWorkflowContracts(durable, goodRelease)).toThrow(/artifact name/);
+  });
+
   it("documents where the index lives and how long evidence is kept", () => {
     expect(docs).toContain(
       "The historical scoreboard is the local directory `.context/performance/scoreboard-index`.",
@@ -1299,5 +1992,9 @@ describe("workflow contracts", () => {
     );
     expect(docs).toContain("github-release-lifetime");
     expect(docs).toContain("A pending record is never deleted to hide an earlier measurement.");
+    expect(docs).toContain("Building the physical evidence runner is out of scope");
+    expect(docs).toContain(
+      "This preview was published without measured performance evidence: <reason>.",
+    );
   });
 });

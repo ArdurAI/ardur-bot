@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, cp, mkdir, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -7,10 +7,32 @@ import { tsImport } from "tsx/esm/api";
 
 /** Local historical scoreboard. Workflow artifacts are a transport copy, not this store. */
 export const SCOREBOARD_INDEX_RELATIVE_PATH = ".context/performance/scoreboard-index";
-export const INDEX_SCHEMA_VERSION = 3;
+export const INDEX_SCHEMA_VERSION = 4;
 export const COMMIT_OBJECT_RETENTION_DAYS = 180;
 export const WORKFLOW_ARTIFACT_RETENTION_DAYS = 90;
 export const RELEASE_EVIDENCE_RETENTION = "github-release-lifetime";
+/** Changing the committed release policy is a reviewed change to this digest. */
+export const RELEASE_POLICY_SHA256 =
+  "dbc81d2cd48aae6ddd5ec7c5fde042f6219cf89fd9610a59e5ed1df4c2e55a0e";
+const RELEASE_POLICY_FILE = fileURLToPath(
+  new URL("../docs/performance/release-policy.json", import.meta.url),
+);
+const INDEX_ARTIFACT = "scoreboard-index";
+const INDEX_SCRIPT = "scripts/scoreboard-index.mjs";
+const CHAIN_ORIGINS = [
+  "first-run",
+  "expired-after-90-days-inactivity",
+  "prior-artifact-missing",
+  "non-durable-check",
+];
+const SAFETY_METRIC_IDS = [
+  "m13.wrong-pin",
+  "m13.unauthorized-effects",
+  "m13.duplicate-effects",
+  "m13.lost-accepted-work",
+  "m13.false-completion",
+  "m11.lazy-boundary-violations",
+];
 export const REQUIRED_RELEASE_TARGETS = Object.freeze([
   "desktop-darwin-arm64",
   "desktop-darwin-x64",
@@ -35,6 +57,7 @@ export const PENDING_REASONS = Object.freeze([
   "missing-fixed-release",
   "release-commit-mismatch",
   "unmapped-artifact",
+  "mandatory-evidence-unknown",
 ]);
 const GENESIS = "0".repeat(64);
 const RECORD_KEYS = [
@@ -64,9 +87,11 @@ const RECORD_KEYS = [
   "supersedes",
   "expiresRecord",
   "chainOrigin",
+  "waiver",
   "previousHash",
 ];
-const V2_RECORD_KEYS = RECORD_KEYS.filter((key) => key !== "chainOrigin");
+const V3_RECORD_KEYS = RECORD_KEYS.filter((key) => key !== "waiver");
+const V2_RECORD_KEYS = V3_RECORD_KEYS.filter((key) => key !== "chainOrigin");
 const LEGACY_RECORD_KEYS = V2_RECORD_KEYS.filter((key) => key !== "gateCodes");
 const DIRECTORY_TARGETS = {
   "desktop-mac-arm64": "desktop-darwin-arm64",
@@ -82,13 +107,22 @@ const TARGET_PLATFORM = {
   "desktop-linux-arm64": "linux",
   "desktop-win32-x64": "win32",
 };
-const FAILURE_EXIT_CODES = new Set([
-  "artifact-digest-mismatch",
+const REFUSAL_CODES = new Set([
   "safety-failure",
   "budget-regression",
   "required-task-failed",
+  "release-policy-unpinned",
+  "release-policy-mismatch",
+  "waiver-not-permitted",
+  "invalid-waiver",
+  "waiver-with-evidence",
+]);
+const FAILURE_EXIT_CODES = new Set([
+  ...REFUSAL_CODES,
+  "artifact-digest-mismatch",
   "unmapped-artifact",
 ]);
+const REPORT_FILES = ["parent.json", "candidate.json", "fixed-release.json", "policy.json"];
 const PRIVATE_MARKERS = [
   "/Users/",
   "/home/",
@@ -128,6 +162,7 @@ function loadScoreboard() {
     SCOREBOARD_MANIFEST: manifest.SCOREBOARD_MANIFEST,
     createPerformanceEvidenceEnvelope: report.createPerformanceEvidenceEnvelope,
     parsePerformanceEvidenceEnvelope: report.parsePerformanceEvidenceEnvelope,
+    assertRequiredEvidence: report.assertRequiredEvidence,
     comparePerformanceEvidence: statistics.comparePerformanceEvidence,
     packagedCoverage: plan.packagedCoverage,
     RELEASE_TARGETS: plan.RELEASE_TARGETS,
@@ -182,6 +217,88 @@ function assertPublicValue(value) {
     for (const item of Object.values(value)) assertPublicValue(item);
   }
 }
+
+/** Waiver text lands in public release notes, so it stays one plain sentence without markup. */
+export function parseEvidenceWaiver(reason, actor) {
+  if (typeof reason !== "string" || typeof actor !== "string") return null;
+  const text = reason.trim().replace(/\.+$/, "").trim();
+  if (
+    !/^[A-Za-z0-9 .,;:'"()!?&%+/-]{1,200}$/.test(text) ||
+    !/[A-Za-z]/.test(text) ||
+    text.includes("://") ||
+    !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$/.test(actor)
+  )
+    return null;
+  try {
+    assertPublicValue([text, actor]);
+  } catch {
+    return null;
+  }
+  return { reason: text, actor };
+}
+
+async function loadReleasePolicy(file, expectedSha256) {
+  const scoreboard = await loadScoreboard();
+  try {
+    const bytes = await readFile(file);
+    const digestValue = sha256(bytes);
+    if (digestValue !== expectedSha256) return null;
+    const policy = JSON.parse(bytes.toString("utf8"));
+    exactKeys(policy, [
+      "schemaVersion",
+      "suiteVersion",
+      "manifestHash",
+      "releaseTargets",
+      "budget",
+      "guardrails",
+    ]);
+    exactKeys(policy.budget, ["mode", "required", "declarations", "seed", "resamples"]);
+    if (
+      policy.schemaVersion !== 1 ||
+      policy.suiteVersion !== scoreboard.SCOREBOARD_MANIFEST.suiteVersion ||
+      policy.manifestHash !== scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST) ||
+      policy.budget.mode !== "release" ||
+      policy.releaseTargets.join(",") !== REQUIRED_RELEASE_TARGETS.join(",") ||
+      !Array.isArray(policy.guardrails) ||
+      !policy.guardrails.length
+    )
+      return null;
+    for (const guardrail of policy.guardrails) {
+      exactKeys(guardrail, [
+        "id",
+        "metricIds",
+        "taskIds",
+        "experimentIds",
+        "crashBoundaryIds",
+        "usage",
+      ]);
+      opaque(guardrail.id);
+    }
+    return { sha256: digestValue, policy };
+  } catch {
+    return null;
+  }
+}
+
+function suppliedPolicyMatches(releasePolicy, supplied, canonicalSerialize) {
+  try {
+    const { policy } = supplied;
+    return (
+      canonicalSerialize({
+        manifestHash: policy.manifestHash,
+        mode: policy.mode,
+        required: policy.required,
+        declarations: policy.declarations,
+        seed: policy.analysis.seed,
+        resamples: policy.analysis.resamples,
+      }) ===
+      canonicalSerialize({ manifestHash: releasePolicy.manifestHash, ...releasePolicy.budget })
+    );
+  } catch {
+    return false;
+  }
+}
+
 function sameKey(record, key) {
   return (
     record.commit === key.commit &&
@@ -413,7 +530,9 @@ async function readIndexUnlocked(root) {
         ? LEGACY_RECORD_KEYS
         : record?.schemaVersion === 2
           ? V2_RECORD_KEYS
-          : RECORD_KEYS;
+          : record?.schemaVersion === 3
+            ? V3_RECORD_KEYS
+            : RECORD_KEYS;
     exactKeys(record, [...keys, "recordHash"]);
     const actual = hashRecord(record, contentDigest);
     if (record.recordHash !== actual || record.previousHash !== previous)
@@ -496,6 +615,27 @@ function artifactName(name) {
     fail("unsafe-artifact-name", "unsafe-artifact-name");
 }
 
+function storedArtifacts(values, releaseTargets) {
+  const stored = (Array.isArray(values) ? values : []).map((artifact) => {
+    exactKeys(artifact, ["name", "sha256", "bytes", "target"], "unsafe-artifact-name");
+    artifactName(artifact.name);
+    digest(artifact.sha256);
+    if (!Number.isSafeInteger(artifact.bytes) || artifact.bytes < 0)
+      fail("invalid-digest", "invalid-digest");
+    if (artifact.target !== null && !releaseTargets.includes(artifact.target))
+      fail("unknown-target", "unknown-target");
+    return {
+      name: artifact.name,
+      sha256: artifact.sha256,
+      bytes: artifact.bytes,
+      target: artifact.target,
+    };
+  });
+  return stored.sort((left, right) =>
+    left.sha256 < right.sha256 ? -1 : left.sha256 > right.sha256 ? 1 : 0,
+  );
+}
+
 async function normalizeRecord(input, existing) {
   const scoreboard = await loadScoreboard();
   const publicInput = { ...input };
@@ -511,9 +651,12 @@ async function normalizeRecord(input, existing) {
   if (input.fixedReleaseCommit !== null) sha40(input.fixedReleaseCommit);
   sha40(input.runnerCommit);
   timestamp(input.indexedAt);
-  if (!["measured", "pending", "expired", "rejected", "refused"].includes(input.status))
+  if (!["measured", "pending", "expired", "rejected", "refused", "waived"].includes(input.status))
     fail("invalid-status", "invalid-status");
   if (!["commit", "release"].includes(input.tier)) fail("invalid-tier", "invalid-tier");
+  if (input.status === "waived" && input.tier !== "release")
+    fail("invalid-status", "invalid-status");
+  if (input.status !== "waived" && input.waiver != null) fail("invalid-record", "invalid-record");
   if (!["candidate", "parent", "fixed-release"].includes(input.role))
     fail("invalid-role", "invalid-role");
   if (!Number.isSafeInteger(input.attempt) || input.attempt < 1)
@@ -547,12 +690,10 @@ async function normalizeRecord(input, existing) {
     supersedes: input.supersedes,
     expiresRecord: input.expiresRecord ?? null,
     chainOrigin: existing.length === 0 ? (input.chainOrigin ?? "first-run") : null,
+    waiver: null,
     previousHash: existing.at(-1)?.recordHash ?? GENESIS,
   };
-  if (
-    body.chainOrigin !== null &&
-    !["first-run", "expired-after-90-days-inactivity"].includes(body.chainOrigin)
-  )
+  if (body.chainOrigin !== null && !CHAIN_ORIGINS.includes(body.chainOrigin))
     fail("invalid-chain-origin", "invalid-chain-origin");
   const prior = existing.filter((record) => sameKey(record, body));
   if (body.status === "pending" && prior.some((record) => record.status === "measured"))
@@ -590,6 +731,13 @@ async function normalizeRecord(input, existing) {
       digest(input.reportDigest);
       body.reportDigest = input.reportDigest;
     }
+  } else if (input.status === "waived") {
+    if (input.pendingReason !== null) fail("invalid-reason", "invalid-reason");
+    body.waiver = parseEvidenceWaiver(input.waiver?.reason, input.waiver?.actor);
+    if (!body.waiver || body.waiver.reason !== input.waiver.reason)
+      fail("invalid-waiver", "invalid-waiver");
+    body.artifactDigests = storedArtifacts(input.artifactDigests, scoreboard.RELEASE_TARGETS);
+    if (!body.artifactDigests.length) fail("artifact-digest-mismatch", "artifact-digest-mismatch");
   } else {
     const envelope = input.envelope?.report
       ? scoreboard.parsePerformanceEvidenceEnvelope(input.envelope)
@@ -604,25 +752,7 @@ async function normalizeRecord(input, existing) {
     body.observedSamples = measuredMetrics.length
       ? Math.min(...measuredMetrics.map((metric) => metric.observations.length))
       : null;
-    const digests = Array.isArray(input.artifactDigests) ? input.artifactDigests : [];
-    const stored = digests.map((artifact) => {
-      exactKeys(artifact, ["name", "sha256", "bytes", "target"], "unsafe-artifact-name");
-      artifactName(artifact.name);
-      digest(artifact.sha256);
-      if (!Number.isSafeInteger(artifact.bytes) || artifact.bytes < 0)
-        fail("invalid-digest", "invalid-digest");
-      if (artifact.target !== null && !scoreboard.RELEASE_TARGETS.includes(artifact.target))
-        fail("unknown-target", "unknown-target");
-      return {
-        name: artifact.name,
-        sha256: artifact.sha256,
-        bytes: artifact.bytes,
-        target: artifact.target,
-      };
-    });
-    stored.sort((left, right) =>
-      left.sha256 < right.sha256 ? -1 : left.sha256 > right.sha256 ? 1 : 0,
-    );
+    const stored = storedArtifacts(input.artifactDigests, scoreboard.RELEASE_TARGETS);
     const buildArtifacts = envelope.report.artifacts.filter(
       (artifact) => artifact.kind === "build",
     );
@@ -687,8 +817,7 @@ export async function appendIndexRecord(root, input, options = {}) {
 const CHAIN_ORIGIN_FILE = ".chain-origin";
 
 export async function restoreIndex(source, root, missingReason) {
-  if (!["first-run", "expired-after-90-days-inactivity"].includes(missingReason))
-    fail("invalid-chain-origin", "invalid-chain-origin");
+  if (!CHAIN_ORIGINS.includes(missingReason)) fail("invalid-chain-origin", "invalid-chain-origin");
   if (await exists(recordsPath(source))) {
     await readIndex(source);
     if (await exists(root)) {
@@ -706,8 +835,7 @@ export async function restoreIndex(source, root, missingReason) {
 async function chainOrigin(root) {
   try {
     const value = (await readFile(path.join(root, CHAIN_ORIGIN_FILE), "utf8")).trim();
-    if (!["first-run", "expired-after-90-days-inactivity"].includes(value))
-      fail("invalid-chain-origin", "invalid-chain-origin");
+    if (!CHAIN_ORIGINS.includes(value)) fail("invalid-chain-origin", "invalid-chain-origin");
     return value;
   } catch (error) {
     if (error instanceof ScoreboardIndexError) throw error;
@@ -969,16 +1097,7 @@ function metricSummary(report, prefix) {
 }
 
 function safetySummary(report) {
-  const safety = report.metrics.filter((metric) =>
-    [
-      "m13.wrong-pin",
-      "m13.unauthorized-effects",
-      "m13.duplicate-effects",
-      "m13.lost-accepted-work",
-      "m13.false-completion",
-      "m11.lazy-boundary-violations",
-    ].includes(metric.id),
-  );
+  const safety = report.metrics.filter((metric) => SAFETY_METRIC_IDS.includes(metric.id));
   const measured = safety.filter((metric) =>
     metric.observations.some((item) => item.value !== null),
   );
@@ -1052,11 +1171,18 @@ export async function evaluatePublicationGate(input) {
     reasons.push({ code, scope, detail: text });
   };
   if (input.unmapped) push("unmapped-artifact", "artifacts");
+  const releasePolicy = input.releasePolicy ?? null;
+  if (!releasePolicy) push("release-policy-unpinned", "release-policy");
   let verdict = null;
   let candidateReport = null;
   if (!input.parent || !input.candidate || !input.fixedRelease || !input.policy) {
     push("reports-missing", "reports");
   } else {
+    if (
+      releasePolicy &&
+      !suppliedPolicyMatches(releasePolicy.policy, input.policy, scoreboard.canonicalSerialize)
+    )
+      push("release-policy-mismatch", "release-policy");
     verdict = scoreboard.comparePerformanceEvidence({
       policy: input.policy,
       parent: input.parent,
@@ -1066,6 +1192,14 @@ export async function evaluatePublicationGate(input) {
     for (const reason of verdict.reasons) push(reason.code, reason.scope, reason.detail);
     candidateReport = verdict.evidence?.candidate.report ?? null;
   }
+  if (candidateReport && releasePolicy)
+    for (const { id, ...selection } of releasePolicy.policy.guardrails) {
+      try {
+        scoreboard.assertRequiredEvidence(candidateReport, selection);
+      } catch (error) {
+        push("mandatory-evidence-unknown", id, error instanceof Error ? error.message : undefined);
+      }
+    }
   const files = input.files ?? [];
   assertPublicValue(
     files.map(({ target, name, sha256: digestValue, bytes }) => ({
@@ -1226,11 +1360,13 @@ export async function evaluatePublicationGate(input) {
   );
   const gate = {
     schemaVersion: INDEX_SCHEMA_VERSION,
+    path: "measured",
     allowPublication,
     exitCode,
     reasons: unique,
     unknowns: [...new Set(unknowns)],
     humanAcceptance: "separate",
+    releasePolicySha256: releasePolicy?.sha256 ?? null,
     suiteVersion: scoreboard.SCOREBOARD_MANIFEST.suiteVersion,
     suiteHash: scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST),
     environment: input.environment,
@@ -1274,15 +1410,46 @@ function cell(value) {
 }
 
 export function renderScoreboardNotes(gate) {
+  if (gate?.path === "waiver") {
+    exactKeys(
+      gate,
+      [
+        "schemaVersion",
+        "path",
+        "allowPublication",
+        "exitCode",
+        "reasons",
+        "waiver",
+        "distributedDigests",
+      ],
+      "invalid-gate",
+    );
+    const waiver = parseEvidenceWaiver(gate.waiver?.reason, gate.waiver?.actor);
+    if (
+      gate.allowPublication !== true ||
+      gate.reasons.length ||
+      !waiver ||
+      waiver.reason !== gate.waiver.reason
+    )
+      fail("notes-require-validated-gate", "Release notes require a publication gate that passed.");
+    return [
+      "## Performance evidence",
+      "",
+      `This preview was published without measured performance evidence: ${waiver.reason}.`,
+      "",
+    ].join("\n");
+  }
   exactKeys(
     gate,
     [
       "schemaVersion",
+      "path",
       "allowPublication",
       "exitCode",
       "reasons",
       "unknowns",
       "humanAcceptance",
+      "releasePolicySha256",
       "suiteVersion",
       "suiteHash",
       "environment",
@@ -1312,6 +1479,7 @@ export function renderScoreboardNotes(gate) {
     "invalid-gate",
   );
   if (
+    gate.path !== "measured" ||
     gate.allowPublication !== true ||
     gate.humanAcceptance !== "separate" ||
     gate.releaseEligible !== true
@@ -1392,6 +1560,119 @@ async function appendVisible(root, input) {
   }
 }
 
+function releaseRecordBase(options, suiteVersion, environmentHash) {
+  return {
+    tier: "release",
+    mode: "release",
+    suiteVersion,
+    environment: options.environment,
+    environmentHash,
+    indexedAt: options.indexedAt ?? new Date().toISOString(),
+    runnerCommit: options.runnerCommit,
+    fixedReleaseCommit: options.fixedReleaseSha || null,
+    root: options.indexRoot,
+  };
+}
+
+function candidateKey(options, suiteHash) {
+  return {
+    commit: options.candidateSha,
+    suiteHash,
+    environment: options.environment,
+    role: "candidate",
+    tier: "release",
+  };
+}
+
+async function recordUnpublished(options, gate, common) {
+  const scoreboard = await loadScoreboard();
+  const gateCodes = [...new Set(gate.reasons.map((reason) => reason.code))].sort();
+  const refusal = gateCodes.some((code) => REFUSAL_CODES.has(code));
+  const reason = PENDING_REASONS.includes(gate.reasons[0]?.code)
+    ? gate.reasons[0].code
+    : "reports-missing";
+  if (options.candidateSha && /^[a-f0-9]{40}$/.test(options.candidateSha)) {
+    const records = await readIndex(options.indexRoot);
+    const key = candidateKey(options, scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST));
+    const prior = records.filter((record) => sameKey(record, key));
+    await appendVisible(options.indexRoot, {
+      ...common,
+      status: refusal
+        ? "refused"
+        : prior.some((record) => record.status === "measured")
+          ? "rejected"
+          : "pending",
+      commit: options.candidateSha,
+      parentCommit: /^[a-f0-9]{40}$/.test(options.baseSha ?? "") ? options.baseSha : null,
+      role: "candidate",
+      attempt: nextAttempt(records, key),
+      supersedes: prior.at(-1)?.recordHash ?? null,
+      pendingReason: refusal ? null : reason,
+      gateCodes: refusal ? gateCodes : [],
+    });
+  }
+  return gate.exitCode;
+}
+
+/** A waiver publishes installers only; it never reads, produces or implies measurements. */
+async function runWaivedRelease(options, files, unmapped) {
+  const scoreboard = await loadScoreboard();
+  const reasons = [];
+  const push = (code, scope) => reasons.push({ code, scope, detail: code });
+  if (unmapped) push("unmapped-artifact", "artifacts");
+  if (options.trigger !== "workflow_dispatch") push("waiver-not-permitted", "trigger");
+  const waiver = parseEvidenceWaiver(options.waiver, options.actor ?? "");
+  if (!waiver) push("invalid-waiver", "waiver");
+  const supplied = await Promise.all(
+    [...REPORT_FILES, "energy.json"].map((name) => exists(path.join(options.reportsRoot, name))),
+  );
+  if (supplied.some(Boolean) || files.some((file) => file.name.startsWith("scoreboard-")))
+    push("waiver-with-evidence", "reports");
+  const primaries = primaryInstallers(files);
+  for (const target of REQUIRED_RELEASE_TARGETS)
+    if (!primaries.some((file) => file.target === target)) push("missing-platform", target);
+  const allowPublication = reasons.length === 0;
+  const gate = {
+    schemaVersion: INDEX_SCHEMA_VERSION,
+    path: "waiver",
+    allowPublication,
+    exitCode: allowPublication
+      ? 0
+      : reasons.some((reason) => FAILURE_EXIT_CODES.has(reason.code))
+        ? 1
+        : 2,
+    reasons,
+    waiver: allowPublication ? waiver : null,
+    distributedDigests: files.map(({ target, name, sha256: digestValue, bytes }) => ({
+      target,
+      name,
+      sha256: digestValue,
+      bytes,
+    })),
+  };
+  assertPublicValue(gate);
+  await mkdir(path.dirname(options.outputPath), { recursive: true });
+  await writeFile(options.outputPath, `${scoreboard.canonicalSerialize(gate)}\n`);
+  const common = releaseRecordBase(options, scoreboard.SCOREBOARD_MANIFEST.suiteVersion, null);
+  if (!allowPublication) return recordUnpublished(options, gate, common);
+  const records = await readIndex(options.indexRoot);
+  const key = candidateKey(options, scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST));
+  const prior = records.filter((record) => sameKey(record, key));
+  await appendIndexRecord(options.indexRoot, {
+    ...common,
+    status: "waived",
+    commit: options.candidateSha,
+    parentCommit: /^[a-f0-9]{40}$/.test(options.baseSha ?? "") ? options.baseSha : null,
+    role: "candidate",
+    attempt: nextAttempt(records, key),
+    supersedes: prior.at(-1)?.recordHash ?? null,
+    pendingReason: null,
+    artifactDigests: gate.distributedDigests,
+    waiver,
+  });
+  return 0;
+}
+
 export async function runReleaseGate(options) {
   const scoreboard = await loadScoreboard();
   let files = [];
@@ -1402,14 +1683,15 @@ export async function runReleaseGate(options) {
     if (!(error instanceof ScoreboardIndexError) || error.code !== "unmapped-artifact") throw error;
     unmapped = true;
   }
+  if (typeof options.waiver === "string" && options.waiver !== "")
+    return runWaivedRelease(options, files, unmapped);
   const installers = files.filter((file) => installerRank(file.name) < 5);
   let energyTargets = new Set();
   const energyFile = path.join(options.reportsRoot, "energy.json");
   if (await exists(energyFile))
     energyTargets = await validatedEnergy(energyFile, options.artifactRoot, installers);
-  const names = ["parent.json", "candidate.json", "fixed-release.json", "policy.json"];
   const [parent, candidate, fixedRelease, policy] = await Promise.all(
-    names.map((name) => readJson(path.join(options.reportsRoot, name))),
+    REPORT_FILES.map((name) => readJson(path.join(options.reportsRoot, name))),
   );
   const attachedCandidate = files.find((file) => file.name === "scoreboard-candidate.json");
   let attachedEvidenceDigest = null;
@@ -1440,57 +1722,19 @@ export async function runReleaseGate(options) {
     baseSha: options.baseSha,
     fixedReleaseSha: options.fixedReleaseSha || null,
     environment: options.environment,
+    releasePolicy: await loadReleasePolicy(
+      options.releasePolicyPath ?? RELEASE_POLICY_FILE,
+      options.releasePolicySha256 ?? RELEASE_POLICY_SHA256,
+    ),
   });
   await mkdir(path.dirname(options.outputPath), { recursive: true });
   await writeFile(options.outputPath, `${scoreboard.canonicalSerialize(gate)}\n`);
-  const indexedAt = options.indexedAt ?? new Date().toISOString();
-  const common = {
-    tier: "release",
-    mode: "release",
-    suiteVersion: gate.suiteVersion,
-    environment: options.environment,
-    environmentHash: candidate?.report?.environmentHash ?? null,
-    indexedAt,
-    runnerCommit: options.runnerCommit,
-    fixedReleaseCommit: options.fixedReleaseSha || null,
-    root: options.indexRoot,
-  };
-  if (!gate.allowPublication) {
-    const gateCodes = [...new Set(gate.reasons.map((reason) => reason.code))].sort();
-    const refusal = gateCodes.some((code) =>
-      ["safety-failure", "budget-regression", "required-task-failed"].includes(code),
-    );
-    const reason = PENDING_REASONS.includes(gate.reasons[0]?.code)
-      ? gate.reasons[0].code
-      : "reports-missing";
-    if (options.candidateSha && /^[a-f0-9]{40}$/.test(options.candidateSha)) {
-      const records = await readIndex(options.indexRoot);
-      const key = {
-        commit: options.candidateSha,
-        suiteHash: gate.suiteHash,
-        environment: options.environment,
-        role: "candidate",
-        tier: "release",
-      };
-      const prior = records.filter((record) => sameKey(record, key));
-      await appendVisible(options.indexRoot, {
-        ...common,
-        status: refusal
-          ? "refused"
-          : prior.some((record) => record.status === "measured")
-            ? "rejected"
-            : "pending",
-        commit: options.candidateSha,
-        parentCommit: /^[a-f0-9]{40}$/.test(options.baseSha ?? "") ? options.baseSha : null,
-        role: "candidate",
-        attempt: nextAttempt(records, key),
-        supersedes: prior.at(-1)?.recordHash ?? null,
-        pendingReason: refusal ? null : reason,
-        gateCodes: refusal ? gateCodes : [],
-      });
-    }
-    return gate.exitCode;
-  }
+  const common = releaseRecordBase(
+    options,
+    gate.suiteVersion,
+    candidate?.report?.environmentHash ?? null,
+  );
+  if (!gate.allowPublication) return recordUnpublished(options, gate, common);
   const roles = [
     [
       "candidate",
@@ -1534,6 +1778,28 @@ export async function runReleaseGate(options) {
   return 0;
 }
 
+function firstParentRevList(args) {
+  return parseRevListParents(
+    execFileSync("git", ["rev-list", "--first-parent", "--parents", ...args], {
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+    }),
+  );
+}
+
+/** A cancelled pending run leaves a gap that only the chain itself can reveal. */
+function commitsSinceIndexed(records, head) {
+  const indexed = new Set(
+    records
+      .filter((record) => record.tier === "commit" && record.role === "candidate")
+      .map((record) => record.commit),
+  );
+  if (!indexed.size) return null;
+  const history = firstParentRevList([head]);
+  const nearest = history.findIndex((item) => indexed.has(item.commit));
+  return nearest < 0 ? null : history.slice(0, nearest).reverse();
+}
+
 export async function runIndexPush(options) {
   const scoreboard = await loadScoreboard();
   let commits = options.commits ?? null;
@@ -1550,7 +1816,13 @@ export async function runIndexPush(options) {
       head: options.head,
     });
     try {
-      if (range.kind === "single") {
+      const resumed =
+        (options.mode ?? "commit") === "commit"
+          ? commitsSinceIndexed(await readIndex(options.root), range.head)
+          : null;
+      if (resumed) {
+        commits = resumed;
+      } else if (range.kind === "single") {
         let parentCommit = null;
         try {
           const parent = execFileSync("git", ["rev-parse", `${range.head}^`], {
@@ -1562,19 +1834,9 @@ export async function runIndexPush(options) {
         }
         commits = [{ commit: range.head, parentCommit }];
       } else if (range.kind === "history") {
-        commits = parseRevListParents(
-          execFileSync("git", ["rev-list", "--reverse", "--parents", range.head], {
-            encoding: "utf8",
-          }),
-        );
+        commits = firstParentRevList(["--reverse", range.head]);
       } else {
-        commits = parseRevListParents(
-          execFileSync(
-            "git",
-            ["rev-list", "--reverse", "--parents", `${range.base}..${range.head}`],
-            { encoding: "utf8" },
-          ),
-        );
+        commits = firstParentRevList(["--reverse", `${range.base}..${range.head}`]);
       }
     } catch (error) {
       if (error instanceof ScoreboardIndexError) throw error;
@@ -1664,6 +1926,120 @@ export async function verifyPublicationBytes(root, gate) {
   return actual;
 }
 
+export function durableIndexScope({ eventName, ref }) {
+  return eventName === "push" && (ref === "refs/heads/dev" || ref === "refs/heads/main");
+}
+
+/**
+ * Run order is undocumented, filtered listings stop at 1,000 results, and runs themselves
+ * age out with their artifacts, so the whole retention window is listed and sorted here.
+ */
+export async function findPriorIndexArtifact({
+  repository,
+  branch,
+  request,
+  now = new Date(),
+  hasIndexJob,
+  indexJobPredates,
+  pageSize = 100,
+}) {
+  const windowStart = new Date(
+    now.getTime() - (WORKFLOW_ARTIFACT_RETENTION_DAYS + 1) * 24 * 60 * 60 * 1000,
+  );
+  const runs = [];
+  for (let page = 1; runs.length < 1000; page += 1) {
+    const response = await request(`/repos/${repository}/actions/workflows/performance.yml/runs`, {
+      branch,
+      event: "push",
+      status: "success",
+      created: `>=${windowStart.toISOString().slice(0, 10)}`,
+      exclude_pull_requests: "true",
+      per_page: pageSize,
+      page,
+    });
+    const listed = Array.isArray(response?.workflow_runs) ? response.workflow_runs : [];
+    runs.push(...listed);
+    if (listed.length < pageSize) break;
+  }
+  const candidates = runs
+    .filter(
+      (run) =>
+        run?.event === "push" &&
+        run.head_branch === branch &&
+        run.head_repository?.full_name === repository &&
+        run.conclusion === "success" &&
+        Number.isSafeInteger(run.id) &&
+        hasIndexJob(run.head_sha),
+    )
+    .sort(
+      (left, right) =>
+        Date.parse(right.created_at) - Date.parse(left.created_at) || right.id - left.id,
+    );
+  let expired = false;
+  for (const run of candidates.slice(0, 50)) {
+    const response = await request(`/repos/${repository}/actions/runs/${run.id}/artifacts`, {
+      name: INDEX_ARTIFACT,
+      per_page: 100,
+    });
+    const artifacts = (Array.isArray(response?.artifacts) ? response.artifacts : []).filter(
+      (artifact) => artifact?.name === INDEX_ARTIFACT && artifact.workflow_run?.id === run.id,
+    );
+    if (artifacts.some((artifact) => artifact.expired === false))
+      return { runId: run.id, missingReason: "prior-artifact-missing" };
+    if (artifacts.some((artifact) => artifact.expired === true)) expired = true;
+  }
+  if (expired) return { runId: null, missingReason: "expired-after-90-days-inactivity" };
+  if (candidates.length) return { runId: null, missingReason: "prior-artifact-missing" };
+  return {
+    runId: null,
+    missingReason: indexJobPredates(windowStart) ? "expired-after-90-days-inactivity" : "first-run",
+  };
+}
+
+/** Git, not the run list, proves a first run: expired runs are deleted with their artifacts. */
+export function indexJobHistory(cwd = process.cwd()) {
+  const git = (args) => spawnSync("git", args, { cwd, encoding: "utf8" });
+  const hasIndexJob = (sha) =>
+    typeof sha === "string" &&
+    /^[a-f0-9]{40}$/.test(sha) &&
+    git(["cat-file", "-e", `${sha}:${INDEX_SCRIPT}`]).status === 0;
+  return {
+    hasIndexJob,
+    indexJobPredates(date) {
+      const result = git([
+        "rev-list",
+        "--first-parent",
+        "-1",
+        `--before=${date.toISOString()}`,
+        "HEAD",
+      ]);
+      return result.status === 0 && hasIndexJob(result.stdout.trim());
+    },
+  };
+}
+
+function githubRequest(apiUrl, token) {
+  return async (pathname, query) => {
+    const url = new URL(`${apiUrl.replace(/\/+$/, "")}${pathname}`);
+    for (const [key, value] of Object.entries(query)) url.searchParams.set(key, String(value));
+    let response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          accept: "application/vnd.github+json",
+          authorization: `Bearer ${token}`,
+          "x-github-api-version": "2022-11-28",
+        },
+      });
+    } catch {
+      response = null;
+    }
+    if (!response?.ok)
+      fail("infrastructure-unavailable", "The workflow run history could not be read.");
+    return response.json();
+  };
+}
+
 function jobBlock(yaml, name) {
   const marker = `\n  ${name}:\n`;
   const start = yaml.indexOf(marker);
@@ -1733,8 +2109,26 @@ export function assertWorkflowContracts(performanceText, releaseText) {
   requireText(index, "inputs.gate != 'required'", "advisory index condition");
   requireText(index, "group: scoreboard-index-", "serialized index writers");
   requireText(index, "cancel-in-progress: false", "index writers must wait");
+  requireText(
+    index,
+    "node scripts/scoreboard-index.mjs prior-index",
+    "index restores via prior-index",
+  );
+  if (index.includes("workflow_runs[0]")) errors.push("index trusts the newest run");
+  if (index.includes("github.head_ref")) errors.push("index restores a pull request branch");
+  requireText(
+    index,
+    `name: \${{ steps.prior.outputs.artifact_name }}`,
+    "index upload must use the scoped artifact name",
+  );
+  requireText(performanceText, "evidence_waiver:", "performance waiver input");
   const releaseGate = jobBlock(performanceText, "release-gate");
   requireText(releaseGate, "if: inputs.gate == 'required'", "required gate condition");
+  requireText(
+    releaseGate,
+    `SCOREBOARD_WAIVER: \${{ inputs.evidence_waiver }}`,
+    "the gate must see the waiver",
+  );
   const gateCommand = releaseGate.split("node scripts/scoreboard-index.mjs release-gate")[0] ?? "";
   if (gateCommand.split("\n").slice(-8).join("\n").includes("continue-on-error"))
     errors.push("release gate continues on error");
@@ -1759,6 +2153,18 @@ export function assertWorkflowContracts(performanceText, releaseText) {
   requireText(evidence, "needs: [validate, build]", "evidence follows packaging");
   if (evidence.includes("continue-on-error") || evidence.includes("gh release create"))
     errors.push("evidence job bypasses the gate");
+  requireText(releaseText, "evidence_waiver:", "release waiver input");
+  requireText(evidence, "evidence_waiver:", "evidence receives the waiver");
+  if (
+    releaseText
+      .split("\n")
+      .some(
+        (line) =>
+          line.includes("inputs.evidence_waiver") &&
+          !line.includes("github.event_name == 'workflow_dispatch' && inputs.evidence_waiver"),
+      )
+  )
+    errors.push("a waiver may only come from a manual dispatch");
   const publish = jobBlock(releaseText, "publish");
   requireText(publish, "needs: [validate, build, evidence]", "publish needs evidence");
   requireText(publish, "scoreboard-publication/gate.json", "notes bind the gate");
@@ -1832,6 +2238,32 @@ async function main(argv) {
     await restoreIndex(args.source, args.root, args["missing-reason"]);
     return;
   }
+  if (command === "prior-index") {
+    const ref = env("GITHUB_REF");
+    const durable = durableIndexScope({ eventName: env("GITHUB_EVENT_NAME"), ref });
+    let prior = { runId: null, missingReason: "non-durable-check" };
+    if (durable) {
+      const repository = env("GITHUB_REPOSITORY");
+      if (!/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(repository))
+        fail("invalid-repository", "The repository name is invalid.");
+      prior = await findPriorIndexArtifact({
+        repository,
+        branch: ref.slice("refs/heads/".length),
+        request: githubRequest(env("GITHUB_API_URL") || "https://api.github.com", env("GH_TOKEN")),
+        ...indexJobHistory(),
+      });
+    }
+    process.stdout.write(
+      [
+        `durable=${durable}`,
+        `run_id=${prior.runId ?? ""}`,
+        `missing_reason=${prior.missingReason}`,
+        `artifact_name=${durable ? INDEX_ARTIFACT : `${INDEX_ARTIFACT}-check`}`,
+        "",
+      ].join("\n"),
+    );
+    return;
+  }
   if (command === "release-gate") {
     process.exitCode = await runReleaseGate({
       artifactRoot: env("SCOREBOARD_ARTIFACTS") || "release-artifacts",
@@ -1843,6 +2275,9 @@ async function main(argv) {
       fixedReleaseSha: env("SCOREBOARD_FIXED"),
       runnerCommit: env("SCOREBOARD_RUNNER"),
       environment: env("SCOREBOARD_ENVIRONMENT") || "release-packaged",
+      waiver: env("SCOREBOARD_WAIVER"),
+      trigger: env("GITHUB_EVENT_NAME"),
+      actor: env("GITHUB_TRIGGERING_ACTOR"),
     });
     return;
   }
@@ -1867,7 +2302,7 @@ async function main(argv) {
   }
   fail(
     "invalid-argument",
-    "Expected baseline-decision, restore-index, index-push, release-gate, verify-publication, list-upload, or check-workflows.",
+    "Expected baseline-decision, restore-index, prior-index, index-push, release-gate, verify-publication, list-upload, or check-workflows.",
   );
 }
 

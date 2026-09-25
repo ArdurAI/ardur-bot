@@ -49,6 +49,11 @@ on:
         required: false
         type: string
         default: ""
+      evidence_waiver:
+        description: Dispatch-only reason to publish a preview without measured evidence
+        required: false
+        type: string
+        default: ""
 
 permissions:
   actions: read
@@ -185,35 +190,11 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
-      - name: Find the previous successful index artifact for this branch
+      - name: Find the newest restorable index chain for this repository
         id: prior
         env:
           GH_TOKEN: ${{ github.token }}
-          INDEX_BRANCH: ${{ github.head_ref || github.ref_name }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          run_id="$(
-            gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/performance.yml/runs" \
-              -f branch="$INDEX_BRANCH" -f status=success -f per_page=100 \
-              --jq '.workflow_runs[0].id // empty'
-          )"
-          if [[ -z "$run_id" ]]; then
-            echo "run_id=" >> "$GITHUB_OUTPUT"
-            echo "missing_reason=first-run" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          artifact_id="$(
-            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
-              --jq '[.artifacts[] | select(.name == "scoreboard-index" and .expired == false) | .id][0] // empty'
-          )"
-          if [[ -z "$artifact_id" ]]; then
-            echo "run_id=" >> "$GITHUB_OUTPUT"
-            echo "missing_reason=expired-after-90-days-inactivity" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "missing_reason=expired-after-90-days-inactivity" >> "$GITHUB_OUTPUT"
+        run: node scripts/scoreboard-index.mjs prior-index >> "$GITHUB_OUTPUT"
       - name: Download the previous index chain
         if: steps.prior.outputs.run_id != ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -240,10 +221,10 @@ jobs:
           SCOREBOARD_ROOT: .context/performance/scoreboard-index
         run: node scripts/scoreboard-index.mjs index-push
       - name: Upload the index transport copy
-        if: always()
+        if: always() && steps.prior.outputs.artifact_name != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: scoreboard-index
+          name: ${{ steps.prior.outputs.artifact_name }}
           path: .context/performance/scoreboard-index
           retention-days: 90
           if-no-files-found: warn
@@ -298,6 +279,7 @@ jobs:
           SCOREBOARD_REPORTS: scoreboard-reports
           SCOREBOARD_OUTPUT: publication/scoreboard-publication/gate.json
           SCOREBOARD_INDEX: publication/scoreboard-publication/index
+          SCOREBOARD_WAIVER: ${{ inputs.evidence_waiver }}
         run: node scripts/scoreboard-index.mjs release-gate
       - name: Upload the publication gate
         if: always()
