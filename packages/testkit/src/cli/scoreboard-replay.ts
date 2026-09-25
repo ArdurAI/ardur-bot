@@ -44,7 +44,11 @@ for (const key of args.keys())
     throw new Error(`Unknown argument: ${key}`);
 
 async function digestDiff() {
-  const tracked = execFileSync("git", ["diff", "--binary", "HEAD"], { encoding: "utf8" });
+  const tracked = execFileSync("git", ["diff", "--binary", "HEAD"], {
+    encoding: "utf8",
+    // A reviewed refresh of the 30 tapes can exceed the subprocess default of 1 MiB.
+    maxBuffer: 32 * 1024 * 1024,
+  });
   const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], {
     encoding: "utf8",
   })
@@ -295,18 +299,21 @@ async function main() {
           });
           console.error(`${task.id}: incomplete`);
         } finally {
-          await writeFile(
-            path.join(output, `${task.id}.json`),
-            `${canonicalSerialize(results.at(-1))}\n`,
-            { flag: "wx" },
-          );
-          if (originalHome === undefined) delete process.env.HOME;
-          else process.env.HOME = originalHome;
-          restoreNetwork?.();
-          await closeProvider?.();
-          await closeTools?.();
-          await database.close();
-          await rm(directory, { recursive: true, force: true });
+          try {
+            await writeFile(
+              path.join(output, `${task.id}.json`),
+              `${canonicalSerialize(results.at(-1))}\n`,
+              { flag: "wx" },
+            );
+          } finally {
+            if (originalHome === undefined) delete process.env.HOME;
+            else process.env.HOME = originalHome;
+            restoreNetwork?.();
+            await closeProvider?.();
+            await closeTools?.();
+            await database.close();
+            await rm(directory, { recursive: true, force: true });
+          }
         }
       }
     } finally {
