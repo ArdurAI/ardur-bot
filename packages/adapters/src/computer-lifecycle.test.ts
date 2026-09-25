@@ -1011,6 +1011,7 @@ describe("computer provisioning", () => {
             provisioningId: null,
             providerRef: next.providerRef,
             kind: next.kind,
+            updatedAt: expect.any(Date),
           },
         });
         expect(destroy).not.toHaveBeenCalled();
