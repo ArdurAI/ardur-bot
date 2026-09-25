@@ -2117,6 +2117,45 @@ describe("commit enumeration", () => {
     }
   }, 60_000);
 
+  it("stops an empty chain at the retention window instead of before", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-window-"));
+    const work = path.join(root, "repo");
+    const indexRoot = path.join(root, "index");
+    await mkdir(work);
+    try {
+      fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      const ancient = await fixtureCommit(work, "ancient", "2020-01-01T00:00:00Z");
+      const oldest = await fixtureCommit(work, "c0");
+      const middle = await fixtureCommit(work, "c1");
+      const head = await fixtureCommit(work, "c2");
+      const pushed = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "index-push"],
+        {
+          cwd: work,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            SCOREBOARD_BEFORE: middle,
+            SCOREBOARD_BASE: "",
+            SCOREBOARD_HEAD: head,
+            SCOREBOARD_RUNNER: head,
+            SCOREBOARD_MODE: "commit",
+            SCOREBOARD_ROOT: indexRoot,
+          },
+        },
+      );
+      expect(pushed.status).toBe(0);
+      const records = await readIndex(indexRoot);
+      expect(records.map((record) => record.commit)).toEqual([oldest, middle, head]);
+      expect(records.some((record) => record.commit === ancient)).toBe(false);
+      expect(records[0]?.enumerationStart).toBe(oldest);
+      expect(records[0]?.enumerationReason).toBe("empty-chain-retention-window");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("backfills to the newest chained commit when none is an ancestor of head", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-no-ancestor-"));
     const work = path.join(root, "repo");
