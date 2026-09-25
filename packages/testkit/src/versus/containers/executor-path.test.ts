@@ -258,6 +258,147 @@ describe("container executor contract", () => {
     expect(spawned).toBe(false);
   });
 
+  it("does not report cancellation until a running guest has stopped", async () => {
+    const session = stubSession();
+    let releaseDestroy!: () => void;
+    const destroyGate = new Promise<void>((resolve) => {
+      releaseDestroy = resolve;
+    });
+    let destroyStarted = false;
+    session.destroy = async () => {
+      destroyStarted = true;
+      await destroyGate;
+    };
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    session.exec = async (_argv: string[], options?: { signal?: AbortSignal }) => {
+      markStarted();
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      options?.signal?.addEventListener("abort", () => child.emit("close", null), { once: true });
+      return child;
+    };
+    const budget = selfTestBudget();
+    const ledger = new BudgetLedger(budget);
+    ledger.open("cancel-running");
+    const admission = new TrialAdmission("cancel-running", ledger, () => undefined, ["shell"]);
+    admission.bindModel(route, budget.model.id);
+    const computer = new ContainerComputer(session, getTask("task-01"), admission);
+    const controller = new AbortController();
+    const current = context(controller.signal);
+    const ref = await computer.provision({ botId: "home-1", homePath: "unused" }, context());
+    const run = await startRuntime(admission, {
+      botId: "bot-1",
+      threadId: "thread",
+      runId: "run",
+      prompt: "synthetic",
+      instructions: "",
+      history: [],
+      tools: "none",
+      model: { provider: "custom", id: budget.model.id, baseUrl: route },
+      executeTool: async () => {
+        const events = [];
+        for await (const event of computer.execute(
+          ref,
+          { argv: ["printf", "still-running"], timeoutMs: 5_000 },
+          current,
+        ))
+          events.push(event);
+        return events;
+      },
+    });
+    await run.authorizeTool!("shell");
+    let settled = false;
+    const pending = run.executeTool!("shell", {}, "cancel-running");
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    try {
+      await started;
+      controller.abort();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(settled).toBe(false);
+      expect(destroyStarted).toBe(true);
+    } finally {
+      releaseDestroy();
+    }
+    const error = await pending.then(
+      () => null,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/cancelled/);
+    expect((error as Error).message).not.toMatch(/uncertain/);
+  });
+
+  it("reports a timed-out stop of a running guest as uncertain", async () => {
+    const session = stubSession();
+    session.destroy = () => new Promise(() => undefined);
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    session.exec = async (_argv: string[], options?: { signal?: AbortSignal }) => {
+      markStarted();
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      options?.signal?.addEventListener("abort", () => child.emit("close", null), { once: true });
+      return child;
+    };
+    const budget = selfTestBudget();
+    const ledger = new BudgetLedger(budget);
+    ledger.open("cancel-uncertain");
+    const admission = new TrialAdmission("cancel-uncertain", ledger, () => undefined, ["shell"]);
+    admission.bindModel(route, budget.model.id);
+    const computer = new ContainerComputer(session, getTask("task-01"), admission);
+    computer.cancelWaitMs = 80;
+    const controller = new AbortController();
+    const current = context(controller.signal);
+    const ref = await computer.provision({ botId: "home-1", homePath: "unused" }, context());
+    const run = await startRuntime(admission, {
+      botId: "bot-1",
+      threadId: "thread",
+      runId: "run",
+      prompt: "synthetic",
+      instructions: "",
+      history: [],
+      tools: "none",
+      model: { provider: "custom", id: budget.model.id, baseUrl: route },
+      executeTool: async () => {
+        const events = [];
+        for await (const event of computer.execute(
+          ref,
+          { argv: ["printf", "still-running"], timeoutMs: 5_000 },
+          current,
+        ))
+          events.push(event);
+        return events;
+      },
+    });
+    await run.authorizeTool!("shell");
+    const pending = run.executeTool!("shell", {}, "cancel-uncertain");
+    await started;
+    controller.abort();
+    const error = await pending.then(
+      () => null,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      "The command's cancellation timed out, so its outcome is uncertain.",
+    );
+    expect((error as Error).message.toLowerCase()).not.toContain("cancelled");
+  });
+
   it("keeps the team-folder preparation outside admission and refuses other commands", async () => {
     const session = stubSession();
     const mkdirs: string[] = [];

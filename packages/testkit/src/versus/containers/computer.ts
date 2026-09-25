@@ -15,9 +15,14 @@ import { requireValue } from "../budget.js";
 import type { TrialAdmission } from "./admission.js";
 import type { ContainerSession } from "./session.js";
 
+const CANCELLED_COMMAND = "Container command cancelled or exceeded output/deadline budget";
+const UNCERTAIN_STOP = "The command's cancellation timed out, so its outcome is uncertain.";
+
 /** A real cached-image computer. Every file and command executes in the same bounded tmpfs/cgroup. */
 export class ContainerComputer implements SandboxProvider {
   private ref: ComputerRef | null = null;
+  /** How long a cancellation may wait before its outcome is uncertain. */
+  cancelWaitMs = 12_000;
   constructor(
     readonly session: ContainerSession,
     private readonly task: TaskContract,
@@ -216,6 +221,34 @@ export class ContainerComputer implements SandboxProvider {
     yield { type: "stdout", data: "artifacts" };
     yield { type: "exit", code: 0 };
   }
+  private async haltGuest(child: object | null): Promise<"cancelled" | "uncertain"> {
+    const work = (async () => {
+      const signalGuest = this.session.signalGuest;
+      if (child && typeof signalGuest === "function") {
+        try {
+          await signalGuest.call(this.session, child);
+        } catch {
+          // Removing the container stops a guest the signal could not reach.
+        }
+      }
+      await this.session.destroy();
+    })();
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        work,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error("timeout")), this.cancelWaitMs);
+        }),
+      ]);
+      return "cancelled";
+    } catch {
+      void work.catch(() => undefined);
+      return "uncertain";
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
   private async *runProduct(
     argv: string[],
     request: CommandRequest,
@@ -225,56 +258,92 @@ export class ContainerComputer implements SandboxProvider {
       stderr = "";
     let bytes = 0,
       stopped = false;
+    let child: {
+      stdout: NodeJS.ReadableStream | null;
+      stderr: NodeJS.ReadableStream | null;
+      once(event: "error", listener: (error: Error) => void): unknown;
+      once(event: "close", listener: (code: number | null) => void): unknown;
+    } | null = null;
     const stdoutDecoder = new StringDecoder("utf8"),
       stderrDecoder = new StringDecoder("utf8");
-    const abort = () => {
-      stopped = true;
-      void this.session.destroy();
+    let haltPromise: Promise<"cancelled" | "uncertain"> | null = null;
+    let notifyStop: (outcome: "cancelled" | "uncertain") => void = () => undefined;
+    const stopResult = new Promise<"cancelled" | "uncertain">((resolve) => {
+      notifyStop = resolve;
+    });
+    const halt = () => {
+      if (!haltPromise) {
+        stopped = true;
+        haltPromise = this.haltGuest(child).then((outcome) => {
+          notifyStop(outcome);
+          return outcome;
+        });
+      }
+      return haltPromise;
     };
-    if (context.signal.aborted) abort();
-    else {
-      context.signal.addEventListener("abort", abort, { once: true });
-      if (context.signal.aborted) abort();
-    }
+    const onAbort = () => {
+      void halt();
+    };
+    if (context.signal.aborted) onAbort();
+    else context.signal.addEventListener("abort", onAbort, { once: true });
     const timer = setTimeout(
-      abort,
+      onAbort,
       Math.min(request.timeoutMs ?? this.session.policy.wallMs, this.session.policy.wallMs),
     );
-    const cancelled = () =>
-      new Error("Container command cancelled or exceeded output/deadline budget");
+    const cancelled = () => new Error(CANCELLED_COMMAND);
+    const uncertain = () => {
+      const error = new Error(UNCERTAIN_STOP);
+      (error as Error & { uncertain: boolean }).uncertain = true;
+      return error;
+    };
+    const throwStop = async () => {
+      const outcome = await halt();
+      if (outcome === "uncertain") throw uncertain();
+      throw cancelled();
+    };
     try {
-      if (stopped || context.signal.aborted) throw cancelled();
-      const child = await this.session.exec(argv, {
+      if (stopped || context.signal.aborted) await throwStop();
+      child = await this.session.exec(argv, {
         cwd: `/opt/data/${this.name(request.cwd ?? "")}`,
         signal: context.signal,
       });
-      if (context.signal.aborted) abort();
-      child.stdout!.on("data", (data: Buffer) => {
+      if (stopped || context.signal.aborted) await throwStop();
+      child.stdout?.on("data", (data: Buffer) => {
         bytes += data.length;
-        if (bytes > 2 * 1024 * 1024) abort();
+        if (bytes > 2 * 1024 * 1024) onAbort();
         if (!stopped) stdout += stdoutDecoder.write(data);
       });
-      child.stderr!.on("data", (data: Buffer) => {
+      child.stderr?.on("data", (data: Buffer) => {
         bytes += data.length;
-        if (bytes > 2 * 1024 * 1024) abort();
+        if (bytes > 2 * 1024 * 1024) onAbort();
         if (!stopped) stderr += stderrDecoder.write(data);
       });
-      const code = await new Promise<number>((resolve, reject) => {
-        child.once("error", reject);
-        child.once("close", (exitCode) => resolve(exitCode ?? 1));
+      const closed = new Promise<number>((resolve, reject) => {
+        child?.once("error", (error) => {
+          if (!stopped) reject(error);
+        });
+        child?.once("close", (exitCode) => resolve(exitCode ?? 1));
       });
-      if (stopped || context.signal.aborted) throw cancelled();
+      const winner = await Promise.race([
+        closed.then((code) => ({ kind: "exit" as const, code })),
+        stopResult.then((outcome) => ({ kind: "stop" as const, outcome })),
+      ]);
+      if (winner.kind === "stop" || stopped || context.signal.aborted) {
+        const outcome = winner.kind === "stop" ? winner.outcome : await stopResult;
+        if (outcome === "uncertain") throw uncertain();
+        throw cancelled();
+      }
       stdout += stdoutDecoder.end();
       stderr += stderrDecoder.end();
       if (stdout) yield { type: "stdout", data: stdout };
       if (stderr) yield { type: "stderr", data: stderr };
-      yield { type: "exit", code };
+      yield { type: "exit", code: winner.code };
     } catch (error) {
-      if (stopped || context.signal.aborted) throw cancelled();
+      if (stopped || context.signal.aborted) await throwStop();
       throw error;
     } finally {
       clearTimeout(timer);
-      context.signal.removeEventListener("abort", abort);
+      context.signal.removeEventListener("abort", onAbort);
     }
   }
   async snapshotFiles(_homeKey: string, botId: string) {

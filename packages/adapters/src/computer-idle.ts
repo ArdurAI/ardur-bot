@@ -14,10 +14,11 @@ import { checkpointComputerWorkspace } from "./computer-workspace.js";
 
 export const DEFAULT_SANDBOX_IDLE_MS = 10 * 60 * 1000;
 const BACKGROUND_WORK_IDLE_SENTINEL = "ardurbot-background-idle";
-// /tmp is not writable in every confined computer. Honor an explicit directory, then TMPDIR.
+// The launcher, cancel, and idle probe must share one directory. TMPDIR is not that
+// directory: a shell can see a different TMPDIR than the probe.
 const backgroundMarkerDirectory = [
   // biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion
-  'marker_dir="${ARDURBOT_BACKGROUND_DIR:-${TMPDIR:-/tmp}}"',
+  'marker_dir="${ARDURBOT_BACKGROUND_DIR:-/tmp}"',
   // biome-ignore lint/suspicious/noTemplateCurlyInString: shell parameter expansion
   'marker_dir="${marker_dir%/}"',
 ];

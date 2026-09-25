@@ -442,14 +442,17 @@ describe("background work launch and probe", () => {
   );
 
   it.skipIf(process.platform === "win32")(
-    "opens its activity marker in TMPDIR so a read-only /tmp does not block the command",
+    "opens its activity marker in ARDURBOT_BACKGROUND_DIR so a read-only /tmp does not block the command",
     async () => {
       const directory = mkdtempSync(join(tmpdir(), "ardurbot-background-dir-"));
+      const ignored = mkdtempSync(join(tmpdir(), "ardurbot-background-tmpdir-"));
       const markerId = "bounded-tmp";
       const marker = join(directory, `ardurbot-background-${markerId}-run-1-launch`);
       const leaked = `/tmp/ardurbot-background-${markerId}-run-1-launch`;
+      const moved = join(ignored, `ardurbot-background-${markerId}-run-1-launch`);
       markers.add(marker);
       markers.add(leaked);
+      markers.add(moved);
       const launched = spawn(
         "bash",
         [
@@ -466,8 +469,8 @@ describe("background work launch and probe", () => {
           env: {
             ...process.env,
             HOME: shellHome,
-            TMPDIR: directory,
-            ARDURBOT_BACKGROUND_DIR: "",
+            TMPDIR: ignored,
+            ARDURBOT_BACKGROUND_DIR: directory,
           },
         },
       );
@@ -481,8 +484,52 @@ describe("background work launch and probe", () => {
         expect(stdout).toBe("bounded");
         expect(existsSync(marker)).toBe(true);
         expect(existsSync(leaked)).toBe(false);
+        expect(existsSync(moved)).toBe(false);
       } finally {
         rmSync(directory, { force: true, recursive: true });
+        rmSync(ignored, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "keeps the probe and the marker together when only the launcher sees TMPDIR",
+    async () => {
+      const launcherTmp = mkdtempSync(join(tmpdir(), "ardurbot-launcher-tmp-"));
+      const markerId = "tmpdir-split";
+      const shared = `/tmp/ardurbot-background-${markerId}-run-1-launch`;
+      const moved = join(launcherTmp, `ardurbot-background-${markerId}-run-1-launch`);
+      markers.add(shared);
+      markers.add(moved);
+      const launcherEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        HOME: shellHome,
+        TMPDIR: launcherTmp,
+      };
+      delete launcherEnv.ARDURBOT_BACKGROUND_DIR;
+      const probeEnv: NodeJS.ProcessEnv = { ...process.env, HOME: shellHome };
+      delete probeEnv.ARDURBOT_BACKGROUND_DIR;
+      delete probeEnv.TMPDIR;
+      const launched = spawn(
+        "bash",
+        [
+          "-c",
+          BACKGROUND_WORK_LAUNCH,
+          "ardurbot-background-launch",
+          markerId,
+          "run-1",
+          "launch",
+          "exec sleep 30",
+        ],
+        { stdio: "ignore", env: launcherEnv },
+      );
+      children.push(launched);
+      try {
+        await expect.poll(() => probeBackgroundWork(markerId, probeEnv)).toBe(0);
+        expect(existsSync(shared)).toBe(true);
+        expect(existsSync(moved)).toBe(false);
+      } finally {
+        rmSync(launcherTmp, { force: true, recursive: true });
       }
     },
   );
@@ -607,19 +654,16 @@ function idleHarness(
 }
 
 function activityMarker(...parts: string[]) {
-  const directory = (process.env.ARDURBOT_BACKGROUND_DIR || process.env.TMPDIR || "/tmp").replace(
-    /\/+$/,
-    "",
-  );
+  const directory = (process.env.ARDURBOT_BACKGROUND_DIR || "/tmp").replace(/\/+$/, "");
   return `${directory}/ardurbot-background-${parts.join("-")}`;
 }
 
-function probeBackgroundWork(markerId: string): Promise<number> {
+function probeBackgroundWork(markerId: string, env?: NodeJS.ProcessEnv): Promise<number> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "bash",
       ["-c", BACKGROUND_WORK_PROBE, "ardurbot-background-probe", markerId],
-      { stdio: ["ignore", "pipe", "pipe"] },
+      { stdio: ["ignore", "pipe", "pipe"], env },
     );
     child.on("error", reject);
     child.on("close", (code) => resolve(code ?? 1));

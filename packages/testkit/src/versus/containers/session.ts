@@ -9,7 +9,7 @@ import type { Budget } from "../budget.js";
 import { requireValue } from "../budget.js";
 import { createTrialDirectory, destroyOwnedDirectory } from "../isolation.js";
 import { sanitize } from "../provenance.js";
-import { CONTAINER_GUEST } from "./guest.js";
+import { CONTAINER_GUEST, SYMLINK_REFUSAL } from "./guest.js";
 import type { ContainerInspection, ContainerPolicy, ContainerProof } from "./policy.js";
 import {
   CONTAINER_ROOT,
@@ -21,6 +21,61 @@ import {
 } from "./policy.js";
 
 const executeFile = promisify(execFile);
+const EXEC_WRAPPER = `
+import os, sys
+os.umask(0o007)
+pidfile = os.environ.get("ARDURBOT_EXEC_PID")
+if pidfile:
+    try:
+        os.setsid()
+    except OSError:
+        try:
+            os.setpgid(0, 0)
+        except OSError:
+            pass
+    fd = os.open(pidfile, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    os.write(fd, str(os.getpid()).encode())
+    os.close(fd)
+os.execv(sys.argv[1], sys.argv[1:])
+`;
+const SIGNAL_GUEST = `
+import os, signal, sys, time
+path = sys.argv[1]
+deadline = time.monotonic() + 2
+pid = 0
+while time.monotonic() < deadline:
+    try:
+        pid = int(open(path).read())
+        break
+    except FileNotFoundError:
+        time.sleep(0.05)
+    except (OSError, ValueError):
+        pid = 0
+        break
+if pid <= 1:
+    raise SystemExit(0)
+def gone():
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return True
+    return False
+if not gone():
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+for _ in range(40):
+    if gone():
+        raise SystemExit(0)
+    time.sleep(0.05)
+raise SystemExit(1)
+`;
 async function localEndpoint() {
   const explicit = process.env.DOCKER_CONTEXT;
   const endpoint =
@@ -106,6 +161,7 @@ export class ContainerSession {
   private requests = new Set<AbortController>();
   private timer: NodeJS.Timeout | undefined;
   private cleanup: Promise<void> | null = null;
+  private readonly execPids = new WeakMap<object, string>();
   private constructor(
     private readonly resource: Awaited<ReturnType<typeof createTrialDirectory>>,
     policy: ContainerPolicy,
@@ -295,9 +351,12 @@ export class ContainerSession {
     const pending = this.pending.get(id);
     requireValue(pending, "Unsolicited container control reply");
     this.pending.delete(id);
-    if (message.error)
-      pending.reject(new Error(`Container operation refused: ${String(message.error)}`));
-    else pending.resolve(message.kind === "ready" ? message.cgroup : message.value);
+    if (message.error) {
+      const detail = String(message.error);
+      pending.reject(
+        new Error(detail === SYMLINK_REFUSAL ? detail : `Container operation refused: ${detail}`),
+      );
+    } else pending.resolve(message.kind === "ready" ? message.cgroup : message.value);
   }
   private send(value: unknown) {
     requireValue(this.active && this.child, "Container closed");
@@ -452,6 +511,8 @@ export class ContainerSession {
       argv.length > 0 && argv[0]!.startsWith("/") && argv.every((arg) => !arg.includes("\0")),
       "Container command must have an absolute executable",
     );
+    const execId = randomUUID();
+    const pidFile = `${CONTAINER_ROOT}/tmp/ardurbot-exec-${execId}.pid`;
     const env = {
       PATH: "/usr/local/bin:/usr/bin:/bin",
       HOME: `${CONTAINER_ROOT}/home`,
@@ -462,6 +523,7 @@ export class ContainerSession {
       // The activity marker and product temp files share the bounded tmpfs, never the read-only /tmp.
       TMPDIR: `${CONTAINER_ROOT}/tmp`,
       ARDURBOT_BACKGROUND_DIR: `${CONTAINER_ROOT}/tmp`,
+      ARDURBOT_EXEC_PID: pidFile,
     };
     const cwd = options.cwd ?? `${CONTAINER_ROOT}/workspace`;
     requireValue(
@@ -489,17 +551,41 @@ export class ContainerSession {
         "-S",
         "-u",
         "-c",
-        "import os,sys\nos.umask(0o007)\nos.execv(sys.argv[1], sys.argv[1:])",
+        EXEC_WRAPPER,
         ...argv,
       ],
       {
         shell: false,
         detached: true,
+        // Abort must not kill only this client. The guest keeps running until signalGuest.
         stdio: ["ignore", "pipe", "pipe"],
-        signal: options.signal,
       },
     );
+    this.execPids.set(child, pidFile);
     return child;
+  }
+  /** Signal the tagged guest process group. Container removal remains the backstop. */
+  async signalGuest(child: object): Promise<void> {
+    const pidFile = this.execPids.get(child);
+    if (!pidFile || !this.active) return;
+    await docker(
+      [
+        "exec",
+        "--user",
+        this.policy.productUser,
+        "--workdir",
+        CONTAINER_ROOT,
+        this.id,
+        "/usr/bin/python3",
+        "-I",
+        "-S",
+        "-c",
+        SIGNAL_GUEST,
+        pidFile,
+      ],
+      5000,
+      this.endpoint,
+    ).catch(() => undefined);
   }
   destroy() {
     this.cleanup ??= this.destroyOwned();

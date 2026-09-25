@@ -16,6 +16,9 @@ export function decryptAgentEnvironment(
 ): Record<string, string> {
   return Object.fromEntries(
     rows.map((row) => {
+      if (row.name.startsWith("ARDURBOT_")) {
+        throw new Error("Agent environment names cannot start with ARDURBOT_.");
+      }
       AgentSecretInputSchema.shape.name.parse(row.name);
       return [row.name, secrets.load(row.secret.ciphertext, row.secret.id)];
     }),
