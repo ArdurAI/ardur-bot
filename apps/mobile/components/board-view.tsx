@@ -145,7 +145,12 @@ export function MobileBoard() {
     work(async () => {
       if (!workspaceId) return;
       const before = data;
-      const updated = { ...item, status, deferUntil: null };
+      const updated = {
+        ...item,
+        status,
+        deferUntil: null,
+        closedAt: status === "closed" ? new Date().toISOString() : null,
+      };
       setData((current) =>
         current
           ? {
@@ -293,10 +298,10 @@ export function MobileBoard() {
                       workspaceId,
                       item: { title: title.trim(), type: "task", priority: 2 },
                     });
+                    setTitle("");
                     const status = columns.find((entry) => entry.id === column)?.status;
                     if (status !== "open")
                       await rpc("board/update", { workspaceId, id: item.id, patch: { status } });
-                    setTitle("");
                   })
                 }
               />

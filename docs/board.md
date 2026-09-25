@@ -17,7 +17,7 @@ in `packages/adapters/src/board/beads.ts`.
 ```mermaid
 flowchart LR
   Web[Web and Electron Board] --> API[Board RPC and scope checks]
-  Mobile[Mobile Ready and item] --> API
+  Mobile[Mobile Overview and Board] --> API
   API --> Bridge[Authenticated host bridge]
   Bridge --> Host[Host service and BoardRunner]
   API --> Queue[Source mode command job]
@@ -59,7 +59,7 @@ enabled state and ownership. Existing folder prefixes are read from Beads.
 
 Registered folders appear in the picker. Existing `.beads/` folders are opened
 directly. An empty registered folder requires the owner to choose
-`Start a board in this folder`; a dialog lists the files before initialization.
+`Start board`; a dialog lists the files before initialization.
 The exact initialization flags tested against `bd version 1.2.2 (6c124203e)` are:
 
 ```text
@@ -178,7 +178,7 @@ same registered roots as the desktop IDE; editing stays in the desktop IDE.
 Overview contains the Board view, with status changes, quick-add, comments, follow,
 dispatch and a virtualized native list. Board setup is beside Integrations in mobile
 account settings. Signed device grants remain read-only; account sign-in is required
-for management. New mobile strings have Russian and Chinese translations.
+for management and Files access. New mobile strings have Russian and Chinese translations.
 
 ## Limits and review decisions
 
@@ -193,8 +193,8 @@ for management. New mobile strings have Russian and Chinese translations.
   queue. Very large boards can exceed these limits and return a structured error.
 - The UI and provider add no runtime dependencies or required hosted service.
   Ordinary model costs still apply when work is sent to a bot.
-- Apply `20260925110000_beads_board` and `20260925150000_board_follow_settings` through the normal application migration
-  process before opening Board. Generation and offline tests do not prove a live
+- Apply the application migrations through `20260925150000_board_follow_settings`
+  before opening Board. Generation and offline tests do not prove a live
   deployment has applied the schema.
 
 See [verification evidence](board-verification.md) for the tested commands,

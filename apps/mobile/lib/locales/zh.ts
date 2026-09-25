@@ -987,6 +987,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Send to bot": "发送给机器人",
   Dashboard: "仪表盘",
   "Sign in to manage boards.": "请登录以管理看板。",
+  "Sign in to browse files.": "请登录以浏览文件。",
+  Bots: "机器人",
   "Sign in as the owner to configure boards.": "请以所有者身份登录以配置看板。",
   "Creates .beads/ in this folder. Git files and hooks stay unchanged.":
     "在此文件夹中创建 .beads/。Git 文件和钩子保持不变。",

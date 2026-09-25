@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Button, ScrollView, Text, View } from "react-native";
 import { rpc } from "../lib/api";
+import { hasPairedDevice } from "../lib/dispatch";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 
@@ -18,13 +19,24 @@ export default function FilesScreen() {
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [paired, setPaired] = useState<boolean | null>(null);
+  const [rootsReady, setRootsReady] = useState(false);
   useEffect(() => {
     const abort = new AbortController();
-    void rpc<IdeRoot[]>("ide/roots", {}, { signal: abort.signal })
+    void hasPairedDevice()
+      .then(async (paired) => {
+        if (abort.signal.aborted) return;
+        setPaired(paired);
+        if (paired) return;
+        const rows = await rpc<IdeRoot[]>("ide/roots", {}, { signal: abort.signal });
+        return rows;
+      })
       .then((rows) => {
-        if (!abort.signal.aborted) {
+        if (rows && !abort.signal.aborted) {
           setRoots(rows);
           setRootId(rows[0]?.id ?? "");
+          setRootsReady(true);
+          setError(false);
         }
       })
       .catch(() => {
@@ -64,13 +76,20 @@ export default function FilesScreen() {
       setBusy(false);
     }
   }
+  if (paired)
+    return (
+      <View style={{ padding: 16 }}>
+        <Stack.Screen options={{ title: t("Files") }} />
+        <Text style={{ color: tokens.foreground }}>{t("Sign in to browse files.")}</Text>
+      </View>
+    );
   return (
     <ScrollView
       style={{ backgroundColor: tokens.background }}
       contentContainerStyle={{ padding: 16, gap: 12 }}
     >
       <Stack.Screen options={{ title: t("Files") }} />
-      {busy ? <ActivityIndicator /> : null}
+      {!error && (busy || !rootsReady) ? <ActivityIndicator /> : null}
       {error ? (
         <View>
           <Text accessibilityRole="alert" style={{ color: tokens.destructive }}>
@@ -108,7 +127,7 @@ export default function FilesScreen() {
               onPress={() => setPath(path.split("/").slice(0, -1).join("/"))}
             />
           ) : null}
-          {!roots.length && !error ? (
+          {rootsReady && !roots.length && !error ? (
             <Text style={{ color: tokens.foreground }}>{t("No registered folders")}</Text>
           ) : null}
           {entries.map((entry) => (

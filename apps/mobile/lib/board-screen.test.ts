@@ -306,3 +306,25 @@ it("offers native read-only file browsing through the existing IDE authorization
   expect(node.textContent).toContain("Project notes");
   expect(node.textContent).toContain("Open the IDE on desktop to edit.");
 });
+it("explains Files access on paired phones without attempting account-only IDE requests", async () => {
+  fakes.paired = true;
+  await act(async () => root.render(h(FilesScreen)));
+  expect(node.textContent).toContain("Sign in to browse files.");
+  expect(rpc).not.toHaveBeenCalled();
+});
+it("clears a created quick-add even if its subsequent status change fails", async () => {
+  vi.mocked(rpc).mockImplementation(async (procedure) => {
+    if (procedure === "board/update") throw new Error("unavailable");
+    return procedure === "board/view" ? board : item;
+  });
+  await act(async () => root.render(h(MobileBoard)));
+  await act(async () => button("Blocked").click());
+  await type("New item", "Next work");
+  await act(async () => button("Add").click());
+  expect(node.querySelector<HTMLInputElement>('[aria-label="New item"]')!.value).toBe("");
+  expect(button("Add").disabled).toBe(true);
+  expect(node.textContent).toContain("Could not load Board; retry.");
+  expect(
+    vi.mocked(rpc).mock.calls.filter(([procedure]) => procedure === "board/create"),
+  ).toHaveLength(1);
+});

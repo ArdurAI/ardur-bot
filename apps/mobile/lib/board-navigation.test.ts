@@ -28,6 +28,7 @@ it("accepts only complete Board notification targets", () => {
 });
 it("translates every new Board, setup and Files string in both mobile catalogs", () => {
   const strings = [
+    "Bots",
     "Ready",
     "In progress",
     "Blocked",

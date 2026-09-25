@@ -1023,6 +1023,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Send to bot": "Отправить боту",
   Dashboard: "Панель управления",
   "Sign in to manage boards.": "Войдите в аккаунт, чтобы управлять досками.",
+  "Sign in to browse files.": "Войдите в аккаунт, чтобы просматривать файлы.",
+  Bots: "Боты",
   "Sign in as the owner to configure boards.": "Войдите как владелец, чтобы настроить доски.",
   "Creates .beads/ in this folder. Git files and hooks stay unchanged.":
     "Создаёт .beads/ в этой папке. Файлы и хуки Git не изменяются.",
