@@ -20,10 +20,11 @@ budgets fail before product startup. The executable comes from `--hermes-executa
 or PATH; `--hermes-source <path>` can identify its source tree. Neither product is upgraded.
 
 **Live startup is currently refused.** Owner approval and a valid budget are necessary, but
-the native confinement and Ardur controlled-computer qualification gates remain incomplete.
+the pinned Hermes container and shared-model qualification gates remain incomplete.
 There is no override that turns fixture results into a qualified live lane. The guarded live
-command retains planning evidence when its revision and budget gates pass. A container/VM
-lane is an explicit future backend, not a claim about the installed native product.
+command retains planning evidence when its revision and budget gates pass. The
+[Linux container backend](containers/README.md) is a separate release cohort; it does not
+relabel the installed native product.
 
 The non-generating qualification command diagnoses native startup and probes the installed
 interpreter with `-I -S` (isolated standard library, without importing Hermes). It also reads
@@ -60,16 +61,20 @@ an invocation-wide process-tree budget. A filesystem/network proof cannot author
 product startup while resource enforcement is only a watchdog. Proofs and their private policy
 bindings are immutable; this check applies at the Hermes adapter boundary as well as the CLI.
 
-Ardur's existing supervisor supplies CPU, memory/swap and pids limits. Its writable root and home
-are not an aggregate disk quota, and the current versus adapter does not admit all native tools
-and descendants through its budget ledger. Live execution remains refused. The smallest next
-backend design reuses an already-cached computer image in a separately labeled Linux container
-cohort, with a read-only root, quota-backed storage or bounded tmpfs, cgroup process-tree limits,
-and a private gateway/broker network. No Docker socket or owner directory belongs in a product
-container. The preflight records the cached image's exact daemon-reported byte count and zero
-image download bytes. Linux Hermes is a different install from the approved native cohort:
-its source/runtime pin and an exact missing-package size manifest must be approved before any
-package acquisition. This command does not resolve or download those packages.
+Ardur's general supervisor supplies CPU, memory/swap and pids limits but does not put its writable
+root and home under an aggregate quota. The versus container computer supplies the stricter
+boundary through the existing `SandboxProvider` interface. The native preflight only inspects
+metadata; it does not start this backend or acquire images. Run the container gates explicitly:
+
+```sh
+pnpm --filter @ardurbot/testkit exec tsx src/versus/containers/qualification.ts --stand-in --out ./artifacts/versus/container-qualification
+pnpm --filter @ardurbot/testkit exec tsx src/versus/rpc-self-test.ts --container --out ./artifacts/versus/container-rpc
+pnpm --filter @ardurbot/testkit exec tsx src/versus/containers/qualification.ts --hermes --out ./artifacts/versus/hermes-container-qualification
+```
+
+These commands make no model calls or downloads. The last command refuses before startup if the
+pinned image is absent and names the exact pull needing owner approval. The stand-in is a scripted
+protocol double in the cached computer image, not an execution of Hermes.
 
 Dry run reads repository/source metadata and a fixed allowlist of Hermes entrypoints, hashes
 the executable, and emits a launch plan, prerequisites, invalid-until-completed budget template,
@@ -122,8 +127,9 @@ from persisted bot messages; Hermes supplies completed assistant response frames
 An absent or incomplete Hermes reply fails closed, and a leaking reply fails redaction even
 when the saved result is correct. Reply capture does not establish content paint or user TTFT.
 W0-2 usage types are reused. W0-3 runtime collectors are landed, but their full request/purpose
-coverage is not yet qualified by this versus adapter. W0-4 timing/paint collection remains
-incomplete. Unknown-purpose requests stay in raw evidence and are counted as a conversion gap,
+coverage is not yet qualified by this versus adapter. W0-4 collectors are landed, but full
+cross-product timing/paint coverage remains unqualified. Unknown-purpose requests stay in raw
+evidence and are counted as a conversion gap,
 because schema 3 has no unknown-purpose enum. They are never relabeled as main calls.
 
 Artifacts include `index.md`, `source-provenance.json`, `versus-manifest.json`, `launch-plan.json`,
@@ -133,8 +139,11 @@ commit, parent, fixed research baseline, dirty diff, executed source inventory a
 lock. Hermes's requested, release and installed revisions remain three distinct identities.
 Source hashing covers named entrypoints, not a complete Python installation closure.
 
-Validation uses the real schema-3 parser, verifies raw hashes and build/fixture/grader bindings,
-rejects unpaired IDs and mixed tiers, and compares usage categories with their raw observations.
+Validation uses the real schema-3 parser, verifies final-file checksums on reread, raw hashes and
+build/fixture/grader bindings, rejects unpaired IDs and mixed tiers, and compares usage categories
+with their raw observations. Trial summaries, raw grades, grades.jsonl, schema outcomes, analysis
+totals and retained-trial coverage must agree. Build dirtiness covers the executed source inventory
+across product packages plus the lockfile, including new and deleted source files.
 Hash consistency is provenance, not a signature proving an independently audited measurement.
 
 ## Authority and adapter limits
@@ -179,9 +188,9 @@ this invocation. A native product receives the profile as immutable launch data,
 journal must be outside and explicitly denied by the profile. OS canary failure blocks startup.
 The native watchdog is not a kernel CPU/RAM/process/disk ceiling and cannot prove accounting for
 detached descendants. Those are remaining qualification gates, not implemented guarantees.
-Native Ardur tools do not yet reserve against the broker's pre-effect tool counter, and native
-descendant creation has no versus collector. Counter zeros in the gateway ledger describe that
-ledger's observations, not complete product tool/descendant consumption; live startup is blocked.
+The container computer adds pre-effect tool/helper/command admission at Ardur's existing runtime
+hooks. The file-fixture adapter remains a separate protocol surface without those guarantees.
+Neither surface supplies full packaged-stack resource or user-paint measurements.
 
 ## Budget approval
 
