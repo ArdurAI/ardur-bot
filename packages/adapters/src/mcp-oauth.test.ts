@@ -318,8 +318,8 @@ describe("MCP OAuth", () => {
           .map((value) => JSON.parse(value))
           .some((value) => value.oauth?.tokens?.access_token === "access-token"),
       ).toBe(true);
-      expect(prisma.mcpServer.update).toHaveBeenCalledWith({
-        where: { id: "server-1" },
+      expect(tx.mcpServer.update).toHaveBeenCalledWith({
+        where: { id: "server-1", spaceId: "workspace-1", userId: "user-1" },
         data: { revision: { increment: 1 } },
       });
     },
@@ -431,7 +431,8 @@ describe("MCP OAuth", () => {
         deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       mcpOAuthSession: sessions,
-      $transaction: vi.fn().mockResolvedValue([]),
+      $executeRaw: vi.fn(),
+      $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma)),
     };
     const secrets = {
       load: vi.fn((ciphertext: string) =>
@@ -458,7 +459,7 @@ describe("MCP OAuth", () => {
     });
     expect(new URLSearchParams(tokenRequestBody).get("code_verifier")).toBe("persisted-verifier");
     expect(prisma.mcpServer.update).toHaveBeenCalledWith({
-      where: { id: "server-1" },
+      where: { id: "server-1", spaceId: "workspace-1", userId: "user-1" },
       data: { revision: { increment: 1 } },
     });
   });

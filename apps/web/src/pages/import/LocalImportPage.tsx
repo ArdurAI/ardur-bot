@@ -217,7 +217,10 @@ export function LocalImportPage() {
             disabled={busy}
             onCheckedChange={(autoImport) =>
               void work(async () => {
-                await rpc.localImport.configure({ autoImport });
+                await rpc.localImport.configure({
+                  autoImport,
+                  selection: { ...status.selection, ...selected },
+                });
               })
             }
           />

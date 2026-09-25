@@ -42,6 +42,8 @@ export function createLocalImportJobs(
             "content-type": "application/json",
           },
           body: JSON.stringify({ requestId: job.requestId, response, failed }),
+        }).catch(() => {
+          throw new Error("The import result could not reach the API. Check API_INTERNAL_URL.");
         });
         if (!result.ok) throw new Error("The import result could not be delivered.");
       }
