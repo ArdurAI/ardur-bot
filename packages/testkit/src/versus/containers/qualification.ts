@@ -6,7 +6,7 @@ import { gradeOutcome } from "../../scoreboard/graders/outcome.js";
 import { contentDigest } from "../../scoreboard/manifest.js";
 import { getTask } from "../../scoreboard/tasks/catalog.js";
 import { referenceSolution } from "../../scoreboard/tasks/reference.js";
-import { HermesContainerAdapter } from "../adapters/hermes-container.js";
+import { HermesContainerAdapter, WORKSPACE_NOT_INSPECTED } from "../adapters/hermes-container.js";
 import type { VersusEvent } from "../adapters/types.js";
 import { BudgetLedger, requireValue } from "../budget.js";
 import { startGateway } from "../gateway.js";
@@ -67,16 +67,19 @@ export function retainsReceiptsWithoutWorkspace(input: {
   cancelled: boolean;
   terminal: string;
   effects: readonly unknown[];
-  files: Record<string, string>;
-  links: readonly string[] | undefined;
+  files?: Record<string, string>;
+  links?: readonly string[];
+  snapshot?: { error?: string };
   providerRequests: number;
   gradedPassed: boolean;
 }) {
+  if (input.snapshot?.error || input.files === undefined || !Array.isArray(input.links))
+    return false;
   return (
     input.terminal === (input.cancelled ? "cancelled" : "uncertain") &&
     input.effects.length === 1 &&
     Object.keys(input.files).length === 0 &&
-    input.links?.length === 0 &&
+    input.links.length === 0 &&
     input.providerRequests === 0 &&
     !input.gradedPassed
   );
@@ -415,19 +418,29 @@ print(json.dumps(out))
           else await lost.session!.destroy();
           await lost.submit();
           const retained = await lost.collect();
-          const passed = retainsReceiptsWithoutWorkspace({
-            cancelled,
-            terminal: retained.observation.terminal,
-            effects: retained.observation.effects,
-            files: retained.observation.files,
-            links: retained.observation.links,
-            providerRequests: gateway.requests.length,
-            gradedPassed: gradeOutcome(task, retained.observation).passed,
-          });
+          const observed = retained.observation;
+          const uninspected =
+            observed.snapshot?.error !== undefined ||
+            observed.files === undefined ||
+            observed.links === undefined;
+          const passed =
+            !uninspected &&
+            retainsReceiptsWithoutWorkspace({
+              cancelled,
+              terminal: observed.terminal,
+              effects: observed.effects,
+              files: observed.files,
+              links: observed.links,
+              snapshot: observed.snapshot,
+              providerRequests: gateway.requests.length,
+              gradedPassed: gradeOutcome(task, observed).passed,
+            });
           report.checks.push({
             name: `${id}-retains-receipts-and-nonsuccess`,
             passed,
-            evidence: { ...retained, ledger: ledger.snapshot() },
+            evidence: uninspected
+              ? { failure: WORKSPACE_NOT_INSPECTED, ...retained, ledger: ledger.snapshot() }
+              : { ...retained, ledger: ledger.snapshot() },
           });
         } finally {
           await lost.destroy();
@@ -463,7 +476,12 @@ print(json.dumps(out))
           : "container-boundary-qualified-product-unqualified";
     if (report.status === "failed")
       report.failures.push(
-        ...report.checks.filter((check) => !check.passed).map((check) => check.name),
+        ...report.checks
+          .filter((check) => !check.passed)
+          .map((check) => {
+            const failure = (check.evidence as { failure?: unknown }).failure;
+            return typeof failure === "string" ? failure : check.name;
+          }),
       );
   } catch (error) {
     report.status = "blocked";

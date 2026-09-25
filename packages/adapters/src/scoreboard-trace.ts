@@ -12,7 +12,14 @@ let active: ReturnType<typeof createTraceBuffer> | undefined;
 
 /** Fixed-size, drop-new buffer. There is no exporter, I/O, timer or promise on the record path. */
 export function createTraceBuffer(
-  options: { capacity?: number; sampleRate?: number; processId?: string; now?: () => number } = {},
+  options: {
+    capacity?: number;
+    sampleRate?: number;
+    processId?: string;
+    now?: () => number;
+    /** Wall-clock milliseconds of this process time origin. Defaults to `performance.timeOrigin`. */
+    timeOrigin?: number;
+  } = {},
 ) {
   const capacity = options.capacity ?? 8192;
   const sampleRate = options.sampleRate ?? 1;
@@ -26,6 +33,9 @@ export function createTraceBuffer(
     sampleRate > 1 ||
     !opaque(processId)
   )
+    throw new Error("Invalid trace buffer options");
+  const timeOrigin = options.timeOrigin ?? performance.timeOrigin;
+  if (!Number.isFinite(timeOrigin) || timeOrigin < 0)
     throw new Error("Invalid trace buffer options");
   const now = options.now ?? (() => performance.now());
   let points: TracePoint[] = [];
@@ -89,12 +99,19 @@ export function createTraceBuffer(
       return {
         version: 1,
         processId,
+        timeOrigin,
         points: points.map((point) => ({ ...point })),
         counters: { ...counters },
       };
     },
     drain(): TraceBatch {
-      const batch = { version: 1 as const, processId, points, counters: { ...counters } };
+      const batch = {
+        version: 1 as const,
+        processId,
+        timeOrigin,
+        points,
+        counters: { ...counters },
+      };
       points = [];
       return batch;
     },

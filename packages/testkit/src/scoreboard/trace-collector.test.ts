@@ -1,4 +1,5 @@
-import type { TracePoint } from "@ardurbot/contracts";
+import type { TraceBatch, TracePoint } from "@ardurbot/contracts";
+import { nextFence } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import { createTraceBuffer } from "../../../adapters/src/scoreboard-trace.js";
 import {
@@ -137,6 +138,147 @@ describe("trace evidence", () => {
     ).toBeNull();
   });
 
+  it("measures a cross-process crash span from wall time, never the process-local clocks", () => {
+    const attempt = 7;
+    const killedOrigin = 1_700_000_000_000;
+    const recoveredOrigin = 1_700_000_005_000;
+    const startedAt = 4000;
+    const finishedAt = 10;
+    const wall = recoveredOrigin + finishedAt - (killedOrigin + startedAt);
+    const spanOf = (
+      killedOriginValue: number | undefined,
+      recoveredOriginValue: number | undefined,
+      endAt: number,
+    ) => {
+      const killed = createTraceBuffer({ processId: "interrupted-worker", now: () => 1 });
+      const recovered = createTraceBuffer({ processId: "recovered-worker", now: () => 1 });
+      killed.record("run-a", "admission.started", {}, 0);
+      killed.record("run-a", "tool.started", { operationId: "tool-1", attempt }, startedAt);
+      recovered.record(
+        "run-a",
+        "tool.finished",
+        { operationId: "tool-1", attempt: nextFence(attempt), outcome: "success" },
+        endAt,
+      );
+      recovered.record("run-a", "terminal.committed", { outcome: "success" }, endAt + 1);
+      const stamp = (batch: TraceBatch, timeOrigin: number | undefined) => {
+        if (timeOrigin === undefined) delete (batch as { timeOrigin?: number }).timeOrigin;
+        else (batch as { timeOrigin?: number }).timeOrigin = timeOrigin;
+        return batch;
+      };
+      const evidence = collectTraceEvidence(
+        [
+          stamp(killed.snapshot(), killedOriginValue),
+          stamp(recovered.snapshot(), recoveredOriginValue),
+        ],
+        {
+          sessionId: "crash",
+          pairId: null,
+          requiredBoundaries: [
+            "admission.started",
+            "tool.started",
+            "tool.finished",
+            "terminal.committed",
+          ],
+          pairAcrossProcesses: true,
+        },
+      );
+      const span = evidence.derived[0]!.operations.find(
+        (operation) => operation.kind === "tool.started",
+      )!.duration;
+      return { span, complete: evidence.derived[0]!.complete };
+    };
+    const forward = spanOf(killedOrigin, recoveredOrigin, finishedAt);
+    expect(forward.complete).toBe(true);
+    expect(forward.span).toEqual({ value: wall, lowerMs: wall, upperMs: wall, reason: null });
+    expect(forward.span.reason).not.toBe("reversed-boundaries");
+    expect(forward.span.value).not.toBe(finishedAt - startedAt);
+    const uncalibrated = spanOf(undefined, recoveredOrigin, 5000);
+    expect(uncalibrated.complete).toBe(true);
+    expect(uncalibrated.span).toEqual({
+      value: null,
+      lowerMs: null,
+      upperMs: null,
+      reason: "clock-not-calibrated",
+    });
+    expect(uncalibrated.span.reason).not.toBe("reversed-boundaries");
+    expect(uncalibrated.span.value).not.toBe(5000 - startedAt);
+    const skewed = spanOf(recoveredOrigin, killedOrigin, 5000);
+    expect(skewed.complete).toBe(true);
+    expect(skewed.span).toEqual({
+      value: null,
+      lowerMs: null,
+      upperMs: null,
+      reason: "clock-skew",
+    });
+    expect(skewed.span.reason).not.toBe("reversed-boundaries");
+    expect(skewed.span.value).not.toBe(5000 - startedAt);
+    const same = createTraceBuffer({ processId: "only-worker", now: () => 1 });
+    same.record("run-a", "tool.started", { operationId: "tool-1", attempt }, 10);
+    same.record(
+      "run-a",
+      "tool.finished",
+      { operationId: "tool-1", attempt, outcome: "success" },
+      40,
+    );
+    const alone = deriveTrace(same.snapshot().points);
+    expect(alone.operations[0]!.duration).toEqual({
+      value: 30,
+      lowerMs: 30,
+      upperMs: 30,
+      reason: null,
+    });
+  });
+
+  it("pairs a killed start with the recovering process's next lease fence", () => {
+    const attempt = 7;
+    const killedOrigin = 1_700_000_000_000;
+    const recoveredOrigin = 1_700_000_002_500;
+    const evidenceFor = (finishAttempt: number) => {
+      const killed = createTraceBuffer({ processId: "interrupted-worker", now: () => 1 });
+      const recovered = createTraceBuffer({ processId: "recovered-worker", now: () => 1 });
+      killed.record("run-a", "admission.started", {}, 0);
+      killed.record("run-a", "tool.started", { operationId: "tool-1", attempt }, 20);
+      recovered.record(
+        "run-a",
+        "tool.finished",
+        { operationId: "tool-1", attempt: finishAttempt, outcome: "success" },
+        35,
+      );
+      recovered.record("run-a", "terminal.committed", { outcome: "success" }, 40);
+      const killedBatch = killed.snapshot();
+      const recoveredBatch = recovered.snapshot();
+      (killedBatch as { timeOrigin?: number }).timeOrigin = killedOrigin;
+      (recoveredBatch as { timeOrigin?: number }).timeOrigin = recoveredOrigin;
+      return collectTraceEvidence([killedBatch, recoveredBatch], {
+        sessionId: "crash",
+        pairId: null,
+        requiredBoundaries: [
+          "admission.started",
+          "tool.started",
+          "tool.finished",
+          "terminal.committed",
+        ],
+        pairAcrossProcesses: true,
+      });
+    };
+    const paired = evidenceFor(nextFence(attempt));
+    expect(paired.derived[0]!.complete).toBe(true);
+    expect(paired.derived[0]!.operations[0]).toMatchObject({
+      outcome: "success",
+      duration: {
+        value: recoveredOrigin + 35 - (killedOrigin + 20),
+        reason: null,
+      },
+    });
+    const unrelated = evidenceFor(nextFence(nextFence(attempt)) + 5);
+    expect(unrelated.derived[0]!.operations[0]).toMatchObject({
+      outcome: "interrupted",
+      duration: { value: null, reason: "interrupted" },
+    });
+    expect(unrelated.derived[0]!.complete).toBe(true);
+  });
+
   it("pairs crash boundaries across processes only when crash evidence asks", () => {
     const before = createTraceBuffer({ processId: "interrupted-worker", now: () => 1 });
     const after = createTraceBuffer({ processId: "recovered-worker", now: () => 1 });
@@ -147,13 +289,13 @@ describe("trace evidence", () => {
     after.record(
       "run-a",
       "provider.finished",
-      { operationId: "provider-1", attempt: 0, outcome: "success" },
+      { operationId: "provider-1", attempt: nextFence(0), outcome: "success" },
       40,
     );
     after.record(
       "run-a",
       "tool.finished",
-      { operationId: "tool-1", attempt: 0, outcome: "success" },
+      { operationId: "tool-1", attempt: nextFence(0), outcome: "success" },
       50,
     );
     after.record("run-a", "terminal.committed", { outcome: "success" }, 60);

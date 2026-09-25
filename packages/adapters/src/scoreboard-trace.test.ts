@@ -20,6 +20,7 @@ describe("bounded production trace", () => {
     buffer.record("run-a", "tool.started", detail);
     buffer.record("run-a", "tool.finished", { outcome: "failed" });
     buffer.record("run-a", "terminal.committed", { outcome: "failed" });
+    expect(buffer.snapshot().timeOrigin).toBe(performance.timeOrigin);
     expect(buffer.snapshot().counters).toEqual({
       recorded: 2,
       dropped: 1,

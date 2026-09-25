@@ -50,6 +50,8 @@ export interface TracePoint {
 export interface TraceBatch {
   version: 1;
   processId: string;
+  /** Wall-clock milliseconds of this process's time origin (`performance.timeOrigin`). */
+  timeOrigin?: number;
   points: TracePoint[];
   counters: { recorded: number; dropped: number; sampledOut: number; invalid: number };
 }

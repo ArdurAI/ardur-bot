@@ -100,13 +100,14 @@ function assertServingWitness(budget: Budget, serving: ServingWitness | undefine
   if (!serving) return;
   const identity = serving.identity();
   if (
+    identity.origin === budget.endpoint.origin &&
     identity.model === budget.model.id &&
     identity.digest === budget.model.digest &&
     identity.contextSize === budget.contextSize
   )
     return;
   const error = new Error(
-    "Serving witness model, digest, or context does not match the gateway budget",
+    "Serving witness origin, model, digest, or context does not match the gateway budget",
   ) as Error & { code: string };
   error.code = "serving-witness-mismatch";
   throw error;

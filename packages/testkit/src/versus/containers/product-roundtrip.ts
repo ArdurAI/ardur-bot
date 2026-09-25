@@ -301,7 +301,7 @@ export async function qualifyHermesProduct(root: string) {
         reply: artifact.observation.reply,
         gradePassed: grade.passed,
         elapsedMs: artifact.observation.elapsedMs,
-        files: Object.keys(artifact.observation.files),
+        files: Object.keys(artifact.observation.files ?? {}),
       },
       failure: passed ? null : "Hermes product tool round trip failed",
     };

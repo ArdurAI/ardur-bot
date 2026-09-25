@@ -24,14 +24,18 @@ afterEach(async () => {
   for (const parent of parents.splice(0)) await rm(parent, { recursive: true, force: true });
 });
 
-async function retain(entries: Record<string, string | { kind: "link" }>, cancelled: boolean) {
+async function retain(
+  entries: Record<string, string | { kind: "link" }>,
+  cancelled: boolean,
+  snapshot: () => Promise<unknown> = async () => entries,
+) {
   inspectImage.mockResolvedValue({ id: `sha256:${"ab".repeat(32)}`, revision: null });
   const session = {
     policy: {},
     proof: {},
     write: async () => undefined,
     read: async () => Buffer.from(""),
-    snapshot: async () => entries,
+    snapshot,
     exec: async () => {
       throw new Error("must not start");
     },
@@ -85,7 +89,7 @@ async function retain(entries: Record<string, string | { kind: "link" }>, cancel
       providerRequests: 0,
       gradedPassed: gradeOutcome(task, artifact.observation).passed,
     });
-    return { links, files: artifact.observation.files, passed };
+    return { links, files: artifact.observation.files, passed, observation: artifact.observation };
   } finally {
     await adapter.destroy();
     await destroyOwnedDirectory(trial);
@@ -99,6 +103,43 @@ it("fails container-cancel-retains-receipts-and-nonsuccess and container-loss-re
     expect(retained.links).toEqual(["leak"]);
     expect(retained.passed).toBe(false);
   }
+});
+
+it("fails both retention probes when a non-UTF-8 file prevents the snapshot", async () => {
+  for (const cancelled of [true, false]) {
+    const retained = await retain({}, cancelled, async () => {
+      throw new Error("Container operation refused: UnicodeDecodeError");
+    });
+    const observation = retained.observation as typeof retained.observation & {
+      snapshot?: { error?: string };
+    };
+    expect(observation.snapshot?.error).toBe("The workspace could not be inspected.");
+    expect(retained.passed).toBe(false);
+    expect(retained.links).not.toEqual([]);
+    expect(retained.files).not.toEqual({});
+  }
+  expect(
+    retainsReceiptsWithoutWorkspace({
+      cancelled: true,
+      terminal: "cancelled",
+      effects: [{}],
+      files: {},
+      links: undefined,
+      providerRequests: 0,
+      gradedPassed: false,
+    }),
+  ).toBe(false);
+  expect(
+    retainsReceiptsWithoutWorkspace({
+      cancelled: false,
+      terminal: "uncertain",
+      effects: [{}],
+      files: {},
+      links: undefined,
+      providerRequests: 0,
+      gradedPassed: false,
+    }),
+  ).toBe(false);
 });
 
 it("passes cancel and loss retention when the workspace snapshot is empty", async () => {

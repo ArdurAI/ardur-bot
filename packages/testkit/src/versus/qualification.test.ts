@@ -341,6 +341,64 @@ describe("non-generating live prerequisites", () => {
       await gateway.close();
     }
   });
+  it("refuses a serving witness for the same model, digest, and context on another port", async () => {
+    const f = fixture();
+    const route = await inspectLocalRoute(expected, f.transport);
+    const upstream = vi.fn(async () => new Response("not-called", { status: 500 }));
+    const ps = {
+      models: [{ name: expected.model, digest: expected.digest, context_length: 64000 }],
+    };
+    const metadata = (async () => Response.json(ps)) as typeof fetch;
+    const otherPort = {
+      ...route.budget,
+      endpoint: { ...route.budget.endpoint, origin: "http://127.0.0.1:11435" },
+    };
+    let startCode = "accepted";
+    try {
+      const opened = await startGateway({
+        budget: route.budget,
+        ledger: new BudgetLedger(route.budget),
+        transport: upstream,
+        evidenceKind: "provider-live",
+        serving: new ServingWitness(otherPort, metadata),
+      });
+      await opened.close();
+    } catch (error) {
+      startCode = (error as { code?: string }).code ?? "error";
+    }
+    const serving = new ServingWitness(route.budget, metadata);
+    const ledger = new BudgetLedger(route.budget);
+    const gateway = await startGateway({
+      budget: route.budget,
+      ledger,
+      transport: upstream,
+      evidenceKind: "provider-live",
+      serving,
+    });
+    const identity = serving as ServingWitness & {
+      identity: () => { origin?: string; model: string; digest: string; contextSize: number };
+    };
+    identity.identity = () => ({
+      origin: "http://127.0.0.1:11435",
+      model: route.budget.model.id,
+      digest: route.budget.model.digest,
+      contextSize: route.budget.contextSize,
+    });
+    let admitCode = "accepted";
+    try {
+      await gateway.admit("trial-port");
+    } catch (error) {
+      admitCode = (error as { code?: string }).code ?? "error";
+    } finally {
+      await gateway.close();
+    }
+    expect({ startCode, admitCode, upstream: upstream.mock.calls.length }).toEqual({
+      startCode: "serving-witness-mismatch",
+      admitCode: "serving-witness-mismatch",
+      upstream: 0,
+    });
+    expect(ledger.snapshot()).toMatchObject({ trials: [], reservations: [] });
+  });
   it("refuses a serving witness built for a different model, digest, or context", async () => {
     const f = fixture();
     const route = await inspectLocalRoute(expected, f.transport);
@@ -374,7 +432,7 @@ describe("non-generating live prerequisites", () => {
     expect(upstream).not.toHaveBeenCalled();
     const serving = new ServingWitness(route.budget, metadata);
     const identity = serving as ServingWitness & {
-      identity: () => { model: string; digest: string; contextSize: number };
+      identity: () => { origin: string; model: string; digest: string; contextSize: number };
     };
     const ledger = new BudgetLedger(route.budget);
     const gateway = await startGateway({
@@ -405,6 +463,7 @@ describe("non-generating live prerequisites", () => {
     );
     try {
       identity.identity = () => ({
+        origin: route.budget.endpoint.origin,
         model: "other:8b",
         digest: route.budget.model.digest,
         contextSize: route.budget.contextSize,
@@ -414,6 +473,7 @@ describe("non-generating live prerequisites", () => {
       });
       expect(ledger.snapshot()).toMatchObject({ trials: [], reservations: [] });
       identity.identity = () => ({
+        origin: route.budget.endpoint.origin,
         model: route.budget.model.id,
         digest: contentDigest("other-model"),
         contextSize: route.budget.contextSize,
@@ -422,6 +482,7 @@ describe("non-generating live prerequisites", () => {
         code: "serving-witness-mismatch",
       });
       identity.identity = () => ({
+        origin: route.budget.endpoint.origin,
         model: route.budget.model.id,
         digest: route.budget.model.digest,
         contextSize: 32768,
@@ -430,6 +491,7 @@ describe("non-generating live prerequisites", () => {
         code: "serving-witness-mismatch",
       });
       identity.identity = () => ({
+        origin: route.budget.endpoint.origin,
         model: route.budget.model.id,
         digest: route.budget.model.digest,
         contextSize: route.budget.contextSize,
@@ -437,6 +499,7 @@ describe("non-generating live prerequisites", () => {
       await gateway.admit("trial-match");
       const url = gateway.capability("trial-match", "main", () => undefined);
       identity.identity = () => ({
+        origin: route.budget.endpoint.origin,
         model: "other:8b",
         digest: route.budget.model.digest,
         contextSize: route.budget.contextSize,
@@ -444,6 +507,7 @@ describe("non-generating live prerequisites", () => {
       expect((await send(url)).status).toBe(403);
       expect(upstream).not.toHaveBeenCalled();
       identity.identity = () => ({
+        origin: route.budget.endpoint.origin,
         model: route.budget.model.id,
         digest: route.budget.model.digest,
         contextSize: route.budget.contextSize,

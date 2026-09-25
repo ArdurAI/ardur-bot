@@ -178,8 +178,9 @@ stdout/stderr decoders, bounded output, deadlines, process-group cancellation an
 sampling. CLI text cannot prove durable admission, product approval or first content paint.
 PTY approval usability and user TTFT are unsupported. Default route observation remains unknown
 unless a gateway witness is supplied; configured identity is not observed identity. The witness is
-bound to the gateway budget: its model, digest and context must match the route being served. A
-difference is refused at startup and again at each admission, with code `serving-witness-mismatch`.
+bound to the gateway budget: its origin, model, digest and context must match the route being
+served. A difference, including another loopback port, is refused at startup and again at each
+admission, with code `serving-witness-mismatch`.
 
 Ardur uses `models/connect`, `bots/create`, `bots/update`, ordinary `threads/send`, persisted
 admission/terminal reads, `threads/stop`, and `threads/answer`. Learning is explicitly disabled.
@@ -213,8 +214,9 @@ the effect and records the refusal. The file-fixture adapter remains a separate 
 without those guarantees. Neither surface supplies full packaged-stack resource or user-paint
 measurements. The scripted Hermes round trip does not prove that a declared context is served:
 the image requires at least 64,000 tokens, attested by `/api/ps` at planning and again at admission.
-The witness that reads `/api/ps` must name the same model, digest and context as the budget the
-gateway serves. A witness built for a different route is refused before a trial is admitted.
+The witness that reads `/api/ps` must name the same origin, model, digest and context as the budget
+the gateway serves. A witness built for a different route, including another loopback port, is
+refused before a trial is admitted.
 
 ## Budget approval
 

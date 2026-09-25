@@ -1,5 +1,6 @@
 import type { TraceBatch, TraceBoundary, TraceOutcome, TracePoint } from "@ardurbot/contracts";
 import { TRACE_BOUNDARIES } from "@ardurbot/contracts";
+import { nextFence } from "@ardurbot/core";
 import type { MetricEvidence, PerformanceEvidenceReport } from "../performance-report.js";
 import { canonicalSerialize, contentDigest } from "./manifest.js";
 
@@ -151,11 +152,20 @@ function validateBatches(batches: readonly TraceBatch[]) {
   const ids = new Set<string>();
   for (const batch of batches) {
     if (
-      Object.keys(batch).some((k) => !["version", "processId", "points", "counters"].includes(k)) ||
+      Object.keys(batch).some(
+        (k) => !["version", "processId", "timeOrigin", "points", "counters"].includes(k),
+      ) ||
       Object.keys(batch.counters).sort().join(",") !== "dropped,invalid,recorded,sampledOut"
     )
       throw new Error("Invalid or unsanitized trace batch");
-    if (batch.version !== 1 || batch.points.length > 1_000_000)
+    if (
+      batch.version !== 1 ||
+      batch.points.length > 1_000_000 ||
+      (batch.timeOrigin !== undefined &&
+        (typeof batch.timeOrigin !== "number" ||
+          !Number.isFinite(batch.timeOrigin) ||
+          batch.timeOrigin < 0))
+    )
       throw new Error("Invalid trace batch");
     for (const n of Object.values(batch.counters))
       if (!Number.isSafeInteger(n) || n < 0) throw new Error("Invalid trace counter");
@@ -234,24 +244,36 @@ function operationFinish(
   pairAcrossProcesses: boolean,
 ) {
   const boundary = start.boundary.replace("started", "finished");
-  const matches = (point: TracePoint) =>
-    point.boundary === boundary &&
-    point.operationId === start.operationId &&
-    point.attempt === start.attempt;
+  const sameOperation = (point: TracePoint) =>
+    point.boundary === boundary && point.operationId === start.operationId;
   const local = points.find(
     (point) =>
-      matches(point) && point.processId === start.processId && point.sequence > start.sequence,
+      sameOperation(point) &&
+      point.attempt === start.attempt &&
+      point.processId === start.processId &&
+      point.sequence > start.sequence,
   );
-  if (local || !pairAcrossProcesses) return local;
-  return points.find((point) => matches(point) && point.processId !== start.processId);
+  if (local || !pairAcrossProcesses || start.attempt === undefined) return local;
+  // Recovery leases the next fence and records that fence as the finish attempt.
+  const recoveredAttempt = nextFence(start.attempt);
+  return points.find(
+    (point) =>
+      sameOperation(point) &&
+      point.attempt === recoveredAttempt &&
+      point.processId !== start.processId,
+  );
 }
 
-/** A crash may finish on the recovering process. Ordinary traces still refuse that pair. */
+/**
+ * A crash may finish on the recovering process. The span is wall time
+ * (`timeOrigin + at`) on both sides. Same-process spans stay on the process clock.
+ */
 function operationSpan(
   start: TracePoint,
   end: TracePoint | undefined,
   calibrations: readonly TraceCalibration[],
   pairAcrossProcesses: boolean,
+  origins: ReadonlyMap<string, number | undefined>,
 ): TraceDuration {
   if (!end)
     return pairAcrossProcesses
@@ -262,16 +284,24 @@ function operationSpan(
   if (start.traceId !== end.traceId) return missing("different-traces");
   if (![start.at, end.at].every((at) => Number.isFinite(at) && at >= 0))
     return missing("invalid-clock");
-  if (end.at < start.at) return missing("reversed-boundaries");
-  return exact(end.at - start.at);
+  const startOrigin = origins.get(start.processId);
+  const endOrigin = origins.get(end.processId);
+  if (startOrigin === undefined || endOrigin === undefined) return missing("clock-not-calibrated");
+  const value = endOrigin + end.at - (startOrigin + start.at);
+  if (value < 0) return missing("clock-skew");
+  return exact(value);
 }
 
 export function deriveTrace(
   points: readonly TracePoint[],
   calibrations: readonly TraceCalibration[] = [],
-  options: { pairAcrossProcesses?: boolean } = {},
+  options: {
+    pairAcrossProcesses?: boolean;
+    timeOrigins?: ReadonlyMap<string, number | undefined>;
+  } = {},
 ) {
   const pairAcrossProcesses = options.pairAcrossProcesses === true;
+  const timeOrigins = options.timeOrigins ?? new Map<string, number | undefined>();
   if (!points.length || new Set(points.map((p) => p.traceId)).size !== 1)
     throw new Error("Expected one nonempty trace");
   // A first boundary is only ordered when it belongs to a single process.
@@ -348,7 +378,7 @@ export function deriveTrace(
         attempt: p.attempt,
         operationId: p.operationId,
         outcome,
-        duration: operationSpan(p, end, calibrations, pairAcrossProcesses),
+        duration: operationSpan(p, end, calibrations, pairAcrossProcesses, timeOrigins),
         firstText: traceDuration(p, text),
       };
     });
@@ -448,11 +478,18 @@ export function collectTraceEvidence(
   const artifact = { batches: raw, calibrations };
   const bytes = canonicalSerialize(artifact);
   const sha256 = contentDigest(artifact);
+  const timeOrigins = new Map<string, number | undefined>();
+  for (const batch of raw) {
+    const origin = typeof batch.timeOrigin === "number" ? batch.timeOrigin : undefined;
+    if (!timeOrigins.has(batch.processId)) timeOrigins.set(batch.processId, origin);
+    else if (timeOrigins.get(batch.processId) !== origin)
+      timeOrigins.set(batch.processId, undefined);
+  }
   const points = raw.flatMap((b) => b.points);
   const dropped = raw.some((b) => b.counters.dropped > 0 || b.counters.invalid > 0);
   const traces = [...new Set(points.map((p) => p.traceId))].map((id) => {
     const subset = points.filter((p) => p.traceId === id);
-    const derived = deriveTrace(subset, calibrations, { pairAcrossProcesses });
+    const derived = deriveTrace(subset, calibrations, { pairAcrossProcesses, timeOrigins });
     const missingBoundaries = options.requiredBoundaries.filter(
       (b) => !subset.some((p) => p.boundary === b),
     );

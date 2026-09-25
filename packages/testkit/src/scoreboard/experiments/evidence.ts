@@ -63,9 +63,11 @@ function sameBoundaries(left: readonly TraceBoundary[], right: readonly TraceBou
 }
 /**
  * Both processes must contribute a batch. Crash recollection pairs a start with a finish
- * recorded by the other process. The merged trace is complete when that recollection reports
+ * on the recovering process whose attempt is the next lease fence. The span is wall time from
+ * each batch's timeOrigin. The merged trace is complete when that recollection reports
  * exactly one terminal, every stored boundary, and no drop. A start with no finish is interrupted
- * and does not by itself make the crash incomplete.
+ * and does not by itself make the crash incomplete. A span that is clock-not-calibrated or
+ * clock-skew is still observed.
  */
 function crashTraces(boundaryId: string, attempts: readonly MatrixResult[]) {
   const phases = attempts.flatMap((attempt) =>

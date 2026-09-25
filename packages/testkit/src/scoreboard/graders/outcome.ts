@@ -6,9 +6,11 @@ export interface OutcomeObservation {
   result: unknown;
   reply: string;
   state: FixtureRecord[];
-  files: Record<string, string>;
+  files?: Record<string, string>;
   /** Guest symlink paths. Content is never followed. */
   links?: readonly string[];
+  /** Set when the workspace snapshot could not be taken. */
+  snapshot?: { error: string };
   effects: { id: string; authorized: boolean; revision: number }[];
   tools: string[];
   expectedPin: Json;
@@ -169,6 +171,30 @@ function repairChecks(files: Record<string, string>) {
 }
 
 export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
+  const files = observed.files;
+  if (!files || observed.snapshot?.error) {
+    return {
+      passed: false,
+      criticalPassed: false,
+      withinDeadline: false,
+      checks: {
+        shape: false,
+        facts: false,
+        citations: false,
+        conflicts: false,
+        state: false,
+        effects: false,
+        permissions: false,
+        pin: false,
+        files: false,
+        saved: false,
+        redaction: false,
+        terminal: false,
+        deadline: false,
+      },
+      judgment: "human-calibration-required" as const,
+    };
+  }
   const index = Number(task.id.slice(5)) - 1;
   if (!facts[index]) throw new Error("Hidden grader missing for task");
   const result =
@@ -186,8 +212,8 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
   };
   const preserved = Object.entries(expectedFiles).every(([file, content]) =>
     file === "src/settings.json" && task.id === "task-21"
-      ? repairChecks(observed.files)
-      : observed.files[file] === content,
+      ? repairChecks(files)
+      : files[file] === content,
   );
   const checks = {
     shape: equal(Object.keys(result).sort(), ["citations", "facts", "unresolved"]),
@@ -202,13 +228,12 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
     permissions: observed.tools.every((tool) => task.allowedTools.includes(tool)),
     pin: equal(observed.expectedPin, observed.observedPin),
     files:
-      preserved &&
-      Object.keys(observed.files).every((file) => file === "result.json" || file in task.files),
+      preserved && Object.keys(files).every((file) => file === "result.json" || file in task.files),
     saved:
-      typeof observed.files["result.json"] === "string" &&
+      typeof files["result.json"] === "string" &&
       (() => {
         try {
-          return equal(JSON.parse(observed.files["result.json"]!), observed.result);
+          return equal(JSON.parse(files["result.json"]!), observed.result);
         } catch {
           return false;
         }

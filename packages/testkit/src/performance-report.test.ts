@@ -1,3 +1,4 @@
+import { nextFence } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import { createTraceBuffer } from "../../adapters/src/scoreboard-trace.js";
 import {
@@ -648,13 +649,20 @@ describe("task, experiment and recovery evidence", () => {
   });
   it("accepts a complete crash from the matrix adapter only with trace links", () => {
     const stored = LOCAL_TRACE_BOUNDARIES;
-    const phase = (processId: string, points: readonly (typeof stored)[number][]) => {
-      const buffer = createTraceBuffer({ processId, now: () => 1 });
+    const killedOrigin = 1_700_000_000_000;
+    const recoveredOrigin = 1_700_000_004_000;
+    const phase = (
+      processId: string,
+      points: readonly (typeof stored)[number][],
+      attempt: number,
+      timeOrigin: number,
+    ) => {
+      const buffer = createTraceBuffer({ processId, now: () => 1, timeOrigin });
       let at = 0;
       for (const boundary of points) {
         const operation =
           boundary.startsWith("provider.") || boundary.startsWith("tool.")
-            ? { operationId: boundary.startsWith("tool.") ? "tool-1" : "provider-1", attempt: 0 }
+            ? { operationId: boundary.startsWith("tool.") ? "tool-1" : "provider-1", attempt }
             : {};
         buffer.record(
           "fixture-run",
@@ -689,15 +697,18 @@ describe("task, experiment and recovery evidence", () => {
                 boundary !== "provider.finished" &&
                 boundary !== "terminal.committed",
             ),
+            0,
+            killedOrigin,
           ),
         },
         after: {
           autonomousCompletion: false,
-          trace: phase("recovered-worker", [
-            "tool.finished",
-            "provider.finished",
-            "terminal.committed",
-          ]),
+          trace: phase(
+            "recovered-worker",
+            ["tool.finished", "provider.finished", "terminal.committed"],
+            nextFence(0),
+            recoveredOrigin,
+          ),
         },
       },
       coverage: [],

@@ -11,6 +11,9 @@ import { sanitize } from "../provenance.js";
 import { hermesArguments, superviseHermesProcess, syntheticHermesConfig } from "./hermes.js";
 import type { TrialArtifacts, TrialContext, VersusAdapter } from "./types.js";
 
+/** Cancel and loss probes use this sentence when the guest workspace was not read. */
+export const WORKSPACE_NOT_INSPECTED = "The workspace could not be inspected.";
+
 /** File contents stay in `files`. Symlink paths stay in `links` and are never followed. */
 export function guestWorkspace(entries: Record<string, string | { kind: "link" }>) {
   const files: Record<string, string> = {};
@@ -35,7 +38,12 @@ export class HermesContainerAdapter implements VersusAdapter {
   private operation: Promise<void> | null = null;
   private control = new AbortController();
   private elapsedMs = 0;
-  private snapshot: Awaited<ReturnType<TrialBroker["snapshot"]>> | null = null;
+  private snapshot:
+    | (Awaited<ReturnType<TrialBroker["snapshot"]>> & { snapshot?: { error: string } })
+    | (Awaited<ReturnType<TrialBroker["snapshotReceipts"]>> & {
+        snapshot: { error: string };
+      })
+    | null = null;
   constructor(
     private readonly options: {
       ledger: BudgetLedger;
@@ -177,7 +185,19 @@ export class HermesContainerAdapter implements VersusAdapter {
           artifactCollection: "guest-files-unavailable",
           receiptsRetained: true,
         });
-        return { ...(await this.broker!.snapshotReceipts()), files: {}, links: [] };
+        try {
+          return {
+            ...(await this.broker!.snapshotReceipts()),
+            snapshot: { error: WORKSPACE_NOT_INSPECTED },
+          };
+        } catch {
+          return {
+            state: [],
+            effects: [],
+            tools: [],
+            snapshot: { error: WORKSPACE_NOT_INSPECTED },
+          };
+        }
       });
       // Killing a docker client alone cannot cancel its guest process. Destroy the owned namespace.
       await session.destroy();
@@ -201,9 +221,10 @@ export class HermesContainerAdapter implements VersusAdapter {
     requireValue(this.context && this.operation, "No submitted container trial");
     await this.operation.catch(() => undefined);
     const snapshot = this.snapshot ?? { files: {}, links: [], state: [], effects: [], tools: [] };
+    const files = "files" in snapshot ? snapshot.files : undefined;
     let result: unknown = null;
     try {
-      result = JSON.parse(snapshot.files["result.json"] ?? "null");
+      result = JSON.parse(files?.["result.json"] ?? "null");
     } catch {
       /* Retain invalid artifacts. */
     }
