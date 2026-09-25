@@ -35,7 +35,8 @@ export class FleetCatalog {
       where: { id: "default" },
     });
     const kind = sandboxKindForBot(this.fallback.describe().id, deployment?.computerHost);
-    if (kind !== "docker") {
+    // The null binding refreshes both local rows when the default is the host.
+    if (kind !== "docker" && kind !== "desktop") {
       await this.fallback.capacity(context);
       return;
     }

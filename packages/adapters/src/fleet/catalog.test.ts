@@ -69,4 +69,11 @@ it("uses the configured desktop fallback for null bindings and can place work ba
     targetId: "host",
     connectionId: null,
   });
+  await catalog.testDefault(context);
+  const tested = await catalog.list(context);
+  expect(tested.targets.find((target) => target.id === "default")).toMatchObject({
+    kind: "docker",
+    version: "test",
+    os: "linux",
+  });
 });
