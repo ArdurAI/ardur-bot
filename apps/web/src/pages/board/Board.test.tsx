@@ -84,6 +84,24 @@ async function render(children: ReactNode, path = "/") {
   );
   return node;
 }
+it("shows a filed-by marker that links to the run", async () => {
+  const filed = {
+    ...item("board-a"),
+    filedBy: { botId: "builder", botName: "Builder", runId: "run-1" },
+  };
+  const node = await render(
+    <BoardColumns
+      snapshot={{
+        items: [filed],
+        readyIds: ["board-a"],
+        blockedIds: [],
+      }}
+      onOpen={() => undefined}
+    />,
+  );
+  const link = node.querySelector<HTMLAnchorElement>('a[href="/app/builder?run=run-1"]');
+  expect(link?.textContent).toContain("Builder");
+});
 it("preserves precise dates on unrelated edits and allows clearing or changing a date", async () => {
   const existing = {
     ...item("board-a"),

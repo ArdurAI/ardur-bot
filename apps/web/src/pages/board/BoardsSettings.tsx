@@ -1,9 +1,18 @@
+import type { SpaceLearningConfig } from "@ardurbot/contracts";
 import type { BoardConfiguration, BoardProblem, BoardWorkspace } from "@ardurbot/contracts/board";
-import { Button, Dialog, DialogContent, DialogTitle, Input, NativeSelect } from "@ardurbot/ui-web";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Input,
+  NativeSelect,
+  Switch,
+} from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { SettingsRow } from "../../components/SettingsRow";
-import { rpc } from "../../lib/rpc";
+import { rpc, selectedSpaceId } from "../../lib/rpc";
 import type { SettingsPageProps } from "../settings-types";
 
 export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageProps) {
@@ -16,12 +25,22 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
   const [error, setError] = useState(false);
   const [problem, setProblem] = useState<BoardProblem | null>(null);
   const [confirm, setConfirm] = useState<"start" | "archive" | null>(null);
+  const [upkeep, setUpkeep] = useState(true);
+  const [learning, setLearning] = useState<SpaceLearningConfig | null>(null);
   const board = boards.find((row) => row.id === id) ?? boards[0];
+  const reviewer = learning?.destination?.modelId ?? learning?.reviewerPin?.modelId ?? null;
   async function load() {
-    const [result, bots] = await Promise.all([rpc.board.workspaces({}), rpc.bots.list()]);
+    const [result, bots, upkeepResult, learningResult] = await Promise.all([
+      rpc.board.workspaces({}),
+      rpc.bots.list(),
+      rpc.board.upkeep({}),
+      rpc.learning.settings(),
+    ]);
     setBoards(result.workspaces);
     setProblem(result.problem);
     setBots(bots);
+    setUpkeep(upkeepResult.enabled);
+    setLearning(learningResult);
     setLoaded(true);
   }
   useEffect(() => {
@@ -77,6 +96,64 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
             <Trans>Retry</Trans>
           </Button>
         </p>
+      ) : null}
+      <SettingsRow label={t`Bots keep the board and memory current`}>
+        <Switch
+          aria-label={t`Bots keep the board and memory current`}
+          checked={upkeep}
+          disabled={busy || !loaded}
+          onCheckedChange={(enabled) =>
+            void work(async () => {
+              setUpkeep((await rpc.board.setUpkeep({ enabled })).enabled);
+            })
+          }
+        />
+      </SettingsRow>
+      {learning ? (
+        <SettingsRow
+          label={t`Learning review`}
+          content={
+            <p className="py-2 text-sm text-muted-foreground">
+              {reviewer ? (
+                <Trans>Reviewer: {reviewer}</Trans>
+              ) : (
+                <Trans>No reviewer model yet.</Trans>
+              )}
+            </p>
+          }
+        >
+          <span>
+            {learning.enabled ? (
+              <Trans>Learning review is on</Trans>
+            ) : (
+              <Trans>Learning review is off</Trans>
+            )}
+          </span>
+          {!learning.enabled ? (
+            <Button
+              variant="outline"
+              disabled={busy || !learning.canConfigure || !learning.destination}
+              onClick={() =>
+                void work(async () => {
+                  const spaceId = selectedSpaceId();
+                  setLearning(
+                    await rpc.learning.configure(
+                      {
+                        enabled: true,
+                        reviewerPin: learning.reviewerPin ?? learning.destination,
+                        consolidationEnabled: learning.consolidationEnabled,
+                        budgets: learning.budgets,
+                      },
+                      spaceId ? { context: { spaceId } } : undefined,
+                    ),
+                  );
+                })
+              }
+            >
+              <Trans>Enable</Trans>
+            </Button>
+          ) : null}
+        </SettingsRow>
       ) : null}
       <SettingsRow
         label={t`Beads`}

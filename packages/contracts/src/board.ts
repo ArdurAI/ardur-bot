@@ -21,6 +21,7 @@ export const BOARD_STATUSES = [
   "pinned",
   "hooked",
 ] as const;
+export const BOT_FILED_LABEL = "bot-filed";
 export const BOARD_LINK_TYPES = [
   "blocks",
   "tracks",
@@ -58,6 +59,12 @@ export const BoardCommentSchema = z.object({
   text: z.string(),
   createdAt: z.string(),
 });
+export const BoardFilingSchema = z.object({
+  botId: z.string().min(1).max(128),
+  botName: z.string().min(1).max(80),
+  runId: z.string().min(1).max(128),
+});
+export type BoardFiling = z.infer<typeof BoardFilingSchema>;
 export const BoardHistorySchema = z.object({
   id: z.string(),
   author: z.string(),
@@ -87,6 +94,7 @@ export const WorkItemSchema = z.object({
   comments: z.array(BoardCommentSchema),
   history: z.array(BoardHistorySchema),
   closeWhenDone: z.boolean().default(false),
+  filedBy: BoardFilingSchema.nullable().optional(),
 });
 export type WorkItem = z.infer<typeof WorkItemSchema>;
 export type BoardComment = z.infer<typeof BoardCommentSchema>;
@@ -294,6 +302,10 @@ export const boardContract = {
     .input(workspaceInput.extend({ rootId: BoardItemIdSchema.optional() }))
     .output(BoardGraphSchema),
   export: oc.input(workspaceInput).output(z.object({ path: z.string() })),
+  upkeep: oc.input(z.object({})).output(z.object({ enabled: z.boolean() })),
+  setUpkeep: oc
+    .input(z.object({ enabled: z.boolean() }))
+    .output(z.object({ enabled: z.boolean() })),
   send: oc
     .input(itemInput.extend({ botId: z.string(), clientNonce: z.string().min(1).max(100) }))
     .output(z.object({ runId: z.string(), botId: z.string() })),

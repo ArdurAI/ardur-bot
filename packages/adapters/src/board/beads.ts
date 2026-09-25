@@ -15,6 +15,7 @@ import {
   BoardClaimFilterSchema,
   BoardCreateSchema,
   BoardError,
+  BoardFilingSchema,
   BoardFilterSchema,
   BoardItemIdSchema,
   BoardPatchSchema,
@@ -23,6 +24,7 @@ import {
 } from "@ardurbot/contracts/board";
 import { getLogger } from "@ardurbot/logging";
 import { z } from "zod";
+import { filingBotName } from "./filing.js";
 
 export type BoardTransport = (request: BoardRun) => Promise<BoardRunResult>;
 const rawObject = z.record(z.string(), z.unknown());
@@ -65,6 +67,13 @@ export function parseBeadsItem(value: unknown): WorkItem {
       direction: "incoming" as const,
     })),
   );
+  const labels = array(raw.labels).map((label) => z.string().parse(label));
+  const meta = metadata(raw.metadata);
+  const runId = str(meta.ardur_run_id);
+  const botId = str(meta.ardur_bot_id);
+  const botName = str(meta.ardur_filed_by);
+  const filed =
+    runId && botId && botName ? BoardFilingSchema.safeParse({ botId, botName, runId }) : null;
   return WorkItemSchema.parse({
     id,
     title: z.string().parse(raw.title),
@@ -74,7 +83,7 @@ export function parseBeadsItem(value: unknown): WorkItem {
     status: str(raw.status, "open"),
     priority: num(raw.priority, 2),
     assignee: str(raw.assignee) || null,
-    labels: array(raw.labels).map((label) => z.string().parse(label)),
+    labels,
     parent:
       str(raw.parent) ||
       dependencies.find((edge) => edge.type === "parent-child" && edge.direction === "outgoing")
@@ -91,7 +100,8 @@ export function parseBeadsItem(value: unknown): WorkItem {
     commentCount: num(raw.comment_count, array(raw.comments).length),
     comments: array(raw.comments).map(parseBeadsComment),
     history: [],
-    closeWhenDone: metadata(raw.metadata).ardur_close_when_done === true,
+    closeWhenDone: meta.ardur_close_when_done === true,
+    filedBy: filed?.success ? filed.data : null,
   });
 }
 export class BeadsBoardProvider implements ProjectBoardProvider {
@@ -254,6 +264,25 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     if (this.options.observe)
       await this.show(id).catch((error) => getLogger().error("board comment observation", error));
     return comment;
+  }
+  async noteFiling(
+    id: string,
+    filing: { runId: string; botId: string; botName: string },
+  ): Promise<WorkItem> {
+    BoardItemIdSchema.parse(id);
+    if (
+      !/^[A-Za-z0-9_-]{1,128}$/.test(filing.runId) ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(filing.botId)
+    )
+      throw new BoardError({
+        code: "forbidden",
+        message: "This run cannot be recorded on the board.",
+      });
+    const name = filingBotName(filing.botName);
+    await this.json(["update", id, "--set-metadata", `ardur_run_id=${filing.runId}`]);
+    await this.json(["update", id, "--set-metadata", `ardur_bot_id=${filing.botId}`]);
+    await this.json(["update", id, "--set-metadata", `ardur_filed_by=${name}`]);
+    return this.show(id);
   }
   async link(from: string, to: string, type: string) {
     BoardItemIdSchema.parse(from);

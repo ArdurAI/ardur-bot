@@ -1113,6 +1113,11 @@ msgstr "默认情况下 Bot 会直接执行。只有当你想先审核某类操�
 msgid "Bots are working"
 msgstr "Bot 正在工作"
 
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Bots keep the board and memory current"
+msgstr "机器人会保持看板和记忆为最新"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -3155,6 +3160,7 @@ msgstr ""
 msgid "Email"
 msgstr "邮箱"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3384,6 +3390,10 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 msgid "Feedback corrections"
 msgstr ""
+
+#: src/pages/board/FiledBy.tsx
+msgid "Filed by {name}"
+msgstr "由机器人 {name} 记录"
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
@@ -4067,6 +4077,19 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Learning review"
+msgstr "学习复查"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is off"
+msgstr "学习复查已关闭"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is on"
+msgstr "学习复查已开启"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -4890,6 +4913,10 @@ msgstr ""
 #: src/pages/SpaceSearch.tsx
 msgid "No results"
 msgstr "无结果"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "No reviewer model yet."
+msgstr "尚未选择复查模型。"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
@@ -6153,6 +6180,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Reviewer"
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Reviewer: {reviewer}"
+msgstr "复查模型：{reviewer}"
 
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."

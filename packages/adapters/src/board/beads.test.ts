@@ -112,6 +112,21 @@ describe("Beads provider using a recorded executable", () => {
     ).toHaveLength(2);
     expect(await f.provider.listWorkspaces()).toHaveLength(2);
   });
+  it("stores the originating run on a bot-filed item", async () => {
+    const f = await fixture();
+    await f.provider.noteFiling("board-a", {
+      runId: "run-1",
+      botId: "builder",
+      botName: "Builder",
+    });
+    expect(
+      f.requests.filter((request) => request.argv[0] === "update").map((request) => request.argv),
+    ).toEqual([
+      ["update", "board-a", "--set-metadata", "ardur_run_id=run-1"],
+      ["update", "board-a", "--set-metadata", "ardur_bot_id=builder"],
+      ["update", "board-a", "--set-metadata", "ardur_filed_by=Builder"],
+    ]);
+  });
   it("patches do not reset creation defaults", () => {
     expect(BoardPatchSchema.parse({ description: "Updated" })).toEqual({ description: "Updated" });
   });

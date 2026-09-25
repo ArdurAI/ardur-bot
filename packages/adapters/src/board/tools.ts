@@ -13,6 +13,24 @@ import type { PrismaClient } from "@ardurbot/db";
 import { z } from "zod";
 import type { BoardScope } from "./service.js";
 import { BoardService } from "./service.js";
+import {
+  BOARD_WRITE_TOOLS,
+  type BoardToolAccess,
+  type BoardUnavailableReason,
+  boardUnavailableSentence,
+  duplicateBoardItemMessage,
+  filingBotName,
+  normalizeBoardTitle,
+  redactBoardText,
+  withBotFiledLabel,
+} from "./upkeep.js";
+
+export type BoardToolRunOptions = {
+  upkeep?: boolean;
+  secrets?: string[];
+  board?: BoardToolAccess;
+  reason?: BoardUnavailableReason | null;
+};
 
 const workspace = z.object({ workspaceId: z.string().optional() });
 const item = workspace.extend({ id: BoardItemIdSchema });
@@ -62,23 +80,84 @@ export async function executeBoardTool(
   scope: BoardScope,
   name: string,
   raw: unknown,
+  options: BoardToolRunOptions = {},
 ) {
   const schema = boardToolSchemas[name as keyof typeof boardToolSchemas];
   if (!schema) throw new Error("Unknown board tool.");
+  if (
+    options.upkeep &&
+    options.board &&
+    options.board !== "write" &&
+    (options.board === "none" || BOARD_WRITE_TOOLS.has(name))
+  ) {
+    return {
+      error: boardUnavailableSentence(
+        options.reason ?? (options.board === "read" ? "read-only" : "no-board"),
+      ),
+    };
+  }
   const input = schema.parse(raw);
+  const secrets = options.upkeep ? (options.secrets ?? []) : [];
   const provider = await service.provider(scope, input.workspaceId);
   switch (name) {
     case "board_ready":
       return { items: await provider.ready(boardToolSchemas.board_ready.parse(raw).filter) };
     case "board_show":
       return provider.show(boardToolSchemas.board_show.parse(raw).id);
-    case "board_create":
-      return provider.create(boardToolSchemas.board_create.parse(raw).item);
+    case "board_create": {
+      const args = boardToolSchemas.board_create.parse(raw);
+      const item = {
+        ...args.item,
+        ...(args.item.title ? { title: redactBoardText(args.item.title, secrets) } : {}),
+        ...(args.item.description !== undefined
+          ? { description: redactBoardText(args.item.description, secrets) }
+          : {}),
+        ...(args.item.acceptanceCriteria !== undefined
+          ? { acceptanceCriteria: redactBoardText(args.item.acceptanceCriteria, secrets) }
+          : {}),
+      };
+      if (!options.upkeep) return provider.create(item);
+      const title = normalizeBoardTitle(item.title);
+      const existing = (await provider.list()).find(
+        (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
+      );
+      if (existing)
+        return { item: existing, duplicate: true, message: duplicateBoardItemMessage(existing.id) };
+      const reserved = await service.reserveBotFiling(scope);
+      if (!reserved.ok) return { error: reserved.message };
+      let created: Awaited<ReturnType<typeof provider.create>> | undefined;
+      try {
+        created = await provider.create({ ...item, labels: withBotFiledLabel(item.labels) });
+        if (!scope.runId || !scope.botId || typeof provider.noteFiling !== "function")
+          return created;
+        const actor = await service.actor(scope);
+        return await provider.noteFiling(created.id, {
+          runId: scope.runId,
+          botId: scope.botId,
+          botName: filingBotName(actor.startsWith("bot:") ? actor.slice(4) : actor),
+        });
+      } catch (error) {
+        if (!created) await service.releaseBotFiling(reserved.id);
+        throw error;
+      }
+    }
     case "board_update": {
       const args = boardToolSchemas.board_update.parse(raw);
       if (args.patch.status === "closed")
         await service.assertBotMayClose(scope, input.workspaceId, [args.id]);
-      return provider.update(args.id, args.patch);
+      const patch = {
+        ...args.patch,
+        ...(args.patch.title !== undefined
+          ? { title: redactBoardText(args.patch.title, secrets) }
+          : {}),
+        ...(args.patch.description != null
+          ? { description: redactBoardText(args.patch.description, secrets) }
+          : {}),
+        ...(args.patch.acceptanceCriteria != null
+          ? { acceptanceCriteria: redactBoardText(args.patch.acceptanceCriteria, secrets) }
+          : {}),
+      };
+      return provider.update(args.id, patch);
     }
     case "board_claim": {
       const args = boardToolSchemas.board_claim.parse(raw);
@@ -87,11 +166,11 @@ export async function executeBoardTool(
     case "board_close": {
       const args = boardToolSchemas.board_close.parse(raw);
       await service.assertBotMayClose(scope, input.workspaceId, args.ids);
-      return provider.close(args.ids, args.reason);
+      return provider.close(args.ids, redactBoardText(args.reason, secrets));
     }
     case "board_comment": {
       const args = boardToolSchemas.board_comment.parse(raw);
-      return provider.comment(args.id, args.text);
+      return provider.comment(args.id, redactBoardText(args.text, secrets));
     }
     case "board_link": {
       const args = boardToolSchemas.board_link.parse(raw);

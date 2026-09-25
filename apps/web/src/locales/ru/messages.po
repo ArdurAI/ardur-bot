@@ -1113,6 +1113,11 @@ msgstr "По умолчанию боты действуют, не спрашив
 msgid "Bots are working"
 msgstr "Боты работают"
 
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Bots keep the board and memory current"
+msgstr "Боты поддерживают доску и память в актуальном состоянии"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -3155,6 +3160,7 @@ msgstr ""
 msgid "Email"
 msgstr "Электронная почта"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3384,6 +3390,10 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 msgid "Feedback corrections"
 msgstr ""
+
+#: src/pages/board/FiledBy.tsx
+msgid "Filed by {name}"
+msgstr "Создал бот {name}"
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
@@ -4067,6 +4077,19 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Learning review"
+msgstr "Проверка обучения"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is off"
+msgstr "Проверка обучения выключена"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is on"
+msgstr "Проверка обучения включена"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -4890,6 +4913,10 @@ msgstr "Удаленные MCP-серверы не найдены"
 #: src/pages/SpaceSearch.tsx
 msgid "No results"
 msgstr "Нет результатов"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "No reviewer model yet."
+msgstr "Проверяющая модель ещё не выбрана."
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
@@ -6153,6 +6180,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Reviewer"
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Reviewer: {reviewer}"
+msgstr "Проверяющая модель: {reviewer}"
 
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."

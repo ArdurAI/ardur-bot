@@ -61,17 +61,23 @@ export default function OverviewScreen() {
                   {t("Blocked")}: {data.blocked}
                 </Line>
                 {data.items.map((item) => (
-                  <Button
-                    key={item.id}
-                    title={item.title}
-                    onPress={() =>
-                      router.setParams({
-                        view: "board",
-                        workspace: data.workspace?.id,
-                        item: item.id,
-                      })
-                    }
-                  />
+                  <View key={item.id}>
+                    <Button
+                      title={item.title}
+                      onPress={() =>
+                        router.setParams({
+                          view: "board",
+                          workspace: data.workspace?.id,
+                          item: item.id,
+                        })
+                      }
+                    />
+                    {item.filedBy ? (
+                      <Text style={{ color: tokens.foreground }}>
+                        {t("Filed by {name}", { name: item.filedBy.botName })}
+                      </Text>
+                    ) : null}
+                  </View>
                 ))}
                 {!data.workspace ? (
                   <Button

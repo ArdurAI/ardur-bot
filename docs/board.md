@@ -138,9 +138,27 @@ not a full Dolt backup.
 
 `board_ready`, `board_show`, `board_create`, `board_update`, `board_claim`,
 `board_close`, `board_comment` and `board_link` use the shared tool registry for
-all supported runtimes. Reads are read-only; writes go through the existing
-low-risk action approval rules. Webhook authority does not bypass approvals.
-There is no delete tool.
+all supported runtimes, including Pi, Claude Code and Codex. Reads are read-only;
+writes go through the existing low-risk action approval rules. Webhook authority
+does not bypass approvals. There is no delete tool.
+
+Settings → Customize → Boards includes "Bots keep the board and memory current".
+It is on by default. While it is on, a bot that can reach an enabled board receives
+those tools and a short instruction: claim or link the item this run serves, file
+unfinished work after checking for an open item with the same title, comment
+outcomes, close finished items with a reason, and record durable learnings with
+`remember`. If there is no board, the computer is unreachable, or the run is
+read-only, the instruction says so in one sentence and only tools that can run are
+offered. Turning the setting off removes that instruction and leaves tool behavior
+as it was. The same row shows whether learning review is on, the reviewer model,
+and Enable. Enable uses the existing learning configure call. Learning review stays
+off until someone turns it on.
+
+Bot-created items keep the actor `bot:<name>`, the label `bot-filed`, and the run
+id in Beads metadata. The server allows 5 new items per run and 30 per space each
+hour, returns an existing open item when the normalized title matches, and redacts
+that run's secrets from titles, bodies and comments. Read-only grants still reject
+writes.
 
 Send to a bot creates a normal conversation turn containing the item's title,
 description and acceptance criteria. The item becomes in progress, assigned to

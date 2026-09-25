@@ -13,6 +13,12 @@ import { BoardRunner } from "@ardurbot/host-runtime/board/runner";
 import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
+import {
+  RUN_FILING_CAP,
+  RUN_FILING_LIMIT,
+  SPACE_FILING_CAP,
+  SPACE_FILING_LIMIT,
+} from "./upkeep.js";
 
 export type BoardScope = {
   userId: string;
@@ -290,5 +296,47 @@ export class BoardService {
     const item = await (await this.provider(scope, workspace.id)).show(run.boardItemId);
     if (!run.boardCloseWhenDone || !item.closeWhenDone)
       throw new BoardError({ code: "forbidden", message: "Closing this item is a human action." });
+  }
+  async upkeep(scope: BoardScope) {
+    await this.actor(scope);
+    const row = await this.options.prisma.space.findUnique({
+      where: { id: scope.spaceId },
+      select: { botUpkeep: true },
+    });
+    return { enabled: row?.botUpkeep !== false };
+  }
+  async setUpkeep(scope: BoardScope, enabled: boolean) {
+    if (scope.botId)
+      throw new BoardError({ code: "forbidden", message: "Configure this board in Settings." });
+    await this.actor(scope);
+    const saved = await this.options.prisma.space.update({
+      where: { id: scope.spaceId },
+      data: { botUpkeep: enabled },
+      select: { botUpkeep: true },
+    });
+    return { enabled: saved.botUpkeep };
+  }
+  async reserveBotFiling(scope: BoardScope) {
+    if (!scope.runId) return { ok: false as const, message: RUN_FILING_LIMIT };
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const runId = scope.runId;
+    return this.options.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM spaces WHERE id = ${scope.spaceId} FOR UPDATE`;
+      const runCount = await tx.botBoardFiling.count({
+        where: { spaceId: scope.spaceId, runId },
+      });
+      if (runCount >= RUN_FILING_CAP) return { ok: false as const, message: RUN_FILING_LIMIT };
+      const hourCount = await tx.botBoardFiling.count({
+        where: { spaceId: scope.spaceId, createdAt: { gte: since } },
+      });
+      if (hourCount >= SPACE_FILING_CAP) return { ok: false as const, message: SPACE_FILING_LIMIT };
+      const row = await tx.botBoardFiling.create({
+        data: { spaceId: scope.spaceId, runId },
+      });
+      return { ok: true as const, id: row.id };
+    });
+  }
+  async releaseBotFiling(id: string) {
+    await this.options.prisma.botBoardFiling.delete({ where: { id } }).catch(() => undefined);
   }
 }

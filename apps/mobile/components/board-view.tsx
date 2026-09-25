@@ -336,6 +336,11 @@ export function MobileBoard() {
                   {item.id} · P{item.priority}
                   {item.assignee ? ` · ${item.assignee}` : ""}
                 </Text>
+                {item.filedBy ? (
+                  <Text style={foreground}>
+                    {t("Filed by {name}", { name: item.filedBy.botName })}
+                  </Text>
+                ) : null}
               </View>
             )}
           />
@@ -375,6 +380,11 @@ export function MobileBoard() {
               <Text accessibilityRole="header" style={[styles.title, foreground]}>
                 {selected.title}
               </Text>
+              {selected.filedBy ? (
+                <Text style={foreground}>
+                  {t("Filed by {name}", { name: selected.filedBy.botName })}
+                </Text>
+              ) : null}
               <Text style={foreground}>{selected.description}</Text>
               {selected.acceptanceCriteria ? (
                 <>

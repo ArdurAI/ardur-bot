@@ -3,6 +3,7 @@ import { Button } from "@ardurbot/ui-web";
 import { Trans } from "@lingui/react/macro";
 import { Link } from "react-router-dom";
 import { rpc } from "../../lib/rpc";
+import { FiledBy } from "../board/FiledBy";
 import type { PanelActions, PanelContext } from "./panels";
 
 export function load({ signal, spaceId }: PanelContext) {
@@ -37,13 +38,14 @@ export default function WorkPanel({ data, openSettings }: { data: BoardWork } & 
       {data.items.length ? (
         <ul className="space-y-2">
           {data.items.map((item) => (
-            <li key={item.id}>
+            <li key={item.id} className="flex flex-wrap items-baseline gap-2">
               <Link
                 className="underline"
                 to={`/app/board?workspace=${encodeURIComponent(data.workspace!.id)}&item=${encodeURIComponent(item.id)}`}
               >
                 {item.title}
               </Link>
+              {item.filedBy ? <FiledBy filing={item.filedBy} /> : null}
             </li>
           ))}
         </ul>
