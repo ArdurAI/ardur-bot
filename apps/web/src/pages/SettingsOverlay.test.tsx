@@ -28,11 +28,11 @@ vi.mock("../lib/rpc", () => ({
 }));
 vi.mock("./memory/MemoryPage", () => ({ MemoryPage: () => <div>Generate memory from chats</div> }));
 vi.mock("./AccountSettingsOverlay", () => ({
-  GeneralSettingsPanels: () => <div>Account content</div>,
   UsageSettingsPanel: () => <div>Usage content</div>,
   ComputerSettingsPanel: () => <div>This computer folders</div>,
   UpdatesSettingsPanel: () => <div>Update content</div>,
 }));
+vi.mock("./account/AccountSettings", () => ({ default: () => <div>Account content</div> }));
 vi.mock("./MemorySettingsOverlay", () => ({
   MemorySettingsOverlay: () => <div>Existing memory and skills</div>,
 }));
@@ -42,6 +42,11 @@ vi.mock("./VoiceSettingsOverlay", () => ({ VoiceSettingsOverlay: () => <div>Voic
 vi.mock("./DevicesSettings", () => ({ DevicesSettings: () => <div>Device content</div> }));
 vi.mock("./McpServersOverlay", () => ({ McpServersOverlay: () => <div>MCP servers</div> }));
 vi.mock("./KnowledgeSection", () => ({ AgentSkills: () => <div>Existing skills</div> }));
+vi.mock("./customize/ExtensionsPage", () => ({
+  default: () => <div>Installed on your computer</div>,
+}));
+vi.mock("./customize/SkillsPage", () => ({ default: () => <div>Created by you</div> }));
+vi.mock("./customize/PluginsPage", () => ({ default: () => <div>In this space</div> }));
 vi.mock("./LearningInbox", () => ({
   LearningInbox: () => <div>Learning inbox timeline and curator</div>,
 }));
@@ -83,6 +88,10 @@ beforeEach(() => {
     },
   }));
 });
+async function waitForSection(check: () => boolean) {
+  await act(() => vi.dynamicImportSettled());
+  await waitForSettings(check);
+}
 async function render(desktop = false) {
   if (desktop)
     window.ardurbotDesktop = { platform: "darwin" } as NonNullable<Window["ardurbotDesktop"]>;
@@ -91,7 +100,7 @@ async function render(desktop = false) {
       <SettingsOverlay {...props} isDeploymentOwner />
     </PreferencesProvider>,
   );
-  await waitForSettings(() => !!result.container.querySelector('[data-settings-row="Chat font"]'));
+  await waitForSection(() => !!result.container.querySelector('[data-settings-row="Chat font"]'));
   return result.container;
 }
 it("filters sections and open row labels, then clears search on navigation", async () => {
@@ -105,7 +114,7 @@ it("filters sections and open row labels, then clears search on navigation", asy
   await act(async () =>
     container.querySelector<HTMLButtonElement>('[data-testid="settings-nav-privacy"]')!.click(),
   );
-  await waitForSettings(() => container.textContent!.includes("Your data"));
+  await waitForSection(() => container.textContent!.includes("Your data"));
   expect(search.value).toBe("");
   expect(container.textContent).not.toContain("How we protect your data");
 });
@@ -176,25 +185,25 @@ it("keeps denied permission out of saved settings and retries a failed initial r
   expect(container.textContent).toContain("Allow notifications in your browser settings");
   expect(fake.update).not.toHaveBeenCalled();
 });
-it("keeps all desktop placeholders backed by working content or an empty state", async () => {
+it("loads the registered pages without duplicate navigation", async () => {
   const container = await render(true);
   for (const [id, copy] of [
     ["account", "Account content"],
     ["capabilities", "Tool access mode"],
     ["memory", "Generate memory from chats"],
     ["system", "Restart the desktop app to update it."],
-    ["extensions", "MCP servers"],
+    ["extensions", "Installed on your computer"],
     ["developer", "Server URL"],
-    ["skills", "Existing skills"],
+    ["skills", "Created by you"],
     ["integrations", "Connected apps"],
     ["mcp", "MCP servers"],
     ["learning", "Learning inbox timeline and curator"],
-    ["plugins", "Nothing installed yet"],
+    ["plugins", "In this space"],
   ]) {
     await act(async () =>
       container.querySelector<HTMLButtonElement>(`[data-testid="settings-nav-${id}"]`)!.click(),
     );
-    await waitForSettings(() => container.textContent!.includes(copy!));
+    await waitForSection(() => container.textContent!.includes(copy!));
   }
   expect(container.querySelector('[data-testid="settings-nav-local-api"]')).toBeNull();
 });
@@ -206,7 +215,7 @@ it("opens the trusted registry from the integration deep link and preserves comp
       initialIntegration="connection-test"
     />,
   );
-  await waitForSettings(() => container.textContent!.includes("Connected apps"));
+  await waitForSection(() => container.textContent!.includes("Connected apps"));
   expect(container.querySelector('[data-settings-section="integrations"]')).not.toBeNull();
   expect(container.querySelector('[data-reconnect-id="connection-test"]')).not.toBeNull();
   expect(container.querySelector('[data-testid="settings-nav-connectors"]')).toBeNull();
@@ -236,7 +245,7 @@ it("searches capability rows and opens Skills through the registry", async () =>
       .find((button) => button.textContent === "Skills have moved to Customize")!
       .click(),
   );
-  await waitForSettings(() => container.textContent!.includes("Existing skills"));
+  await waitForSettings(() => container.textContent!.includes("Created by you"));
   expect(container.querySelector('[data-settings-section="skills"]')).not.toBeNull();
 });
 

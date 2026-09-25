@@ -1,12 +1,12 @@
 {
-  "baselineCommit": "e53945d844b67ff5d28627e08b07a9cc692e6585",
+  "baselineCommit": "cd4f634d95dceb04bced6016673cc486bdba2cdd",
   "node": "26.7.0",
   "pnpm": "9.15.0",
   "gzipLevel": 9,
   "initial": {
-    "baseline": 411371,
-    "withIDE": 411517,
-    "delta": 146,
+    "baseline": 412550,
+    "withIDE": 412690,
+    "delta": 140,
     "limit": 1024
   },
   "lazyChunks": [
@@ -20,7 +20,7 @@
     },
     {
       "id": "src/pages/ide/IdePage.tsx",
-      "file": "assets/IdePage-AsYsFy_C.js",
+      "file": "assets/IdePage-BzRFu1nk.js",
       "lazy": true,
       "dynamic": true,
       "raw": 24484,
@@ -36,7 +36,7 @@
     },
     {
       "id": "src/pages/shell/terminal-session.tsx",
-      "file": "assets/terminal-session-D4vTAbpH.js",
+      "file": "assets/terminal-session-SeZ66_Nn.js",
       "lazy": true,
       "dynamic": true,
       "raw": 370820,

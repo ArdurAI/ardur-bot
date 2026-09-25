@@ -11,6 +11,7 @@ export {
   TERMINAL_WINDOW_BYTES,
   validateTerminalSize,
 } from "@ardurbot/contracts";
+export * from "./account.js";
 export * from "./action-approval.js";
 export * from "./agent-skill.js";
 export * from "./ai-consent.js";
@@ -33,6 +34,7 @@ export * from "./composer-mention-picker.js";
 export * from "./composer-mentions.js";
 export * from "./composer-slash.js";
 export * from "./computer-updates.js";
+export * from "./connector-rows.js";
 export * from "./cron.js";
 export * from "./delegation-policy.js";
 export * from "./events.js";

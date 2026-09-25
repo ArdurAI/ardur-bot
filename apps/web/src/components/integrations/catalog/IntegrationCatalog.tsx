@@ -1,16 +1,30 @@
-import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/contracts";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@ardurbot/ui-web";
+import type { IntegrationConnection, IntegrationDescriptor, McpServer } from "@ardurbot/contracts";
+import { Button, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { connectIntegration } from "../../../lib/connect-integration";
 import { refreshIntegrationCatalog } from "../../../lib/integration-catalog-query";
 import { MCP_OAUTH_CHANNEL } from "../../../lib/mcp-connect";
 import { rpc } from "../../../lib/rpc";
+import type { CatalogTab } from "../../../pages/customize/CustomizeControls";
+import { CustomizeToolbar } from "../../../pages/customize/CustomizeControls";
+import { connectorRows } from "../../../pages/customize/connector-rows";
+import { IntegrationTable } from "../../../pages/customize/IntegrationTable";
 import { IntegrationManage } from "./IntegrationManage";
 
-export function IntegrationCatalog({ reconnectId }: { reconnectId?: string }) {
+export function IntegrationCatalog({
+  reconnectId,
+  onBusyChange,
+}: {
+  reconnectId?: string;
+  onBusyChange?(busy: boolean): void;
+}) {
   const { t } = useLingui();
   const consentPopup = useRef<Window | null>(null);
+  const focusedReconnect = useRef<string | null>(null);
+  const [tab, setTab] = useState<CatalogTab>("catalog");
+  const [query, setQuery] = useState("");
+  const [servers, setServers] = useState<McpServer[]>([]);
   const [catalog, setCatalog] = useState<IntegrationDescriptor[]>([]);
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -20,11 +34,23 @@ export function IntegrationCatalog({ reconnectId }: { reconnectId?: string }) {
   const [customHost, setCustomHost] = useState(false);
   const [tokenFor, setTokenFor] = useState<string | null>(null);
   const [token, setToken] = useState("");
+  useEffect(() => {
+    onBusyChange?.(busy !== null);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
   const refresh = async () => {
-    const result = await refreshIntegrationCatalog();
-    if (reconnectId) {
+    const [result, servers] = await Promise.all([
+      refreshIntegrationCatalog(),
+      rpc.mcp.servers.list(),
+    ]);
+    setServers(servers);
+    if (reconnectId && focusedReconnect.current !== reconnectId) {
       const connection = result.connections.find((row) => row.id === reconnectId);
-      if (connection) setTokenFor(connection.catalogId);
+      if (connection) {
+        focusedReconnect.current = reconnectId;
+        setTab("yours");
+        setTokenFor(connection.catalogId);
+      }
     }
     setCatalog(result.catalog);
     setConnections(result.connections);
@@ -123,8 +149,20 @@ export function IntegrationCatalog({ reconnectId }: { reconnectId?: string }) {
         return t`Connect your account.`;
     }
   }
+  const rows = connectorRows({ catalog, connections, servers, catalogTab: true }).filter(
+    (row) =>
+      (tab === "catalog" || !row.id.startsWith("catalog:")) &&
+      row.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+  );
   return (
     <div className="space-y-4" data-testid="integration-catalog">
+      <CustomizeToolbar
+        tab={tab}
+        onTab={setTab}
+        query={query}
+        onQuery={setQuery}
+        searchLabel={t`Search integrations`}
+      />
       {error ? (
         <div role="alert" className="space-y-2">
           <p className="text-sm text-destructive">{t`Could not connect or load integrations.`}</p>
@@ -134,141 +172,156 @@ export function IntegrationCatalog({ reconnectId }: { reconnectId?: string }) {
           >{t`Try again`}</Button>
         </div>
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {catalog.map((descriptor) => {
-          const connection = connections.find((entry) => entry.catalogId === descriptor.id);
+      <IntegrationTable
+        rows={rows}
+        busy={busy}
+        onConnect={(row) => {
+          const descriptor = catalog.find((item) => item.id === row.catalogId);
+          const connection = connections.find((item) => item.id === row.id);
+          if (!descriptor) return;
+          if (descriptor.authKind === "token") setTokenFor(descriptor.id);
+          else void connect(descriptor, connection);
+        }}
+        renderActions={(row) => {
+          const descriptor = catalog.find((item) => item.id === row.catalogId)!;
+          const connection = connections.find((item) => item.id === row.id);
           return (
-            <Card key={descriptor.id} data-testid={`integration-${descriptor.id}`}>
-              <CardHeader>
-                <CardTitle>{descriptor.name}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  {descriptor.available ? sentence(descriptor, connection) : t`Coming soon`}
-                </p>
-                {!descriptor.available ? null : descriptor.authKind === "token" &&
-                  connection?.state !== "connected" &&
-                  connection?.state !== "awaiting-consent" ? (
-                  <div className="space-y-3">
-                    {tokenFor === descriptor.id ? (
-                      <form
-                        className="space-y-2"
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          void connect(descriptor, connection, "token");
-                        }}
-                      >
-                        <Input
-                          type="password"
-                          aria-label={t`Fine-grained token`}
-                          autoComplete="off"
-                          spellCheck={false}
-                          value={token}
-                          onChange={(event) => setToken(event.target.value)}
-                        />
-                        <p className="text-sm text-muted-foreground">{t`Grant only the repositories and permissions this bot needs.`}</p>
-                        <a
-                          className="text-sm underline"
-                          href={descriptor.tokenUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >{t`Create a token`}</a>
-                        <div className="flex gap-2">
-                          <Button
-                            type="submit"
-                            disabled={busy !== null || !token.trim()}
-                          >{t`Connect`}</Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={busy !== null}
-                            onClick={() => {
-                              setToken("");
-                              setTokenFor(null);
-                            }}
-                          >{t`Cancel`}</Button>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
+            <div className="mt-2 space-y-3">
+              {descriptor.available ? (
+                <p className="text-sm text-muted-foreground">{sentence(descriptor, connection)}</p>
+              ) : null}
+              {!descriptor.available ? (
+                <span className="text-xs text-muted-foreground">{t`Coming soon`}</span>
+              ) : descriptor.authKind === "token" &&
+                (connection?.state !== "connected" || row.status === "reconnect") &&
+                connection?.state !== "awaiting-consent" ? (
+                <div className="space-y-3">
+                  {tokenFor === descriptor.id ? (
+                    <form
+                      className="space-y-2"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void connect(descriptor, connection, "token");
+                      }}
+                    >
+                      <Input
+                        type="password"
+                        aria-label={t`Fine-grained token`}
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={token}
+                        onChange={(event) => setToken(event.target.value)}
+                      />
+                      <p className="text-sm text-muted-foreground">{t`Grant only the repositories and permissions this bot needs.`}</p>
+                      <a
+                        className="text-sm underline"
+                        href={descriptor.tokenUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >{t`Create a token`}</a>
+                      <div className="flex gap-2">
                         <Button
+                          type="submit"
+                          disabled={busy !== null || !token.trim()}
+                        >{t`Connect`}</Button>
+                        <Button
+                          type="button"
+                          variant="outline"
                           disabled={busy !== null}
                           onClick={() => {
                             setToken("");
-                            setTokenFor(descriptor.id);
+                            setTokenFor(null);
                           }}
-                        >{t`Use a token`}</Button>
+                        >{t`Cancel`}</Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        disabled={busy !== null}
+                        onClick={() => {
+                          setToken("");
+                          setTokenFor(descriptor.id);
+                        }}
+                      >
+                        {row.status === "reconnect" ? t`Reconnect` : t`Use a token`}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        render={<a href={descriptor.docsUrl} target="_blank" rel="noreferrer" />}
+                      >{t`Open documentation`}</Button>
+                      {descriptor.oauthAvailable ? (
                         <Button
                           variant="outline"
-                          render={<a href={descriptor.docsUrl} target="_blank" rel="noreferrer" />}
-                        >{t`Open documentation`}</Button>
-                        {descriptor.oauthAvailable ? (
-                          <Button
-                            variant="outline"
-                            disabled={busy !== null}
-                            onClick={() => void connect(descriptor, connection, "oauth")}
-                          >{t`Sign in with GitHub`}</Button>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-                ) : connection?.state === "needs-client-registration" ? (
-                  <Button
-                    variant="outline"
-                    render={<a href={descriptor.docsUrl} target="_blank" rel="noreferrer" />}
-                  >{t`Open documentation`}</Button>
-                ) : connection?.state === "connected" ? (
-                  <Button
-                    variant="outline"
-                    disabled={busy !== null}
-                    onClick={() => setSelected(connection.id)}
-                  >
-                    {connection.needsReview ? t`Review tools` : t`Manage`}
-                  </Button>
-                ) : connection?.state === "awaiting-consent" ? (
-                  <Button
-                    variant="outline"
-                    disabled={busy !== null && busy !== descriptor.id}
-                    onClick={() => void cancel(connection)}
-                  >{t`Cancel`}</Button>
-                ) : connection?.state === "discovery-failed" ? (
-                  <Button
-                    variant="outline"
-                    disabled={busy !== null}
-                    onClick={() => void connect(descriptor, connection)}
-                  >{t`Try again`}</Button>
-                ) : (
-                  <Button
-                    disabled={busy !== null || (descriptor.id === "gitlab" && customHost && !host)}
-                    onClick={() => void connect(descriptor, connection)}
-                  >{t`Connect`}</Button>
-                )}
-                {descriptor.id === "gitlab" && !connection ? (
-                  <details>
-                    <summary className="cursor-pointer text-xs text-muted-foreground">{t`Advanced`}</summary>
-                    <div className="mt-3 space-y-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        aria-pressed={customHost}
-                        onClick={() => setCustomHost(!customHost)}
-                      >{t`Use your GitLab host`}</Button>
-                      {customHost ? (
-                        <Input
-                          aria-label={t`GitLab host`}
-                          placeholder="https://gitlab.example.com"
-                          value={host}
-                          onChange={(event) => setHost(event.target.value)}
-                        />
+                          disabled={busy !== null}
+                          onClick={() => void connect(descriptor, connection, "oauth")}
+                        >{t`Sign in with GitHub`}</Button>
                       ) : null}
                     </div>
-                  </details>
-                ) : null}
-              </CardContent>
-            </Card>
+                  )}
+                </div>
+              ) : connection?.state === "needs-client-registration" ? (
+                <Button
+                  variant="outline"
+                  render={<a href={descriptor.docsUrl} target="_blank" rel="noreferrer" />}
+                >{t`Open documentation`}</Button>
+              ) : row.status === "reconnect" ? (
+                <Button
+                  variant="outline"
+                  disabled={busy !== null}
+                  onClick={() => void connect(descriptor, connection)}
+                >{t`Reconnect`}</Button>
+              ) : connection?.state === "connected" ? (
+                <Button
+                  variant="outline"
+                  disabled={busy !== null}
+                  onClick={() => setSelected(connection.id)}
+                >
+                  {connection.needsReview ? t`Review tools` : t`Manage`}
+                </Button>
+              ) : connection?.state === "awaiting-consent" ? (
+                <Button
+                  variant="outline"
+                  disabled={busy !== null && busy !== descriptor.id}
+                  onClick={() => void cancel(connection)}
+                >{t`Cancel`}</Button>
+              ) : connection?.state === "discovery-failed" ? (
+                <Button
+                  variant="outline"
+                  disabled={busy !== null}
+                  onClick={() => void connect(descriptor, connection)}
+                >{t`Try again`}</Button>
+              ) : (
+                <Button
+                  disabled={busy !== null || (descriptor.id === "gitlab" && customHost && !host)}
+                  onClick={() => void connect(descriptor, connection)}
+                >{t`Connect`}</Button>
+              )}
+              {descriptor.id === "gitlab" && !connection ? (
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted-foreground">{t`Advanced`}</summary>
+                  <div className="mt-3 space-y-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-pressed={customHost}
+                      onClick={() => setCustomHost(!customHost)}
+                    >{t`Use your GitLab host`}</Button>
+                    {customHost ? (
+                      <Input
+                        aria-label={t`GitLab host`}
+                        placeholder="https://gitlab.example.com"
+                        value={host}
+                        onChange={(event) => setHost(event.target.value)}
+                      />
+                    ) : null}
+                  </div>
+                </details>
+              ) : null}
+            </div>
           );
-        })}
-      </div>
+        }}
+      />
     </div>
   );
 }

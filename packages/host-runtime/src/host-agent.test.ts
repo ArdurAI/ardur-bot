@@ -7,8 +7,13 @@ import { decodeHostFrame, encodeHostFrame, HOST_WINDOW } from "@ardurbot/contrac
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostAgent } from "./host-agent.js";
+import { HostMcpServers } from "./host-mcp.js";
 import { nativeEnvironment } from "./runtimes/native-process.js";
 
+vi.mock("node:os", async (original) => ({
+  ...(await original<object>()),
+  hostname: () => "Test computer",
+}));
 vi.mock("./runtimes/claude-code-runtime.js", async (original) => ({
   ...(await original<object>()),
   probeClaude: async () => ({
@@ -80,6 +85,11 @@ async function fixture(runtime?: AgentRuntime, acknowledge = false) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "host-agent-")));
   roots.push(root);
   const frames: HostFrame[] = [];
+  const pendingEnds = new Map<string, () => void>();
+  function completed(id: string) {
+    if (frames.some((frame) => frame.type === "end" && frame.id === id)) return Promise.resolve();
+    return new Promise<void>((resolve) => pendingEnds.set(id, resolve));
+  }
   const agent = new HostAgent(
     { root, hostRoots: [root] },
     {
@@ -89,6 +99,10 @@ async function fixture(runtime?: AgentRuntime, acknowledge = false) {
           queueMicrotask(() => {
             void agent.receive({ v: 1, type: "ack", id: frame.id, seq: frame.seq });
           });
+        if (frame.type === "end") {
+          pendingEnds.get(frame.id)?.();
+          pendingEnds.delete(frame.id);
+        }
       },
       close: vi.fn(),
     },
@@ -96,7 +110,7 @@ async function fixture(runtime?: AgentRuntime, acknowledge = false) {
   );
   agents.push(agent);
   await agent.initialize();
-  return { root, frames, agent };
+  return { root, frames, agent, completed };
 }
 function fakeRuntime(events: number): AgentRuntime {
   return {
@@ -178,12 +192,13 @@ describe("host process operations", () => {
     );
   });
   it("streams file chunks inside registered roots and refuses symlink escape in the host", async () => {
-    const { agent, frames, root } = await fixture();
+    const { agent, frames, root, completed } = await fixture();
     await writeFile(path.join(root, "allowed.txt"), "file contents");
     await agent.receive(
       request({ op: "computer.files.read", homeKey: "bot", path: path.join(root, "allowed.txt") }),
     );
-    await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
+    await completed("req");
+    expect(frames.at(-1)).toMatchObject({ type: "end", id: "req" });
     expect(frames[0]).toMatchObject({
       channel: "file",
       data: Buffer.from("file contents").toString("base64"),
@@ -192,7 +207,8 @@ describe("host process operations", () => {
       ...request({ op: "computer.files.list", homeKey: "bot", path: root }),
       id: "listing",
     });
-    await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ id: "listing", type: "end" }));
+    await completed("listing");
+    expect(frames.at(-1)).toMatchObject({ id: "listing", type: "end" });
     expect(frames).toContainEqual(
       expect.objectContaining({
         channel: "result",
@@ -213,13 +229,12 @@ describe("host process operations", () => {
       }),
       id: "second",
     });
-    await vi.waitFor(() =>
-      expect(frames.at(-1)).toMatchObject({
-        id: "second",
-        type: "end",
-        problem: { code: "runtime-unavailable" },
-      }),
-    );
+    await completed("second");
+    expect(frames.at(-1)).toMatchObject({
+      id: "second",
+      type: "end",
+      problem: { code: "runtime-unavailable" },
+    });
     expect(JSON.stringify(frames)).not.toContain("never transmitted");
   });
   it("keeps homes separate when space and computer identifiers contain separators", async () => {
@@ -249,6 +264,7 @@ describe("host process operations", () => {
 it("reports the host inventory through health and the run-scoped environment operation", async () => {
   const { agent, frames } = await fixture();
   const health = await agent.health();
+  expect(health.name).toBe("Test computer");
   expect(health.environment?.tools[0]).toMatchObject({ name: "gh", status: "signed in" });
   await agent.receive(request({ op: "computer.environment", homeKey: "bot" }));
   await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("end"));
@@ -256,7 +272,7 @@ it("reports the host inventory through health and the run-scoped environment ope
 });
 
 it("round-trips a 2 MB owner save and bounds larger previews without raising bot file limits", async () => {
-  const { agent, frames, root } = await fixture(undefined, true);
+  const { agent, frames, root, completed } = await fixture(undefined, true);
   const content = Buffer.alloc(2 * 1024 * 1024, 97);
   const file = path.join(root, "editor.txt");
   await agent.receive(
@@ -268,7 +284,8 @@ it("round-trips a 2 MB owner save and bounds larger previews without raising bot
       content: content.toString("base64"),
     }),
   );
-  await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ type: "end", id: "req" }));
+  await completed("req");
+  expect(frames.at(-1)).toMatchObject({ type: "end", id: "req" });
   expect(frames.at(-1)).not.toHaveProperty("problem");
   expect(await readFile(file)).toEqual(content);
   await writeFile(file, Buffer.concat([content, Buffer.from("large")]));
@@ -282,7 +299,8 @@ it("round-trips a 2 MB owner save and bounds larger previews without raising bot
     }),
     id: "preview",
   });
-  await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ type: "end", id: "preview" }));
+  await completed("preview");
+  expect(frames.at(-1)).toMatchObject({ type: "end", id: "preview" });
   const chunks = frames.flatMap((frame) =>
     frame.type === "stream" && frame.id === "preview" && frame.channel === "file"
       ? [Buffer.from(frame.data as string, "base64")]
@@ -293,11 +311,42 @@ it("round-trips a 2 MB owner save and bounds larger previews without raising bot
     ...request({ op: "computer.files.read", homeKey: "bot", path: file }),
     id: "bot-read",
   });
-  await vi.waitFor(() =>
-    expect(frames.at(-1)).toMatchObject({
-      type: "end",
-      id: "bot-read",
-      problem: expect.any(Object),
-    }),
-  );
+  await completed("bot-read");
+  expect(frames.at(-1)).toMatchObject({
+    type: "end",
+    id: "bot-read",
+    problem: expect.any(Object),
+  });
+});
+
+it("dispatches registered MCP requests and completes acknowledged streams without provisioning files", async () => {
+  const execute = vi.spyOn(HostMcpServers.prototype, "execute").mockResolvedValue({ tools: [] });
+  const provision = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
+  const { agent, frames, root, completed } = await fixture(undefined, true);
+  agent.refreshMcp = vi.fn(async () => {
+    await agent.configureMcp([
+      {
+        serverId: "server",
+        userId: "owner",
+        spaceId: "space",
+        revision: 1,
+        command: "node",
+        args: [],
+        env: {},
+        cwd: root,
+        redactions: [],
+      },
+    ]);
+  });
+  const operation = { op: "mcp.tools", serverId: "server", revision: 1 } as const;
+  const frame = request(operation);
+  await agent.receive(frame);
+  await completed(frame.id);
+  expect(agent.refreshMcp).toHaveBeenCalledOnce();
+  expect(execute).toHaveBeenCalledWith(operation, frame.scope, expect.any(AbortSignal));
+  expect(provision).not.toHaveBeenCalled();
+  expect(frames).toEqual([
+    { v: 1, type: "stream", id: frame.id, seq: 0, channel: "result", data: { tools: [] } },
+    { v: 1, type: "end", id: frame.id },
+  ]);
 });

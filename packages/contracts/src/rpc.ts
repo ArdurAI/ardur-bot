@@ -1,5 +1,6 @@
 import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
+import { accountContract } from "./account.js";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
 import {
@@ -15,6 +16,7 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
 } from "./computer-connections.js";
+import { customizationContract } from "./customization.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
 import {
@@ -258,6 +260,8 @@ function createIdeContract() {
 }
 
 export const appContract = {
+  ...customizationContract,
+  account: accountContract,
   channelPairing: channelPairingContract,
   devices: devicesContract,
   pairing: pairingContract,
@@ -998,6 +1002,7 @@ export const appContract = {
           z.union([
             z.object({ id: Id, config: McpServerConfigInput }),
             z.object({ id: Id, secret: z.string().min(1).max(16384) }),
+            z.object({ id: Id, enabled: z.boolean() }),
           ]),
         )
         .output(McpServerSchema),

@@ -57,6 +57,12 @@ sequenceDiagram
   Only an explicit editor write request gets the larger base64-sized frame limit
   (`HOST_WRITE_FRAME_BYTES`). Bot file limits and all stream-frame limits above
   remain unchanged. Workers cannot mint or replay an owner editor grant.
+- Owner file and settings MCP requests share the registration generation,
+  deployment ownership and space membership checks. Their grants use in-process
+  request identity, so a worker cannot claim a settings grant with a copied ID.
+  File requests still require registered roots. MCP requests still require the
+  current server revision; bot calls also require an active run and explicit tool
+  grants. Responses revalidate these checks before delivery.
 - Host loss, cancellation, overflow and revoked grants stop requests with a
   `RuntimeProblem`. Request IDs and disconnected runs are tombstoned for the API process lifetime. The
   reconnect path never resends a request. Giving a disconnected run a new request ID

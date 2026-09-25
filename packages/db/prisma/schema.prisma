@@ -32,6 +32,8 @@ model User {
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
   avatarStyle                 String                       @default("robot")
+  displayName                 String                       @default("")
+  workType                    String                       @default("")
   sessions                    Session[]
   accounts                    Account[]
   members                     Member[]
@@ -181,6 +183,12 @@ model Member {
 }
 
 model Space {
+  customizationMarketplaces CustomizationMarketplace[]
+  pluginInstalls PluginInstall[]
+  botInstructions String @default("")
+  botInstructionsAuthorId String?
+  botInstructionsRevision Int @default(0)
+  requireTrustedDevices Boolean @default(false)
   toolAccessMode String @default("when-needed")
   connectorSearch Boolean @default(false)
   inlineVisualizations Boolean @default(true)
@@ -594,6 +602,7 @@ model Task {
 }
 
 model Run {
+  accountInstructionContext Json?
   comparisonId String?
   delegationId String? @unique
   delegationRootTaskId String?
@@ -803,6 +812,7 @@ model ScratchpadItem {
 }
 
 model TaughtSkill {
+  enabled   Boolean @default(true)
   id        String    @id @default(cuid())
   spaceId   String
   space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -833,6 +843,11 @@ model TaughtSkill {
 /// The Pi runtime already understands this format; we persist and inject them.
 /// Distinct from TaughtSkill (demo/record playbooks).
 model AgentSkill {
+  enabled     Boolean @default(true)
+  pluginId    String?
+  plugin      PluginInstall? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  componentKind String @default("skill")
+  bundleId String?
   id          String   @id @default(cuid())
   spaceId     String
   space       Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -1157,6 +1172,12 @@ model Secret {
 }
 
 model McpServer {
+  pluginId      String?
+  plugin        PluginInstall? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  managedBy     String?
+  managedId     String?
+  placement     String @default("worker")
+  diagnostics   Json @default("{}")
   id            String            @id @default(cuid())
   spaceId       String
   space         Space             @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -1627,6 +1648,7 @@ model PairingThrottle {
   @@map("pairing_throttles")
 }
 model PendingDevicePairing {
+  platform String?
   id String @id @default(cuid())
   challengeHash String @unique
   userId String
@@ -1644,6 +1666,8 @@ model PendingDevicePairing {
   @@map("pending_device_pairings")
 }
 model DeviceGrant {
+  trustedAt DateTime? @default(now())
+  platform String?
   kind String @default("device")
   installationId String?
   provider String?
@@ -1947,6 +1971,9 @@ model Delegation {
 
 // A deployment has one paired host. Only a SHA-256 digest is persisted.
 model HostRegistration {
+  name String @default("Computer")
+  platform String?
+  lastSeenAt DateTime?
   id String @id @default("default")
   userId String
   tokenHash String @unique
@@ -1954,6 +1981,38 @@ model HostRegistration {
   generation String
   createdAt DateTime @default(now())
   @@map("host_registrations")
+}
+
+model CustomizationMarketplace {
+  id        String @id @default(cuid())
+  spaceId   String
+  space     Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String
+  source    String
+  manifest  Json
+  secretId  String
+  createdAt DateTime @default(now())
+  @@unique([spaceId, userId, name])
+  @@map("customization_marketplaces")
+}
+
+model PluginInstall {
+  skills        AgentSkill[]
+  servers       McpServer[]
+  id            String @id @default(cuid())
+  spaceId       String
+  space         Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId        String
+  name          String
+  marketplaceId String?
+  source        String
+  digest        String
+  state         String @default("installing")
+  summary       Json
+  createdAt     DateTime @default(now())
+  @@unique([spaceId, userId, name])
+  @@map("plugin_installs")
 }
 
 model Comparison {

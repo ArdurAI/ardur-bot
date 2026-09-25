@@ -211,11 +211,6 @@
       "lazy": true,
       "dynamic": true
     },
-    "src/pages/settings/DeveloperSection.tsx": {
-      "file": "assets/DeveloperSection-aBEx-L6c.js",
-      "lazy": true,
-      "dynamic": true
-    },
     "src/pages/settings/DevicesSection.tsx": {
       "file": "assets/DevicesSection-C-bclcqU.js",
       "lazy": true,
@@ -251,23 +246,33 @@
       "lazy": true,
       "dynamic": true
     },
-    "src/pages/settings/PluginsSection.tsx": {
-      "file": "assets/PluginsSection-CcgfWMJR.js",
-      "lazy": true,
-      "dynamic": true
-    },
     "src/pages/settings/PrivacySettings.tsx": {
       "file": "assets/PrivacySettings-V9BhTEHz.js",
       "lazy": true,
       "dynamic": true
     },
-    "src/pages/settings/SkillsSection.tsx": {
-      "file": "assets/SkillsSection-C6QWs4L-.js",
+    "src/pages/settings/VoiceSection.tsx": {
+      "file": "assets/VoiceSection-BovxZIcN.js",
       "lazy": true,
       "dynamic": true
     },
-    "src/pages/settings/VoiceSection.tsx": {
-      "file": "assets/VoiceSection-BovxZIcN.js",
+    "src/pages/customize/DeveloperPage.tsx": {
+      "file": "assets/DeveloperPage-Bezl47ec.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/customize/SkillsPage.tsx": {
+      "file": "assets/SkillsPage-DW5blpWt.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/customize/PluginsPage.tsx": {
+      "file": "assets/PluginsPage-DXgr2xpm.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/customize/ExtensionsPage.tsx": {
+      "file": "assets/ExtensionsPage-BNW9BpE2.js",
       "lazy": true,
       "dynamic": true
     }

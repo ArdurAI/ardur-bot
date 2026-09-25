@@ -174,6 +174,17 @@ export class GitTransport {
       unchecked?: boolean;
     } = {},
   ): Promise<string> {
+    return (await this.runBytes(args, options)).toString("utf8");
+  }
+  async runBytes(
+    args: readonly string[],
+    options: {
+      input?: string;
+      signal?: AbortSignal;
+      env?: NodeJS.ProcessEnv;
+      unchecked?: boolean;
+    } = {},
+  ): Promise<Buffer> {
     if (options.signal?.aborted) throw new GitOperationError();
     if (!options.unchecked)
       await new MarkdownFiles(path.join(this.files.root, ".git")).validateRoot();
@@ -216,7 +227,7 @@ export class GitTransport {
       child.once("close", (code) => {
         clearTimeout(timeout);
         options.signal?.removeEventListener("abort", stop);
-        if (code === 0 && !stopped) resolve(Buffer.concat(chunks).toString("utf8"));
+        if (code === 0 && !stopped) resolve(Buffer.concat(chunks));
         else reject(new GitOperationError(code));
       });
     });

@@ -127,7 +127,29 @@ export const HostTurnSchema = z.strictObject({
   emptyResponseText: text.optional(),
 });
 export type HostTurn = z.infer<typeof HostTurnSchema>;
+export const HostMcpRegistrationSchema = z.strictObject({
+  redactions: z.array(z.string().max(4096)).max(256).default([]),
+  serverId: id,
+  userId: id,
+  spaceId: id,
+  revision: z.number().int().positive(),
+  command: z.string().min(1).max(512),
+  args: z.array(z.string().max(2048)).max(64),
+  env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().max(4096)),
+  cwd: path,
+});
+export type HostMcpRegistration = z.infer<typeof HostMcpRegistrationSchema>;
+const mcpTarget = { serverId: id, revision: z.number().int().positive() };
 export const HostOperationSchema = z.discriminatedUnion("op", [
+  z.strictObject({ op: z.literal("mcp.tools"), ...mcpTarget }),
+  z.strictObject({
+    op: z.literal("mcp.call"),
+    ...mcpTarget,
+    name: z.string().min(1).max(160),
+    args: z.record(z.string(), z.unknown()),
+  }),
+  z.strictObject({ op: z.literal("mcp.status"), ...mcpTarget }),
+  z.strictObject({ op: z.literal("mcp.stop"), ...mcpTarget }),
   z.strictObject({ op: z.literal("computer.environment"), homeKey: id }),
   z.strictObject({
     op: z.literal("computer.exec"),
@@ -179,6 +201,7 @@ export const HostRequestSchema = z.strictObject({
 });
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 export const HostHealthSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80).optional(),
   platform: z.enum(["darwin", "linux", "win32"]),
   roots: z.array(path).max(32),
   load: z.number().int().min(0).max(HOST_IN_FLIGHT),
@@ -310,3 +333,6 @@ export const HostRuntimeEventSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("checkpoint"), blob: text }),
   z.strictObject({ type: z.literal("done"), text: text.optional() }),
 ]);
+/** Canonical text for a public identifier; hashing it never yields a host credential. */
+// Defined in plain JavaScript so the packaged desktop app can load it.
+export { hostRegistrationIdentityText } from "./host-registration-identity.js";
