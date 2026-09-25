@@ -8,6 +8,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { PiAgentRuntime } from "../../../../adapters/src/pi-runtime.js";
 import { MODEL_STREAM_MAX_RETRIES } from "../../../../adapters/src/pi-runtime-limits.js";
 import type { MatrixResult } from "./catalog.js";
+import type { StreamScenario } from "./schedules.js";
 import {
   prefixObservation,
   RATE_SCENARIOS,
@@ -76,6 +77,48 @@ function event(text: string, end = false) {
   return `data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", created: 0, model: "matrix-v1", choices: [{ index: 0, delta: end ? {} : { content: text }, finish_reason: end ? "stop" : null }] })}\n\n`;
 }
 
+export interface StreamWrite {
+  bytes: Buffer;
+  delayBeforeMs: number;
+}
+
+/**
+ * Content frames, then the finish frame and [DONE].
+ * short-final-delta holds the last slice and waits before that slice, the finish frame and [DONE].
+ * Other scenarios keep a scheduled delay on the first slice only.
+ */
+export function providerStreamPlan(scenario: StreamScenario, text = STREAM_TEXT): StreamWrite[] {
+  const step = scenario === "burst" ? 64 : 3;
+  const chars = Array.from(text);
+  const slices: string[] = [];
+  for (let index = 0; index < chars.length; index += step)
+    slices.push(chars.slice(index, index + step).join(""));
+  const held = scenario === "short-final-delta" ? (slices.pop() ?? "") : "";
+  const writes: StreamWrite[] = [];
+  for (const [sliceIndex, slice] of slices.entries()) {
+    for (const part of streamSchedule(scenario, event(slice))) {
+      const delayBeforeMs = scenario === "short-final-delta" || sliceIndex !== 0 ? 0 : part.delayMs;
+      writes.push({ bytes: Buffer.from(part.bytes), delayBeforeMs });
+    }
+  }
+  const terminalDelayMs =
+    scenario === "short-final-delta" ? (streamSchedule(scenario).at(-1)?.delayMs ?? 0) : 0;
+  if (held) {
+    const heldParts = streamSchedule(scenario, event(held));
+    for (const [index, part] of heldParts.entries()) {
+      writes.push({
+        bytes: Buffer.from(part.bytes),
+        delayBeforeMs: index === 0 ? terminalDelayMs : 0,
+      });
+    }
+  }
+  writes.push({
+    bytes: Buffer.from(`${event("", true)}data: [DONE]\n\n`),
+    delayBeforeMs: held ? 0 : terminalDelayMs,
+  });
+  return writes;
+}
+
 export async function streamingExperiment(prisma: PrismaClient): Promise<MatrixResult> {
   await prisma.$executeRaw`CREATE SCHEMA IF NOT EXISTS scoreboard_fixture`;
   await prisma.$executeRaw`CREATE TABLE scoreboard_fixture.safe_deltas (scenario text NOT NULL, seq integer NOT NULL, value text NOT NULL, PRIMARY KEY (scenario, seq))`;
@@ -84,29 +127,31 @@ export async function streamingExperiment(prisma: PrismaClient): Promise<MatrixR
     const server = await providerServer(async (_body, response) => {
       response.writeHead(200, { "content-type": "text/event-stream" });
       // Split the secret across protocol events and split Unicode across network writes.
-      const textParts = Array.from(STREAM_TEXT);
-      for (let i = 0; i < textParts.length; i += scenario === "burst" ? 64 : 3) {
-        const text = textParts.slice(i, i + (scenario === "burst" ? 64 : 3)).join("");
-        for (const part of streamSchedule(scenario, event(text))) {
-          if (part.delayMs && i === 0) await delay(part.delayMs);
-          if (!response.write(part.bytes))
-            await new Promise<void>((resolve) => {
-              response.once("drain", resolve);
-              response.once("close", resolve);
-            });
-          if (response.destroyed) return;
-        }
+      for (const part of providerStreamPlan(scenario)) {
+        if (part.delayBeforeMs) await delay(part.delayBeforeMs);
+        if (!response.write(part.bytes))
+          await new Promise<void>((resolve) => {
+            response.once("drain", resolve);
+            response.once("close", resolve);
+          });
+        if (response.destroyed) return;
       }
-      response.end(`${event("", true)}data: [DONE]\n\n`);
+      response.end();
     });
     try {
       const redactor = createStreamingRedactor([SYNTHETIC_SECRET]);
+      const expected = redactSecrets(STREAM_TEXT, [SYNTHETIC_SECRET]);
+      let assembled = "";
+      let completeAtMs: number | null = null;
       let seq = 0;
       const started = performance.now();
       const save = async (text: string) => {
         if (!text) return;
         if (scenario === "slow-database" || scenario === "slow-renderer") await delay(5);
         await prisma.$executeRaw`INSERT INTO scoreboard_fixture.safe_deltas (scenario, seq, value) VALUES (${scenario}, ${seq++}, ${text})`;
+        assembled += text;
+        if (completeAtMs === null && assembled === expected)
+          completeAtMs = performance.now() - started;
       };
       for await (const item of new PiAgentRuntime().run(
         request(server.baseUrl, `stream-${scenario}`),
@@ -119,12 +164,22 @@ export async function streamingExperiment(prisma: PrismaClient): Promise<MatrixR
         Array<{ value: string }>
       >`SELECT value FROM scoreboard_fixture.safe_deltas WHERE scenario = ${scenario} ORDER BY seq`;
       const text = rows.map((row) => row.value).join("");
+      const requiredDelayMs = providerStreamPlan(scenario).reduce(
+        (max, part) => Math.max(max, part.delayBeforeMs),
+        0,
+      );
+      // Timers may fire slightly early. 40ms is slack under a 300ms frame, not a shorter scenario.
+      const finalTextAfterDelay =
+        requiredDelayMs === 0 || (completeAtMs !== null && completeAtMs + 40 >= requiredDelayMs);
       samples.push({
         scenario,
-        exact: text === redactSecrets(STREAM_TEXT, [SYNTHETIC_SECRET]),
+        exact: text === expected,
         secretAbsent: !text.includes(SYNTHETIC_SECRET),
         persistedBytes: Buffer.byteLength(text),
         elapsedMs: performance.now() - started,
+        completeAtMs,
+        requiredDelayMs,
+        finalTextAfterDelay,
       });
     } finally {
       await server.close();
@@ -133,6 +188,9 @@ export async function streamingExperiment(prisma: PrismaClient): Promise<MatrixR
   const checks = {
     exactOrderedOutput: samples.every((row) => row.exact),
     noSecretExposure: samples.every((row) => row.secretAbsent),
+    finalTextFollowsDelayedTerminal: samples.every(
+      (row) => row.scenario !== "short-final-delta" || row.finalTextAfterDelay,
+    ),
   };
   return {
     id: "O2",

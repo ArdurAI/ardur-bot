@@ -14,9 +14,11 @@ import {
   until,
 } from "../experiments/durable.js";
 import { contentDigest } from "../manifest.js";
+import { redactMatrixDiagnostic } from "../redact.js";
 import { denyExternalTcp } from "../replay/offline.js";
 import { collectTraceEvidence, LOCAL_TRACE_BOUNDARIES } from "../trace-collector.js";
 import { auxiliaryFault } from "./auxiliary.js";
+import { RECOVERY_DEADLINE_MS, RECOVERY_OBSERVATION_MS } from "./deadlines.js";
 import { FaultSandbox } from "./sandbox.js";
 
 interface Input {
@@ -252,12 +254,13 @@ async function main(input: Input) {
         "run.continue": async ({ runId }) => handles.executor.continueRun(runId, "matrix-worker"),
       }),
     );
+    if (input.phase === "recover") process.send?.({ type: "observing" });
     const finished = await until(
       async () => {
         const state = await db.prisma.run.findUniqueOrThrow({ where: { id: run.id } });
         return ["completed", "failed", "waiting_input", "cancelled"].includes(state.status);
       },
-      input.phase === "recover" ? 75000 : 20000,
+      input.phase === "recover" ? RECOVERY_OBSERVATION_MS : 20000,
     );
     if (input.phase === "interrupt") throw new Error("Declared crash boundary was not reached");
     const after = await db.prisma.run.findUniqueOrThrow({ where: { id: run.id } });
@@ -306,7 +309,8 @@ async function main(input: Input) {
         unauthorizedActions: actions.filter((action) => !action.authorized).length,
         observedRuntimeCalls: calls.length,
         wrongPinRuntimeCalls: calls.filter((call) => !call.valid_pin).length,
-        recoveryDeadlineMs: 75000,
+        recoveryObservationMs: RECOVERY_OBSERVATION_MS,
+        recoveryDeadlineMs: RECOVERY_DEADLINE_MS,
         autonomousCompletion: !pending && !expectedUncertainty && after.status === "completed",
         queueWaitMs: after.queueWaitMs,
         fence: after.leaseFence,
@@ -339,9 +343,7 @@ process.once("message", (input: Input) => {
         type: "error",
         code:
           error instanceof Error
-            ? error.message
-                .replace(/(?:postgres\S+|\/Users\/\S+|\/Volumes\/\S+)/g, "<redacted>")
-                .slice(0, 400)
+            ? redactMatrixDiagnostic(error.message).slice(0, 400)
             : "fixture-failed",
       });
       process.exitCode = 1;

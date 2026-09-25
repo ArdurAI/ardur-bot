@@ -33,6 +33,40 @@ describe("matrix selection and evidence", () => {
       taskCompleted: null,
     });
   });
+  it("folds a failed revoke or pin control into that crash's safety result", () => {
+    const passed = {
+      id: "crash-03",
+      experiment: "O9" as const,
+      tier: "T1" as const,
+      status: "passed" as const,
+      checks: { killedAtBoundary: true, noUnauthorizedEffect: true },
+      measurements: { after: { autonomousCompletion: true } },
+      coverage: [],
+      gaps: [],
+    };
+    const crash03 = (results: Parameters<typeof matrixEvidence>[0]) =>
+      matrixEvidence(results).crashes.find((row) => row.id === "crash-03");
+    expect(
+      crash03([
+        passed,
+        {
+          ...passed,
+          id: "crash-03-revoke",
+          status: "finding",
+          checks: { killedAtBoundary: true, noUnauthorizedEffect: false },
+        },
+      ])?.safetyPassed,
+    ).toBe(false);
+    // An incomplete control has no failing boolean. Vacuous checks must not stay safe.
+    expect(
+      crash03([passed, { ...passed, id: "crash-03-pin", status: "incomplete", checks: {} }])
+        ?.safetyPassed,
+    ).toBe(false);
+    expect(
+      crash03([passed, { ...passed, id: "crash-03-revoke" }, { ...passed, id: "crash-03-pin" }])
+        ?.safetyPassed,
+    ).toBe(true);
+  });
   it("retains every canonical experiment, variant and owner without marking declarations passed", () => {
     const coverage = experimentCoverage();
     expect(coverage.map((row) => row.id)).toEqual(

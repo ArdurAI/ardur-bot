@@ -24,10 +24,14 @@ export function matrixEvidence(results: readonly MatrixResult[]) {
   }));
   const crashes: CrashEvidence[] = CRASH_BOUNDARIES.map((boundary) => {
     const result = results.find((item) => item.id === boundary.id);
+    const controls = results.filter((item) => item.id.startsWith(`${boundary.id}-`));
     const measured = Boolean(
       result && result.status !== "incomplete" && result.checks.killedAtBoundary,
     );
     const after = result?.measurements.after as { autonomousCompletion?: boolean } | undefined;
+    const controlFailed = controls.some(
+      (control) => control.status !== "passed" || Object.values(control.checks).includes(false),
+    );
     return {
       id: boundary.id,
       status: measured ? "complete" : "incomplete",
@@ -36,7 +40,9 @@ export function matrixEvidence(results: readonly MatrixResult[]) {
         measured && result?.status === "passed"
           ? (boundary.expected as CrashEvidence["recovery"])
           : null,
-      safetyPassed: measured ? Object.values(result!.checks).every(Boolean) : null,
+      safetyPassed: measured
+        ? Object.values(result!.checks).every(Boolean) && !controlFailed
+        : null,
       taskCompleted:
         typeof after?.autonomousCompletion === "boolean" ? after.autonomousCompletion : null,
       traceIds: [],

@@ -3,12 +3,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createDb } from "@ardurbot/db";
+import { createDb, expireComputerExecutionLeases } from "@ardurbot/db";
 import type { CrashId, MatrixResult } from "../experiments/catalog.js";
 import { assertDisposableUrl } from "../experiments/durable.js";
 import { CRASH_BOUNDARIES } from "../manifest.js";
+import { redactMatrixDiagnostic } from "../redact.js";
 import { credentialFreeEnvironment } from "../replay/offline.js";
 import { isOwnedReplayDatabase } from "../replay/postgres.js";
+import { faultPhaseBudgetMs } from "./deadlines.js";
+import { classifyComputerLeaseReclaim, runWillContinue } from "./lease.js";
 import type { NativeHostReady } from "./native-host.js";
 import { observeNativeDisconnect } from "./native-host.js";
 
@@ -63,6 +66,7 @@ export async function faultChild(input: {
           | { type: "error"; code: string }
           | { type: "ready" }
           | { type: "prepared" }
+          | { type: "observing" }
           | { type: "progress"; stage: string }
           | NativeHostReady,
       ) => {
@@ -80,7 +84,18 @@ export async function faultChild(input: {
         if (value.type === "prepared") {
           clearTimeout(timer);
           stage = "durable-experiment";
-          timer = setTimeout(timeout, input.phase === "recover" ? 90000 : 60000);
+          timer = setTimeout(timeout, faultPhaseBudgetMs(input.phase, "prepared"));
+          return;
+        }
+        if (value.type === "observing") {
+          clearTimeout(timer);
+          stage = "recovery-observation";
+          try {
+            timer = setTimeout(timeout, faultPhaseBudgetMs(input.phase, "observing"));
+          } catch (error) {
+            child.kill("SIGKILL");
+            reject(error instanceof Error ? error : new Error("Observation deadline rejected"));
+          }
           return;
         }
         if (value.type === "host-ready") {
@@ -108,12 +123,10 @@ export async function faultChild(input: {
         // Only synthetic child diagnostics; omit environment, stack paths and database URI.
         reject(
           new Error(
-            `Fault child exited without evidence (${code ?? signal}); ${
-              diagnostic
-                .split("\n")
-                .find((line) => line.startsWith("Error:"))
-                ?.replace(/postgres\S+/g, "<database>") ?? "child startup or execution failed"
-            }`,
+            `Fault child exited without evidence (${code ?? signal}); ${redactMatrixDiagnostic(
+              diagnostic.split("\n").find((line) => line.startsWith("Error:")) ??
+                "child startup or execution failed",
+            )}`,
           ),
         );
       } else {
@@ -137,12 +150,17 @@ export async function runCrashCase(
   const db = createDb(databaseUrl);
   try {
     const before = await faultChild({ databaseUrl, directory, id, phase: "interrupt" });
-    // Advance only the dead process's lease clock; this is not a measured production TTL.
+    // Expire run leases and computer-execution tombstones. Deleting the computer lease
+    // would make the next acquire insert fence 1 and skip production reclaim.
     await db.prisma.run.updateMany({
       where: { status: { in: ["leased", "running"] } },
       data: { leaseExpiresAt: new Date(0) },
     });
-    await db.prisma.computerExecutionLease.deleteMany();
+    const leasesBefore = await db.prisma.computerExecutionLease.findMany({
+      select: { id: true, fence: true, computerId: true, botId: true },
+    });
+    const runsAtDeath = await db.prisma.run.findMany({ select: { status: true } });
+    await expireComputerExecutionLeases(db.prisma, {});
     const queue = await db.pool.query<{ table: string | null }>(
       "SELECT to_regclass('graphile_worker._private_jobs')::text AS table",
     );
@@ -170,11 +188,20 @@ export async function runCrashCase(
       });
     const started = performance.now();
     const after = await faultChild({ databaseUrl, directory, id, phase: "recover", negative });
-    const checks = {
+    const leasesAfter = await db.prisma.computerExecutionLease.findMany({
+      select: { id: true, fence: true, computerId: true, botId: true },
+    });
+    const leaseVerdict = classifyComputerLeaseReclaim({
+      before: leasesBefore,
+      after: leasesAfter,
+      continuing: runWillContinue(runsAtDeath.map((run) => run.status)),
+    });
+    const checks: Record<string, boolean> = {
       killedAtBoundary: before.killed,
       ...before.message.checks,
       ...after.message.checks,
     };
+    if (leasesBefore.length > 0) checks.computerLeaseReclaimed = leaseVerdict.ok;
     return {
       id: `${id}${negative ? `-${negative}` : ""}`,
       experiment: "O9",
@@ -186,7 +213,12 @@ export async function runCrashCase(
         before: before.message.measurements,
         after: after.message.measurements,
         recoveryMs: performance.now() - started,
-        leaseClockAdvanced: true,
+        leaseClockAdvanced: leaseVerdict.reclaimed || leaseVerdict.reason === "tombstone-retained",
+        computerLeaseReclaim: leaseVerdict.reason,
+        computerLeaseFences: {
+          before: leasesBefore.map(({ id: leaseId, fence }) => ({ id: leaseId, fence })),
+          after: leasesAfter.map(({ id: leaseId, fence }) => ({ id: leaseId, fence })),
+        },
         expiredQueueLocks,
       },
       coverage: [

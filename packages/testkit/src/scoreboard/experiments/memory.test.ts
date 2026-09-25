@@ -19,11 +19,20 @@ describe("memory scale verdict", () => {
         headContent: true,
         scopePreserved: true,
         historicalRevisionsNotMaterialized: true,
+        readsObserved: true,
       },
       status: "passed",
+      reason: null,
     });
     expect(
       classifyMemoryScale([{ documents: 1, revisions: 1, bytes: 256 }], false, true).status,
     ).toBe("finding");
+  });
+  it("does not pass when no document read was observed", () => {
+    const verdict = classifyMemoryScale([], true, true);
+    expect(verdict.checks.historicalRevisionsNotMaterialized).toBe(false);
+    expect(verdict.checks.readsObserved).toBe(false);
+    expect(verdict.status).toBe("incomplete");
+    expect(verdict.reason).toBe("no-reads-observed");
   });
 });

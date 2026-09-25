@@ -13,6 +13,7 @@ import {
   writeMatrixArtifact,
 } from "../scoreboard/experiments/evidence.js";
 import { createScoreboardManifest } from "../scoreboard/manifest.js";
+import { redactMatrixDiagnostic } from "../scoreboard/redact.js";
 import { credentialFreeEnvironment } from "../scoreboard/replay/offline.js";
 
 async function main() {
@@ -84,9 +85,7 @@ async function main() {
         measurements: {
           error:
             error instanceof Error
-              ? error.message
-                  .replace(/(?:postgres\S+|\/Users\/\S+|\/Volumes\/\S+)/g, "<redacted>")
-                  .slice(0, 500)
+              ? redactMatrixDiagnostic(error.message).slice(0, 500)
               : "execution-failed",
         },
         coverage: [],
@@ -182,7 +181,7 @@ async function main() {
 
 main().catch((error: unknown) => {
   process.stderr.write(
-    `${error instanceof Error ? error.message.replace(/(?:postgres\S+|\/Users\/\S+|\/Volumes\/\S+)/g, "<redacted>") : "Matrix setup failed"}\n`,
+    `${error instanceof Error ? redactMatrixDiagnostic(error.message) : "Matrix setup failed"}\n`,
   );
   process.exitCode = 2;
 });

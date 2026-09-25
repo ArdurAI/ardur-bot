@@ -1,5 +1,5 @@
 import type { AgentRuntime, SemanticMemoryProvider } from "@ardurbot/adapter-kit";
-import type { createDb } from "@ardurbot/db";
+import type { createDb, PrismaClient } from "@ardurbot/db";
 import { createThreadMessage } from "@ardurbot/db";
 import { deliverMemory, MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import {
@@ -17,6 +17,8 @@ import { GraphileJobPublisher, GraphileJobWorkerHost } from "../../../../adapter
 import { fixtureHandlers, seedScope, until } from "../experiments/durable.js";
 import { GOLD_SUMMARY, gradeGoldProbes } from "../experiments/schedules.js";
 import { contentDigest } from "../manifest.js";
+import { classifyCompactionRetry } from "./compaction-oracle.js";
+import { RECOVERY_DEADLINE_MS, RECOVERY_OBSERVATION_MS } from "./deadlines.js";
 import { interruptibleNativeHost } from "./native-host.js";
 
 export function goldRuntime(
@@ -43,6 +45,28 @@ export const GOLD_MODEL = {
   id: "gold-summary-v1",
   thinkingLevel: "off" as const,
 };
+
+function watchCompactionWrites(prisma: PrismaClient): PrismaClient {
+  return prisma.$extends({
+    query: {
+      thread: {
+        async updateMany({ args, query }) {
+          const result = await query(args);
+          const data = args.data;
+          if (
+            result.count > 0 &&
+            data &&
+            typeof data === "object" &&
+            "historyCompactionSummary" in data
+          ) {
+            await prisma.$executeRaw`UPDATE scoreboard_fixture.compaction_writes SET writes = writes + 1 WHERE id = 1`;
+          }
+          return result;
+        },
+      },
+    },
+  }) as unknown as PrismaClient;
+}
 
 export async function auxiliaryFault(
   db: ReturnType<typeof createDb>,
@@ -74,6 +98,9 @@ export async function auxiliaryFault(
             signal: new AbortController().signal,
           };
     if (input.id === "crash-08") {
+      await prisma.$executeRaw`CREATE SCHEMA IF NOT EXISTS scoreboard_fixture`;
+      await prisma.$executeRaw`CREATE TABLE IF NOT EXISTS scoreboard_fixture.compaction_writes (id integer PRIMARY KEY, writes integer NOT NULL)`;
+      await prisma.$executeRaw`INSERT INTO scoreboard_fixture.compaction_writes (id, writes) VALUES (1, 0) ON CONFLICT (id) DO NOTHING`;
       if (input.phase === "interrupt") {
         for (let i = 0; i < 6; i++)
           await createThreadMessage(prisma, {
@@ -81,11 +108,12 @@ export async function auxiliaryFault(
             role: "user",
             blocks: [{ kind: "text", text: GOLD_SUMMARY }],
           });
-      }
+      } else process.send?.({ type: "observing" });
+      const watched = watchCompactionWrites(prisma);
       const compact = () =>
         compactHistory(
           {
-            prisma,
+            prisma: watched,
             runtime: goldRuntime(),
             jobs,
             memoryProviders: { resolve: async () => null },
@@ -116,6 +144,10 @@ export async function auxiliaryFault(
       }
       await compact();
       const row = await prisma.thread.findUniqueOrThrow({ where: { id: context.threadId } });
+      const writes = await prisma.$queryRaw<Array<{ writes: number }>>`
+        SELECT writes FROM scoreboard_fixture.compaction_writes WHERE id = 1`;
+      const compactionWrites = Number(writes[0]?.writes ?? 0);
+      const retry = classifyCompactionRetry(compactionWrites);
       process.send?.({
         type: "result",
         checks: {
@@ -123,11 +155,15 @@ export async function auxiliaryFault(
           goldRetained: Object.values(gradeGoldProbes(row.historyCompactionSummary ?? "")).every(
             Boolean,
           ),
-          noDuplicateRevision: row.historyCompactionGeneration === 0,
+          // Generation stays put across summary writes, so it cannot show a second write.
+          noDuplicateRevision: retry.ok,
         },
         measurements: {
           cursor: row.historyCompactedUpToSeq,
           summaryHash: contentDigest(row.historyCompactionSummary),
+          compactionWrites,
+          compactionOracle:
+            "summary updateMany counter; compactHistory does not advance historyCompactionGeneration",
           quality: "synthetic-gold-probes; not live reasoning",
         },
       });
@@ -197,13 +233,14 @@ export async function auxiliaryFault(
           : await prisma.memoryDocument.findFirstOrThrow();
       // The killed delivery stays queued. Recovery relies on the aged Graphile lock,
       // not a second enqueue that would hide a duplicate retry.
+      if (input.phase === "recover") process.send?.({ type: "observing" });
       const done = await until(
         async () =>
           (await prisma.memoryDocument.findUniqueOrThrow({ where: { id: document.id } }))
             .deliveryStatus === "delivered",
         // The continuous Graphile runner schedules its first stale-lock sweep within 60s.
-        // Include one complete production sweep plus 15s, without changing its scheduler.
-        input.phase === "recover" ? 75000 : 20000,
+        // The parent deadline starts at `observing` and adds 15s for these reads.
+        input.phase === "recover" ? RECOVERY_OBSERVATION_MS : 20000,
       );
       if (input.phase === "interrupt") throw new Error("Delivery boundary not reached");
       const receipts = await prisma.$queryRaw<
@@ -224,7 +261,8 @@ export async function auxiliaryFault(
         measurements: {
           receipts,
           queue: queue.rows,
-          recoveryDeadlineMs: 75000,
+          recoveryObservationMs: RECOVERY_OBSERVATION_MS,
+          recoveryDeadlineMs: RECOVERY_DEADLINE_MS,
           productionSweepJitterSeeded: false,
           providerContract:
             "idempotent document/revision fixture; arbitrary provider idempotency unverified",
@@ -328,6 +366,7 @@ export async function auxiliaryFault(
       await until(async () => false, 25000);
       throw new Error("Native boundary not reached");
     }
+    process.send?.({ type: "observing" });
     const run = await prisma.run.findFirstOrThrow();
     const effect = await prisma.externalEffect.findFirstOrThrow();
     const gate = resolveDuplicateEffectGate(effect, effect.kind);

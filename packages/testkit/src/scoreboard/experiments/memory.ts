@@ -12,17 +12,25 @@ export function classifyMemoryScale(
   headOk: boolean,
   scopeOk: boolean,
 ) {
+  const readsObserved = loaded.length > 0;
   const checks = {
     headContent: headOk,
     scopePreserved: scopeOk,
+    readsObserved,
     // A point read of the current document must not materialize the space's history.
-    historicalRevisionsNotMaterialized: loaded.every(
-      (row) => row.documents <= 1 && row.revisions <= 1,
-    ),
+    // An empty observation is not that property: Array.every is true for no reads.
+    historicalRevisionsNotMaterialized:
+      readsObserved && loaded.every((row) => row.documents <= 1 && row.revisions <= 1),
   };
+  const status: MatrixResult["status"] = !readsObserved
+    ? "incomplete"
+    : Object.values(checks).every(Boolean)
+      ? "passed"
+      : "finding";
   return {
     checks,
-    status: (Object.values(checks).every(Boolean) ? "passed" : "finding") as MatrixResult["status"],
+    status,
+    reason: readsObserved ? null : "no-reads-observed",
   };
 }
 
@@ -121,6 +129,7 @@ export async function runMemoryScale(
         heapBefore,
         heapAfter,
         peakHeap: null,
+        scaleReason: verdict.reason,
         queryPlan: plan.rows,
         planScope: "head selection only; ORM revision relation plan not captured",
         sampledDatabaseLocks: Number(locks.rows[0]!.count),

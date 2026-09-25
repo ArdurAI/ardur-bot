@@ -53,10 +53,10 @@ maintenance/callback dependencies. They do not substitute for integrated executo
 | Experiment | Owner / handoff | Executable subset and remaining coverage |
 | --- | --- | --- |
 | O1 | W0-8 / W0-9 | Existing comparator and immutable release index; not rerouted through this runner. |
-| O2 | W0-6 / W0-7 / W1-10 | Pi HTTP/SSE parsing, byte/Unicode/secret fragmentation, safe PostgreSQL consumer; renderer and executor flush cadence remain open. |
+| O2 | W0-6 / W0-7 / W1-10 | Pi HTTP/SSE parsing, byte/Unicode/secret fragmentation, safe PostgreSQL consumer. The short final delta is delayed until just before the finish frame and `[DONE]`; the assembled text is complete only after that delay. Renderer and executor flush cadence remain open. |
 | O3 | W0-6 / W1-6 / Chief of Staff | Actual serialized provider requests under time, memory, grant and schema changes; eligibility hashes are not cache-hit telemetry. |
 | O4 | W0-6 / W1-5 | Gold fact/negation/supersession/approval/unresolved/source probes, failed/oversized summary and concurrent generation edit; live model quality and summary usage remain open. |
-| O5 | W0-6 / W1-2 | Real document/revision scaling and denied scope. A head read that materializes unrelated revisions is a finding. Query count, lock wait and peak heap remain open. |
+| O5 | W0-6 / W1-2 | Real document/revision scaling and denied scope. A head read that materializes unrelated revisions is a finding. No observed read is incomplete (`no-reads-observed`), not a pass. Query count, lock wait and peak heap remain open. |
 | O6 | W0-6 / W1-3 / robust integrations | Real catalog/session code with durable grants, revisions, pagination, slow/unavailable transport and execute-after-revoke; full task-level required/optional semantics remain open. |
 | O7 | W0-6 / Chief of Staff / fleet | Real Graphile open-loop/fixed-concurrency work and saturated callback negative control; real maintenance/delegation/native placement remains open. |
 | O8 | W0-6 / robust integrations | Real Pi HTTP failures for two bots. Auth is not retried and Retry-After of one second is honored. There is no shared admission budget, and a non-numeric Retry-After retries immediately. Both are findings. |
@@ -81,23 +81,34 @@ a host command. Stored pins and the model actually passed to the runtime are bot
 | --- | --- | --- |
 | crash-01 admission before enqueue | Automatic recovery | Nonce re-delivery and reconciler recover exactly one accepted run. |
 | crash-02 lease before work | Safe retry | Expired dead-worker lease can be reclaimed without duplicate work. |
-| crash-03 intent before action | Safe retry | Intended effect is executed once; revoked grant requires approval; a changed bot pin cannot replace the run pin. |
+| crash-03 intent before action | Safe retry | Intended effect is executed once; revoked grant requires approval; a changed bot pin cannot replace the run pin. A failed revoke or pin control forces this crash's `safetyPassed` to false. |
 | crash-04 action before receipt | Explicit uncertainty | The action count stays one and the missing receipt is not guessed successful or retried. |
 | crash-05 receipt before terminal | Automatic recovery | Completed effect is replayed from its durable receipt without repeating the action. |
 | crash-06 terminal before UI | Automatic recovery | Terminal state survives nonce re-delivery; UI paint itself is not measured. |
 | crash-07 pending approval | Automatic recovery | Pending approval survives; no action runs before consent. |
-| crash-08 compaction commit | Safe retry | Summary/cursor survive and a retry retains the gold probes and generation. |
+| crash-08 compaction commit | Safe retry | Summary and cursor survive. The retry must not write the summary again. The oracle counts summary writes, because `compactHistory` does not advance `historyCompactionGeneration`. |
 | crash-09 memory delivery | Safe retry | The aged original delivery job is retried once. The idempotent fixture records that retry and one revision; arbitrary provider idempotency is not inferred. |
 | crash-10 native host disconnect | Explicit uncertainty | Real HostClient observes WebSocket loss with its pin intact; durable native effect stays uncertain and incompatible continuation is refused. |
 
-Each source-loading stage has a five-minute deadline; the interrupt child deadline is one minute.
-Recovery has a 90-second child deadline and a 75-second observation window.
-The continuous Graphile runner schedules its first stale-lock sweep within 60 seconds. The memory
-and executor cases allow one complete production sweep plus 15 seconds without changing its scheduler or jitter.
-After confirmed process death the fixture expires run/computer leases and ages Graphile locks,
-so production stale-lock reclamation can execute without waiting hours. This is a declared
-clock acceleration, not autonomous wall-clock recovery evidence. The real native client is
-used against a synthetic loopback host; no installed CLI or human acceptance is implied.
+Each source-loading stage has a five-minute deadline. The interrupt child deadline is one minute
+from `prepared`. Recovery keeps that five-minute budget until the child sends `observing`, which
+is immediately before the wait (executor cases and crash-09). The parent then allows the 75-second
+observation window plus 15 seconds for the oracle reads and the IPC result (90 seconds). The
+deadline does not include API startup. The continuous Graphile runner schedules its first stale-lock
+sweep within 60 seconds of worker start. The 75-second window is one full sweep plus 15 seconds,
+without changing its scheduler or jitter. crash-08 and crash-10 send `observing` when recovery
+work begins, so their shorter path stays on the same 90-second budget.
+After confirmed process death the fixture expires run leases and computer execution leases: it sets
+`expiresAt` in the past and keeps the row. Production reclaim updates that row and increments its
+fence. Deleting the row would let the next acquire insert fence 1 and hide a reclaim regression.
+When a lease existed and the dead run was queued, leased, or running, recovery must show the same
+lease id and a higher fence. A terminal run, and a run already waiting for approval, keeps that
+expired tombstone: recovery does not call `acquireComputerExecutionLease`, so the fence stays put.
+Crash-01 and crash-02 die before that acquire, so they have no row to reclaim; a fresh fence-1
+insert there is the create path, not evidence of reclaim. Graphile locks are aged so production stale-lock
+reclamation can run without waiting hours. This is a declared clock acceleration, not autonomous
+wall-clock recovery evidence. The real native client is used against a synthetic loopback host;
+no installed CLI or human acceptance is implied.
 
 Retries use the existing nonce/effect contracts. A completed external action without a durable
 receipt must retain uncertainty: see the [AWS idempotent API guidance](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/),
@@ -111,8 +122,11 @@ Artifacts are content-addressed JSON envelopes, written exclusively and indexed 
 read-back check. Their binding includes the base commit, deterministic tracked/untracked diff
 digest, dependency lock digest, image digests and sizes, environment and complete manifest.
 `matrixEvidence` emits the existing W0-1 `ExperimentEvidence`/`CrashEvidence` fragments for the
-scoreboard workflow. Detailed probe results are supplemental raw evidence, not a replacement
-release schema. All experiment variants remain incomplete until their full acceptance closes.
+scoreboard workflow. Revoke and pin controls are separate attempts (`crash-03-revoke`,
+`crash-03-pin`). A failed or incomplete control is folded into that crash's `safetyPassed`, so
+the fragment cannot report the boundary safe. The evidence schema stays the existing crash keys.
+Detailed probe results are supplemental raw evidence, not a replacement release schema. All
+experiment variants remain incomplete until their full acceptance closes.
 
 Trace collection reuses W0-4 and preserves unknown/unobserved boundaries. Cross-process timing
 is not combined without clock calibration. Fixture counters do not become provider usage,
