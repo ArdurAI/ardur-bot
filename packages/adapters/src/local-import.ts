@@ -477,12 +477,16 @@ export class LocalImportService {
     context: MemoryOperationContext,
   ) {
     const documents = this.deps.documents;
+    const source = context.imported;
     try {
-      return await documents.commit(input, context);
+      return await documents.commit(input, {
+        ...context,
+        imported: source ? { ...source, documentRevision: input.expectedRevision + 1 } : undefined,
+      });
     } catch (error) {
       if (!(error instanceof MemoryConflictError)) throw error;
       // File-backed stores commit before the SQL receipt. Reuse that exact write on retry,
-      // including after a restart, without adopting intervening edits or another source.
+      // including after a restart, without adopting intervening edits, restores or another source.
       let head = input.id ? await documents.read(input.id, context) : null;
       if (!input.id) {
         let cursor: string | undefined;
@@ -495,7 +499,6 @@ export class LocalImportService {
           cursor = page.nextCursor ?? undefined;
         } while (!head && cursor);
       }
-      const source = context.imported;
       return head &&
         source &&
         !head.deletedAt &&
@@ -506,6 +509,7 @@ export class LocalImportService {
         head.scopeKey.spaceId === context.spaceId &&
         head.scopeKey.userId === context.userId &&
         head.imported?.tool === source.tool &&
+        head.imported.documentRevision === head.revision &&
         head.imported.sourcePathHash === source.sourcePathHash &&
         head.imported.contentHash === source.contentHash &&
         head.imported.kind === source.kind

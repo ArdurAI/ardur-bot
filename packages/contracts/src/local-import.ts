@@ -87,6 +87,8 @@ export const ImportedProvenanceSchema = z.strictObject({
   contentHash: hash,
   modifiedAt: z.string().datetime(),
   importedAt: z.string().datetime(),
+  // The revision written by the import; later edits and restores retain this original value.
+  documentRevision: z.number().int().positive().optional(),
   kind: LocalImportCategorySchema,
   authorizesIntent: z.literal(false),
 });
