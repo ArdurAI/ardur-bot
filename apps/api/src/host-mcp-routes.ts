@@ -31,6 +31,7 @@ export function mountHostMcpRoutes(
         },
         data: {
           enabled: false,
+          revision: { increment: 1 },
           connectionState: "discovery-failed",
           diagnostics: {
             status: "error",

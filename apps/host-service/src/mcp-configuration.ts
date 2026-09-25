@@ -1,6 +1,12 @@
 import type { HostMcpRegistration } from "@ardurbot/contracts/host-bridge";
 import { HostMcpRegistrationSchema, hostSocketUrl } from "@ardurbot/contracts/host-bridge";
 
+export class HostMcpAuthorizationError extends Error {
+  constructor() {
+    super("This computer is no longer authorized. Connect it again in Settings.");
+  }
+}
+
 export async function readHostMcpConfiguration(config: {
   apiUrl: string;
   token: string;
@@ -12,6 +18,7 @@ export async function readHostMcpConfiguration(config: {
     redirect: "error",
     cache: "no-store",
   });
+  if ([401, 403, 404, 410].includes(response.status)) throw new HostMcpAuthorizationError();
   if (!response.ok || !response.body) throw new Error("Local server configuration is unavailable.");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];

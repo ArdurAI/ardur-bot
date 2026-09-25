@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCustomizationPlugins, resolvePluginVariables } from "./customization-plugins.js";
 import { createCustomizationRoutes } from "./customization-routes.js";
 import { createCustomizationSkills, customizationCatalog } from "./customization-skills.js";
+import { authorizeHostMcp } from "./host-mcp-authorization.js";
 import { configDiff, createMcpSettings, parseServerConfig } from "./mcp-settings.js";
 import type { RouterDeps } from "./router.js";
 
@@ -128,7 +129,15 @@ async function fixture() {
       count: vi.fn(async ({ where }) => rows.filter((row) => matches(row, where)).length),
     };
   }
-  prisma.$transaction = vi.fn(async (callback: (tx: unknown) => unknown) => callback(prisma));
+  let transactionActive = false;
+  prisma.$transaction = vi.fn(async (callback: (tx: unknown) => unknown) => {
+    transactionActive = true;
+    try {
+      return await callback(prisma);
+    } finally {
+      transactionActive = false;
+    }
+  });
   const deps = {
     prisma,
     secrets: new EncryptedSecretStore("fixture-encryption-material"),
@@ -139,10 +148,41 @@ async function fixture() {
   return {
     deps,
     tables,
+    get transactionActive() {
+      return transactionActive;
+    },
     mcp: createMcpSettings(deps),
     skills: createCustomizationSkills(deps),
     plugins: createCustomizationPlugins(deps),
   };
+}
+async function hostFixture() {
+  const f = await fixture();
+  f.tables.mcpServer!.push({
+    ...actor,
+    id: "running",
+    slug: "running",
+    name: "Running",
+    description: "",
+    transport: "stdio",
+    placement: "host",
+    revision: 1,
+    enabled: true,
+    command: "node",
+    args: [],
+    secretId: null,
+    managedBy: null,
+    catalogId: null,
+  });
+  const stop = vi.fn(async () => ({}));
+  f.deps.hostBridge = {
+    status: vi.fn(async () => ({ configured: true, connected: true })),
+    result: stop,
+  } as unknown as RouterDeps["hostBridge"];
+  f.deps.prisma.deploymentSettings = {
+    findUnique: vi.fn(async () => ({ ownerUserId: actor.userId })),
+  } as unknown as RouterDeps["prisma"]["deploymentSettings"];
+  return { f, stop };
 }
 describe("customization service boundaries", () => {
   it("isolates plugin preview capacity by user and space and expires pending previews", async () => {
@@ -214,14 +254,105 @@ describe("customization service boundaries", () => {
     const fresh = await f.mcp.preview(actor, await f.mcp.config(actor));
     stop.mockImplementationOnce(async () => {
       expect(f.deps.prisma.$executeRaw).toHaveBeenCalled();
-      expect(f.tables.mcpServer![0]!.revision).toBe(2);
+      expect(f.transactionActive).toBe(false);
+      expect(f.tables.mcpServer![0]).toMatchObject({ revision: 3, enabled: false });
       return {};
     });
     await f.mcp.apply(actor, fresh.id);
     expect(stop).toHaveBeenCalledExactlyOnceWith(
-      { op: "mcp.stop", serverId: "running", revision: 2 },
+      { op: "mcp.stop", serverId: "running", revision: 3 },
       expect.objectContaining({ userId: actor.userId, spaceId: actor.spaceId }),
     );
+  });
+  it.each(["host", "worker", "remove"] as const)(
+    "commits before a slow host shutdown and keeps its stop authorized when applying %s",
+    async (placement) => {
+      const { f, stop } = await hostFixture();
+      const config = await f.mcp.config(actor);
+      const preview = await f.mcp.preview(actor, {
+        ...config,
+        ...(placement === "remove" ? { json: '{"mcpServers":{}}' } : {}),
+      });
+      const started = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      stop.mockImplementationOnce(async () => {
+        started.resolve();
+        await release.promise;
+        return {};
+      });
+      const applying = f.mcp.apply(actor, preview.id, placement === "host" ? "host" : "worker");
+      await started.promise;
+      try {
+        expect(f.transactionActive).toBe(false);
+        expect(f.tables.mcpServer![0]).toMatchObject({
+          enabled: false,
+          revision: 2,
+          placement: "host",
+        });
+        expect(
+          await authorizeHostMcp(
+            f.deps.prisma,
+            {
+              v: 1,
+              type: "request",
+              id: "stop",
+              scope: {
+                userId: actor.userId,
+                spaceId: actor.spaceId,
+                botId: "settings",
+                runId: "stop",
+              },
+              operation: { op: "mcp.stop", serverId: "running", revision: 2 },
+            },
+            true,
+          ),
+        ).toBe(true);
+        expect(stop).toHaveBeenCalledWith(
+          { op: "mcp.stop", serverId: "running", revision: 2 },
+          expect.anything(),
+        );
+      } finally {
+        release.resolve();
+        await applying;
+      }
+      if (placement === "remove") expect(f.tables.mcpServer).toHaveLength(0);
+      else expect(f.tables.mcpServer![0]).toMatchObject({ enabled: true, revision: 3, placement });
+    },
+  );
+  it("compensates a failed host shutdown without restoring the old revision", async () => {
+    const { f, stop } = await hostFixture();
+    const preview = await f.mcp.preview(actor, await f.mcp.config(actor));
+    stop.mockRejectedValueOnce(new Error("Host stop failed"));
+    await expect(f.mcp.apply(actor, preview.id, "host")).rejects.toThrow("Host stop failed");
+    expect(f.tables.mcpServer![0]).toMatchObject({
+      enabled: true,
+      revision: 3,
+      command: "node",
+      placement: "host",
+    });
+    expect(f.tables.secret).toHaveLength(0);
+  });
+  it("does not overwrite a concurrent configuration change during shutdown compensation", async () => {
+    const { f, stop } = await hostFixture();
+    const preview = await f.mcp.preview(actor, await f.mcp.config(actor));
+    stop.mockImplementationOnce(async () => {
+      Object.assign(f.tables.mcpServer![0]!, { enabled: false, revision: 7 });
+      throw new Error("Host stop failed");
+    });
+    await expect(f.mcp.apply(actor, preview.id, "host")).rejects.toThrow("Host stop failed");
+    expect(f.tables.mcpServer![0]).toMatchObject({ enabled: false, revision: 7 });
+  });
+  it("revalidates the configuration after shutdown before applying the preview", async () => {
+    const { f, stop } = await hostFixture();
+    const preview = await f.mcp.preview(actor, await f.mcp.config(actor));
+    stop.mockImplementationOnce(async () => {
+      Object.assign(f.tables.mcpServer![0]!, { enabled: false, revision: 7 });
+      return {};
+    });
+    await expect(f.mcp.apply(actor, preview.id, "host")).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+    expect(f.tables.mcpServer![0]).toMatchObject({ enabled: false, revision: 7 });
   });
   it("reimports a removed bundle while preserving a disabled skill that was not removed", async () => {
     const f = await fixture();
