@@ -55,6 +55,11 @@ vi.mock("./VoiceSettingsOverlay", () => ({ VoiceSettingsOverlay: () => <div>Voic
 vi.mock("./DevicesSettings", () => ({ DevicesSettings: () => <div>Device content</div> }));
 vi.mock("./McpServersOverlay", () => ({ McpServersOverlay: () => <div>MCP servers</div> }));
 vi.mock("./KnowledgeSection", () => ({ AgentSkills: () => <div>Existing skills</div> }));
+vi.mock("./customize/ExtensionsPage", () => ({
+  default: () => <div>Installed on your computer</div>,
+}));
+vi.mock("./customize/SkillsPage", () => ({ default: () => <div>Created by you</div> }));
+vi.mock("./customize/PluginsPage", () => ({ default: () => <div>In this space</div> }));
 vi.mock("./LearningInbox", () => ({
   LearningInbox: () => <div>Learning inbox timeline and curator</div>,
 }));
@@ -193,20 +198,20 @@ it("keeps denied permission out of saved settings and retries a failed initial r
   expect(container.textContent).toContain("Allow notifications in your browser settings");
   expect(fake.update).not.toHaveBeenCalled();
 });
-it("keeps all desktop placeholders backed by working content or an empty state", async () => {
+it("loads the registered pages without duplicate navigation", async () => {
   const container = await render(true);
   for (const [id, copy] of [
     ["account", "Account content"],
     ["capabilities", "Tool access mode"],
     ["memory", "Generate memory from chats"],
     ["system", "Restart the desktop app to update it."],
-    ["extensions", "MCP servers"],
+    ["extensions", "Installed on your computer"],
     ["developer", "Server URL"],
-    ["skills", "Existing skills"],
+    ["skills", "Created by you"],
     ["integrations", "Connected apps"],
     ["mcp", "MCP servers"],
     ["learning", "Learning inbox timeline and curator"],
-    ["plugins", "Nothing installed yet"],
+    ["plugins", "In this space"],
   ]) {
     await act(async () =>
       container.querySelector<HTMLButtonElement>(`[data-testid="settings-nav-${id}"]`)!.click(),
@@ -253,7 +258,7 @@ it("searches capability rows and opens Skills through the registry", async () =>
       .find((button) => button.textContent === "Skills have moved to Customize")!
       .click(),
   );
-  await waitForSettings(() => container.textContent!.includes("Existing skills"));
+  await waitForSettings(() => container.textContent!.includes("Created by you"));
   expect(container.querySelector('[data-settings-section="skills"]')).not.toBeNull();
 });
 

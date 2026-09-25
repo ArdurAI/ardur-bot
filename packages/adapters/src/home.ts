@@ -123,7 +123,7 @@ export class LocalAgentHomeStore implements AgentHomeStore {
     botId: string,
     filePath: string,
     _context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ): Promise<string> {
     await this.waitForBotWrite(botId);
     await this.recoverInterruptedCommit(botId);
@@ -132,8 +132,19 @@ export class LocalAgentHomeStore implements AgentHomeStore {
     try {
       if (options?.maxBytes !== undefined) {
         const info = await handle.stat();
-        if (info.size > options.maxBytes) {
+        if (info.size > options.maxBytes && !options.preview) {
           throw new Error(`agent home file exceeds ${options.maxBytes} bytes`);
+        }
+      }
+      if (options?.preview && options.maxBytes !== undefined) {
+        const buffer = Buffer.alloc(options.maxBytes);
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        try {
+          return new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, bytesRead), {
+            stream: bytesRead === buffer.length,
+          });
+        } catch {
+          throw new Error("Binary file");
         }
       }
       return await handle.readFile("utf8");

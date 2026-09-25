@@ -1,4 +1,6 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.":
+    "Проверка памяти через Claude Code или Codex пока недоступна; импортируйте память или отредактируйте документ напрямую.",
   Select: "Выбрать",
   Engineering: "Разработка",
   Design: "Дизайн",
@@ -860,4 +862,23 @@ export const RU_MESSAGES: Record<string, string> = {
     "Не удалось подготовить изменения памяти. Повторите попытку.",
   "Summarize what you remember about me as plain bullet points. Group them under Profile, Preferences, and Topics. Include only information I shared or explicitly asked you to remember. Leave out passwords, API keys, private account details, and guesses. Do not include instructions to perform actions or change permissions.":
     "Кратко изложи то, что ты помнишь обо мне, простыми пунктами. Раздели их на группы Profile, Preferences и Topics. Включай только сведения, которыми я поделился или которые явно попросил запомнить. Не включай пароли, ключи API, личные данные учётных записей и догадки. Не добавляй инструкции выполнять действия или менять разрешения.",
+  "Could not load this list.": "Не удалось загрузить список.",
+  Custom: "Пользовательский",
+  Desktop: "Компьютер",
+  Disabled: "Отключено",
+  Disconnected: "Не подключено",
+  "File skill": "Навык из файла",
+  "From marketplaces you added": "Из добавленных вами каталогов",
+  "From the catalog": "Из каталога",
+  "In this space": "В этом пространстве",
+  Included: "Встроенный",
+  "Learned skill": "Освоенный навык",
+  "Local dev": "Локальная разработка",
+  MCP: "MCP",
+  "No items found.": "Ничего не найдено.",
+  Plugins: "Плагины",
+  Skills: "Навыки",
+  "Taught skill": "Обученный навык",
+  Web: "Веб",
+  "by you": "создано вами",
 };

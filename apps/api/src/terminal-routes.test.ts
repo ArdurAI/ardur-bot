@@ -172,3 +172,30 @@ it("reports an expired terminal session without blaming the caller's valid contr
   ).rejects.toMatchObject({ code: "CONFLICT", message: TERMINAL_ENDED });
   expect(f.provider.open).not.toHaveBeenCalled();
 });
+
+it("opens an IDE terminal at the computer root while chat retains the bot working directory", async () => {
+  const ide = fixture();
+  await ide.routes.ticket(
+    ide.actor,
+    { botId: "bot", computerId: "computer", workspace: "computer" },
+    "auth",
+    "https://app.example",
+  );
+  expect(ide.provider.open).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.anything(),
+    expect.objectContaining({ workingRoot: "/home/ardurbot" }),
+  );
+  const chat = fixture();
+  await chat.routes.ticket(
+    chat.actor,
+    { botId: "bot", computerId: "computer" },
+    "auth",
+    "https://app.example",
+  );
+  expect(chat.provider.open).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.anything(),
+    expect.objectContaining({ workingRoot: "/home/ardurbot/bots/bot" }),
+  );
+});

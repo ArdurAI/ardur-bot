@@ -16,6 +16,7 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
 } from "./computer-connections.js";
+import { customizationContract } from "./customization.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
 import {
@@ -90,6 +91,14 @@ import {
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
 import { HostStatusSchema } from "./host-bridge.js";
+import {
+  IDE_FILE_BYTES,
+  IdeChangeSchema,
+  IdeEntrySchema,
+  IdeFileSchema,
+  IdePathSchema,
+  IdeRootSchema,
+} from "./ide.js";
 import { Id, IsoDate } from "./ids.js";
 import {
   IntegrationCatalogListSchema,
@@ -209,7 +218,48 @@ const threadSendInput = threadTarget
   });
 
 const CommandReference = z.object({ runId: Id, commandId: Id });
+// Keep IDE-only construction removable from the browser contracts barrel.
+const ideContract = /* @__PURE__ */ createIdeContract();
+function createIdeContract() {
+  return {
+    roots: oc.output(z.array(IdeRootSchema)),
+    list: oc
+      .input(z.object({ rootId: Id, path: IdePathSchema.default("") }))
+      .output(z.array(IdeEntrySchema)),
+    read: oc.input(z.object({ rootId: Id, path: IdePathSchema.min(1) })).output(IdeFileSchema),
+    save: oc
+      .input(
+        z.object({
+          rootId: Id,
+          path: IdePathSchema.min(1),
+          content: z.string().max(IDE_FILE_BYTES),
+          version: z.string().regex(/^[a-f0-9]{64}$/),
+          approved: z.boolean().default(false),
+        }),
+      )
+      .output(
+        z.object({
+          saved: z.boolean(),
+          approvalRequired: z.boolean(),
+          version: z.string().optional(),
+          reason: z.string().optional(),
+        }),
+      ),
+    changes: oc
+      .input(
+        z.object({
+          rootId: Id,
+          since: z.iso.datetime(),
+          until: z.iso.datetime(),
+          cursor: Id.optional(),
+        }),
+      )
+      .output(z.object({ items: z.array(IdeChangeSchema), nextCursor: Id.nullable() })),
+  };
+}
+
 export const appContract = {
+  ...customizationContract,
   account: accountContract,
   channelPairing: channelPairingContract,
   devices: devicesContract,
@@ -454,6 +504,7 @@ export const appContract = {
     markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
     markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
   },
+  ide: ideContract,
   terminal: {
     close: oc
       .input(z.object({ botId: Id, computerId: Id, sessionId: Id }))
@@ -462,7 +513,14 @@ export const appContract = {
       .input(z.object({ botId: Id, computerId: Id }))
       .output(z.object({ available: z.boolean() })),
     ticket: oc
-      .input(z.object({ botId: Id, computerId: Id, sessionId: Id.optional() }))
+      .input(
+        z.object({
+          botId: Id,
+          computerId: Id,
+          sessionId: Id.optional(),
+          workspace: z.literal("computer").optional(),
+        }),
+      )
       .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
   },
   computer: {
@@ -944,6 +1002,7 @@ export const appContract = {
           z.union([
             z.object({ id: Id, config: McpServerConfigInput }),
             z.object({ id: Id, secret: z.string().min(1).max(16384) }),
+            z.object({ id: Id, enabled: z.boolean() }),
           ]),
         )
         .output(McpServerSchema),

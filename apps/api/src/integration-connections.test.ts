@@ -147,6 +147,44 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
 }
 
 describe("catalog connection lifecycle", () => {
+  it.each(["authorization_not_requested", "already_connected"] as const)(
+    "discovers custom servers after an OAuth probe returns %s",
+    async (status) => {
+      const f = fixture();
+      f.setRow({ catalogId: null, connectionState: "not-connected" });
+      f.oauth.begin.mockResolvedValue({ status } as never);
+      vi.spyOn(f.service, "tools").mockResolvedValue(manifest);
+      const input = {
+        serverId: "connection",
+        redirectUri: "https://app.example.test/mcp/oauth/callback",
+      };
+      expect(await f.service.beginAuthorization(actor, input)).toEqual({ status });
+      expect(f.oauth.begin).toHaveBeenCalledWith({ ...input, ...actor });
+      expect(f.service.tools).toHaveBeenCalledWith(actor, "connection");
+      expect(f.row()).toMatchObject({ connectionState: "connected", manifest });
+    },
+  );
+  it("waits for OAuth consent before discovering a custom server", async () => {
+    const f = fixture();
+    const tools = vi.spyOn(f.service, "tools");
+    expect(
+      await f.service.beginAuthorization(actor, {
+        serverId: "connection",
+        redirectUri: "https://app.example.test/mcp/oauth/callback",
+      }),
+    ).toMatchObject({ status: "authorization_required" });
+    expect(tools).not.toHaveBeenCalled();
+    await expect(
+      f.service.beginAuthorization(
+        { ...actor, userId: "other" },
+        {
+          serverId: "connection",
+          redirectUri: "https://app.example.test/mcp/oauth/callback",
+        },
+      ),
+    ).rejects.toThrow();
+    expect(f.oauth.begin).toHaveBeenCalledTimes(1);
+  });
   it.each(["notion", "atlassian"])(
     "connects, cancels, reconnects and revokes %s with an enriched actor",
     async (catalogId) => {

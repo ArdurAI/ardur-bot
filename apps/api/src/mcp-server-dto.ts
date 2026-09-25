@@ -1,0 +1,63 @@
+import type { McpServer } from "@ardurbot/contracts";
+import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
+
+export function mcpServerDto(
+  row: {
+    catalogId?: string | null;
+    managedBy?: string | null;
+    managedId?: string | null;
+    placement?: string;
+    connectionState?: string;
+    id: string;
+    spaceId: string;
+    slug: string;
+    name: string;
+    description: string;
+    transport: string;
+    endpoint: string | null;
+    command: string | null;
+    args: unknown;
+    env: unknown;
+    headers: unknown;
+    secretId: string | null;
+    enabled: boolean;
+    revision: number;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+  oauthStatus: McpServer["oauthStatus"] = "none",
+): McpServer {
+  const args = Array.isArray(row.args)
+    ? row.args.filter((item): item is string => typeof item === "string")
+    : [];
+  const envKeys =
+    row.env && typeof row.env === "object" && !Array.isArray(row.env) ? Object.keys(row.env) : [];
+  const headerKeys =
+    row.headers && typeof row.headers === "object" && !Array.isArray(row.headers)
+      ? Object.keys(row.headers)
+      : [];
+  return {
+    catalogId: row.catalogId ?? null,
+    id: row.id,
+    spaceId: row.spaceId,
+    slug: row.slug,
+    name: row.name,
+    description: row.description,
+    transport: row.transport as McpServer["transport"],
+    endpoint: row.endpoint,
+    command: row.command,
+    args: redactMcpArguments(args),
+    managedBy: row.managedBy === "extension" || row.managedBy === "plugin" ? row.managedBy : null,
+    managedId: row.managedId ?? null,
+    placement: row.placement === "host" ? "host" : "worker",
+    connectionState: row.connectionState ?? "not-connected",
+    envKeys,
+    headerKeys,
+    hasSecret: row.secretId !== null,
+    oauthStatus,
+    enabled: row.enabled,
+    revision: row.revision,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}

@@ -5,23 +5,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Actor } from "@ardurbot/contracts";
 import { DEFAULT_USER_PREFERENCES } from "@ardurbot/contracts";
-import { createRepos } from "@ardurbot/db";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
 import { LocalAgentHomeStore } from "../../../packages/adapters/src/home.js";
 
-vi.mock("@ardurbot/db", () => ({
+vi.mock("@ardurbot/db", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   getUserPreferences: vi.fn(async () => DEFAULT_USER_PREFERENCES),
-  createRepos: vi.fn(() => ({
-    getBot: async () => ({
-      name: "Helper",
-      title: "",
-      description: "",
-      instructions: "",
-      thread: { id: "thread" },
-      computer: null,
-    }),
-  })),
 }));
 vi.mock("./thread-message-pages.js", () => ({ loadAllMessages: vi.fn(async () => []) }));
 
@@ -63,7 +53,33 @@ function fixture() {
       },
     ]),
   };
-  const bot = { findMany: vi.fn(async () => []) };
+  const bots = [
+    {
+      id: "bot",
+      spaceId: "first",
+      userId: "owner",
+      archivedAt: null as Date | null,
+      name: "Helper",
+      title: "",
+      description: "",
+      instructions: "",
+      thread: { id: "thread" },
+      computer: null as { homeKey: string } | null,
+    },
+  ];
+  const bot = {
+    findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+      bots.filter((row) =>
+        Object.entries(where).every(([key, value]) => row[key as keyof typeof row] === value),
+      ),
+    ),
+    findFirst: vi.fn(
+      async ({ where }: { where: Record<string, unknown> }) =>
+        bots.find((row) =>
+          Object.entries(where).every(([key, value]) => row[key as keyof typeof row] === value),
+        ) ?? null,
+    ),
+  };
   const thread = { findMany: vi.fn(async () => [{ id: "thread" }]) };
   const spaceMember = {
     findMany: vi.fn(async () => [
@@ -89,8 +105,44 @@ function fixture() {
     artifacts: { get: vi.fn(async () => new TextEncoder().encode("hello")) },
     exportLearning: vi.fn(async () => ({ journey: [], observations: [] })),
   } as unknown as Parameters<typeof exportAccountData>[0];
-  return { deps, prisma };
+  return { deps, prisma, bots };
 }
+it("includes archived bots in account exports while retaining owner and space isolation", async () => {
+  const { deps, prisma, bots } = fixture();
+  bots[0]!.archivedAt = new Date("2026-09-24T00:00:00Z");
+  bots[0]!.computer = { homeKey: "archived-home" };
+  bots.push({ ...bots[0]!, id: "foreign", userId: "other", name: "Foreign" });
+  bots.push({ ...bots[0]!, id: "outside", spaceId: "outside", name: "Outside" });
+  const binary = Buffer.from([0, 255, 128, 42]);
+  deps.home = {
+    async *exportHome() {
+      yield { path: "binary.bin", content: binary };
+    },
+  } as typeof deps.home;
+  const chunks: Buffer[] = [];
+  for await (const chunk of await exportArchive(deps, actor)) chunks.push(chunk);
+  const archive = Buffer.concat(chunks);
+  const data = JSON.parse(
+    execFileSync("tar", ["-xzOf", "-", "manifest.json"], { input: archive, encoding: "utf8" }),
+  );
+  expect(data.version).toBe(2);
+  expect(data.spaces[0]?.bots.map((entry: { bot: { name: string } }) => entry.bot.name)).toEqual([
+    "Helper",
+  ]);
+  expect(data.spaces[0]?.bots[0]?.home).toBe("homes/1");
+  expect(execFileSync("tar", ["-xzOf", "-", "homes/1/binary.bin"], { input: archive })).toEqual(
+    binary,
+  );
+  expect(data.spaces[1]?.bots).toEqual([]);
+  expect(prisma.bot.findFirst).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { id: "bot", spaceId: "first", userId: "owner" },
+    }),
+  );
+  for (const id of ["foreign", "outside"])
+    await expect(exportBotData(deps, actor, id, { includeArchived: true })).rejects.toThrow();
+  await expect(exportBotData(deps, actor, "bot")).rejects.toThrow();
+});
 it("exports account data across current memberships, including upload references, without storage or authentication internals", async () => {
   const { deps, prisma } = fixture();
   const data = await exportAccountData(deps, actor);
@@ -134,7 +186,7 @@ it("keeps the existing bot export usable without a provisioned computer", async 
 });
 
 it("streams one shared home, preserves binary hashes, omits caches and profiles, and stays within export budgets", async () => {
-  const { deps, prisma } = fixture();
+  const { deps, prisma, bots } = fixture();
   const root = await mkdtemp(path.join(tmpdir(), "export-test-"));
   const home = new LocalAgentHomeStore(root);
   deps.home = home;
@@ -155,16 +207,10 @@ it("streams one shared home, preserves binary hashes, omits caches and profiles,
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, file.content);
   }
-  const bot = {
-    name: "Helper",
-    title: "",
-    description: "",
-    instructions: "",
-    computer: { homeKey: "shared" },
-  };
-  const repoMock = vi.mocked(createRepos).mockReturnValue({ getBot: async () => bot } as never);
+  bots[0]!.id = "bot-1";
+  bots[0]!.computer = { homeKey: "shared" };
+  bots.push({ ...bots[0]!, id: "bot-2" });
   prisma.spaceMember.findMany.mockResolvedValue([{ space: { id: "first", name: "First" } }]);
-  prisma.bot.findMany.mockResolvedValue([{ id: "bot-1" }, { id: "bot-2" }] as never);
   const streamHome = vi.spyOn(home, "streamHome");
   try {
     const beforeStart = performance.now();
@@ -245,19 +291,6 @@ it("streams one shared home, preserves binary hashes, omits caches and profiles,
       digest(bytes),
     );
   } finally {
-    repoMock.mockReset();
-    repoMock.mockImplementation(
-      () =>
-        ({
-          getBot: async () => ({
-            name: "Helper",
-            title: "",
-            description: "",
-            instructions: "",
-            computer: null,
-          }),
-        }) as never,
-    );
     await rm(root, { recursive: true, force: true });
   }
 });

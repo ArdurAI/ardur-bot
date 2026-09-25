@@ -14,6 +14,7 @@
     "./local-settings": "./src/local-settings.js",
     "./runtime-pins": "./src/runtime-pins.ts",
     "./host-bridge": "./src/host-bridge.ts",
+    "./customization-catalog": "./src/customization-catalog.json",
     "./host-environment": "./src/host-environment.js",
     "./host-registration-identity": "./src/host-registration-identity.js"
   },

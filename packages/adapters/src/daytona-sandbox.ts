@@ -29,6 +29,7 @@ import {
   PORTABLE_TRANSFER_BATCH_BYTES,
   shouldSkipPortableWorkspaceFile,
 } from "./computer-workspace.js";
+import { readFilePreview } from "./file-preview.js";
 import { LinuxDesktop, PREPARE_LINUX_DESKTOP } from "./linux-desktop.js";
 
 const DAYTONA_SCREEN_TTL_SECONDS = 3_600;
@@ -248,9 +249,18 @@ export class DaytonaSandboxProvider implements SandboxProvider {
   async readFile(
     computer: ComputerRef,
     filePath: string,
-    _context: AdapterContext,
-    options?: { maxBytes?: number },
+    context: AdapterContext,
+    options?: { maxBytes?: number; preview?: boolean },
   ): Promise<Uint8Array> {
+    if (options?.preview && options.maxBytes !== undefined)
+      return readFilePreview(
+        this,
+        computer,
+        await this.workspaceRoot(await this.box(computer)),
+        normalizeWorkspacePath(filePath),
+        context,
+        options.maxBytes,
+      );
     const sandbox = await this.box(computer);
     const target = workspacePath(await this.workspaceRoot(sandbox), filePath);
     if (options?.maxBytes !== undefined) {

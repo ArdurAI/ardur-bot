@@ -7,13 +7,26 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const request = vi.hoisted(() => vi.fn());
 const copy = vi.hoisted(() => vi.fn(async () => undefined));
+const focus = vi.hoisted(() => ({
+  enter: undefined as (() => void) | undefined,
+  leave: undefined as (() => void) | undefined,
+}));
 vi.mock("./api", () => ({ rpc: request }));
 vi.mock("expo-clipboard", () => ({ setStringAsync: copy }));
 vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
 vi.mock("./appearance", () => ({ mobileTokens: () => ({}) }));
 vi.mock("./native", () => ({ native: {}, useThemedStyles: (fn: () => unknown) => fn() }));
 vi.mock("expo-router", () => ({
-  useFocusEffect: (effect: () => void) => useEffect(effect, [effect]),
+  useFocusEffect: (effect: () => (() => void) | undefined) =>
+    useEffect(() => {
+      focus.enter = () => {
+        focus.leave = effect();
+      };
+      focus.enter();
+      return () => {
+        focus.leave?.();
+      };
+    }, [effect]),
   useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock("react-native", () => ({
@@ -52,14 +65,17 @@ vi.mock("react-native", () => ({
     value,
     onChangeText,
     accessibilityLabel,
+    editable,
   }: {
     value: string;
     onChangeText: (value: string) => void;
     accessibilityLabel: string;
+    editable?: boolean;
   }) =>
     createElement("textarea", {
       value,
       "aria-label": accessibilityLabel,
+      disabled: editable === false,
       onChange: (event: { currentTarget: HTMLTextAreaElement }) =>
         onChangeText(event.currentTarget.value),
     }),
@@ -98,6 +114,108 @@ function input(container: HTMLElement, label: string, text: string) {
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+});
+
+function pendingRequest() {
+  let resolve!: (value: unknown) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+it.each([
+  [
+    "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
+    true,
+  ],
+  ["private provider failure", false],
+])("shows only a recognized native review refusal: %s", async (message, recognized) => {
+  request.mockRejectedValue(new Error(message as string));
+  await mounted(createElement(MemoryIntentControls), async (container) => {
+    await act(async () =>
+      input(container, "Tell your bot what to change or remove", "Use short answers."),
+    );
+    await act(async () => button(container, "Send").click());
+    expect(container.textContent).toContain(
+      recognized ? message : "Could not prepare memory changes. Try again.",
+    );
+    if (!recognized) expect(container.textContent).not.toContain(message);
+    expect(button(container, "Send").disabled).toBe(false);
+  });
+});
+
+it.each(["import", "edit"] as const)(
+  "unlocks a pending %s after blur without showing stale proposals",
+  async (intent) => {
+    const pending = pendingRequest();
+    request.mockReturnValueOnce(pending.promise).mockResolvedValue([]);
+    await mounted(createElement(MemoryIntentControls), async (container) => {
+      if (intent === "import") await act(async () => button(container, "Start import").click());
+      const label = intent === "import" ? "Paste memory" : "Tell your bot what to change or remove";
+      const submit = intent === "import" ? "Review import" : "Send";
+      await act(async () => input(container, label, "Use short answers."));
+      await act(async () => button(container, submit).click());
+      expect(button(container, submit).disabled).toBe(true);
+      await act(async () => focus.leave?.());
+      await act(async () => pending.resolve([]));
+      await act(async () => focus.enter?.());
+      expect(button(container, submit).disabled).toBe(false);
+      const field = container.querySelector(
+        `textarea[aria-label="${label}"]`,
+      ) as HTMLTextAreaElement;
+      expect(field.disabled).toBe(false);
+      expect(field.value).toBe("Use short answers.");
+      expect(container.textContent).not.toContain("Pending approval");
+      await act(async () => button(container, submit).click());
+      expect(request).toHaveBeenCalledTimes(2);
+    });
+  },
+);
+
+it("unlocks an edit that fails after refocus without showing a stale error", async () => {
+  const pending = pendingRequest();
+  request.mockReturnValueOnce(pending.promise);
+  await mounted(createElement(MemoryIntentControls), async (container) => {
+    await act(async () =>
+      input(container, "Tell your bot what to change or remove", "Use short answers."),
+    );
+    await act(async () => button(container, "Send").click());
+    await act(async () => focus.leave?.());
+    await act(async () => focus.enter?.());
+    expect(button(container, "Send").disabled).toBe(true);
+    await act(async () => pending.reject(new Error("offline")));
+    expect(button(container, "Send").disabled).toBe(false);
+    expect(container.textContent).not.toContain("Could not prepare memory changes.");
+  });
+});
+
+it.each([false, true])("unlocks generation after focus changes and failure=%s", async (failed) => {
+  const settings = SpaceLearningConfigSchema.parse({
+    enabled: true,
+    canConfigure: true,
+    destination: null,
+  });
+  const pending = pendingRequest();
+  request.mockImplementation((path: string) =>
+    path === "learning/configure" ? pending.promise : Promise.resolve(settings),
+  );
+  await mounted(createElement(MemoryControls), async (container) => {
+    const toggle = container.querySelector('[role="switch"]') as HTMLButtonElement;
+    await act(async () => toggle.click());
+    expect(toggle.disabled).toBe(true);
+    await act(async () => focus.leave?.());
+    await act(async () => focus.enter?.());
+    await act(async () =>
+      failed
+        ? pending.reject(new Error("offline"))
+        : pending.resolve({ ...settings, enabled: false }),
+    );
+    expect(toggle.disabled).toBe(false);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(container.textContent).not.toContain("Could not save memory settings.");
+  });
 });
 
 it("uses the native switch to change generation consent without granting automatic approval", async () => {

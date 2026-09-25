@@ -23,6 +23,7 @@ export const AccountInstructionsInputSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
 });
 export const AccountSettingsSchema = AccountProfileInputSchema.extend({
+  name: z.string(),
   spaceId: z.string(),
   instructions: z.string().max(4000),
   instructionsRevision: z.number().int().nonnegative(),

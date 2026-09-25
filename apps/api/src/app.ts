@@ -94,6 +94,7 @@ import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { HostBridge } from "./host-bridge.js";
+import { mountHostMcpRoutes } from "./host-mcp-routes.js";
 import { ensureInstanceIdentity } from "./instance-identity.js";
 import { createLearningService } from "./learning.js";
 import { mountLocalSettings, validLocalSettingsToken } from "./local-settings.js";
@@ -920,6 +921,7 @@ export async function createApp(
     })();
   }
 
+  mountHostMcpRoutes(app, { prisma, secrets, hostBridge });
   app.post("/api/host-bridge/pair", async (c) => {
     const origin = c.req.header("origin");
     if (origin && !isTrustedOrigin(origin, env)) return c.json({ error: "Forbidden" }, 403);
