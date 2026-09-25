@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { MessageDescriptor } from "@lingui/core";
 import type { ComponentProps, ReactNode } from "react";
-import { act } from "react";
+import { act, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -129,6 +129,58 @@ it("loads seven independent lazy panels and renders honest empty states", async 
   );
   expect(governance.querySelector("a")?.getAttribute("href")).toContain("governance.md");
   expect(governance.querySelector("button, input, select")).toBeNull();
+});
+it("paints the layout before bootstrap without starting unscoped panel requests", async () => {
+  await act(async () =>
+    root.render(<DashboardPage scope="" openSettings={actions.openSettings} />),
+  );
+  expect(node.querySelector("h1")?.textContent).toBe("Dashboard");
+  expect(Array.from(node.querySelectorAll("h2"), (heading) => heading.textContent)).toEqual([
+    "Now",
+    "Computers",
+    "Connections",
+    "Routines",
+    "Usage",
+    "Learning",
+    "Governance",
+  ]);
+  expect(node.querySelectorAll('[aria-busy="true"]')).toHaveLength(7);
+  for (const request of Object.values(api)) expect(request).not.toHaveBeenCalled();
+  await renderPage();
+  expect(node.querySelector('[aria-busy="true"]')).toBeNull();
+  expect(api.features).toHaveBeenCalledOnce();
+});
+it("keeps headings and neighboring panels visible while a widget renderer is suspended", async () => {
+  let resolveWidget!: (module: { default: () => ReactNode }) => void;
+  const Deferred = lazy(
+    () =>
+      new Promise<{ default: () => ReactNode }>((resolve) => {
+        resolveWidget = resolve;
+      }),
+  );
+  const base = getDashboardPanels().find((panel) => panel.id === "usage")!;
+  const pending = { ...base, load: async () => ({}), render: () => <Deferred /> };
+  const ready = {
+    ...base,
+    id: "ready",
+    load: async () => ({}),
+    render: () => <p>Ready widget</p>,
+  };
+  await act(async () =>
+    root.render(
+      <>
+        <DashboardPanelView panel={pending} scope="viewer:space" spaceId="space" {...actions} />
+        <DashboardPanelView panel={ready} scope="viewer:space" spaceId="space" {...actions} />
+      </>,
+    ),
+  );
+  const usage = node.querySelector('[data-panel="usage"]')!;
+  expect(usage.querySelector("h2")?.textContent).toBe("Usage");
+  expect(usage.querySelector('[aria-busy="true"]')).not.toBeNull();
+  expect(node.textContent).toContain("Ready widget");
+  await act(async () => resolveWidget({ default: () => <p>Loaded widget</p> }));
+  expect(usage.textContent).toContain("Loaded widget");
+  expect(usage.querySelector('[aria-busy="true"]')).toBeNull();
 });
 it("uses native registered folders and saved engine state without probing owner-only controls", async () => {
   vi.stubGlobal("ardurbotDesktop", {

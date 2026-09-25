@@ -1,7 +1,7 @@
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import type { ComponentType, ReactNode } from "react";
-import { createElement, useSyncExternalStore } from "react";
+import { createElement, lazy, useSyncExternalStore } from "react";
 import type { SettingsSection } from "../SettingsOverlay";
 
 export type PanelContext = { spaceId: string; signal: AbortSignal };
@@ -63,8 +63,14 @@ function lazyPanel<T>(
   empty: MessageDescriptor,
   chunk: () => Promise<PanelModule<T>>,
 ) {
-  // Import failures use the same retry path as data failures. Successful modules
-  // and data stay together in the cache, so a warm render never waits on import().
+  // Loading data and rendering share one import. Failed imports can be retried;
+  // successful modules stay warm alongside the panel's cached data.
+  let module: Promise<PanelModule<T>> | undefined;
+  const loadModule = () =>
+    (module ??= chunk().catch((error) => {
+      module = undefined;
+      throw error;
+    }));
   registerDashboardPanel({
     id,
     title,
@@ -72,11 +78,10 @@ function lazyPanel<T>(
     group,
     empty,
     load: async (context) => {
-      const module = await chunk();
-      const value = await module.load(context);
-      return value === null ? null : { value, Render: module.default };
+      const panel = await loadModule();
+      return panel.load(context);
     },
-    Render: ({ data, ...actions }) => createElement(data.Render, { data: data.value, ...actions }),
+    Render: lazy(async () => ({ default: (await loadModule()).default })),
   });
 }
 

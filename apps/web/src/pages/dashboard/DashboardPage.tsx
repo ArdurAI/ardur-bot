@@ -23,7 +23,7 @@ export function DashboardPage({
   ...actions
 }: {
   scope: string;
-  spaceId: string;
+  spaceId?: string;
 } & Pick<PanelActions, "openSettings">) {
   const [learningOpen, setLearningOpen] = useState(false);
   const panels = useDashboardPanels();
@@ -37,16 +37,22 @@ export function DashboardPage({
         <Trans>Dashboard</Trans>
       </h1>
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 lg:grid-cols-2">
-        {panels.map((panel) => (
-          <DashboardPanelView
-            key={`${scope}:${panel.id}`}
-            panel={panel}
-            scope={scope}
-            spaceId={spaceId}
-            {...actions}
-            openLearning={() => setLearningOpen(true)}
-          />
-        ))}
+        {panels.map((panel) =>
+          spaceId ? (
+            <DashboardPanelView
+              key={`${scope}:${panel.id}`}
+              panel={panel}
+              scope={scope}
+              spaceId={spaceId}
+              {...actions}
+              openLearning={() => setLearningOpen(true)}
+            />
+          ) : (
+            <DashboardPanelFrame key={panel.id} panel={panel}>
+              <PanelSkeleton />
+            </DashboardPanelFrame>
+          ),
+        )}
       </div>
       {learningOpen ? (
         <Suspense fallback={null}>
@@ -120,29 +126,44 @@ export function DashboardPanelView({
     void refresh();
   };
   return (
+    <DashboardPanelFrame panel={panel}>
+      {error ? <PanelError retry={retry} /> : null}
+      {!value && !error ? <PanelSkeleton /> : null}
+      {value ? (
+        <PanelBoundary key={renderKey} retry={retry}>
+          {value.data === null ? (
+            <p className="text-sm text-muted-foreground">{i18n._(panel.empty)}</p>
+          ) : (
+            <Suspense fallback={<PanelSkeleton />}>
+              {panel.render(value.data, { ...actions, refresh })}
+            </Suspense>
+          )}
+        </PanelBoundary>
+      ) : null}
+    </DashboardPanelFrame>
+  );
+}
+
+function DashboardPanelFrame({ panel, children }: { panel: DashboardPanel; children: ReactNode }) {
+  const { i18n } = useLingui();
+  return (
     <section
       data-panel={panel.id}
       data-group={panel.group}
       className={`min-w-0 rounded-xl border border-border bg-card p-4 ${panel.group === "now" ? "lg:col-span-2" : ""}`}
     >
       <h2 className="mb-3 text-sm font-medium">{i18n._(panel.title)}</h2>
-      {error ? <PanelError retry={retry} /> : null}
-      {!value && !error ? (
-        <div
-          aria-busy="true"
-          className="h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"
-        />
-      ) : null}
-      {value ? (
-        <PanelBoundary key={renderKey} retry={retry}>
-          {value.data === null ? (
-            <p className="text-sm text-muted-foreground">{i18n._(panel.empty)}</p>
-          ) : (
-            panel.render(value.data, { ...actions, refresh })
-          )}
-        </PanelBoundary>
-      ) : null}
+      {children}
     </section>
+  );
+}
+
+function PanelSkeleton() {
+  return (
+    <div
+      aria-busy="true"
+      className="h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none"
+    />
   );
 }
 

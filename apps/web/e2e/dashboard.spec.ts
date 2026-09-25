@@ -1,3 +1,4 @@
+import { DEFAULT_USER_PREFERENCES } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 
@@ -76,6 +77,21 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   };
   let answered = false;
   let approvedInput: unknown;
+  let releaseBootstrap!: () => void;
+  const bootstrapReady = new Promise<void>((resolve) => {
+    releaseBootstrap = resolve;
+  });
+  let releaseNow!: () => void;
+  const nowReady = new Promise<void>((resolve) => {
+    releaseNow = resolve;
+  });
+  await page.route(
+    /\/(?:assets\/NowPanel-[^/]+\.js|src\/pages\/dashboard\/NowPanel\.tsx)(?:\?|$)/,
+    async (route) => {
+      await nowReady;
+      await route.continue();
+    },
+  );
   const snapshot = () => ({
     botId: "bot",
     threadId: "thread",
@@ -134,8 +150,15 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   );
   await page.route("**/rpc/**", async (route) => {
     const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
+    if (procedure === "bootstrap") await bootstrapReady;
     const values: Record<string, unknown> = {
       me,
+      "preferences/get": DEFAULT_USER_PREFERENCES,
+      "notifications/activity": {
+        userId: user.id,
+        preferences: DEFAULT_USER_PREFERENCES,
+        activities: [],
+      },
       bootstrap: {
         me,
         bots: [bot],
@@ -210,7 +233,29 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
     }
   });
   await page.goto("/app");
-  await expect(page.getByTestId("dashboard")).toBeVisible();
+  try {
+    await expect(page.getByTestId("dashboard")).toBeVisible();
+    await expect(page.getByTestId("dashboard").getByRole("heading")).toHaveText([
+      "Dashboard",
+      "Now",
+      "Computers",
+      "Connections",
+      "Routines",
+      "Usage",
+      "Learning",
+      "Governance",
+    ]);
+    await expect(page.getByTestId("dashboard").locator('[aria-busy="true"]')).toHaveCount(7);
+  } finally {
+    releaseBootstrap();
+  }
+  try {
+    await expect(page.locator('[data-panel="now"] [aria-busy="true"]')).toBeVisible();
+    await expect(page.locator('[data-panel="connections"]')).toContainText("No connections");
+    await expect(page.locator('[data-panel="governance"] a')).toBeVisible();
+  } finally {
+    releaseNow();
+  }
   await expect(page).toHaveTitle("Dashboard — Ardur Bot");
   await expect(page.getByText("Waiting for your approval", { exact: true })).toBeVisible();
   const governance = page.locator('[data-panel="governance"]');

@@ -214,6 +214,7 @@ import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { CompareStart } from "./CompareStart";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
+import { DashboardPage } from "./dashboard/DashboardPage";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
 import type { RoutineDraftState } from "./RoutineEditor";
@@ -255,9 +256,6 @@ import { WindowChrome } from "./WindowChrome";
 
 const TeamBoard = lazy(() =>
   import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
-);
-const DashboardPage = lazy(() =>
-  import("./dashboard/DashboardPage").then((module) => ({ default: module.DashboardPage })),
 );
 
 const BotContextMenu = lazy(() =>
@@ -3193,24 +3191,14 @@ export function ShellPage({
 
       {dashboard ? (
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {bootstrapMe ? (
-            <Suspense
-              fallback={
-                <div className="m-6 h-24 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
-              }
-            >
-              <DashboardPage
-                key={bootstrapMe.spaceId}
-                scope={`${userId}:${bootstrapMe.spaceId}`}
-                spaceId={bootstrapMe.spaceId}
-                openSettings={(section) =>
-                  section === "messaging" ? setMessagingSettingsOpen(true) : openSettings(section)
-                }
-              />
-            </Suspense>
-          ) : (
-            <div className="m-6 h-24 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
-          )}
+          <DashboardPage
+            key={bootstrapMe?.spaceId}
+            scope={bootstrapMe ? `${userId}:${bootstrapMe.spaceId}` : ""}
+            spaceId={bootstrapMe?.spaceId}
+            openSettings={(section) =>
+              section === "messaging" ? setMessagingSettingsOpen(true) : openSettings(section)
+            }
+          />
         </main>
       ) : null}
       {team ? (

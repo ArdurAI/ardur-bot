@@ -4,12 +4,8 @@ import type {
   TeamBoard,
   UsageSummary,
 } from "@ardurbot/contracts";
-import {
-  ConnectionOverviewSchema,
-  RunsListOutputSchema,
-  TeamBoardSchema,
-  UsageSummarySchema,
-} from "@ardurbot/contracts";
+import { RunsListOutputSchema, TeamBoardSchema } from "@ardurbot/contracts";
+import { ConnectionOverviewSchema, UsageSummarySchema } from "@ardurbot/contracts/dashboard";
 import type { OverviewNow } from "@ardurbot/core";
 import { rpc } from "./api";
 
