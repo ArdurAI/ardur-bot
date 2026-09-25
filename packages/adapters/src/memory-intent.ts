@@ -20,6 +20,7 @@ import { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 import { learningHash } from "./learning-records.js";
 import { learningSecrets } from "./learning-redaction.js";
 import { hasBotPin, requestedBotPin } from "./pin-resolution.js";
+import { ObservedUsageTotals } from "./runtime-usage.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { skillDocumentContext } from "./skill-documents.js";
 
@@ -168,6 +169,7 @@ export async function proposeMemoryIntent(
   });
   let tokens = 0;
   let usageSeen = input.intent === "import";
+  const usageTotals = new ObservedUsageTotals();
   try {
     let drafts = importedMemoryDrafts(text);
     if (input.intent === "edit" && resolved) {
@@ -209,8 +211,9 @@ export async function proposeMemoryIntent(
               if (event.type === "text") output += event.text;
               if (event.type === "done" && !output) output = event.text ?? "";
               if (event.type === "usage") {
-                usageSeen = true;
-                tokens += event.inputTokens + event.outputTokens;
+                usageTotals.observe(event);
+                usageSeen = usageTotals.reported;
+                tokens = usageTotals.tokens;
               }
               if (output.length > budgets.maxOutputChars)
                 throw new Error("Memory review exceeded its output limit.");

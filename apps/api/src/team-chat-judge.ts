@@ -3,6 +3,7 @@ import type { AgentRunModel, AgentRuntime } from "@ardurbot/adapter-kit";
 import {
   type EncryptedSecretStore,
   formatCurrentTimeInstruction,
+  ObservedUsageTotals,
   resolveModelAuth,
   serializeModelSecret,
   toOAuthCredential,
@@ -135,6 +136,7 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
       });
       const judgeId = `team-chat-judge:${randomUUID()}`;
       let text = "";
+      const usageTotals = new ObservedUsageTotals();
       for await (const event of this.deps.runtime.run(
         {
           botId: input.bot.id,
@@ -163,6 +165,8 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
       )) {
         if (event.type === "done" && event.text) text = event.text;
         if (event.type === "usage") {
+          const delta = usageTotals.observe(event);
+          if (!delta) continue;
           await this.deps.prisma.usageRecord.create({
             data: {
               spaceId: input.bot.spaceId,
@@ -170,8 +174,8 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
               userId: input.bot.userId,
               provider: event.provider,
               model: event.model,
-              inputTokens: event.inputTokens,
-              outputTokens: event.outputTokens,
+              inputTokens: delta.inputTokens,
+              outputTokens: delta.outputTokens,
             },
           });
         }

@@ -1,5 +1,6 @@
 import type { AgentUsage, RawUsageCounts, UsageOutcome, UsagePurpose } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector } from "@ardurbot/adapter-kit";
+import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@ardurbot/contracts";
 import type {
   Api,
   AssistantMessage,
@@ -8,6 +9,7 @@ import type {
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { dispatcherFetch } from "./undici-fetch.js";
 
 const HTTP_APIS = new Set([
   "anthropic-messages",
@@ -164,10 +166,17 @@ export function observePiUsage(
       active.finished = true;
     }
   };
+  // These providers attach a package Undici Agent after the observer is injected.
+  // Preserve their matching transport instead of falling back to Node's bundled fetch.
+  const baseFetch =
+    options.fetch ??
+    (model.provider === OPENAI_COMPATIBLE_PROVIDER_ID || model.provider === "ollama"
+      ? dispatcherFetch
+      : globalThis.fetch);
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const current = begin(true);
     try {
-      const response = await (options.fetch ?? globalThis.fetch)(input, init);
+      const response = await baseFetch(input, init);
       const observed = observeBody(
         response,
         (payload) => {

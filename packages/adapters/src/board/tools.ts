@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ConnectorTool } from "@ardurbot/adapter-kit";
 import {
   BOARD_LINK_TYPES,
@@ -113,17 +114,65 @@ export async function finishBoardRun(
       message: "This board is not available in this space.",
     });
   if (!["completed", "failed", "cancelled"].includes(run.status)) return;
-  const completed = run.status === "completed";
-  const service = new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" });
-  const provider = await service.provider(scope, run.boardWorkspaceId);
-  const item = await provider.show(run.boardItemId);
-  const marker = `[Run ${run.id}]`;
-  if (!item.comments.some((comment) => comment.text.startsWith(marker)))
-    await provider.comment(
-      item.id,
-      `${marker} ${completed ? "Completed" : run.status === "cancelled" ? "Cancelled" : "Failed"}\n${outcome.slice(0, 30_000)}`,
-    );
-  if (completed && run.boardCloseWhenDone && item.closeWhenDone && item.status !== "closed")
-    await provider.close([item.id], "Bot reported done");
-  await deps.prisma.run.update({ where: { id: run.id }, data: { boardCommentedAt: new Date() } });
+  // Immediate delivery and reconciliation share a durable claim, without holding a DB connection.
+  // Bound all host work to two minutes, leaving a minute to stop before crash recovery can take over.
+  const deadline = Date.now() + 120_000;
+  const token = randomUUID();
+  const claimed = await deps.prisma.run.updateMany({
+    where: {
+      id: run.id,
+      spaceId: scope.spaceId,
+      userId: scope.userId,
+      botId: scope.botId,
+      status: run.status,
+      boardItemId: run.boardItemId,
+      boardWorkspaceId: run.boardWorkspaceId,
+      boardCommentedAt: null,
+      OR: [{ boardDeliveryExpiresAt: null }, { boardDeliveryExpiresAt: { lte: new Date() } }],
+    },
+    data: { boardDeliveryToken: token, boardDeliveryExpiresAt: new Date(deadline + 60_000) },
+  });
+  if (!claimed.count) return;
+  try {
+    const signal = AbortSignal.any([
+      ...(scope.signal ? [scope.signal] : []),
+      AbortSignal.timeout(Math.max(0, deadline - Date.now())),
+    ]);
+    const checkDeadline = () => {
+      signal.throwIfAborted();
+      // Wall time also catches a paused worker resuming after another worker can reclaim its lease.
+      if (Date.now() >= deadline) throw new Error("Board outcome delivery timed out.");
+    };
+    checkDeadline();
+    const completed = run.status === "completed";
+    const service = new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" });
+    const provider = await service.provider({ ...scope, signal }, run.boardWorkspaceId);
+    checkDeadline();
+    const item = await provider.show(run.boardItemId);
+    const marker = `[Run ${run.id}]`;
+    checkDeadline();
+    if (!item.comments.some((comment) => comment.text.startsWith(marker)))
+      await provider.comment(
+        item.id,
+        `${marker} ${completed ? "Completed" : run.status === "cancelled" ? "Cancelled" : "Failed"}\n${outcome.slice(0, 30_000)}`,
+      );
+    checkDeadline();
+    if (completed && run.boardCloseWhenDone && item.closeWhenDone && item.status !== "closed")
+      await provider.close([item.id], "Bot reported done");
+    checkDeadline();
+    await deps.prisma.run.updateMany({
+      where: { id: run.id, boardDeliveryToken: token, boardDeliveryExpiresAt: { gt: new Date() } },
+      data: {
+        boardCommentedAt: new Date(),
+        boardDeliveryToken: null,
+        boardDeliveryExpiresAt: null,
+      },
+    });
+  } finally {
+    // A failed attempt stays pending; a stale worker cannot release a successor's claim.
+    await deps.prisma.run.updateMany({
+      where: { id: run.id, boardDeliveryToken: token },
+      data: { boardDeliveryToken: null, boardDeliveryExpiresAt: null },
+    });
+  }
 }
