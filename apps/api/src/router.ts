@@ -186,6 +186,8 @@ import { createCustomizationRoutes } from "./customization-routes.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
+import { createIdeChanges } from "./ide-changes.js";
+import { createIdeFiles } from "./ide-files.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
@@ -547,6 +549,8 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
 
   const systemSettings = createSystemSettings(deps.prisma);
   const commands = createCommandRoutes(deps);
+  const ide = createIdeFiles(deps);
+  const ideChanges = createIdeChanges(deps, ide);
   return os.router({
     ...createCustomizationRoutes(deps),
     account: {
@@ -599,6 +603,19 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       start: authed.channelPairing.start.handler(({ context, input }) =>
         channelPairing.start(context.actor, input),
       ),
+    },
+    ide: {
+      roots: authed.ide.roots.handler(({ context }) => ide.roots(context.actor)),
+      list: authed.ide.list.handler(({ context, input }) =>
+        ide.list(context.actor, input, context.signal),
+      ),
+      read: authed.ide.read.handler(({ context, input }) =>
+        ide.read(context.actor, input, context.signal),
+      ),
+      save: authed.ide.save.handler(({ context, input }) =>
+        ide.save(context.actor, input, context.signal),
+      ),
+      changes: authed.ide.changes.handler(({ context, input }) => ideChanges(context.actor, input)),
     },
     terminal: {
       close: authed.terminal.close.handler(
@@ -2514,7 +2531,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     memory: {
       propose: authed.memory.propose.handler(({ context, input }) =>
-        proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+        memoryRpc(() =>
+          proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+        ),
       ),
       remember: authed.memory.remember.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);

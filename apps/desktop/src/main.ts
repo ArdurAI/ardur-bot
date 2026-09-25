@@ -71,6 +71,7 @@ import { readEnabledRoutines } from "./system/routines.js";
 import { installSystemRuntime } from "./system/runtime.js";
 import { systemTray } from "./system/tray.js";
 import { staysRunning } from "./tray.js";
+import { UnsavedFiles } from "./unsaved-files.js";
 import { shouldOpenInAppPopup } from "./window-open.js";
 import {
   browserWindowOptions,
@@ -93,6 +94,7 @@ const DESKTOP_STACK_PROBE_PATH = "/.well-known/ardurbot-desktop-stack";
 const DESKTOP_STACK_TOKEN_HEADER = "x-ardurbot-desktop-stack-token";
 let desktopTray: ReturnType<typeof systemTray> = null;
 let mainWindow: BrowserWindow | null = null;
+const unsavedFiles = new UnsavedFiles<BrowserWindow>();
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
 let setupWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -347,6 +349,24 @@ function createWindow(url: string, partition: string | null) {
     popup.webContents.on("will-redirect", (details) => capture(details));
     popup.webContents.on("will-navigate", (details) => capture(details));
   });
+  win.webContents.on("will-prevent-unload", (event) => {
+    if (quitting && !unsavedFiles.has(win)) {
+      event.preventDefault();
+      return;
+    }
+    const discard =
+      dialog.showMessageBoxSync(win, {
+        type: "question",
+        message: "Unsaved changes",
+        buttons: ["Cancel", "Discard"],
+        defaultId: 0,
+        cancelId: 0,
+      }) === 1;
+    if (discard) {
+      unsavedFiles.set(win, false);
+      event.preventDefault();
+    } else quitting = false;
+  });
   win.on("close", (event) => {
     if (
       staysRunning(process.platform, desktopTray !== null, hostService?.keepRunning) &&
@@ -362,16 +382,19 @@ function createWindow(url: string, partition: string | null) {
           !hostService?.keepRunning &&
           mainWindow === win &&
           !win.isDestroyed() &&
-          !win.isVisible()
+          !win.isVisible() &&
+          !unsavedFiles.has(win)
         )
           win.destroy();
       }, WARM_WINDOW_TTL_MS);
     }
   });
   win.once("closed", () => {
-    clearTimeout(warmWindowTimer);
-    hostService?.windowClosed();
-    if (mainWindow === win) mainWindow = null;
+    if (mainWindow === win) {
+      clearTimeout(warmWindowTimer);
+      mainWindow = null;
+      hostService?.windowClosed();
+    }
   });
   markOnce("rk:main:window-created");
   if (win.isVisible()) markOnce("rk:main:window-shown");
@@ -971,8 +994,8 @@ function abandonPendingAppSwitch(
   pendingPreviousWindow = null;
   if (previous !== null && !previous.isDestroyed()) {
     const failed = mainWindow;
-    if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     mainWindow = previous;
+    if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;
     // If setup was already closed (e.g. during a slow write), make the restored
@@ -1237,6 +1260,16 @@ app.whenReady().then(async () => {
     } finally {
       selectingMemoryFolder = false;
     }
+  });
+  ipcMain.handle("desktop.window.unsaved", (event, dirty: unknown) => {
+    const win = fromMainWindow(event) ? mainWindow : null;
+    if (
+      !win ||
+      event.senderFrame !== win.webContents.mainFrame ||
+      safeOrigin(event.senderFrame.url) !== safeOrigin(appWindowTargets.get(win) ?? "")
+    )
+      throw new Error("Window is unavailable here.");
+    unsavedFiles.set(win, dirty);
   });
   ipcMain.handle("desktop.window.close", (event) => {
     windowFrom(event)?.close();
@@ -1506,8 +1539,24 @@ app.on("window-all-closed", () => {
   if (!staysRunning(process.platform, desktopTray !== null, hostService?.keepRunning)) app.quit();
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   quitting = true;
+  if (mainWindow && unsavedFiles.has(mainWindow)) {
+    const discard =
+      dialog.showMessageBoxSync(mainWindow, {
+        type: "question",
+        message: "Unsaved changes",
+        buttons: ["Cancel", "Discard"],
+        defaultId: 0,
+        cancelId: 0,
+      }) === 1;
+    if (!discard) {
+      event.preventDefault();
+      quitting = false;
+      return;
+    }
+    unsavedFiles.set(mainWindow, false);
+  }
   hostService?.stop();
   desktopTray?.destroy();
   desktopTray = null;

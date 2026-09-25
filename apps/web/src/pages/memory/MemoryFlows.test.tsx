@@ -163,6 +163,23 @@ describe("memory proposal entry points", () => {
       },
     );
   });
+  it.each([
+    [
+      "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
+      true,
+    ],
+    ["private provider failure", false],
+  ])("shows only a recognized review refusal: %s", async (message, recognized) => {
+    const propose = vi.fn().mockRejectedValue(new Error(message as string));
+    await mounted(<MemoryComposer propose={propose} onProposals={vi.fn()} />, async (container) => {
+      await act(async () => input(container.querySelector("textarea")!, "Use short answers."));
+      await act(async () => button(container, "Send").click());
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        recognized ? message : "Could not request memory changes. Try again.",
+      );
+      expect(container.querySelector("textarea")?.value).toBe("Use short answers.");
+    });
+  });
 });
 
 describe("memory generation consent", () => {

@@ -61,4 +61,45 @@ describe("notification preference gate", () => {
     expect(tracker.accept([done, muted])).toEqual([]);
     expect(tracker.accept([done, { ...muted, enabled: true }])).toEqual([]);
   });
+  it.each([true, false])("ignores mirror timestamps for a completion seeded=%s", (seeded) => {
+    const tracker = new NotificationActivityTracker();
+    const done: NotificationActivity = {
+      id: "run",
+      name: "Bot",
+      threadId: "thread",
+      category: "responseCompletions",
+      status: "completed",
+      updatedAt: "2026-09-24T00:00:00Z",
+      enabled: true,
+    };
+    tracker.accept(seeded ? [done] : []);
+    expect(tracker.accept([done])).toEqual(seeded ? [] : [done]);
+    expect(tracker.accept([{ ...done, updatedAt: "2026-09-24T00:00:01Z" }])).toEqual([]);
+    expect(tracker.accept([{ ...done, updatedAt: "2026-09-24T00:00:02Z" }])).toEqual([]);
+    const waiting = {
+      ...done,
+      status: "waiting_input" as const,
+      updatedAt: "2026-09-24T00:00:03Z",
+    };
+    expect(tracker.accept([waiting])).toEqual([waiting]);
+    const completedAgain = { ...done, updatedAt: "2026-09-24T00:00:04Z" };
+    expect(tracker.accept([completedAgain])).toEqual([completedAgain]);
+  });
+  it("keeps a muted completion consumed after mirror writes and enabling notifications", () => {
+    const tracker = new NotificationActivityTracker();
+    const row: NotificationActivity = {
+      id: "run",
+      name: "Bot",
+      threadId: "thread",
+      category: "routines",
+      status: "completed",
+      updatedAt: "2026-09-24T00:00:00Z",
+      enabled: false,
+    };
+    tracker.accept([]);
+    expect(tracker.accept([row])).toEqual([]);
+    expect(tracker.accept([{ ...row, enabled: true, updatedAt: "2026-09-24T00:00:01Z" }])).toEqual(
+      [],
+    );
+  });
 });

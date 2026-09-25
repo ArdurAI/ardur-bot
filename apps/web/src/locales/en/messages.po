@@ -443,6 +443,7 @@ msgid "Advanced..."
 msgstr "Advanced..."
 
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/ide/diff.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr "After"
@@ -714,6 +715,11 @@ msgstr "Arguments"
 msgid "Artifacts"
 msgstr "Artifacts"
 
+#: src/pages/ide/dialogs.tsx
+#: src/pages/ide/IdePage.tsx
+msgid "Ask a bot"
+msgstr "Ask a bot"
+
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask before {0}"
@@ -870,6 +876,7 @@ msgid "Bearer token (optional)"
 msgstr "Bearer token (optional)"
 
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/ide/diff.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
 #: src/pages/MemoryHistory.tsx
@@ -880,6 +887,10 @@ msgstr "Before"
 #: src/pages/system/SystemPage.tsx
 msgid "Beta"
 msgstr "Beta"
+
+#: src/pages/ide/IdePage.tsx
+msgid "Binary file"
+msgstr "Binary file"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Block link copied."
@@ -940,6 +951,8 @@ msgstr "Bot: {0}"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/ide/dialogs.tsx
+#: src/pages/ide/IdePage.tsx
 msgid "Bots"
 msgstr "Bots"
 
@@ -1088,6 +1101,11 @@ msgstr "Change pin"
 #: src/components/composer/command-description.ts
 msgid "Change this bot’s pin"
 msgstr "Change this bot’s pin"
+
+#: src/pages/ide/changes.tsx
+#: src/pages/ide/IdePage.tsx
+msgid "Changes"
+msgstr "Changes"
 
 #: src/pages/account/AccountSignIn.tsx
 msgid "Changing…"
@@ -1268,6 +1286,11 @@ msgstr "Client secret"
 msgid "Close"
 msgstr "Close"
 
+#. placeholder {0}: basename(current.path)
+#: src/pages/ide/IdePage.tsx
+msgid "Close {0}"
+msgstr "Close {0}"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Close chart"
 msgstr "Close chart"
@@ -1396,6 +1419,7 @@ msgid "Completion not recorded"
 msgstr "Completion not recorded"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -1596,7 +1620,7 @@ msgstr "Connecting…"
 msgid "Connection"
 msgstr "Connection"
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Connection lost — reconnecting"
 msgstr "Connection lost — reconnecting"
 
@@ -3061,7 +3085,7 @@ msgstr "Filter"
 msgid "Find a destination"
 msgstr "Find a destination"
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Find in terminal"
 msgstr "Find in terminal"
 
@@ -3303,6 +3327,10 @@ msgstr "How to check"
 #: src/pages/Shell.tsx
 msgid "I’m done"
 msgstr "I’m done"
+
+#: src/pages/ide/IdePage.tsx
+msgid "IDE"
+msgstr "IDE"
 
 #: src/pages/TeamBoard.tsx
 msgid "Idle"
@@ -3669,6 +3697,7 @@ msgstr "Load all connected tools"
 msgid "Load earlier messages"
 msgstr "Load earlier messages"
 
+#: src/pages/ide/changes.tsx
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Load more"
 msgstr "Load more"
@@ -4199,7 +4228,7 @@ msgid "New space"
 msgstr "New space"
 
 #: src/pages/account/AccountTables.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Next"
 msgstr "Next"
 
@@ -4398,6 +4427,7 @@ msgid "Not now"
 msgstr "Not now"
 
 #: src/components/ThreadCommandBlock.tsx
+#: src/pages/ide/diff.tsx
 msgid "Not recorded"
 msgstr "Not recorded"
 
@@ -4524,6 +4554,8 @@ msgstr "Only space-shared documents go to this repository."
 
 #: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/ide/IdePage.tsx
+#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 msgid "Open"
@@ -4534,7 +4566,7 @@ msgstr "Open"
 msgid "Open {0}"
 msgstr "Open {0}"
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Open a new terminal"
 msgstr "Open a new terminal"
 
@@ -4612,6 +4644,7 @@ msgid "Opening chat…"
 msgstr "Opening chat…"
 
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Opening terminal"
 msgstr "Opening terminal"
 
@@ -4808,7 +4841,7 @@ msgid "Preview migration"
 msgstr "Preview migration"
 
 #: src/pages/account/AccountTables.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Previous"
 msgstr "Previous"
 
@@ -4915,6 +4948,10 @@ msgstr "Queued"
 msgid "Quick access shortcut"
 msgstr "Quick access shortcut"
 
+#: src/pages/ide/dialogs.tsx
+msgid "Quick open"
+msgstr "Quick open"
+
 #: src/pages/Shell.tsx
 msgid "Quote"
 msgstr "Quote"
@@ -4930,6 +4967,10 @@ msgstr "Reactions"
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Read"
 msgstr "Read"
+
+#: src/pages/ide/IdePage.tsx
+msgid "Read only: file is larger than 2 MB"
+msgstr "Read only: file is larger than 2 MB"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Read replies aloud"
@@ -4966,7 +5007,7 @@ msgstr "Recheck"
 
 #: src/components/integrations/catalog/IntegrationCatalog.tsx
 #: src/pages/customize/IntegrationTable.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Reconnect"
 msgstr "Reconnect"
 
@@ -5064,6 +5105,7 @@ msgstr "Reject"
 msgid "Rejected"
 msgstr "Rejected"
 
+#: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
 msgid "Release"
 msgstr "Release"
@@ -5538,6 +5580,7 @@ msgstr "Sans"
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/ide/IdePage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/ModelDestinations.tsx
@@ -5561,6 +5604,7 @@ msgstr "Save connection"
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
+#: src/pages/ide/IdePage.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Saved"
 msgstr "Saved"
@@ -5794,7 +5838,7 @@ msgstr "Server URL"
 msgid "Session actions"
 msgstr "Session actions"
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Session ended — open a new terminal"
 msgstr "Session ended — open a new terminal"
 
@@ -6169,10 +6213,12 @@ msgstr "Syncs to {0}"
 msgid "System"
 msgstr "System"
 
+#: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
 msgstr "Take control"
 
+#: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control to open a terminal"
 msgstr "Take control to open a terminal"
@@ -6228,7 +6274,9 @@ msgstr "Teams not enabled"
 msgid "Tell your bot what to change or remove"
 msgstr "Tell your bot what to change or remove"
 
+#: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/terminal-session.tsx
 msgid "Terminal"
 msgstr "Terminal"
 
@@ -6236,6 +6284,7 @@ msgstr "Terminal"
 msgid "Terminal could not open; try again"
 msgstr "Terminal could not open; try again"
 
+#: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal is not available on this computer"
 msgstr "Terminal is not available on this computer"
@@ -6295,6 +6344,9 @@ msgid "Thinking"
 msgstr "Thinking"
 
 #: src/components/ThreadCommandBlock.tsx
+#: src/pages/ide/dialogs.tsx
+#: src/pages/ide/IdePage.tsx
+#: src/pages/ide/terminal.tsx
 msgid "This action could not finish; try again."
 msgstr "This action could not finish; try again."
 
@@ -6336,6 +6388,7 @@ msgstr "this computer"
 
 #: src/pages/account/AccountTables.tsx
 #: src/pages/HostComputerSettings.tsx
+#: src/pages/ide/IdePage.tsx
 msgid "This computer"
 msgstr "This computer"
 
@@ -6544,6 +6597,10 @@ msgstr "Unlink"
 #: src/pages/BotContextMenu.tsx
 msgid "Unpin"
 msgstr "Unpin"
+
+#: src/pages/ide/IdePage.tsx
+msgid "Unsaved changes"
+msgstr "Unsaved changes"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx

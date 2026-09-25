@@ -83,6 +83,7 @@ export interface ArdurBotDesktop {
   };
   platform: string;
   window: {
+    setUnsavedChanges?: (dirty: boolean) => Promise<void>;
     close: () => Promise<void>;
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;

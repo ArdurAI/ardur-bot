@@ -41,13 +41,13 @@ export class NotificationActivityTracker {
   private seeded = false;
   private newest = "";
   accept(rows: NotificationActivity[]): NotificationActivity[] {
-    const next = new Set(rows.map((row) => `${row.id}:${row.status}:${row.updatedAt}`));
+    const next = new Set(rows.map((row) => `${row.id}:${row.status}`));
     const changed = this.seeded
       ? rows.filter(
           (row) =>
             row.enabled &&
             row.updatedAt >= this.newest &&
-            !this.seen.has(`${row.id}:${row.status}:${row.updatedAt}`),
+            !this.seen.has(`${row.id}:${row.status}`),
         )
       : [];
     this.seen = next;

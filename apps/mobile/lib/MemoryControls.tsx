@@ -1,5 +1,5 @@
 import type { LearningProposal, SpaceLearningConfig } from "@ardurbot/contracts";
-import { MEMORY_IMPORT_PROMPT } from "@ardurbot/contracts";
+import { MEMORY_IMPORT_PROMPT, MEMORY_REVIEW_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
@@ -46,7 +46,7 @@ export function MemoryControls() {
       if (ticket.current === current) setError(true);
     } finally {
       locked.current = false;
-      if (ticket.current === current) setBusy(false);
+      setBusy(false);
     }
   }
   return (
@@ -79,7 +79,7 @@ export function MemoryIntentControls() {
   const [instruction, setInstruction] = useState("");
   const [items, setItems] = useState<LearningProposal[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"runtime" | "request" | null>(null);
   const locked = useRef(false);
   const ticket = useRef(0);
   useFocusEffect(
@@ -96,7 +96,7 @@ export function MemoryIntentControls() {
     if (!value) return;
     locked.current = true;
     setBusy(true);
-    setError(false);
+    setError(null);
     const current = ticket.current;
     try {
       const proposals = await proposeMemoryChange({
@@ -108,11 +108,16 @@ export function MemoryIntentControls() {
       setItems(proposals);
       if (intent === "import") setText("");
       else setInstruction("");
-    } catch {
-      if (ticket.current === current) setError(true);
+    } catch (error) {
+      if (ticket.current === current)
+        setError(
+          error instanceof Error && error.message === MEMORY_REVIEW_UNAVAILABLE_MESSAGE
+            ? "runtime"
+            : "request",
+        );
     } finally {
       locked.current = false;
-      if (ticket.current === current) setBusy(false);
+      setBusy(false);
     }
   }
   return (
@@ -127,7 +132,9 @@ export function MemoryIntentControls() {
           <Button
             title={t("Copy prompt")}
             onPress={() =>
-              void Clipboard.setStringAsync(t(MEMORY_IMPORT_PROMPT)).catch(() => setError(true))
+              void Clipboard.setStringAsync(t(MEMORY_IMPORT_PROMPT)).catch(() =>
+                setError("request"),
+              )
             }
           />
           <TextInput
@@ -184,7 +191,11 @@ export function MemoryIntentControls() {
       />
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
-          {t("Could not prepare memory changes. Try again.")}
+          {error === "runtime"
+            ? t(
+                "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
+              )
+            : t("Could not prepare memory changes. Try again.")}
         </Text>
       ) : null}
     </View>

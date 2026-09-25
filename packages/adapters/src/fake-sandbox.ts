@@ -193,14 +193,20 @@ export class FakeSandboxProvider implements SandboxProvider {
     computer: ComputerRef,
     filePath: string,
     _context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ) {
     const file = this.requiredBox(computer).files.get(normalizeWorkspacePath(filePath));
     if (!file) throw new Error("computer file not found");
-    if (options?.maxBytes !== undefined && file.content.byteLength > options.maxBytes) {
+    if (
+      !options?.preview &&
+      options?.maxBytes !== undefined &&
+      file.content.byteLength > options.maxBytes
+    ) {
       throw new Error(`computer file exceeds ${options.maxBytes} bytes`);
     }
-    return new Uint8Array(file.content);
+    return new Uint8Array(
+      options?.preview ? file.content.subarray(0, options.maxBytes) : file.content,
+    );
   }
 
   async writeFile(computer: ComputerRef, file: PortableFile, _context: AdapterContext) {
