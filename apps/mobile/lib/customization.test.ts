@@ -15,7 +15,12 @@ vi.mock("react-native", () => ({
 }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("../lib/api", () => ({ rpc: vi.fn() }));
-vi.mock("../lib/i18n", () => ({ useI18n: () => ({ t: (value: string) => value }) }));
+vi.mock("../lib/i18n", () => ({
+  useI18n: () => ({
+    t: (value: string, params: Record<string, string> = {}) =>
+      value.replace(/\{(\w+)\}/g, (_, key: string) => params[key] ?? key),
+  }),
+}));
 vi.mock("../lib/appearance", () => ({ mobileTokens: () => ({}) }));
 vi.mock("../lib/native", () => ({ useThemedStyles: (factory: () => unknown) => factory() }));
 
@@ -23,6 +28,56 @@ import { CustomizationRows } from "../components/customization-list";
 import { loadCustomization } from "./customization";
 
 describe("mobile customization lists", () => {
+  it("renders user, marketplace, learned and taught provenance without claiming false authorship", async () => {
+    const skills = await loadCustomization("skills", async () =>
+      [
+        { kind: "file", source: "user" },
+        { kind: "file", source: "plugin" },
+        { kind: "learned", source: "learned" },
+        { kind: "taught", source: "user" },
+        { kind: "file", source: "imported" },
+      ].map((value, i) => ({
+        ...value,
+        id: String(i),
+        name: `Skill ${i}`,
+        description: "Recipe",
+        enabled: true,
+        botId: null,
+        pluginId: value.source === "plugin" ? "plugin" : null,
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      })),
+    );
+    const plugins = await loadCustomization("plugins", async () => ({
+      installs: [
+        {
+          id: "plugin",
+          name: "Fixture plugin",
+          description: "Review",
+          author: "Fixture publisher",
+          source: "marketplace",
+          state: "installed",
+          marketplaceId: "market",
+          version: null,
+          categories: [],
+          skills: [],
+          commands: [],
+          servers: [],
+          instructions: [],
+          createdAt: new Date(0).toISOString(),
+        },
+      ],
+    }));
+    const render = (rows: typeof skills) =>
+      renderToStaticMarkup(createElement(CustomizationRows, { rows }));
+    expect(render([skills[0]!])).toContain("by you");
+    for (const row of [...skills.slice(1), ...plugins])
+      expect(render([row])).not.toContain("by you");
+    expect(render([skills[1]!])).toContain("From a plugin");
+    expect(render([skills[2]!])).toContain("Learned skill");
+    expect(render([skills[3]!])).toContain("Taught skill");
+    expect(render(plugins)).toContain("Fixture publisher");
+  });
   it("separates product accounts from local MCP and includes opt-in defaults without mutations", async () => {
     const server = {
       name: "Fixture",

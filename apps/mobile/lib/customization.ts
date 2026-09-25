@@ -12,6 +12,8 @@ export type MobileCustomizationRow = {
   id: string;
   name: string;
   description: string;
+  attribution?: string;
+  author?: string | null;
   detail: string;
   date?: string;
   status?: "connected" | "reconnect" | "disconnected";
@@ -28,6 +30,12 @@ export async function loadCustomization(
         id: row.id,
         name: row.name,
         description: row.description,
+        attribution:
+          row.source === "plugin"
+            ? "From a plugin"
+            : row.kind === "file" && row.source === "user"
+              ? "by you"
+              : undefined,
         detail:
           row.kind === "learned"
             ? "Learned skill"
@@ -45,6 +53,7 @@ export async function loadCustomization(
         id: row.id,
         name: row.name,
         description: row.description,
+        author: row.author,
         detail:
           row.source === "catalog"
             ? "From the catalog"

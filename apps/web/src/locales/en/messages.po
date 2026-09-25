@@ -195,6 +195,10 @@ msgstr "@{0}"
 msgid "1 run at this pin; hosted providers may bill per run"
 msgstr "1 run at this pin; hosted providers may bill per run"
 
+#: src/components/Context.tsx
+msgid "7 days"
+msgstr "7 days"
+
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
 msgstr "A bit of everything"
@@ -985,6 +989,10 @@ msgstr "Brain label"
 msgid "Branch"
 msgstr "Branch"
 
+#: src/components/Context.tsx
+msgid "Brief"
+msgstr "Brief"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Browse extensions"
 msgstr "Browse extensions"
@@ -1015,6 +1023,10 @@ msgstr "by {0}"
 msgid "by you"
 msgstr "by you"
 
+#: src/components/Context.tsx
+msgid "Cache hits"
+msgstr "Cache hits"
+
 #: src/pages/CallView.tsx
 msgid "Call"
 msgstr "Call"
@@ -1026,6 +1038,7 @@ msgstr "Can't reach the server."
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -1482,6 +1495,10 @@ msgstr "Computers are unavailable; reconnect and try again."
 msgid "Computers that can run tasks with access to local files, computer use, browser use, and local MCPs"
 msgstr "Computers that can run tasks with access to local files, computer use, browser use, and local MCPs"
 
+#: src/components/Context.tsx
+msgid "Concurrent runs"
+msgstr "Concurrent runs"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
 msgstr "Configure"
@@ -1650,6 +1667,11 @@ msgstr "Connectors"
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr "Consolidation uses the review connection and may incur model charges. Approval is required."
 
+#: src/components/Context.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Context"
+msgstr "Context"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
@@ -1677,6 +1699,10 @@ msgstr "Continue with email"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Controls how connector tools are loaded in new conversations."
 msgstr "Controls how connector tools are loaded in new conversations."
+
+#: src/pages/GroupPanel.tsx
+msgid "Coordinator"
+msgstr "Coordinator"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Coordinator bot"
@@ -1979,6 +2005,10 @@ msgstr "Could not load comparisons; retry."
 msgid "Could not load computers."
 msgstr "Could not load computers."
 
+#: src/components/Context.tsx
+msgid "Could not load data"
+msgstr "Could not load data"
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Could not load destinations."
 msgstr "Could not load destinations."
@@ -2180,6 +2210,10 @@ msgstr "Could not save Auto Review"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Could not save capabilities. Try again."
 msgstr "Could not save capabilities. Try again."
+
+#: src/components/Context.tsx
+msgid "Could not save changes"
+msgstr "Could not save changes"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Could not save changes. Try again."
@@ -2643,6 +2677,7 @@ msgstr "Desktop update"
 msgid "Destination scope"
 msgstr "Destination scope"
 
+#: src/components/AskCard.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -2842,6 +2877,7 @@ msgstr "e.g. Hivenet Agent, Presales, Timesheets bot"
 msgid "Earlier message"
 msgstr "Earlier message"
 
+#: src/components/Context.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr "Edit"
@@ -3218,6 +3254,10 @@ msgstr "Granted"
 #: src/pages/Shell.tsx
 msgid "Group"
 msgstr "Group"
+
+#: src/components/Context.tsx
+msgid "Group brief"
+msgstr "Group brief"
 
 #: src/pages/GroupPanel.tsx
 msgid "Group settings"
@@ -3663,6 +3703,10 @@ msgstr "Learning views"
 msgid "Leave"
 msgstr "Leave"
 
+#: src/components/Context.tsx
+msgid "Left unchanged: {reason}"
+msgstr "Left unchanged: {reason}"
+
 #: src/pages/system/DispatchSetting.tsx
 msgid "Let paired phones and chat accounts dispatch, steer, and approve work in this space."
 msgstr "Let paired phones and chat accounts dispatch, steer, and approve work in this space."
@@ -4090,9 +4134,17 @@ msgstr "Model name"
 msgid "Model options"
 msgstr "Model options"
 
+#: src/components/Context.tsx
+msgid "Model or memory unavailable"
+msgstr "Model or memory unavailable"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "Model spend uses your provider keys."
+
+#: src/components/Context.tsx
+msgid "Model unavailable"
+msgstr "Model unavailable"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Model updated."
@@ -4413,6 +4465,7 @@ msgid "No uploaded files"
 msgstr "No uploaded files"
 
 #: src/pages/customize/McpDiagnostics.tsx
+#: src/pages/GroupPanel.tsx
 msgid "None"
 msgstr "None"
 
@@ -4745,6 +4798,10 @@ msgstr "Other"
 msgid "Other model…"
 msgstr "Other model…"
 
+#: src/components/Context.tsx
+msgid "Owner edited recently"
+msgstr "Owner edited recently"
+
 #: src/pages/RoutineEditor.tsx
 msgid "PagerDuty incident"
 msgstr "PagerDuty incident"
@@ -4988,6 +5045,10 @@ msgstr "Push notifications on your phone."
 #: src/pages/MemoryHistory.tsx
 msgid "Pushed"
 msgstr "Pushed"
+
+#: src/components/Context.tsx
+msgid "Queue wait"
+msgstr "Queue wait"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/ComparePanel.tsx
@@ -5424,6 +5485,7 @@ msgstr "Restoring your workspace"
 msgid "Restricted"
 msgstr "Restricted"
 
+#: src/components/Context.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
@@ -5528,6 +5590,10 @@ msgstr "Revoke"
 msgid "Revoked"
 msgstr "Revoked"
 
+#: src/components/Context.tsx
+msgid "Rewritten {time}"
+msgstr "Rewritten {time}"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Robot"
 msgstr "Robot"
@@ -5539,6 +5605,10 @@ msgstr "Room guidance"
 #: src/pages/RoutineEditor.tsx
 msgid "Rotate key"
 msgstr "Rotate key"
+
+#: src/components/Context.tsx
+msgid "Routed by default"
+msgstr "Routed by default"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/Shell.tsx
@@ -5632,6 +5702,7 @@ msgid "Sans"
 msgstr "Sans"
 
 #: src/components/AskCard.tsx
+#: src/components/Context.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/MessageFeedback.tsx
@@ -6301,6 +6372,10 @@ msgstr "Take control to open a terminal"
 msgid "task"
 msgstr "task"
 
+#: src/components/Context.tsx
+msgid "Task budget reached"
+msgstr "Task budget reached"
+
 #: src/pages/LearningObservation.tsx
 msgid "Task contracts"
 msgstr "Task contracts"
@@ -6546,6 +6621,10 @@ msgstr "This suggestion cannot be approved here."
 msgid "Time of day"
 msgstr "Time of day"
 
+#: src/components/Context.tsx
+msgid "Time to first token"
+msgstr "Time to first token"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Timeline"
@@ -6562,6 +6641,10 @@ msgstr "To use your Claude subscription, choose Runs on → Claude Code in a bot
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "To:"
+
+#: src/components/Context.tsx
+msgid "Today"
+msgstr "Today"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"

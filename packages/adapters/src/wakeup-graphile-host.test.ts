@@ -61,6 +61,7 @@ it("replaces waiting Git pushes per space and serializes their execution", async
 
 function handlers(): BackgroundJobHandlers {
   return {
+    "briefs.maintain": async () => undefined,
     "learning.curate": async () => undefined,
     "learning.review": async () => undefined,
     "memory.git-push": async () => undefined,
@@ -137,7 +138,8 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
     await host.start(handlers());
     expect(run).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        crontab: "0 3 * * 1 learning_curate ?id=learningCurator&fill=1w",
+        crontab:
+          "0 3 * * 1 learning_curate ?id=learningCurator&fill=1w\n*/10 * * * * briefs_maintain ?id=briefMaintenance",
         taskList: expect.objectContaining({ learning_curate: expect.any(Function) }),
       }),
     );

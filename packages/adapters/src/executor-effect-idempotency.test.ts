@@ -1,3 +1,9 @@
+// Admission is verified separately; these fixtures isolate tool policy and replay.
+vi.mock("./context/concurrency.js", () => ({
+  claimBotRun: (prisma: unknown, input: { claim: (tx: unknown) => Promise<unknown> }) =>
+    input.claim(prisma),
+}));
+
 import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
 import type { CommandBlock as FixtureCommandBlock } from "@ardurbot/contracts";
 import type { ActionApprovalRule } from "@ardurbot/core";
@@ -67,6 +73,7 @@ function fixture(runId = "run-1") {
     updatedAt: Date;
   }> = [];
   const run = {
+    createdAt: new Date("2026-09-24T12:00:00Z"),
     id: runId,
     botId: "bot-1",
     threadId: "thread-1",
@@ -950,7 +957,7 @@ it("gives a host run one inventory and launches its command without reloading a 
   f.setCalls([{ name: "shell", args: { command: "gh auth status" }, executionId: "host-command" }]);
   await f.run();
   expect(f.environmentNote).toHaveBeenCalledOnce();
-  expect(f.runtimeRun.mock.calls[0]![0].instructions).toContain(
+  expect(f.runtimeRun.mock.calls[0]![0].prompt).toContain(
     "Tools on this computer: gh 2.80.0 (signed in).",
   );
   expect(f.sandboxExecute).toHaveBeenCalledWith(

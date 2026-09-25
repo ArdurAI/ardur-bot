@@ -2040,12 +2040,14 @@ describe("mobile thread event reduction", () => {
     expect(next?.cursor).toBe(11);
   });
 
-  it("preserves ask actions and runId on created messages", () => {
+  it("preserves full approval text, presentation, actions and runId on created messages", () => {
     const initial = snapshot();
     const askBlock = {
       kind: "ask",
-      text: "Review before writing",
-      detail: "title: Result",
+      text: `'gh' 'issue' 'create' '--body' '${"x".repeat(4000)}' '--title' '${"y".repeat(4000)} tail'`,
+      detail: "Identity: fixture-account\nWorking directory: '/workspace'\n[redacted]",
+      preformatted: true,
+      approvalEffectId: "effect",
       status: "pending",
       actions: [
         { id: "allow", label: "Allow once" },

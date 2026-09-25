@@ -17,6 +17,7 @@ import {
   progressMessageId,
   reduceCommandMessages,
   reduceLiveMessageBlocks,
+  reduceRunContext,
   runFailureError,
   subagentBlockFromPayload,
   takeLiveMessage,
@@ -267,6 +268,7 @@ export function reduceThreadSnapshot(
   event: ProductEvent,
 ): ThreadSnapshot | null {
   if (!prev) return prev;
+  if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandEvent(event.type) && event.seq <= (prev.cursor ?? -1)) return prev;
   if (isCommandEvent(event.type))
     return { ...prev, cursor: event.seq, messages: reduceCommandMessages(prev.messages, event) };
@@ -279,6 +281,7 @@ export function reduceThreadSnapshot(
       messages: [],
       olderCursor: null,
       run: null,
+      contextRun: null,
       activeRuns: [],
     };
   }

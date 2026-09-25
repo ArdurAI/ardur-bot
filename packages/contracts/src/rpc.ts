@@ -16,6 +16,13 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
 } from "./computer-connections.js";
+import {
+  BriefSchema,
+  ConcurrentRunsSchema,
+  ContextBudgetsSchema,
+  ContextMetricsSchema,
+  ContextSettingsSchema,
+} from "./context.js";
 import { customizationContract } from "./customization.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
@@ -304,6 +311,36 @@ export const appContract = {
     setDispatch: oc
       .input(z.object({ enabled: z.boolean() }))
       .output(z.object({ enabled: z.boolean(), canChange: z.boolean() })),
+  },
+  metrics: {
+    context: oc
+      .input(z.object({ botId: Id.optional(), groupId: Id.optional() }))
+      .output(ContextMetricsSchema),
+  },
+  context: {
+    settings: oc.input(z.object({ botId: Id })).output(ContextSettingsSchema),
+    configure: oc
+      .input(
+        z.object({
+          budgets: ContextBudgetsSchema.optional(),
+          concurrentRuns: ConcurrentRunsSchema.optional(),
+          coordinatorBotId: Id.nullable().optional(),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+  },
+  briefs: {
+    list: oc.input(z.object({ botId: Id, groupId: Id.optional() })).output(z.array(BriefSchema)),
+    update: oc
+      .input(
+        z.object({
+          botId: Id,
+          groupId: Id.nullable().optional(),
+          content: z.string().max(6000),
+          expectedRevision: z.number().int().nonnegative(),
+        }),
+      )
+      .output(z.object({ revision: z.number().int().positive() })),
   },
   spaces: {
     list: oc.output(SpaceNavigationSchema),

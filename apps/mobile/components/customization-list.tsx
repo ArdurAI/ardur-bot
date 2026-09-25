@@ -27,7 +27,12 @@ export function CustomizationRows({ rows }: { rows: MobileCustomizationRow[] }) 
             <Text style={styles.name}>{row.name}</Text>
             {row.description ? (
               <Text style={styles.detail}>
-                {t("by you")} · {row.description}
+                {row.author
+                  ? `${t("by {author}", { author: row.author })} · `
+                  : row.attribution
+                    ? `${t(row.attribution)} · `
+                    : ""}
+                {row.description}
               </Text>
             ) : null}
             <View style={styles.metadata}>

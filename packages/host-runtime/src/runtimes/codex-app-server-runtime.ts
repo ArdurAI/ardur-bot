@@ -256,6 +256,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
     let pinValid = false;
     let finished = false;
     let reportedInputTokens = 0;
+    let reportedCachedTokens = 0;
     let reportedOutputTokens = 0;
     let reader: Promise<void> | undefined;
     let steering: ReturnType<typeof setInterval> | undefined;
@@ -424,12 +425,18 @@ export class CodexAppServerRuntime implements AgentRuntime {
               continue;
             }
             if (params.threadId && params.threadId !== threadId) continue;
-            if (request.controlledComparison && event.method === "thread/tokenUsage/updated") {
-              // Comparison sessions always start fresh. `last` is context usage,
+            if (!request.nativeSession?.sessionId && event.method === "thread/tokenUsage/updated") {
+              // Fresh sessions start at zero. `last` is context usage,
               // whereas changes in `total` account for every model call once.
               const usage = (
                 params.tokenUsage as
-                  | { total?: { inputTokens?: number; outputTokens?: number } }
+                  | {
+                      total?: {
+                        inputTokens?: number;
+                        outputTokens?: number;
+                        cachedInputTokens?: number;
+                      };
+                    }
                   | undefined
               )?.total;
               if (
@@ -441,13 +448,21 @@ export class CodexAppServerRuntime implements AgentRuntime {
                 (usage.inputTokens! > reportedInputTokens ||
                   usage.outputTokens! > reportedOutputTokens)
               ) {
+                const cachedTokens =
+                  Number.isSafeInteger(usage.cachedInputTokens) &&
+                  usage.cachedInputTokens! >= reportedCachedTokens &&
+                  usage.cachedInputTokens! <= usage.inputTokens!
+                    ? usage.cachedInputTokens! - reportedCachedTokens
+                    : undefined;
                 queue.push({
                   type: "usage",
                   provider: pin.provider!,
                   model: pin.modelId!,
                   inputTokens: usage.inputTokens! - reportedInputTokens,
                   outputTokens: usage.outputTokens! - reportedOutputTokens,
+                  ...(cachedTokens === undefined ? {} : { cachedTokens }),
                 });
+                if (cachedTokens !== undefined) reportedCachedTokens += cachedTokens;
                 reportedInputTokens = usage.inputTokens!;
                 reportedOutputTokens = usage.outputTokens!;
               }

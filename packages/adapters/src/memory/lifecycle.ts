@@ -23,8 +23,17 @@ export async function authenticatedMemoryAccess(
     select: { id: true },
   });
   if (context.botId && !bots.some((bot) => bot.id === context.botId)) throw new MemoryAccessError();
+  const groups = await tx.chatGroup.findMany({
+    where: {
+      spaceId: context.spaceId,
+      userId: context.userId,
+      ...(context.botId ? { members: { some: { botId: context.botId } } } : {}),
+    },
+    select: { id: true },
+  });
   return {
     ...context,
+    groupIds: groups.map((group) => group.id),
     botIds: bots.map((bot) => bot.id),
     model: context.memoryModel,
     generation: context.memoryGeneration,
@@ -44,6 +53,17 @@ export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
         if (context.memorySessionStart) await tx.$executeRaw`SET LOCAL lock_timeout = '500ms'`;
         await lockMemorySpace(tx, context.spaceId);
         const access = await authenticatedMemoryAccess(tx, context);
+        if (context.briefGeneration !== undefined) {
+          const source = await tx.thread.findFirst({
+            where: {
+              id: context.threadId,
+              spaceId: context.spaceId,
+              userId: context.userId,
+              historyCompactionGeneration: context.briefGeneration,
+            },
+          });
+          if (!source) throw new MemoryAccessError();
+        }
         const config = await tx.spaceMemoryConfig.findUnique({
           where: { spaceId: context.spaceId },
         });

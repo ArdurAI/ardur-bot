@@ -1,5 +1,6 @@
 import type { ConnectorTool } from "@ardurbot/adapter-kit";
 import { describe, expect, it } from "vitest";
+import { assembleTurnContext } from "./context/assemble.js";
 import {
   catalogEntries,
   executeLazyCatalogControl,
@@ -44,6 +45,38 @@ class FakeRuntime {
   }
 }
 describe("40-tool deferred loading", () => {
+  it("counts the selected tool mode in the stable budget without charging hidden schemas", async () => {
+    const instructions =
+      "Use the owner's account instructions where compatible with the bot's job.";
+    const deferred = lazyCatalogTools(
+      "fixture",
+      "fixture",
+      "Notes",
+      catalogEntries(fortyToolFixture),
+    );
+    const base = {
+      instructions,
+      history: [],
+      message: "Read the notes",
+      budgets: { stable: 16000 },
+    };
+    const lazy = await assembleTurnContext({ ...base, tools: deferred });
+    const wire = JSON.stringify(
+      deferred.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+    );
+    expect(lazy.snapshot.layers.stable).toBe(instructions.length + wire.length);
+    expect(lazy.snapshot.layers.stable).toBeLessThan(16000);
+    await expect(assembleTurnContext({ ...base, tools: fortyToolFixture })).rejects.toThrow(
+      "including exposed tools",
+    );
+    const eager = await assembleTurnContext({
+      ...base,
+      budgets: { stable: 64000 },
+      tools: fortyToolFixture.slice(0, 20),
+    });
+    expect(eager.snapshot.layers.stable).toBeGreaterThan(lazy.snapshot.layers.stable);
+    expect(lazy.stablePrefix).toBe(instructions);
+  });
   it("sends names and summaries initially, and only the selected full schema on load", async () => {
     const entries = catalogEntries(fortyToolFixture);
     const deferred = lazyCatalogTools("fixture", "fixture", "Notes", entries);

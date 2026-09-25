@@ -70,10 +70,12 @@ import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-co
 import { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppConnectCard } from "../components/AppConnectCard";
+import { ApprovalPreview } from "../components/ApprovalPreview";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { NativeCommandBlock } from "../components/command-block";
+import { MobileRunContext } from "../components/context-section";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -580,6 +582,10 @@ function Thread() {
                 run={snap?.run?.botId === currentBot.id ? snap.run : null}
               />
             ) : null}
+            <MobileRunContext
+              snapshot={(snap?.contextRun ?? snap?.run)?.contextSnapshot}
+              routingRule={(snap?.contextRun ?? snap?.run)?.routingRule}
+            />
           </View>
         </Pressable>
       ),
@@ -2748,7 +2754,10 @@ const MessageBubble = memo(function MessageBubble({
             paddingVertical: 14,
           }}
         >
-          {askBlock.text ? (
+          {askBlock.preformatted ? (
+            <ApprovalPreview text={askBlock.text} detail={askBlock.detail} />
+          ) : null}
+          {askBlock.text && !askBlock.preformatted ? (
             <Text
               {...actionProps}
               style={{ color: tokens.foreground, fontSize: 15.5, lineHeight: 23 }}
@@ -2756,7 +2765,7 @@ const MessageBubble = memo(function MessageBubble({
               {askBlock.text}
             </Text>
           ) : null}
-          {askBlock.detail ? (
+          {askBlock.detail && !askBlock.preformatted ? (
             <Text
               {...(askBlock.text ? {} : actionProps)}
               style={{

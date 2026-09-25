@@ -4,22 +4,23 @@ import path from "node:path";
 import { BUILTIN_AGENT_SKILLS, McpConnector, skillDocumentContext } from "@ardurbot/adapters";
 import type { Actor, PluginInstall, PluginSummary } from "@ardurbot/contracts";
 import { McpRemoteEndpointSchema, PluginSummarySchema } from "@ardurbot/contracts";
-import { buildSkillMd, parseSkillMd } from "@ardurbot/core";
-import type { PluginInstall as PluginRow, Prisma } from "@ardurbot/db";
-import { IsolationError } from "@ardurbot/db";
-import { redactMcpArguments, redactMcpText } from "@ardurbot/host-runtime/mcp-diagnostics";
-import type { BundleFile } from "../../desktop/src/extensions/files.js";
-import { bundleDocument, writeBundleFiles } from "../../desktop/src/extensions/files.js";
+import type { BundleFile } from "@ardurbot/contracts/bundles/files";
+import { bundleDocument, writeBundleFiles } from "@ardurbot/contracts/bundles/files";
 import {
   parseMarketplace,
   parsePluginJson,
   planPlugin,
   pluginFiles,
   pluginInstallFiles,
-} from "../../desktop/src/extensions/plugins.js";
+} from "@ardurbot/contracts/bundles/plugins";
+import { buildSkillMd, parseSkillMd } from "@ardurbot/core";
+import type { PluginInstall as PluginRow, Prisma } from "@ardurbot/db";
+import { IsolationError } from "@ardurbot/db";
+import { redactMcpArguments, redactMcpText } from "@ardurbot/host-runtime/mcp-diagnostics";
 import { encodedBundle, uploadedBundle } from "./customization-files.js";
 import { customizationCatalog } from "./customization-skills.js";
 import { fetchMarketplaceGit } from "./marketplace-git.js";
+import { createOwnerPreviews } from "./pending-previews.js";
 import type { RouterDeps } from "./router.js";
 
 type Plan = ReturnType<typeof planPlugin>;
@@ -113,7 +114,7 @@ export function resolvePluginVariables(value: string, root: string): string {
 }
 
 export function createCustomizationPlugins(deps: RouterDeps) {
-  const previews = new Map<string, Preview>();
+  const previews = createOwnerPreviews<Preview>();
   const folder = (actor: Actor, id: string) =>
     path.join(
       deps.dataDir,
@@ -203,10 +204,10 @@ export function createCustomizationPlugins(deps: RouterDeps) {
     return { ok: true as const };
   }
   function previewFor(actor: Actor, id: string) {
-    const preview = previews.get(id);
+    const preview = previews(actor).get(id);
     if (
       !preview ||
-      preview.expires < Date.now() ||
+      preview.expires <= Date.now() ||
       preview.owner.spaceId !== actor.spaceId ||
       preview.owner.userId !== actor.userId
     )
@@ -335,10 +336,10 @@ export function createCustomizationPlugins(deps: RouterDeps) {
         plan = planPlugin(files, entry);
       }
       components(plan);
-      for (const [id, preview] of previews) if (preview.expires < Date.now()) previews.delete(id);
-      if (previews.size >= 16) throw new Error("Finish a pending plugin install first.");
+      const pending = previews(actor);
+      if (pending.size >= 16) throw new Error("Finish a pending plugin install first.");
       const id = randomUUID();
-      previews.set(id, {
+      pending.set(id, {
         owner: actor,
         files,
         plan,
@@ -363,6 +364,7 @@ export function createCustomizationPlugins(deps: RouterDeps) {
       const preview = previewFor(actor, previewId);
       if (
         placement === "host" &&
+        Object.values(preview.plan.servers).some((server) => server.command) &&
         (!actor.isDeploymentOwner ||
           !deps.hostBridge ||
           !(await deps.hostBridge.status(actor.userId)).configured)
@@ -473,7 +475,7 @@ export function createCustomizationPlugins(deps: RouterDeps) {
           });
           await tx.pluginInstall.update({ where: { id }, data: { state: "installed" } });
         });
-        previews.delete(previewId);
+        previews(actor).delete(previewId);
         return installDto({ ...row, state: "installed" });
       } catch (error) {
         for (const documentId of writtenDocuments) {
