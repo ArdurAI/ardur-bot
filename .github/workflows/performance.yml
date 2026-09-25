@@ -4,13 +4,58 @@ on:
     branches: [dev, main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      candidate_sha:
+        description: Exact candidate commit
+        required: true
+        type: string
+      base_sha:
+        description: Exact parent commit
+        required: true
+        type: string
+      fixed_release_sha:
+        description: Exact fixed release commit
+        required: false
+        type: string
+        default: ""
+      suite_version:
+        description: Scoreboard suite version
+        required: true
+        type: string
+      environment:
+        description: Hardware class and platform label
+        required: true
+        type: string
+      mode:
+        description: commit or release
+        required: true
+        type: string
+      gate:
+        description: advisory or required
+        required: true
+        type: string
+      common_runner_sha:
+        description: Benchmark runner revision checked out as its own tree
+        required: true
+        type: string
+      attempt:
+        description: Evidence attempt number
+        required: false
+        type: string
+        default: "1"
 
 permissions:
   contents: read
 
+concurrency:
+  group: performance-${{ github.workflow }}-${{ github.ref }}-${{ inputs.candidate_sha || github.sha }}
+  cancel-in-progress: false
+
 jobs:
   budgets:
     name: Advisory production shell budgets
+    if: github.event_name != 'workflow_call'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     continue-on-error: true
@@ -27,23 +72,38 @@ jobs:
           node-version: 22
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
-      - name: Prepare the comparison revision on the same runner
+      - name: Prepare independent base and runner trees
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          RUNNER_SHA: ${{ inputs.common_runner_sha || github.sha }}
         shell: bash
         run: |
           set -euo pipefail
           if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then BASE_SHA="$(git rev-parse HEAD^)"; fi
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RUNNER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
           base="$RUNNER_TEMP/performance-base"
+          runner="$RUNNER_TEMP/performance-runner"
           git worktree add --detach "$base" "$BASE_SHA"
-          # Use the same benchmark harness against each revision's production code.
-          cp apps/web/playwright.performance.config.ts "$base/apps/web/"
-          cp apps/web/e2e/{shell-performance.spec.ts,performance-fixture.ts} "$base/apps/web/e2e/"
-          cp apps/web/src/lib/performance-proxy.test.tsx "$base/apps/web/src/lib/"
-          # First rollout extracts the existing skeleton without changing its markup.
-          if [[ ! -f "$base/apps/web/src/components/ShellSkeleton.tsx" ]]; then
-            cp apps/web/src/components/ShellSkeleton.tsx "$base/apps/web/src/components/"
+          git worktree add --detach "$runner" "$RUNNER_SHA"
+          if [[ "$base" -ef "$runner" || "$base" -ef "$GITHUB_WORKSPACE" ]]; then
+            echo "Baseline, runner, and candidate trees must be independent." >&2
+            exit 1
           fi
+          decision="$(node scripts/scoreboard-index.mjs baseline-decision --base "$base" --runner-sha "$RUNNER_SHA" --candidate-sha "$GITHUB_SHA" --base-sha "$BASE_SHA")"
+          case "$decision" in
+            measure) ;;
+            pending:*)
+              printf '%s\n' "${decision#pending:}" > "$RUNNER_TEMP/base-pending-reason"
+              echo "::warning title=Performance baseline::${decision}. Candidate production files stay in the candidate tree."
+              exit 0
+              ;;
+            *)
+              echo "Unexpected baseline decision." >&2
+              exit 1
+              ;;
+          esac
           cd "$base"
           pnpm install --frozen-lockfile
       - name: Measure comparison revision
@@ -51,6 +111,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ -f "$RUNNER_TEMP/base-pending-reason" ]]; then
+            echo "::warning title=Performance baseline::$(cat "$RUNNER_TEMP/base-pending-reason")"
+            exit 0
+          fi
           cd "$RUNNER_TEMP/performance-base"
           PERF_REPORT_FILE="$RUNNER_TEMP/proxy-before.json" pnpm exec vitest run apps/web/src/lib/performance-proxy.test.tsx
           pnpm --filter @ardurbot/web build
@@ -90,4 +154,88 @@ jobs:
         with:
           name: shell-performance
           path: .context/performance
+          if-no-files-found: warn
+          retention-days: 90
+
+  index:
+    name: Index commit evidence
+    if: github.event_name != 'workflow_call' || inputs.gate != 'required'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Record every pushed commit as measured or pending
+        env:
+          SCOREBOARD_EVENT: ${{ github.event_name }}
+          SCOREBOARD_BEFORE: ${{ github.event.before }}
+          SCOREBOARD_BASE: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
+          SCOREBOARD_HEAD: ${{ inputs.candidate_sha || github.sha }}
+          SCOREBOARD_RUNNER: ${{ inputs.common_runner_sha || github.sha }}
+          SCOREBOARD_MODE: ${{ inputs.mode || 'commit' }}
+          SCOREBOARD_ENVIRONMENT: ${{ inputs.environment || 'ubuntu-24.04-diagnostic' }}
+          SCOREBOARD_SUITE: ${{ inputs.suite_version || 'scoreboard-1' }}
+          SCOREBOARD_FIXED: ${{ inputs.fixed_release_sha }}
+          SCOREBOARD_ROOT: .context/performance/scoreboard-index
+        run: node scripts/scoreboard-index.mjs index-push
+      - name: Upload the index transport copy
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scoreboard-index
+          path: .context/performance/scoreboard-index
+          retention-days: 90
+          if-no-files-found: warn
+
+  release-gate:
+    name: Validate release evidence
+    if: github.event_name == 'workflow_call' && inputs.gate == 'required'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: desktop-*
+          path: release-artifacts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          pattern: scoreboard-reports
+          path: scoreboard-reports
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Fail closed without validated measured artifacts
+        env:
+          SCOREBOARD_CANDIDATE: ${{ inputs.candidate_sha }}
+          SCOREBOARD_BASE: ${{ inputs.base_sha }}
+          SCOREBOARD_FIXED: ${{ inputs.fixed_release_sha }}
+          SCOREBOARD_RUNNER: ${{ inputs.common_runner_sha }}
+          SCOREBOARD_ENVIRONMENT: ${{ inputs.environment }}
+          SCOREBOARD_ARTIFACTS: release-artifacts
+          SCOREBOARD_REPORTS: scoreboard-reports
+          SCOREBOARD_OUTPUT: scoreboard-publication/gate.json
+          SCOREBOARD_INDEX: scoreboard-publication/index
+        run: node scripts/scoreboard-index.mjs release-gate
+      - name: Upload the publication gate
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scoreboard-publication
+          path: scoreboard-publication
+          retention-days: 90
           if-no-files-found: warn

@@ -142,7 +142,11 @@ evidence passes, **1** means a known regression or safety failure, and **2** mea
 inconclusive evidence. Every result retains raw report envelopes, comparisons and machine-readable
 reasons. A required release invocation must also require `mode: "release"` and
 `releaseEligible: true`; a commit pass is advisory and cannot authorize publication. This comparator
-does not install a publication gate or replace human acceptance.
+does not replace human acceptance. The desktop release workflow calls it from the evidence job,
+which is the publication gate: publication also requires the measured build digests to match the
+final distributed files, coverage of the required desktop platforms, and physical energy for those
+platforms. Signing or repackaging changes those bytes, so the gate must be run again on the final
+files. A failed attempt stays in the index and does not erase an earlier measurement.
 
 Create a policy using `createBudgetPolicy(required, options)` in
 `packages/testkit/src/scoreboard/statistics.ts`. Options bind the environment hash, exact scenario,
@@ -207,8 +211,34 @@ Two-file proxy and schema-1/2 desktop inputs remain readable but return incomple
 do not supply paired raw evidence. `bundle-budget.mjs` with no baseline measures assets only. With
 parent and fixed-release files it returns static diagnostics; schema-3 evidence is still required
 for calibration, artifact provenance and a release pass. Missing native platforms, energy
-instruments or live-provider evidence remain explicit gaps. W0-9 owns immutable indexing, trusted
-policy selection, artifact-byte verification and release workflow integration.
+instruments or live-provider evidence remain explicit gaps. The release workflow now binds that
+comparison to the packaged bytes before publication.
+
+## Evidence index
+
+The historical scoreboard is the local directory `.context/performance/scoreboard-index`.
+`records.jsonl` is an append-only hash chain. Raw schema-3 envelopes live under `objects/` and are
+named by the SHA-256 of their canonical bytes. A record is appended only after those hashes match.
+The directory is local-first and is not a hosted telemetry store. Public records use synthetic
+tasks and hardware-class labels.
+
+Commit object bytes are retained for 180 days. Pruning removes only those bytes, writes an expiry
+record first, and leaves the original line in place. Release objects are not pruned.
+A pending record is never deleted to hide an earlier measurement. A later rejection is a new line;
+the measured line remains.
+
+Workflow artifacts expire after 90 days and are not the historical scoreboard. Release evidence is
+attached to the GitHub release and kept for the github-release-lifetime of that release. Development
+pushes record every new commit as measured or pending and stay advisory. The release invocation is
+mandatory: `publish` depends on the evidence job, and that job fails closed when the report,
+platform, energy, or digest check is incomplete. Credential-free pull-request runners do not receive
+provider credentials. Live provider evaluation stays explicit and budgeted. Physical release runners
+are not provisioned by this workflow; until they upload `scoreboard-reports`, publication stops
+with the missing evidence visible.
+
+The commit sample plan is 20 paired observations. The release plan is 200 replay pairs and 100
+observations per startup stratum. Startup strata that this gate did not collect stay labeled
+unknown. Human acceptance is separate and is not granted by the evidence.
 
 The `performance` workflow uses the production Vite build with synthetic auth/RPC responses and a
 fake streamed provider; it has no Docker or hosted-provider dependency. It measures five fresh
@@ -222,7 +252,10 @@ bot switching, and both side-panel transitions. Animation-frame markers within t
 the slowest observed frame interval: target **60 fps**, warn below **50 fps** (over 20 ms). This is a
 main-thread frame-scheduling proxy, not a claim about GPU presentation on every display. Missing
 samples or reports are visible warnings, not silently green measurements. Trace archives and
-screenshots are attached to the `shell-performance` artifact for review. The workflow is advisory.
+screenshots are attached to the `shell-performance` artifact for review. The commit workflow is
+advisory. It builds the base revision in its own worktree and keeps the benchmark runner in a
+third worktree. It does not copy candidate production files into the baseline. A baseline without
+a compatible in-tree harness is recorded as pending.
 
 ## Motion audit
 

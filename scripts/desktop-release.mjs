@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderScoreboardNotes } from "./scoreboard-index.mjs";
 
 export function releaseVersion(tag, version) {
   if (
@@ -16,7 +17,7 @@ export function releaseVersion(tag, version) {
 
 // Only fixed labels and counts leave this process. Subjects, scopes, author identities,
 // and file names cannot leak into public release notes.
-export function releaseNotes(subjects) {
+export function releaseNotes(subjects, gate) {
   const labels = {
     feat: "Features",
     fix: "Fixes",
@@ -36,7 +37,7 @@ export function releaseNotes(subjects) {
     const label = labels[prefix] ?? "Other changes";
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  return [
+  const summary = [
     "Unsigned preview. Signed builds come later.",
     "",
     "macOS updates require downloading and installing the new build manually.",
@@ -46,6 +47,8 @@ export function releaseNotes(subjects) {
       .map(([label, count]) => `- ${label}: ${count} ${count === 1 ? "change" : "changes"}.`),
     "",
   ].join("\n");
+  if (gate === undefined) return summary;
+  return `${summary}${renderScoreboardNotes(gate)}`;
 }
 
 export async function generateCask(version, assets, output) {
@@ -70,17 +73,33 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(releaseVersion(args[0], version));
   } else if (command === "notes") {
     const tag = args[0];
-    const git = (values) => execFileSync("git", values, { encoding: "utf8" }).trim();
-    let previous;
-    try {
-      previous = git(["describe", "--tags", "--abbrev=0", "--match", "v*", `${tag}^`]);
-    } catch {
-      /* First release includes all ancestors. */
+    const evidencePath = args[1];
+    if (!tag || !evidencePath) {
+      console.error("Publication notes require a validated scoreboard gate file.");
+      process.exitCode = 1;
+    } else {
+      let gate;
+      try {
+        gate = JSON.parse(await readFile(evidencePath, "utf8"));
+      } catch {
+        console.error("The scoreboard gate file is missing or unreadable.");
+        process.exitCode = 1;
+        gate = null;
+      }
+      if (gate) {
+        const git = (values) => execFileSync("git", values, { encoding: "utf8" }).trim();
+        let previous;
+        try {
+          previous = git(["describe", "--tags", "--abbrev=0", "--match", "v*", `${tag}^`]);
+        } catch {
+          /* First release includes all ancestors. */
+        }
+        const subjects = git(["log", "--format=%s", previous ? `${previous}..${tag}` : tag])
+          .split("\n")
+          .filter(Boolean);
+        process.stdout.write(releaseNotes(subjects, gate));
+      }
     }
-    const subjects = git(["log", "--format=%s", previous ? `${previous}..${tag}` : tag])
-      .split("\n")
-      .filter(Boolean);
-    process.stdout.write(releaseNotes(subjects));
   } else if (command === "cask") {
     await generateCask(args[0], args[1], args[2]);
   } else throw new Error("Expected validate, notes, or cask.");
