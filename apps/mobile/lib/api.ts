@@ -2,12 +2,15 @@ import type {
   Bot,
   BotSection,
   ComputerMode,
+  ContextSnapshot,
   Feedback,
   Group,
   Me,
   MessageBlock,
   ModelCatalogEntry,
   ModelCredential,
+  RuntimeInfo,
+  RuntimePin,
   RuntimeProblem,
   Space,
   SpaceNavigation,
@@ -27,6 +30,7 @@ import {
   readBoundedJsonResponse,
   reduceCommandMessages,
   reduceLiveMessageBlocks,
+  reduceRunContext,
   runFailureError,
   signupRequiresEmailVerification,
   takeLiveMessage,
@@ -641,7 +645,15 @@ export async function rpc<T>(
       throw abortReason(error);
     });
     if (!res.ok || parsed.error) {
-      const message = parsed.error?.message ?? `rpc ${proc} failed`;
+      const payload = parsed.json;
+      const message =
+        parsed.error?.message ??
+        (payload &&
+        typeof payload === "object" &&
+        "message" in payload &&
+        typeof payload.message === "string"
+          ? payload.message
+          : `rpc ${proc} failed`);
       const unauthorized = res.status === 401 || /unauthorized/i.test(message);
       // After a delete where SecureStore could not clear the stale id, restart
       // reloads it and the first RPCs 401. Probe once without a Space header:
@@ -739,6 +751,7 @@ export type MobileBot = Pick<
   | "updatedAt"
   | "computerMode"
   | "modelCredentialId"
+  | "modelPinRevision"
   | "runtimeKind"
   | "runtimeExperimental"
   | "modelProvider"
@@ -790,6 +803,7 @@ export type MobileGroup = Pick<
   | "unread"
   | "updatedAt"
   | "members"
+  | "coordinatorBotId"
 > &
   Partial<Pick<Group, "spaceId">>;
 
@@ -810,7 +824,12 @@ export type MobileSnapshot = {
     status: string;
     error?: string | null;
     runtimeProblem?: RuntimeProblem;
+    runtimePin?: RuntimePin | null;
+    runtimeInfo?: RuntimeInfo | null;
+    contextSnapshot?: ContextSnapshot | null;
+    routingRule?: string | null;
   } | null;
+  contextRun?: MobileSnapshot["run"];
   activeRuns?: Array<{ id: string; botId?: string; status: string }>;
   members?: MobileGroup["members"];
   computer?: {
@@ -976,11 +995,30 @@ export async function subscribeThread(
   }
 }
 
+export function isMobileThreadSnapshotEvent(event: ThreadEvent): boolean {
+  return (
+    event.type === "run.context" ||
+    event.type === "thread.progress" ||
+    event.type === "agent.tool.called" ||
+    event.type === "agent.tool.completed" ||
+    event.type === "thread.message.created" ||
+    event.type === "thread.message.updated" ||
+    event.type === "thread.message.reaction" ||
+    event.type === "thread.subagent" ||
+    event.type === "thread.cloud_agent" ||
+    event.type === "thread.cleared" ||
+    event.type === "run.waiting_input" ||
+    event.type === "computer.takeover.requested" ||
+    isRunTerminalEvent(event)
+  );
+}
+
 export function applyMobileThreadEvent(
   prev: MobileSnapshot | null,
   event: ThreadEvent,
 ): MobileSnapshot | null {
   if (!prev) return prev;
+  if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
   if (isCommandEvent(event.type))
     return {
@@ -1014,6 +1052,7 @@ export function applyMobileThreadEvent(
       messages: [],
       olderCursor: null,
       run: null,
+      contextRun: null,
       activeRuns: [],
     };
   }

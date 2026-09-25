@@ -100,6 +100,7 @@ export class HostHub {
     try {
       if (!(await this.authorize(request, host.ownerId, host.generation)) || this.host !== host)
         throw new Error("Unauthorized host operation.");
+      if (this.pending.get(request.id) !== pending) return;
       this.seen.add(request.id);
       // A bounded tombstone set lasts for the API process lifetime; worker request IDs are random.
       if (this.seen.size > 100_000) {

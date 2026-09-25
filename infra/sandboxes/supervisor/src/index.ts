@@ -56,6 +56,7 @@ import {
   socketPath,
 } from "./container-engine.js";
 import { assertComputerHomeWritable } from "./home-ownership.js";
+import { screenRelay } from "./screen-relay.js";
 import {
   assertRequestIdentity,
   attemptComputerControl,
@@ -95,9 +96,11 @@ import { assertNoDockerTerminals } from "./terminal-process.js";
 loadRootEnv();
 
 // Preserve Dockerode's existing DOCKER_HOST/TLS configuration for the default engine.
-const defaultDocker = new Docker(
-  process.env.DOCKER_HOST ? {} : { socketPath: discoverEngineSocket() },
-);
+const defaultEngineSocket =
+  process.env.DOCKER_HOST && !process.env.DOCKER_SOCKET && !process.env.CONTAINER_HOST
+    ? undefined
+    : await discoverEngineSocket();
+const defaultDocker = new Docker(defaultEngineSocket ? { socketPath: defaultEngineSocket } : {});
 const engineScope = new AsyncLocalStorage<Docker>();
 const engines = new Map<string, Docker>();
 const docker = new Proxy(defaultDocker, {
@@ -182,8 +185,28 @@ app.use("/computers*", async (c, next) => {
   return engineScope.run(engine, next);
 });
 app.get("/computers/engine", async (c) => {
-  const [version, info] = await Promise.all([docker.version(), docker.info()]);
-  return c.json(engineFromResponses(version, info));
+  try {
+    const [version, info] = await Promise.all([docker.version(), docker.info()]);
+    return c.json(engineFromResponses(version, info));
+  } catch (error) {
+    const socket =
+      c.req.header("x-ardurbot-engine-socket") ??
+      defaultEngineSocket ??
+      (process.env.DOCKER_HOST?.startsWith("unix://")
+        ? process.env.DOCKER_HOST.slice(7)
+        : undefined);
+    if (
+      socket &&
+      ["ECONNREFUSED", "ENOENT", "EACCES", "ETIMEDOUT"].includes(
+        (error as NodeJS.ErrnoException).code ?? "",
+      )
+    ) {
+      const engine =
+        c.req.header("x-ardurbot-engine") ?? (socket.includes("podman") ? "podman" : "docker");
+      return c.json({ error: "engine-unavailable", engine, socket: socketPath(socket) }, 503);
+    }
+    throw error;
+  }
 });
 app.use("/computers", limitSupervisorRequestBody);
 app.use("/computers/*", limitSupervisorRequestBody);
@@ -197,6 +220,7 @@ app.post("/computers", async (c) => {
       homePath: z.string().min(1),
       spaceId: z.string().min(1),
       imageProfile: ComputerProfileSchema.default("base"),
+      networkEgress: z.boolean().default(true),
     })
     .parse(await c.req.json());
   try {
@@ -215,7 +239,9 @@ app.post("/computers", async (c) => {
       if (expectedEngine && expectedEngine !== engine.name)
         throw new Error("The selected engine does not match this connection.");
       const runtimeInfo = await inspectSupervisorContainer();
-      const networkMode = computerNetworkName(body.botId, runtimeInfo);
+      const networkMode = body.networkEgress
+        ? computerNetworkName(body.botId, runtimeInfo)
+        : "none";
       const serviceHomePath = path.resolve(body.homePath);
       assertBotHomePath(serviceHomePath, body.botId);
       const hostUid = process.getuid?.();
@@ -242,7 +268,7 @@ app.post("/computers", async (c) => {
         const desired = await docker.getImage(image).inspect();
         const controlPublishOk = controlPortPublicationMatches(
           info.HostConfig.PortBindings,
-          controlViaLoopback,
+          body.networkEgress && controlViaLoopback,
         );
         if (
           info.Image === desired.Id &&
@@ -291,7 +317,9 @@ app.post("/computers", async (c) => {
         await assertComputerHomeWritable(serviceHomePath, effectiveUid, effectiveGid);
         const name = containerNameFor(body.botId);
         const createdNetwork =
-          screenNetworkMode === "internal" ? undefined : await ensureBotNetwork(body.botId);
+          networkMode === "none" || screenNetworkMode === "internal"
+            ? undefined
+            : await ensureBotNetwork(body.botId);
         let container: Docker.Container | undefined;
         try {
           if (existing) {
@@ -308,7 +336,7 @@ app.post("/computers", async (c) => {
               engine,
               networkMode,
               controlToken: randomUUID(),
-              publishControlPort: controlViaLoopback,
+              publishControlPort: body.networkEgress && controlViaLoopback,
             }),
           );
           await container.start();
@@ -578,7 +606,8 @@ app.get("/computers/:id/files", async (c) => {
         "target, limit = sys.argv[1], int(sys.argv[2])",
         "with open(target, 'rb') as source:",
         "  content = source.read() if limit < 0 else source.read(limit + 1)",
-        "if limit >= 0 and len(content) > limit: sys.exit(42)",
+        "if limit >= 0 and len(content) > limit and sys.argv[3] != 'preview': sys.exit(42)",
+        "if limit >= 0: content = content[:limit]",
         "sys.stdout.write(base64.b64encode(content).decode())",
       ].join("\n");
       const result = await runContainerCommand(container, [
@@ -587,6 +616,7 @@ app.get("/computers/:id/files", async (c) => {
         script,
         target,
         String(maxBytes ?? -1),
+        c.req.query("preview") === "1" ? "preview" : "read",
       ]);
       if (result.code === 42) {
         return c.json({ error: `computer file exceeds ${maxBytes} bytes` }, 413);
@@ -1046,6 +1076,7 @@ function assertBotHomePath(homePath: string, botId: string) {
 }
 
 function computerControlEndpoint(info: Docker.ContainerInspectInfo) {
+  if (info.HostConfig.NetworkMode === "none") return undefined;
   const token = info.Config.Env?.find((value) =>
     value.startsWith("ARDURBOT_COMPUTER_CONTROL_TOKEN="),
   )?.slice("ARDURBOT_COMPUTER_CONTROL_TOKEN=".length);
@@ -1157,6 +1188,18 @@ async function publishedScreenUrl(
 ) {
   for (let i = 0; i < 30; i += 1) {
     const info = i === 0 && initialInfo ? initialInfo : await container.inspect();
+    if (info.HostConfig.NetworkMode === "none") {
+      const runtime = await inspectSupervisorContainer();
+      const host = runtime
+        ? Object.values(runtime.NetworkSettings.Networks).find((network) => network.IPAddress)
+            ?.IPAddress
+        : "127.0.0.1";
+      if (!host) throw new Error("Supervisor screen address is unavailable");
+      const port = await screenRelay(container, Number(containerPort), host);
+      if (!(await waitForScreenReady(host, port, SCREEN_READY_TIMEOUT_MS)))
+        throw new Error("Computer screen did not become ready in time");
+      return screenUrlFor(String(port), host);
+    }
     if (screenNetworkMode === "isolated") {
       const runtime = await inspectSupervisorContainer();
       const networkName = info.HostConfig.NetworkMode;

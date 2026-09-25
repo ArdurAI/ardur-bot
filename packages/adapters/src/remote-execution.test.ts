@@ -1,4 +1,5 @@
 import type { SandboxProvider } from "@ardurbot/adapter-kit";
+import type { HostCommandApproval } from "@ardurbot/contracts";
 import { ALL_DEVICE_SCOPES, canonicalDispatchJson } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { deviceDigest } from "@ardurbot/db";
@@ -73,7 +74,9 @@ function fixture() {
     spaceMember: { findUnique: vi.fn(async () => ({ id: "member" })) },
     bot: { findFirst: vi.fn(async () => ({ id: "bot" })) },
     botMcpServer: { findFirst: vi.fn(async () => assignment) },
-    remoteAuthorityPolicy: { findMany: vi.fn(async () => []) },
+    remoteAuthorityPolicy: {
+      findMany: vi.fn(async () => [] as { layer: string; scopes: string[] }[]),
+    },
     deviceAuditEvent: { create: vi.fn(async () => ({})) },
     deviceApprovalBinding: {
       findUnique: vi.fn(async () => binding),
@@ -102,6 +105,47 @@ function fixture() {
   };
 }
 describe("executor device boundary", () => {
+  it.each(["program", "argv", "identity", "workspace", "cwd", "computerId"])(
+    "binds device approval to the unredacted host %s",
+    async (field) => {
+      const f = fixture();
+      const hostCommand: HostCommandApproval = {
+        id: "github",
+        argv: ["gh", "issue", "create", "--title", "ghp_fixturevalue123"],
+        identity: "fixture-account",
+        workspace: null,
+        cwd: "/workspace",
+        computerId: "computer",
+      };
+      f.effect.request = boundDirectApprovalRequest(
+        {
+          connectorId: "mcp",
+          resourceId: "connector",
+          resourceRevision: 2,
+          toolName: "execute_command",
+          hostCommand,
+        },
+        { args: hostCommand.argv.slice(1) },
+        REMOTE_APPROVAL_MARKER,
+      );
+      f.binding.requestFingerprint = deviceDigest(canonicalDispatchJson(f.effect.request));
+      f.answer.requestFingerprint = f.binding.requestFingerprint;
+      if (field === "program") hostCommand.argv[0] = "glab";
+      else if (field === "argv") hostCommand.argv[4] = "ghp_otherfixture456";
+      else if (field === "identity") hostCommand.identity = "other-fixture-account";
+      else if (field === "workspace") hostCommand.workspace = "other-workspace";
+      else if (field === "cwd") hostCommand.cwd = "/other-workspace";
+      else hostCommand.computerId = "other-computer";
+      await expect(validateDeviceApproval(f.db, f.effect, f.answer)).rejects.toThrow(
+        "changed or expired",
+      );
+      f.binding.answeredByGrantId = "phone";
+      await expect(
+        revalidateDeviceApprovalExecution(f.db, f.effect.id, f.run.id, "execute_command"),
+      ).rejects.toThrow("changed or expired");
+      expect(f.tx.deviceApprovalBinding.updateMany).not.toHaveBeenCalled();
+    },
+  );
   it("pauses a deploy the bot may run, then permits it with presence, and blocks after revocation", async () => {
     const f = fixture();
     f.grant.lastPresenceAt = new Date(0);
@@ -318,4 +362,15 @@ it("binds remote built-ins to their bot resource without changing local or conne
   expect(
     remoteBuiltinApprovalRoute({ botId: "bot", originDeviceGrantId: "grant" }, "custom", false),
   ).toBeUndefined();
+});
+
+it("rechecks Dispatch inside the approval transaction before consuming a binding", async () => {
+  const f = fixture();
+  f.tx.remoteAuthorityPolicy.findMany.mockResolvedValue([
+    { layer: "desktop-dispatch", scopes: [] },
+  ]);
+  await expect(validateDeviceApproval(f.db, f.effect, f.answer)).rejects.toThrow(
+    "Dispatch is off on this computer",
+  );
+  expect(f.tx.deviceApprovalBinding.updateMany).not.toHaveBeenCalled();
 });

@@ -815,7 +815,7 @@ removed in finally blocks after recording these results.
 - `packages/contracts/src/index.ts`
 - `packages/contracts/src/rpc.ts`
 - `packages/core/src/action-approval.ts`
-- `packages/db/prisma/migrations/20260924110000_beads_board/migration.sql`
+- `packages/db/prisma/migrations/20260925110000_beads_board/migration.sql`
 - `packages/db/prisma/schema.prisma`
 - `packages/host-runtime/src/board/argv.ts`
 - `packages/host-runtime/src/board/runner.test.ts`

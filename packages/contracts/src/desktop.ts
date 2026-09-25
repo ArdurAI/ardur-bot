@@ -1,3 +1,5 @@
+import type { DesktopCustomization } from "./desktop-extensions.js";
+
 /**
  * `unsupported` covers an unpackaged build and a repository with no published releases, which is
  * the normal state for a fork. It is not an error the user needs to act on. Automatic checks stay
@@ -38,9 +40,28 @@ export interface ArdurBotDesktopOAuthCallback {
   state?: string;
 }
 
+export interface DesktopDeviceListenerState {
+  enabled: boolean;
+  hints: string[];
+  mode?: DesktopInstanceMode;
+  available?: boolean;
+  reason?: string;
+}
+
 export interface ArdurBotDesktop {
+  customization?: DesktopCustomization;
+  notifications?: {
+    supported(): Promise<boolean>;
+    show(message: { title: string; body: string; threadId: string }): Promise<boolean>;
+  };
   host?: {
-    state(): Promise<{ configured: boolean; roots: string[] }>;
+    state(): Promise<{
+      configured: boolean;
+      roots: string[];
+      registrationId?: string;
+      keepRunning?: boolean;
+    }>;
+    setKeepRunning?(enabled: boolean): Promise<void>;
     setup(): Promise<void>;
     addRoot(): Promise<string | null>;
     /** Opens the same native picker, initially showing a dropped directory. */
@@ -49,8 +70,8 @@ export interface ArdurBotDesktop {
     clear(): Promise<void>;
   };
   devices?: {
-    state: () => Promise<{ enabled: boolean; hints: string[] }>;
-    setEnabled: (enabled: boolean) => Promise<{ enabled: boolean; hints: string[] }>;
+    state: () => Promise<DesktopDeviceListenerState>;
+    setEnabled: (enabled: boolean) => Promise<DesktopDeviceListenerState>;
   };
   memoryFolders?: {
     available: () => Promise<boolean>;
@@ -62,12 +83,18 @@ export interface ArdurBotDesktop {
   };
   platform: string;
   window: {
+    setUnsavedChanges?: (dirty: boolean) => Promise<void>;
     close: () => Promise<void>;
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
     state: () => Promise<{ minimized: boolean; maximized: boolean; fullScreen: boolean }>;
   };
   update: ArdurBotDesktopUpdate;
+  integrations?: {
+    open(url: string): Promise<void>;
+    focus(): Promise<void>;
+    onReturn(listener: (id: string) => void): () => void;
+  };
   oauth: {
     /**
      * Open system-browser auth. A redirect_uri must be HTTP loopback with state;

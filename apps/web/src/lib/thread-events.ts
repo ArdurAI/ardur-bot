@@ -7,7 +7,11 @@ import type {
   ThreadMessagePage,
   ThreadSnapshot,
 } from "@ardurbot/contracts";
-import { ProviderErrorKindSchema, RuntimeProblemSchema } from "@ardurbot/contracts";
+import {
+  ProviderErrorKindSchema,
+  RunTriggerSchema,
+  RuntimeProblemSchema,
+} from "@ardurbot/contracts";
 import {
   isActive,
   isCommandEvent,
@@ -17,6 +21,7 @@ import {
   progressMessageId,
   reduceCommandMessages,
   reduceLiveMessageBlocks,
+  reduceRunContext,
   runFailureError,
   subagentBlockFromPayload,
   takeLiveMessage,
@@ -24,31 +29,15 @@ import {
   upsertMessageById,
 } from "@ardurbot/core";
 
-const runTriggers = new Set<Run["trigger"]>([
-  "user",
-  "routine",
-  "resume",
-  "follow_up",
-  "spawn",
-  "skill",
-  "bot_message",
-  "webhook",
-  "messaging",
-  "cloud_agent",
-]);
-
 function runFromStartedEvent(event: ProductEvent, previous: Run | undefined): Run {
-  const trigger = event.payload.trigger;
+  const trigger = RunTriggerSchema.safeParse(event.payload.trigger);
   return {
     id: event.runId ?? previous?.id ?? event.id,
     botId: event.botId,
     threadId: event.threadId,
     taskId: previous?.taskId ?? event.runId ?? event.id,
     status: "running",
-    trigger:
-      typeof trigger === "string" && runTriggers.has(trigger as Run["trigger"])
-        ? (trigger as Run["trigger"])
-        : (previous?.trigger ?? "user"),
+    trigger: trigger.success ? trigger.data : (previous?.trigger ?? "user"),
     routineId:
       typeof event.payload.routineId === "string"
         ? event.payload.routineId
@@ -256,6 +245,7 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
     event.type === "thread.message.updated" ||
     event.type === "thread.message.reaction" ||
     event.type === "run.started" ||
+    event.type === "run.context" ||
     event.type === "run.waiting_input" ||
     event.type === "computer.takeover.requested" ||
     isRunTerminalEvent(event)
@@ -267,6 +257,7 @@ export function reduceThreadSnapshot(
   event: ProductEvent,
 ): ThreadSnapshot | null {
   if (!prev) return prev;
+  if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandEvent(event.type) && event.seq <= (prev.cursor ?? -1)) return prev;
   if (isCommandEvent(event.type))
     return { ...prev, cursor: event.seq, messages: reduceCommandMessages(prev.messages, event) };
@@ -279,6 +270,7 @@ export function reduceThreadSnapshot(
       messages: [],
       olderCursor: null,
       run: null,
+      contextRun: null,
       activeRuns: [],
     };
   }

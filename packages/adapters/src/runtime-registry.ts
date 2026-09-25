@@ -24,7 +24,7 @@ export class RuntimeRegistry {
       return runtimePinProblem(
         pin,
         "runtime-unavailable",
-        "The pinned runtime is unavailable — connect it or change the pin.",
+        "The pinned runtime is unavailable — change the pin.",
       );
     if (pin.runtimeKind !== "pi" && computerKind !== "desktop")
       return runtimePinProblem(
@@ -42,7 +42,7 @@ export class RuntimeRegistry {
       (): RuntimeAvailability => ({
         runtimeKind: pin.runtimeKind,
         available: false,
-        reason: "The pinned runtime is unavailable — connect it or change the pin.",
+        reason: "The pinned runtime is unavailable — change the pin.",
         models: [],
       }),
     );
@@ -50,7 +50,7 @@ export class RuntimeRegistry {
       return runtimePinProblem(
         pin,
         "runtime-unavailable",
-        availability.reason ?? "The pinned runtime is unavailable — connect it or change the pin.",
+        availability.reason ?? "The pinned runtime is unavailable — change the pin.",
       );
     if (pin.runtimeKind !== "pi") {
       const model = availability.models.find((entry) => entry.id === pin.modelId);

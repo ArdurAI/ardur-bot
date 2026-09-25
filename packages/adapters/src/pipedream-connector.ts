@@ -202,7 +202,12 @@ export class PipedreamConnector implements ManagedConnectorProvider {
 
   async discoverTools(context: AdapterContext): Promise<ConnectorTool[]> {
     const tools = await this.allTools(context);
-    if (tools.length <= DIRECT_TOOL_LIMIT) return tools;
+    if (
+      context.toolAccessMode === "all" ||
+      tools.length === 0 ||
+      (context.toolAccessMode !== "when-needed" && tools.length <= DIRECT_TOOL_LIMIT)
+    )
+      return tools;
     return lazyCatalogTools(
       catalogToolPrefix("pipedream"),
       "pipedream",

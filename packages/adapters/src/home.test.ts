@@ -120,6 +120,28 @@ describe("LocalAgentHomeStore path containment", () => {
     const exported = [];
     for await (const file of store.exportHome("bot-1", context)) exported.push(file.path);
     expect(exported).toEqual(["safe.txt"]);
+    const streamed = [];
+    for await (const file of store.streamHome("bot-1", context, () => false)) {
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of file.content) chunks.push(chunk);
+      streamed.push({ path: file.path, content: Buffer.concat(chunks).toString() });
+    }
+    expect(streamed).toEqual([{ path: "safe.txt", content: "safe" }]);
+  });
+
+  it("does not export excluded cache contents through an in-home symlink", async () => {
+    const { store, home } = await fixture();
+    await mkdir(path.join(home, ".cache"));
+    await writeFile(path.join(home, ".cache/data"), "cache");
+    await symlink(".cache/data", path.join(home, "alias"));
+    const paths = [];
+    for await (const file of store.streamHome(
+      "bot-1",
+      context,
+      (path) => path === ".cache" || path.startsWith(".cache/"),
+    ))
+      paths.push(file.path);
+    expect(paths).toEqual([]);
   });
 
   it("exports and copies internal links, bytes, empty directories, and file modes", async () => {
@@ -148,4 +170,16 @@ describe("LocalAgentHomeStore path containment", () => {
     await store.commit("bot-2", dest, context);
     expect(await readFile(path.join(store.pathFor("bot-2"), "nested/run"))).toEqual(bytes);
   });
+});
+
+it("previews a stopped computer home with bounded UTF-8 reads and explicit binary detection", async () => {
+  const { store, home } = await fixture();
+  await writeFile(path.join(home, "large.txt"), "abcdef");
+  expect(await store.readFile("bot-1", "large.txt", context, { maxBytes: 4, preview: true })).toBe(
+    "abcd",
+  );
+  await writeFile(path.join(home, "binary.bin"), Buffer.from([255, 254, 1]));
+  await expect(
+    store.readFile("bot-1", "binary.bin", context, { maxBytes: 4, preview: true }),
+  ).rejects.toThrow("Binary file");
 });

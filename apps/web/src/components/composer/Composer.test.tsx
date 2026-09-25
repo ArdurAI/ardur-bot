@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({
   integrations: vi.fn(),
+  summary: vi.fn(),
   servers: vi.fn(),
   send: vi.fn(),
   action: vi.fn(),
@@ -17,7 +18,11 @@ const fake = vi.hoisted(() => ({
   open: vi.fn(),
 }));
 vi.mock("../../lib/rpc", () => ({
-  rpc: { integrations: { list: fake.integrations }, mcp: { servers: { list: fake.servers } } },
+  rpc: {
+    integrations: { list: fake.integrations },
+    connectors: { summary: fake.summary },
+    mcp: { servers: { list: fake.servers } },
+  },
   selectedSpaceId: () => "space",
 }));
 vi.mock("../../lib/auth", () => ({ authClient: {} }));
@@ -67,6 +72,7 @@ beforeEach(() => {
     connections: [{ id: "connection", catalogId: "reports", state: "not-connected" }],
   });
   fake.servers.mockResolvedValue([{ id: "mcp", name: "Local tools" }]);
+  fake.summary.mockResolvedValue({ needingReconnection: 1 });
 });
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
@@ -169,6 +175,22 @@ function menuItem(text: string): HTMLElement {
 }
 
 describe("composer controls", () => {
+  it.each(["streamable_http", "host-cli"])(
+    "opens Manage for a %s connection needing sign-in",
+    async (transport) => {
+      fake.integrations.mockResolvedValue({
+        catalog: [{ id: "reports", name: "Reports", authKind: "oauth" }],
+        connections: [
+          { id: "connection", catalogId: "reports", state: "needs-sign-in", transport },
+        ],
+      });
+      await mount();
+      await openMenu();
+      await click(menuItem("Integrations"));
+      await click(menuItem("Reports"));
+      expect(fake.manage).toHaveBeenCalledExactlyOnceWith("connection");
+    },
+  );
   it("shows the exact menu order and hides folders on the web", async () => {
     await mount();
     await openMenu();
@@ -177,10 +199,10 @@ describe("composer controls", () => {
     ).toEqual([
       "Add files or photosCtrl+U",
       "Slash commands",
-      "Connectors(1 need reconnection)",
+      "Integrations(1 need reconnection)",
       "Plugins",
     ]);
-    await click(menuItem("Connectors"));
+    await click(menuItem("Integrations"));
     await click(menuItem("Reports"));
     expect(fake.manage).toHaveBeenCalledWith("connection");
   });
@@ -251,6 +273,9 @@ describe("composer controls", () => {
   it("refreshes connector status from the same Settings query and inserts its chip", async () => {
     await mount();
     await openMenu();
+    expect(fake.summary).toHaveBeenCalled();
+    expect(menuItem("Integrations").textContent).toContain("1 need reconnection");
+    fake.summary.mockResolvedValue({ needingReconnection: 0 });
     fake.integrations.mockResolvedValue({
       catalog: [{ id: "reports", name: "Reports" }],
       connections: [{ id: "connection", catalogId: "reports", state: "connected" }],
@@ -258,8 +283,8 @@ describe("composer controls", () => {
     await act(async () => {
       await refreshIntegrationCatalog();
     });
-    expect(menuItem("Connectors").textContent).toBe("Connectors");
-    await click(menuItem("Connectors"));
+    expect(menuItem("Integrations").textContent).toBe("Integrations");
+    await click(menuItem("Integrations"));
     await click(menuItem("Reports"));
     await click(button("Send"));
     expect(fake.send).toHaveBeenCalledWith("@Reports", [

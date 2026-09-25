@@ -1,5 +1,11 @@
 import type { Comparison, ComparisonParticipant, ComparisonResult } from "@ardurbot/contracts";
-import { comparisonStatusText, TEAM_REFRESH_MS } from "@ardurbot/core";
+import { runtimeNames } from "@ardurbot/contracts";
+import {
+  comparisonStatusText,
+  formatModelPin,
+  runtimeEffortLabel,
+  TEAM_REFRESH_MS,
+} from "@ardurbot/core";
 import { Stack, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -126,10 +132,11 @@ export function MobileComparisonOutput({
     <View style={[styles.result, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
       <Text style={[text, styles.name]}>{participant.name}</Text>
       <Text style={text}>
-        {pin.provider} · {pin.modelId} · {pin.effort ?? t("Not reported")}
+        {formatModelPin(pin, runtimeEffortLabel(pin, result?.provenance, t("requested"))) ||
+          t("Not reported")}
       </Text>
       <Text style={text}>
-        {pin.runtimeKind} · {participant.executing.computer.kind}
+        {runtimeNames[pin.runtimeKind]} · {participant.executing.computer.kind}
       </Text>
       <Text style={text}>{result ? comparisonStatusText(result, t) : t("Incomplete")}</Text>
       {result ? (

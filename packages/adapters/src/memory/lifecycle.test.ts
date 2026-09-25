@@ -37,6 +37,7 @@ function fixture() {
       findMany: vi.fn(async () => [{ spaceId: "space", userId: "user" }]),
     },
     bot: { findMany: vi.fn(async () => [{ id: "bot" }]) },
+    chatGroup: { findMany: vi.fn(async () => []) },
     spaceMemoryConfig: { findUnique: vi.fn(async () => config) },
   });
   const prisma = {

@@ -1,8 +1,12 @@
 import type { McpServerConfigInput } from "@ardurbot/contracts";
+import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 
 /** Shape of the encrypted MCP credential blob. `oauth` holds SDK OAuth state
  * (tokens, client registration, PKCE verifier) managed by McpOAuthBroker. */
 export type McpSecretMaterial = {
+  args?: string[];
+  command?: string;
+  cwd?: string;
   secret?: string;
   env?: Record<string, string>;
   headers?: Record<string, string>;
@@ -32,9 +36,20 @@ export function buildMcpUpdateMaterial(
   const material = options.clearOAuth ? { ...existing } : existing;
   const clearedOAuth = options.clearOAuth === true && material.oauth !== undefined;
   if (options.clearOAuth) delete material.oauth;
+  const args =
+    config.transport === "stdio" && config.args
+      ? config.args.map((arg, i) =>
+          arg === redactMcpArguments(material.args ?? [], Object.values(material.env ?? {}))[i]
+            ? (material.args?.[i] ?? arg)
+            : arg,
+        )
+      : undefined;
   const clearing = config.clearCredential === true;
   if (clearing) {
-    return { action: "store", material: material.oauth ? { oauth: material.oauth } : {} };
+    return {
+      action: "store",
+      material: { ...(material.oauth ? { oauth: material.oauth } : {}), ...(args ? { args } : {}) },
+    };
   }
   const secret = "secret" in config && config.secret ? config.secret : undefined;
   const env = "env" in config ? config.env : undefined;
@@ -43,10 +58,14 @@ export function buildMcpUpdateMaterial(
     material.secret ||
       (material.env && Object.keys(material.env).length > 0) ||
       (material.headers && Object.keys(material.headers).length > 0) ||
-      material.oauth,
+      material.oauth ||
+      material.args,
   );
   const suppliesMaterial = Boolean(
-    secret || (env && Object.keys(env).length > 0) || (headers && Object.keys(headers).length > 0),
+    args ||
+      secret ||
+      (env && Object.keys(env).length > 0) ||
+      (headers && Object.keys(headers).length > 0),
   );
   if (!existingHasMaterial && !suppliesMaterial) {
     return clearedOAuth ? { action: "store", material } : { action: "keep" };
@@ -55,6 +74,7 @@ export function buildMcpUpdateMaterial(
     action: "store",
     material: {
       ...material,
+      ...(args ? { args, command: config.transport === "stdio" ? config.command : undefined } : {}),
       ...(secret ? { secret } : {}),
       ...(env !== undefined ? { env } : {}),
       ...(headers !== undefined ? { headers } : {}),

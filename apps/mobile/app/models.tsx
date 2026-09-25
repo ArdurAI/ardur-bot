@@ -12,7 +12,7 @@ import {
   parseModelMaxTokens,
 } from "@ardurbot/contracts";
 import { createModelProbe, featuredModelProviders, initialModelProbeState } from "@ardurbot/core";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -27,7 +27,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { OllamaConnection } from "../components/ollama-connection";
-import { type MobileMe, type MobileModel, type MobileModelCredential, rpc } from "../lib/api";
+import type { MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
+import { rpc } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
@@ -63,7 +64,11 @@ type ModelSelection = {
 };
 
 export default function Models() {
-  const { provider: requestedProvider } = useLocalSearchParams<{ provider?: string }>();
+  const { provider: requestedProvider, botId } = useLocalSearchParams<{
+    provider?: string;
+    botId?: string;
+  }>();
+  const router = useRouter();
   const styles = useThemedStyles(createModelsStyles);
   const { t } = useI18n();
   const colorScheme = useResolvedAppearance();
@@ -772,9 +777,23 @@ export default function Models() {
             {!isOpenAiCompatible && selected.billing ? (
               <Text style={styles.billing}>
                 {provider === "anthropic"
-                  ? t("Claude subscriptions are not supported here yet; use an API key.")
+                  ? t(
+                      "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.",
+                    )
                   : selected.billing}
               </Text>
+            ) : null}
+
+            {provider === "anthropic" && botId ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({ pathname: "/bot-settings", params: { botId, focus: "runtime" } })
+                }
+                style={styles.selectedRow}
+              >
+                <Text style={styles.modelLabel}>{t("Open bot settings")}</Text>
+              </Pressable>
             ) : null}
 
             {!isOpenAiCompatible ? (

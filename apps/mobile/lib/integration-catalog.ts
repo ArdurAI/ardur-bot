@@ -9,13 +9,11 @@ export function integrationCardMessage(
   descriptor: IntegrationDescriptor,
   connection?: IntegrationConnection,
 ): string {
-  if (!descriptor.available) return "Coming soon";
-  if (
-    descriptor.id === "github" &&
-    (!connection || ["not-connected", "needs-client-registration"].includes(connection.state))
-  )
-    return "Sign-in needs a pre-registered app; use a fine-grained token instead.";
+  if (connection?.lastError === "Sign-in timed out.") return "Sign-in timed out.";
+  if (!descriptor.available) return "Not available";
   switch (connection?.state) {
+    case "needs-sign-in":
+      return "Needs sign-in";
     case "connected":
       return connection.needsReview
         ? "Review tools before your bots can use this account."

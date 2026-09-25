@@ -18,6 +18,7 @@ export * from "./messages.js";
 export * from "./messaging.js";
 export * from "./messaging-routes.js";
 export * from "./model-credentials.js";
+export * from "./preferences.js";
 export * from "./repos.js";
 export * from "./scope.js";
 export * from "./spaces.js";

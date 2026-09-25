@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type {
   AdapterContext,
   AgentHomeStore,
+  AgentRuntime,
   ArtifactStore,
   ConnectorCatalogItem,
   JobPublisher,
@@ -33,6 +34,7 @@ import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
+  autoReviewConfigurationWarning,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
   CodexConnections,
@@ -59,6 +61,7 @@ import {
   kubernetesContexts,
   listPiCatalog,
   listScratchpadItems,
+  loadPushToken,
   McpOAuthBroker,
   mapScratchpadItem,
   modelCredentialDto,
@@ -73,6 +76,7 @@ import {
   prepareApiInstall,
   prepareGraphqlInstall,
   probeOpenAiCompatibleModels,
+  proposeMemoryIntent,
   provisionComputer,
   pullOllamaModel,
   queueComputerUpdate,
@@ -93,9 +97,10 @@ import {
   verifyMcpInstall,
 } from "@ardurbot/adapters";
 import type { Auth } from "@ardurbot/auth";
-import type { Actor, ComputerStatus, McpServer, Me, SpaceNavigation } from "@ardurbot/contracts";
+import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
   appContract,
+  IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
@@ -128,6 +133,7 @@ import {
   findModelCredential,
   findSpaceMemoryConfig,
   formatMessagingLinkCode,
+  getUserPreferences,
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
@@ -148,10 +154,15 @@ import {
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
   touchGroupUpdatedAt,
+  updateUserPreferences,
 } from "@ardurbot/db";
+import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
+import type { Router } from "@orpc/server";
 import { implement, ORPCError } from "@orpc/server";
+import { createAccountService } from "./account.js";
+import { exportDownload } from "./account-export.js";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
@@ -159,8 +170,10 @@ import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artif
 import { boardCall, createBoard } from "./board.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
+import { createCapabilitySettings } from "./capability-settings.js";
 import { createCommandRoutes } from "./command-routes.js";
 import { createComparisons } from "./comparisons.js";
+import { releaseMaintenanceControl } from "./computer-maintenance.js";
 import {
   computerEngineInfo,
   listComputerConnections,
@@ -172,13 +185,19 @@ import {
   resolveBusyBotName,
   toComputerStatus,
 } from "./computer-status.js";
+import { createContextService } from "./context.js";
+import type { RouterContext } from "./customization-routes.js";
+import { createCustomizationRoutes } from "./customization-routes.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
+import { createIdeChanges } from "./ide-changes.js";
+import { createIdeFiles } from "./ide-files.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
-import { IntegrationConnections } from "./integration-connections.js";
+import { connectionDto, IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
+import { mcpServerDto } from "./mcp-server-dto.js";
 import { changeGitMemoryLocation } from "./memory-git-location.js";
 import { changeMemoryLocation } from "./memory-location.js";
 import {
@@ -190,6 +209,7 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
+import { notificationActivity } from "./notification-activity.js";
 import { ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
   chooseFocus,
@@ -199,6 +219,7 @@ import {
   startOnboarding,
 } from "./onboarding.js";
 import { createRemoteDevices } from "./remote-devices.js";
+import { routineHistory } from "./routine-history.js";
 import { listSpaceRuns } from "./runs.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
 import { querySpaceSearch } from "./search.js";
@@ -210,13 +231,13 @@ import {
   readServerUpdateStatus,
   UpdaterProxyError,
 } from "./server-update.js";
+import { createSystemSettings } from "./system/settings.js";
 import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-skills.js";
 import { acceptTeamTask, teamBoard } from "./team.js";
 import type { createTerminalRoutes } from "./terminal-routes.js";
 import { guardComputerTakeover } from "./terminal-takeover.js";
 import {
   isPeerRun,
-  loadAllMessages,
   loadMessagePage,
   shouldForwardPeerThreadEvent,
 } from "./thread-message-pages.js";
@@ -229,6 +250,7 @@ import {
   threadHead,
   threadSnapshot,
 } from "./thread-target.js";
+import { deleteUploadedFile, listUploadedFiles } from "./uploaded-files.js";
 import {
   disconnectVoiceCredential,
   listVoiceCatalog,
@@ -243,7 +265,6 @@ import {
 
 const MAX_COMPUTER_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 const THREAD_MESSAGE_PAGE_SIZE = 100;
-const EXPORT_MESSAGE_PAGE_SIZE = 500;
 
 async function reconcilePendingConnections(
   prisma: PrismaClient,
@@ -370,57 +391,6 @@ function computerContext(actor: Actor, botId: string, operationId: string): Adap
   };
 }
 
-function mcpServerDto(
-  row: {
-    id: string;
-    spaceId: string;
-    slug: string;
-    name: string;
-    description: string;
-    transport: string;
-    endpoint: string | null;
-    command: string | null;
-    args: unknown;
-    env: unknown;
-    headers: unknown;
-    secretId: string | null;
-    enabled: boolean;
-    revision: number;
-    createdAt: Date;
-    updatedAt: Date;
-  },
-  oauthStatus: McpServer["oauthStatus"] = "none",
-): McpServer {
-  const args = Array.isArray(row.args)
-    ? row.args.filter((item): item is string => typeof item === "string")
-    : [];
-  const envKeys =
-    row.env && typeof row.env === "object" && !Array.isArray(row.env) ? Object.keys(row.env) : [];
-  const headerKeys =
-    row.headers && typeof row.headers === "object" && !Array.isArray(row.headers)
-      ? Object.keys(row.headers)
-      : [];
-  return {
-    id: row.id,
-    spaceId: row.spaceId,
-    slug: row.slug,
-    name: row.name,
-    description: row.description,
-    transport: row.transport as McpServer["transport"],
-    endpoint: row.endpoint,
-    command: row.command,
-    args,
-    envKeys,
-    headerKeys,
-    hasSecret: row.secretId !== null,
-    oauthStatus,
-    enabled: row.enabled,
-    revision: row.revision,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
 function connectionContext(
   actor: Pick<Actor, "spaceId" | "userId">,
   operationId: string,
@@ -461,6 +431,7 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  runtime?: AgentRuntime;
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
   terminals?: ReturnType<typeof createTerminalRoutes>;
@@ -479,6 +450,7 @@ export interface RouterDeps {
   integrationSettings?: IntegrationProviderSettings;
   composio?: ComposioProvider;
   mcpOAuth?: McpOAuthBroker;
+  integrationConnections?: IntegrationConnections;
   connectors: ConnectorRegistry;
   remoteConnectors?: RemoteConnectorDependencies;
   artifacts: ArtifactStore;
@@ -528,7 +500,7 @@ function mapSpaceLifecycleError(error: unknown): unknown {
   return error;
 }
 
-export function createRouter(deps: RouterDeps) {
+export function createRouter(deps: RouterDeps): Router<typeof appContract, RouterContext> {
   const board = createBoard(deps);
   const comparisons = createComparisons({
     prisma: deps.prisma,
@@ -544,21 +516,34 @@ export function createRouter(deps: RouterDeps) {
     actor: Actor | null;
     signal?: AbortSignal;
     authSessionId?: string;
+    authHeaders?: Headers;
     origin?: string;
   }>();
   const channelPairing = createChannelPairing(deps);
   const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
+  const account = createAccountService({ ...deps, remoteDevices });
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
-  const integrations = new IntegrationConnections(
-    deps.prisma,
-    mcpOAuth,
-    deps.secrets,
-    deps.env.webOrigin,
-    deps.remoteConnectors,
-    { stdioEnabled: deps.env.mcpStdioEnabled, allowedCommands: deps.env.mcpStdioAllowedCommands },
-  );
+  const integrations =
+    deps.integrationConnections ??
+    new IntegrationConnections(
+      deps.prisma,
+      mcpOAuth,
+      deps.secrets,
+      deps.env.webOrigin,
+      deps.remoteConnectors,
+      {
+        stdioEnabled: deps.env.mcpStdioEnabled,
+        allowedCommands: deps.env.mcpStdioAllowedCommands,
+        hostMcp: deps.hostBridge,
+      },
+      async (actor) =>
+        (
+          (await sourceHostStatus(deps.prisma, actor.userId, deps.env.sandboxProvider)) ??
+          (await deps.hostBridge?.status(actor.userId))
+        )?.health?.integrations ?? [],
+    );
   const groupRepos = createGroupRepos(deps.prisma);
   const taughtSkills = createTaughtSkillsService({
     memoryDocuments: deps.memoryDocuments,
@@ -577,8 +562,52 @@ export function createRouter(deps: RouterDeps) {
     return next({ context: { ...context, actor: context.actor } });
   });
 
+  const systemSettings = createSystemSettings(deps.prisma);
   const commands = createCommandRoutes(deps);
+  const ide = createIdeFiles(deps);
+  const ideChanges = createIdeChanges(deps, ide);
   return os.router({
+    ...createCustomizationRoutes(deps),
+    account: {
+      get: authed.account.get.handler(({ context }) => account.get(context.actor)),
+      updateProfile: authed.account.updateProfile.handler(({ context, input }) =>
+        account.updateProfile(context.actor, input),
+      ),
+      updateInstructions: authed.account.updateInstructions.handler(({ context, input }) =>
+        account.updateInstructions(context.actor, input),
+      ),
+      setTrustedDevices: authed.account.setTrustedDevices.handler(({ context, input }) =>
+        account.setTrustedDevices(context.actor, input.required),
+      ),
+      approveDevice: authed.account.approveDevice.handler(({ context, input }) =>
+        account.approveDevice(context.actor, input.id),
+      ),
+      localDevices: authed.account.localDevices.handler(({ context }) =>
+        account.localDevices(context.actor),
+      ),
+      disconnectDevice: authed.account.disconnectDevice.handler(({ context, input }) =>
+        account.disconnectDevice(context.actor, input),
+      ),
+      sessions: authed.account.sessions.handler(({ context }) =>
+        account.sessions.list(context.actor.userId, context.authHeaders ?? new Headers()),
+      ),
+      revokeSession: authed.account.revokeSession.handler(({ context, input }) =>
+        account.sessions.revoke(
+          context.actor.userId,
+          context.authHeaders ?? new Headers(),
+          input.id,
+        ),
+      ),
+      revokeOtherSessions: authed.account.revokeOtherSessions.handler(({ context }) =>
+        account.sessions.revokeOthers(context.actor.userId, context.authHeaders ?? new Headers()),
+      ),
+    },
+    system: {
+      dispatch: authed.system.dispatch.handler(({ context }) => systemSettings.get(context.actor)),
+      setDispatch: authed.system.setDispatch.handler(({ context, input }) =>
+        systemSettings.set(context.actor, input.enabled),
+      ),
+    },
     channelPairing: {
       installations: authed.channelPairing.installations.handler(({ context }) =>
         channelPairing.installations(context.actor),
@@ -589,6 +618,19 @@ export function createRouter(deps: RouterDeps) {
       start: authed.channelPairing.start.handler(({ context, input }) =>
         channelPairing.start(context.actor, input),
       ),
+    },
+    ide: {
+      roots: authed.ide.roots.handler(({ context }) => ide.roots(context.actor)),
+      list: authed.ide.list.handler(({ context, input }) =>
+        ide.list(context.actor, input, context.signal),
+      ),
+      read: authed.ide.read.handler(({ context, input }) =>
+        ide.read(context.actor, input, context.signal),
+      ),
+      save: authed.ide.save.handler(({ context, input }) =>
+        ide.save(context.actor, input, context.signal),
+      ),
+      changes: authed.ide.changes.handler(({ context, input }) => ideChanges(context.actor, input)),
     },
     terminal: {
       close: authed.terminal.close.handler(
@@ -659,12 +701,18 @@ export function createRouter(deps: RouterDeps) {
     health: os.health.handler(async () => ({ ok: true as const, version: "0.1.0" })),
     me: authed.me.handler(async ({ context }): Promise<Me> => meDto(deps, context.actor)),
     preferences: {
-      update: authed.preferences.update.handler(async ({ context, input }): Promise<Me> => {
-        await deps.prisma.user.update({
-          where: { id: context.actor.userId },
-          data: { avatarStyle: input.avatarStyle },
-        });
-        return meDto(deps, context.actor);
+      get: authed.preferences.get.handler(({ context }) =>
+        getUserPreferences(deps.prisma, context.actor.userId),
+      ),
+      update: authed.preferences.update.handler(async ({ context, input }) => {
+        const { avatarStyle, ...patch } = input;
+        if (avatarStyle !== undefined)
+          await deps.prisma.user.update({
+            where: { id: context.actor.userId },
+            data: { avatarStyle },
+          });
+        const preferences = await updateUserPreferences(deps.prisma, context.actor.userId, patch);
+        return { ...(await meDto(deps, context.actor)), preferences };
       }),
     },
     spaces: {
@@ -1189,6 +1237,34 @@ export function createRouter(deps: RouterDeps) {
         return { ok: true as const };
       }),
     },
+    metrics: {
+      context: authed.metrics.context.handler(({ context, input }) =>
+        createContextService(deps.prisma, deps.memoryDocuments).metrics(context.actor, input),
+      ),
+    },
+    context: {
+      settings: authed.context.settings.handler(({ context, input }) =>
+        createContextService(deps.prisma, deps.memoryDocuments).settings(
+          context.actor,
+          input.botId,
+        ),
+      ),
+      configure: authed.context.configure.handler(({ context, input }) =>
+        createContextService(deps.prisma, deps.memoryDocuments).configure(context.actor, input),
+      ),
+    },
+    briefs: {
+      list: authed.briefs.list.handler(({ context, input }) =>
+        memoryRpc(() =>
+          createContextService(deps.prisma, deps.memoryDocuments).briefs(context.actor, input),
+        ),
+      ),
+      update: authed.briefs.update.handler(({ context, input }) =>
+        memoryRpc(() =>
+          createContextService(deps.prisma, deps.memoryDocuments).saveBrief(context.actor, input),
+        ),
+      ),
+    },
     bots: {
       list: authed.bots.list.handler(async ({ context }) => repos.listBots(context.actor)),
       listArchived: authed.bots.listArchived.handler(async ({ context }) =>
@@ -1281,6 +1357,7 @@ export function createRouter(deps: RouterDeps) {
             title: input.title,
             description: input.description,
             instructions: input.instructions,
+            concurrentRuns: input.concurrentRuns,
             notifyOnFinish: input.notifyOnFinish,
             color: input.color,
             pinned: input.pinned,
@@ -1896,7 +1973,14 @@ export function createRouter(deps: RouterDeps) {
         );
         if (!configuration.connectionId && !["docker", "kubernetes"].includes(bot.computer.kind))
           throw new ORPCError("BAD_REQUEST", { message: "Choose a computer connection first." });
-        return queueComputerUpdate(deps, bot.computer.id, bot.id, "update", configuration);
+        try {
+          await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
+          return await queueComputerUpdate(deps, bot.computer.id, bot.id, "update", configuration);
+        } catch (error) {
+          if (error instanceof ComputerBusyError)
+            throw new ORPCError("CONFLICT", { message: "Computer is busy" });
+          throw error;
+        }
       }),
       status: authed.computer.status.handler(async ({ context, input }) =>
         computerStatus(deps, context.actor, input.botId),
@@ -2016,6 +2100,7 @@ export function createRouter(deps: RouterDeps) {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
         try {
+          await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
           return await queueComputerUpdate(deps, bot.computer.id, bot.id, "recover");
         } catch (error) {
           if (error instanceof ComputerBusyError)
@@ -2034,6 +2119,7 @@ export function createRouter(deps: RouterDeps) {
             message: "Computer update is not available on this device",
           });
         try {
+          await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
           return await queueComputerUpdate(deps, bot.computer.id, bot.id);
         } catch (error) {
           if (error instanceof ComputerBusyError)
@@ -2497,6 +2583,11 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     memory: {
+      propose: authed.memory.propose.handler(({ context, input }) =>
+        memoryRpc(() =>
+          proposeMemoryIntent({ ...deps, secretStore: deps.secrets }, context.actor, input),
+        ),
+      ),
       remember: authed.memory.remember.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         await memoryRpc(() =>
@@ -2627,6 +2718,9 @@ export function createRouter(deps: RouterDeps) {
       ),
     },
     routines: {
+      history: authed.routines.history.handler(({ context, input }) =>
+        routineHistory(deps.prisma, context.actor, input.routineId),
+      ),
       list: authed.routines.list.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
         return listRoutinesDto(deps, context.actor, input.botId);
@@ -3049,6 +3143,15 @@ export function createRouter(deps: RouterDeps) {
       ),
     },
     capabilities: {
+      settings: authed.capabilities.settings.handler(({ context }) =>
+        createCapabilitySettings(deps).settings(context.actor),
+      ),
+      configure: authed.capabilities.configure.handler(({ context, input }) =>
+        createCapabilitySettings(deps).configure(context.actor, input),
+      ),
+      network: authed.capabilities.network.handler(({ context, input }) =>
+        createCapabilitySettings(deps).network(context.actor, input),
+      ),
       list: authed.capabilities.list.handler(async ({ context }) => {
         const rows = await deps.prisma.capabilityInstall.findMany({
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
@@ -3233,6 +3336,10 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     integrations: {
+      status: authed.integrations.status.handler(async ({ context, input }) => {
+        await integrations.expireConsent(context.actor);
+        return connectionDto(await integrations.owned(context.actor, input.connectionId));
+      }),
       resourceTools: authed.integrations.resourceTools.handler(({ context, input }) =>
         integrations.resourceTools(context.actor, input.connectionId, input.kind),
       ),
@@ -3262,9 +3369,15 @@ export function createRouter(deps: RouterDeps) {
     },
     mcp: {
       servers: {
-        tools: authed.mcp.servers.tools.handler(({ context, input }) =>
-          integrations.tools(context.actor, input.serverId),
+        permissions: authed.mcp.servers.permissions.handler(({ context, input }) =>
+          integrations.assign(context.actor, { ...input, connectionId: input.serverId }, "mcp"),
         ),
+        tools: authed.mcp.servers.tools.handler(async ({ context, input }) => {
+          await integrations.capture(context.actor, input.serverId);
+          return IntegrationManifestSchema.parse(
+            (await integrations.owned(context.actor, input.serverId)).manifest,
+          );
+        }),
         list: authed.mcp.servers.list.handler(async ({ context }) => {
           const rows = await deps.prisma.mcpServer.findMany({
             where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
@@ -3322,7 +3435,12 @@ export function createRouter(deps: RouterDeps) {
                 transport: input.transport,
                 endpoint: "endpoint" in input ? input.endpoint : null,
                 command: "command" in input ? input.command : null,
-                args: ("args" in input ? input.args : []) as Prisma.InputJsonValue,
+                args: ("args" in input
+                  ? redactMcpArguments(input.args, [
+                      ...Object.values(input.env),
+                      ...(input.secret ? [input.secret] : []),
+                    ])
+                  : []) as Prisma.InputJsonValue,
                 env: ("env" in input
                   ? Object.fromEntries(Object.keys(input.env).map((key) => [key, true]))
                   : {}) as Prisma.InputJsonValue,
@@ -3349,10 +3467,34 @@ export function createRouter(deps: RouterDeps) {
               },
             });
             if (!existing) throw new IsolationError();
+            if (existing.managedBy)
+              throw new ORPCError("BAD_REQUEST", {
+                message: "Manage this server in Extensions or Plugins.",
+              });
             if (existing.catalogId)
               throw new ORPCError("BAD_REQUEST", {
                 message: "Manage this connection in Integrations.",
               });
+            if ("enabled" in input) {
+              if (existing.transport === "stdio")
+                throw new ORPCError("BAD_REQUEST", { message: "A remote MCP server is required" });
+              await tx.botMcpServer.updateMany({
+                where: {
+                  serverId: existing.id,
+                  spaceId: context.actor.spaceId,
+                  userId: context.actor.userId,
+                },
+                data: { needsReview: true, allowAllTools: false, allowedTools: [] },
+              });
+              return tx.mcpServer.update({
+                where: { id: existing.id },
+                data: {
+                  enabled: input.enabled,
+                  connectionState: "not-connected",
+                  revision: { increment: 1 },
+                },
+              });
+            }
             const existingSecret = existing.secretId
               ? await tx.secret.findFirst({
                   where: {
@@ -3422,7 +3564,12 @@ export function createRouter(deps: RouterDeps) {
                 transport: config.transport,
                 endpoint: nextEndpoint,
                 command: "command" in config ? config.command : null,
-                args: ("args" in config ? config.args : []) as Prisma.InputJsonValue,
+                args: ("args" in config
+                  ? redactMcpArguments(config.args, [
+                      ...Object.values(config.env),
+                      ...(config.secret ? [config.secret] : []),
+                    ])
+                  : []) as Prisma.InputJsonValue,
                 env: ("env" in config
                   ? Object.fromEntries(Object.keys(config.env).map((key) => [key, true]))
                   : {}) as Prisma.InputJsonValue,
@@ -3463,9 +3610,13 @@ export function createRouter(deps: RouterDeps) {
               spaceId: context.actor.spaceId,
               userId: context.actor.userId,
             },
-            select: { id: true, secretId: true },
+            select: { id: true, secretId: true, managedBy: true },
           });
           if (!server) throw new IsolationError();
+          if (server.managedBy)
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Manage this server in Extensions or Plugins.",
+            });
           // Assignments cascade; the encrypted credential must go with the server.
           await deps.prisma.$transaction([
             deps.prisma.mcpServer.delete({ where: { id: server.id } }),
@@ -3608,15 +3759,11 @@ export function createRouter(deps: RouterDeps) {
       oauth: {
         begin: authed.mcp.oauth.begin.handler(async ({ context, input }) => {
           try {
-            const expectedRedirect = new URL("/mcp/oauth/callback", deps.env.webOrigin).toString();
+            const expectedRedirect = new URL("/api/oauth/done", deps.env.webOrigin).toString();
             if (new URL(input.redirectUri).toString() !== expectedRedirect) {
               throw new Error("MCP OAuth redirect URI is not allowed");
             }
-            return await mcpOAuth.begin({
-              ...input,
-              spaceId: context.actor.spaceId,
-              userId: context.actor.userId,
-            });
+            return await integrations.beginAuthorization(context.actor, input);
           } catch (error) {
             throw new ORPCError("BAD_REQUEST", {
               message: error instanceof Error ? error.message : "Could not start MCP OAuth",
@@ -4863,6 +5010,12 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     artifacts: {
+      uploaded: authed.artifacts.uploaded.handler(({ context, input }) =>
+        listUploadedFiles(deps.prisma, context.actor, input.cursor),
+      ),
+      deleteUploaded: authed.artifacts.deleteUploaded.handler(({ context, input }) =>
+        deleteUploadedFile(deps, context.actor, input.artifactId),
+      ),
       list: authed.artifacts.list.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
         const rows = await deps.prisma.artifact.findMany({
@@ -4964,56 +5117,19 @@ export function createRouter(deps: RouterDeps) {
         comparisons.export(context.actor, input.id),
       ),
       bot: authed.export.bot.handler(async ({ context, input }) => {
-        const bot = await repos.getBot(context.actor, input.botId);
-        if (!bot.thread || !bot.computer) throw new IsolationError();
-        const homeKey = bot.computer.homeKey;
-        const exportContext = {
-          operationId: "export",
-          traceId: "export",
-          spaceId: context.actor.spaceId,
-          userId: context.actor.userId,
-          signal: new AbortController().signal,
-        };
-        const [memory, routines, files, history] = await Promise.all([
-          deps.memory.read({ scope: "bot", botId: input.botId }, exportContext),
-          deps.prisma.routine.findMany({
-            where: { botId: input.botId, spaceId: context.actor.spaceId },
-          }),
-          (async () => {
-            const exported: Array<{ path: string; content: string }> = [];
-            for await (const file of deps.home.exportHome(homeKey, exportContext)) {
-              exported.push({
-                path: file.path,
-                content: new TextDecoder().decode(file.content),
-              });
-            }
-            return exported;
-          })(),
-          loadAllMessages(deps.prisma, bot.thread.id, EXPORT_MESSAGE_PAGE_SIZE),
-        ]);
-        return {
-          version: 1 as const,
-          learning: await learning.exportLearning(context.actor, input.botId),
-          exportedAt: new Date().toISOString(),
-          bot: {
-            name: bot.name,
-            title: bot.title,
-            description: bot.description,
-            instructions: bot.instructions,
-          },
-          memory: memory.documents.map((m) => ({ path: m.path, content: m.content })),
-          routines: routines.map((r) => ({
-            name: r.name,
-            prompt: r.prompt,
-            crons: r.crons,
-            timezone: r.timezone,
-          })),
-          files,
-          history,
-        };
+        await repos.getBot(context.actor, input.botId);
+        return exportDownload(context.actor, input.botId);
       }),
+      account: authed.export.account.handler(({ context }) => exportDownload(context.actor)),
     },
+
     notifications: {
+      activity: authed.notifications.activity.handler(({ context }) =>
+        notificationActivity(deps.prisma, context.actor),
+      ),
+      capabilities: authed.notifications.capabilities.handler(async ({ context }) => ({
+        dispatchPush: Boolean(await loadPushToken(deps.dataDir, context.actor.userId)),
+      })),
       registerPush: authed.notifications.registerPush.handler(async ({ context, input }) => {
         await savePushToken(deps.dataDir, context.actor.userId, input.token);
         return { ok: true as const };
@@ -5425,7 +5541,11 @@ async function loadAutoReviewSettings(deps: RouterDeps, actor: Actor) {
   ]);
   const enabled = preference?.enabled ?? deploymentAutoReviewDefault(process.env);
   const checkerAvailable = environmentAvailable || Boolean(credential);
-  return { enabled, checkerAvailable };
+  return {
+    enabled,
+    checkerAvailable,
+    configurationWarning: autoReviewConfigurationWarning(process.env),
+  };
 }
 
 async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
@@ -5507,6 +5627,7 @@ async function runComputerReplace(
   const manualRunId = `${mode}:${randomUUID()}`;
   let lease: ComputerExecutionLease | null;
   try {
+    await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
     lease = await acquireComputerExecutionLease(deps.prisma, {
       computerId: bot.computer.id,
       runId: manualRunId,

@@ -1306,7 +1306,9 @@ describe("sendThreadMessage", () => {
       steeringMessage: { create: vi.fn() },
       event: { create: vi.fn().mockResolvedValue({ seq: 2, threadId: "thread-1" }) },
       task: { create: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      space: { findUnique: vi.fn().mockResolvedValue(null) },
       chatGroup: {
+        findUnique: vi.fn().mockResolvedValue(null),
         findFirst: vi.fn().mockResolvedValue({
           id: "group-1",
           members: [
@@ -2009,6 +2011,7 @@ describe("sendThreadMessage", () => {
         }),
       },
       run: {
+        findFirst: vi.fn().mockResolvedValue(null),
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
         create: vi
@@ -2020,7 +2023,9 @@ describe("sendThreadMessage", () => {
         create: vi.fn().mockResolvedValue({ id: "event-1", seq: 1, createdAt: new Date() }),
       },
       steeringMessage: { create: vi.fn() },
+      space: { findUnique: vi.fn().mockResolvedValue(null) },
       chatGroup: {
+        findUnique: vi.fn().mockResolvedValue(null),
         findFirst: vi.fn().mockResolvedValue({
           id: "group-1",
           members: [

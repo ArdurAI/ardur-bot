@@ -47,6 +47,7 @@ async function fixture() {
     spaceMember: { findUnique: async () => ({ role: "owner" }) },
     user: { findUnique: async () => ({ name: "Fixture member" }) },
     bot: { findMany: async () => [] },
+    chatGroup: { findMany: async () => [] },
     spaceMemoryConfig: {
       findUnique: async () => current.value,
       upsert: vi.fn(

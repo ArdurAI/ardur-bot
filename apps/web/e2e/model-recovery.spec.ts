@@ -292,7 +292,7 @@ test("native runtime settings show unavailable sign-in without replacing the pin
       modelProvider: "anthropic",
       modelId: "claude-opus-5",
       modelCredentialId: "native:claude-code",
-      thinkingLevel: "low",
+      thinkingLevel: "high",
     }));
     await route.fulfill({ response, json: body });
   });
@@ -302,8 +302,15 @@ test("native runtime settings show unavailable sign-in without replacing the pin
         json: {
           runtimeKind: "claude-code",
           available: false,
+          version: "2.1.281",
           reason: "Not signed in — run `claude` in a terminal once",
-          models: [{ id: "claude-opus-5", label: "Opus 5", efforts: ["low"] }],
+          models: [
+            {
+              id: "claude-opus-5",
+              label: "Opus 5",
+              efforts: ["low", "medium", "high", "xhigh", "max"],
+            },
+          ],
         },
       },
     }),
@@ -324,6 +331,22 @@ test("native runtime settings show unavailable sign-in without replacing the pin
     "claude-opus-5",
   );
   await expect(settings.getByText("Not signed in — run `claude` in a terminal once")).toBeVisible();
+  const effort = settings.getByRole("combobox", { name: "Thinking", exact: true });
+  await expect(effort).toHaveValue("high");
+  await expect(effort.locator("option")).toHaveText([
+    "Choose effort",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]);
+  await expect(
+    page.getByRole("button", {
+      name: "Change model: Claude Code · claude-opus-5 · high · requested",
+      exact: true,
+    }),
+  ).toBeVisible();
   await expect(
     settings.getByRole("switch", { name: "Experimental", exact: true }),
   ).not.toBeChecked();

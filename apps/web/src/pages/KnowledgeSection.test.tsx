@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { SpaceLearningConfigSchema } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -7,7 +8,17 @@ import { expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), get: vi.fn() }));
 vi.mock("../lib/rpc", () => ({
-  rpc: { agentSkills: api, memory: { list: async () => ({ items: [], nextCursor: null }) } },
+  rpc: {
+    agentSkills: api,
+    memory: { list: async () => ({ items: [], nextCursor: null }) },
+    learning: {
+      summary: async () => ({ pendingCount: 0, appliedThisWeek: 0 }),
+      list: async () => ({ reviews: [], proposals: [], pendingCount: 0, appliedThisWeek: 0 }),
+      settings: async () => SpaceLearningConfigSchema.parse({ destination: null }),
+      grants: async () => ({ grants: [], offers: [] }),
+      journey: async () => [],
+    },
+  },
 }));
 vi.mock("../lib/artifact-open", () => ({ downloadArtifactBytes: vi.fn() }));
 vi.mock("@lingui/react/macro", () => {

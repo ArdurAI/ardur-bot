@@ -22,6 +22,7 @@ model AiDataConsent {
 }
 
 model User {
+  preferences UserPreferences?
   aiDataConsents AiDataConsent[]
   id                          String                       @id
   name                        String
@@ -31,6 +32,8 @@ model User {
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
   avatarStyle                 String                       @default("robot")
+  displayName                 String                       @default("")
+  workType                    String                       @default("")
   sessions                    Session[]
   accounts                    Account[]
   members                     Member[]
@@ -45,9 +48,27 @@ model User {
   createdSpaces               Space[]                      @relation("SpaceCreator")
   botSecrets BotSecret[]
   agentSecrets               AgentSecret[]
+  customizationMarketplaces  CustomizationMarketplace[]
+  pluginInstalls             PluginInstall[]
 
   @@unique([email])
   @@map("user")
+}
+
+model UserPreferences {
+  userId String @id @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme String @default("system")
+  chatFont String @default("sans") @map("chat_font")
+  motion String @default("system")
+  responseCompletions Boolean @default(true) @map("response_completions")
+  routines Boolean @default(true)
+  approvalsNeeded Boolean @default(true) @map("approvals_needed")
+  dispatchMessages Boolean @default(true) @map("dispatch_messages")
+  preferredBrowser String @default("builtin") @map("preferred_browser")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("user_preferences")
 }
 
 model Session {
@@ -166,6 +187,18 @@ model Member {
 model Space {
   boardWorkspaces BoardWorkspace[]
   boardCommands BoardCommand[]
+  contextBudgets Json?
+  concurrentRuns Int @default(3)
+  coordinatorBotId String?
+  customizationMarketplaces CustomizationMarketplace[]
+  pluginInstalls PluginInstall[]
+  botInstructions String @default("")
+  botInstructionsAuthorId String?
+  botInstructionsRevision Int @default(0)
+  requireTrustedDevices Boolean @default(false)
+  toolAccessMode String @default("when-needed")
+  connectorSearch Boolean @default(false)
+  inlineVisualizations Boolean @default(true)
   comparisons Comparison[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
@@ -344,6 +377,8 @@ model SpaceVoicePreference {
 }
 
 model Bot {
+  concurrentRuns Int?
+  briefs BotBrief[]
   allowedModelDestinations Json?
   screenGeneration Int @default(0)
   id                String            @id @default(cuid())
@@ -440,6 +475,7 @@ model BotDeletion {
 }
 
 model ChatGroup {
+  coordinatorBotId String?
   id         String            @id @default(cuid())
   spaceId    String
   space      Space             @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -474,6 +510,7 @@ model ChatGroupMember {
 }
 
 model Thread {
+  briefs BotBrief[]
   id                          String     @id @default(cuid())
   spaceId                     String
   space                       Space      @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -581,6 +618,10 @@ model Run {
   boardItemId String?
   boardCloseWhenDone Boolean @default(false)
   boardCommentedAt DateTime?
+  contextSnapshot Json?
+  routingRule String?
+  queueWaitMs Int?
+  accountInstructionContext Json?
   comparisonId String?
   delegationId String? @unique
   delegationRootTaskId String?
@@ -634,10 +675,12 @@ model Run {
   @@unique([spaceId, clientNonce])
   @@index([status, leaseExpiresAt])
   @@index([status, updatedAt, id])
+  @@index([userId, updatedAt, id])
   @@index([botOutcomeReturnedAt, status])
   @@index([boardCommentedAt, status, updatedAt])
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
+  @@index([spaceId, userId, createdAt])
   @@index([spaceId, botId])
   @@index([originDeviceGrantId, status])
   @@index([remoteRootTaskId, status])
@@ -790,6 +833,7 @@ model ScratchpadItem {
 }
 
 model TaughtSkill {
+  enabled   Boolean @default(true)
   id        String    @id @default(cuid())
   spaceId   String
   space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -820,6 +864,11 @@ model TaughtSkill {
 /// The Pi runtime already understands this format; we persist and inject them.
 /// Distinct from TaughtSkill (demo/record playbooks).
 model AgentSkill {
+  enabled     Boolean @default(true)
+  pluginId    String?
+  plugin      PluginInstall? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  componentKind String @default("skill")
+  bundleId String?
   id          String   @id @default(cuid())
   spaceId     String
   space       Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -882,6 +931,7 @@ model CapabilityInstall {
 }
 
 model MemoryDocument {
+  kind String @default("topic")
   id        String           @id @default(cuid())
   spaceId   String
   space     Space            @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -911,6 +961,7 @@ model MemoryDocument {
 }
 
 model MemoryRevision {
+  kind String @default("topic")
   id             String         @id @default(cuid())
   documentId     String
   document       MemoryDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -980,6 +1031,7 @@ model ComputerUpdate {
 }
 
 model Computer {
+  networkEgress Boolean @default(true)
   imageProfile String @default("base")
   connectionId String?
   screenGeneration Int @default(0)
@@ -1052,10 +1104,33 @@ model Artifact {
 
   @@index([spaceId, botId])
   @@index([groupId])
+  @@index([userId, runId, id])
   @@map("artifacts")
 }
 
 model UsageRecord {
+  /// Null on historical/totals-only rows. Never backfill certainty or request identity.
+  requestKey String? @unique
+  requestId String?
+  attemptId String?
+  parentRequestId String?
+  counterEpoch String?
+  counterMode String?
+  lastSequence Int?
+  purpose String @default("legacy")
+  coverage String @default("partial")
+  categoryCoverage Json?
+  inputSemantics String @default("unknown")
+  reasoningSemantics String @default("unknown")
+  logicalInputTokens Int?
+  uncachedInputTokens Int?
+  cacheReadInputTokens Int?
+  cacheWriteInputTokens Int?
+  reportedOutputTokens Int?
+  reasoningTokens Int?
+  /// A snapshot of the admitted pin, not credentials or mutable bot settings.
+  runtimePin Json?
+  observations RequestUsageObservation[]
   delegationId String?
   rootTaskId String?
   requesterBotId String?
@@ -1088,6 +1163,20 @@ model UsageRecord {
   @@index([rootTaskId])
   @@index([delegationId])
   @@map("usage_records")
+}
+
+/// Immutable safe usage receipts, deleted with the owning usage row/space.
+model RequestUsageObservation {
+  id String @id @default(cuid())
+  usageRecordId String
+  usageRecord UsageRecord @relation(fields: [usageRecordId], references: [id], onDelete: Cascade)
+  sequence Int
+  fingerprint String
+  observation Json
+  createdAt DateTime @default(now())
+
+  @@unique([usageRecordId, sequence])
+  @@map("request_usage_observations")
 }
 
 model NotificationPreference {
@@ -1140,6 +1229,12 @@ model Secret {
 }
 
 model McpServer {
+  pluginId      String?
+  plugin        PluginInstall? @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  managedBy     String?
+  managedId     String?
+  placement     String @default("worker")
+  diagnostics   Json @default("{}")
   id            String            @id @default(cuid())
   spaceId       String
   space         Space             @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -1164,6 +1259,12 @@ model McpServer {
   oauthSessions McpOAuthSession[]
   catalogId     String?
   connectionState String          @default("not-connected")
+  consentStartedAt DateTime?
+  lastCheckedAt DateTime?
+  lastSuccessAt DateTime?
+  lastUsedAt DateTime?
+  lastError     String?
+  recentErrors  Json              @default("[]")
   manifest      Json?
   spaceAllowedTools Json          @default("[]")
   spaceToolPolicies Json          @default("{}")
@@ -1171,6 +1272,7 @@ model McpServer {
 
   @@unique([spaceId, userId, slug])
   @@index([spaceId, userId])
+  @@index([enabled, lastCheckedAt])
   @@map("mcp_servers")
 }
 
@@ -1610,6 +1712,7 @@ model PairingThrottle {
   @@map("pairing_throttles")
 }
 model PendingDevicePairing {
+  platform String?
   id String @id @default(cuid())
   challengeHash String @unique
   userId String
@@ -1627,6 +1730,8 @@ model PendingDevicePairing {
   @@map("pending_device_pairings")
 }
 model DeviceGrant {
+  trustedAt DateTime? @default(now())
+  platform String?
   kind String @default("device")
   installationId String?
   provider String?
@@ -1930,6 +2035,9 @@ model Delegation {
 
 // A deployment has one paired host. Only a SHA-256 digest is persisted.
 model HostRegistration {
+  name String @default("Computer")
+  platform String?
+  lastSeenAt DateTime?
   id String @id @default("default")
   userId String
   tokenHash String @unique
@@ -1937,6 +2045,40 @@ model HostRegistration {
   generation String
   createdAt DateTime @default(now())
   @@map("host_registrations")
+}
+
+model CustomizationMarketplace {
+  id        String @id @default(cuid())
+  spaceId   String
+  space     Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  source    String
+  manifest  Json
+  secretId  String
+  createdAt DateTime @default(now())
+  @@unique([spaceId, userId, name])
+  @@map("customization_marketplaces")
+}
+
+model PluginInstall {
+  skills        AgentSkill[]
+  servers       McpServer[]
+  id            String @id @default(cuid())
+  spaceId       String
+  space         Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  marketplaceId String?
+  source        String
+  digest        String
+  state         String @default("installing")
+  summary       Json
+  createdAt     DateTime @default(now())
+  @@unique([spaceId, userId, name])
+  @@map("plugin_installs")
 }
 
 model Comparison {
@@ -2007,4 +2149,29 @@ model BoardCommand {
 
   @@index([expiresAt])
   @@map("board_commands")
+}
+
+model BotBrief {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  botId String
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  threadId String
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  groupKey String
+  pendingRunId String?
+  toolResults String @default("") @db.Text
+  lastMessageSeq Int @default(-1)
+  historyGeneration Int @default(0)
+  rewrittenAt DateTime?
+  attemptedAt DateTime?
+  leaseExpiresAt DateTime?
+  reason String?
+  @@unique([botId, threadId])
+  @@index([pendingRunId, attemptedAt])
+  @@index([botId, leaseExpiresAt])
+  @@index([threadId, leaseExpiresAt])
+  @@index([spaceId, userId, botId])
+  @@map("bot_briefs")
 }

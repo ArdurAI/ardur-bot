@@ -8,6 +8,7 @@ import type {
 
 const payloadSchemas = {
   "board.run": z.object({ requestId: z.string().min(1) }),
+  "briefs.maintain": z.object({ runId: z.string().min(1).optional() }).strict(),
   "learning.curate": z.object({
     spaceId: z.string().min(1).optional(),
     requestedBy: z.string().min(1).optional(),

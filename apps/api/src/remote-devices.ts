@@ -1,6 +1,6 @@
 import type { JobPublisher } from "@ardurbot/adapter-kit";
 import { runContinueJob } from "@ardurbot/adapter-kit";
-import { validateDeviceApproval } from "@ardurbot/adapters";
+import { admitRoutedDispatch as admitDispatch, validateDeviceApproval } from "@ardurbot/adapters";
 import type { Actor, DeviceScope, PairingPayload } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
@@ -13,7 +13,6 @@ import {
 import { effectiveRemoteAuthority } from "@ardurbot/core";
 import type { DeviceGrant, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
-  admitDispatch,
   auditDevice,
   authenticateDevice,
   completeDevicePairing,
@@ -26,6 +25,7 @@ import {
   requestCancel,
   requestDispatchStop,
   requestShortCodePairing,
+  requireDispatchEnabled,
   startDevicePairing,
   verifyDeviceSignature,
 } from "@ardurbot/db";
@@ -159,6 +159,7 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
   };
 }
 const pairInput = z.strictObject({
+  platform: z.enum(["ios", "android", "darwin", "linux", "win32", "web"]).optional(),
   challenge: z.string().min(8).max(128),
   instanceId: z.string().max(128),
   deviceName: z.string().trim().min(1).max(80),
@@ -167,6 +168,8 @@ const pairInput = z.strictObject({
   signature: z.string().min(1).max(256),
 });
 export const DEVICE_READ_PROCEDURES = new Set([
+  "account/get",
+  "account/localDevices",
   "me",
   "bootstrap",
   "spaces/list",
@@ -174,6 +177,11 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "bots/list",
   "groups/list",
   "agentSkills/list",
+  "customizationSkills/list",
+  "connectors/summary",
+  "integrations/list",
+  "mcp/servers/list",
+  "plugins/list",
   "routines/list",
   "threads/head",
   "threads/get",
@@ -186,6 +194,9 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "board/show",
   "comparisons/list",
   "comparisons/get",
+  "briefs/list",
+  "context/settings",
+  "metrics/context",
 ]);
 function publicGrant(grant: DeviceGrant) {
   return {
@@ -311,6 +322,8 @@ export function mountRemoteDevices(
       if (!grant.scopes.includes(scope))
         throw new DeviceRequestError("This action is unavailable from this device.");
     };
+    if (["dispatch", "answer", "team-accept", "default"].includes(input.operation))
+      await requireDispatchEnabled(deps.prisma, grant.spaceId);
     switch (input.operation) {
       case "presence":
         return c.json({ ok: true });

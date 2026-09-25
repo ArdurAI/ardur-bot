@@ -83,6 +83,9 @@ function fixture() {
     status: "pending",
   };
   const tx = {
+    remoteAuthorityPolicy: {
+      findMany: vi.fn(async () => [] as { layer: string; scopes: string[] }[]),
+    },
     deviceApprovalBinding: { findUnique: vi.fn(async () => binding) },
     messagingTaskOrigin: {
       findFirst: vi.fn(async () => ({ taskId: "task", grantId: "grant" })),
@@ -126,7 +129,7 @@ function fixture() {
     jobs: jobs as unknown as JobPublisher,
     events: events as unknown as ThreadEvents,
   });
-  return { tx, dispatch, jobs, events, binding };
+  return { tx, dispatch, jobs, events, binding, ask };
 }
 describe("chat Dispatch actions", () => {
   it("runs nothing for an unpaired group sender", async () => {
@@ -154,6 +157,7 @@ describe("chat Dispatch actions", () => {
         text: expect.stringContaining("untrusted peer content"),
       }),
       expect.objectContaining({ installationId: "installation", channelId: "channel" }),
+      expect.any(Function),
     );
     expect(calls.admit.mock.calls[0]?.[2].text).toContain("&lt;/channel_message&gt;");
     expect(calls.enqueue).not.toHaveBeenCalled(); // Accepted belongs to admission's database transaction.
@@ -187,6 +191,21 @@ describe("chat Dispatch actions", () => {
     expect(f.tx.deviceAuditEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ type: "remote.consequential.blocked" }),
     });
+  });
+  it("retains the complete host command preview while requiring approval on a trusted device", async () => {
+    const f = fixture();
+    calls.route.mockReturnValue({ toolName: "execute_command" });
+    Object.assign(f.ask, {
+      preformatted: true,
+      text: `'gh' 'issue' 'create' '--body' '${"x".repeat(6000)} tail'`,
+      detail: "Identity: fixture-account\nWorking directory: '/workspace'\n[redacted]",
+    });
+    await f.dispatch.notifications(installation);
+    expect(calls.enqueue.mock.calls[0]?.[1].card).toEqual({
+      text: `${f.ask.text}\n${f.ask.detail}\n${CHAT_COPY.stronger}`,
+    });
+    await f.dispatch.consume(installation, { ...event, action: `allow:${f.binding.nonce}` });
+    expect(f.events.answerRunInput).not.toHaveBeenCalled();
   });
   it("reuses the P1 bound validator for a scoped once-only answer", async () => {
     const f = fixture();
@@ -241,4 +260,25 @@ it("does not dispatch ambient group conversation", async () => {
   await f.dispatch.consume(installation, { ...event, private: false, addressed: false });
   expect(calls.admit).not.toHaveBeenCalled();
   expect(calls.enqueue).not.toHaveBeenCalled();
+});
+
+describe("space Dispatch switch", () => {
+  it.each([
+    { text: "Start a task" },
+    { text: "Change the task", replyTo: "message" },
+    { text: "", action: `allow:${"a".repeat(36)}` },
+  ])("blocks channel dispatch, steering and approvals while off: %j", async (request) => {
+    const f = fixture();
+    f.tx.remoteAuthorityPolicy.findMany.mockResolvedValue([
+      { layer: "desktop-dispatch", scopes: [] },
+    ]);
+    await f.dispatch.consume(installation, { ...event, ...request });
+    expect(calls.admit).not.toHaveBeenCalled();
+    expect(f.events.answerRunInput).not.toHaveBeenCalled();
+    expect(f.jobs.enqueue).not.toHaveBeenCalled();
+    expect(calls.enqueue).toHaveBeenCalledWith(
+      f.tx,
+      expect.objectContaining({ card: { text: "Dispatch is off on this computer" } }),
+    );
+  });
 });

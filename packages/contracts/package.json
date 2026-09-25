@@ -9,12 +9,20 @@
       "development": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./desktop-errors": "./src/desktop-errors.js",
     "./device-paths": "./src/device-paths.js",
     "./local-settings": "./src/local-settings.js",
     "./runtime-pins": "./src/runtime-pins.ts",
     "./host-bridge": "./src/host-bridge.ts",
     "./host-environment": "./src/host-environment.js",
-    "./board": "./src/board.ts"
+    "./board": "./src/board.ts",
+    "./host-integrations": "./src/host-integrations.ts",
+    "./customization-catalog": "./src/customization-catalog.json",
+    "./host-registration-identity": "./src/host-registration-identity.js",
+    "./bundles/files": "./src/bundles/files.js",
+    "./bundles/manifest": "./src/bundles/manifest.js",
+    "./bundles/plugins": "./src/bundles/plugins.js",
+    "./bundles/zip": "./src/bundles/zip.js"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",

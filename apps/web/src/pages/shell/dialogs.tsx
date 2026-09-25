@@ -342,9 +342,7 @@ export function DeleteBotDialog({
     <AlertDialog open onOpenChange={closeUnlessBusy(deleting, onCancel)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="break-words">
-            <Trans>Delete {bot.name}?</Trans>
-          </AlertDialogTitle>
+          <AlertDialogTitle className="break-words">{t`Delete ${bot.name}?`}</AlertDialogTitle>
           <AlertDialogDescription>
             <Trans>
               Its conversation, files, and routines will be permanently deleted. Bots it created
@@ -435,9 +433,7 @@ export function DeleteItemDialog({
     <AlertDialog open onOpenChange={closeUnlessBusy(deleting, onCancel)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            <Trans>Delete {item.name}?</Trans>
-          </AlertDialogTitle>
+          <AlertDialogTitle>{t`Delete ${item.name}?`}</AlertDialogTitle>
           <AlertDialogDescription>
             {description ?? <Trans>This cannot be undone.</Trans>}
           </AlertDialogDescription>

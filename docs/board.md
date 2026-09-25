@@ -162,7 +162,7 @@ Russian and Chinese catalog entries; English is the source catalog.
 - `apps/web/src/pages/shell/top-nav.ts` was absent. Board is placed beside Team
   in `Shell.tsx`; if the dashboard stream introduces `registerTopNavItem`, register
   Board at order 30 when combining those changes.
-- Apply `20260924110000_beads_board` through the normal application migration
+- Apply `20260925110000_beads_board` through the normal application migration
   process before opening Board. Generation and offline tests do not prove a live
   deployment has applied the schema.
 

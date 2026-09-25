@@ -20,6 +20,7 @@ afterEach(async () => {
 function handlers(overrides: Partial<BackgroundJobHandlers> = {}): BackgroundJobHandlers {
   return {
     "board.run": vi.fn(async () => undefined),
+    "briefs.maintain": async () => undefined,
     "learning.curate": async () => undefined,
     "learning.review": async () => undefined,
     "memory.git-push": async () => undefined,

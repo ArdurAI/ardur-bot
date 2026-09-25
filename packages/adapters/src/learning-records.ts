@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { MessageBlock, ProposalEvidence } from "@ardurbot/contracts";
+import { AccountInstructionContextSchema } from "@ardurbot/contracts";
 import type { LearningSignalRecords } from "@ardurbot/core";
 import { buildLearningSignals } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
@@ -112,6 +113,8 @@ export async function loadLearningRecords(prisma: PrismaClient, runId: string) {
       },
     });
   const records: LearningSignalRecords = {
+    settingsInstructions: AccountInstructionContextSchema.safeParse(run.accountInstructionContext)
+      .data,
     runId,
     threadId: run.threadId,
     userId: run.userId,

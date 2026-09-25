@@ -147,9 +147,20 @@ it.each([false, true])(
           ]
         : [],
     );
-    await render();
+    const onOpenBotRuntime = vi.fn();
+    await act(async () =>
+      root.render(
+        <ModelSettingsOverlay
+          embedded
+          onClose={() => undefined}
+          onOpenBotRuntime={onOpenBotRuntime}
+        />,
+      ),
+    );
+    await act(async () => button("Open bot settings").click());
+    expect(onOpenBotRuntime).toHaveBeenCalledOnce();
     expect(container.textContent).toContain(
-      "Claude subscriptions are not supported here yet; use an API key.",
+      "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.",
     );
     expect(container.querySelector('label[for="model-api-key"]')?.textContent).toContain("API key");
     expect(container.textContent).not.toContain("Sign in");

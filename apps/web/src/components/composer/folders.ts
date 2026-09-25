@@ -1,11 +1,25 @@
 import type { ArdurBotDesktop } from "@ardurbot/contracts";
+import { DESKTOP_FOLDER_ERRORS } from "@ardurbot/contracts/desktop-errors";
 import type { ComposerMention } from "@ardurbot/core";
+import { knownActionError } from "../../lib/known-action-error";
+
+export function composerFolderError(error: unknown, fallback = "Could not add folder. Try again.") {
+  if (
+    error instanceof Error &&
+    /No handler registered for ['"]desktop\.host\.addRoot['"]/.test(error.message)
+  )
+    return "Restart the desktop app to update it.";
+  return knownActionError(error, DESKTOP_FOLDER_ERRORS, fallback);
+}
 
 export async function pickComposerFolder(
-  host: NonNullable<ArdurBotDesktop["host"]>,
+  host: ArdurBotDesktop["host"],
   dropped?: File,
 ): Promise<ComposerMention | null> {
-  const path = dropped ? await host.addDroppedRoot?.(dropped) : await host.addRoot();
+  if (!host) throw new Error("Folders require this computer.");
+  if (typeof host.addRoot !== "function" || (dropped && typeof host.addDroppedRoot !== "function"))
+    throw new Error("Restart the desktop app to update it.");
+  const path = dropped ? await host.addDroppedRoot!(dropped) : await host.addRoot();
   if (!path) return null;
   return { kind: "folder", id: path, name: path.split(/[\\/]/).filter(Boolean).pop() ?? path };
 }

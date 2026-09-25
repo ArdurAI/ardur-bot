@@ -18,6 +18,8 @@ const grant = {
   scopes: [...ALL_DEVICE_SCOPES],
   defaultBotId: "bot-a",
   revokedAt: null,
+  kind: "device",
+  trustedAt: new Date("2026-09-24T05:00:00Z"),
 } as DeviceGrant;
 function fixture() {
   let receipt: Record<string, unknown> | null = null;
@@ -37,6 +39,7 @@ function fixture() {
   };
   const bot = { id: "bot-a", spaceId: "space", userId: "owner", thread: { id: "thread-a" } };
   const tx = {
+    space: { findUniqueOrThrow: vi.fn(async () => ({ requireTrustedDevices: true })) },
     delegationRoot: { updateMany: vi.fn(async () => ({ count: 0 })) },
     delegation: {
       updateMany: vi.fn(async () => ({ count: 0 })),
@@ -85,7 +88,9 @@ function fixture() {
     instanceIdentity: {
       findUnique: vi.fn(async () => ({ instanceId: "home", scopes: ALL_DEVICE_SCOPES })),
     },
-    remoteAuthorityPolicy: { findMany: vi.fn(async () => []) },
+    remoteAuthorityPolicy: {
+      findMany: vi.fn(async () => [] as { layer: string; scopes: string[] }[]),
+    },
     deviceAuditEvent: { create: vi.fn(async () => ({})) },
     attempt: { updateMany: vi.fn(async () => ({ count: 1 })) },
     dispatchSummary: { upsert: vi.fn(async (_input: unknown) => ({})) },
@@ -101,6 +106,21 @@ function fixture() {
   };
 }
 describe("durable Dispatch admission", () => {
+  it.each([undefined, "task-a"])(
+    "rechecks trust before dispatch or steering (%s)",
+    async (replyToTaskId) => {
+      const f = fixture();
+      const pending = { ...grant, trustedAt: null };
+      f.tx.deviceGrant.findFirst.mockResolvedValue(pending);
+      const input = { clientNonce: "pending-device-nonce", text: "Do this task", replyToTaskId };
+      await expect(admitDispatch(f.db, grant, input)).rejects.toThrow("approve this device");
+      expect(f.tx.task.create).not.toHaveBeenCalled();
+      expect(f.tx.steeringMessage.create).not.toHaveBeenCalled();
+      expect(f.tx.dispatchReceipt.create).not.toHaveBeenCalled();
+      f.tx.deviceGrant.findFirst.mockResolvedValue(grant);
+      await expect(admitDispatch(f.db, grant, input)).resolves.toMatchObject({ state: "accepted" });
+    },
+  );
   it("returns the original task on retry and conflicts when the body changes", async () => {
     const f = fixture();
     const input = { clientNonce: "same-client-nonce", text: "Do this task" };
@@ -299,3 +319,22 @@ it("rechecks revocation before recording a stop request", async () => {
   await expect(requestDispatchStop(f.db, grant, "task-a")).rejects.toThrow("unavailable");
   expect(f.tx.run.updateMany).not.toHaveBeenCalled();
 });
+
+it.each([undefined, "task-a"])(
+  "refuses database admission while Dispatch is off, including steering %s",
+  async (replyToTaskId) => {
+    const f = fixture();
+    f.tx.remoteAuthorityPolicy.findMany.mockResolvedValue([
+      { layer: "desktop-dispatch", scopes: [] },
+    ]);
+    await expect(
+      admitDispatch(f.db, grant, {
+        clientNonce: "off",
+        text: "Work",
+        ...(replyToTaskId ? { replyToTaskId } : {}),
+      }),
+    ).rejects.toThrow("Dispatch is off on this computer");
+    expect(f.tx.task.create).not.toHaveBeenCalled();
+    expect(f.tx.dispatchReceipt.create).not.toHaveBeenCalled();
+  },
+);

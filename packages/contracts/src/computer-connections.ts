@@ -1,6 +1,25 @@
 import { z } from "zod";
 import { ComputerProfileSchema } from "./computer-profiles.js";
 
+export const ComputerEngineUnavailableSchema = z.object({
+  error: z.literal("engine-unavailable"),
+  engine: z.enum(["docker", "podman"]),
+  socket: z
+    .string()
+    .min(1)
+    .max(1024)
+    .regex(/^[^\r\n\0]+$/),
+});
+export class ComputerEngineUnavailableError extends Error {
+  constructor(failure: z.infer<typeof ComputerEngineUnavailableSchema>) {
+    const name = failure.engine === "podman" ? "Podman" : "Docker";
+    const application = failure.engine === "podman" ? "Podman" : "Docker Desktop";
+    super(
+      `${name} is not running or not reachable at ${failure.socket}. Start ${application} and try again.`,
+    );
+  }
+}
+
 const quantity = z.string().regex(/^\d+(?:\.\d+)?(?:m|[KMGT]i?)?$/);
 export const ComputerConnectionSettingsSchema = z.object({
   engine: z.enum(["docker", "podman", "kubernetes"]),
@@ -37,3 +56,9 @@ export const ComputerConfigurationSchema = z.object({
 export function computerCapabilities(kind: string) {
   return { graphical: kind !== "kubernetes", interactiveTerminal: kind === "docker" };
 }
+
+export const ComputerReplacementConfigurationSchema = ComputerConfigurationSchema.omit({
+  botId: true,
+})
+  .partial({ imageProfile: true, connectionId: true })
+  .extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });

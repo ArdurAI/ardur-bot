@@ -17,6 +17,7 @@ import {
   changePassword,
   currentApiBase,
   deleteAccount,
+  isMobileThreadSnapshotEvent,
   loadApiBase,
   MAX_MOBILE_AUTH_RESPONSE_BYTES,
   MAX_MOBILE_RPC_RESPONSE_BYTES,
@@ -60,6 +61,24 @@ afterEach(() => {
 });
 
 describe("mobile API authentication", () => {
+  it.each([
+    "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
+    "This bot may only run locally — change the pin or the space policy",
+  ])("decodes a memory refusal from the real oRPC envelope: %s", async (message) => {
+    paired.loadHome.mockResolvedValue(null);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse(
+          { json: { defined: false, code: "BAD_REQUEST", status: 400, message } },
+          { status: 400 },
+        ),
+      ),
+    );
+    await expect(
+      rpc("memory/propose", { intent: "edit", text: "Use short answers.", requestId: "test" }),
+    ).rejects.toThrow(message);
+  });
   beforeEach(async () => {
     vi.restoreAllMocks();
     vi.mocked(SecureStore.getItemAsync).mockReset();
@@ -1545,6 +1564,34 @@ describe("mobile API authentication", () => {
 });
 
 describe("mobile thread subscription", () => {
+  it("delivers live context through the screen subscription filter", async () => {
+    const payload = {
+      layers: { stable: 100, brief: 20, summary: 0, messages: 10, recall: 0, message: 30 },
+      recallRan: false,
+      recallCalls: 0,
+      cachedTokens: 0,
+      inputTokens: 100,
+      timeToFirstTokenMs: 12,
+      queueWaitMs: 8,
+      routingRule: "last-active-thread",
+    };
+    const event = { type: "run.context", runId: "run-1", seq: 4, payload };
+    let state: MobileSnapshot | null = { ...snapshot(), run: { id: "run-1", status: "running" } };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(`data: ${JSON.stringify({ json: event })}\n\n`)),
+    );
+    await subscribeThread(
+      { botId: "bot-1" },
+      3,
+      (received) => {
+        if (isMobileThreadSnapshotEvent(received)) state = applyMobileThreadEvent(state, received);
+      },
+      new AbortController().signal,
+    );
+    expect(state?.run).toMatchObject({ contextSnapshot: payload });
+    expect(state?.cursor).toBe(4);
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.mocked(SecureStore.getItemAsync).mockReset();
@@ -2022,12 +2069,14 @@ describe("mobile thread event reduction", () => {
     expect(next?.cursor).toBe(11);
   });
 
-  it("preserves ask actions and runId on created messages", () => {
+  it("preserves full approval text, presentation, actions and runId on created messages", () => {
     const initial = snapshot();
     const askBlock = {
       kind: "ask",
-      text: "Review before writing",
-      detail: "title: Result",
+      text: `'gh' 'issue' 'create' '--body' '${"x".repeat(4000)}' '--title' '${"y".repeat(4000)} tail'`,
+      detail: "Identity: fixture-account\nWorking directory: '/workspace'\n[redacted]",
+      preformatted: true,
+      approvalEffectId: "effect",
       status: "pending",
       actions: [
         { id: "allow", label: "Allow once" },
@@ -2119,6 +2168,8 @@ describe("mobile thread event reduction", () => {
       kind: "problem",
       code: "pin-credential-missing",
       pin: {
+        // Runtime pins now include the runtime kind when parsed.
+        runtimeKind: "pi",
         provider: "xai",
         modelId: "grok-4.6",
         effort: "high",

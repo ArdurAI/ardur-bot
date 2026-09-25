@@ -49,3 +49,20 @@ export const SandboxKind = z.enum([
   "fake",
 ]);
 export type SandboxKind = z.infer<typeof SandboxKind>;
+
+export const RunTriggerSchema = z.enum([
+  "user",
+  "routine",
+  "resume",
+  "follow_up",
+  "reaction",
+  "spawn",
+  "skill",
+  "bot_message",
+  "webhook",
+  "messaging",
+  "cloud_agent",
+  "comparison",
+  "comparison-coordinator",
+]);
+export type RunTrigger = z.infer<typeof RunTriggerSchema>;

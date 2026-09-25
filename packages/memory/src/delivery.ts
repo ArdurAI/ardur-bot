@@ -51,7 +51,7 @@ export async function deliverMemory(
     const doc = await s.store.read(id, s.access);
     if (!doc || doc.revision !== revision || doc.delivery.status === "delivered") return null;
     // Typed setting revisions are visible history, never semantic knowledge or prompt instructions.
-    if (doc.path.startsWith("preferences/")) {
+    if (doc.scopeKey.kind === "group" || doc.path.startsWith("preferences/")) {
       await s.store.setDelivery(id, revision, { ...doc.delivery, status: "delivered" }, s.access);
       return null;
     }
@@ -148,6 +148,7 @@ export async function recallDocuments(
       documents: bundle.documents
         .filter(
           (doc) =>
+            doc.revisions.at(-1)!.scopeKey.kind !== "group" &&
             !doc.revisions.at(-1)!.deletedAt &&
             !doc.revisions.at(-1)!.path.startsWith("preferences/"),
         )

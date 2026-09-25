@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ArdurBotDesktop } from "@ardurbot/contracts";
 import type { ComponentProps } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -99,6 +100,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  delete window.ardurbotDesktop;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -147,4 +149,64 @@ it("reveals chat pairing only when requested and shares the device list", async 
   expect(api.channelStart).toHaveBeenCalledWith({ installationId: "installation", botId: "bot" });
   expect(container.textContent).toContain("PAIRTEST1234");
   expect(container.textContent).toContain("private message");
+});
+
+it("hides the listener toggle when the main process rejects existing-instance pairing", async () => {
+  window.ardurbotDesktop = {
+    devices: {
+      state: async () => ({ enabled: false, hints: [], available: false, mode: "existing" }),
+      setEnabled: vi.fn(),
+    },
+  } as unknown as ArdurBotDesktop;
+  await act(async () => root.render(<DevicesSettings owner />));
+  expect(container.querySelector("#lan-listener")).toBeNull();
+  expect(container.textContent).toContain(
+    "Phone pairing needs a home run by this app. Set up This computer to use it.",
+  );
+});
+it("shows the development capability and preserves a known bridge reason", async () => {
+  const setEnabled = vi
+    .fn()
+    .mockRejectedValue(
+      new Error(
+        "Error invoking remote method 'desktop.devices.setEnabled': Error: Connect this Mac to your network first.",
+      ),
+    );
+  window.ardurbotDesktop = {
+    devices: {
+      state: async () => ({ enabled: false, hints: [], available: true, mode: "existing" }),
+      setEnabled,
+    },
+  } as unknown as ArdurBotDesktop;
+  await act(async () => root.render(<DevicesSettings owner />));
+  await act(async () => container.querySelector<HTMLInputElement>("#lan-listener")!.click());
+  expect(setEnabled).toHaveBeenCalledWith(true);
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    "Connect this Mac to your network first.",
+  );
+});
+it("preserves known server reasons but hides unexpected diagnostics", async () => {
+  api.start.mockRejectedValueOnce(new Error("These permissions are unavailable at home."));
+  await act(async () => root.render(<DevicesSettings owner />));
+  await click("Pair device");
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    "These permissions are unavailable at home.",
+  );
+  api.start.mockRejectedValueOnce(new Error("private database diagnostic"));
+  await click("Pair device");
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    "This change could not finish; try again.",
+  );
+});
+
+it("asks for a desktop update when an older bridge cannot report pairing capability", async () => {
+  window.ardurbotDesktop = {
+    devices: {
+      state: async () => ({ enabled: false, hints: [] }),
+      setEnabled: vi.fn(),
+    },
+  } as unknown as ArdurBotDesktop;
+  await act(async () => root.render(<DevicesSettings owner />));
+  expect(container.querySelector("#lan-listener")).toBeNull();
+  expect(container.textContent).toContain("Restart the desktop app to update it.");
 });

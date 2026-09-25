@@ -1,5 +1,9 @@
 import type { JobPublisher, JobWorkerHost } from "@ardurbot/adapter-kit";
-import { ComposioConnector, IntegrationProviderSettings } from "@ardurbot/adapters";
+import {
+  ComposioConnector,
+  createHostClient,
+  IntegrationProviderSettings,
+} from "@ardurbot/adapters";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { createMessagingReceivers } from "./messaging-receivers.js";
 
@@ -109,6 +113,8 @@ async function main() {
     prisma,
     secrets,
     {
+      sandbox,
+      hostMcp: createHostClient(),
       stdioEnabled: process.env.MCP_STDIO_ENABLED === "true",
       allowedCommands: (process.env.MCP_STDIO_ALLOWED_COMMANDS ?? "")
         .split(",")

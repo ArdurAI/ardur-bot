@@ -47,12 +47,14 @@ export function ModelSettingsOverlay({
   embedded = false,
   localOwner = false,
   initialProvider,
+  onOpenBotRuntime,
 }: {
   onClose: () => void;
   /** Render panel body only for the shared Settings shell. */
   embedded?: boolean;
   localOwner?: boolean;
   initialProvider?: string;
+  onOpenBotRuntime?: () => void;
 }) {
   const { t } = useLingui();
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
@@ -413,7 +415,7 @@ export function ModelSettingsOverlay({
         <div className="text-[12.5px] uppercase tracking-[0.08em] text-muted-foreground/80">
           <Trans>Active model</Trans>
         </div>
-        <div className="mt-1 text-[16px] text-foreground">
+        <div className="mt-1 break-all text-[16px] text-foreground">
           {currentEntry?.label ?? me?.defaultModel ?? t`Deployment default`}
         </div>
         <div className="mt-1 text-[13px] text-muted-foreground">
@@ -423,8 +425,8 @@ export function ModelSettingsOverlay({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden px-6 py-6 sm:px-8 md:flex-row">
-        <div className="flex min-h-0 shrink-0 flex-col md:w-[310px]">
+      <div className="flex min-w-0 flex-col gap-6 px-6 py-6 sm:px-8 @min-[44rem]:flex-row">
+        <div className="flex min-w-0 shrink-0 flex-col @min-[44rem]:w-60">
           <div className="mb-3 text-[13.5px] text-muted-foreground">
             <Trans>Providers</Trans>
           </div>
@@ -438,7 +440,7 @@ export function ModelSettingsOverlay({
             placeholder={t`Search providers`}
             className="h-10 rounded-xl px-3.5"
           />
-          <div className="rk-scroll mt-3 max-h-[240px] overflow-y-auto rounded-xl border border-border md:min-h-0 md:max-h-none md:flex-1">
+          <div className="rk-scroll mt-3 max-h-[240px] overflow-y-auto rounded-xl border border-border @min-[44rem]:max-h-96">
             {filteredGroups.length ? (
               filteredGroups.map((group) => {
                 const connected = credentials.some(
@@ -479,7 +481,7 @@ export function ModelSettingsOverlay({
           </div>
         </div>
 
-        <div ref={detailScrollRef} className="rk-scroll min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <div ref={detailScrollRef} className="min-w-0 flex-1">
           {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
           {notice ? <p className="mb-4 text-sm text-success">{notice}</p> : null}
           {hasHiddenModels ? (
@@ -651,13 +653,21 @@ export function ModelSettingsOverlay({
               {!isOpenAiCompatible && selected.billing ? (
                 <p className="mt-2 text-[13px] leading-[1.5] text-muted-foreground">
                   {provider === "anthropic" ? (
-                    <Trans>Claude subscriptions are not supported here yet; use an API key.</Trans>
+                    <Trans>
+                      To use your Claude subscription, choose Runs on → Claude Code in a bot's
+                      settings.
+                    </Trans>
                   ) : (
                     selected.billing
                   )}
                 </p>
               ) : null}
 
+              {provider === "anthropic" && onOpenBotRuntime ? (
+                <Button variant="outline" onClick={onOpenBotRuntime}>
+                  <Trans>Open bot settings</Trans>
+                </Button>
+              ) : null}
               {!isOpenAiCompatible ? (
                 <div className="mt-5 rounded-xl border border-border px-4 py-3">
                   <div className="text-[12.5px] uppercase tracking-[0.08em] text-muted-foreground/80">
@@ -876,7 +886,7 @@ export function ModelSettingsOverlay({
 
   if (embedded) {
     return (
-      <div data-testid="model-settings" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div data-testid="model-settings" className="flex min-w-0 flex-col">
         {body}
       </div>
     );
@@ -891,7 +901,7 @@ export function ModelSettingsOverlay({
     >
       <DialogContent
         showCloseButton={false}
-        className="flex h-[760px] max-h-[calc(100%-2rem)] w-[1080px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl bg-card p-0 sm:max-w-[1080px]"
+        className="@container flex h-[760px] max-h-[calc(100%-2rem)] w-[1080px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-y-auto rounded-2xl bg-card p-0 sm:max-w-[1080px]"
       >
         {body}
       </DialogContent>
