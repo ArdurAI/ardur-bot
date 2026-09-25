@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import type {
   AdapterContext,
   CommandRequest,
@@ -15,7 +14,7 @@ import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerSecretLoader } from "./computer-connections.js";
 import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
-import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { localDesktopSandbox } from "./desktop-sandbox.js";
 import {
   createHostClient,
   RemoteHostSandboxProvider,
@@ -37,7 +36,7 @@ export function createRunSandbox(
     kind === "desktop"
       ? usesHostBridge()
         ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
-        : new DesktopSandboxProvider({ root: opts.dataDir, hostRoots: [homedir()] })
+        : localDesktopSandbox(opts.dataDir)
       : createSandboxProvider(kind, opts);
   const primary =
     opts.prisma && opts.secrets
@@ -51,10 +50,7 @@ export function createRunSandbox(
     primary,
     usesHostBridge()
       ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
-      : new DesktopSandboxProvider({
-          root: opts.dataDir,
-          hostRoots: [homedir()],
-        }),
+      : localDesktopSandbox(opts.dataDir),
     async () => {
       const settings = await opts.prisma!.deploymentSettings.findUnique({
         where: { id: "default" },

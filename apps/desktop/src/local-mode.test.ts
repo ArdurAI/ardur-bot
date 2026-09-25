@@ -90,6 +90,7 @@ describe("local mode start", () => {
       expect(env.WEB_ORIGIN).toBe(`http://127.0.0.1:${port}`);
       expect(env.API_URL).toBe(`http://127.0.0.1:${port}`);
       expect(env.SANDBOX_SUPERVISOR_TOKEN?.length).toBeGreaterThanOrEqual(32);
+      expect(env.ARDURBOT_HOST_ROOTS_FILE).toBe(path.join(root, "host-service", "host-roots.json"));
     }
     expect(port).not.toBe(5432);
     expect(port).not.toBe(5433);
@@ -284,6 +285,93 @@ describe("packaged and unpackaged service launch", () => {
     );
     expect(launch.args[2]).toBe(path.join("/fixture/desktop", "..", "worker", "src", "index.ts"));
     expect(launch.nodePath).toBeUndefined();
+  });
+});
+
+describe("database lifecycle", () => {
+  it("stops Postgres when migration fails and clears the handle", async () => {
+    const root = await userData();
+    let stops = 0;
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        migrate: async () => {
+          throw new Error("migration failed");
+        },
+        postgresFactory: () => ({
+          initialise: async () => undefined,
+          start: async () => undefined,
+          stop: async () => {
+            stops += 1;
+          },
+        }),
+      }),
+    );
+    const state = await controller.start();
+    expect(state.phase).toBe("failed");
+    expect(state.message).toBe("The database stopped.");
+    expect(stops).toBe(1);
+    await controller.stop();
+    expect(stops).toBe(1);
+  });
+
+  it("retries by attaching to a healthy postmaster instead of starting another", async () => {
+    const root = await userData();
+    const databaseDir = path.join(root, "postgres");
+    await mkdir(databaseDir, { recursive: true });
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      path.join(databaseDir, "postmaster.pid"),
+      `4321\n${databaseDir}\n0\n23456\n/tmp\n`,
+    );
+    let starts = 0;
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postmasterAlive: () => true,
+        stopPostmaster: async () => undefined,
+        postgresFactory: () => ({
+          initialise: async () => undefined,
+          start: async () => {
+            starts += 1;
+          },
+          stop: async () => undefined,
+        }),
+      }),
+    );
+    const state = await controller.start();
+    expect(state.phase).toBe("ready");
+    expect(starts).toBe(0);
+  });
+
+  it("does not start Postgres when quit wins before start", async () => {
+    const root = await userData();
+    let starts = 0;
+    let stops = 0;
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => {
+          void controller.stop();
+          return {
+            initialise: async () => undefined,
+            start: async () => {
+              starts += 1;
+            },
+            stop: async () => {
+              stops += 1;
+            },
+          };
+        },
+      }),
+    );
+    await controller.start();
+    expect(starts).toBe(0);
+    expect(stops).toBeGreaterThanOrEqual(1);
+    expect(controller.running()).toBe(false);
   });
 });
 

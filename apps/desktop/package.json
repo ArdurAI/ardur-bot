@@ -7,7 +7,7 @@
   "main": "dist/desktop-loader.mjs",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs && node scripts/bundle-services.mjs",
+    "build": "pnpm --filter @ardurbot/db build:migrate && pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs && node scripts/bundle-services.mjs",
     "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --mac --win --linux",
     "pack:dir": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json",

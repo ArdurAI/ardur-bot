@@ -73,7 +73,12 @@ export class DesktopSandboxProvider implements SandboxProvider {
   readonly boxes = new Map<string, DesktopBox>();
 
   constructor(
-    private readonly opts: { root?: string; hostRoots?: string[]; restricted?: boolean } = {},
+    private readonly opts: {
+      root?: string;
+      hostRoots?: string[];
+      restricted?: boolean;
+      registeredFoldersFile?: string;
+    } = {},
   ) {}
 
   capacity() {
@@ -165,7 +170,10 @@ export class DesktopSandboxProvider implements SandboxProvider {
     const missing: string[] = [];
     for (;;) {
       try {
-        return path.join(await confinedHostCwd(candidate, this.allowedRoots(box.home)), ...missing);
+        return path.join(
+          await confinedHostCwd(candidate, await this.allowedRoots(box.home)),
+          ...missing,
+        );
       } catch (error) {
         const parent = path.dirname(candidate);
         if (this.opts.restricted || !hasErrorCode(error, "ENOENT") || parent === candidate)
@@ -190,7 +198,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
     }
     if (this.opts.restricted && request.cwd?.split(/[/\\]/u).includes(".."))
       throw new Error("Path escapes registered folders.");
-    const roots = this.allowedRoots(box.home);
+    const roots = await this.allowedRoots(box.home);
     const sourceRoots = this.opts.restricted
       ? roots
       : [...roots, ...(await Promise.all(roots.map((root) => realpath(root))))];
@@ -437,8 +445,35 @@ export class DesktopSandboxProvider implements SandboxProvider {
     return box;
   }
 
-  private allowedRoots(home: string) {
-    return [home, ...(this.opts.hostRoots ?? [])];
+  private async allowedRoots(home: string) {
+    const registered = this.opts.registeredFoldersFile
+      ? await readRegisteredFolders(this.opts.registeredFoldersFile)
+      : (this.opts.hostRoots ?? []);
+    return [home, ...registered];
+  }
+}
+
+export function localDesktopSandbox(root?: string, env: NodeJS.ProcessEnv = process.env) {
+  return new DesktopSandboxProvider({
+    root,
+    restricted: true,
+    registeredFoldersFile: env.ARDURBOT_HOST_ROOTS_FILE,
+  });
+}
+
+export async function readRegisteredFolders(file: string | undefined): Promise<string[]> {
+  if (!file) return [];
+  try {
+    const parsed = JSON.parse(await readFile(file, "utf8")) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (entry): entry is string =>
+          typeof entry === "string" && path.isAbsolute(entry) && !entry.includes("\0"),
+      )
+      .slice(0, 32);
+  } catch {
+    return [];
   }
 }
 

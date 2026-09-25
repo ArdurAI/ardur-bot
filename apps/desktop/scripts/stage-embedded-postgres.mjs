@@ -72,6 +72,22 @@ function resolveEmbeddedPostgresRoot(desktopDir, packageName) {
   return packageRoot(createRequire(path.join(wrapperRoot, "package.json")), packageName);
 }
 
+function assertPackageMatches(source, platform, arch) {
+  const manifest = JSON.parse(readFileSync(path.join(source, "package.json"), "utf8"));
+  const expected = embeddedPostgresPackageName(platform, arch);
+  const cpus = Array.isArray(manifest.cpu) ? manifest.cpu : [];
+  const systems = Array.isArray(manifest.os) ? manifest.os : [];
+  if (
+    manifest.name !== expected ||
+    (cpus.length > 0 && !cpus.includes(arch)) ||
+    (systems.length > 0 && !systems.includes(platform))
+  ) {
+    throw new Error(
+      `Refusing to stage ${manifest.name ?? "an unknown package"} for ${platform} ${arch}.`,
+    );
+  }
+}
+
 export async function stageEmbeddedPostgres(options = {}) {
   const platform = options.platform ?? process.platform;
   const arch = options.arch ?? process.arch;
@@ -79,17 +95,38 @@ export async function stageEmbeddedPostgres(options = {}) {
   const plan = stagePlan(platform, arch);
   const source = resolveEmbeddedPostgresRoot(desktopDir, plan.packageName);
   if (!source) throw new Error(`Cannot find ${plan.packageName} to stage beside the desktop app.`);
+  assertPackageMatches(source, platform, arch);
   const destination = path.join(desktopDir, plan.destination);
   await rm(path.join(desktopDir, "build", "postgres-modules"), { recursive: true, force: true });
   await mkdir(path.dirname(destination), { recursive: true });
   await cp(source, destination, { recursive: true, verbatimSymlinks: false });
-  const binaryName = process.platform === "win32" ? "postgres.exe" : "postgres";
+  const binaryName = platform === "win32" ? "postgres.exe" : "postgres";
   const binary = path.join(destination, "native", "bin", binaryName);
   await stat(binary);
   return { ...plan, source, destination, binary };
 }
 
+function cliOptions(argv) {
+  const options = {};
+  for (let index = 2; index < argv.length; index += 1) {
+    const flag = argv[index];
+    if (flag !== "--platform" && flag !== "--arch" && flag !== "--desktop") {
+      throw new Error(`Unknown argument ${flag}.`);
+    }
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`Missing value for ${flag}.`);
+    options[flag.slice(2)] = value;
+    index += 1;
+  }
+  return options;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const staged = await stageEmbeddedPostgres();
+  const options = cliOptions(process.argv);
+  const staged = await stageEmbeddedPostgres({
+    platform: options.platform,
+    arch: options.arch,
+    desktopDir: options.desktop,
+  });
   process.stdout.write(`Staged ${staged.packageName} at ${staged.destination}\n`);
 }

@@ -4,7 +4,7 @@
   const hostPosture = document.getElementById("host-posture");
   if (hostPosture && bridge?.platform === "darwin") {
     hostPosture.textContent =
-      "On this Mac, approvals, folder allowlists, and secret redaction are enforced. Disk, CPU, and time caps are advisory.";
+      "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes.";
   }
 
   const form = document.getElementById("setup");
@@ -32,7 +32,7 @@
     starting: "Starting Ardur Bot…",
     "waiting-healthy": "Almost ready…",
     database: "Starting the database.",
-    migrations: "Applying the database.",
+    migrations: "Preparing the database.",
     services: "Starting services.",
     ready: "Ardur Bot is ready.",
   };

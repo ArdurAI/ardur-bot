@@ -1,4 +1,5 @@
-import { lstat } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { lstat, readFile } from "node:fs/promises";
 import { createRequire, registerHooks } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
@@ -121,5 +122,54 @@ export async function legacyStackEnvExists(userDataDir: string): Promise<boolean
     return info.isFile() || info.isSymbolicLink();
   } catch {
     return false;
+  }
+}
+
+export function pidIsAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A live `postmaster.pid` means a previous process still owns this data directory.
+ * A stale pid is left for the library's `start()`, which Postgres itself clears.
+ */
+export async function livePostmaster(
+  databaseDir: string,
+  alive: (pid: number) => boolean = pidIsAlive,
+): Promise<{ pid: number; port: number } | null> {
+  let text: string;
+  try {
+    text = await readFile(path.join(databaseDir, "postmaster.pid"), "utf8");
+  } catch {
+    return null;
+  }
+  const [pidLine, recordedDir, , portLine] = text.split("\n");
+  const pid = Number(pidLine);
+  const port = Number(portLine);
+  if (!Number.isInteger(pid) || pid <= 0 || !recordedDir) return null;
+  if (path.resolve(recordedDir) !== path.resolve(databaseDir)) return null;
+  if (!alive(pid)) return null;
+  return { pid, port: Number.isInteger(port) && port > 0 ? port : 0 };
+}
+
+export async function stopPostmaster(pid: number): Promise<void> {
+  try {
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
+        shell: false,
+        windowsHide: true,
+        stdio: "ignore",
+      });
+      return;
+    }
+    process.kill(pid, "SIGINT");
+  } catch {
+    return;
   }
 }

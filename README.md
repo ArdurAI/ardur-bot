@@ -83,8 +83,8 @@ Only approve a download you trust from the official release page.
 
 **This computer** starts the app's own database and services. Docker is not required for that
 first launch. You can still connect the client to an existing server. On this computer, approvals,
-folder allowlists, and secret redaction are enforced. Disk, CPU, and time caps are advisory, and
-the app says so. Docker remains available later as an added computer, and Compose remains the way
+folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command
+stops after five minutes. Docker remains available later as an added computer, and Compose remains the way
 to run a server. Unsigned previews use manual downloads for updates on every OS.
 
 After the owner publishes the [Homebrew tap](docs/desktop-release.md#homebrew-tap-handoff):

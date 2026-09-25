@@ -6,7 +6,7 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
 
 Same as the README quick start: `.env` from `.env.example`, Postgres via Compose, `pnpm sandbox:build`, `pnpm dev`, then [http://127.0.0.1:5173](http://127.0.0.1:5173) (or `http://localhost:5173` — both loopback hosts are trusted). Electron during source development: `pnpm --filter @ardurbot/desktop dev` while that stack is up, choosing **Existing instance** with that address.
 
-The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. On this computer, approvals, folder allowlists, and secret redaction are enforced. Disk, CPU, and time caps are advisory, and the setup screen says so. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
+The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
 
 For source development in WSL, keep the checkout and `data` directory in the Linux filesystem (for example, `~/ardurbot`), and run `pnpm dev` as your normal user. The host-run supervisor matches bot container UID/GID to that user. If Docker Desktop container IPs are unreachable, set `SANDBOX_CONTROL_VIA_LOOPBACK=true` in `.env`; this publishes the token-protected control service on a random loopback port. Leave this unset for the Compose-hosted supervisor.
 
@@ -316,8 +316,8 @@ The Electron desktop app is a client of the same API. Docker and E2B still apply
   desktop runtime and protected port routes for concurrent bot desktops. Each bot has its own
   persistent Chrome profile; logins are not shared between bots.
 - **Desktop provider** / **This computer** is what the installed app uses for **This computer**.
-  The API and worker run on that machine. Approvals, folder allowlists, and secret redaction are
-  enforced. Disk, CPU, and time caps are advisory, and the app says so. Do not point a public or
+  The API and worker run on that machine. On this computer, approvals, folder allowlists and secret
+  redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes. Do not point a public or
   shared service at this provider. macOS does not show its own permission dialog for these commands.
   On Windows, stopping the embedded database uses the library's forced process-tree kill; the next
   start uses Postgres crash recovery. Docker stays the default for Compose and for a setup that

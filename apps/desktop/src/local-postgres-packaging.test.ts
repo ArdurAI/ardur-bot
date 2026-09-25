@@ -42,6 +42,18 @@ describe("embedded Postgres packaging", () => {
       "node_modules/embedded-postgres",
     );
     expect(workflow).toContain("stage-embedded-postgres.mjs");
+    expect(workflow).toContain(
+      [
+        "node apps/desktop/scripts/stage-embedded-postgres.mjs --platform ",
+        "{{ matrix.nodePlatform }} --arch ",
+        "{{ matrix.arch }}",
+      ].join("$"),
+    );
+    expect(workflow).toContain("select-supported-architectures.mjs");
+    expect(workflow).toContain("https://pnpm.io/settings#supportedarchitectures");
     expect(workflow).toContain("pnpm install --frozen-lockfile");
+    for (const entry of ["nodePlatform: darwin", "nodePlatform: linux", "nodePlatform: win32"]) {
+      expect(workflow).toContain(entry);
+    }
   });
 });

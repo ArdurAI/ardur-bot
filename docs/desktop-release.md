@@ -119,8 +119,8 @@ builds come later and require an explicit change to this policy.
    **Ardur Bot.app** to **Applications**, eject the DMG, and follow the unsigned-opening steps
    in the [README](../README.md#install-a-desktop-preview). Open it, confirm the version in update
    settings, and complete setup. **This computer** starts the app's own database and services.
-   On this computer, approvals, folder allowlists, and secret redaction are enforced. Disk, CPU,
-   and time caps are advisory, and the setup screen says so. Connecting to an existing server is
+   On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU
+   caps are advisory; a command stops after five minutes. Connecting to an existing server is
    unchanged. On Windows, stopping that database uses the embedded Postgres library's forced
    process-tree kill, and the next start uses Postgres crash recovery. The release job copies only
    that architecture's Postgres binaries into the app before packaging.

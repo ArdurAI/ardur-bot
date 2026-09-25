@@ -2,6 +2,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopLocalStackState } from "@ardurbot/contracts";
+import { HOST_ROOTS_FILE } from "./host-service.js";
 import { writeServiceLog } from "./local-logs.js";
 import {
   DATABASE_NAME,
@@ -9,8 +10,11 @@ import {
   type EmbeddedPostgresOptions,
   FORBIDDEN_PORTS,
   legacyStackEnvExists,
+  livePostmaster,
   POSTGRES_USER,
+  pidIsAlive,
   readPersistedPort,
+  stopPostmaster,
   writePersistedPort,
 } from "./local-postgres.js";
 import { isArdurBotHealth } from "./setup-config.js";
@@ -48,6 +52,8 @@ export interface LocalModeDependencies {
   portAvailable: (port: number) => Promise<boolean>;
   randomHex: (bytes: number) => string;
   now: () => number;
+  postmasterAlive?: (pid: number) => boolean;
+  stopPostmaster?: (pid: number) => Promise<void>;
   onState?: (state: DesktopLocalStackState) => void;
   onFailed?: (message: string) => void;
 }
@@ -136,7 +142,7 @@ export class LocalModeController {
   }
 
   running(): boolean {
-    return !this.stopped && (this.postgres !== undefined || this.inflight !== null);
+    return this.postgres !== undefined || (this.inflight !== null && !this.stopped);
   }
 
   start(): Promise<DesktopLocalStackState> {
@@ -152,12 +158,19 @@ export class LocalModeController {
   }
 
   /** Postgres is not restarted. The window shows one sentence; Retry calls start(). */
-  reportDatabaseDown(): void {
-    if (this.databaseReported || this.stopped) return;
+  reportDatabaseDown(): Promise<void> {
+    if (this.databaseReported || this.stopped) return Promise.resolve();
     this.databaseReported = true;
+    const postgres = this.postgres;
     this.postgres = undefined;
     this.publish("failed", "The database stopped.");
     this.deps.onFailed?.("The database stopped.");
+    return postgres
+      ? postgres.stop().then(
+          () => undefined,
+          () => undefined,
+        )
+      : Promise.resolve();
   }
 
   async stop(): Promise<void> {
@@ -175,8 +188,10 @@ export class LocalModeController {
     try {
       this.publish("database", null);
       await this.ensurePostgres();
+      if (this.stopped) return this.current;
       this.publish("migrations", null);
       await this.deps.migrate(this.databaseUrl);
+      if (this.stopped) return this.current;
       this.publish("services", null);
       if (!this.children.has("api")) this.spawn("api");
       if (!this.children.has("worker")) this.spawn("worker");
@@ -193,7 +208,7 @@ export class LocalModeController {
       this.publish("ready", null);
       return this.current;
     } catch {
-      if (!this.databaseReported) this.reportDatabaseDown();
+      if (!this.stopped && !this.databaseReported) await this.reportDatabaseDown();
       return this.current;
     }
   }
@@ -209,6 +224,17 @@ export class LocalModeController {
     await mkdir(databaseDir, { recursive: true, mode: 0o700 });
     await mkdir(path.join(this.deps.userDataDir, "data"), { recursive: true, mode: 0o700 });
     await mkdir(path.join(this.deps.userDataDir, "logs"), { recursive: true, mode: 0o700 });
+    const live = await livePostmaster(databaseDir, this.deps.postmasterAlive ?? pidIsAlive);
+    if (live) {
+      if (live.port >= 1024 && live.port !== this.postgresPort && !FORBIDDEN_PORTS.has(live.port)) {
+        this.postgresPort = live.port;
+        await writePersistedPort(path.join(this.deps.userDataDir, "postgres.port"), live.port);
+      }
+      this.databaseUrl = databaseUrl(secrets.POSTGRES_PASSWORD, this.postgresPort);
+      this.postgres = attachedPostgres(live.pid, this.deps.stopPostmaster ?? stopPostmaster);
+      if (this.stopped) await this.releaseDatabase();
+      return;
+    }
     const postgres = this.deps.postgresFactory({
       databaseDir,
       port: this.postgresPort,
@@ -226,12 +252,32 @@ export class LocalModeController {
       },
     });
     this.postgres = postgres;
-    try {
-      await stat(path.join(databaseDir, "PG_VERSION"));
-    } catch {
-      await postgres.initialise();
+    if (this.stopped) {
+      await this.releaseDatabase();
+      return;
     }
-    await postgres.start();
+    try {
+      try {
+        await stat(path.join(databaseDir, "PG_VERSION"));
+      } catch {
+        await postgres.initialise();
+      }
+      if (this.stopped) {
+        await this.releaseDatabase();
+        return;
+      }
+      await postgres.start();
+    } catch {
+      await this.releaseDatabase();
+      throw new Error("The database stopped.");
+    }
+    if (this.stopped) await this.releaseDatabase();
+  }
+
+  private async releaseDatabase(): Promise<void> {
+    const postgres = this.postgres;
+    this.postgres = undefined;
+    if (postgres) await postgres.stop().catch(() => undefined);
   }
 
   private spawn(service: ServiceName): void {
@@ -249,6 +295,7 @@ export class LocalModeController {
       origin: this.originUrl,
       apiPort: this.apiPort,
       secrets: this.secrets,
+      userDataDir: this.deps.userDataDir,
     });
     if (launch.nodePath) env.NODE_PATH = launch.nodePath;
     const child = this.deps.spawn(launch.command, launch.args, {
@@ -380,6 +427,14 @@ export class LocalModeController {
   }
 }
 
+function attachedPostgres(pid: number, stop: (pid: number) => Promise<void>): EmbeddedPostgresLike {
+  return {
+    initialise: async () => undefined,
+    start: async () => undefined,
+    stop: () => stop(pid),
+  };
+}
+
 function idleState(): DesktopLocalStackState {
   return { phase: "idle", message: null, output: [], layerBytes: {}, imageTag: "" };
 }
@@ -411,6 +466,7 @@ function serviceEnvironment(
     origin: string;
     apiPort: number;
     secrets: Record<SecretKey, string>;
+    userDataDir: string;
   },
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
@@ -419,6 +475,7 @@ function serviceEnvironment(
     DATABASE_URL: settings.databaseUrl,
     DATA_DIR: settings.dataDir,
     SANDBOX_PROVIDER: "desktop",
+    ARDURBOT_HOST_ROOTS_FILE: path.join(settings.userDataDir, "host-service", HOST_ROOTS_FILE),
     BETTER_AUTH_SECRET: settings.secrets.BETTER_AUTH_SECRET,
     ENCRYPTION_KEY: settings.secrets.ENCRYPTION_KEY,
     SCREEN_PROXY_SECRET: settings.secrets.SCREEN_PROXY_SECRET,

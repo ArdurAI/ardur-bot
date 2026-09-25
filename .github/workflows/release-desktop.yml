@@ -58,11 +58,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-15, platform: mac, arch: arm64 }
-          - { os: macos-15, platform: mac, arch: x64 }
-          - { os: ubuntu-24.04, platform: linux, arch: x64 }
-          - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, optional: true }
-          - { os: windows-2022, platform: win, arch: x64 }
+          - { os: macos-15, platform: mac, arch: arm64, nodePlatform: darwin }
+          - { os: macos-15, platform: mac, arch: x64, nodePlatform: darwin }
+          - { os: ubuntu-24.04, platform: linux, arch: x64, nodePlatform: linux }
+          - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, optional: true, nodePlatform: linux }
+          - { os: windows-2022, platform: win, arch: x64, nodePlatform: win32 }
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       # Signing discovery is disabled; mac.notarize=false explicitly skips notarization.
@@ -76,6 +76,11 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+      - name: Install optional packages for this architecture
+        # pnpm 9 reads pnpm.supportedArchitectures from the root package.json, including
+        # an architecture that is not the runner's. The macOS x64 job runs on arm64.
+        # https://pnpm.io/settings#supportedarchitectures
+        run: node apps/desktop/scripts/select-supported-architectures.mjs --os ${{ matrix.nodePlatform }} --cpu ${{ matrix.arch }}
       - run: pnpm install --frozen-lockfile
       - name: Generate the Prisma client
         run: pnpm db:generate
@@ -87,7 +92,7 @@ jobs:
       # macro is win32, while the package is @embedded-postgres/windows-x64, so the
       # copy is explicit. https://www.electron.build/file-patterns
       - name: Stage embedded Postgres for this architecture
-        run: node apps/desktop/scripts/stage-embedded-postgres.mjs
+        run: node apps/desktop/scripts/stage-embedded-postgres.mjs --platform ${{ matrix.nodePlatform }} --arch ${{ matrix.arch }}
       - name: Package without signing or publishing
         run: pnpm --filter @ardurbot/desktop exec electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
       - name: Report unavailable optional ARM Linux toolchain
