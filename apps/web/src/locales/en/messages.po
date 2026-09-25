@@ -1004,7 +1004,6 @@ msgstr "Bot: {0}"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/ide/dialogs.tsx
-#: src/pages/ide/IdePage.tsx
 #: src/pages/shell/OpenToSetting.tsx
 #: src/pages/shell/top-nav.ts
 msgid "Bots"
@@ -3446,6 +3445,7 @@ msgid "I’m done"
 msgstr "I’m done"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/ide-nav.ts
 msgid "IDE"
 msgstr "IDE"
 
@@ -4852,6 +4852,7 @@ msgstr "Open the desktop app to check this computer."
 msgid "Open the desktop app to manage extensions."
 msgstr "Open the desktop app to manage extensions."
 
+#: src/pages/settings-sections.ts
 #: src/pages/shell/OpenToSetting.tsx
 msgid "Open to"
 msgstr "Open to"

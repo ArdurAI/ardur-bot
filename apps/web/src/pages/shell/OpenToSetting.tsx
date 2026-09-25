@@ -1,15 +1,13 @@
-import { Field, FieldLabel, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
+import { NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { SettingsRow } from "../../components/SettingsRow";
 import { useOpenTo, writeOpenTo } from "./open-to";
 
 export function OpenToSetting() {
   const { t } = useLingui();
   const value = useOpenTo();
   return (
-    <Field className="rounded-xl border border-border px-4 py-4">
-      <FieldLabel htmlFor="open-to">
-        <Trans>Open to</Trans>
-      </FieldLabel>
+    <SettingsRow label={t`Open to`}>
       <NativeSelect
         id="open-to"
         aria-label={t`Open to`}
@@ -23,6 +21,6 @@ export function OpenToSetting() {
           <Trans>Bots</Trans>
         </NativeSelectOption>
       </NativeSelect>
-    </Field>
+    </SettingsRow>
   );
 }

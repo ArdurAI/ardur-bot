@@ -16,7 +16,6 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
 } from "./computer-connections.js";
-import { dashboardContract, RoutineOverviewSchema, UsageSummarySchema } from "./dashboard.js";
 import {
   BriefSchema,
   ConcurrentRunsSchema,
@@ -25,6 +24,7 @@ import {
   ContextSettingsSchema,
 } from "./context.js";
 import { customizationContract } from "./customization.js";
+import { dashboardContract, RoutineOverviewSchema, UsageSummarySchema } from "./dashboard.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
 import {

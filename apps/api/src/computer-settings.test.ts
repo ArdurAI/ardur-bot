@@ -6,8 +6,8 @@ import {
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
-  listComputerConnections,
   computerEngineInfo,
+  listComputerConnections,
   saveComputerConnection,
   validateComputerConfiguration,
 } from "./computer-settings.js";

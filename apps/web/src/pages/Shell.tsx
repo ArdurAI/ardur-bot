@@ -250,7 +250,6 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { SidebarSettings } from "./shell/sidebar-settings";
-import "./shell/board-nav";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
 
@@ -3205,11 +3204,7 @@ export function ShellPage({
                 scope={`${userId}:${bootstrapMe.spaceId}`}
                 spaceId={bootstrapMe.spaceId}
                 openSettings={(section) =>
-                  section === "messaging"
-                    ? setMessagingSettingsOpen(true)
-                    : section === "mcp"
-                      ? setMcpOpen(true)
-                      : openSettings(section)
+                  section === "messaging" ? setMessagingSettingsOpen(true) : openSettings(section)
                 }
               />
             </Suspense>

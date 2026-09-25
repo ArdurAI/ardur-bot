@@ -4,7 +4,6 @@ import { Button, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { rpc } from "../../lib/rpc";
 import { WindowChrome } from "../WindowChrome";
 import { Changes, useChanges } from "./changes";
@@ -223,11 +222,7 @@ export default function IdePage() {
       data-testid="ide-page"
     >
       <header className="app-drag flex h-12 shrink-0 items-center gap-3 border-b border-border px-3">
-        <WindowChrome />
-        <Link
-          to="/app"
-          className="app-no-drag text-sm text-muted-foreground hover:text-foreground"
-        >{t`Bots`}</Link>
+        <WindowChrome navigation />
         <h1 className="text-sm font-medium">{t`IDE`}</h1>
         <div className="app-no-drag ml-auto flex gap-1">
           <Button

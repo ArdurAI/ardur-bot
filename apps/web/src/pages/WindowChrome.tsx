@@ -1,5 +1,7 @@
 import { desktopBridge, windowChromeKind } from "../lib/desktop";
 import { TopNav } from "./shell/TopNav";
+import "./shell/board-nav";
+import "./shell/ide-nav";
 
 export function WindowChrome({ navigation = false }: { navigation?: boolean }) {
   // Reserve space only for macOS's native inset traffic lights. Windows and Linux

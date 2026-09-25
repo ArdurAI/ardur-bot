@@ -16,6 +16,7 @@ it.each([null, "group"])(
     ]);
     const findThreads = vi.fn(async () => [{ id: "coordinator-thread", groupId }]);
     const prisma = {
+      userPreferences: { findUnique: vi.fn(async () => null) },
       run: {
         findMany: vi.fn(async () => [
           {

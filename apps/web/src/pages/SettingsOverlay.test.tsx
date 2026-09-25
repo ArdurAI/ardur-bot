@@ -150,6 +150,21 @@ it("saves theme, font and motion through RPC and applies their attributes", asyn
     expect(document.documentElement.dataset[attribute!]).toBe(value);
   }
 });
+it("finds Open to in General and saves it only on this device", async () => {
+  const container = await render();
+  await changeInput(container.querySelector<HTMLInputElement>('input[type="search"]')!, "open to");
+  expect(container.querySelector('[data-testid="settings-nav-general"]')).not.toBeNull();
+  const row = container.querySelector<HTMLElement>('[data-settings-row="Open to"]')!;
+  expect(row.hidden).toBe(false);
+  const select = row.querySelector<HTMLSelectElement>('select[aria-label="Open to"]')!;
+  expect(select.value).toBe("dashboard");
+  await act(async () => {
+    select.value = "bots";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(localStorage.getItem("ardurbot:open-to")).toBe("bots");
+  expect(fake.update).not.toHaveBeenCalled();
+});
 it("hides notification switches with no delivery path", async () => {
   vi.stubGlobal("Notification", undefined);
   const container = await render();

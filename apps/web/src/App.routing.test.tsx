@@ -13,6 +13,10 @@ vi.mock("./lib/auth", () => ({
   },
 }));
 vi.mock("./lib/performance", () => ({ markOnce: () => {}, markAfterPaint: () => {} }));
+vi.mock("./components/PreferencesProvider", () => ({
+  PreferencesProvider: ({ children }: { children: ReactNode }) => children,
+}));
+vi.mock("./pages/system/QuickComposer", () => ({ QuickComposer: () => null }));
 vi.mock("./pages/Shell", () => ({
   ShellPage: ({ dashboard, team }: { dashboard?: boolean; team?: boolean }) => {
     const params = useParams();
