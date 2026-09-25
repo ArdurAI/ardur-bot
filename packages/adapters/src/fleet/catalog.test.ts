@@ -193,6 +193,10 @@ it("lists a local Docker computer separately when Kubernetes is the default and 
     bots: [{ id: "bot", name: "Bot" }],
   });
   expect(kubernetes?.bots).toEqual([]);
+  await expect(catalog.resolveComputer(computer, context)).resolves.toBeInstanceOf(
+    DockerSandboxProvider,
+  );
+  await expect(catalog.resolveTarget(kubernetes!, context)).resolves.toBe(fallback);
   const deps = {
     prisma: prisma as unknown as PrismaClient,
     home: {} as AgentHomeStore,

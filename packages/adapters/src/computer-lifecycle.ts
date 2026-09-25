@@ -665,8 +665,19 @@ export async function replaceComputer(
     imageProfile?: "base" | "developer";
     connectionId?: string | null;
     networkEgress?: boolean;
+    targetId?: string;
+  },
+  routing?: {
+    source: SandboxProvider;
+    target: SandboxProvider;
+    targetId: string;
   },
 ): Promise<ComputerRef> {
+  if (configuration?.targetId && routing?.targetId !== configuration.targetId) {
+    throw new Error("Computer replacement target is unavailable");
+  }
+  const sourceSandbox = routing?.source ?? deps.sandbox;
+  const targetSandbox = routing?.target ?? deps.sandbox;
   let placementRunId: string | undefined;
   if (configuration?.placementRunId) {
     const run = await deps.prisma.run.findFirst({
@@ -798,7 +809,7 @@ export async function replaceComputer(
         await onProgress?.("saving");
         const revision = await checkpointComputerWorkspace(
           deps.home,
-          deps.sandbox,
+          sourceSandbox,
           existing.homeKey,
           oldRef,
           context,
@@ -816,9 +827,9 @@ export async function replaceComputer(
     }
     await onProgress?.("recreating");
     if (oldRef) {
-      await deps.sandbox.releaseScreen?.(oldRef, context).catch(() => undefined);
+      await sourceSandbox.releaseScreen?.(oldRef, context).catch(() => undefined);
       try {
-        await deps.sandbox.destroy(oldRef, context);
+        await sourceSandbox.destroy(oldRef, context);
       } catch (error) {
         if (mode !== "recover") throw error;
       }
@@ -856,7 +867,7 @@ export async function replaceComputer(
     });
     if (stopped.count !== 1) throw new ComputerBusyError();
     return provisionComputer(
-      deps,
+      { ...deps, sandbox: targetSandbox },
       computerId,
       context,
       controlHolder,

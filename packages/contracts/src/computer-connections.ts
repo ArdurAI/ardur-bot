@@ -73,4 +73,8 @@ export const ComputerReplacementConfigurationSchema = ComputerConfigurationSchem
   botId: true,
 })
   .partial({ imageProfile: true, connectionId: true })
-  .extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });
+  .extend({
+    networkEgress: z.boolean().optional(),
+    targetId: z.string().max(160).optional(),
+    confirmed: z.literal(true),
+  });

@@ -198,6 +198,7 @@ export async function placeRunComputer(
             imageProfile: computer.imageProfile,
             confirmed: true,
             placementRunId: runId,
+            targetId: decision.targetId,
           },
         },
       });
@@ -245,6 +246,10 @@ export async function placeRunComputer(
   try {
     const moveSignal = AbortSignal.any([signal, abort.signal]);
     moveSignal.throwIfAborted();
+    const [sourceSandbox, targetSandbox] = await Promise.all([
+      catalog.resolveComputer(computer, context),
+      catalog.resolveTarget(target, context),
+    ]);
     await replaceComputer(
       deps,
       computer.id,
@@ -264,6 +269,12 @@ export async function placeRunComputer(
         imageProfile: computer.imageProfile as "base" | "developer",
         connectionId: decision.connectionId,
         placementRunId: runId,
+        targetId: decision.targetId,
+      },
+      {
+        source: sourceSandbox,
+        target: targetSandbox,
+        targetId: decision.targetId,
       },
     );
     const committed = await deps.prisma.$transaction(async (tx) => {

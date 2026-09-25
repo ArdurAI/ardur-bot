@@ -49,6 +49,20 @@ export class FleetCatalog {
       options.supervisorToken,
     );
   }
+  async resolveComputer(
+    computer: { connectionId?: string | null; kind?: string | null },
+    context: AdapterContext,
+  ): Promise<SandboxProvider> {
+    if (computer.connectionId) return this.connections.resolve(computer.connectionId, context);
+    return computer.kind === "docker" ? this.docker : this.fallback;
+  }
+  async resolveTarget(
+    target: Pick<FleetTarget, "id" | "connectionId">,
+    context: AdapterContext,
+  ): Promise<SandboxProvider> {
+    if (target.connectionId) return this.connections.resolve(target.connectionId, context);
+    return target.id === "docker" ? this.docker : this.fallback;
+  }
   async testDefault(context: AdapterContext) {
     const deployment = await this.prisma.deploymentSettings.findUnique({
       where: { id: "default" },
