@@ -35,7 +35,12 @@ function fixture() {
     },
     boardFollow: { findMany: vi.fn(async () => []) },
     boardWorkspace: { findFirst: vi.fn(async () => workspace) },
-    run: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    run: {
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
   };
   const service = new BoardService({
     prisma: prisma as unknown as PrismaClient,

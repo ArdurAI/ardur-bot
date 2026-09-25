@@ -5,8 +5,16 @@ function isLocalDockerEndpoint(endpoint: string) {
   return endpoint.startsWith("unix://") || /^npipe:\/\/\/\/\.\/pipe\/[\w-]+$/.test(endpoint);
 }
 
+const ownedDatabases = new Set<string>();
+/** In-memory ownership proof; a matching database name alone is not authorization. */
+export function isOwnedReplayDatabase(databaseUrl: string) {
+  return ownedDatabases.has(databaseUrl);
+}
+
 /** Provision once, migrate once, then clone a clean database for every independent trial. */
-export async function provisionReplayPostgres() {
+export async function provisionReplayPostgres(
+  options: { prismaConfig?: string; ownerToken?: string } = {},
+) {
   if (process.env.DOCKER_HOST && !isLocalDockerEndpoint(process.env.DOCKER_HOST))
     throw new Error("Disposable replay requires a local Docker socket");
   // Respect an explicitly supplied endpoint; otherwise follow the installed Docker CLI context.
@@ -20,15 +28,25 @@ export async function provisionReplayPostgres() {
       throw new Error("Select a local disposable Docker endpoint");
     process.env.DOCKER_HOST = endpoint;
   }
-  const container = await new PostgreSqlContainer("postgres:16-alpine")
-    .withDatabase("scoreboard_template")
-    .start();
+  const definition = new PostgreSqlContainer("postgres:16-alpine").withDatabase(
+    "scoreboard_template",
+  );
+  if (options.ownerToken) definition.withLabels({ "ardur.versus.owner": options.ownerToken });
+  const container = await definition.start();
   try {
     const databaseUrl = container.getConnectionUri();
     await new Promise<void>((resolve, reject) => {
       const child = spawn(
         "pnpm",
-        ["--filter", "@ardurbot/db", "exec", "prisma", "migrate", "deploy"],
+        [
+          "--filter",
+          "@ardurbot/db",
+          "exec",
+          "prisma",
+          "migrate",
+          "deploy",
+          ...(options.prismaConfig ? ["--config", options.prismaConfig] : []),
+        ],
         {
           env: { ...process.env, DATABASE_URL: databaseUrl, REALTIME_DATABASE_URL: databaseUrl },
           stdio: "pipe",
@@ -54,6 +72,7 @@ export async function provisionReplayPostgres() {
       );
     });
     let sequence = 0;
+    const issued = new Set<string>();
     const sql = async (statement: string) => {
       const result = await container.exec([
         "psql",
@@ -74,10 +93,21 @@ export async function provisionReplayPostgres() {
         await sql(`CREATE DATABASE "${name}" TEMPLATE "scoreboard_template"`);
         const url = new URL(databaseUrl);
         url.pathname = `/${name}`;
-        return { url: url.toString(), close: () => sql(`DROP DATABASE "${name}" WITH (FORCE)`) };
+        const value = url.toString();
+        ownedDatabases.add(value);
+        issued.add(value);
+        return {
+          url: value,
+          close: async () => {
+            await sql(`DROP DATABASE "${name}" WITH (FORCE)`);
+            ownedDatabases.delete(value);
+            issued.delete(value);
+          },
+        };
       },
       close: async () => {
         await container.stop();
+        for (const url of issued) ownedDatabases.delete(url);
       },
     };
   } catch (error) {

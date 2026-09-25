@@ -62,6 +62,25 @@ export async function runProductionTask(options: {
   sandbox: DepartmentSandbox;
   variant?: TaskVariant;
   createApp: () => Promise<ProductionApp>;
+  model?: { id: string; maxTokens: number; contextWindow: number };
+  control?: {
+    signal?: AbortSignal;
+    preapproveConsent?: boolean;
+    configure?: (handles: ProductionApp, cookie: string, botId: string) => Promise<void>;
+    admitted?: (
+      handles: ProductionApp,
+      cookie: string,
+      botId: string,
+      runId: string,
+    ) => Promise<void>;
+    waiting?: (
+      handles: ProductionApp,
+      cookie: string,
+      botId: string,
+      runId: string,
+    ) => Promise<void>;
+    observed?: (observation: OutcomeObservation) => void | Promise<void>;
+  };
 }) {
   const { task, services, sandbox } = options;
   const database = new URL(options.databaseUrl);
@@ -111,8 +130,11 @@ export async function runProductionTask(options: {
     cookie = sessionCookieHeader(signup);
     await fixtureRpc(handles, cookie, "models/connect", {
       provider: "openai-compatible",
-      modelId: "scoreboard-v1",
+      modelId: options.model?.id ?? "scoreboard-v1",
       baseUrl: options.modelBaseUrl,
+      ...(options.model
+        ? { maxTokens: options.model.maxTokens, contextWindow: options.model.contextWindow }
+        : {}),
     });
     await fixtureRpc(handles, cookie, "capabilities/configure", { toolAccessMode: "all" });
     await fixtureRpc(handles, cookie, "connections/begin", {
@@ -145,10 +167,11 @@ export async function runProductionTask(options: {
     await fixtureRpc(handles, cookie, "bots/update", {
       botId,
       modelProvider: "openai-compatible",
-      modelId: "scoreboard-v1",
+      modelId: options.model?.id ?? "scoreboard-v1",
       thinkingLevel: "off",
     });
     await services.seed(handles.prisma, task, botId);
+    await options.control?.configure?.(handles, cookie, botId);
     const configured = await handles.prisma.bot.findUniqueOrThrow({
       where: { id: botId },
       select: { computer: { select: { id: true, kind: true, scope: true, homeKey: true } } },
@@ -160,22 +183,27 @@ export async function runProductionTask(options: {
       mode: configured.computer.scope,
     };
     // Explicit task consent is represented by an ordinary scoped policy. It never authorizes other tools.
-    if (task.consent.length)
+    if (task.consent.length && options.control?.preapproveConsent !== false)
       await fixtureRpc(handles, cookie, "approvalRules/set", {
         effect: "always_allow",
         matchKind: "tool",
         matchValue: "SCOREBOARD_UPDATE",
         botId,
       });
+    if (options.control?.signal?.aborted) throw new Error("Trial cancelled before admission");
     const started = performance.now();
     const sent = await fixtureRpc<{ runId: string }>(handles, cookie, "threads/send", {
       botId,
       text: `${task.prompt}\nInput files: ${Object.keys(task.files).join(", ")}.`,
     });
     runId = sent.runId;
+    await options.control?.admitted?.(handles, cookie, botId, runId);
     let terminal: OutcomeObservation["terminal"] = "timed-out";
     let productError: string | null = null;
     while (performance.now() - started <= task.deadlineMs) {
+      if (options.control?.signal?.aborted) {
+        await fixtureRpc(handles, cookie, "threads/stop", { botId });
+      }
       const run = await handles.prisma.run.findUniqueOrThrow({
         where: { id: runId },
         select: { status: true },
@@ -185,6 +213,11 @@ export async function runProductionTask(options: {
         break;
       }
       if (run.status === "waiting_input") {
+        if (options.control?.waiting) {
+          await options.control.waiting(handles, cookie, botId, runId);
+          await delay(20);
+          continue;
+        }
         productError = "unexpected-approval-or-question";
         break;
       }
@@ -201,7 +234,13 @@ export async function runProductionTask(options: {
     }
     const run = await handles.prisma.run.findUniqueOrThrow({
       where: { id: runId },
-      select: { runtimePin: true, runtimeComputer: true, leaseFence: true, queueWaitMs: true },
+      select: {
+        status: true,
+        runtimePin: true,
+        runtimeComputer: true,
+        leaseFence: true,
+        queueWaitMs: true,
+      },
     });
     const events = await handles.prisma.event.findMany({
       where: { runId, type: "agent.tool.called" },
@@ -250,7 +289,7 @@ export async function runProductionTask(options: {
       expectedPin: {
         runtime: "pi",
         provider: "openai-compatible",
-        model: "scoreboard-v1",
+        model: options.model?.id ?? "scoreboard-v1",
         effort: "off",
         computer: expectedComputer,
       },
@@ -258,12 +297,14 @@ export async function runProductionTask(options: {
       elapsedMs,
       terminal,
     };
+    await options.control?.observed?.(observation);
     return {
       taskId: task.id,
       department: task.department,
       grade: gradeOutcome(task, observation),
       terminal,
       elapsedMs,
+      persistedStatus: run.status,
       productError,
       queueWaitMs: run.queueWaitMs,
       pinEvidence: observedPin,

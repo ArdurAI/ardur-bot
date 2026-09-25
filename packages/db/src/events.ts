@@ -825,7 +825,14 @@ export async function pauseRunForInput(
   input: PauseRunForInput,
   realtime?: RealtimeFanout,
 ): Promise<boolean> {
-  const committed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+  const committed = await withTransactionRetry(() => pauseRunForInputOnce(prisma, input));
+  if (!committed) return false;
+  await notifyRealtime(realtime, committed.threadId, committed.seq);
+  return true;
+}
+
+async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInput) {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const target = await delegationApprovalTarget(
       tx,
       input.runId,
@@ -918,10 +925,6 @@ export async function pauseRunForInput(
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
     return { threadId: waitingEvent.threadId, seq: waitingEvent.seq };
   });
-
-  if (!committed) return false;
-  await notifyRealtime(realtime, committed.threadId, committed.seq);
-  return true;
 }
 
 export async function pauseRunForTakeover(

@@ -143,6 +143,7 @@ export * from "./routing/dispatch.js";
 export * from "./routing/route.js";
 export * from "./run-secret.js";
 export * from "./runtime-registry.js";
+export { ObservedUsageTotals } from "./runtime-usage.js";
 export * from "./runtimes/codex-connect.js";
 export { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "./runtimes/native-host.js";
 export * from "./sandbox-factory.js";
