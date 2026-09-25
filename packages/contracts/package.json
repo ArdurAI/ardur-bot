@@ -13,6 +13,7 @@
     "./device-paths": "./src/device-paths.js",
     "./local-settings": "./src/local-settings.js",
     "./runtime-pins": "./src/runtime-pins.ts",
+    "./rpc": "./src/rpc.ts",
     "./host-bridge": "./src/host-bridge.ts",
     "./host-environment": "./src/host-environment.js",
     "./board": "./src/board.ts",

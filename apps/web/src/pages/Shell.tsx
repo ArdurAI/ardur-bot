@@ -212,7 +212,6 @@ import { useNotifications } from "../lib/use-notifications";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
-import { Board as ProjectBoard } from "./board/Board";
 import { CompareStart } from "./CompareStart";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
@@ -255,6 +254,9 @@ import { SystemDictation } from "./system/SystemDictation";
 import { TeamBoard } from "./TeamBoard";
 import { WindowChrome } from "./WindowChrome";
 
+const ProjectBoard = lazy(() =>
+  import("./board/Board").then((module) => ({ default: module.Board })),
+);
 const BotContextMenu = lazy(() =>
   import("./BotContextMenu").then((module) => ({ default: module.BotContextMenu })),
 );
@@ -3189,24 +3191,26 @@ export function ShellPage({ team = false, board = false }: { team?: boolean; boa
           inert={mobileSidebarOpen}
           className="flex min-w-0 flex-1 flex-col bg-background"
         >
-          <TaskPage
-            bots={bots}
-            key={bootstrapMe?.spaceId}
-            navigation={
-              <Button
-                variant="ghost"
-                size="icon"
-                className={botsSidebarCollapsed ? "" : "md:hidden"}
-                aria-label={t`Open navigation`}
-                onClick={() => {
-                  setMobileSidebarOpen(window.matchMedia("(max-width: 767px)").matches);
-                  setBotsSidebarCollapsedPref(false);
-                }}
-              >
-                <Menu size={19} />
-              </Button>
-            }
-          />
+          <Suspense fallback={<div className="h-full bg-background" />}>
+            <TaskPage
+              bots={bots}
+              key={bootstrapMe?.spaceId}
+              navigation={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={botsSidebarCollapsed ? "" : "md:hidden"}
+                  aria-label={t`Open navigation`}
+                  onClick={() => {
+                    setMobileSidebarOpen(window.matchMedia("(max-width: 767px)").matches);
+                    setBotsSidebarCollapsedPref(false);
+                  }}
+                >
+                  <Menu size={19} />
+                </Button>
+              }
+            />
+          </Suspense>
         </main>
       ) : null}
       <main
