@@ -1,9 +1,13 @@
 import { execFileSync, spawn } from "node:child_process";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 
+function isLocalDockerEndpoint(endpoint: string) {
+  return endpoint.startsWith("unix://") || /^npipe:\/\/\/\/\.\/pipe\/[\w-]+$/.test(endpoint);
+}
+
 /** Provision once, migrate once, then clone a clean database for every independent trial. */
 export async function provisionReplayPostgres() {
-  if (process.env.DOCKER_HOST && !process.env.DOCKER_HOST.startsWith("unix://"))
+  if (process.env.DOCKER_HOST && !isLocalDockerEndpoint(process.env.DOCKER_HOST))
     throw new Error("Disposable replay requires a local Docker socket");
   // Respect an explicitly supplied endpoint; otherwise follow the installed Docker CLI context.
   if (!process.env.DOCKER_HOST) {
@@ -12,7 +16,7 @@ export async function provisionReplayPostgres() {
       ["context", "inspect", "--format", '{{(index .Endpoints "docker").Host}}'],
       { encoding: "utf8" },
     ).trim();
-    if (!endpoint.startsWith("unix://"))
+    if (!isLocalDockerEndpoint(endpoint))
       throw new Error("Select a local disposable Docker endpoint");
     process.env.DOCKER_HOST = endpoint;
   }
