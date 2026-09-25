@@ -31,6 +31,14 @@ export function sensitiveShellCommand(command: string): boolean {
 }
 
 type Tool = (name: string, args: Record<string, unknown>, executionId: string) => Promise<unknown>;
+
+function commandStopUncertain(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    "uncertain" in error &&
+    (error as { uncertain?: unknown }).uncertain === true
+  );
+}
 type StoredComputer = {
   id: string;
   scope: string;
@@ -200,14 +208,16 @@ export function createCommandRecording(input: {
       entry.block.truncated = retained.includes(COMMAND_TRUNCATED);
       await append("command.finished", { block: entry.block });
       return result;
-    } catch {
+    } catch (error) {
+      const uncertain = commandStopUncertain(error);
       entry.block = {
         ...entry.block,
-        outcome: input.context.signal.aborted ? "cancelled" : "unknown",
-        error: "The command ended without a complete recording.",
+        outcome: uncertain ? "unknown" : input.context.signal.aborted ? "cancelled" : "unknown",
+        error: uncertain ? error.message : "The command ended without a complete recording.",
       };
       // Cancellation may already fence history writes. The last intent still projects unknown.
       await append("command.finished", { block: entry.block }).catch(() => undefined);
+      if (uncertain) throw error;
       throw new Error("The command ended without a complete recording.");
     }
   }

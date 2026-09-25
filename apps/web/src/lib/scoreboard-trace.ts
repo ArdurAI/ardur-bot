@@ -114,13 +114,13 @@ export function receiveTraceEvent(event: ProductEvent) {
     trace.dropped++;
     return;
   }
+  const messageId =
+    typeof event.payload.messageId === "string" ? event.payload.messageId : undefined;
   pending.set(event.runId, {
     traceId: event.runId,
     threadId: event.threadId,
     seq: event.seq,
-    ...(event.type === "thread.message.created" && typeof event.payload.messageId === "string"
-      ? { messageId: event.payload.messageId }
-      : {}),
+    ...(messageId ? { messageId } : {}),
     ...(outcome ? { outcome } : {}),
   });
 }
@@ -243,17 +243,21 @@ export function paintThreadTrace(snapshot: ThreadSnapshot | null): (() => void) 
                 const latest = observation.snapshot;
                 if (pending.threadId !== latest.threadId || pending.seq > latest.cursor) return;
                 if (boundary === "client.text.painted") {
-                  const message = latest.messages.find(
-                    (m) =>
-                      m.runId === id &&
-                      m.role === "bot" &&
-                      (pending.messageId === undefined || m.id === pending.messageId) &&
-                      m.blocks.some(
-                        (b) =>
-                          (b.kind === "text" || (b.kind === "progress" && !b.activity)) &&
-                          b.text.trim().length > 0,
-                      ),
-                  );
+                  const message = latest.messages.find((m) => {
+                    if (m.runId !== id || m.role !== "bot") return false;
+                    // The snapshot cursor already includes this event. Streaming
+                    // progress without a message id matches only a message that
+                    // appeared at or after it, by that message's seq or the cursor.
+                    const appearedAtOrAfter = m.seq >= pending.seq || m.seq >= latest.cursor;
+                    if (pending.messageId !== undefined) {
+                      if (m.id !== pending.messageId) return false;
+                    } else if (!appearedAtOrAfter) return false;
+                    return m.blocks.some(
+                      (b) =>
+                        (b.kind === "text" || (b.kind === "progress" && !b.activity)) &&
+                        b.text.trim().length > 0,
+                    );
+                  });
                   if (
                     !message ||
                     !visible(

@@ -72,11 +72,12 @@ const logger = createRootLogger(SERVICE_NAMES.worker);
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
-  // Shared by Prisma, the reconciliation leadership lock, and both graphile-worker
-  // components (see GraphileJobPublisher/GraphileJobWorkerHost) — one pool instead
-  // of four separate ones. Keep this modest: graphile holds a LISTEN client and
-  // leadership holds an advisory-lock client for the process lifetime, and a
-  // larger max just competes for Postgres max_connections (53300).
+  // Shared by Prisma, graphile-worker, and reconciliation — one pool instead of
+  // separate ones. Keep this modest: graphile holds a LISTEN client, and the
+  // reconciler and messaging receivers each hold an advisory-lock client for the
+  // process lifetime (namespace 1380019075, ids 1 and 2). Board notifications
+  // take a transaction lock (id 3) for one tick and return that client. A larger
+  // max just competes for Postgres max_connections (53300).
   const { prisma, pool } = createDb(databaseUrl, {
     poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 8),
     applicationName: "ardurbot-worker",
@@ -289,8 +290,7 @@ async function main() {
   const boardNotifications = createBoardNotificationDelivery({
     prisma,
     notifications: new ExpoPushProvider(dataDir),
-    // Lock ids in this namespace: 1 = job reconciler, 2 = messaging receivers, 3 = board notifications.
-    leadership: createPostgresReconciliationLeadership(pool, { lockId: 3 }),
+    pool,
   });
   boardNotifications.start();
   const chatReceivers = createMessagingReceivers({
