@@ -2228,6 +2228,8 @@ model BotBoardFiling {
   itemId String?
   botId String?
   learningProposalId String? @unique
+  // Normalized title captured when the reservation is written, so a later claim can match only that item.
+  titleKey String?
   // A learning proposal that matched an existing open item links to it without owning it.
   reused Boolean @default(false)
   closedAt DateTime?

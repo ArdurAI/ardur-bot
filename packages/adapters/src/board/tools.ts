@@ -130,7 +130,10 @@ async function fileUpkeepItem(
     (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
   );
   if (existing) {
-    if (!existing.filedBy && (await service.claimHollowFiling(scope, workspaceId, existing.id)))
+    if (
+      !existing.filedBy &&
+      (await service.claimHollowFiling(scope, workspaceId, existing.id, title))
+    )
       return noteFiling(service, provider, scope, existing);
     const repair = !existing.filedBy && (await service.runFiling(scope, workspaceId, existing.id));
     return {
@@ -139,7 +142,7 @@ async function fileUpkeepItem(
       message: duplicateBoardItemMessage(existing.id),
     };
   }
-  const reserved = await service.reserveBotFiling(scope);
+  const reserved = await service.reserveBotFiling(scope, title);
   if (!reserved.ok) return { error: reserved.message };
   let created: WorkItem | undefined;
   try {

@@ -274,6 +274,45 @@ it("says what happened when a filed board item changed before Undo", async () =>
     "This board item changed after it was filed. Review it on the Board.",
   );
 });
+it("shows the server sentence when Reject leaves a changed board item open", async () => {
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    status: "pending",
+  };
+  const sentence =
+    "This board item changed after it was filed, so it was left open for review on the Board.";
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [board],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  api.reject.mockImplementation(async () => {
+    api.list.mockResolvedValue({
+      reviews: [],
+      proposals: [{ ...board, status: "rejected" }],
+      pendingCount: 0,
+      appliedThisWeek: 0,
+    });
+    return {
+      proposal: { ...board, status: "rejected" },
+      conflict: { before: "", applied: "board-a", current: sentence, expectedRevision: 0 },
+    };
+  });
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  await click("Reject");
+  expect(container.querySelector("article [role=alert]")?.textContent).toContain(sentence);
+  expect(container.textContent).not.toContain(
+    "This board item changed after it was filed. Review it on the Board.",
+  );
+});
 it("disables display-only approval with a sentence and does not fetch evidence until opened", async () => {
   api.list.mockResolvedValue({
     reviews: [],

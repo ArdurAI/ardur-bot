@@ -436,7 +436,23 @@ export class BoardService {
     const deadline = Date.now() + FILING_LOCK_WAIT_MS;
     for (;;) {
       scope.signal?.throwIfAborted();
-      const client = await pool.connect();
+      if (Date.now() >= deadline) throw new BoardError({ code: "busy", message: FILING_BUSY });
+      const connected = await pool.connect().then(
+        (client) => ({ ok: true as const, client }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      if (!connected.ok) {
+        // Waiting does not need a free connection. A full pool rejects the checkout;
+        // that is still "busy" until the deadline.
+        if (!isFilingPoolTimeout(connected.error)) throw connected.error;
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) throw new BoardError({ code: "busy", message: FILING_BUSY });
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(FILING_LOCK_POLL_MS, remaining)),
+        );
+        continue;
+      }
+      const client = connected.client;
       let locked = false;
       let lost = false;
       try {
@@ -463,7 +479,7 @@ export class BoardService {
     }
   }
   /** Checks the caps and inserts the reservation in one short transaction. */
-  async reserveBotFiling(scope: BoardScope) {
+  async reserveBotFiling(scope: BoardScope, titleKey: string) {
     const runId = scope.runId;
     if (!runId) return { ok: false as const, message: RUN_FILING_LIMIT };
     return this.options.prisma.$transaction(async (tx) => {
@@ -474,7 +490,7 @@ export class BoardService {
       if (await this.spaceFilingCapReached(tx, scope.spaceId))
         return { ok: false as const, message: SPACE_FILING_LIMIT };
       const row = await tx.botBoardFiling.create({
-        data: { spaceId: scope.spaceId, runId, botId: scope.botId ?? null },
+        data: { spaceId: scope.spaceId, runId, botId: scope.botId ?? null, titleKey },
       });
       return { ok: true as const, id: row.id };
     });
@@ -517,14 +533,26 @@ export class BoardService {
       getLogger().error("board filing cleanup", settleError);
     }
   }
-  /** This run's reservation that never received an item id. */
-  async claimHollowFiling(scope: BoardScope, workspaceId: string, itemId: string) {
+  /**
+   * This run's reservation for the same normalized title, when it never received an item id.
+   * An item that already has a filing row is left alone so the caller can report a duplicate.
+   */
+  async claimHollowFiling(
+    scope: BoardScope,
+    workspaceId: string,
+    itemId: string,
+    titleKey: string,
+  ) {
     if (!scope.runId) return null;
     const hollow = await this.options.prisma.botBoardFiling.findFirst({
-      where: { spaceId: scope.spaceId, runId: scope.runId, itemId: null },
+      where: { spaceId: scope.spaceId, runId: scope.runId, itemId: null, titleKey },
       orderBy: { createdAt: "desc" },
     });
     if (!hollow) return null;
+    const taken = await this.options.prisma.botBoardFiling.findFirst({
+      where: { workspaceId, itemId },
+    });
+    if (taken) return null;
     await this.recordFilingItem(hollow.id, workspaceId, itemId);
     return hollow;
   }
@@ -569,7 +597,6 @@ export class BoardService {
         workspaceId: own.workspaceId,
       };
     }
-    if (own) await prisma.botBoardFiling.delete({ where: { id: own.id } });
     const workspace = await this.workspace(scope, input.workspaceId);
     const provider = await this.provider(scope, workspace.id);
     const item = {
@@ -581,12 +608,23 @@ export class BoardService {
     const existing = (await provider.list()).find(
       (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
     );
+    if (own && !own.itemId && own.titleKey === title && existing) {
+      const taken = await prisma.botBoardFiling.findFirst({
+        where: { workspaceId: workspace.id, itemId: existing.id },
+      });
+      if (!taken && createdAfterReservation(existing.createdAt, own.createdAt)) {
+        await this.recordFilingItem(own.id, workspace.id, existing.id);
+        return { item: existing, duplicate: false, workspaceId: workspace.id };
+      }
+    }
+    if (own) await prisma.botBoardFiling.delete({ where: { id: own.id } });
     const link = {
       spaceId: scope.spaceId,
       runId: null,
       botId: scope.botId,
       workspaceId: workspace.id,
       learningProposalId: proposalId,
+      titleKey: title,
       reused: false,
     };
     if (existing) {
@@ -655,6 +693,17 @@ export class BoardService {
       })),
     };
   }
+}
+
+function isFilingPoolTimeout(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("timeout exceeded when trying to connect");
+}
+
+/** An item created after the reservation, with no filing row, belongs to that reservation. */
+function createdAfterReservation(itemCreatedAt: string, reservedAt: Date): boolean {
+  const created = new Date(itemCreatedAt).getTime();
+  return !Number.isNaN(created) && created > reservedAt.getTime();
 }
 
 /** A hollow reservation counts only for its first 15 minutes. An attached item always counts. */

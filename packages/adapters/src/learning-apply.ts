@@ -412,7 +412,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     if (!row) throw new IsolationError();
     return row.status;
   }
-  /** Files outside the learning transaction; the filing lock also orders reject and Undo. */
+  /** Files under the space lock, then releases it before the learning save. The save re-checks pending. */
   async function fileBoardItem(
     id: string,
     actor: Identity,
@@ -420,27 +420,27 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     secrets: string[],
   ) {
     const service = deps.boardService!;
-    return service.withFilingLock(actor, async () => {
+    const filed = await service.withFilingLock(actor, async () => {
       if ((await proposalStatus(id, actor)) !== "pending")
         throw new Error("This suggestion is no longer pending.");
-      const filed = await service.fileLearningProposal(
+      return service.fileLearningProposal(
         { ...actor, botId: proposal.scope.botId! },
         proposal.id,
         proposal.boardItem!,
         secrets,
       );
-      return operation(id, actor, async (tx, current, _context, audit) => {
-        if (current.status !== "pending") throw new Error("This suggestion is no longer pending.");
-        current.appliedBoardItem = {
-          workspaceId: filed.workspaceId,
-          itemId: filed.item.id,
-          updatedAt: filed.item.updatedAt,
-          duplicate: filed.duplicate,
-        };
-        current.status = "applied";
-        await audit("approve");
-        return { proposal: await save(tx, current, { appliedAt: new Date() }) };
-      });
+    });
+    return operation(id, actor, async (tx, current, _context, audit) => {
+      if (current.status !== "pending") throw new Error("This suggestion is no longer pending.");
+      current.appliedBoardItem = {
+        workspaceId: filed.workspaceId,
+        itemId: filed.item.id,
+        updatedAt: filed.item.updatedAt,
+        duplicate: filed.duplicate,
+      };
+      current.status = "applied";
+      await audit("approve");
+      return { proposal: await save(tx, current, { appliedAt: new Date() }) };
     });
   }
   /** Closes the filed item only if nobody changed it since approval. */
@@ -458,6 +458,10 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       const undone = item.status === "closed" && item.closeReason === BOARD_UNDO_REASON;
       const changed = !undone && (item.status === "closed" || item.updatedAt !== applied.updatedAt);
       if (!undone && !changed) await provider.close([item.id], BOARD_UNDO_REASON);
+      if (!changed)
+        await deps.prisma.botBoardFiling.deleteMany({
+          where: { spaceId: actor.spaceId, learningProposalId: proposal.id, reused: false },
+        });
       return operation(id, actor, async (tx, current, _context, audit) => {
         if (current.status !== "applied")
           throw new Error("This suggestion has no applied board item to undo.");

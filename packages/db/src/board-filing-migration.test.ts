@@ -32,6 +32,12 @@ it("lets a proposal reuse an item another filing already owns, once per proposal
   expect(reuse).not.toMatch(/\bDROP TABLE\b|\bDELETE FROM\b|\bTRUNCATE\b/);
 });
 
+it("records the normalized title on a filing without rewriting existing rows", () => {
+  const titled = migration("20260925200000_board_filing_title_key");
+  expect(titled).toContain('ADD COLUMN "titleKey" TEXT');
+  expect(titled).not.toMatch(/\bNOT NULL\b|\bDROP TABLE\b|\bDELETE FROM\b|\bTRUNCATE\b/);
+});
+
 it("names every Board migration in the operator checklist", () => {
   const docs = readFileSync(new URL("../../../docs/board.md", import.meta.url), "utf8");
   const named = [...docs.matchAll(/`(\d{14}_[a-z_]+)`/g)].map((match) => match[1]);
@@ -39,6 +45,7 @@ it("names every Board migration in the operator checklist", () => {
     "20260925170000_bot_upkeep",
     "20260925180000_board_filing_outcomes",
     "20260925190000_board_filing_reuse",
+    "20260925200000_board_filing_title_key",
   ])
     expect(named).toContain(name);
   for (const name of named)

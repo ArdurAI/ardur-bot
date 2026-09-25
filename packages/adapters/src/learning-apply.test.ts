@@ -1,5 +1,6 @@
 import type { LearningProposal, RuntimePin } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
+import { observeBoardItems } from "@ardurbot/db";
 import { MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import { memoryDatabaseFake, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
 import { describe, expect, it, vi } from "vitest";
@@ -60,6 +61,12 @@ function table(rows: Row[]) {
     create: vi.fn(async ({ data }: { data: Row }) => {
       const row = { id: `row-${rows.length}`, createdAt: new Date(), ...data };
       rows.push(row);
+      return row;
+    }),
+    delete: vi.fn(async ({ where }: { where: Row }) => {
+      const index = rows.findIndex((row) => matches(row, where));
+      if (index < 0) throw new Error("Missing");
+      const [row] = rows.splice(index, 1);
       return row;
     }),
     update: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
@@ -1189,4 +1196,207 @@ it("undoes an approved category edit without overwriting later category changes"
     kind: "profile",
     content: "Studies plants.",
   });
+});
+
+function panelCounts(rows: Row[]) {
+  const counted = rows.filter((row) => row.botId && row.itemId && row.reused !== true);
+  return {
+    filed: counted.length,
+    done: counted.filter((row) => row.outcome === "completed").length,
+    open: counted.filter((row) => row.outcome == null).length,
+    other: counted.filter((row) => row.outcome === "closed-other").length,
+  };
+}
+
+it("owns the item created after a reservation when recording the id never landed, and reuses an older item", async () => {
+  const f = fixture();
+  const createdAt = new Date(Date.now() + 60_000).toISOString();
+  const created = {
+    id: "board-a",
+    status: "open",
+    createdAt,
+    updatedAt: createdAt,
+    title: "Finish the import follow-up",
+  };
+  const close = vi.fn(async () => [{ ...created, status: "closed" }]);
+  const show = vi.fn(async () => created);
+  let listed = 0;
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => {
+      listed += 1;
+      return listed === 1 ? [] : [created];
+    }),
+    create: vi.fn(async () => created),
+    show,
+    close,
+  } as never);
+  const update = f.db.botBoardFiling.update.getMockImplementation()!;
+  f.db.botBoardFiling.update.mockImplementation(async () => {
+    throw new Error("timeout exceeded when trying to connect");
+  });
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  await expect(apply.approve(proposal.id, actor)).rejects.toThrow(
+    /timeout exceeded when trying to connect/,
+  );
+  expect(f.filings[0]?.itemId ?? null).toBeNull();
+  expect(f.filings[0]?.reused).toBe(false);
+  f.db.botBoardFiling.update.mockImplementation(update);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-a",
+    duplicate: false,
+  });
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", learningProposalId: proposal.id, reused: false }),
+  ]);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+
+  const older = fixture();
+  const previous = {
+    id: "board-b",
+    status: "open",
+    createdAt: "2020-01-01T00:00:00.000Z",
+    updatedAt: "2020-01-01T00:00:00.000Z",
+    title: "Finish the import follow-up",
+  };
+  const olderClose = vi.fn(async () => [{ ...previous, status: "closed" }]);
+  const olderBoard = new BoardService({ prisma: older.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(olderBoard, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(olderBoard, "provider").mockResolvedValue({
+    list: vi.fn(async () => [previous]),
+    create: vi.fn(async () => previous),
+    show: vi.fn(async () => previous),
+    close: olderClose,
+  } as never);
+  const olderApply = createLearningApplyService({ ...older.deps, boardService: olderBoard });
+  const earlier = await older.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  older.filings.push({
+    id: "reservation",
+    ...actor,
+    botId: "bot",
+    workspaceId: null,
+    itemId: null,
+    learningProposalId: earlier.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+    createdAt: new Date(),
+  });
+  const reused = await olderApply.approve(earlier.id, actor);
+  expect(reused.proposal.appliedBoardItem).toMatchObject({ duplicate: true });
+  expect(older.filings.some((row) => row.reused === true && row.itemId === "board-b")).toBe(true);
+  await olderApply.revert(earlier.id, actor);
+  expect(olderClose).not.toHaveBeenCalled();
+});
+
+it("drops an undone filing so the Work panel and Overview do not count it as closed otherwise", async () => {
+  const { f, apply, close, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  expect(f.filings).toHaveLength(1);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  Object.assign(f.deps.prisma, { boardFollow: { findMany: vi.fn(async () => []) } });
+  await observeBoardItems(f.deps.prisma, "workspace", [
+    {
+      id: "board-a",
+      title: "Finish the import follow-up",
+      status: "closed",
+      assignee: null,
+      commentCount: 0,
+      closedAt: "2026-09-25T12:00:00.000Z",
+      closeReason: "Undone from Learning",
+    } as never,
+  ]);
+  expect(panelCounts(f.filings)).toEqual({ filed: 0, done: 0, open: 0, other: 0 });
+});
+
+it("releases the filing lock before the learning save", async () => {
+  const state = { open: 0 };
+  const held = new Map<string, number>();
+  let clients = 0;
+  const pool = {
+    connect: vi.fn(async () => {
+      const id = ++clients;
+      state.open += 1;
+      return {
+        query: vi.fn(async (sql: string, values: unknown[] = []) => {
+          const key = String(values[1]);
+          if (sql.includes("pg_try_advisory_lock")) {
+            if (held.has(key)) return { rows: [{ acquired: false }] };
+            held.set(key, id);
+            return { rows: [{ acquired: true }] };
+          }
+          if (sql.includes("pg_advisory_unlock")) {
+            if (held.get(key) === id) held.delete(key);
+            return { rows: [{ released: true }] };
+          }
+          throw new Error(sql);
+        }),
+        release: vi.fn(() => {
+          state.open -= 1;
+        }),
+      };
+    }),
+  };
+  const f = fixture();
+  const created = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    title: "Finish the import follow-up",
+  };
+  const board = new BoardService({
+    prisma: f.deps.prisma,
+    dataDir: "/fixture",
+    lockPool: pool as never,
+  });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => []),
+    create: vi.fn(async () => created),
+    show: vi.fn(async () => created),
+    close: vi.fn(async () => [{ ...created, status: "closed" }]),
+  } as never);
+  const opens: number[] = [];
+  const original = f.deps.prisma.$transaction.bind(f.deps.prisma);
+  f.deps.prisma.$transaction = (async (fn: (tx: unknown) => Promise<unknown>) => {
+    opens.push(state.open);
+    return original(fn);
+  }) as typeof f.deps.prisma.$transaction;
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  await apply.approve(proposal.id, actor);
+  expect(opens.at(-1)).toBe(0);
+  expect(opens).toContain(1);
 });

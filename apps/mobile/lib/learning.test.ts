@@ -308,6 +308,49 @@ it("says what happened when a filed board item changed before Undo", async () =>
   }
 });
 
+it("shows the server sentence when Reject leaves a changed board item open", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    diff: "+Finish the import follow-up",
+    status: "pending",
+  };
+  const sentence =
+    "This board item changed after it was filed, so it was left open for review on the Board.";
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/journey") return [];
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    if (path === "learning/reject")
+      return {
+        proposal: { ...board, status: "rejected" },
+        conflict: { before: "", applied: "board-a", current: sentence, expectedRevision: 0 },
+      };
+    return { reviews: [], proposals: [board], pendingCount: 1, appliedThisWeek: 0, botNames: {} };
+  });
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    await act(async () =>
+      [...container.querySelectorAll("button")].find((b) => b.textContent === "Reject")!.click(),
+    );
+    expect(container.textContent).toContain(sentence);
+    expect(container.textContent).not.toContain(
+      "This board item changed after it was filed. Review it on the Board.",
+    );
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it("preserves content that resembles a diff header", () => {
   expect(learningBeforeAfter("--- current\n+++ proposed\n--- current\n+++ proposed")).toEqual({
     before: "-- current",

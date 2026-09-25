@@ -246,8 +246,9 @@ for management and Files access. New mobile strings have Russian and Chinese tra
   queue. Very large boards can exceed these limits and return a structured error.
 - The UI and provider add no runtime dependencies or required hosted service.
   Ordinary model costs still apply when work is sent to a bot.
-- Apply the application migrations through `20260925190000_board_filing_reuse`,
-  which follows `20260925170000_bot_upkeep` and `20260925180000_board_filing_outcomes`,
+- Apply the application migrations through `20260925200000_board_filing_title_key`,
+  which follows `20260925170000_bot_upkeep`, `20260925180000_board_filing_outcomes`,
+  and `20260925190000_board_filing_reuse`,
   before opening Board. Generation and offline tests do not prove a live
   deployment has applied the schema.
 

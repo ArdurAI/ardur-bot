@@ -617,6 +617,7 @@ it("files learning proposals through redaction, dedupe and the hourly cap", asyn
       botId: "builder",
       workspaceId: "workspace",
       learningProposalId: "proposal",
+      titleKey: "rotate [redacted]",
       reused: false,
     },
   });
@@ -1195,4 +1196,176 @@ it("ignores hollow reservations older than 15 minutes for both filing caps", asy
     ),
   ).resolves.toMatchObject({ duplicate: false });
   expect(hour.provider.create).toHaveBeenCalledOnce();
+});
+
+/** Two connections, and a checkout past that rejects the way node-pg does when the pool is full. */
+function cappedAdvisoryPool(max: number) {
+  const held = new Map<string, number>();
+  const state = { open: 0, maxOpen: 0, connects: 0, rejected: 0 };
+  let next = 0;
+  const pool = {
+    connect: vi.fn(async () => {
+      if (state.open >= max) {
+        state.rejected += 1;
+        throw new Error("timeout exceeded when trying to connect");
+      }
+      const client = ++next;
+      state.connects += 1;
+      state.open += 1;
+      state.maxOpen = Math.max(state.maxOpen, state.open);
+      return {
+        query: vi.fn(async (sql: string, values: unknown[] = []) => {
+          const key = String(values[1]);
+          if (sql.includes("pg_try_advisory_lock")) {
+            if (held.has(key)) return { rows: [{ acquired: false }] };
+            held.set(key, client);
+            return { rows: [{ acquired: true }] };
+          }
+          if (sql.includes("pg_advisory_unlock")) {
+            if (held.get(key) === client) held.delete(key);
+            return { rows: [{ released: true }] };
+          }
+          throw new Error(`Unexpected query: ${sql}`);
+        }),
+        release: vi.fn(() => {
+          state.open -= 1;
+        }),
+      };
+    }),
+  };
+  return { pool, state };
+}
+
+it("waits when the lock pool is exhausted and reports busy only after the deadline", async () => {
+  vi.useFakeTimers();
+  const blocked = new Map<string, (value: WorkItem) => void>();
+  const release = (title: string) => {
+    const resolve = blocked.get(title);
+    if (!resolve) throw new Error(`No held filing for ${title}`);
+    blocked.delete(title);
+    resolve(item(title));
+  };
+  try {
+    const scenario = async (waiterTitle: string) => {
+      const lock = cappedAdvisoryPool(2);
+      const { board, provider } = service({ lockPool: lock.pool });
+      provider.create.mockImplementation((input?: { title?: string }) => {
+        const name = input?.title ?? "";
+        if (name === waiterTitle) return Promise.resolve(item(name));
+        return new Promise<WorkItem>((resolve) => {
+          blocked.set(name, resolve);
+        });
+      });
+      const file = (id: string, itemTitle: string) =>
+        executeBoardTool(
+          board,
+          { ...scope, spaceId: id, runId: `run-${id}` },
+          "board_create",
+          { workspaceId: "workspace", item: { title: itemTitle } },
+          { upkeep: true },
+        );
+      const heldA = file("space-a", "Hold A");
+      const heldB = file("space-b", "Hold B");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(lock.state).toMatchObject({ open: 2, maxOpen: 2 });
+      const waiting = file("space-c", waiterTitle);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(lock.state.rejected).toBeGreaterThan(0);
+      expect(lock.state.maxOpen).toBe(2);
+      return { lock, heldA, heldB, waiting, provider };
+    };
+
+    const finished = await scenario("Third");
+    release("Hold A");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(finished.lock.state.open).toBe(1);
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(finished.waiting).resolves.toMatchObject({ id: "board-a" });
+    expect(finished.provider.create).toHaveBeenCalledTimes(3);
+    release("Hold B");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const busy = await scenario("Late");
+    const settled = expect(busy.waiting).rejects.toMatchObject({
+      problem: { code: "busy", message: "Another write is in progress" },
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await settled;
+    expect(busy.provider.create).toHaveBeenCalledTimes(2);
+  } finally {
+    for (const resolve of blocked.values()) resolve(item("Released"));
+    await vi.advanceTimersByTimeAsync(0);
+    vi.useRealTimers();
+  }
+});
+
+it("claims a hollow reservation only for its own title and does not take an item that is already filed", async () => {
+  const other = item("Write the notes");
+  other.id = "board-b";
+  const missed = service({ open: [other] });
+  missed.filings.push(
+    filingRow({ id: "hollow", itemId: null, titleKey: "ship the board", createdAt: new Date() }),
+  );
+  const wrong = await executeBoardTool(
+    missed.board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "Write the notes" } },
+    { upkeep: true },
+  );
+  expect(wrong).toMatchObject({
+    duplicate: true,
+    item: { id: "board-b" },
+    message: "An open item already has this title: board-b.",
+  });
+  expect(missed.filings.find((row) => row.id === "hollow")).toMatchObject({
+    itemId: null,
+    titleKey: "ship the board",
+  });
+  expect(missed.provider.create).not.toHaveBeenCalled();
+
+  const owned = item("Ship the board");
+  const taken = service({ open: [owned] });
+  taken.filings.push(filingRow({ id: "hollow", itemId: null, titleKey: "ship the board" }));
+  taken.filings.push(
+    filingRow({
+      id: "owner",
+      runId: null,
+      workspaceId: "workspace",
+      itemId: "board-a",
+      learningProposalId: "proposal",
+      reused: false,
+    }),
+  );
+  const update = taken.prisma.botBoardFiling.update.getMockImplementation()!;
+  taken.prisma.botBoardFiling.update.mockImplementation(async (args) => {
+    const data = args.data as { itemId?: string | null; workspaceId?: string | null };
+    if (data.itemId) {
+      const clash = taken.filings.some(
+        (row) =>
+          row.id !== args.where.id &&
+          row.itemId === data.itemId &&
+          row.reused !== true &&
+          (row.workspaceId ?? data.workspaceId) === (data.workspaceId ?? row.workspaceId),
+      );
+      if (clash)
+        throw new Error("Unique constraint failed on the fields: (`workspaceId`,`itemId`)");
+    }
+    return update(args);
+  });
+  await expect(
+    executeBoardTool(
+      taken.board,
+      scope,
+      "board_create",
+      { workspaceId: "workspace", item: { title: "Ship the board" } },
+      { upkeep: true },
+    ),
+  ).resolves.toMatchObject({
+    duplicate: true,
+    item: { id: "board-a" },
+    message: "An open item already has this title: board-a.",
+  });
+  expect(taken.filings.find((row) => row.id === "hollow")).toMatchObject({ itemId: null });
+  expect(taken.provider.create).not.toHaveBeenCalled();
 });

@@ -346,7 +346,12 @@ function LearningCard({
             <Button
               variant="ghost"
               disabled={busy}
-              onClick={() => void change(() => rpc.learning.reject({ proposalId: proposal.id }))}
+              onClick={() =>
+                void change(async () => {
+                  const result = await rpc.learning.reject({ proposalId: proposal.id });
+                  setConflict(result.conflict ?? null);
+                })
+              }
             >
               <Trans>Reject</Trans>
             </Button>
@@ -538,7 +543,11 @@ function LearningCard({
         <div role="alert" className="mt-3 text-sm">
           {proposal.type === "board-item" ? (
             <p>
-              <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
+              {conflict.current ? (
+                conflict.current
+              ) : (
+                <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
+              )}
             </p>
           ) : (
             <p>

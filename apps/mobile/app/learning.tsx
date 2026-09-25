@@ -237,7 +237,13 @@ export default function Learning() {
                         <Button
                           title={t("Reject")}
                           disabled={busy}
-                          onPress={() => void change(() => learningAction("reject", proposal.id))}
+                          onPress={() =>
+                            void change(async () => {
+                              const result = await learningAction("reject", proposal.id);
+                              setConflict(result.conflict);
+                              setOpen(proposal.id);
+                            })
+                          }
                         />
                       </>
                     ) : proposal.status === "applied" ? (
@@ -349,7 +355,8 @@ export default function Learning() {
                         <View>
                           <Text style={styles.error}>
                             {proposal.type === "board-item"
-                              ? t(
+                              ? conflict.current ||
+                                t(
                                   "This board item changed after it was filed. Review it on the Board.",
                                 )
                               : t(
