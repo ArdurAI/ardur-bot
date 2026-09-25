@@ -92,3 +92,64 @@ it("binds tracked, staged, new and deleted product source plus the lock, without
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("treats a staged deletion of harness source as a dirty build", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "versus-staged-delete-"));
+  const execute = childProcess.execFileSync;
+  const git = (...args: string[]) =>
+    execute(
+      "git",
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture.invalid",
+        ...args,
+      ],
+      { cwd: root, stdio: "pipe", encoding: "utf8" },
+    );
+  try {
+    await mkdir(path.join(root, "packages/testkit/src/versus"), { recursive: true });
+    await writeFile(
+      path.join(root, "packages/testkit/src/versus/fixture.ts"),
+      "export const synthetic = true;\n",
+    );
+    // A sibling keeps the source directory after the staged deletion.
+    await writeFile(
+      path.join(root, "packages/testkit/src/versus/kept.ts"),
+      "export const kept = true;\n",
+    );
+    await writeFile(path.join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    git("init");
+    git("add", ".");
+    git("commit", "-m", "Synthetic baseline");
+    git("commit", "--allow-empty", "-m", "Synthetic head");
+    vi.spyOn(childProcess, "execFileSync").mockImplementation(((
+      file: string,
+      args: string[],
+      options: unknown,
+    ) => {
+      if (file === "git" && args.includes(`${RESEARCH_BASELINE}^{commit}`))
+        return RESEARCH_BASELINE;
+      return execute(file, args, options as never);
+    }) as typeof childProcess.execFileSync);
+    syncBuiltinESMExports();
+    expect((await inspectBuild(root)).build.dirty).toBe(false);
+    git("rm", "packages/testkit/src/versus/fixture.ts");
+    const staged = await inspectBuild(root);
+    expect(staged.build.dirty).toBe(true);
+    expect(staged.build.diffDigest).not.toBeNull();
+    expect(
+      staged.buildArtifact.inventory.find((entry) => entry.file.endsWith("/versus/fixture.ts"))
+        ?.sha256,
+    ).toBeNull();
+  } finally {
+    vi.restoreAllMocks();
+    syncBuiltinESMExports();
+    await rm(root, { recursive: true, force: true });
+  }
+});

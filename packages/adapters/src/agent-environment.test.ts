@@ -30,6 +30,15 @@ describe("agent-environment", () => {
     ).toThrow();
   });
 
+  it("rejects agent environment names that would move the background marker", () => {
+    const load = () => "/moved";
+    for (const name of ["ARDURBOT_BACKGROUND_DIR", "ARDURBOT_HOME"]) {
+      expect(() =>
+        decryptAgentEnvironment([{ name, secret: { id: "sec", ciphertext: "x" } }], { load }),
+      ).toThrow("Agent environment names cannot start with ARDURBOT_.");
+    }
+  });
+
   it("formats an instruction only when secrets exist", () => {
     expect(formatAgentEnvironmentInstruction({})).toBeUndefined();
     expect(formatAgentEnvironmentInstruction({ Z: "1", A: "2" })).toContain("A, Z");

@@ -8,16 +8,21 @@ import type {
   ProcessEvent,
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
-import { teamBotWorkspaceDirectory } from "@ardurbot/adapters";
+import { DELEGATION_WORKSPACE_SCRIPT, teamBotWorkspaceDirectory } from "@ardurbot/adapters";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { TaskContract } from "../../scoreboard/tasks/catalog.js";
 import { requireValue } from "../budget.js";
 import type { TrialAdmission } from "./admission.js";
 import type { ContainerSession } from "./session.js";
 
+const CANCELLED_COMMAND = "Container command cancelled or exceeded output/deadline budget";
+const UNCERTAIN_STOP = "The command's cancellation timed out, so its outcome is uncertain.";
+
 /** A real cached-image computer. Every file and command executes in the same bounded tmpfs/cgroup. */
 export class ContainerComputer implements SandboxProvider {
   private ref: ComputerRef | null = null;
+  /** How long a cancellation may wait before its outcome is uncertain. */
+  cancelWaitMs = 12_000;
   constructor(
     readonly session: ContainerSession,
     private readonly task: TaskContract,
@@ -66,7 +71,7 @@ export class ContainerComputer implements SandboxProvider {
     await this.session.assertReady();
     if (this.ref) return { ...this.ref, fresh: false };
     this.ref = {
-      id: `versus-${this.session.id.slice(0, 20)}`,
+      id: this.session.id,
       botId: request.botId,
       kind: "docker",
       providerRef: this.session.id,
@@ -108,14 +113,46 @@ export class ContainerComputer implements SandboxProvider {
       throw new Error("File size limit");
     return new Uint8Array(options?.preview ? content.subarray(0, options.maxBytes) : content);
   }
-  async listFiles(computer: ComputerRef, directory: string): Promise<ComputerFileEntry[]> {
+  async listFiles(
+    computer: ComputerRef,
+    directory: string,
+    _context?: AdapterContext,
+  ): Promise<ComputerFileEntry[]> {
     this.check(computer);
-    const files = await this.session.snapshot(this.name(directory));
-    return Object.entries(files).map(([file, content]) => ({
-      path: file,
-      kind: "file",
-      size: Buffer.byteLength(content),
-    }));
+    const root = this.name(directory).replace(/\/+$/, "");
+    const relative = root.replace(/^workspace\/?/, "");
+    const value = await this.session.file("list", root);
+    requireValue(Array.isArray(value), "Container listing unavailable");
+    const entries: ComputerFileEntry[] = [];
+    for (const item of value) {
+      requireValue(item && typeof item === "object", "Container listing unavailable");
+      const record = item as Record<string, unknown>;
+      const name = record.name;
+      requireValue(
+        typeof name === "string" &&
+          name.length > 0 &&
+          name !== "." &&
+          name !== ".." &&
+          !name.includes("/") &&
+          !name.includes("\0"),
+        "Container listing unavailable",
+      );
+      requireValue(
+        record.kind === "file" || record.kind === "dir",
+        "Container listing unavailable",
+      );
+      requireValue(
+        typeof record.size === "number" && record.size >= 0,
+        "Container listing unavailable",
+      );
+      entries.push({
+        path: relative ? `${relative}/${name}` : name,
+        kind: record.kind,
+        size: record.kind === "dir" ? 0 : record.size,
+        ...(record.kind === "file" && record.executable === true ? { executable: true } : {}),
+      });
+    }
+    return entries.sort((left, right) => left.path.localeCompare(right.path));
   }
   async *exportWorkspace(computer: ComputerRef): AsyncIterable<PortableFile> {
     this.check(computer);
@@ -147,6 +184,10 @@ export class ContainerComputer implements SandboxProvider {
       yield { type: "exit", code: 0 };
       return;
     }
+    if (this.admission.current()?.name === "workspace-prepare") {
+      yield* this.prepareWorkspace(request);
+      return;
+    }
     this.admission.requireEffect("shell");
     this.admission.descendant("computer-command");
     requireValue(
@@ -156,48 +197,153 @@ export class ContainerComputer implements SandboxProvider {
     const argv = request.argv.map((arg, index) =>
       index === 0 && !arg.startsWith("/") ? `/usr/bin/${arg}` : arg,
     );
-    const child = await this.session.exec(argv, {
-      cwd: `/opt/data/${this.name(request.cwd ?? "")}`,
-    });
+    // The production launcher's login shell sources /etc/profile, which forks. This lane denies fork.
+    const confined = argv.map((arg, index) =>
+      index === 2 ? arg.replaceAll('exec bash -lc "$4"', 'exec bash --noprofile -lc "$4"') : arg,
+    );
+    yield* this.runProduct(confined, request, context);
+  }
+  private async *prepareWorkspace(request: CommandRequest): AsyncIterable<ProcessEvent> {
+    const directory = request.argv[5];
+    requireValue(
+      request.argv.length === 6 &&
+        (request.argv[0] === "bash" || request.argv[0] === "/usr/bin/bash") &&
+        request.argv[1] === "-c" &&
+        request.argv[2] === DELEGATION_WORKSPACE_SCRIPT &&
+        request.argv[3] === "task-workspace" &&
+        typeof request.argv[4] === "string" &&
+        !request.argv[4].includes("\0") &&
+        typeof directory === "string" &&
+        /^tasks\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(directory),
+      "Unadmitted computer command",
+    );
+    await this.session.file("mkdir", this.name(directory));
+    yield { type: "stdout", data: "artifacts" };
+    yield { type: "exit", code: 0 };
+  }
+  private async haltGuest(child: object | null): Promise<"cancelled" | "uncertain"> {
+    const work = (async () => {
+      const signalGuest = this.session.signalGuest;
+      if (child && typeof signalGuest === "function") {
+        try {
+          await signalGuest.call(this.session, child);
+        } catch {
+          // Removing the container stops a guest the signal could not reach.
+        }
+      }
+      await this.session.destroy();
+    })();
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        work,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error("timeout")), this.cancelWaitMs);
+        }),
+      ]);
+      return "cancelled";
+    } catch {
+      void work.catch(() => undefined);
+      return "uncertain";
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  private async *runProduct(
+    argv: string[],
+    request: CommandRequest,
+    context: AdapterContext,
+  ): AsyncIterable<ProcessEvent> {
     let stdout = "",
       stderr = "";
     let bytes = 0,
       stopped = false;
+    let child: {
+      stdout: NodeJS.ReadableStream | null;
+      stderr: NodeJS.ReadableStream | null;
+      once(event: "error", listener: (error: Error) => void): unknown;
+      once(event: "close", listener: (code: number | null) => void): unknown;
+    } | null = null;
     const stdoutDecoder = new StringDecoder("utf8"),
       stderrDecoder = new StringDecoder("utf8");
-    const abort = () => {
-      stopped = true;
-      void this.session.destroy();
+    let haltPromise: Promise<"cancelled" | "uncertain"> | null = null;
+    let notifyStop: (outcome: "cancelled" | "uncertain") => void = () => undefined;
+    const stopResult = new Promise<"cancelled" | "uncertain">((resolve) => {
+      notifyStop = resolve;
+    });
+    const halt = () => {
+      if (!haltPromise) {
+        stopped = true;
+        haltPromise = this.haltGuest(child).then((outcome) => {
+          notifyStop(outcome);
+          return outcome;
+        });
+      }
+      return haltPromise;
     };
-    context.signal.addEventListener("abort", abort, { once: true });
+    const onAbort = () => {
+      void halt();
+    };
+    if (context.signal.aborted) onAbort();
+    else context.signal.addEventListener("abort", onAbort, { once: true });
     const timer = setTimeout(
-      abort,
+      onAbort,
       Math.min(request.timeoutMs ?? this.session.policy.wallMs, this.session.policy.wallMs),
     );
-    child.stdout!.on("data", (data: Buffer) => {
-      bytes += data.length;
-      if (bytes > 2 * 1024 * 1024) abort();
-      if (!stopped) stdout += stdoutDecoder.write(data);
-    });
-    child.stderr!.on("data", (data: Buffer) => {
-      bytes += data.length;
-      if (bytes > 2 * 1024 * 1024) abort();
-      if (!stopped) stderr += stderrDecoder.write(data);
-    });
+    const cancelled = () => new Error(CANCELLED_COMMAND);
+    const uncertain = () => {
+      const error = new Error(UNCERTAIN_STOP);
+      (error as Error & { uncertain: boolean }).uncertain = true;
+      return error;
+    };
+    const throwStop = async () => {
+      const outcome = await halt();
+      if (outcome === "uncertain") throw uncertain();
+      throw cancelled();
+    };
     try {
-      const code = await new Promise<number>((resolve, reject) => {
-        child.once("error", reject);
-        child.once("close", (code) => resolve(code ?? 1));
+      if (stopped || context.signal.aborted) await throwStop();
+      child = await this.session.exec(argv, {
+        cwd: `/opt/data/${this.name(request.cwd ?? "")}`,
+        signal: context.signal,
       });
-      requireValue(!stopped, "Container command cancelled or exceeded output/deadline budget");
+      if (stopped || context.signal.aborted) await throwStop();
+      child.stdout?.on("data", (data: Buffer) => {
+        bytes += data.length;
+        if (bytes > 2 * 1024 * 1024) onAbort();
+        if (!stopped) stdout += stdoutDecoder.write(data);
+      });
+      child.stderr?.on("data", (data: Buffer) => {
+        bytes += data.length;
+        if (bytes > 2 * 1024 * 1024) onAbort();
+        if (!stopped) stderr += stderrDecoder.write(data);
+      });
+      const closed = new Promise<number>((resolve, reject) => {
+        child?.once("error", (error) => {
+          if (!stopped) reject(error);
+        });
+        child?.once("close", (exitCode) => resolve(exitCode ?? 1));
+      });
+      const winner = await Promise.race([
+        closed.then((code) => ({ kind: "exit" as const, code })),
+        stopResult.then((outcome) => ({ kind: "stop" as const, outcome })),
+      ]);
+      if (winner.kind === "stop" || stopped || context.signal.aborted) {
+        const outcome = winner.kind === "stop" ? winner.outcome : await stopResult;
+        if (outcome === "uncertain") throw uncertain();
+        throw cancelled();
+      }
       stdout += stdoutDecoder.end();
       stderr += stderrDecoder.end();
       if (stdout) yield { type: "stdout", data: stdout };
       if (stderr) yield { type: "stderr", data: stderr };
-      yield { type: "exit", code };
+      yield { type: "exit", code: winner.code };
+    } catch (error) {
+      if (stopped || context.signal.aborted) await throwStop();
+      throw error;
     } finally {
       clearTimeout(timer);
-      context.signal.removeEventListener("abort", abort);
+      context.signal.removeEventListener("abort", onAbort);
     }
   }
   async snapshotFiles(_homeKey: string, botId: string) {
