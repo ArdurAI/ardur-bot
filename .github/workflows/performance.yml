@@ -206,7 +206,13 @@ jobs:
       - name: Verify and restore the previous index chain
         env:
           MISSING_REASON: ${{ steps.prior.outputs.missing_reason }}
-        run: node scripts/scoreboard-index.mjs restore-index --source "$RUNNER_TEMP/scoreboard-index-restore" --root .context/performance/scoreboard-index --missing-reason "$MISSING_REASON"
+        run: |
+          set -euo pipefail
+          args=(--source "$RUNNER_TEMP/scoreboard-index-restore" --root .context/performance/scoreboard-index)
+          if [[ -n "$MISSING_REASON" ]]; then
+            args+=(--missing-reason "$MISSING_REASON")
+          fi
+          node scripts/scoreboard-index.mjs restore-index "${args[@]}"
       - name: Record every pushed commit as measured or pending
         env:
           SCOREBOARD_BEFORE: ${{ github.event.before }}
@@ -244,17 +250,23 @@ jobs:
         with:
           pattern: desktop-*
           path: release-artifacts
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        continue-on-error: true
-        with:
-          pattern: scoreboard-reports
-          path: scoreboard-reports
-          merge-multiple: true
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
+      - name: See whether this run uploaded measured reports
+        id: reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/scoreboard-index.mjs report-artifact >> "$GITHUB_OUTPUT"
+      - name: Download measured reports
+        if: steps.reports.outputs.present == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: scoreboard-reports
+          path: scoreboard-reports
+          merge-multiple: true
       - name: Assemble the exact publication files before gating
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +29,7 @@ import {
   auditCommits,
   baselineMeasurementPlan,
   COMMIT_OBJECT_RETENTION_DAYS,
+  classifyGateCodes,
   durableIndexScope,
   evidenceFor,
   findPriorIndexArtifact,
@@ -41,6 +42,8 @@ import {
   REQUIRED_RELEASE_TARGETS,
   readIndex,
   renderScoreboardNotes,
+  reportsArtifactPresent,
+  restoreIndex,
   runReleaseGate,
   SCOREBOARD_INDEX_RELATIVE_PATH,
   samplePlanFor,
@@ -89,6 +92,11 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+      - run: node scripts/scoreboard-index.mjs report-artifact
+      - if: steps.reports.outputs.present == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: scoreboard-reports
       - run: node scripts/desktop-release-assets.mjs version source publication/release-ready
       - env:
           SCOREBOARD_ARTIFACTS: publication/release-ready
@@ -139,13 +147,9 @@ jobs:
     steps:
       - run: node scripts/desktop-release.mjs notes tag scoreboard-publication/gate.json
       - run: |
-          trap cleanup EXIT
           node scripts/scoreboard-index.mjs verify-publication --directory release-ready --gate scoreboard-publication/gate.json
           node scripts/scoreboard-index.mjs list-upload --directory release-ready
-          gh release delete
-          gh release create
-          created=1
-          gh release upload
+          node scripts/release-publish.mjs --waiver-record publication/scoreboard-publication/waiver-record.json
 `;
 
 function pending(commit: string, attempt = 1, supersedes: string | null = null) {
@@ -498,7 +502,7 @@ async function writeReleaseCase(count: number, withEnergy: boolean) {
 async function gate(
   caseRoot: Awaited<ReturnType<typeof writeReleaseCase>>,
   indexName = "index",
-  extra: Record<string, string> = {},
+  extra: Record<string, string | number | null> = {},
 ) {
   const outputPath = path.join(caseRoot.root, "gate.json");
   const releasePolicyPath = path.join(caseRoot.root, "release-policy.json");
@@ -1376,6 +1380,7 @@ describe("release publication gate", () => {
         waiver: `  ${WAIVER}.  `,
         trigger: "workflow_dispatch",
         actor: "release-operator",
+        runId: 5150,
       });
       expect(result.code).toBe(0);
       expect(result.gate).toMatchObject({
@@ -1403,8 +1408,22 @@ describe("release publication gate", () => {
       const notes = releaseNotes(["feat: fixture"], result.gate);
       const evidence = notes.split("## Performance evidence\n\n")[1] ?? "";
       expect(evidence.split("\n")[0]).toBe(
-        `This preview was published without measured performance evidence: ${WAIVER}.`,
+        `This preview was published without measured performance evidence: ${WAIVER}. Waived by release-operator.`,
       );
+      const waiverRecord = JSON.parse(
+        await readFile(path.join(bare.root, "waiver-record.json"), "utf8"),
+      ) as {
+        reason: string;
+        actor: string;
+        runId: number;
+        indexLine: { status: string; waiver: { actor: string } };
+      };
+      expect(waiverRecord).toMatchObject({
+        reason: WAIVER,
+        actor: "release-operator",
+        runId: 5150,
+        indexLine: { status: "waived", waiver: { actor: "release-operator", reason: WAIVER } },
+      });
       expect(notes).not.toMatch(/Measured evidence|\| Metric|Observed samples|within-budget/);
     } finally {
       await rm(bare.root, { recursive: true, force: true });
@@ -1538,6 +1557,205 @@ describe("release publication gate", () => {
       await rm(probe.root, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("records an undeclared committed budget instead of missing reports", async () => {
+    const probe = await stagePassing();
+    try {
+      const committed = JSON.parse(
+        readFileSync(new URL("../docs/performance/release-policy.json", import.meta.url), "utf8"),
+      ) as {
+        budget: {
+          required: { metricIds: string[] };
+          declarations: {
+            nominalQueue: boolean;
+            retainedSessionGrowthBytes: number | null;
+            toolTerminationDeadlineMs: number | null;
+          };
+          seed: number;
+        };
+      };
+      const rewrite = async (name: string) => {
+        const file = path.join(probe.reportsRoot, name);
+        const envelope = JSON.parse(await readFile(file, "utf8")) as {
+          report: ReturnType<typeof syntheticReport>;
+        };
+        envelope.report.scenario.tier = "T2";
+        const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report));
+        await writeFile(file, bytes);
+        if (name === "candidate.json")
+          await writeFile(path.join(probe.artifactRoot, "scoreboard-candidate.json"), bytes);
+        return JSON.parse(bytes).report as ReturnType<typeof syntheticReport>;
+      };
+      await rewrite("parent.json");
+      await rewrite("fixed-release.json");
+      const candidate = await rewrite("candidate.json");
+      const discovered = createBudgetPolicy(
+        {
+          metricIds: committed.budget.required.metricIds,
+          taskIds: [],
+          experimentIds: [],
+          crashBoundaryIds: [],
+          usage: false,
+        },
+        {
+          mode: "release",
+          environmentHash: candidate.environmentHash,
+          scenario: candidate.scenario,
+          seed: committed.budget.seed,
+          resamples: 1000,
+          ...committed.budget.declarations,
+        },
+      );
+      const undeclaredIds = committed.budget.required.metricIds.filter((id) => {
+        const definition = METRIC_DEFINITIONS.find((item) => item.id === id)!;
+        return metricBudget(definition, discovered.policy).kind === "undeclared";
+      });
+      expect(undeclaredIds).toEqual(["m10.post-idle-retained", "m13.terminal-stop"]);
+      const selection = {
+        metricIds: undeclaredIds,
+        taskIds: [],
+        experimentIds: [],
+        crashBoundaryIds: [],
+        usage: false,
+      };
+      for (const name of ["parent.json", "candidate.json", "fixed-release.json"]) {
+        const file = path.join(probe.reportsRoot, name);
+        const envelope = JSON.parse(await readFile(file, "utf8")) as {
+          report: ReturnType<typeof syntheticReport>;
+        };
+        for (const id of undeclaredIds) {
+          const metric = envelope.report.metrics.find((item) => item.id === id)!;
+          metric.missingReason = null;
+          metric.coverage = { expected: 1, observed: 1 };
+          metric.observations = [
+            {
+              id: `obs-${id.replaceAll(".", "-")}`,
+              sessionId: "session-1",
+              pairId: "pair-1",
+              traceId: "trace-01",
+              outcome: "success",
+              value: 1,
+              missingReason: null,
+              provenance: {
+                kind: id.startsWith("m13.") ? "measured" : "counted",
+                sourceHash: hash("raw"),
+              },
+            },
+          ];
+        }
+        const soak = envelope.report.experiments
+          .find((item) => item.id === "O12")!
+          .variants.find((item) => item.id === "soak-2h")!;
+        soak.status = "complete";
+        soak.missingReason = null;
+        soak.traceIds = ["trace-01"];
+        const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report));
+        await writeFile(file, bytes);
+        if (name === "candidate.json")
+          await writeFile(path.join(probe.artifactRoot, "scoreboard-candidate.json"), bytes);
+      }
+      const evidencePolicy = createBudgetPolicy(selection, {
+        mode: "release",
+        environmentHash: candidate.environmentHash,
+        scenario: candidate.scenario,
+        seed: committed.budget.seed,
+        resamples: 1000,
+        ...committed.budget.declarations,
+      });
+      await writeFile(path.join(probe.reportsRoot, "policy.json"), JSON.stringify(evidencePolicy));
+      await writeReleasePolicy(probe.root, {
+        schemaVersion: 1,
+        suiteVersion: SCOREBOARD_MANIFEST.suiteVersion,
+        manifestHash: contentDigest(SCOREBOARD_MANIFEST),
+        releaseTargets: [...REQUIRED_RELEASE_TARGETS],
+        budget: {
+          mode: "release",
+          required: selection,
+          declarations: committed.budget.declarations,
+          seed: committed.budget.seed,
+          resamples: 1000,
+        },
+        guardrails: [{ id: "fixture-undeclared", ...selection }],
+      });
+      const result = await gate(probe, "index-undeclared");
+      expect(result.code).not.toBe(0);
+      const record = (await readIndex(result.indexRoot)).find((item) => item.role === "candidate");
+      expect(record?.pendingReason).toBe("undeclared-budget");
+      expect(record?.pendingReason).not.toBe("reports-missing");
+      expect(record?.metricIds).toEqual(undeclaredIds);
+      expect(record?.gateCodes).toContain("undeclared-budget");
+      expect(result.gate.reasons).toContainEqual(
+        expect.objectContaining({
+          code: "undeclared-budget",
+          detail:
+            "retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared.",
+        }),
+      );
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("writes recovery as a sentence for a complete crash", async () => {
+    const crashed = await stagePassing();
+    try {
+      await rewriteCandidate(crashed.reportsRoot, (report) => {
+        const crash = report.crashes.find((item) => item.id === "crash-01")!;
+        crash.status = "complete";
+        crash.missingReason = null;
+        crash.recovery = "automatic-recovery";
+        crash.safetyPassed = true;
+        crash.taskCompleted = true;
+        crash.traceIds = ["trace-01"];
+      });
+      const result = await gate(crashed, "index-recovery");
+      expect(result.code).toBe(0);
+      const notes = releaseNotes(["fix: fixture"], result.gate);
+      expect(notes).toContain(
+        "Recovery: crash-01 recovered by automatic recovery, safety passed, task completed.",
+      );
+      expect(notes).not.toContain("safety true");
+      expect(notes).not.toContain("completed true");
+    } finally {
+      await rm(crashed.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("comparison reason classification", () => {
+  it("puts every statistics reason in exactly one of pending or refusal", () => {
+    const statistics = readFileSync(
+      new URL("../packages/testkit/src/scoreboard/statistics.ts", import.meta.url),
+      "utf8",
+    );
+    const codes = [
+      ...new Set(
+        [...statistics.matchAll(/reason\(\s*"([a-z0-9-]+)"/g)].map((match) => match[1] ?? ""),
+      ),
+    ];
+    expect(codes.length).toBeGreaterThan(10);
+    const index = readFileSync(new URL("./scoreboard-index.mjs", import.meta.url), "utf8");
+    const pending = [
+      ...(
+        index.match(/export const PENDING_REASONS = Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1] ?? ""
+      ).matchAll(/"([a-z0-9-]+)"/g),
+    ].map((match) => match[1]);
+    const refusal = [
+      ...(index.match(/const REFUSAL_CODES = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? "").matchAll(
+        /"([a-z0-9-]+)"/g,
+      ),
+    ].map((match) => match[1]);
+    for (const code of codes) {
+      expect({
+        code,
+        classes: Number(pending.includes(code)) + Number(refusal.includes(code)),
+      }).toEqual({
+        code,
+        classes: 1,
+      });
+    }
+    expect(() => classifyGateCodes(["not-a-real-gate-code"])).toThrow(/unknown-gate-code/);
+  });
 });
 
 describe("committed release policy", () => {
@@ -1804,6 +2022,73 @@ describe("prior index chain", () => {
       `/repos/${REPOSITORY}/actions/runs/20/artifacts`,
     ]);
     expect(lookups[0]?.query).toMatchObject({ name: "scoreboard-index" });
+    expect(result).toEqual({ runId: 20, missingReason: null });
+  });
+
+  it("keeps walking past 50 runs until a live artifact inside the retention window", async () => {
+    const dated = (id: number, daysBefore: number) =>
+      run(id, new Date(NOW.getTime() - daysBefore * 24 * 60 * 60 * 1000).toISOString());
+    const newestFirst = Array.from({ length: 51 }, (_, index) => dated(1000 - index, index));
+    const liveOn51st = fakeGitHub(newestFirst, { 950: [artifact(950, false)] });
+    await expect(find(liveOn51st)).resolves.toEqual({ runId: 950, missingReason: null });
+    expect(liveOn51st.calls.filter((call) => call.pathname.endsWith("/artifacts"))).toHaveLength(
+      51,
+    );
+
+    const expiredThenLive = fakeGitHub(newestFirst, {
+      ...Object.fromEntries(
+        newestFirst.slice(0, 50).map((item) => [item.id, [artifact(item.id, true)]]),
+      ),
+      950: [artifact(950, false)],
+    });
+    await expect(find(expiredThenLive)).resolves.toEqual({ runId: 950, missingReason: null });
+
+    const parent = await mkdtemp(path.join(os.tmpdir(), "scoreboard-hit-"));
+    const source = path.join(parent, "source");
+    const restored = path.join(parent, "restored");
+    try {
+      await appendIndexRecord(source, pending(A));
+      await expect(restoreIndex(source, restored, null)).resolves.toBe("restored");
+      expect((await readIndex(restored)).map((record) => record.commit)).toEqual([A]);
+      await expect(access(path.join(restored, ".chain-origin"))).rejects.toThrow();
+      await expect(
+        restoreIndex(path.join(parent, "missing"), path.join(parent, "again"), null),
+      ).rejects.toMatchObject({ code: "missing-restored-chain" });
+      await expect(access(path.join(parent, "again", ".chain-origin"))).rejects.toThrow();
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+
+    const outside = fakeGitHub([run(8, "2026-09-01T00:00:00Z"), run(9, "2026-06-01T00:00:00Z")], {
+      9: [artifact(9, false)],
+    });
+    await expect(find(outside)).resolves.toEqual({
+      runId: null,
+      missingReason: "prior-artifact-missing",
+    });
+    expect(outside.calls.map((call) => call.pathname)).not.toContain(
+      `/repos/${REPOSITORY}/actions/runs/9/artifacts`,
+    );
+  });
+
+  it("counts a listed scoreboard-reports artifact even after it expires", async () => {
+    const request = async (pathname: string, query: Record<string, string | number>) => {
+      expect(pathname).toBe(`/repos/${REPOSITORY}/actions/runs/7/artifacts`);
+      expect(query).toMatchObject({ name: "scoreboard-reports", per_page: 100 });
+      return {
+        artifacts: [{ name: "scoreboard-reports", expired: true }],
+      };
+    };
+    await expect(
+      reportsArtifactPresent({ repository: REPOSITORY, runId: 7, request }),
+    ).resolves.toBe(true);
+    await expect(
+      reportsArtifactPresent({
+        repository: REPOSITORY,
+        runId: 8,
+        request: async () => ({ artifacts: [] }),
+      }),
+    ).resolves.toBe(false);
   });
 
   it("labels a first run, an expired chain and a missing artifact truthfully", async () => {
@@ -1917,7 +2202,14 @@ describe("workflow contracts", () => {
     expect(performanceYaml).toContain("needs.budgets.outputs.pending_reason");
     expect(performanceYaml).not.toContain("performance-runner");
     expect(releaseYaml).not.toContain("release-ready/*");
-    expect(releaseYaml).toContain("gh release delete");
+    expect(releaseYaml).toContain("node scripts/release-publish.mjs");
+    expect(releaseYaml).not.toContain("gh release create");
+    const reports = performanceYaml.split("pattern: scoreboard-reports")[0]?.split("\n").slice(-12);
+    expect(reports?.join("\n")).not.toContain("continue-on-error");
+    expect(reports?.join("\n")).toContain("steps.reports.outputs.present == 'true'");
+    expect(performanceYaml.indexOf("report-artifact")).toBeLessThan(
+      performanceYaml.indexOf("pattern: scoreboard-reports"),
+    );
     expect(releaseYaml).toContain("verify-publication");
     expect(releaseYaml.split("\n  publish:\n")[1]).not.toContain("desktop-release-assets.mjs");
     expect(performanceYaml).toContain("SCOREBOARD_ARTIFACTS: publication/release-ready");
@@ -1949,10 +2241,11 @@ describe("workflow contracts", () => {
       "gh release create release-ready/*",
     );
     expect(() => assertWorkflowContracts(goodPerformance, directoryUpload)).toThrow(/directory/);
-    const noCleanup = goodRelease
-      .replace("trap cleanup EXIT\n", "")
-      .replace("gh release delete", "true");
-    expect(() => assertWorkflowContracts(goodPerformance, noCleanup)).toThrow(/draft/);
+    const noCleanup = goodRelease.replace(
+      "node scripts/release-publish.mjs --waiver-record publication/scoreboard-publication/waiver-record.json",
+      "true",
+    );
+    expect(() => assertWorkflowContracts(goodPerformance, noCleanup)).toThrow(/publish script/);
   });
 
   it("passes a waiver to the gate only from a manual dispatch", () => {
@@ -1994,7 +2287,10 @@ describe("workflow contracts", () => {
     expect(docs).toContain("A pending record is never deleted to hide an earlier measurement.");
     expect(docs).toContain("Building the physical evidence runner is out of scope");
     expect(docs).toContain(
-      "This preview was published without measured performance evidence: <reason>.",
+      "This preview was published without measured performance evidence: <reason>. Waived by <actor>.",
+    );
+    expect(docs).toContain(
+      "retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared.",
     );
   });
 });

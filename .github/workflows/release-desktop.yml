@@ -163,27 +163,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          created=0
-          cleanup() {
-            status=$?
-            if [[ "$status" -ne 0 && "$created" -eq 1 ]]; then
-              if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" == "true" ]]; then
-                gh release delete "$RELEASE_TAG" --yes --cleanup-tag=false
-              fi
-            fi
-            exit "$status"
-          }
-          trap cleanup EXIT
           node scripts/desktop-release.mjs notes "$RELEASE_TAG" publication/scoreboard-publication/gate.json > release-notes.md
           node scripts/scoreboard-index.mjs verify-publication --directory publication/release-ready --gate publication/scoreboard-publication/gate.json
           mapfile -t upload_files < <(node scripts/scoreboard-index.mjs list-upload --directory publication/release-ready)
           [[ "${#upload_files[@]}" -gt 0 ]]
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release already exists; refusing to replace its assets." >&2
-            exit 1
-          fi
-          gh release create "$RELEASE_TAG" --verify-tag --target "$RELEASE_SHA" --draft --prerelease --latest=false --title "$RELEASE_TAG" --notes-file release-notes.md
-          created=1
-          gh release upload "$RELEASE_TAG" "${upload_files[@]}"
-          gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
-          created=0
+          node scripts/release-publish.mjs --tag "$RELEASE_TAG" --target "$RELEASE_SHA" --notes release-notes.md --waiver-record publication/scoreboard-publication/waiver-record.json -- "${upload_files[@]}"

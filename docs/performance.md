@@ -231,11 +231,12 @@ Workflow artifacts expire after 90 days and are not the historical scoreboard. R
 attached to the GitHub release and kept for the github-release-lifetime of that release. Development
 pushes record every new commit as measured or pending and stay advisory. Only a push to `dev` or
 `main` of this repository extends the durable chain. Before appending, the index job lists every
-page of this workflow's successful push runs for the same branch within the 90-day window, keeps
-runs whose head repository is this repository, and restores the newest one whose `scoreboard-index`
-artifact has not expired. Pull-request, manual, and fork runs never restore or upload
-`scoreboard-index`; they build a throwaway `scoreboard-index-check` chain. A downloaded chain with a
-broken hash fails the job instead of silently starting over.
+page of this workflow's successful push runs for the same branch, newest first, and keeps walking
+until a run has a `scoreboard-index` artifact that has not expired or the run is older than the
+90-day window. The walk is bounded by that window, not by a run count. A live artifact restores
+that chain and does not write a chain origin. Pull-request, manual, and fork runs never restore or
+upload `scoreboard-index`; they build a throwaway `scoreboard-index-check` chain. A downloaded
+chain with a broken hash fails the job instead of silently starting over.
 
 Index writers for one ref are serialized. GitHub keeps one pending index job per ref and cancels an
 older pending one, so a burst of pushes can skip a run. Enumeration therefore resumes at the nearest
@@ -246,9 +247,10 @@ the new records.
 
 A new genesis names why no chain was restored. `first-run` means git history shows the index job did
 not exist on the branch before the retention window, so no older chain can exist.
-`expired-after-90-days-inactivity` means an older chain existed but its artifact expired; GitHub
-also deletes workflow runs past retention, so an empty run list alone does not prove a first run.
-`prior-artifact-missing` means a qualifying run exists but no live artifact was found for it.
+`expired-after-90-days-inactivity` means the walk saw an expired artifact, or an older chain existed
+and GitHub has since deleted the runs; an empty run list alone does not prove a first run.
+`prior-artifact-missing` means a successful run inside the window exists but none of them uploaded
+the artifact.
 
 Release decisions use the committed `docs/performance/release-policy.json`. The gate verifies its
 SHA-256 against the digest pinned in `scripts/scoreboard-index.mjs`, refuses a supplied budget
@@ -257,8 +259,8 @@ effect safety, deterministic tasks, crash recovery, latency, absolute targets, p
 and compaction, bundle, memory, and energy. Optional live-quality runs are not a release guardrail.
 The five effect-safety counts are checked by their guardrail and the safety verdict rather than the
 budget selection, because seven reliability metrics in one family exceed the resample limit. Tool
-termination and retained-session growth have no reviewed declaration yet, so those budgets stay
-undeclared and block measured publication until one is committed.
+termination and retained-session growth have no reviewed declaration yet. retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared. That pending result is recorded as `undeclared-budget` with those metric ids. It is
+not a missing-report failure and it does not refuse the candidate.
 
 The release invocation is mandatory: `publish` depends on the evidence job, and that job fails
 closed when the report, platform, energy, or digest check is incomplete. The asset assembler merges
@@ -266,17 +268,22 @@ update feeds and writes the cask before the gate. The gate requires the measured
 equal the candidate report, records every derived publication file, and publication re-hashes that
 exact flat file set before upload. Release notes and the gate label the SHA-256 of the exact
 attached `scoreboard-candidate.json` bytes separately from the canonical evidence-envelope SHA-256.
-A failed draft creation or upload is cleaned up so the same tag can be retried.
+A leftover draft for the same tag is deleted and publication continues. A published release is left
+in place. A draft created by a failed upload is deleted so the same tag can be retried.
 Credential-free pull-request runners do not receive provider credentials. Live provider evaluation
 stays explicit and budgeted.
 
 Building the physical evidence runner is out of scope for this workflow. No job produces
 `scoreboard-reports` yet, so a tag push stops with the missing evidence visible. Until a runner
 exists, a preview can be published only by a manual `workflow_dispatch` with a non-empty
-`evidence_waiver` reason. The gate accepts a waiver only from a dispatch, refuses it beside any
-report or attached evidence file, and records a `waived` index entry with the reason and the
-account that triggered the run. A waived release carries no measurements; its evidence section
-starts with `This preview was published without measured performance evidence: <reason>.`
+`evidence_waiver` reason. The gate accepts a waiver only from a dispatch, and only when this run
+uploaded no `scoreboard-reports` artifact. If that artifact exists, its download must succeed and
+the waiver is refused as `waiver-with-evidence`. The gate also refuses a waiver beside any report
+or attached evidence file, and records a `waived` index entry with the reason and the account that
+triggered the run. A waived release carries no measurements; its evidence section starts with
+`This preview was published without measured performance evidence: <reason>. Waived by <actor>.`
+The same reason, actor, run id, and index line are uploaded as the `waiver-record.json` release
+asset, so the record outlives the 90-day workflow artifact.
 
 The commit sample plan is 20 paired observations. The release plan is 200 replay pairs and 100
 observations for every required startup stratum. Missing or short startup strata fail with

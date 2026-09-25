@@ -7,7 +7,7 @@ import { tsImport } from "tsx/esm/api";
 
 /** Local historical scoreboard. Workflow artifacts are a transport copy, not this store. */
 export const SCOREBOARD_INDEX_RELATIVE_PATH = ".context/performance/scoreboard-index";
-export const INDEX_SCHEMA_VERSION = 4;
+export const INDEX_SCHEMA_VERSION = 5;
 export const COMMIT_OBJECT_RETENTION_DAYS = 180;
 export const WORKFLOW_ARTIFACT_RETENTION_DAYS = 90;
 export const RELEASE_EVIDENCE_RETENTION = "github-release-lifetime";
@@ -58,6 +58,17 @@ export const PENDING_REASONS = Object.freeze([
   "release-commit-mismatch",
   "unmapped-artifact",
   "mandatory-evidence-unknown",
+  "undeclared-budget",
+  "outcome-pairing-changed",
+  "incomplete-analysis",
+  "invalid-policy",
+  "invalid-evidence",
+  "incomplete-evidence",
+  "baseline-commit-mismatch",
+  "calibration-required",
+  "candidate-before-policy-freeze",
+  "incomparable-evidence",
+  "inconclusive-interval",
 ]);
 const GENESIS = "0".repeat(64);
 const RECORD_KEYS = [
@@ -88,9 +99,11 @@ const RECORD_KEYS = [
   "expiresRecord",
   "chainOrigin",
   "waiver",
+  "metricIds",
   "previousHash",
 ];
-const V3_RECORD_KEYS = RECORD_KEYS.filter((key) => key !== "waiver");
+const V4_RECORD_KEYS = RECORD_KEYS.filter((key) => key !== "metricIds");
+const V3_RECORD_KEYS = V4_RECORD_KEYS.filter((key) => key !== "waiver");
 const V2_RECORD_KEYS = V3_RECORD_KEYS.filter((key) => key !== "chainOrigin");
 const LEGACY_RECORD_KEYS = V2_RECORD_KEYS.filter((key) => key !== "gateCodes");
 const DIRECTORY_TARGETS = {
@@ -107,7 +120,7 @@ const TARGET_PLATFORM = {
   "desktop-linux-arm64": "linux",
   "desktop-win32-x64": "win32",
 };
-const REFUSAL_CODES = new Set([
+export const REFUSAL_CODES = new Set([
   "safety-failure",
   "budget-regression",
   "required-task-failed",
@@ -117,6 +130,8 @@ const REFUSAL_CODES = new Set([
   "invalid-waiver",
   "waiver-with-evidence",
 ]);
+export const UNDECLARED_PUBLICATION_NOTE =
+  "retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared.";
 const FAILURE_EXIT_CODES = new Set([
   ...REFUSAL_CODES,
   "artifact-digest-mismatch",
@@ -532,7 +547,9 @@ async function readIndexUnlocked(root) {
           ? V2_RECORD_KEYS
           : record?.schemaVersion === 3
             ? V3_RECORD_KEYS
-            : RECORD_KEYS;
+            : record?.schemaVersion === 4
+              ? V4_RECORD_KEYS
+              : RECORD_KEYS;
     exactKeys(record, [...keys, "recordHash"]);
     const actual = hashRecord(record, contentDigest);
     if (record.recordHash !== actual || record.previousHash !== previous)
@@ -615,6 +632,52 @@ function artifactName(name) {
     fail("unsafe-artifact-name", "unsafe-artifact-name");
 }
 
+function storedGateCodes(values, required) {
+  const codes = Array.isArray(values) ? values : [];
+  if (
+    (required && codes.length === 0) ||
+    codes.some((code) => typeof code !== "string" || !/^[a-z0-9-]+$/.test(code))
+  )
+    fail("invalid-gate-codes", "invalid-gate-codes");
+  return [...new Set(codes)].sort();
+}
+
+function storedMetricIds(values) {
+  const ids = Array.isArray(values) ? values : [];
+  if (ids.some((id) => typeof id !== "string" || !/^[a-z][a-z0-9.-]*$/.test(id)))
+    fail("invalid-metric-id", "invalid-metric-id");
+  return [...new Set(ids)].sort();
+}
+
+export function classifyGateCodes(codes) {
+  const unique = [...new Set(codes)].sort();
+  for (const code of unique) {
+    const pending = PENDING_REASONS.includes(code);
+    const refusal = REFUSAL_CODES.has(code);
+    if (pending === refusal) fail("unknown-gate-code", `unknown-gate-code: ${code}`);
+  }
+  return unique;
+}
+
+function metricIdsFromReasons(reasons) {
+  return storedMetricIds(
+    reasons
+      .filter((reason) => reason.code === "undeclared-budget")
+      .map((reason) =>
+        String(reason.scope ?? "")
+          .split(":")
+          .at(-1),
+      ),
+  );
+}
+
+function pendingReasonFor(reasons) {
+  const codes = reasons.map((reason) => reason.code);
+  if (codes.includes("undeclared-budget")) return "undeclared-budget";
+  const first = codes[0];
+  return PENDING_REASONS.includes(first) ? first : "reports-missing";
+}
+
 function storedArtifacts(values, releaseTargets) {
   const stored = (Array.isArray(values) ? values : []).map((artifact) => {
     exactKeys(artifact, ["name", "sha256", "bytes", "target"], "unsafe-artifact-name");
@@ -687,6 +750,7 @@ async function normalizeRecord(input, existing) {
     artifactDigests: [],
     pendingReason: null,
     gateCodes: [],
+    metricIds: storedMetricIds(input.metricIds),
     supersedes: input.supersedes,
     expiresRecord: input.expiresRecord ?? null,
     chainOrigin: existing.length === 0 ? (input.chainOrigin ?? "first-run") : null,
@@ -707,18 +771,13 @@ async function normalizeRecord(input, existing) {
   if (input.status === "pending" || input.status === "rejected") {
     if (!PENDING_REASONS.includes(input.pendingReason)) fail("invalid-reason", "invalid-reason");
     body.pendingReason = input.pendingReason;
+    body.gateCodes = storedGateCodes(input.gateCodes, false);
     if (input.expiresRecord !== undefined && input.expiresRecord !== null)
       fail("invalid-record", "invalid-record");
     body.expiresRecord = null;
   } else if (input.status === "refused") {
     if (input.pendingReason !== null) fail("invalid-reason", "invalid-reason");
-    if (
-      !Array.isArray(input.gateCodes) ||
-      input.gateCodes.length === 0 ||
-      input.gateCodes.some((code) => typeof code !== "string" || !/^[a-z0-9-]+$/.test(code))
-    )
-      fail("invalid-gate-codes", "invalid-gate-codes");
-    body.gateCodes = [...new Set(input.gateCodes)].sort();
+    body.gateCodes = storedGateCodes(input.gateCodes, true);
   } else if (input.status === "expired") {
     digest(input.expiresRecord);
     body.expiresRecord = input.expiresRecord;
@@ -817,7 +876,7 @@ export async function appendIndexRecord(root, input, options = {}) {
 const CHAIN_ORIGIN_FILE = ".chain-origin";
 
 export async function restoreIndex(source, root, missingReason) {
-  if (!CHAIN_ORIGINS.includes(missingReason)) fail("invalid-chain-origin", "invalid-chain-origin");
+  const foundChain = missingReason == null || missingReason === "";
   if (await exists(recordsPath(source))) {
     await readIndex(source);
     if (await exists(root)) {
@@ -827,6 +886,8 @@ export async function restoreIndex(source, root, missingReason) {
     await cp(source, root, { recursive: true, errorOnExist: true, force: false });
     return "restored";
   }
+  if (foundChain) fail("missing-restored-chain", "A live index artifact did not restore.");
+  if (!CHAIN_ORIGINS.includes(missingReason)) fail("invalid-chain-origin", "invalid-chain-origin");
   await mkdir(root, { recursive: true });
   await writeFile(path.join(root, CHAIN_ORIGIN_FILE), `${missingReason}\n`, { flag: "wx" });
   return missingReason;
@@ -1131,11 +1192,18 @@ function taskSummary(report) {
 function recoverySummary(report) {
   const complete = report.crashes.filter((crash) => crash.status === "complete");
   if (!complete.length) return "unknown";
+  const recoveryWords = {
+    "automatic-recovery": "recovered by automatic recovery",
+    "safe-retry": "retried safely",
+    "explicit-uncertainty": "left uncertain",
+  };
   return complete
-    .map(
-      (crash) =>
-        `${crash.id} ${crash.recovery} safety ${crash.safetyPassed} completed ${crash.taskCompleted}`,
-    )
+    .map((crash) => {
+      const recovery = recoveryWords[crash.recovery] ?? "recovery unknown";
+      const safety = crash.safetyPassed === true ? "safety passed" : "safety failed";
+      const task = crash.taskCompleted === true ? "task completed" : "task not completed";
+      return `${crash.id} ${recovery}, ${safety}, ${task}`;
+    })
     .join("; ");
 }
 
@@ -1189,7 +1257,12 @@ export async function evaluatePublicationGate(input) {
       candidate: input.candidate,
       fixedRelease: input.fixedRelease,
     });
-    for (const reason of verdict.reasons) push(reason.code, reason.scope, reason.detail);
+    for (const reason of verdict.reasons)
+      push(
+        reason.code,
+        reason.scope,
+        reason.code === "undeclared-budget" ? UNDECLARED_PUBLICATION_NOTE : reason.detail,
+      );
     candidateReport = verdict.evidence?.candidate.report ?? null;
   }
   if (candidateReport && releasePolicy)
@@ -1435,7 +1508,7 @@ export function renderScoreboardNotes(gate) {
     return [
       "## Performance evidence",
       "",
-      `This preview was published without measured performance evidence: ${waiver.reason}.`,
+      `This preview was published without measured performance evidence: ${waiver.reason}. Waived by ${waiver.actor}.`,
       "",
     ].join("\n");
   }
@@ -1586,11 +1659,9 @@ function candidateKey(options, suiteHash) {
 
 async function recordUnpublished(options, gate, common) {
   const scoreboard = await loadScoreboard();
-  const gateCodes = [...new Set(gate.reasons.map((reason) => reason.code))].sort();
+  const gateCodes = classifyGateCodes(gate.reasons.map((reason) => reason.code));
   const refusal = gateCodes.some((code) => REFUSAL_CODES.has(code));
-  const reason = PENDING_REASONS.includes(gate.reasons[0]?.code)
-    ? gate.reasons[0].code
-    : "reports-missing";
+  const metricIds = metricIdsFromReasons(gate.reasons);
   if (options.candidateSha && /^[a-f0-9]{40}$/.test(options.candidateSha)) {
     const records = await readIndex(options.indexRoot);
     const key = candidateKey(options, scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST));
@@ -1607,8 +1678,9 @@ async function recordUnpublished(options, gate, common) {
       role: "candidate",
       attempt: nextAttempt(records, key),
       supersedes: prior.at(-1)?.recordHash ?? null,
-      pendingReason: refusal ? null : reason,
-      gateCodes: refusal ? gateCodes : [],
+      pendingReason: refusal ? null : pendingReasonFor(gate.reasons),
+      gateCodes,
+      metricIds,
     });
   }
   return gate.exitCode;
@@ -1658,7 +1730,7 @@ async function runWaivedRelease(options, files, unmapped) {
   const records = await readIndex(options.indexRoot);
   const key = candidateKey(options, scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST));
   const prior = records.filter((record) => sameKey(record, key));
-  await appendIndexRecord(options.indexRoot, {
+  const indexLine = await appendIndexRecord(options.indexRoot, {
     ...common,
     status: "waived",
     commit: options.candidateSha,
@@ -1670,6 +1742,13 @@ async function runWaivedRelease(options, files, unmapped) {
     artifactDigests: gate.distributedDigests,
     waiver,
   });
+  const runId = Number.isSafeInteger(options.runId) ? options.runId : null;
+  const waiverRecord = { reason: waiver.reason, actor: waiver.actor, runId, indexLine };
+  assertPublicValue(waiverRecord);
+  await writeFile(
+    path.join(path.dirname(options.outputPath), "waiver-record.json"),
+    `${JSON.stringify(waiverRecord)}\n`,
+  );
   return 0;
 }
 
@@ -1930,9 +2009,30 @@ export function durableIndexScope({ eventName, ref }) {
   return eventName === "push" && (ref === "refs/heads/dev" || ref === "refs/heads/main");
 }
 
+async function listRunArtifacts(request, repository, runId, name) {
+  const artifacts = [];
+  for (let page = 1; artifacts.length < 1000; page += 1) {
+    const response = await request(`/repos/${repository}/actions/runs/${runId}/artifacts`, {
+      name,
+      per_page: 100,
+      page,
+    });
+    const listed = (Array.isArray(response?.artifacts) ? response.artifacts : []).filter(
+      (artifact) => artifact?.name === name,
+    );
+    artifacts.push(...listed);
+    const pageLength = Array.isArray(response?.artifacts) ? response.artifacts.length : 0;
+    if (pageLength < 100) break;
+  }
+  return artifacts;
+}
+
 /**
- * Run order is undocumented, filtered listings stop at 1,000 results, and runs themselves
- * age out with their artifacts, so the whole retention window is listed and sorted here.
+ * Filtered workflow-run listings stop at 1,000 results and do not document an order,
+ * so every page inside the retention window is collected and sorted. Artifact inspection
+ * then walks newest first until a live scoreboard-index artifact or a run older than
+ * the 90-day window. The listing date is one day earlier because the created filter is
+ * calendar-day granularity.
  */
 export async function findPriorIndexArtifact({
   repository,
@@ -1944,15 +2044,16 @@ export async function findPriorIndexArtifact({
   pageSize = 100,
 }) {
   const windowStart = new Date(
-    now.getTime() - (WORKFLOW_ARTIFACT_RETENTION_DAYS + 1) * 24 * 60 * 60 * 1000,
+    now.getTime() - WORKFLOW_ARTIFACT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
   );
+  const listedFrom = new Date(windowStart.getTime() - 24 * 60 * 60 * 1000);
   const runs = [];
   for (let page = 1; runs.length < 1000; page += 1) {
     const response = await request(`/repos/${repository}/actions/workflows/performance.yml/runs`, {
       branch,
       event: "push",
       status: "success",
-      created: `>=${windowStart.toISOString().slice(0, 10)}`,
+      created: `>=${listedFrom.toISOString().slice(0, 10)}`,
       exclude_pull_requests: "true",
       per_page: pageSize,
       page,
@@ -1976,24 +2077,36 @@ export async function findPriorIndexArtifact({
         Date.parse(right.created_at) - Date.parse(left.created_at) || right.id - left.id,
     );
   let expired = false;
-  for (const run of candidates.slice(0, 50)) {
-    const response = await request(`/repos/${repository}/actions/runs/${run.id}/artifacts`, {
-      name: INDEX_ARTIFACT,
-      per_page: 100,
-    });
-    const artifacts = (Array.isArray(response?.artifacts) ? response.artifacts : []).filter(
-      (artifact) => artifact?.name === INDEX_ARTIFACT && artifact.workflow_run?.id === run.id,
+  let sawRun = false;
+  for (const run of candidates) {
+    const createdAt = Date.parse(run.created_at);
+    if (!Number.isFinite(createdAt) || createdAt < windowStart.getTime()) break;
+    sawRun = true;
+    const artifacts = (await listRunArtifacts(request, repository, run.id, INDEX_ARTIFACT)).filter(
+      (artifact) => artifact.workflow_run?.id === run.id,
     );
     if (artifacts.some((artifact) => artifact.expired === false))
-      return { runId: run.id, missingReason: "prior-artifact-missing" };
+      return { runId: run.id, missingReason: null };
     if (artifacts.some((artifact) => artifact.expired === true)) expired = true;
   }
   if (expired) return { runId: null, missingReason: "expired-after-90-days-inactivity" };
-  if (candidates.length) return { runId: null, missingReason: "prior-artifact-missing" };
+  if (sawRun) return { runId: null, missingReason: "prior-artifact-missing" };
   return {
     runId: null,
     missingReason: indexJobPredates(windowStart) ? "expired-after-90-days-inactivity" : "first-run",
   };
+}
+
+/** True when this run uploaded scoreboard-reports, including an expired artifact. */
+export async function reportsArtifactPresent({
+  repository,
+  runId,
+  request,
+  name = "scoreboard-reports",
+}) {
+  if (!Number.isSafeInteger(runId)) fail("invalid-run", "invalid-run");
+  const artifacts = await listRunArtifacts(request, repository, runId, name);
+  return artifacts.length > 0;
 }
 
 /** Git, not the run list, proves a first run: expired runs are deleted with their artifacts. */
@@ -2170,15 +2283,26 @@ export function assertWorkflowContracts(performanceText, releaseText) {
   requireText(publish, "scoreboard-publication/gate.json", "notes bind the gate");
   requireText(publish, "verify-publication", "publication bytes are reverified");
   requireText(publish, "list-upload", "publication uploads an explicit file list");
-  requireText(publish, "trap cleanup EXIT", "draft cleanup trap");
-  requireText(publish, "gh release delete", "failed draft cleanup");
-  requireText(publish, "gh release upload", "explicit release upload");
-  requireText(publish, "created=1", "draft ownership marker");
+  requireText(publish, "node scripts/release-publish.mjs", "publish script");
+  requireText(publish, "--waiver-record", "waiver record is uploaded with the release");
+  requireText(publish, "waiver-record.json", "waiver record asset");
+  if (publish.includes("gh release create") || publish.includes("gh release view"))
+    errors.push("publish inlines release commands");
   if (publish.includes("desktop-release-assets.mjs"))
     errors.push("publish rewrites gated publication files");
   if (publish.includes("release-ready/*")) errors.push("publication uploads a directory glob");
-  if ((publish.match(/gh release create/g) ?? []).length !== 1)
-    errors.push("unexpected publish command");
+  const reportsDownload = releaseGate.split("pattern: scoreboard-reports")[0] ?? "";
+  const reportsStep = reportsDownload.split("\n").slice(-12).join("\n");
+  if (!releaseGate.includes("node scripts/scoreboard-index.mjs report-artifact"))
+    errors.push("report artifact existence check");
+  if (
+    releaseGate.indexOf("report-artifact") < 0 ||
+    releaseGate.indexOf("report-artifact") > releaseGate.indexOf("pattern: scoreboard-reports")
+  )
+    errors.push("list reports before download");
+  if (!reportsStep.includes("steps.reports.outputs.present == 'true'"))
+    errors.push("report download must be skipped when the artifact is absent");
+  if (reportsStep.includes("continue-on-error")) errors.push("report download continues on error");
   requireText(releaseText, "cancel-in-progress: false", "release must not cancel publication");
   if (errors.length) fail("invalid-workflow", errors.join("; "));
 }
@@ -2257,7 +2381,7 @@ async function main(argv) {
       [
         `durable=${durable}`,
         `run_id=${prior.runId ?? ""}`,
-        `missing_reason=${prior.missingReason}`,
+        `missing_reason=${prior.missingReason ?? ""}`,
         `artifact_name=${durable ? INDEX_ARTIFACT : `${INDEX_ARTIFACT}-check`}`,
         "",
       ].join("\n"),
@@ -2278,6 +2402,7 @@ async function main(argv) {
       waiver: env("SCOREBOARD_WAIVER"),
       trigger: env("GITHUB_EVENT_NAME"),
       actor: env("GITHUB_TRIGGERING_ACTOR"),
+      runId: /^\d+$/.test(env("GITHUB_RUN_ID")) ? Number(env("GITHUB_RUN_ID")) : null,
     });
     return;
   }
@@ -2293,6 +2418,19 @@ async function main(argv) {
     if (files.length) process.stdout.write("\n");
     return;
   }
+  if (command === "report-artifact") {
+    const repository = env("GITHUB_REPOSITORY");
+    const runId = Number(env("GITHUB_RUN_ID"));
+    if (!/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(repository))
+      fail("invalid-repository", "The repository name is invalid.");
+    const present = await reportsArtifactPresent({
+      repository,
+      runId,
+      request: githubRequest(env("GITHUB_API_URL") || "https://api.github.com", env("GH_TOKEN")),
+    });
+    process.stdout.write(`present=${present}\n`);
+    return;
+  }
   if (command === "check-workflows") {
     assertWorkflowContracts(
       await readFile(".github/workflows/performance.yml", "utf8"),
@@ -2302,7 +2440,7 @@ async function main(argv) {
   }
   fail(
     "invalid-argument",
-    "Expected baseline-decision, restore-index, prior-index, index-push, release-gate, verify-publication, list-upload, or check-workflows.",
+    "Expected baseline-decision, restore-index, prior-index, index-push, release-gate, report-artifact, verify-publication, list-upload, or check-workflows.",
   );
 }
 
