@@ -276,6 +276,14 @@ it("shows a server sentence and hides a browser fetch failure", async () => {
     "This name could not be saved.",
   );
 });
+it("shows a failed upkeep change beside its switch", async () => {
+  api.setUpkeep.mockRejectedValueOnce(serverError("Could not change this setting."));
+  const node = await render();
+  await act(async () => node.querySelector<HTMLButtonElement>('[role="switch"]')!.click());
+  expect(
+    node.querySelector('[data-settings-row="Bots keep the board and memory current"]')?.textContent,
+  ).toContain("Could not change this setting.");
+});
 it("saves board upkeep and enables learning through the existing configure call", async () => {
   api.enableLearning.mockResolvedValue({ ...(await api.learning()), enabled: true });
   const node = await render();

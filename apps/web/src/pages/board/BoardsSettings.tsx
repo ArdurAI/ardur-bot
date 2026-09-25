@@ -32,7 +32,7 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [actionError, setActionError] = useState<{
-    target: "refresh" | "name" | "status" | "default" | "bots" | "confirm";
+    target: "refresh" | "upkeep" | "learning" | "name" | "status" | "default" | "bots" | "confirm";
     message: string;
   } | null>(null);
   const [problem, setProblem] = useState<BoardProblem | null>(null);
@@ -128,7 +128,12 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
           </Button>
         </p>
       ) : null}
-      <SettingsRow label={t`Bots keep the board and memory current`}>
+      <SettingsRow
+        label={t`Bots keep the board and memory current`}
+        content={
+          actionError?.target === "upkeep" ? <p role="alert">{actionError.message}</p> : undefined
+        }
+      >
         <Switch
           aria-label={t`Bots keep the board and memory current`}
           checked={upkeep}
@@ -136,7 +141,7 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
           onCheckedChange={(enabled) =>
             void work(async () => {
               setUpkeep((await rpc.board.setUpkeep({ enabled })).enabled);
-            })
+            }, "upkeep")
           }
         />
       </SettingsRow>
@@ -144,13 +149,18 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
         <SettingsRow
           label={t`Learning review`}
           content={
-            <p className="py-2 text-sm text-muted-foreground">
-              {reviewer ? (
-                <Trans>Reviewer: {reviewer}</Trans>
-              ) : (
-                <Trans>No reviewer model yet.</Trans>
-              )}
-            </p>
+            <div className="space-y-2 py-2">
+              <p className="text-sm text-muted-foreground">
+                {reviewer ? (
+                  <Trans>Reviewer: {reviewer}</Trans>
+                ) : (
+                  <Trans>No reviewer model yet.</Trans>
+                )}
+              </p>
+              {actionError?.target === "learning" ? (
+                <p role="alert">{actionError.message}</p>
+              ) : null}
+            </div>
           }
         >
           <span>
@@ -178,7 +188,7 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                       spaceId ? { context: { spaceId } } : undefined,
                     ),
                   );
-                })
+                }, "learning")
               }
             >
               <Trans>Enable</Trans>
