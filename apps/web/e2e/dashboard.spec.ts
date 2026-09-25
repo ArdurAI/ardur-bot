@@ -1,8 +1,106 @@
+import type { BoardView } from "@ardurbot/contracts/board";
 import { expect, test } from "@playwright/test";
 import { dashboardFixture } from "./dashboard-fixture";
 import { captureScreenshot } from "./helpers";
 
 test.use({ viewport: { width: 1280, height: 900 } });
+
+test("starts the first board through the source-mode worker from Settings", async ({ page }) => {
+  const { sourceBoardFixture } = await import("./board-source-fixture");
+  const source = await sourceBoardFixture();
+  const fixture = dashboardFixture();
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
+  await page.route("**/rpc/**", async (route) => {
+    const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
+    const input = route.request().postDataJSON()?.json;
+    if (procedure === "threads/subscribe")
+      return route.fulfill({ contentType: "text/event-stream", body: "" });
+    await route.fulfill({
+      json: {
+        json: procedure.startsWith("board/")
+          ? await source.rpc(procedure, input)
+          : fixture.rpc(procedure, input),
+      },
+    });
+  });
+  try {
+    await page.goto("/app/board");
+    await expect(page.getByRole("button", { name: "Set up a board", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Set up a board", exact: true }).click();
+    await page.getByRole("button", { name: "Start board", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Default", exact: true })).toBeDisabled();
+    expect(
+      (await source.calls()).filter((call) => call.event === "start" && call.argv.includes("init")),
+    ).toHaveLength(1);
+    await page.keyboard.press("Escape");
+    await page.goto("/app/board");
+    await expect(page.locator("[data-board-item]")).toHaveCount(2);
+    await expect(page.getByRole("button", { name: "Set up a board", exact: true })).toHaveCount(0);
+  } finally {
+    await page.unrouteAll({ behavior: "wait" });
+    await source.clean();
+  }
+});
+
+test("keeps board B selected when board A's delayed status update finishes", async ({ page }) => {
+  const fixture = dashboardFixture();
+  const initial = fixture.rpc("board/view") as BoardView;
+  const workspaces = [
+    initial.workspaces[0],
+    { ...initial.workspaces[0], id: "folder", name: "Folder" },
+  ];
+  const mutations: { workspaceId: string; id: string }[] = [];
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
+  await page.route("**/rpc/**", async (route) => {
+    const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
+    const input = route.request().postDataJSON()?.json;
+    if (procedure === "threads/subscribe")
+      return route.fulfill({ contentType: "text/event-stream", body: "" });
+    if (procedure === "board/update") {
+      mutations.push(input);
+      if (input.workspaceId === "board") await pending;
+    }
+    const item = {
+      ...initial.snapshot.items[0],
+      id: input?.workspaceId === "folder" ? "folder-item" : "work-1",
+    };
+    const result =
+      procedure === "board/view"
+        ? {
+            ...initial,
+            workspaces,
+            workspaceId: input?.workspaceId ?? "board",
+            snapshot: { items: [item], readyIds: [item.id], blockedIds: [] },
+          }
+        : fixture.rpc(procedure, input);
+    await route.fulfill({ json: { json: result } });
+  });
+  try {
+    await page.goto("/app/board");
+    await page
+      .locator('[data-board-item="work-1"]')
+      .dragTo(page.locator('[data-board-column="in_progress"]'));
+    await expect.poll(() => mutations.length).toBe(1);
+    await page.getByRole("combobox", { name: "Board", exact: true }).selectOption("folder");
+    release();
+    await expect(page.locator('[data-board-item="folder-item"]')).toBeVisible();
+    await expect(page.locator('[data-board-item="work-1"]')).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "Board", exact: true })).toHaveValue("folder");
+    await page
+      .locator('[data-board-item="folder-item"]')
+      .dragTo(page.locator('[data-board-column="in_progress"]'));
+    await expect
+      .poll(() => mutations.at(-1))
+      .toMatchObject({ workspaceId: "folder", id: "folder-item" });
+  } finally {
+    release();
+  }
+});
 
 test("Dashboard opens first, preserves Bots navigation and approves through the existing thread action", async ({
   page,

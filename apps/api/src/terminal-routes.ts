@@ -6,7 +6,7 @@ import {
   withComputerAdmission,
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { TERMINAL_ENDED, TERMINAL_UNAVAILABLE } from "@ardurbot/contracts";
+import { computerCapabilities, TERMINAL_ENDED, TERMINAL_UNAVAILABLE } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError, requireMembership } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -45,7 +45,7 @@ export function createTerminalRoutes(deps: {
   const provider = deps.sandbox.terminal;
   const availableOn = (computer: { kind: string; connectionId?: string | null }) =>
     Boolean(
-      computer.kind === "docker" &&
+      computerCapabilities(computer.kind).interactiveTerminal &&
         provider &&
         (computer.connectionId || deps.sandbox.describe().capabilities.interactiveTerminal),
     );
@@ -67,7 +67,7 @@ export function createTerminalRoutes(deps: {
           if (
             !session ||
             computer.screenGeneration !== grant.computerGeneration ||
-            computer.kind !== "docker" ||
+            !availableOn(computer) ||
             computer.state !== "running" ||
             computer.maintenanceId ||
             !hasActiveComputerControl(computer) ||
@@ -126,7 +126,7 @@ export function createTerminalRoutes(deps: {
             let computer = await owned(actor, input.botId, input.computerId);
             if (
               !computer.providerRef ||
-              computer.kind !== "docker" ||
+              !availableOn(computer) ||
               !hasActiveComputerControl(computer) ||
               computer.controlBotId !== input.botId
             )
@@ -154,7 +154,7 @@ export function createTerminalRoutes(deps: {
               authSessionId,
               computer: toComputerRef(computer),
               context: {
-                operationId: "terminal.open",
+                operationId: "terminal-open",
                 traceId: "terminal.open",
                 userId: actor.userId,
                 spaceId: actor.spaceId,
@@ -164,12 +164,18 @@ export function createTerminalRoutes(deps: {
                 fence: computer.controlFence,
                 generation: computer.providerRef!,
                 expiresAt: computer.controlLeaseExpiresAt!.getTime(),
-                workingRoot:
-                  computer.scope === "team" && input.workspace !== "computer"
-                    ? `/home/ardurbot/bots/${input.botId}`
-                    : "/home/ardurbot",
+                workingRoot: "",
               },
             };
+            const workingRoot = await deps.sandbox.resolveCommandCwd?.(
+              grant.computer,
+              computer.scope === "team" && input.workspace !== "computer"
+                ? `bots/${input.botId}`
+                : undefined,
+              grant.context,
+            );
+            if (!workingRoot) throw new Error(TERMINAL_UNAVAILABLE);
+            grant.context.workingRoot = workingRoot;
             requestAudited = true;
             return gateway.request(grant, origin, input.sessionId);
           },

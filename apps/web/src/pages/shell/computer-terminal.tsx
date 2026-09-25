@@ -1,4 +1,5 @@
 import type { ComputerStatus } from "@ardurbot/contracts";
+import { computerCapabilities } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
@@ -34,7 +35,7 @@ export function useComputerTerminal({
   useEffect(() => {
     let cancelled = false;
     setAvailable(false);
-    if (botId && computer?.computerId && computer.kind === "docker")
+    if (botId && computer?.computerId && computerCapabilities(computer.kind).interactiveTerminal)
       void rpc.terminal
         .available({ botId, computerId: computer.computerId })
         .then((result) => {

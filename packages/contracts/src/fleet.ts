@@ -89,7 +89,7 @@ export const FleetTargetSchema = /* @__PURE__ */ (() =>
   z.object({
     id: z.string(),
     name: z.string(),
-    kind: z.enum(["host", "docker", "podman", "kubernetes", "ssh", "tailscale"]),
+    kind: z.enum(["host", "docker", "podman", "kubernetes", "ssh", "tailscale", "default"]),
     connectionId: z.string().nullable(),
     state: z.enum(["connected", "discovered", "unavailable"]),
     capacity: CapacitySnapshotSchema,

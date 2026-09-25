@@ -1,7 +1,8 @@
-import type { NotificationProvider } from "@ardurbot/adapter-kit";
+import type { JobPublisher, NotificationProvider } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
-import { deliverBoardNotifications } from "./notifications.js";
+import { createJobReconciler } from "../job-reconciler.js";
+import { createBoardNotificationDelivery, deliverBoardNotifications } from "./notifications.js";
 
 function fixture() {
   const workspace = { id: "board", spaceId: "space", ownerUserId: "owner", enabled: true };
@@ -62,4 +63,104 @@ it("leaves delivery pending after a transport failure", async () => {
   notifications.send.mockRejectedValue(new Error("offline"));
   await deliver();
   expect(prisma.boardNotification.update).not.toHaveBeenCalled();
+});
+it("stops the whole notification batch at its deadline instead of spending a timeout per row", async () => {
+  const { prisma, notifications, row } = fixture();
+  prisma.boardNotification.findMany.mockResolvedValue(
+    Array.from({ length: 50 }, (_, index) => ({ ...row, id: `notice-${index}` })),
+  );
+  const abort = new AbortController();
+  let release!: () => void;
+  notifications.send.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const delivery = deliverBoardNotifications(
+    prisma as unknown as PrismaClient,
+    notifications as unknown as NotificationProvider,
+    abort.signal,
+  );
+  await vi.waitFor(() => expect(notifications.send).toHaveBeenCalledTimes(1));
+  abort.abort();
+  release();
+  await delivery;
+  expect(notifications.send).toHaveBeenCalledTimes(1);
+  expect(prisma.boardNotification.update).not.toHaveBeenCalled();
+});
+it("keeps core recovery independent of a stalled push, bounds cycles, and aborts shutdown", async () => {
+  vi.useFakeTimers();
+  const { prisma, notifications } = fixture();
+  let active = 0;
+  let peak = 0;
+  notifications.send.mockImplementation(
+    (_notice, context) =>
+      new Promise<void>((_resolve, reject) => {
+        peak = Math.max(peak, ++active);
+        context.signal.addEventListener(
+          "abort",
+          () => {
+            --active;
+            reject(new Error("aborted"));
+          },
+          { once: true },
+        );
+      }),
+  );
+  const leadership = { tryAcquire: vi.fn(async () => true), release: vi.fn(async () => undefined) };
+  const db = Object.assign(prisma, {
+    run: { findMany: vi.fn(async () => []) },
+    routine: { findMany: vi.fn(async () => []) },
+    computer: { findMany: vi.fn(async () => []) },
+    messagingOutbound: { findFirst: vi.fn(async () => null) },
+  });
+  const delivery = createBoardNotificationDelivery({
+    prisma: db as unknown as PrismaClient,
+    notifications: notifications as unknown as NotificationProvider,
+    leadership,
+  });
+  try {
+    delivery.start();
+    delivery.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(active).toBe(1);
+    const core = createJobReconciler({
+      prisma: db as unknown as PrismaClient,
+      jobs: { enqueue: vi.fn() } as unknown as JobPublisher,
+    });
+    await core.reconcileOnce();
+    expect(db.run.findMany).toHaveBeenCalled();
+    expect(db.routine.findMany).toHaveBeenCalled();
+    expect(db.computer.findMany).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(active).toBe(0);
+    expect(prisma.boardNotification.update).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(active).toBe(1);
+    expect(peak).toBe(1);
+    expect(notifications.send).toHaveBeenCalledTimes(2);
+  } finally {
+    await delivery.stop();
+    vi.useRealTimers();
+  }
+  expect(active).toBe(0);
+  expect(leadership.release).toHaveBeenCalledOnce();
+});
+it("does not drain notifications on a follower worker", async () => {
+  vi.useFakeTimers();
+  const { prisma, notifications } = fixture();
+  const delivery = createBoardNotificationDelivery({
+    prisma: prisma as unknown as PrismaClient,
+    notifications: notifications as unknown as NotificationProvider,
+    leadership: { tryAcquire: async () => false, release: async () => undefined },
+  });
+  try {
+    delivery.start();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(prisma.boardNotification.findMany).not.toHaveBeenCalled();
+  } finally {
+    await delivery.stop();
+    vi.useRealTimers();
+  }
 });

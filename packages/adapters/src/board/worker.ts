@@ -3,7 +3,7 @@ import type { JobPublisher } from "@ardurbot/adapter-kit";
 import type { BoardRun, BoardRunResult } from "@ardurbot/contracts/board";
 import { BoardError, BoardRunResultSchema, BoardRunSchema } from "@ardurbot/contracts/board";
 import type { PrismaClient } from "@ardurbot/db";
-import type { BoardScope } from "./service.js";
+import type { BoardScope, BoardServiceOptions } from "./service.js";
 import { BoardService } from "./service.js";
 
 /** Human source-mode requests execute in the worker, using its login environment. */
@@ -49,10 +49,7 @@ export async function requestBoardCommand(
   }
 }
 
-export async function executeBoardCommand(
-  deps: { prisma: PrismaClient; dataDir: string },
-  requestId: string,
-) {
+export async function executeBoardCommand(deps: BoardServiceOptions, requestId: string) {
   const claimed = await deps.prisma.boardCommand.updateMany({
     where: { id: requestId, status: "queued", expiresAt: { gt: new Date() } },
     data: { status: "running" },
@@ -80,7 +77,9 @@ export async function executeBoardCommand(
     const scope = { userId: row.userId, spaceId: row.spaceId, signal };
     const service = new BoardService(deps);
     if (input.action !== "discover") {
-      const workspace = await service.workspace(scope, input.workspaceId);
+      const workspace = await service.workspace(scope, input.workspaceId, {
+        allowUninitialized: input.action === "init",
+      });
       if (
         input.workspace?.kind !== workspace.kind ||
         (input.workspace.kind === "folder" && input.workspace.path !== workspace.path) ||

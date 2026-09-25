@@ -223,6 +223,7 @@ export const BoardViewSchema = z.object({
   workspaceId: z.string().nullable(),
   snapshot: BoardSnapshotSchema,
   selected: WorkItemSchema.nullable(),
+  selectionProblem: BoardProblemSchema.nullish(),
   followingIds: z.array(z.string()),
   bots: z.array(z.object({ id: z.string(), name: z.string() })),
   problem: BoardProblemSchema.nullable(),

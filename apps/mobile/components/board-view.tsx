@@ -49,6 +49,7 @@ export function MobileBoard() {
   } | null>(null);
   const pending = useRef<Promise<void> | null>(null);
   const mutation = useRef(false);
+  const selection = useRef(0);
   const key = `ardurbot.board-filters.${selectedSpaceId() ?? "default"}`;
   useEffect(() => {
     let active = true;
@@ -81,6 +82,7 @@ export function MobileBoard() {
   useFocusEffect(
     useCallback(() => {
       const abort = new AbortController();
+      const ticket = ++selection.current;
       const load = async () => {
         await pending.current;
         if (
@@ -96,13 +98,13 @@ export function MobileBoard() {
           { signal: abort.signal },
         )
           .then((response) => {
-            if (!abort.signal.aborted) {
+            if (!abort.signal.aborted && ticket === selection.current) {
               setData(BoardViewSchema.parse(response));
               setError(false);
             }
           })
           .catch(() => {
-            if (!abort.signal.aborted) setError(true);
+            if (!abort.signal.aborted && ticket === selection.current) setError(true);
           })
           .finally(() => {
             if (pending.current === request) pending.current = null;
@@ -138,6 +140,10 @@ export function MobileBoard() {
     }
   }
   const selectItem = (id?: string) => {
+    ++selection.current;
+    setData((current) =>
+      current ? { ...current, selected: null, selectionProblem: null } : current,
+    );
     setComment("");
     router.setParams({ view: "board", workspace: workspaceId ?? params.workspace, item: id ?? "" });
   };
@@ -185,7 +191,15 @@ export function MobileBoard() {
             patch: { status: previous.data, deferUntil: item.deferUntil },
           });
       } catch (error) {
-        setData(before);
+        setData((current) =>
+          current && before && current.workspaceId === before.workspaceId
+            ? {
+                ...current,
+                snapshot: before.snapshot,
+                selected: current.selected?.id === item.id ? item : current.selected,
+              }
+            : current,
+        );
         throw error;
       }
     });
@@ -206,17 +220,20 @@ export function MobileBoard() {
         (!filters.bot || item.assignee === `bot:${filters.bot}`),
     ) ?? [];
   const foreground = { color: tokens.foreground };
+  const failure =
+    error || data?.problem || data?.selectionProblem ? (
+      <View>
+        <Text accessibilityRole="alert" style={{ color: tokens.destructive }}>
+          {data?.selectionProblem ? t("Could not load") : t("Could not load Board; retry.")}
+        </Text>
+        <Button title={t("Retry")} disabled={busy} onPress={() => setRetry((n) => n + 1)} />
+        {data?.selectionProblem ? <Button title={t("Close")} onPress={() => selectItem()} /> : null}
+      </View>
+    ) : null;
   return (
     <View style={styles.page}>
       {!data && !error ? <ActivityIndicator /> : null}
-      {error || data?.problem ? (
-        <View>
-          <Text accessibilityRole="alert" style={{ color: tokens.destructive }}>
-            {t("Could not load Board; retry.")}
-          </Text>
-          <Button title={t("Retry")} onPress={() => setRetry((n) => n + 1)} />
-        </View>
-      ) : null}
+      {!selected ? failure : null}
       {readOnly ? <Text style={foreground}>{t("Sign in to manage boards.")}</Text> : null}
       {data && !workspaceId ? (
         <View>
@@ -352,6 +369,7 @@ export function MobileBoard() {
           keyboardShouldPersistTaps="handled"
         >
           <Button title={t("Close")} onPress={() => selectItem()} />
+          {failure}
           {selected ? (
             <>
               <Text accessibilityRole="header" style={[styles.title, foreground]}>

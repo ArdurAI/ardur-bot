@@ -1,4 +1,4 @@
-import type { AdapterContext } from "@ardurbot/adapter-kit";
+import type { AdapterContext, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { FleetTarget } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import { PlacementSettingsSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
@@ -6,6 +6,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerSecretLoader } from "../computer-connections.js";
 import { ComputerConnections } from "../computer-connections.js";
 import { DockerSandboxProvider } from "../docker-sandbox.js";
+import { sandboxKindForBot } from "../host-aware-sandbox.js";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "../sandbox-factory.js";
 import { hostCapacity } from "./service.js";
@@ -21,6 +22,7 @@ export class FleetCatalog {
     private readonly prisma: PrismaClient,
     secrets: ComputerSecretLoader,
     private readonly options: SandboxProviderOptions,
+    private readonly fallback: SandboxProvider,
   ) {
     this.connections = new ComputerConnections(prisma, secrets, options);
     this.docker = new DockerSandboxProvider(
@@ -29,6 +31,15 @@ export class FleetCatalog {
     );
   }
   async testDefault(context: AdapterContext) {
+    const deployment = await this.prisma.deploymentSettings.findUnique({
+      where: { id: "default" },
+    });
+    const kind = sandboxKindForBot(this.fallback.describe().id, deployment?.computerHost);
+    // The null binding refreshes both local rows when the default is the host.
+    if (kind !== "docker" && kind !== "desktop") {
+      await this.fallback.capacity(context);
+      return;
+    }
     const info = await this.docker.engineInfo({
       ...context,
       signal: AbortSignal.any([context.signal, AbortSignal.timeout(10000)]),
@@ -51,12 +62,23 @@ export class FleetCatalog {
       }),
       this.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
     ]);
+    const defaultKind = sandboxKindForBot(this.fallback.describe().id, deployment?.computerHost);
+    const defaultTargetId = defaultKind === "desktop" ? "host" : "default";
+    const defaultCapacity = await this.fallback
+      .capacity({
+        ...context,
+        signal: AbortSignal.any([context.signal, AbortSignal.timeout(10000)]),
+      })
+      .catch(() => unknownCapacity());
     const host = usesHostBridge()
       ? await (this.options.hostClient ?? createHostClient()).health().catch(() => null)
       : null;
-    const hostSnapshot = usesHostBridge()
-      ? (host?.capacity ?? unknownCapacity())
-      : await hostCapacity();
+    const hostSnapshot =
+      defaultTargetId === "host"
+        ? defaultCapacity
+        : usesHostBridge()
+          ? (host?.capacity ?? unknownCapacity())
+          : await hostCapacity();
     const targets: FleetTarget[] = [
       {
         id: "host",
@@ -70,21 +92,32 @@ export class FleetCatalog {
     ];
     // Keep the deployment default visible even when the owner has selected a host computer.
     let dockerState: FleetTarget["state"] = "connected";
-    const dockerSnapshot = await this.docker.capacity().catch(() => {
-      dockerState = "unavailable";
-      return unknownCapacity();
-    });
+    const dockerSnapshot =
+      defaultTargetId === "default"
+        ? defaultCapacity
+        : await this.docker.capacity().catch(() => {
+            dockerState = "unavailable";
+            return unknownCapacity();
+          });
     targets.push({
       ...this.diagnostics.get("default"),
       id: "default",
-      name: "Docker on this Mac",
-      kind: "docker",
+      name:
+        defaultTargetId === "host" || defaultKind === "docker"
+          ? "Docker on this Mac"
+          : "Default computer",
+      kind:
+        defaultTargetId === "host" || defaultKind === "docker"
+          ? "docker"
+          : defaultKind === "kubernetes"
+            ? "kubernetes"
+            : "default",
       connectionId: null,
       state: dockerSnapshot.source === "not-reported" ? "unavailable" : dockerState,
       capacity: dockerSnapshot,
       bots: [],
     });
-    // Four probes at a time bound host bridge and process load for larger fleets.
+    // Bound per-list work; the shared host bridge also reserves slots for execution.
     for (let offset = 0; offset < rows.length; offset += 4) {
       const entries = await Promise.all(
         rows.slice(offset, offset + 4).map(async (row): Promise<FleetTarget> => {
@@ -119,14 +152,10 @@ export class FleetCatalog {
     }
     for (const bot of bots) {
       const targetId =
-        bot.computer?.connectionId ??
-        (bot.computer?.kind === "desktop" || deployment?.computerHost === "this-mac"
-          ? "host"
-          : "default");
+        bot.computer?.connectionId ?? (bot.computer?.kind === "desktop" ? "host" : defaultTargetId);
       targets.find((target) => target.id === targetId)?.bots.push({ id: bot.id, name: bot.name });
     }
     // The null binding means the saved deployment default. Do not silently change it to reach a host.
-    const defaultTargetId = deployment?.computerHost === "this-mac" ? "host" : "default";
     return {
       targets,
       bots,

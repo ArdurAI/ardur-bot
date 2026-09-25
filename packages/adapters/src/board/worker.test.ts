@@ -83,6 +83,44 @@ it("revalidates folder identity in the worker before calling bd", async () => {
   expect(run).not.toHaveBeenCalled();
   expect(row.result).toMatchObject({ ok: false, problem: { code: "forbidden" } });
 });
+it.each(["space", "folder"])(
+  "initializes a discovered %s workspace through the source worker",
+  async (kind) => {
+    const { deps, row, prisma, run } = fixture();
+    vi.mocked(BoardService.prototype.workspace).mockRestore();
+    const workspace = {
+      id: "workspace",
+      kind,
+      path: "/fixture/project",
+      prefix: "board",
+      name: "Board",
+      initialized: false,
+      enabled: true,
+      isDefault: false,
+      allowAllBots: true,
+      allowedBotIds: [],
+    };
+    Object.assign(prisma, {
+      deploymentSettings: { findUnique: vi.fn(async () => ({ ownerUserId: "owner" })) },
+      spaceMember: { findUnique: vi.fn(async () => ({ userId: "owner" })) },
+      user: { findUniqueOrThrow: vi.fn(async () => ({ name: "Owner" })) },
+      boardWorkspace: { findFirst: vi.fn(async () => workspace) },
+    });
+    row.request = {
+      ...request,
+      action: "init",
+      prefix: "board",
+      argv: [],
+      workspace: kind === "space" ? { kind } : { kind, path: workspace.path },
+    } as never;
+    await executeBoardCommand(deps, "request");
+    expect(row.result).toMatchObject({ ok: true });
+    expect(run).toHaveBeenCalledWith(
+      row.request,
+      expect.objectContaining({ userId: "owner", spaceId: "space" }),
+    );
+  },
+);
 it("cancels a queued source request without replaying a mutation", async () => {
   const { deps, prisma } = fixture();
   const controller = new AbortController();

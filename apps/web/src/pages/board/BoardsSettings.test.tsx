@@ -34,7 +34,7 @@ afterEach(async () => {
   document.body.replaceChildren();
   vi.clearAllMocks();
 });
-async function render(initialized = true) {
+async function render(initialized = true, allowedBotIds: string[] = []) {
   api.workspaces.mockResolvedValue({
     workspaces: [
       {
@@ -47,7 +47,7 @@ async function render(initialized = true) {
         initialized,
         isDefault: false,
         allowAllBots: false,
-        allowedBotIds: [],
+        allowedBotIds,
       },
     ],
     problem: null,
@@ -68,6 +68,14 @@ async function render(initialized = true) {
 }
 const button = (node: HTMLElement, label: string) =>
   [...node.querySelectorAll("button")].find((button) => button.textContent === label)!;
+it("removes unavailable bots when saving the remaining allowlist", async () => {
+  const node = await render(true, ["archived", "deleted"]);
+  await act(async () => node.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  expect(api.configure).toHaveBeenCalledWith({
+    workspaceId: "workspace",
+    patch: { allowedBotIds: ["builder"] },
+  });
+});
 it("initializes only after Settings confirmation and shows the files affected", async () => {
   const node = await render(false);
   expect(api.start).not.toHaveBeenCalled();

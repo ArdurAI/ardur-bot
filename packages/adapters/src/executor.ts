@@ -32,6 +32,7 @@ import {
   BotSecretSubmission,
   CapabilityPreferencesSchema,
   ContextBudgetsSchema,
+  computerCapabilities,
   computerProfileNote,
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
@@ -1803,10 +1804,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
         const attachedFilesPrompt = currentTurnFilesInstruction(currentTurnFiles);
         const graphical =
-          computer.kind === "docker" ||
-          (computer.kind !== "desktop" &&
-            computer.kind !== "kubernetes" &&
-            deps.sandbox.describe().capabilities.graphical);
+          computerCapabilities(computer.kind).graphical &&
+          (computer.kind === "docker" || deps.sandbox.describe().capabilities.graphical);
         // Gate on the model this run will actually call — the pair written to the run row
         // above. Deriving it a second time here dropped the deployment fallback, so a
         // vision-capable default was gated as "scripted" and lost its screenshot tools.

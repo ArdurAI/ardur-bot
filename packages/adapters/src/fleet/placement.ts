@@ -92,6 +92,37 @@ export async function placeRunComputer(
   const unapproved = owners.filter((bot) => !bot.moveAutomatically && !bot.placementConsent);
   if (unapproved.length) {
     const requested = await deps.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM computers WHERE id = ${computer.id} FOR UPDATE`;
+      const pending = await tx.run.findFirst({
+        where: {
+          id: { not: runId },
+          spaceId: run.spaceId,
+          bot: { computerId: computer.id },
+          status: "waiting_input",
+          runtimeComputer: { equals: Prisma.DbNull },
+          placement: { path: ["status"], equals: "pending" },
+        },
+        select: { id: true },
+      });
+      // Consent is shared by the computer: a later run must not replace its controls.
+      if (pending) return true;
+      // Match run admission's bot-before-thread order when publishing the shared controls.
+      await tx.$queryRaw`SELECT id FROM bots WHERE "computerId" = ${computer.id} ORDER BY id FOR UPDATE`;
+      const currentOwners = await tx.bot.findMany({
+        where: { computerId: computer.id, archivedAt: null },
+      });
+      const waiting = currentOwners.filter(
+        (bot) => !bot.moveAutomatically && !bot.placementConsent,
+      );
+      if (
+        !waiting.length ||
+        currentOwners.some(
+          (bot) =>
+            bot.runtimeKind !== "pi" ||
+            (bot.pendingPlacement as { declined?: boolean } | null)?.declined,
+        )
+      )
+        return true;
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${run.threadId} FOR UPDATE`;
       const paused = await tx.run.updateMany({
         where: ownedRun,
@@ -103,7 +134,7 @@ export async function placeRunComputer(
         },
       });
       if (paused.count !== 1) return null;
-      for (const bot of unapproved)
+      for (const bot of waiting)
         await tx.bot.update({
           where: { id: bot.id },
           data: { pendingPlacement: { ...decision, runId } },
@@ -114,9 +145,10 @@ export async function placeRunComputer(
         botId: run.botId,
         runId,
         type: "computer.placement.requested",
-        payload: { ...decision, botIds: unapproved.map((bot) => bot.id) },
+        payload: { ...decision, botIds: waiting.map((bot) => bot.id) },
       });
     });
+    if (requested === true) return true;
     if (requested) await deps.events.notify(run.threadId, requested.seq).catch(() => undefined);
     return false;
   }
@@ -127,6 +159,18 @@ export async function placeRunComputer(
   try {
     updateId = await deps.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM computers WHERE id = ${computer.id} FOR UPDATE`;
+      const currentOwners = await tx.bot.findMany({
+        where: { computerId: computer.id, archivedAt: null },
+      });
+      if (
+        currentOwners.some(
+          (bot) =>
+            bot.runtimeKind !== "pi" ||
+            (!bot.moveAutomatically && !bot.placementConsent) ||
+            (bot.pendingPlacement as { declined?: boolean } | null)?.declined,
+        )
+      )
+        throw new ComputerBusyError();
       const foreign = await tx.run.findFirst({
         where: {
           id: { not: runId },

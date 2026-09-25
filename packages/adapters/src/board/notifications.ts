@@ -2,12 +2,15 @@ import type { NotificationProvider } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { getUserPreferences } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import type { ReconciliationLeadership } from "../job-reconciler.js";
 
-/** The existing worker reconciliation loop drains durable follower notifications. */
+/** A batch has one shared deadline; an optional push service cannot extend it per row. */
 export async function deliverBoardNotifications(
   prisma: PrismaClient,
   notifications: NotificationProvider,
+  signal: AbortSignal = AbortSignal.timeout(15_000),
 ) {
+  if (signal.aborted) return;
   const rows = await prisma.boardNotification.findMany({
     where: { deliveredAt: null },
     include: { follow: { include: { workspace: true } } },
@@ -15,6 +18,7 @@ export async function deliverBoardNotifications(
     take: 50,
   });
   for (const row of rows) {
+    if (signal.aborted) return;
     const { follow } = row;
     const { workspace } = follow;
     try {
@@ -55,17 +59,63 @@ export async function deliverBoardNotifications(
             spaceId: workspace.spaceId,
             userId: follow.userId,
             botId: "",
-            signal: AbortSignal.timeout(15_000),
+            signal,
           },
         );
       }
+      signal.throwIfAborted();
       await prisma.boardNotification.update({
         where: { id: row.id },
         data: { deliveredAt: new Date() },
       });
     } catch (error) {
+      if (signal.aborted) return;
       getLogger().error("board notification delivery", error);
       // A later reconciliation retries transport errors without affecting the item write.
     }
   }
+}
+
+/** Push delivery has its own leadership and schedule, outside run recovery. */
+export function createBoardNotificationDelivery(deps: {
+  prisma: PrismaClient;
+  notifications: NotificationProvider;
+  leadership: ReconciliationLeadership;
+}) {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let running: Promise<void> | undefined;
+  let controller: AbortController | undefined;
+  let stopped = true;
+  const tick = () => {
+    if (stopped || running) return;
+    const abort = new AbortController();
+    controller = abort;
+    const deadline = setTimeout(() => abort.abort(), 15_000);
+    running = (async () => {
+      if (await deps.leadership.tryAcquire())
+        await deliverBoardNotifications(deps.prisma, deps.notifications, abort.signal);
+    })()
+      .catch((error) => getLogger().error("board notification delivery", error))
+      .finally(() => {
+        clearTimeout(deadline);
+        running = undefined;
+        controller = undefined;
+      });
+  };
+  return {
+    start() {
+      if (!stopped) return;
+      stopped = false;
+      tick();
+      timer = setInterval(tick, 30_000);
+      timer.unref?.();
+    },
+    async stop() {
+      stopped = true;
+      clearInterval(timer);
+      controller?.abort();
+      await running;
+      await deps.leadership.release();
+    },
+  };
 }

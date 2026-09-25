@@ -2160,6 +2160,7 @@ msgstr ""
 msgid "Could not install connector"
 msgstr "कनेक्टर इंस्टॉल नहीं हो सका"
 
+#: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/KnowledgeSection.tsx

@@ -2160,6 +2160,7 @@ msgstr ""
 msgid "Could not install connector"
 msgstr "도구 연결을 추가하지 못했습니다."
 
+#: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/KnowledgeSection.tsx
