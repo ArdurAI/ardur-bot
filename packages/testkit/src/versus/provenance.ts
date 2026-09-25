@@ -266,8 +266,11 @@ export function sanitize(value: string, replacements: readonly string[] = []) {
   for (const replacement of [...replacements].filter(Boolean).sort((a, b) => b.length - a.length))
     clean = clean.replaceAll(replacement, "<isolated-resource>");
   return clean
-    .replace(/(?:\/Users\/|\/home\/)[^\s"'<>]+/g, "<private-path>")
-    .replace(/(?:\/private)?\/var\/folders\/[^\s"'<>]+/g, "<temporary-path>")
+    .replace(/(?<=["'])\/[^\\\r\n"'<>]+/g, "<private-path>")
+    .replace(/\b(file|unix):\/\/[^\\\r\n"'<>;,]+/g, "$1://<private-path>")
+    .replace(/(?:\/Users\/|\/home\/)[^\\\s"'<>]+/g, "<private-path>")
+    .replace(/(?:\/private)?\/var\/folders\/[^\\\s"'<>]+/g, "<temporary-path>")
+    .replace(/(?<![a-zA-Z0-9._~:/\\>-])\/[^\\\s"'<>:,;()[\]{}]+/g, "<private-path>")
     .replace(
       /(?<![A-Z0-9._%+-])[A-Z0-9._%+-]{1,64}@[A-Z0-9.-]{1,255}\.[A-Z]{2,24}/gi,
       "<redacted-address>",
