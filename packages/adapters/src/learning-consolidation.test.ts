@@ -1,4 +1,5 @@
-import type { AgentRunRequest } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentUsage } from "@ardurbot/adapter-kit";
+import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import type { DocumentRevision } from "@ardurbot/contracts";
 import { expect, it, vi } from "vitest";
 import { consolidateLearning, overlappingLearnedSkills } from "./learning-consolidation.js";
@@ -19,7 +20,7 @@ const revisions = [1, 2].map((i) => ({
   scopeKey: { kind: "bot", spaceId: "space", userId: "user", botId: "bot" },
   content: `---\nname: reports-${i}\ndescription: Weekly report summary preparation\n---\nPrepare the summary.`,
 })) as DocumentRevision[];
-function fixture(output: "valid" | "tool" = "valid") {
+function fixture(output: "valid" | "tool" = "valid", usage?: AgentUsage[]) {
   const config = {
     enabled: true,
     consolidationEnabled: true,
@@ -37,7 +38,8 @@ function fixture(output: "valid" | "tool" = "valid") {
       yield { type: "tool", name: "write_file" };
       return;
     }
-    yield { type: "usage", inputTokens: 20, outputTokens: 30 };
+    for (const event of usage ?? [{ inputTokens: 20, outputTokens: 30 }])
+      yield { type: "usage", ...event };
     yield {
       type: "text",
       text: JSON.stringify({
@@ -76,6 +78,49 @@ function fixture(output: "valid" | "tool" = "valid") {
   };
   return { deps, config, execute, reviewExecution };
 }
+it("settles cumulative snapshots and their terminal receipt once", async () => {
+  const request = new RequestUsageCollector({
+    provider: "fixture",
+    model: "fixture",
+    inputSemantics: "total-with-cache-subsets",
+    mappingVersion: "fixture-v1",
+  });
+  const started = request.start();
+  const snapshot = request.snapshot({ input: 100, output: 30 });
+  const f = fixture("valid", [started, snapshot, request.finish("success"), snapshot]);
+  const result = await consolidateLearning(
+    f.deps as never,
+    { spaceId: "space", userId: "user" },
+    revisions,
+    f.config as never,
+    now,
+  );
+  expect(result.tokens).toBe(130);
+  expect(f.reviewExecution.update).toHaveBeenLastCalledWith({
+    where: expect.anything(),
+    data: expect.objectContaining({ tokens: 130, reservedTokens: 130 }),
+  });
+});
+
+it("keeps unmeasured cumulative receipts distinct from measured zero", async () => {
+  const request = new RequestUsageCollector({
+    provider: "fixture",
+    model: "fixture",
+    inputSemantics: "total-with-cache-subsets",
+    mappingVersion: "fixture-v1",
+  });
+  const f = fixture("valid", [request.start(), request.finish("success")]);
+  const result = await consolidateLearning(
+    f.deps as never,
+    { spaceId: "space", userId: "user" },
+    revisions,
+    f.config as never,
+    now,
+  );
+  expect(result.tokens).toBeNull();
+  expect(f.reviewExecution.update.mock.calls.at(-1)?.[0].data).not.toHaveProperty("reservedTokens");
+});
+
 it("uses a model-only bounded call, shares reservations and records every source revision without applying", async () => {
   vi.mocked(saveCuratorProposal).mockClear();
   const f = fixture();

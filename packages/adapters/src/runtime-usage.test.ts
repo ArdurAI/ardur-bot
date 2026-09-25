@@ -16,6 +16,46 @@ async function collect(events: AsyncIterable<AgentRuntimeEvent>) {
   return result;
 }
 describe("usage persistence around runtime streams", () => {
+  it("returns only newly measured spend, preserving measured zero and legacy deltas", () => {
+    const request = collector();
+    const totals = new ObservedUsageTotals();
+    expect(totals.observe(request.start())).toBeNull();
+    expect(totals.reported).toBe(false);
+    expect(totals.observe(request.snapshot({ input: 0, output: 0 }))).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    expect(totals.reported).toBe(true);
+    const snapshot = request.snapshot({ input: 100, output: 30 });
+    expect(totals.observe(snapshot)).toEqual({ inputTokens: 100, outputTokens: 30 });
+    expect(totals.observe(request.finish("success"))).toBeNull();
+    expect(totals.observe(snapshot)).toBeNull();
+    expect(
+      totals.observe({ provider: "fixture", model: "fixture", inputTokens: 10, outputTokens: 5 }),
+    ).toEqual({ inputTokens: 10, outputTokens: 5 });
+    expect(
+      totals.observe({
+        provider: "fixture",
+        model: "fixture",
+        inputTokens: 10,
+        outputTokens: 5,
+        reported: false,
+      }),
+    ).toBeNull();
+    expect(totals.tokens).toBe(145);
+  });
+
+  it("preserves deltas from legacy runtimes without inventing request identity", () => {
+    const totals = new ObservedUsageTotals();
+    const usage = { provider: "fixture", model: "fixture", inputTokens: 100, outputTokens: 30 };
+    totals.observe(usage);
+    totals.observe(usage);
+    expect(totals.tokens).toBe(260);
+    expect(totals.reported).toBe(true);
+    expect(() => totals.observe({ ...usage, inputTokens: -1 })).toThrow();
+    expect(totals.tokens).toBe(260);
+  });
+
   it("persists duplicate and cumulative delivery once in local spend totals", async () => {
     const request = collector();
     const started = request.start();
