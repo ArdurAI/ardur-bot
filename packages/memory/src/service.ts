@@ -22,6 +22,7 @@ import { ownedScope } from "./scope.js";
 export interface MemoryOperationContext extends AdapterContext {
   databaseTransaction?: Prisma.TransactionClient;
   learning?: DocumentCommit["learning"];
+  imported?: DocumentCommit["imported"];
   memoryGeneration?: number;
   memoryModel?: MemoryModel;
   threadId?: string;
@@ -106,9 +107,13 @@ export class MemoryService {
   private attribution(
     s: MemorySession,
     context: MemoryOperationContext,
-  ): Pick<DocumentCommit, "author" | "model" | "runId" | "threadId" | "delivery" | "learning"> {
+  ): Pick<
+    DocumentCommit,
+    "author" | "model" | "runId" | "threadId" | "delivery" | "learning" | "imported"
+  > {
     return {
       learning: context.learning,
+      ...(context.imported ? { imported: context.imported } : {}),
       author: {
         kind: context.learning ? "learning-loop" : s.access.runId ? "bot" : "user",
         userId: s.access.userId,

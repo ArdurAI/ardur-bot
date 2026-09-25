@@ -8,6 +8,7 @@ import {
 } from "./fleet-bridge.js";
 import { HostIntegrationSchema } from "./host-integrations.js";
 import { IDE_FILE_BYTES } from "./ide.js";
+import { LocalImportRootsSchema } from "./local-import.js";
 import {
   RuntimeAvailabilitySchema,
   RuntimeInfoSchema,
@@ -150,6 +151,12 @@ export type HostMcpRegistration = z.infer<typeof HostMcpRegistrationSchema>;
 const mcpTarget = { serverId: id, revision: z.number().int().positive() };
 export const HostOperationSchema = /* @__PURE__ */ (() =>
   z.discriminatedUnion("op", [
+    z.strictObject({ op: z.literal("import.scan"), roots: LocalImportRootsSchema.optional() }),
+    z.strictObject({
+      op: z.literal("import.read"),
+      scanId: z.string().uuid(),
+      itemId: z.string().uuid(),
+    }),
     RemoteComputerCallSchema,
     RemoteDiscoverySchema,
     RemoteSecretSchema,

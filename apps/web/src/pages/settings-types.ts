@@ -6,6 +6,7 @@ export type SettingsSection =
   | "privacy"
   | "capabilities"
   | "memory"
+  | "import"
   | "models"
   | "devices"
   | "computer"

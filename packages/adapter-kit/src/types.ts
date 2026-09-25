@@ -8,6 +8,7 @@ import type {
   SandboxKind,
 } from "@ardurbot/contracts";
 import type { HostCommandApproval, HostIntegrationId } from "@ardurbot/contracts/host-integrations";
+import type { LocalImportJob } from "@ardurbot/contracts/local-import";
 
 export interface AdapterContext {
   /** Supplied by the executor only after claiming the exact approved host command. */
@@ -614,6 +615,8 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "local-import.run": LocalImportJob;
+  "local-import.refresh": Record<string, never>;
   "briefs.maintain": { runId?: string };
   "learning.curate": { spaceId?: string; requestedBy?: string; requestId?: string };
   "learning.review": {
@@ -654,7 +657,13 @@ export type BackgroundJob = {
 }[BackgroundJobName];
 
 export type BackgroundJobHandlers = {
-  [Name in BackgroundJobName]: (payload: BackgroundJobPayloads[Name]) => Promise<void>;
+  [Name in Exclude<BackgroundJobName, "local-import.run" | "local-import.refresh">]: (
+    payload: BackgroundJobPayloads[Name],
+  ) => Promise<void>;
+} & {
+  [Name in "local-import.run" | "local-import.refresh"]?: (
+    payload: BackgroundJobPayloads[Name],
+  ) => Promise<void>;
 };
 
 export interface SecretRecord {

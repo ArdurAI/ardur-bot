@@ -90,6 +90,7 @@ export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
             if (document?.path.startsWith("preferences/") && !context.learning)
               throw new MemoryAccessError();
             if (!context.runId) return;
+            if (document?.imported) throw new MemoryAccessError();
             const skill = await tx.agentSkill.findFirst({
               where: { documentId, spaceId: context.spaceId },
             });

@@ -76,6 +76,16 @@ msgstr ""
 msgid "{0} handling"
 msgstr ""
 
+#. placeholder {0}: result.created
+#. placeholder {1}: result.updated
+#. placeholder {2}: result.unchanged
+#. placeholder {3}: result.removed
+#. placeholder {4}: result.skipped
+#. placeholder {5}: result.conflicts
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts."
+msgstr ""
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -728,6 +738,10 @@ msgstr "Archiviert. Chat, Erinnerungen und Dateien bleiben erhalten."
 msgid "Ardur (built-in)"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgstr ""
+
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
@@ -830,6 +844,10 @@ msgstr "Autorisieren"
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize this server so agents can use its tools. A popup opens."
 msgstr "Autorisiere diesen Server, damit Agents seine Tools nutzen können. Ein Pop-up öffnet sich."
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Auto-import changes"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Automated senders"
@@ -1075,7 +1093,11 @@ msgstr "Server nicht erreichbar."
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/PluginsPage.tsx
+<<<<<<< HEAD
 #: src/pages/fleet/FleetSettings.tsx
+=======
+#: src/pages/import/ImportedServerCredentials.tsx
+>>>>>>> dev
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1387,6 +1409,7 @@ msgid "Close panel"
 msgstr "Panel schließen"
 
 #: src/components/ArtifactFileCard.tsx
+#: src/pages/import/LocalImportPage.tsx
 msgid "Close preview"
 msgstr "Vorschau schließen"
 
@@ -2273,6 +2296,10 @@ msgstr ""
 msgid "Could not save configuration. Check the fields and try again."
 msgstr ""
 
+#: src/pages/import/ImportedServerCredentials.tsx
+msgid "Could not save credentials. Check each field and retry."
+msgstr ""
+
 #: src/pages/ModelDestinations.tsx
 msgid "Could not save destinations; try again."
 msgstr ""
@@ -3010,6 +3037,10 @@ msgstr "Gib eine ganze Zahl von 1 bis 1000 für das Bilderlimit ein."
 msgid "Enter this code at <0>{0}</0>"
 msgstr "Gib diesen Code unter <0>{0}</0> ein"
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Environment values are requested when you connect this server."
+msgstr ""
+
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Environment variables"
 msgstr ""
@@ -3053,6 +3084,10 @@ msgstr "Jede Woche"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Excluded files"
 msgstr ""
 
 #: src/pages/TeamBoard.tsx
@@ -3220,9 +3255,21 @@ msgstr ""
 msgid "Flags"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Folder inside your home"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Passwort vergessen?"
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Found on this computer"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Found on this Mac"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -3448,8 +3495,22 @@ msgstr ""
 msgid "Image upload area"
 msgstr "Bild-Upload-Bereich"
 
+#: src/pages/import/LocalImportPage.tsx
 #: src/pages/MemoryImportExport.tsx
+#: src/pages/settings-sections.ts
 msgid "Import"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import all"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import could not finish. Check this computer is connected, then re-scan."
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import from {name}"
 msgstr ""
 
 #: src/pages/MemoryImportExport.tsx
@@ -3466,6 +3527,15 @@ msgstr "OpenAPI-JSON importieren"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Import prompt"
+msgstr ""
+
+#. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
+#. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[selected.imported.tool]
+#. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[server.imported.tool]
+#: src/pages/LearningTimeline.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/MemoryHistory.tsx
+msgid "Imported from {0}"
 msgstr ""
 
 #: src/pages/customize/PluginsPage.tsx
@@ -3554,6 +3624,7 @@ msgid "Instruction"
 msgstr "Anweisung"
 
 #: src/pages/customize/PluginsPage.tsx
+#: src/pages/import/LocalImportPage.tsx
 msgid "Instructions"
 msgstr ""
 
@@ -3612,6 +3683,14 @@ msgstr "Intervalleinheit"
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
 msgstr "Isoliert"
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Item preview"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Items edited after import were kept."
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
@@ -3997,6 +4076,7 @@ msgid "MCP endpoint"
 msgstr ""
 
 #: src/pages/customize/PluginsPage.tsx
+#: src/pages/import/LocalImportPage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "MCP servers"
 msgstr "MCP-Server"
@@ -4025,6 +4105,10 @@ msgstr "Mitglieder ({GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 msgid "Members (pick {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 msgstr "Mitglieder ({GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX} auswählen)"
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Memories"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -4044,7 +4128,17 @@ msgstr ""
 msgid "Memory folder on your server"
 msgstr ""
 
+<<<<<<< HEAD
 #: src/pages/fleet/FleetSettings.tsx
+=======
+#. placeholder {0}: source.memoryFolders
+#. placeholder {1}: source.counts.memories
+#: src/pages/import/LocalImportPage.tsx
+msgid "Memory folders: {0} · Notes: {1}"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+>>>>>>> dev
 msgid "Memory limit"
 msgstr ""
 
@@ -4590,6 +4684,10 @@ msgstr "Nicht verbunden"
 msgid "Not enough runs to tell"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Not found"
+msgstr ""
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Not found on this computer"
 msgstr ""
@@ -4887,6 +4985,10 @@ msgstr ""
 msgid "Other"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Other files"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
@@ -5009,6 +5111,10 @@ msgstr "Wiedergabe…"
 msgid "Plugins"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Plugins and extensions"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/MemoryHistory.tsx
 msgid "Policy version"
@@ -5044,6 +5150,7 @@ msgid "Prevent idle sleep while routines are enabled; your display can turn off,
 msgstr ""
 
 #: src/pages/CompareStart.tsx
+#: src/pages/import/LocalImportPage.tsx
 msgid "Preview"
 msgstr ""
 
@@ -5051,6 +5158,11 @@ msgstr ""
 #: src/components/ArtifactFileCard.tsx
 msgid "Preview {0}"
 msgstr "Vorschau von {0}"
+
+#. placeholder {0}: labels[category]
+#: src/pages/import/LocalImportPage.tsx
+msgid "Preview {name} {0}"
+msgstr ""
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Preview import"
@@ -5190,6 +5302,10 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Quote"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Re-scan"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -5397,6 +5513,10 @@ msgstr ""
 msgid "Remove Git event"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Remove imported items from {name}"
+msgstr ""
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Remove marketplace"
 msgstr ""
@@ -5425,6 +5545,11 @@ msgstr "Skill {0} entfernen"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
+msgstr ""
+
+#. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
+#: src/pages/LearningTimeline.tsx
+msgid "Removed import from {0}"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -5856,6 +5981,17 @@ msgstr "Speichern"
 msgid "Save a memory note"
 msgstr ""
 
+<<<<<<< HEAD
+=======
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Save connection"
+msgstr ""
+
+#: src/pages/import/ImportedServerCredentials.tsx
+msgid "Save credentials"
+msgstr ""
+
+>>>>>>> dev
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
@@ -6111,6 +6247,14 @@ msgstr ""
 msgid "Set up"
 msgstr ""
 
+#: src/pages/import/ImportedServerCredentials.tsx
+msgid "Set up credentials"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Set up servers"
+msgstr ""
+
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
@@ -6222,6 +6366,10 @@ msgstr "Registrieren"
 msgid "Sign-in expired. Connect Codex again."
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only."
+msgstr ""
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
@@ -6237,6 +6385,7 @@ msgstr ""
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/import/LocalImportPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/settings-sections.ts
 msgid "Skills"
@@ -6281,6 +6430,10 @@ msgstr ""
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Einige Einträge haben nicht unterstützte Namen und werden ausgeblendet ({hiddenCount})."
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Some items exceeded the scan limits."
+msgstr ""
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
 msgstr ""
@@ -6291,6 +6444,14 @@ msgstr ""
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Source"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Source folder"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Source folder for {name}"
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
@@ -6938,6 +7099,10 @@ msgstr ""
 msgid "Update computer"
 msgstr ""
 
+#: src/pages/import/ImportedServerCredentials.tsx
+msgid "Update credentials"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update failed"
@@ -7013,6 +7178,10 @@ msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Use folder"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
@@ -7207,6 +7376,7 @@ msgstr ""
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
+#: src/pages/import/LocalImportPage.tsx
 msgid "Working…"
 msgstr "Wird verarbeitet…"
 

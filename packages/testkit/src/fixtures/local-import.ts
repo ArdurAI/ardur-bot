@@ -1,0 +1,81 @@
+import type { McpServer } from "@ardurbot/contracts";
+import type { LocalImportManifest } from "@ardurbot/contracts/local-import";
+
+export const localImportFixture: LocalImportManifest = {
+  scanId: "00000000-0000-4000-8000-000000000001",
+  scannedAt: "2026-09-24T12:00:00.000Z",
+  platform: "darwin",
+  limited: false,
+  sources: [
+    {
+      tool: "claude-code",
+      detected: true,
+      defaultMissing: false,
+      memoryFolders: 1,
+      counts: { instructions: 0, memories: 1, skills: 1, servers: 0, plugins: 0, other: 0 },
+    },
+  ],
+  items: [
+    {
+      id: "00000000-0000-4000-8000-000000000002",
+      tool: "claude-code",
+      category: "memories",
+      name: "build.md",
+      relativePath: ".claude/projects/example/memory/build.md",
+      sourcePathHash: "1".repeat(64),
+      contentHash: "2".repeat(64),
+      size: 80,
+      modifiedAt: "2026-09-24T11:00:00.000Z",
+      importable: true,
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000003",
+      tool: "claude-code",
+      category: "skills",
+      name: "review",
+      relativePath: ".claude/skills/review/SKILL.md",
+      sourcePathHash: "3".repeat(64),
+      contentHash: "4".repeat(64),
+      size: 120,
+      modifiedAt: "2026-09-24T11:00:00.000Z",
+      importable: true,
+    },
+  ],
+};
+export const localImportStatusFixture = {
+  manifest: localImportFixture,
+  autoImport: false,
+  importedAt: null,
+  roots: {},
+  selection: {},
+  imported: [],
+};
+export const localImportServerFixture: McpServer = {
+  id: "imported-server",
+  spaceId: "fixture-space",
+  slug: "search",
+  name: "Search",
+  description: "Imported from Claude Code",
+  transport: "stdio",
+  endpoint: null,
+  command: "node",
+  args: [],
+  envKeys: ["API_KEY"],
+  headerKeys: [],
+  hasSecret: false,
+  oauthStatus: "none",
+  enabled: true,
+  revision: 1,
+  createdAt: "2026-09-24T12:00:00.000Z",
+  updatedAt: "2026-09-24T12:00:00.000Z",
+  imported: {
+    tool: "claude-code",
+    relativePath: ".claude/settings.json",
+    sourcePathHash: "1".repeat(64),
+    contentHash: "2".repeat(64),
+    modifiedAt: "2026-09-24T11:00:00.000Z",
+    importedAt: "2026-09-24T12:00:00.000Z",
+    kind: "servers",
+    authorizesIntent: false,
+  },
+};
