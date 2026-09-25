@@ -59,6 +59,9 @@ vi.mock("./customize/ExtensionsPage", () => ({
   default: () => <div>Installed on your computer</div>,
 }));
 vi.mock("./customize/SkillsPage", () => ({ default: () => <div>Created by you</div> }));
+vi.mock("./import/LocalImportPage", () => ({
+  LocalImportPage: () => <div>Found on this Mac</div>,
+}));
 vi.mock("./customize/PluginsPage", () => ({ default: () => <div>In this space</div> }));
 vi.mock("./LearningInbox", () => ({
   LearningInbox: () => <div>Learning inbox timeline and curator</div>,
@@ -208,6 +211,7 @@ it("loads the registered pages without duplicate navigation", async () => {
     ["extensions", "Installed on your computer"],
     ["developer", "Server URL"],
     ["skills", "Created by you"],
+    ["import", "Found on this Mac"],
     ["integrations", "Connected apps"],
     ["mcp", "MCP servers"],
     ["learning", "Learning inbox timeline and curator"],
@@ -219,6 +223,20 @@ it("loads the registered pages without duplicate navigation", async () => {
     await waitForSection(() => container.textContent!.includes(copy!));
   }
   expect(container.querySelector('[data-testid="settings-nav-local-api"]')).toBeNull();
+});
+it("keeps Import under Customize for the owner and hides it from other members", async () => {
+  const owner = await render();
+  expect(
+    owner.querySelector('fieldset[aria-label="Customize"] [data-testid="settings-nav-import"]'),
+  ).not.toBeNull();
+  const { container } = await renderSettings(
+    <PreferencesProvider userId="test">
+      <SettingsOverlay {...props} initialSection="import" isDeploymentOwner={false} />
+    </PreferencesProvider>,
+  );
+  await waitForSection(() => !!container.querySelector('[data-settings-section="general"]'));
+  expect(container.querySelector('[data-testid="settings-nav-import"]')).toBeNull();
+  expect(container.textContent).not.toContain("Found on this Mac");
 });
 it("opens the trusted registry from the integration deep link and preserves composer reconnection", async () => {
   const { container } = await renderSettings(

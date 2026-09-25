@@ -880,4 +880,40 @@ export const ZH_MESSAGES: Record<string, string> = {
   "7 days": "7 天",
   "This bot may only run locally — change the pin or the space policy":
     "此 Bot 只能在本地运行 — 请更改固定模型或空间策略",
+  "Auto-import changes": "自动导入更改",
+  "Environment values are requested when you connect this server.":
+    "连接此服务器时会要求提供环境变量的值。",
+  "Excluded files": "排除的文件",
+  "Folder inside your home": "主目录内的文件夹",
+  Import: "导入",
+  "Import all": "全部导入",
+  "Import could not finish. Check this computer is connected, then re-scan.":
+    "无法完成导入。请确认此电脑已连接，然后重新扫描。",
+  Instructions: "指令",
+  "Items edited after import were kept.": "已保留导入后编辑过的项目。",
+  "MCP servers": "MCP 服务器",
+  Memories: "记忆",
+  "Memory folders: {folders} · Notes: {notes}": "记忆文件夹：{folders} · 笔记：{notes}",
+  "Not found": "未找到",
+  "Other files": "其他文件",
+  "Plugins and extensions": "插件和扩展",
+  "Preview {tool} {category}": "预览 {tool} 的{category}",
+  "Re-scan": "重新扫描",
+  "Remove imported items from {tool}": "移除从 {tool} 导入的项目",
+  "Save credentials": "保存凭据",
+  "Set up credentials": "设置凭据",
+  "Set up servers": "设置服务器",
+  "Some items exceeded the scan limits.": "部分项目超出了扫描限制。",
+  "Source folder": "源文件夹",
+  "Source folder for {tool}": "{tool} 的源文件夹",
+  "Update credentials": "更新凭据",
+  "Use folder": "使用此文件夹",
+  "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.":
+    "已导入 {created} 项，已更新 {updated} 项，未更改 {unchanged} 项，已移除 {removed} 项，已跳过 {skipped} 项，冲突 {conflicts} 项。",
+  "Found on this Mac": "在这台 Mac 上发现的内容",
+  "Found on this computer": "在此电脑上发现的内容",
+  "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.":
+    "Ardur Bot 读取此电脑上这些工具的指令、记忆、技能和服务器列表，绝不读取登录信息、令牌或聊天记录。",
+  "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only.":
+    "绝不读取登录文件（auth.json、credentials 和 oauth_creds.json）、Cookie、令牌、凭据备份、会话记录、聊天历史、history.jsonl、遥测数据和缓存；服务器列表仅保留环境变量名称。",
 };

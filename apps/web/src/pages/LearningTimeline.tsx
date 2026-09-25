@@ -1,7 +1,8 @@
 import type { LearningJourneyEntry } from "@ardurbot/contracts";
 import { learningJourneyLabel } from "@ardurbot/contracts";
+import { LOCAL_IMPORT_TOOL_NAMES } from "@ardurbot/contracts/local-import";
 import { Button } from "@ardurbot/ui-web";
-import { Trans } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { LearningObservations } from "./LearningObservation";
@@ -13,6 +14,7 @@ export function LearningTimeline({
   botId?: string;
   openProposal: (id: string) => void;
 }) {
+  const { t } = useLingui();
   const [entries, setEntries] = useState<LearningJourneyEntry[]>([]);
   const [selected, setSelected] = useState<LearningJourneyEntry | null>(null);
   const [revisionContent, setRevisionContent] = useState<string | null>(null);
@@ -74,8 +76,12 @@ export function LearningTimeline({
         {entries.map((entry) => (
           <li key={entry.id} className="rounded-lg border p-3 text-sm">
             <p>
-              {learningJourneyLabel(entry.action)} ·{" "}
-              <time dateTime={entry.at}>{new Date(entry.at).toLocaleString()}</time>
+              {entry.importedFrom
+                ? entry.action === "import-removed"
+                  ? t`Removed import from ${LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]}`
+                  : t`Imported from ${LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]}`
+                : learningJourneyLabel(entry.action)}{" "}
+              · <time dateTime={entry.at}>{new Date(entry.at).toLocaleString()}</time>
             </p>
             {entry.proposalId ? (
               <Button variant="ghost" onClick={() => openProposal(entry.proposalId!)}>

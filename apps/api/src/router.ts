@@ -34,6 +34,7 @@ import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
+  assertLocalImportOwner,
   autoReviewConfigurationWarning,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
@@ -59,6 +60,7 @@ import {
   isSandboxGoneError,
   isScratchpadStatus,
   kubernetesContexts,
+  LocalImportService,
   listPiCatalog,
   listScratchpadItems,
   loadPushToken,
@@ -195,6 +197,8 @@ import { createIdeFiles } from "./ide-files.js";
 import { searchIntegrationCatalog } from "./integration-catalog.js";
 import { connectionDto, IntegrationConnections } from "./integration-connections.js";
 import { createLearningService } from "./learning.js";
+import { saveImportedServerCredentials } from "./local-import-credentials.js";
+import type { LocalImportRequests } from "./local-import-requests.js";
 import { buildMcpUpdateMaterial } from "./mcp-material.js";
 import { mcpServerDto } from "./mcp-server-dto.js";
 import { changeGitMemoryLocation } from "./memory-git-location.js";
@@ -433,6 +437,7 @@ export interface RouterDeps {
   runtime?: AgentRuntime;
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
+  localImportRequests?: LocalImportRequests;
   terminals?: ReturnType<typeof createTerminalRoutes>;
   cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
@@ -554,6 +559,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   });
   const learning = createLearningService(deps);
   const agentSkills = createAgentSkillsService(deps.prisma, deps.memoryDocuments);
+  const localImport = new LocalImportService({
+    prisma: deps.prisma,
+    documents: deps.memoryDocuments!,
+  });
 
   const authed = os.use(async ({ context, next }) => {
     if (!context.actor) throw new ORPCError("UNAUTHORIZED");
@@ -2578,6 +2587,24 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           ).catch(() => undefined);
         }
         return { ok: true as const };
+      }),
+    },
+    localImport: {
+      credentials: authed.localImport.credentials.handler(async ({ context, input }) => {
+        await assertLocalImportOwner(deps.prisma, context.actor);
+        return saveImportedServerCredentials(deps.prisma, deps.secrets, context.actor, input);
+      }),
+      status: authed.localImport.status.handler(({ context }) => localImport.status(context.actor)),
+      configure: authed.localImport.configure.handler(({ context, input }) =>
+        localImport.configure(context.actor, input),
+      ),
+      run: authed.localImport.run.handler(async ({ context, input }) => {
+        await assertLocalImportOwner(deps.prisma, context.actor);
+        if (!deps.localImportRequests)
+          throw new ORPCError("SERVICE_UNAVAILABLE", {
+            message: "The import worker is unavailable.",
+          });
+        return deps.localImportRequests.run(context.actor, input);
       }),
     },
     memory: {
