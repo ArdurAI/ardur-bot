@@ -32,63 +32,26 @@ describe("mobile appearance", () => {
     colorScheme = "dark";
     vi.resetModules();
   });
-
-  it("defaults to system and resolves light or dark from the scheme", async () => {
-    const { getCachedAppearancePreference, resolveMobileAppearance, setAppearancePreference } =
+  it("follows the OS even when an old device preference or desktop choice says otherwise", async () => {
+    const { getCachedAppearancePreference, loadAppearancePreference, resolveMobileAppearance } =
       await import("./appearance");
+    store.set("ardurbot.uiAppearance", "light");
+    expect(await loadAppearancePreference()).toBe("system");
     expect(getCachedAppearancePreference()).toBe("system");
-    expect(resolveMobileAppearance("system", "light")).toBe("light");
-    expect(resolveMobileAppearance("system", "dark")).toBe("dark");
-    await setAppearancePreference("light");
-    expect(getCachedAppearancePreference()).toBe("light");
-    expect(resolveMobileAppearance("light", "dark")).toBe("light");
-    await setAppearancePreference("system");
+    expect(resolveMobileAppearance("light", "dark")).toBe("dark");
+    expect(resolveMobileAppearance("dark", "light")).toBe("light");
   });
-
-  it("notifies mounted navigation when the saved preference loads", async () => {
-    const { UI_APPEARANCE_STORAGE_KEY, lightTokens } = await import("@ardurbot/ui-tokens");
-    const { loadAppearancePreference, mobileTokens, subscribeAppearance } = await import(
-      "./appearance"
-    );
-    store.set(UI_APPEARANCE_STORAGE_KEY, "light");
+  it("updates mounted navigation and bubble tokens when the OS changes", async () => {
+    const { mobileTokens, subscribeAppearance } = await import("./appearance");
     const listener = vi.fn();
-    subscribeAppearance(listener);
-
-    await loadAppearancePreference();
-
-    expect(listener).toHaveBeenCalledOnce();
-    expect(mobileTokens()).toEqual(lightTokens);
-  });
-
-  it("notifies subscribers when the OS scheme flips under System preference", async () => {
-    const { resolveMobileAppearance, subscribeAppearance } = await import("./appearance");
-    const listener = vi.fn();
-    subscribeAppearance(listener);
-
-    expect(resolveMobileAppearance()).toBe("dark");
+    const unsubscribe = subscribeAppearance(listener);
+    const before = mobileTokens();
     colorScheme = "light";
     for (const notify of schemeListeners) notify({ colorScheme: "light" });
-
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(resolveMobileAppearance()).toBe("light");
-  });
-
-  it("flips user bubble tokens when appearance switches with an existing preference", async () => {
-    const { mobileTokens, setAppearancePreference, subscribeAppearance } = await import(
-      "./appearance"
-    );
-    const listener = vi.fn();
-    subscribeAppearance(listener);
-
-    await setAppearancePreference("dark");
-    const darkBubble = mobileTokens().secondary;
-    const darkInk = mobileTokens().secondaryForeground;
-
-    listener.mockClear();
-    await setAppearancePreference("light");
     expect(listener).toHaveBeenCalledOnce();
-    expect(mobileTokens().secondary).not.toBe(darkBubble);
-    expect(mobileTokens().secondaryForeground).not.toBe(darkInk);
-    expect(mobileTokens().secondary).not.toBe(mobileTokens().primary);
+    expect(mobileTokens().secondary).not.toBe(before.secondary);
+    unsubscribe();
+    for (const notify of schemeListeners) notify({ colorScheme: "dark" });
+    expect(listener).toHaveBeenCalledOnce();
   });
 });

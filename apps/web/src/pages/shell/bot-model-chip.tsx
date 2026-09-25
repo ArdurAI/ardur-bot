@@ -1,6 +1,6 @@
-import type { Bot } from "@ardurbot/contracts";
+import type { Bot, RuntimeInfo, RuntimePin } from "@ardurbot/contracts";
 import { runtimeNames } from "@ardurbot/contracts";
-import { spaceDefaultEffort } from "@ardurbot/core";
+import { botEffortLabel, spaceDefaultEffort } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
@@ -69,16 +69,22 @@ export function effectiveBotModel(
 export function BotModelChip({
   bot,
   settings,
+  run,
   onClick,
 }: {
   bot: Bot;
   settings: ModelSettings | null;
+  run?: { runtimePin?: RuntimePin | null; runtimeInfo?: RuntimeInfo | null } | null;
   onClick: () => void;
 }) {
   const { t } = useLingui();
   const model = effectiveBotModel(bot, settings);
   if (!model) return null;
-  const label = `${bot.runtimeKind && bot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${model.effortLabel ? ` · ${model.effortLabel}` : model.thinkingLevel ? ` · ${model.thinkingLevel}` : ""}${model.unavailable ? t` · not available` : ""}`;
+  const effort =
+    bot.runtimeKind === "claude-code"
+      ? botEffortLabel(bot, run, t`requested`)
+      : (model.effortLabel ?? model.thinkingLevel);
+  const label = `${bot.runtimeKind && bot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? t` · not available` : ""}`;
   return (
     <Button
       variant="ghost"

@@ -65,7 +65,9 @@ export class JournalDocumentStore implements MemoryDocumentStore {
             canAccess(doc.scopeKey, access) &&
             (input.includeDeleted || !doc.deletedAt) &&
             (!input.scope || doc.scopeKey.kind === input.scope) &&
-            (!input.botId || (doc.scopeKey.kind === "bot" && doc.scopeKey.botId === input.botId)) &&
+            (!input.groupId ||
+              (doc.scopeKey.kind === "group" && doc.scopeKey.groupId === input.groupId)) &&
+            (!input.botId || ("botId" in doc.scopeKey && doc.scopeKey.botId === input.botId)) &&
             (!input.cursor || doc.id > input.cursor),
         )
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -89,6 +91,8 @@ export class JournalDocumentStore implements MemoryDocumentStore {
   }
   async commit(input: DocumentCommit, access: MemoryAccess) {
     assertScope(input.scopeKey, access);
+    if (input.scopeKey.kind === "group" && input.content.length > 6000)
+      throw new Error("Brief exceeds its size limit.");
     assertMemoryPath(input.path);
     assertMemorySafe(input, access.knownSecrets);
     return this.journal.transaction(access, async (docs) => this.append(docs, input, access));
@@ -114,6 +118,7 @@ export class JournalDocumentStore implements MemoryDocumentStore {
     const id = doc?.id ?? randomUUID();
     const createdAt = this.clock().toISOString();
     const revision = DocumentRevisionSchema.parse({
+      kind: input.kind ?? current?.kind ?? "topic",
       documentId: id,
       revision: (current?.revision ?? 0) + 1,
       scopeKey: input.scopeKey,

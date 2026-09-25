@@ -119,7 +119,7 @@ export async function admitDelegation(
   const space = await tx.space.findUniqueOrThrow({ where: { id: input.spaceId } });
   const now = new Date();
   const spent = await tx.usageRecord.aggregate({
-    where: { rootTaskId },
+    where: { rootTaskId, purpose: { not: "detached-learning" } },
     _sum: { inputTokens: true, outputTokens: true },
   });
   const root = await tx.delegationRoot.upsert({

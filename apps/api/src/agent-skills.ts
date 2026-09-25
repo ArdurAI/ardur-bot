@@ -161,7 +161,12 @@ export function createAgentSkillsService(prisma: PrismaClient, documents?: Memor
   return {
     async list(actor: Actor): Promise<Omit<AgentSkill, "content">[]> {
       const rows = await prisma.agentSkill.findMany({
-        where: { spaceId: actor.spaceId, userId: actor.userId },
+        where: {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          enabled: true,
+          componentKind: { not: "instructions" },
+        },
         orderBy: [{ name: "asc" }, { id: "asc" }],
       });
       return mergeBuiltinSkills(
@@ -172,7 +177,12 @@ export function createAgentSkillsService(prisma: PrismaClient, documents?: Memor
 
     async listWithContent(actor: Actor): Promise<AgentSkill[]> {
       const rows = await prisma.agentSkill.findMany({
-        where: { spaceId: actor.spaceId, userId: actor.userId },
+        where: {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          enabled: true,
+          componentKind: { not: "instructions" },
+        },
         orderBy: [{ name: "asc" }, { id: "asc" }],
       });
       return mergeBuiltinSkills(

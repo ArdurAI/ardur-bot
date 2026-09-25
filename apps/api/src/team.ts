@@ -2,6 +2,7 @@ import type { Actor, TeamRow } from "@ardurbot/contracts";
 import {
   DelegationSnapshotSchema,
   RunFailurePayloadSchema,
+  RuntimeInfoSchema,
   taskCardSentence,
 } from "@ardurbot/contracts";
 import { redactTaskValue } from "@ardurbot/core";
@@ -200,7 +201,10 @@ export async function teamBoard(prisma: PrismaClient, actor: Actor): Promise<{ r
         ? delegations.filter((row) => row.rootTaskId === rootTaskId).map(delegationView)
         : [],
       executing: executing?.success
-        ? executing.data
+        ? {
+            ...executing.data,
+            runtimeInfo: RuntimeInfoSchema.safeParse(run?.runtimeInfo).data ?? null,
+          }
         : selected?.kind === "helper" && selected.status !== "queued"
           ? record!.snapshot
           : null,

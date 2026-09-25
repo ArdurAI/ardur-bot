@@ -2,13 +2,14 @@ import { EventEmitter } from "node:events";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { AgentRuntime } from "@ardurbot/adapter-kit";
+import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import type { HostFrame } from "@ardurbot/contracts/host-bridge";
 import { decodeHostFrame, encodeHostFrame } from "@ardurbot/contracts/host-bridge";
 import type { HostWire } from "@ardurbot/host-runtime/bridge-wire";
 import { HostAgent } from "@ardurbot/host-runtime/host-agent";
 import { HostClient } from "@ardurbot/host-runtime/host-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { RemoteHostRuntime } from "../../../packages/adapters/src/remote-host-runtime.js";
 import { RemoteHostSandboxProvider } from "../../../packages/adapters/src/remote-host-sandbox.js";
 import { HostHub } from "./host-hub.js";
 
@@ -36,7 +37,7 @@ const context = {
   runId: "run",
   signal: new AbortController().signal,
 };
-async function fixture() {
+async function fixture(events: AgentRuntimeEvent[] = [{ type: "done" }]) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "host-roundtrip-")));
   const hub = new HostHub(async () => true);
   const fakeRuntime: AgentRuntime = {
@@ -48,7 +49,7 @@ async function fixture() {
     }),
     abort: async () => undefined,
     run: async function* () {
-      yield { type: "done" };
+      yield* events;
     },
   };
   let agent: HostAgent;
@@ -108,6 +109,50 @@ async function fixture() {
   };
 }
 describe("worker to API hub to host protocol", () => {
+  it.each([
+    ["claude-code", "anthropic"],
+    ["codex-app-server", "openai-codex"],
+  ] as const)("round-trips optional cache usage and completion for %s", async (kind, provider) => {
+    const events: AgentRuntimeEvent[] = [undefined, 0, 42].map((cachedTokens) => ({
+      type: "usage",
+      provider,
+      model: "fixture-model",
+      inputTokens: 100,
+      outputTokens: 10,
+      ...(cachedTokens === undefined ? {} : { cachedTokens }),
+    }));
+    events.push({ type: "done", text: "Complete" });
+    const { client } = await fixture(events);
+    const runtime = new RemoteHostRuntime(client, kind);
+    const received: AgentRuntimeEvent[] = [];
+    for await (const event of runtime.run(
+      {
+        botId: "bot",
+        threadId: "thread",
+        runId: "run",
+        instructions: "",
+        prompt: "Hello",
+        history: [],
+        tools: "none",
+        model: {
+          provider,
+          id: "fixture-model",
+          thinkingLevel: "low",
+          runtimePin: {
+            runtimeKind: kind,
+            provider,
+            modelId: "fixture-model",
+            credentialId: "credential",
+            effort: "low",
+            revision: 1,
+          },
+        },
+      },
+      context,
+    ))
+      received.push(event);
+    expect(received).toEqual(events);
+  });
   it("round-trips an actual confined command and file through serialized frames without network listeners", async () => {
     const { client } = await fixture();
     const output = [];

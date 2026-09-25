@@ -137,3 +137,23 @@ describe("outbound host hub", () => {
     hub.detach();
   });
 });
+
+it("does not forward a canceled request after its asynchronous grant resolves", async () => {
+  let allow!: (value: boolean) => void;
+  const hub = new HostHub(
+    () =>
+      new Promise((resolve) => {
+        allow = resolve;
+      }),
+  );
+  const host = wire(),
+    worker = wire();
+  hub.attach(host, "owner", "generation");
+  const pending = hub.request(request, worker);
+  hub.cancel(request.id, worker);
+  allow(true);
+  await pending;
+  expect(host.frames.some((frame) => frame.type === "request")).toBe(false);
+  expect(worker.frames.at(-1)).toMatchObject({ type: "end", problem: expect.any(Object) });
+  hub.detach();
+});

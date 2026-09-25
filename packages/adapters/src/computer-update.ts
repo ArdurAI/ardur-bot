@@ -1,5 +1,5 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
-import { ComputerConfigurationSchema, ComputerUpdateSchema } from "@ardurbot/contracts";
+import { ComputerReplacementConfigurationSchema, ComputerUpdateSchema } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -44,8 +44,9 @@ export async function queueComputerUpdate(
   botId: string,
   action: "update" | "recover" = "update",
   configuration?: {
-    imageProfile: "base" | "developer";
-    connectionId: string | null;
+    imageProfile?: "base" | "developer";
+    connectionId?: string | null;
+    networkEgress?: boolean;
     confirmed: boolean;
   },
 ) {
@@ -150,7 +151,7 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
         if (result.count !== 1) throw new Error("Computer update interrupted");
       },
       update.configuration
-        ? ComputerConfigurationSchema.omit({ botId: true }).parse(update.configuration)
+        ? ComputerReplacementConfigurationSchema.parse(update.configuration)
         : undefined,
     );
     await finishUpdate(deps.prisma, updateId, update.computerId, "completed");

@@ -10,7 +10,7 @@ import { messagingDeliverJob } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
-import { deliverMemory } from "@ardurbot/memory";
+import { deliverMemory, maintainBriefs } from "@ardurbot/memory";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { expireComputerControl } from "./computer-control.js";
@@ -64,6 +64,10 @@ export function createBackgroundJobHandlers(deps: {
     ...(deps.localImport && deps.memoryDocuments
       ? createLocalImportJobs(deps.prisma, deps.memoryDocuments, deps.localImport)
       : {}),
+    "briefs.maintain": async (payload) => {
+      if (payload.runId) await deps.executor.refreshBrief(payload.runId);
+      else await maintainBriefs(deps.prisma, deps.executor.refreshBrief);
+    },
     "learning.curate": (payload) => curateLearningSpaces(deps, payload),
     "learning.review": (payload) =>
       reviewLearning(
@@ -118,6 +122,16 @@ export function createBackgroundJobHandlers(deps: {
           await deliverMessaging();
         });
       }
+      // Replies are durable and published before brief work enters its own worker job.
+      // The periodic drain recovers pending briefs if shutdown rejects this enqueue.
+      if (deps.memoryDocuments)
+        await deps.jobs
+          .enqueue({
+            name: "briefs.maintain",
+            payload: { runId: payload.runId },
+            replaceKey: `briefs.maintain:${payload.runId}`,
+          })
+          .catch((error) => getLogger().error("briefs.maintain enqueue error", error));
     },
     "messaging.deliver": async (payload) => {
       await deliverMessaging(payload.runId);
@@ -159,6 +173,9 @@ export function createBackgroundJobHandlers(deps: {
           memoryProviders: deps.memoryProviders,
           deploymentModelKey: deps.deploymentModelKey,
           ...(deps.executor.resolveModel ? { resolveModel: deps.executor.resolveModel } : {}),
+          ...(deps.executor.resolveCompactionRuntime
+            ? { resolveRuntime: deps.executor.resolveCompactionRuntime }
+            : {}),
         },
         payload.threadId,
       );

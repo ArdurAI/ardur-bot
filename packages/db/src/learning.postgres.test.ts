@@ -30,11 +30,11 @@ describePostgres("learning deletion protection (PostgreSQL)", () => {
     async (operation) => {
       const threadId = `${id}-${operation}`;
       const prisma = db.prisma;
-      await prisma.chatGroup.create({
-        data: { id: threadId, spaceId: id, userId: "fixture-user", name: "Learning fixture" },
+      const bot = await prisma.bot.create({
+        data: { spaceId: id, userId: "fixture-user", name: "Learning fixture", color: "ink" },
       });
       await prisma.thread.create({
-        data: { id: threadId, spaceId: id, userId: "fixture-user", groupId: threadId },
+        data: { id: threadId, spaceId: id, userId: "fixture-user", botId: bot.id },
       });
       const common = {
         spaceId: id,
@@ -46,7 +46,7 @@ describePostgres("learning deletion protection (PostgreSQL)", () => {
       await prisma.learningProposal.create({
         data: {
           ...common,
-          botId: "fixture-bot",
+          botId: bot.id,
           fingerprint: "fixture",
           body: { proposedContent: "Use numbered steps." },
           expiresAt: new Date(),
@@ -59,7 +59,7 @@ describePostgres("learning deletion protection (PostgreSQL)", () => {
         data: {
           ...common,
           idempotencyKey: threadId,
-          botId: "fixture-bot",
+          botId: bot.id,
           evidenceWatermark: "fixture",
           policyVersion: "1",
           status: "proposed",

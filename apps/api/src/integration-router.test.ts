@@ -27,13 +27,20 @@ function fixture() {
   const prisma = {
     spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
     bot: { findFirst: vi.fn(async () => ({ id: "bot" })) },
-    mcpServer: { findFirst: vi.fn(async () => ({ id: "server", catalogId: "github" })) },
-    botMcpServer: { upsert: vi.fn(async () => assignment) },
+    mcpServer: {
+      findFirst: vi.fn(async () => ({ id: "server", catalogId: "github" })),
+      update: vi.fn(),
+    },
+    botMcpServer: { upsert: vi.fn(async () => assignment), updateMany: vi.fn() },
     $executeRaw: vi.fn(),
     $transaction: vi.fn(),
   };
   prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
-  const oauth = { complete: vi.fn(async () => "server"), begin: vi.fn() };
+  const oauth = {
+    complete: vi.fn(async () => "server"),
+    begin: vi.fn(),
+    statusFor: vi.fn(async () => "none"),
+  };
   const handler = new RPCHandler(
     createRouter({
       prisma,
@@ -56,6 +63,102 @@ function fixture() {
 }
 
 describe("integration RPC boundaries", () => {
+  it("routes MCP permissions through the shared service with the MCP ownership boundary", async () => {
+    const f = fixture();
+    const assign = vi.spyOn(IntegrationConnections.prototype, "assign").mockResolvedValue([]);
+    const input = {
+      serverId: "server",
+      botIds: ["bot"],
+      toolIds: ["get_item"],
+      spaceToolPolicies: { get_item: "ask-first" },
+    };
+    expect((await f.request("mcp/servers/permissions", input))?.status).toBe(200);
+    expect(assign).toHaveBeenCalledExactlyOnceWith(
+      actor,
+      { ...input, connectionId: "server" },
+      "mcp",
+    );
+    expect((await f.request("mcp/servers/permissions", input, null))?.status).toBe(401);
+    expect(assign).toHaveBeenCalledTimes(1);
+  });
+  it("refuses write Allow for a custom MCP server at the API boundary", async () => {
+    const f = fixture();
+    f.prisma.mcpServer.findFirst.mockResolvedValueOnce({
+      id: "server",
+      catalogId: null,
+      enabled: true,
+      connectionState: "connected",
+      manifest: {
+        capturedAt: "2026-09-24T00:00:00.000Z",
+        serverVersion: null,
+        account: null,
+        tools: [
+          { id: "update_item", description: "Update an item", inputSchemaDigest: "a".repeat(64) },
+        ],
+      },
+    } as never);
+    const response = await f.request("mcp/servers/permissions", {
+      serverId: "server",
+      botIds: [],
+      toolIds: ["update_item"],
+      spaceToolPolicies: { update_item: "allow" },
+    });
+    expect(response?.status).toBe(400);
+    expect(await response?.text()).toContain("Writes always ask");
+    expect(f.prisma.mcpServer.update).not.toHaveBeenCalled();
+  });
+  it("enables a custom default without replacing credentials and requires fresh tool approval", async () => {
+    const f = fixture();
+    const row = {
+      id: "server",
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      catalogId: null,
+      managedBy: null,
+      slug: "default",
+      name: "Default",
+      description: "",
+      transport: "streamable_http",
+      endpoint: "https://example.test/mcp",
+      command: null,
+      args: [],
+      env: {},
+      headers: { Authorization: true },
+      secretId: "encrypted",
+      enabled: false,
+      revision: 1,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    f.prisma.mcpServer.findFirst.mockResolvedValueOnce(row as never);
+    f.prisma.mcpServer.update.mockResolvedValue({ ...row, enabled: true, revision: 2 });
+    const response = await f.request("mcp/servers/update", { id: "server", enabled: true });
+    expect(response?.status).toBe(200);
+    expect(f.prisma.mcpServer.update).toHaveBeenCalledWith({
+      where: { id: "server" },
+      data: { enabled: true, connectionState: "not-connected", revision: { increment: 1 } },
+    });
+    expect(f.prisma.botMcpServer.updateMany).toHaveBeenCalledWith({
+      where: { serverId: "server", spaceId: "space", userId: "owner" },
+      data: { needsReview: true, allowAllTools: false, allowedTools: [] },
+    });
+    expect(f.prisma.mcpServer.findFirst).toHaveBeenCalledWith({
+      where: { id: "server", spaceId: "space", userId: "owner" },
+    });
+  });
+  it.each([
+    { managedBy: "extension", catalogId: null },
+    { managedBy: "plugin", catalogId: null },
+    { catalogId: "github" },
+  ])("keeps managed enablement in its owning page: %j", async (fields) => {
+    const f = fixture();
+    f.prisma.mcpServer.findFirst.mockResolvedValue({ id: "server", ...fields } as never);
+    expect((await f.request("mcp/servers/update", { id: "server", enabled: true }))?.status).toBe(
+      400,
+    );
+    expect(f.prisma.mcpServer.update).not.toHaveBeenCalled();
+    expect(f.prisma.botMcpServer.updateMany).not.toHaveBeenCalled();
+  });
   it.each([
     ["synthetic_write", "Write an item"],
     ["synthetic_read", "Read and delete an item"],

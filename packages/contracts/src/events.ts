@@ -5,6 +5,7 @@ import {
   CommandBlockSchema,
   CommandEventPayloadSchema,
 } from "./command-blocks.js";
+import { ContextSnapshotSchema } from "./context.js";
 import { Id } from "./ids.js";
 import { McpTransportSchema } from "./mcp.js";
 import { RunFailurePayloadSchema } from "./provider-errors.js";
@@ -24,12 +25,14 @@ export const ProductEventType = z.enum([
   "thread.subagent",
   "thread.cloud_agent",
   "run.started",
+  "run.context",
   "run.checkpointed",
   "run.waiting_input",
   "run.completed",
   "run.failed",
   "run.cancelled",
   "computer.status",
+  "computer.file.changed",
   "computer.takeover.requested",
   "computer.takeover.granted",
   "computer.takeover.released",
@@ -114,6 +117,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     text: z.string(),
     approvalEffectId: Id.optional(),
     detail: z.string().optional(),
+    /** Exact approval text: render verbatim, with expandable full contents. */
+    preformatted: z.boolean().optional(),
     input: z.enum(["text", "secret"]).optional(),
     /** Why the secret is needed; drives field label on the masked card. */
     purpose: SecretAskPurpose.optional(),
@@ -298,6 +303,12 @@ export const ProductEventSchema = z
     payload: z.record(z.string(), z.unknown()),
   })
   .superRefine((event, ctx) => {
+    if (event.type === "run.context") {
+      const result = ContextSnapshotSchema.safeParse(event.payload);
+      if (!result.success)
+        for (const issue of result.error.issues)
+          ctx.addIssue({ ...issue, path: ["payload", ...issue.path] });
+    }
     if (event.type.startsWith("command.")) {
       const schema =
         event.type === "command.exported" || event.type === "command.shared"

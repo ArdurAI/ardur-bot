@@ -139,7 +139,11 @@ export const LearningProposalSchema = z
   .object({
     ...LearningCandidateSchema.shape,
     confidence: LearningCandidateSchema.shape.confidence.optional(),
-    operation: z.enum(["revert-suggestion", "consolidation"]).optional(),
+    operation: z
+      .enum(["revert-suggestion", "consolidation", "memory-import", "memory-edit"])
+      .optional(),
+    documentKind: z.enum(["profile", "preferences", "topic"]).optional(),
+    memoryAction: z.enum(["save", "delete"]).optional(),
     revertsProposalId: z.string().optional(),
     participatingRevisions: z
       .array(z.object({ documentId: z.string(), revision: z.number().int().positive() }))
@@ -217,6 +221,7 @@ export const ProposalEvidenceSchema = z
     sourceClass: z.enum([
       "human-message",
       "human-steering",
+      "human-settings",
       "feedback-reason",
       "run",
       "tool",

@@ -5,7 +5,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { ModelConnectInputSchema } from "@ardurbot/contracts";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { EVAL_CASES } from "../evals/cases.js";
 import { emptyTrial, redact, summarize, validateControls } from "../evals/report.js";
 
@@ -96,6 +96,7 @@ async function main() {
   const dataDir = mkdtempSync(path.join(tmpdir(), "ardurbot-evals-"));
   let postgres: StartedPostgreSqlContainer | undefined;
   try {
+    const { PostgreSqlContainer } = await import("@testcontainers/postgresql");
     postgres = await new PostgreSqlContainer("postgres:16-alpine").start();
     const databaseUrl = postgres.getConnectionUri();
     Object.assign(process.env, {

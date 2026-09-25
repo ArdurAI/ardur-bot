@@ -126,12 +126,12 @@ class ArdurBotNotificationService : Service() {
               recent.asReversed().filter { knownCompleted.add(it.runId) }.forEach { run ->
                 when {
                   !run.notificationsEnabled || isOpenThread(run) -> Unit
-                  run.status == "failed" && settings.needsAttention ->
+                  run.status == "failed" ->
                     immediate += run to attentionCopy(run)
                   run.status != "completed" -> Unit
-                  run.trigger == "routine" && settings.scheduledTasks ->
+                  run.trigger == "routine" ->
                     replyLookups += run to true
-                  run.trigger != "routine" && settings.messages ->
+                  run.trigger != "routine" ->
                     replyLookups += run to false
                 }
               }
@@ -141,7 +141,7 @@ class ArdurBotNotificationService : Service() {
               .putStringSet(SEEN_RUNS, knownCompleted.toSet())
               .putBoolean(SEEN_RUNS_SEEDED, true)
               .apply()
-            if (settings.needsAttention) {
+            run {
               active.filter { it.status == "waiting_input" || it.status == "waiting_takeover" }
                 .filter { it.notificationsEnabled }
                 .filter { alertedAttention.add("${it.runId}:${it.status}") }

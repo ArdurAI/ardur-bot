@@ -31,13 +31,18 @@
       "lazy": true,
       "dynamic": true
     },
-    "chunk:KnowledgeSection": {
-      "file": "assets/KnowledgeSection-cVpn1PDz.js",
-      "lazy": true,
+    "_dist.js": {
+      "file": "assets/dist-x2jm9RvA.js",
+      "lazy": false,
       "dynamic": false
     },
-    "chunk:ToolPicker": {
-      "file": "assets/ToolPicker-DKW7LVP1.js",
+    "_src.js": {
+      "file": "assets/src-zftwNtz1.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:KnowledgeSection": {
+      "file": "assets/KnowledgeSection-cVpn1PDz.js",
       "lazy": true,
       "dynamic": false
     },
@@ -66,11 +71,6 @@
       "lazy": false,
       "dynamic": false
     },
-    "_dist.js": {
-      "file": "assets/dist-x2jm9RvA.js",
-      "lazy": false,
-      "dynamic": false
-    },
     "chunk:input": {
       "file": "assets/input-B3uatZMi.js",
       "lazy": false,
@@ -91,11 +91,6 @@
       "lazy": false,
       "dynamic": false
     },
-    "_src.js": {
-      "file": "assets/src-zftwNtz1.js",
-      "lazy": false,
-      "dynamic": false
-    },
     "chunk:use-model-oauth-signin": {
       "file": "assets/use-model-oauth-signin-Cf1BX7jy.js",
       "lazy": false,
@@ -105,6 +100,11 @@
       "file": "assets/index-BwuuDkJ0.js",
       "lazy": false,
       "dynamic": false
+    },
+    "src/components/integrations/catalog/IntegrationCatalog.tsx": {
+      "file": "assets/IntegrationCatalog-bNtoDJJi.js",
+      "lazy": true,
+      "dynamic": true
     },
     "src/locales/de/messages.po": {
       "file": "assets/messages-BUoaiqsR.js",
@@ -151,6 +151,11 @@
       "lazy": true,
       "dynamic": true
     },
+    "src/pages/AccountSettingsOverlay.tsx": {
+      "file": "assets/AccountSettingsOverlay-D5GHdTyE.js",
+      "lazy": true,
+      "dynamic": true
+    },
     "src/pages/Auth.tsx": {
       "file": "assets/Auth-Cfqc6rQE.js",
       "lazy": true,
@@ -186,11 +191,6 @@
       "lazy": true,
       "dynamic": true
     },
-    "src/pages/PluginsOverlay.tsx": {
-      "file": "assets/PluginsOverlay-BqK5BR63.js",
-      "lazy": true,
-      "dynamic": true
-    },
     "src/pages/ScratchpadSection.tsx": {
       "file": "assets/ScratchpadSection-IGW0bo44.js",
       "lazy": true,
@@ -205,6 +205,76 @@
       "file": "assets/Welcome-C836Kr5I.js",
       "lazy": true,
       "dynamic": true
+    },
+    "src/pages/settings/DevicesSection.tsx": {
+      "file": "assets/DevicesSection-C-bclcqU.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/GeneralSettings.tsx": {
+      "file": "assets/GeneralSettings-C9fGc9Us.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/IntegrationsSection.tsx": {
+      "file": "assets/IntegrationsSection-BiSPUzH9.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/LearningSection.tsx": {
+      "file": "assets/LearningSection-BR9O2Bu-.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/McpSection.tsx": {
+      "file": "assets/McpSection-Dxcq4P2S.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/MemorySection.tsx": {
+      "file": "assets/MemorySection-BseBQvRZ.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/ModelsSection.tsx": {
+      "file": "assets/ModelsSection-BCfCulG5.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/PrivacySettings.tsx": {
+      "file": "assets/PrivacySettings-V9BhTEHz.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/VoiceSection.tsx": {
+      "file": "assets/VoiceSection-BovxZIcN.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/customize/DeveloperPage.tsx": {
+      "file": "assets/DeveloperPage-Bezl47ec.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/customize/SkillsPage.tsx": {
+      "file": "assets/SkillsPage-DW5blpWt.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/customize/PluginsPage.tsx": {
+      "file": "assets/PluginsPage-DXgr2xpm.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/customize/ExtensionsPage.tsx": {
+      "file": "assets/ExtensionsPage-BNW9BpE2.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "chunk:ToolPermissions": {
+      "file": "assets/ToolPermissions-CmC4EzP3.js",
+      "lazy": true,
+      "dynamic": false
     }
   },
   "warnings": []

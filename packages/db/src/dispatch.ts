@@ -9,12 +9,34 @@ import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
 import { finishDelegation } from "./delegation.js";
-import { auditDevice, DeviceRequestError, deviceDigest } from "./device-grants.js";
+import {
+  assertDeviceTrusted,
+  auditDevice,
+  DeviceRequestError,
+  deviceDigest,
+} from "./device-grants.js";
 import { appendEventInTransaction, steerRunInTransaction } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import type { ChannelDispatchOrigin } from "./messaging-routes.js";
 import { answerChannelQuestion, enqueueChat } from "./messaging-routes.js";
 import { withTransactionRetry } from "./transaction-retry.js";
+
+export const DISPATCH_POLICY_LAYER = "desktop-dispatch";
+export const DISPATCH_OFF_MESSAGE = "Dispatch is off on this computer";
+
+/** A separate policy preserves every independent space, user and device restriction. */
+export async function dispatchEnabled(tx: Prisma.TransactionClient, spaceId: string) {
+  const policies = await tx.remoteAuthorityPolicy.findMany({
+    where: { layer: DISPATCH_POLICY_LAYER, subjectId: spaceId },
+  });
+  return !policies.some(
+    (policy) => policy.layer === DISPATCH_POLICY_LAYER && !policy.scopes.includes("dispatch"),
+  );
+}
+
+export async function requireDispatchEnabled(tx: Prisma.TransactionClient, spaceId: string) {
+  if (!(await dispatchEnabled(tx, spaceId))) throw new DeviceRequestError(DISPATCH_OFF_MESSAGE);
+}
 
 const ACTIVE = ["running", "queued", "leased", "waiting_input", "waiting_takeover"];
 export function dispatchState(run: {
@@ -34,6 +56,7 @@ export async function loadRemoteAuthority(
   grant: DeviceGrant,
   botId: string,
 ): Promise<RemoteAuthority> {
+  await assertDeviceTrusted(tx, grant);
   const [home, member, bot, policies] = await Promise.all([
     tx.instanceIdentity.findUnique({ where: { id: "home" } }),
     tx.spaceMember.findUnique({
@@ -46,6 +69,7 @@ export async function loadRemoteAuthority(
       where: {
         OR: [
           { layer: "space", subjectId: grant.spaceId },
+          { layer: DISPATCH_POLICY_LAYER, subjectId: grant.spaceId },
           { layer: "bot", subjectId: botId },
           { layer: "user", subjectId: grant.userId },
         ],
@@ -56,7 +80,15 @@ export async function loadRemoteAuthority(
     policies.find((policy) => policy.layer === name)?.scopes ?? [...ALL_DEVICE_SCOPES];
   return {
     home: home?.instanceId === grant.instanceId ? home.scopes : [],
-    space: member ? layer("space") : [],
+    space: member
+      ? layer("space").filter(
+          (scope) =>
+            !policies.some(
+              (policy) =>
+                policy.layer === DISPATCH_POLICY_LAYER && !policy.scopes.includes("dispatch"),
+            ) || !["dispatch", "steer", "approve", "consequential"].includes(scope),
+        )
+      : [],
     bot: bot ? layer("bot") : [],
     user: member ? layer("user") : [],
     device: grant.revokedAt
@@ -84,6 +116,10 @@ export async function admitDispatch(
   grant: DeviceGrant,
   input: DispatchInput,
   origin?: ChannelDispatchOrigin,
+  routeIncoming?: (
+    tx: Prisma.TransactionClient,
+    defaults: { defaultBotId?: string | null; groupCoordinatorId?: string | null },
+  ) => Promise<{ botId: string; rule: string } | null>,
 ): Promise<Receipt> {
   const key = {
     instanceId: grant.instanceId,
@@ -96,12 +132,14 @@ export async function admitDispatch(
   );
   return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
+      await requireDispatchEnabled(tx, grant.spaceId);
       // Serializes admission and revocation, including a retry whose routing default has changed.
       await tx.$queryRaw`SELECT id FROM device_grants WHERE id = ${grant.id} FOR UPDATE`;
       const liveGrant = await tx.deviceGrant.findFirst({
         where: { id: grant.id, instanceId: grant.instanceId, revokedAt: null },
       });
       if (!liveGrant) throw new DeviceRequestError("This device is no longer allowed to run work.");
+      await assertDeviceTrusted(tx, liveGrant);
       const replay = await tx.dispatchReceipt.findUnique({
         where: { instanceId_spaceId_deviceGrantId_clientNonce: key },
       });
@@ -140,7 +178,18 @@ export async function admitDispatch(
           })
         : null;
       if (origin && !installation) throw new DeviceRequestError("This channel is unavailable.");
-      const botId = input.botId ?? route?.botId ?? installation?.botId ?? liveGrant.defaultBotId;
+      const routed = routeIncoming
+        ? await routeIncoming(tx, {
+            defaultBotId: installation?.botId ?? liveGrant.defaultBotId,
+            groupCoordinatorId: route?.botId,
+          })
+        : null;
+      const botId =
+        routed?.botId ??
+        input.botId ??
+        route?.botId ??
+        installation?.botId ??
+        liveGrant.defaultBotId;
       if (!botId) throw new DeviceRequestError("Choose a bot before sending this task.", 400);
       const bot = await tx.bot.findFirst({
         where: { id: botId, spaceId: grant.spaceId, userId: grant.userId, archivedAt: null },
@@ -273,6 +322,8 @@ export async function admitDispatch(
             taskId: task.id,
             trigger: "user",
             status: "queued",
+            routingRule:
+              routed?.rule ?? (input.botId ? "mention" : input.replyToTaskId ? "reply" : "default"),
             originDeviceGrantId: grant.id,
             remoteDeviceGrantIds: [grant.id],
             remoteRootTaskId: task.id,

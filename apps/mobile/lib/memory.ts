@@ -12,7 +12,7 @@ import { rpc } from "./api";
 /** Native UI consumes the same paginated, authorized contracts as desktop and web. */
 export async function loadMemoryDocuments(cursor?: string) {
   return MemoryDocumentPageSchema.parse(
-    await rpc("memory/list", { cursor, limit: 50, includeDeleted: true }),
+    await rpc("memory/list", { cursor, limit: 50, scope: "user", includeDeleted: false }),
   );
 }
 export async function loadMemoryHistory(documentId: string, cursor?: number) {

@@ -464,10 +464,11 @@ description: What this skill does and when the agent should use it.
 Steps the agent should follow.
 `;
 
-function AgentSkills({
-  onSkillsChange,
+const ignoreSkillsChange = () => undefined;
+export function AgentSkills({
+  onSkillsChange = ignoreSkillsChange,
 }: {
-  onSkillsChange: (skills: AgentSkillCatalogEntry[]) => void;
+  onSkillsChange?: (skills: AgentSkillCatalogEntry[]) => void;
 }) {
   const { t } = useLingui();
   const [loading, setLoading] = useState(true);

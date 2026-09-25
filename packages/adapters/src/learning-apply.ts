@@ -8,6 +8,7 @@ import {
   LearningEditSchema,
   LearningProposalSchema,
   learningApprovalBlock,
+  MEMORY_INTENT_POLICY,
   RuntimePinSchema,
 } from "@ardurbot/contracts";
 import { isReadPolicyTool, parseSkillMd, redactLearningText } from "@ardurbot/core";
@@ -160,6 +161,8 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         : !!proposal.scope.botId)
     )
       throw new IsolationError();
+    if (proposal.operation?.startsWith("memory-") && /^(skills|preferences)\//.test(head.path))
+      throw new IsolationError();
     if (head.path.startsWith("skills/")) {
       const skill = await tx.agentSkill.findFirst({
         where: { documentId: id, spaceId: context.spaceId, userId: context.userId },
@@ -213,6 +216,16 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         /```|~~~/.test(proposal.proposedContent))
     )
       throw new Error("Use a prose skill with name and description frontmatter.");
+    if (proposal.memoryAction === "delete") {
+      if (
+        proposal.type !== "memory" ||
+        proposal.operation !== "memory-edit" ||
+        !proposal.target.documentId ||
+        proposal.proposedContent !== ""
+      )
+        throw new Error("Invalid memory removal.");
+      return;
+    }
     if (["memory", "skill"].includes(proposal.type) && !proposal.proposedContent?.trim())
       throw new Error("Provide document content.");
   }
@@ -234,13 +247,27 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         proposalIds: { array_contains: [proposal.id] },
       },
     });
-    if (!run || !review) throw new IsolationError();
+    const manual = ["memory-import", "memory-edit"].includes(proposal.operation ?? "");
+    if (
+      !review ||
+      (manual
+        ? review.policyVersion !== MEMORY_INTENT_POLICY ||
+          review.userId !== context.userId ||
+          review.botId !== context.botId ||
+          !review.completedAt
+        : !run)
+    )
+      throw new IsolationError();
     const reviewerPin = RuntimePinSchema.parse(review.reviewerPin);
     context.learning = {
       proposalId: proposal.id,
       approvingUserId: context.userId,
       grantId,
-      originatingPin: run.runtimePin ? RuntimePinSchema.parse(run.runtimePin) : null,
+      originatingPin: run?.runtimePin
+        ? RuntimePinSchema.parse(run.runtimePin)
+        : manual
+          ? (proposal.provenance?.originatingPin ?? null)
+          : null,
       reviewerPin,
       policyVersion: review.policyVersion,
       action,
@@ -255,7 +282,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
           }
         : undefined;
     proposal.provenance = {
-      runId: run.id,
+      runId: context.runId!,
       originatingPin: context.learning.originatingPin,
       reviewerPin,
       policyVersion: review.policyVersion,
@@ -278,8 +305,12 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     const applied = history.items.find((item) => item.revision === revision);
     const parent = history.items.find((item) => item.revision === revision - 1);
     if (!applied || (revision > 1 && !parent)) throw new IsolationError();
+    const kindChanged = (parent?.kind ?? "topic") !== (applied.kind ?? "topic");
+    const kindConflict = kindChanged && (head.kind ?? "topic") !== (applied.kind ?? "topic");
     const inverse = head.deletedAt
-      ? null
+      ? proposal.memoryAction === "delete" && head.revision === revision
+        ? (parent?.content ?? null)
+        : null
       : revision === 1
         ? head.revision === revision
           ? ""
@@ -307,7 +338,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         settingConflict = changed.count !== 1;
       }
     }
-    if (inverse === null || settingConflict) {
+    if (inverse === null || settingConflict || kindConflict) {
       await audit("revert-conflict", proposal.appliedRevisionId, `${head.id}:${head.revision}`);
       return {
         proposal,
@@ -321,9 +352,25 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     }
     await attribution(tx, proposal, context, head.revision, "revert");
     const doc =
-      revision === 1
-        ? await memory().delete(head.id, head.revision, context)
-        : await memory().update(head.id, inverse, head.revision, context);
+      head.deletedAt && parent
+        ? await memory().restore(head.id, parent.revision, head.revision, context)
+        : revision === 1
+          ? await memory().delete(head.id, head.revision, context)
+          : kindChanged && parent
+            ? await memory().commit(
+                {
+                  id: head.id,
+                  scope: head.scopeKey.kind,
+                  botId: proposal.scope.botId,
+                  path: head.path,
+                  kind: parent.kind ?? "topic",
+                  content: inverse,
+                  references: head.references,
+                  expectedRevision: head.revision,
+                },
+                context,
+              )
+            : await memory().update(head.id, inverse, head.revision, context);
     if (proposal.type === "skill") {
       const metadata = doc.deletedAt ? null : parseSkillMd(doc.content);
       if (metadata && "error" in metadata) throw new Error("Review this skill before undoing it.");
@@ -480,18 +527,34 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         redactLearningText(head?.content ?? "", context.knownSecrets),
         content,
       );
-      const doc = head
-        ? await memory().update(head.id, content, head.revision, context)
-        : await memory().commit(
-            {
-              scope: proposal.scope.botId ? "bot" : "user",
-              botId: proposal.scope.botId,
-              path: `${proposal.type === "skill" ? "skills" : proposal.type === "preference" ? "preferences" : "learned"}/${proposal.id}.md`,
-              content,
-              expectedRevision: 0,
-            },
-            context,
-          );
+      const doc =
+        head && proposal.memoryAction === "delete"
+          ? await memory().delete(head.id, head.revision, context)
+          : head
+            ? await memory().commit(
+                {
+                  id: head.id,
+                  kind: proposal.documentKind ?? head.kind,
+                  scope: head.scopeKey.kind,
+                  botId: proposal.scope.botId,
+                  path: head.path,
+                  content,
+                  references: head.references,
+                  expectedRevision: head.revision,
+                },
+                context,
+              )
+            : await memory().commit(
+                {
+                  kind: proposal.documentKind,
+                  scope: proposal.scope.botId ? "bot" : "user",
+                  botId: proposal.scope.botId,
+                  path: `${proposal.type === "skill" ? "skills" : proposal.type === "preference" ? "preferences" : "learned"}/${proposal.id}.md`,
+                  content,
+                  expectedRevision: 0,
+                },
+                context,
+              );
       if (proposal.type === "skill") {
         const parsed = parseSkillMd(content);
         if ("error" in parsed) throw new Error("This skill is invalid.");

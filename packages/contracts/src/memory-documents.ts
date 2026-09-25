@@ -10,6 +10,15 @@ export const MemoryIdentity = z
 export const DocumentScopeSchema = z.discriminatedUnion("kind", [
   z
     .object({
+      kind: z.literal("group"),
+      spaceId: MemoryIdentity,
+      userId: MemoryIdentity,
+      botId: MemoryIdentity,
+      groupId: MemoryIdentity,
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("bot"),
       spaceId: MemoryIdentity,
       userId: MemoryIdentity,
@@ -46,8 +55,10 @@ export const LearningProvenanceSchema = z
   })
   .strict();
 export type LearningProvenance = z.infer<typeof LearningProvenanceSchema>;
+export const MemoryDocumentKindSchema = z.enum(["profile", "preferences", "topic"]);
 export const DocumentRevisionSchema = z
   .object({
+    kind: MemoryDocumentKindSchema.optional(),
     documentId: MemoryIdentity,
     revision: z.number().int().positive(),
     scopeKey: DocumentScopeSchema,
@@ -117,7 +128,7 @@ export const MemoryPageInput = z.object({
   cursor: MemoryIdentity.optional(),
   limit: z.number().int().min(1).max(100).default(50),
   botId: MemoryIdentity.optional(),
-  scope: z.enum(["bot", "user", "space-shared"]).optional(),
+  scope: z.enum(["bot", "user", "space-shared", "group"]).optional(),
   includeDeleted: z.boolean().default(false),
 });
 export const MemoryDocumentPageSchema = z.object({

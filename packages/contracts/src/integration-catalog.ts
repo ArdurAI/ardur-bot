@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HostIntegrationSchema } from "./host-integrations.js";
 
 const PublicUrl = z
   .string()
@@ -8,14 +9,33 @@ const PublicUrl = z
     return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;
   }, "Use an HTTPS URL without credentials, query parameters or fragments");
 
+const McpEndpoint = z
+  .string()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      !url.hash &&
+      [...url.searchParams].every(
+        ([key, value]) =>
+          (key === "tools" && value === "all") || (key === "oauth" && value === "initialize"),
+      )
+    );
+  }, "Use an HTTPS MCP URL without credentials or private query parameters");
+
 export const IntegrationDescriptorSchema = z
   .object({
     id: z.string().regex(/^[a-z][a-z0-9-]*$/),
     name: z.string().min(1),
     vendor: z.string().min(1),
     available: z.boolean(),
-    transport: z.enum(["remote-http", "stdio"]),
-    endpoint: PublicUrl.optional(),
+    transport: z.enum(["remote-http", "stdio", "host-cli"]),
+    hostCli: z.object({ command: z.string(), installUrl: PublicUrl }).optional(),
+    remoteDocsUrl: PublicUrl.optional(),
+    endpoint: McpEndpoint.optional(),
     launch: z
       .object({ command: z.string().min(1), args: z.array(z.string()) })
       .strict()
@@ -60,7 +80,7 @@ export const IntegrationDescriptorSchema = z
   })
   .strict()
   .superRefine((descriptor, ctx) => {
-    if (!descriptor.available) return;
+    if (!descriptor.available || descriptor.transport === "host-cli") return;
     if (
       descriptor.transport === "remote-http"
         ? !descriptor.endpoint || descriptor.launch
@@ -79,6 +99,8 @@ export const IntegrationManifestSchema = z
     capturedAt: z.iso.datetime(),
     serverVersion: z.string().nullable(),
     account: z.string().nullable(),
+    workspace: z.string().nullable().optional(),
+    scopes: z.array(z.string()).optional(),
     tools: z
       .array(
         z
@@ -174,6 +196,7 @@ export const IntegrationStateSchema = z.enum([
   "discovery-failed",
   "cancelled",
   "needs-client-registration",
+  "needs-sign-in",
 ]);
 export const IntegrationConnectionSchema = z.object({
   id: z.string(),
@@ -183,6 +206,13 @@ export const IntegrationConnectionSchema = z.object({
   needsReview: z.boolean(),
   resourceConstraints: IntegrationResourceConstraintsSchema.optional(),
   spaceToolPolicies: SpaceToolPoliciesSchema.default({}),
+  transport: z.string().optional(),
+  consentStartedAt: z.iso.datetime().nullable().optional(),
+  lastCheckedAt: z.iso.datetime().nullable().optional(),
+  lastSuccessAt: z.iso.datetime().nullable().optional(),
+  lastUsedAt: z.iso.datetime().nullable().optional(),
+  lastError: z.string().nullable().optional(),
+  recentErrors: z.array(z.object({ at: z.iso.datetime(), message: z.string() })).optional(),
 });
 export type IntegrationConnection = z.infer<typeof IntegrationConnectionSchema>;
 export const IntegrationGrantSchema = z.object({
@@ -196,5 +226,6 @@ export const IntegrationCatalogListSchema = z.object({
   catalog: z.array(IntegrationDescriptorSchema),
   connections: z.array(IntegrationConnectionSchema),
   webUrl: z.string().url().optional(),
+  hostSignIns: z.array(HostIntegrationSchema).optional(),
 });
 export type IntegrationCatalogList = z.infer<typeof IntegrationCatalogListSchema>;

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import type { HostFrame, HostRequest } from "@ardurbot/contracts/host-bridge";
+import type { Actor } from "@ardurbot/contracts";
+import type { HostFrame, HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { HostBridge, hostTokenHash } from "./host-bridge.js";
@@ -25,8 +26,25 @@ function fixture() {
         return { count: 1 };
       }),
     },
+    spaceMember: {
+      findUnique: vi.fn(async () => ({ role: "owner" })),
+      findFirst: vi.fn(async () => ({
+        userId: "owner",
+        spaceId: "space",
+        member: { user: { email: "owner@example.test" } },
+      })),
+    },
     run: { findFirst: vi.fn(async () => null) },
-    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    mcpServer: {
+      findFirst: vi.fn(async () => ({ id: "server", enabled: true, catalogId: null })),
+    },
+    botMcpServer: {
+      findFirst: vi.fn(async () => ({
+        allowedTools: ["read_fixture"],
+        allowAllTools: false,
+        needsReview: false,
+      })),
+    },
   };
   return {
     prisma,
@@ -190,4 +208,203 @@ describe("host pairing and grants", () => {
     expect(sent).toEqual([request]);
     bridge.hub.detach();
   });
+});
+
+describe.each(["editor", "settings"] as const)("shared %s host grants", (kind) => {
+  const actor: Actor = {
+    userId: "owner",
+    spaceId: "space",
+    email: "owner@example.test",
+    isDeploymentOwner: true,
+  };
+  const operation: HostOperation =
+    kind === "editor"
+      ? {
+          op: "computer.files.read",
+          homeKey: "ide",
+          path: "/workspace/project/main.ts",
+          editor: true,
+        }
+      : { op: "mcp.status", serverId: "server", revision: 1 };
+  const open = (bridge: HostBridge) =>
+    kind === "editor" ? bridge.ownerFile(actor, operation) : bridge.result(operation, actor);
+
+  async function grantFixture() {
+    const { bridge, prisma } = fixture();
+    await bridge.pair("owner");
+    const registration = (await prisma.hostRegistration.findUnique())!;
+    registration.hostRoots = ["/workspace/project"];
+    let forwarded!: (request: HostRequest) => void;
+    const received = new Promise<HostRequest>((resolve) => {
+      forwarded = resolve;
+    });
+    const host = {
+      send: vi.fn(async (frame: HostFrame) => {
+        if (frame.type === "request") forwarded(frame);
+      }),
+      close: vi.fn(),
+    };
+    bridge.hub.attach(host, "owner", registration.generation);
+    return { bridge, prisma, registration, host, received };
+  }
+
+  it("acknowledges streams, finishes on end and rejects replayed grants", async () => {
+    const { bridge, prisma, host, received } = await grantFixture();
+    try {
+      const result = open(bridge);
+      const request = await received;
+      const value = kind === "editor" ? Buffer.from("saved text").toString("base64") : { ok: true };
+      await bridge.hub.fromHost(host, {
+        v: 1,
+        type: "stream",
+        id: request.id,
+        seq: 0,
+        channel: kind === "editor" ? "file" : "result",
+        data: value,
+      });
+      expect(host.send).toHaveBeenCalledWith({ v: 1, type: "ack", id: request.id, seq: 0 });
+      await bridge.hub.fromHost(host, { v: 1, type: "end", id: request.id });
+      if (kind === "editor")
+        expect(await result).toMatchObject({ bytes: new Uint8Array(Buffer.from("saved text")) });
+      else expect(await result).toEqual(value);
+      expect(prisma.run.findFirst).not.toHaveBeenCalled();
+      expect(prisma.spaceMember.findFirst).toHaveBeenCalled();
+      const worker = { send: vi.fn(async (_frame: HostFrame) => {}), close: vi.fn() };
+      await bridge.hub.request({ ...request, id: "replayed-grant" }, worker);
+      expect(worker.send).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "end", problem: expect.any(Object) }),
+      );
+      expect(host.send.mock.calls.filter(([frame]) => frame.type === "request")).toHaveLength(1);
+    } finally {
+      bridge.hub.detach();
+    }
+  });
+
+  it.each(["generation", "registration owner", "deployment owner", "membership"])(
+    "refuses requests and responses after revoking %s",
+    async (revoked) => {
+      const { bridge, prisma, registration, host, received } = await grantFixture();
+      try {
+        const result = open(bridge);
+        const rejection = expect(result).rejects.toThrow();
+        const request = await received;
+        if (revoked === "generation") registration.generation = "revoked";
+        else if (revoked === "registration owner") registration.userId = "foreign";
+        else if (revoked === "deployment owner")
+          prisma.deploymentSettings.findUnique.mockResolvedValue({ ownerUserId: "foreign" });
+        else prisma.spaceMember.findFirst.mockResolvedValue(null as never);
+        await bridge.hub.fromHost(host, {
+          v: 1,
+          type: "stream",
+          id: request.id,
+          seq: 0,
+          channel: "result",
+          data: "must not escape",
+        });
+        await rejection;
+        expect(host.send).toHaveBeenCalledWith({ v: 1, type: "cancel", id: request.id });
+        await expect(open(bridge)).rejects.toThrow();
+        expect(host.send.mock.calls.filter(([frame]) => frame.type === "request")).toHaveLength(1);
+      } finally {
+        bridge.hub.detach();
+      }
+    },
+  );
+});
+
+it("keeps MCP calls tied to active bot runs and tool grants alongside settings requests", async () => {
+  const { bridge, prisma } = fixture();
+  await bridge.pair("owner");
+  const registration = (await prisma.hostRegistration.findUnique())!;
+  const host = { send: vi.fn(async (_frame: HostFrame) => {}), close: vi.fn() };
+  const worker = { send: vi.fn(async (_frame: HostFrame) => {}), close: vi.fn() };
+  bridge.hub.attach(host, "owner", registration.generation);
+  const request: HostRequest = {
+    v: 1,
+    type: "request",
+    id: "call",
+    scope: { userId: "owner", spaceId: "space", botId: "bot", runId: "run" },
+    operation: { op: "mcp.call", serverId: "server", revision: 1, name: "read_fixture", args: {} },
+  };
+  try {
+    await expect(bridge.result(request.operation, request.scope)).rejects.toThrow("active bot run");
+    await bridge.hub.request({ ...request, id: "missing-run" }, worker);
+    expect(host.send).not.toHaveBeenCalled();
+    prisma.run.findFirst.mockResolvedValue({ id: "run" } as never);
+    await bridge.hub.request(request, worker);
+    expect(host.send).toHaveBeenCalledExactlyOnceWith(request);
+    prisma.botMcpServer.findFirst.mockResolvedValue({
+      allowedTools: [],
+      allowAllTools: false,
+      needsReview: true,
+    });
+    await bridge.hub.fromHost(host, {
+      v: 1,
+      type: "stream",
+      id: request.id,
+      seq: 0,
+      channel: "result",
+      data: "must not escape",
+    });
+    expect(worker.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "stream" }));
+    expect(host.send).toHaveBeenLastCalledWith({ v: 1, type: "cancel", id: request.id });
+  } finally {
+    bridge.hub.detach();
+  }
+});
+
+it("grants owner editor files only inside current roots and never accepts a worker-forged grant", async () => {
+  const { bridge, prisma } = fixture();
+  await bridge.pair("owner");
+  const registration = (await prisma.hostRegistration.findUnique())!;
+  registration.hostRoots = ["/workspace/project"];
+  const actor: Actor = {
+    userId: "owner",
+    spaceId: "space",
+    email: "owner@example.test",
+    isDeploymentOwner: true,
+  };
+  const host = {
+    send: vi.fn(async (frame: HostFrame) => {
+      if (frame.type !== "request") return;
+      await bridge.hub.fromHost(host, {
+        v: 1,
+        type: "stream",
+        id: frame.id,
+        seq: 0,
+        channel: "file",
+        data: Buffer.from("file text").toString("base64"),
+      });
+      await bridge.hub.fromHost(host, { v: 1, type: "end", id: frame.id });
+    }),
+    close: vi.fn(),
+  };
+  bridge.hub.attach(host, "owner", registration.generation);
+  const operation = {
+    op: "computer.files.read",
+    homeKey: "ide",
+    path: "/workspace/project/main.ts",
+    editor: true,
+  } as const;
+  expect(Buffer.from((await bridge.ownerFile(actor, operation)).bytes).toString()).toBe(
+    "file text",
+  );
+  expect(prisma.run.findFirst).not.toHaveBeenCalled();
+  await expect(bridge.ownerFile({ ...actor, isDeploymentOwner: false }, operation)).rejects.toThrow(
+    "owner",
+  );
+  await expect(
+    bridge.ownerFile(actor, { ...operation, path: "/workspace/project-other/main.ts" }),
+  ).rejects.toThrow("unavailable");
+  const worker = { send: vi.fn(async (_frame: HostFrame) => {}), close: vi.fn() };
+  const granted = host.send.mock.calls.find(
+    ([frame]) => frame.type === "request",
+  )![0] as HostRequest;
+  await bridge.hub.request({ ...granted, id: "forged" }, worker);
+  expect(worker.send).toHaveBeenCalledWith(
+    expect.objectContaining({ type: "end", problem: expect.any(Object) }),
+  );
+  registration.hostRoots = [];
+  await expect(bridge.ownerFile(actor, operation)).rejects.toThrow("unavailable");
+  bridge.hub.detach();
 });

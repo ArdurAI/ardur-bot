@@ -131,7 +131,7 @@ definition retains the owner's setup.
 `LocalImportRecord` stores tool, relative source path, source-path hash, eligible
 content hash, source modification time, import time and the target revision.
 Both tables have explicit mapped names in migration
-`20260924120000_local_import`.
+`20260925120000_local_import`.
 
 Instruction files become private user documents under `imported/instructions/`,
 with provenance kind `instructions`, because this checkout has no space-wide

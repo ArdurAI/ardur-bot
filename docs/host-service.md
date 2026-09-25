@@ -41,7 +41,7 @@ sequenceDiagram
 - Host sockets require WSS outside loopback. Worker authentication is a
   purpose-separated HMAC of the existing deployment encryption key. The worker's
   internal API connection uses `API_INTERNAL_URL`; it never receives the host token.
-- Each request carries run, bot, owner and space IDs. The API checks the active run,
+- Bot requests carry run, bot, owner and space IDs. The API checks the active run,
   cancellation state, computer home and complete saved native pin. Stream frames
   return only to the worker socket that originated the request. Callback execution
   retains worker-owned tool routes, authorization and completion recording.
@@ -50,6 +50,19 @@ sequenceDiagram
   15-minute operation deadline. Thus retained/transferred output is also bounded
   across the four host slots. Native queues and socket queues are bounded. A native
   turn occupies a slot while its tool callback can use another slot.
+- The [inbuilt IDE](ide.md) uses server-minted, in-process owner grants for
+  registered-folder file operations without creating a bot run. Each request and
+  response still revalidates owner, space membership, pairing generation and roots.
+  Editor reads preview at most 2 MiB plus one byte; editor writes accept 2 MiB.
+  Only an explicit editor write request gets the larger base64-sized frame limit
+  (`HOST_WRITE_FRAME_BYTES`). Bot file limits and all stream-frame limits above
+  remain unchanged. Workers cannot mint or replay an owner editor grant.
+- Owner file and settings MCP requests share the registration generation,
+  deployment ownership and space membership checks. Their grants use in-process
+  request identity, so a worker cannot claim a settings grant with a copied ID.
+  File requests still require registered roots. MCP requests still require the
+  current server revision; bot calls also require an active run and explicit tool
+  grants. Responses revalidate these checks before delivery.
 - Host loss, cancellation, overflow and revoked grants stop requests with a
   `RuntimeProblem`. Request IDs and disconnected runs are tombstoned for the API process lifetime. The
   reconnect path never resends a request. Giving a disconnected run a new request ID
@@ -84,8 +97,12 @@ sequenceDiagram
 the whole application environment. The allowed names are `PATH`, `HOME`, `USER`,
 `LOGNAME`, `TMPDIR`, `TEMP`, `TMP`, `SystemRoot`, `WINDIR`, `LOCALAPPDATA`, `APPDATA`,
 `USERPROFILE`, `LANG`, `LC_ALL`, `SHELL`, `SSH_AUTH_SOCK`, `XDG_CONFIG_HOME`,
-`XDG_DATA_HOME`, `XDG_CACHE_HOME` and `HOMEBREW_PREFIX`. Variables containing
-`TOKEN`, `SECRET`, `KEY`, `PASSWORD` or `CREDENTIAL`, names starting with `AWS_`,
+`XDG_DATA_HOME`, `XDG_CACHE_HOME` and `HOMEBREW_PREFIX`. The host also preserves the
+standard nonsecret selectors `AWS_PROFILE`, `AWS_DEFAULT_PROFILE`, `AWS_REGION`,
+`AWS_DEFAULT_REGION`, `KUBECONFIG`, `CLOUDSDK_CONFIG`, `CLOUDSDK_ACTIVE_CONFIG_NAME`,
+`AZURE_CONFIG_DIR`, `GH_CONFIG_DIR`, `GLAB_CONFIG_DIR` and `JENKINS_URL`. The Jenkins
+URL cannot contain credentials, a query or a fragment. Variables containing
+`TOKEN`, `SECRET`, `KEY`, `PASSWORD` or `CREDENTIAL`, all other `AWS_` variables,
 and `GOOGLE_APPLICATION_CREDENTIALS` are excluded, case-insensitively. This includes
 `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GH_TOKEN`, `GITHUB_TOKEN` and `NPM_TOKEN`.
 Injection variables such as `NODE_OPTIONS`, `BASH_ENV`, `ENV`, `ZDOTDIR`,
@@ -97,8 +114,8 @@ flags only for the host-service launch; native CLIs do not inherit those flags.
 login PATH per process and shares concurrent initialization. On macOS/Linux it
 runs the owner's absolute `SHELL` (or OS login shell) non-interactively with `-lc`,
 a three-second timeout and a 16 KiB output limit. NUL-delimited `printf` output
-separates PATH from profile banners. Only PATH is imported from this output; the
-rest of the login environment is never copied. `HOME` stays the actual OS home,
+separates PATH and the fixed nonsecret selectors above from profile banners. No
+other login variables are imported. `HOME` stays the actual OS home,
 not the bot workspace, so CLIs can use their own configuration and keychains.
 `SSH_AUTH_SOCK` preserves access to the owner's existing SSH agent.
 
@@ -133,11 +150,37 @@ Before each host run, `environmentNote` detects `git`, `gh`, `glab`, `kubectl`,
 output is discarded. Context text is bounded, control characters are stripped,
 and emails and credential-shaped assignments are redacted. A failed sign-in probe
 is **not checked**: its exit code alone cannot distinguish a signed-out account
-from a failed network check. Other sign-ins are **not checked**. There is no
-`aws sts get-caller-identity`, cluster endpoint lookup
-or other cloud identity probe. GitHub CLI itself validates credentials against
+from a failed network check. Other sign-ins are **not checked by this run note**.
+The separate Integrations health inventory below checks cloud identities.
+GitHub CLI itself validates credentials against
 its configured hosts when running `gh auth status`; that explicitly permitted
 status command is not a strictly offline check.
+
+### Integration accounts
+
+`host-integrations.ts` adds seven owner-only integration probes to host health.
+They run concurrently on the captured login PATH, with an eight-second deadline
+per CLI and a thirty-second inventory cache. The API receives only selected
+identity/workspace fields, state and check time. Raw status output and token
+material stay out of the database. See [integration lifecycle](./decisions/integration-lifecycle.md)
+for commands, provider documentation and the distinction between a configured
+context and verified remote authentication.
+
+Choosing **Use for bots on this computer** creates a `host-cli` connection with
+`get_identity` and `execute_command`. It stores no credential. Only the deployment
+owner's bots assigned to a desktop computer may use it. Before `execute_command`,
+the host rechecks the selected CLI account and workspace. A changed account
+requires reconnecting and granting the tools again. Authentication, credential,
+executable, endpoint and configuration overrides are rejected by the shared
+command contract. Every command requires Ask-first approval, including reads;
+this avoids trusting a generic command tool's name to classify effects. Commands
+are never automatically retried. A failed command can have an uncertain outcome.
+
+Jenkins uses an owner-installed `jenkins-cli` executable wrapping the official
+`jenkins-cli.jar`, with its server and `-auth @file` configured by the owner.
+The host probes `who-am-i`; `JENKINS_URL` supplies the workspace when set. The
+wrapper and authentication file remain on the computer. Arbitrary jar locations
+and unrelated Jenkins wrappers are not auto-discovered.
 
 The environment note stays one paragraph, for example: **This computer uses the
 owner's tools and saved CLI sign-ins. Tools on this computer: gh 2.80.0 (signed in),

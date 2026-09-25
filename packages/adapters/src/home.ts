@@ -12,7 +12,12 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import type { AdapterContext, AgentHomeStore, PortableFile } from "@ardurbot/adapter-kit";
+import type {
+  AdapterContext,
+  AgentHomeStore,
+  HomeArchiveFile,
+  PortableFile,
+} from "@ardurbot/adapter-kit";
 import { fileHandlePath } from "./file-handle-path.js";
 
 export class LocalAgentHomeStore implements AgentHomeStore {
@@ -101,11 +106,24 @@ export class LocalAgentHomeStore implements AgentHomeStore {
     yield* walkFiles(root, root);
   }
 
+  async *streamHome(
+    homeKey: string,
+    context: AdapterContext,
+    exclude: (path: string) => boolean,
+  ): AsyncIterable<HomeArchiveFile> {
+    await this.waitForBotWrite(homeKey);
+    await this.recoverInterruptedCommit(homeKey);
+    const dir = this.botDir(homeKey);
+    await mkdir(dir, { recursive: true });
+    const root = await realpath(dir);
+    yield* streamHomeFiles(root, root, context.signal, exclude);
+  }
+
   async readFile(
     botId: string,
     filePath: string,
     _context: AdapterContext,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; preview?: boolean },
   ): Promise<string> {
     await this.waitForBotWrite(botId);
     await this.recoverInterruptedCommit(botId);
@@ -114,8 +132,19 @@ export class LocalAgentHomeStore implements AgentHomeStore {
     try {
       if (options?.maxBytes !== undefined) {
         const info = await handle.stat();
-        if (info.size > options.maxBytes) {
+        if (info.size > options.maxBytes && !options.preview) {
           throw new Error(`agent home file exceeds ${options.maxBytes} bytes`);
+        }
+      }
+      if (options?.preview && options.maxBytes !== undefined) {
+        const buffer = Buffer.alloc(options.maxBytes);
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        try {
+          return new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, bytesRead), {
+            stream: bytesRead === buffer.length,
+          });
+        } catch {
+          throw new Error("Binary file");
         }
       }
       return await handle.readFile("utf8");
@@ -363,6 +392,54 @@ async function* walkFiles(
         content: new Uint8Array(content),
         executable: Boolean(mode & 0o100),
       };
+    }
+  }
+}
+
+async function* streamHomeFiles(
+  root: string,
+  current: string,
+  signal: AbortSignal,
+  exclude: (path: string) => boolean,
+  outputPath = "",
+  visited = new Set<string>(),
+): AsyncGenerator<HomeArchiveFile> {
+  const resolved = await traversalTarget(root, current);
+  if (visited.has(resolved)) return;
+  visited.add(resolved);
+  for (const entry of await readdir(resolved, { withFileTypes: true })) {
+    signal.throwIfAborted();
+    const portablePath = path.posix.join(outputPath, entry.name);
+    if (exclude(portablePath)) continue;
+    const full = await traversalTarget(root, path.join(resolved, entry.name)).catch(() => null);
+    if (!full || exclude(path.relative(root, full).split(path.sep).join("/"))) continue;
+    if ((await stat(full)).isDirectory()) {
+      yield* streamHomeFiles(root, full, signal, exclude, portablePath, visited);
+      continue;
+    }
+    const handle = await open(
+      full,
+      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
+    );
+    try {
+      const info = await handle.stat();
+      if (!info.isFile()) continue;
+      assertContained(root, await fileHandlePath(handle.fd));
+      yield {
+        path: portablePath,
+        size: info.size,
+        executable: Boolean(info.mode & 0o100),
+        content: info.size
+          ? handle.createReadStream({
+              autoClose: false,
+              highWaterMark: 64 * 1024,
+              end: info.size - 1,
+              signal,
+            })
+          : (async function* () {})(),
+      };
+    } finally {
+      await handle.close();
     }
   }
 }

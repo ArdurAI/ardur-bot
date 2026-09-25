@@ -127,10 +127,23 @@ export async function createBotFromPicker(
 /** Open the user Settings overlay, optionally switching to a sidebar section. */
 export async function openUserSettings(
   page: Page,
-  section?: "general" | "models" | "memory" | "import" | "voice" | "usage" | "computer" | "updates",
+  section?:
+    | "general"
+    | "account"
+    | "privacy"
+    | "models"
+    | "memory"
+    | "import"
+    | "voice"
+    | "usage"
+    | "computer"
+    | "updates",
 ) {
   await page.getByTestId("user-menu-trigger").click();
-  await page.getByRole("dialog").getByRole("button", { name: "Settings", exact: true }).click();
+  await page
+    .locator('[data-slot="popover-content"]')
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
   const settings = page.getByTestId("user-settings");
   await expect(settings).toBeVisible();
   if (section && section !== "general") {

@@ -51,6 +51,38 @@ const row: TeamRow = TeamRowSchema.parse({
   executing: null,
   usage: { tokens: 150, costs: [] },
 });
+it.each([false, true, undefined])(
+  "renders the executing effort with evidence %s",
+  async (effortAttested) => {
+    const node = document.createElement("div");
+    const root = createRoot(node);
+    const executing = {
+      pin: {
+        runtimeKind: "claude-code" as const,
+        provider: "anthropic",
+        modelId: "claude-opus-5",
+        effort: "high",
+        credentialId: "native:claude-code",
+        revision: 1,
+      },
+      computer: { id: "computer", kind: "desktop", mode: "dedicated" as const },
+      destination: { host: null, local: false },
+      runtimeInfo: { runtimeKind: "claude-code" as const, effortAttested },
+    };
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TeamBoardRow row={{ ...row, executing }} refresh={async () => {}} />
+        </MemoryRouter>,
+      ),
+    );
+    expect([...node.querySelectorAll("dd")].map((dd) => dd.textContent)).toContain(
+      effortAttested ? "high" : "high · requested",
+    );
+    expect(node.textContent?.includes("requested")).toBe(effortAttested !== true);
+    await act(async () => root.unmount());
+  },
+);
 it("renders a board row with expansion, quiet completion and distinct native actions", async () => {
   const node = document.createElement("div");
   document.body.append(node);

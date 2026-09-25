@@ -43,6 +43,7 @@ export function hostProbe(
   captureOutput = false,
   timeoutMs = 2_000,
   platform = process.platform,
+  captureStderr = false,
 ): Promise<ProbeResult> {
   return new Promise((resolve) => {
     let child: ChildProcessWithoutNullStreams;
@@ -89,13 +90,15 @@ export function hostProbe(
       finish(code);
     });
     child.stdin.on("error", () => stop("not started"));
-    child.stdout.on("data", (chunk: Buffer) => {
+    const consume = (chunk: Buffer) => {
       if (!captureOutput || settled) return;
       bytes += chunk.length;
       if (bytes > 16 * 1024) stop("output limit");
       else output += decoder.write(chunk);
-    });
-    child.stderr.resume();
+    };
+    child.stdout.on("data", consume);
+    if (captureStderr) child.stderr.on("data", consume);
+    else child.stderr.resume();
     timer = setTimeout(() => stop("timeout"), timeoutMs);
     child.stdin.end();
   });
@@ -159,17 +162,38 @@ export async function captureHostEnvironment(
         ? "/bin/zsh"
         : "/bin/bash";
   env.SHELL = shell;
-  // NUL framing discards profile banners without ever accepting the profile's environment.
+  // Capture only the login PATH and explicit nonsecret CLI selectors, never the login environment.
+  const selectors = [
+    "PATH",
+    "AWS_PROFILE",
+    "AWS_DEFAULT_PROFILE",
+    "AWS_REGION",
+    "AWS_DEFAULT_REGION",
+    "KUBECONFIG",
+    "CLOUDSDK_CONFIG",
+    "CLOUDSDK_ACTIVE_CONFIG_NAME",
+    "AZURE_CONFIG_DIR",
+    "GH_CONFIG_DIR",
+    "GLAB_CONFIG_DIR",
+    "JENKINS_URL",
+  ];
   const result = await hostProbe(
     shell,
-    ["-lc", 'printf "\\0%s\\0" "$PATH"'],
+    ["-lc", selectors.map((key) => `printf '\\0${key}=%s\\0' "\${${key}:-}"`).join(";")],
     env,
     true,
     3_000,
     platform,
   );
-  const loginPath = result.output.match(/\0([^\0]+)\0/)?.[1];
+  const selected = Object.fromEntries(
+    [...result.output.matchAll(/\0([A-Z_]+)=([^\0]*)\0/g)]
+      .filter((match) => selectors.includes(match[1]!))
+      .map((match) => [match[1]!, match[2]!]),
+  );
+  // Accept the older PATH-only envelope used by installed launchers too.
+  const loginPath = selected.PATH || result.output.match(/\0([^=\0]+)\0/)?.[1];
   if (result.code === 0 && !result.failure && loginPath?.trim()) {
+    Object.assign(env, filterHostEnvironment(selected, platform));
     env.PATH = loginPath;
     return { env };
   }

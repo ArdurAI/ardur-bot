@@ -17,6 +17,12 @@ describe("appConnectPresentation", () => {
     expect(view.actionLabel).toBe("Authorize");
   });
 
+  it("offers trusted catalog navigation without treating it as an OAuth provider", () => {
+    expect(appConnectPresentation({ ...block, connectorId: "trusted-catalog" }).actionLabel).toBe(
+      "Connect",
+    );
+  });
+
   it("hides authorize once connected", () => {
     const view = appConnectPresentation({ ...block, status: "connected" });
     expect(view.showAuthorize).toBe(false);

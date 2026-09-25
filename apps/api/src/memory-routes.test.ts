@@ -1,12 +1,52 @@
 import type { Actor } from "@ardurbot/contracts";
+import { RuntimePinError } from "@ardurbot/contracts";
 import type { JournalDocument } from "@ardurbot/memory";
 import { JournalDocumentStore, MemoryService } from "@ardurbot/memory";
+import { os } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { describe, expect, it } from "vitest";
+import { memoryRpc } from "./memory-routes.js";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
 
-async function fixture() {
+it("serializes a typed locality denial as the safe existing problem", async () => {
+  const handler = new RPCHandler({
+    propose: os.handler(() =>
+      memoryRpc(async () => {
+        throw new RuntimePinError({
+          kind: "problem",
+          code: "locality-denied",
+          reason: "untrusted provider detail",
+          actions: ["change-pin"],
+          pin: {
+            runtimeKind: "pi",
+            provider: "openai-compatible",
+            modelId: "fixture",
+            credentialId: "connection",
+            effort: "medium",
+            revision: 0,
+          },
+        });
+      }),
+    ),
+  });
+  const { response } = await handler.handle(
+    new Request("http://example.test/propose", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"json":null}',
+    }),
+  );
+  expect(response.status).toBe(403);
+  const payload = await response.json();
+  expect(payload.json).toMatchObject({
+    message: "This bot may only run locally — change the pin or the space policy",
+    data: { code: "locality-denied" },
+  });
+  expect(JSON.stringify(payload)).not.toContain("untrusted provider detail");
+});
+
+async function fixture(prisma: unknown = {}) {
   let records: JournalDocument[] = [];
   const store = new JournalDocumentStore(
     {
@@ -47,7 +87,7 @@ async function fixture() {
   );
   const handler = new RPCHandler(
     createRouter({
-      prisma: {},
+      prisma,
       env: { webOrigin: "http://example.test" },
       memoryDocuments: service,
     } as unknown as RouterDeps),
@@ -66,6 +106,38 @@ async function fixture() {
   return { request, actor, saved };
 }
 describe("authorized memory RPC lifecycle", () => {
+  it.each(["claude-code", "codex-app-server"])(
+    "returns an actionable refusal for a %s memory review over RPC",
+    async (runtimeKind) => {
+      const f = await fixture({
+        spaceMember: { findUnique: async () => ({ role: "owner" }) },
+        bot: {
+          findFirst: async () => ({
+            id: "bot",
+            runtimeKind,
+            modelProvider: runtimeKind === "claude-code" ? "anthropic" : "openai-codex",
+            modelId: "fixture",
+            thinkingLevel: "medium",
+            modelCredentialId: `native:${runtimeKind}`,
+            thread: { id: "thread", historyCompactionGeneration: 0 },
+          }),
+        },
+        secret: { findMany: async () => [] },
+        botSecret: { findMany: async () => [] },
+        reviewExecution: { findUnique: async () => null },
+        spaceLearningConfig: { findUnique: async () => null },
+      });
+      const result = await f.request("propose", {
+        intent: "edit",
+        text: "Use short answers.",
+        requestId: "native-fixture",
+      });
+      expect(result.status).toBe(400);
+      expect(result.body.json.message).toBe(
+        "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
+      );
+    },
+  );
   it("exposes authorized indexing progress as counts only", async () => {
     const f = await fixture();
     expect(await f.request("deliveryProgress")).toEqual({
