@@ -18,6 +18,8 @@ export interface TaskContract {
   deadlineMs: number;
   consent: readonly string[];
   remoteTools: boolean;
+  /** Symlink paths the task expects the workspace snapshot to keep. */
+  links?: readonly string[];
 }
 
 export function immutable<T>(value: T): T {

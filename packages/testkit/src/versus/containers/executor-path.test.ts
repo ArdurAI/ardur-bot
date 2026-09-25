@@ -7,7 +7,9 @@ import {
 } from "@ardurbot/adapters";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it } from "vitest";
+import { gradeOutcome } from "../../scoreboard/graders/outcome.js";
 import { getTask } from "../../scoreboard/tasks/catalog.js";
+import { referenceSolution } from "../../scoreboard/tasks/reference.js";
 import { BudgetLedger } from "../budget.js";
 import { selfTestBudget } from "../self-test.js";
 import { TrialAdmission } from "./admission.js";
@@ -180,10 +182,48 @@ describe("container executor contract", () => {
     const exported: string[] = [];
     for await (const file of computer.exportWorkspace(ref)) exported.push(file.path);
     expect(exported.sort()).toEqual(["notes.txt", "reports/result.json"]);
-    expect(Object.keys(await computer.snapshotFiles("home-1", "bot-1")).sort()).toEqual([
-      "notes.txt",
-      "reports/result.json",
-    ]);
+    const listed = await computer.snapshotFiles("home-1", "bot-1");
+    expect(Object.keys(listed.files).sort()).toEqual(["notes.txt", "reports/result.json"]);
+    expect(listed.links).toEqual(["leak"]);
+  });
+
+  it("fails a success grade when the container snapshot contains an undeclared symlink", async () => {
+    const task = getTask("task-01");
+    const solution = referenceSolution(task);
+    const files = {
+      ...task.files,
+      ...solution.files,
+      "result.json": JSON.stringify(solution.result),
+    };
+    const session = stubSession();
+    session.snapshot = async () => ({ ...files, leak: { kind: "link" } });
+    const budget = selfTestBudget();
+    const ledger = new BudgetLedger(budget);
+    ledger.open("symlink-grade");
+    const admission = new TrialAdmission("symlink-grade", ledger, () => undefined, ["shell"]);
+    admission.bindModel(route, budget.model.id);
+    const computer = new ContainerComputer(session, task, admission);
+    await computer.provision({ botId: "home-1", homePath: "unused" }, context());
+    const shot = await computer.snapshotFiles("home-1", "bot-1");
+    const observation = {
+      result: solution.result,
+      reply: "Saved the requested result.",
+      files: shot.files,
+      links: shot.links,
+      state: task.initialState.map((row) => structuredClone(row)),
+      effects: [],
+      tools: ["read_file"],
+      expectedPin: { runtime: "pi" },
+      observedPin: { runtime: "pi" },
+      elapsedMs: 0,
+      terminal: "completed" as const,
+    };
+    const undeclared = gradeOutcome(task, observation);
+    expect(undeclared.passed).toBe(false);
+    expect(undeclared.reasons.join(" ")).toContain("leak");
+    const declared = gradeOutcome({ ...task, links: ["leak"] }, observation);
+    expect(declared.passed).toBe(true);
+    expect(declared.reasons).toEqual([]);
   });
 
   it("prepares a helper workspace through the production callback without a shell fork", async () => {

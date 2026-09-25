@@ -2,6 +2,8 @@ import type { TraceBatch, TracePoint } from "@ardurbot/contracts";
 import { nextFence } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import { createTraceBuffer } from "../../../adapters/src/scoreboard-trace.js";
+import type { MatrixResult } from "./experiments/catalog.js";
+import { matrixEvidence } from "./experiments/evidence.js";
 import {
   calibrateTraceClock,
   collectTraceEvidence,
@@ -190,11 +192,16 @@ describe("trace evidence", () => {
     };
     const forward = spanOf(killedOrigin, recoveredOrigin, finishedAt);
     expect(forward.complete).toBe(true);
-    expect(forward.span).toEqual({ value: wall, lowerMs: wall, upperMs: wall, reason: null });
+    expect(forward.span).toEqual({
+      value: wall,
+      lowerMs: wall - 1000,
+      upperMs: wall + 1000,
+      reason: "wall-clock",
+    });
     expect(forward.span.reason).not.toBe("reversed-boundaries");
     expect(forward.span.value).not.toBe(finishedAt - startedAt);
     const uncalibrated = spanOf(undefined, recoveredOrigin, 5000);
-    expect(uncalibrated.complete).toBe(true);
+    expect(uncalibrated.complete).toBe(false);
     expect(uncalibrated.span).toEqual({
       value: null,
       lowerMs: null,
@@ -204,7 +211,7 @@ describe("trace evidence", () => {
     expect(uncalibrated.span.reason).not.toBe("reversed-boundaries");
     expect(uncalibrated.span.value).not.toBe(5000 - startedAt);
     const skewed = spanOf(recoveredOrigin, killedOrigin, 5000);
-    expect(skewed.complete).toBe(true);
+    expect(skewed.complete).toBe(false);
     expect(skewed.span).toEqual({
       value: null,
       lowerMs: null,
@@ -268,7 +275,7 @@ describe("trace evidence", () => {
       outcome: "success",
       duration: {
         value: recoveredOrigin + 35 - (killedOrigin + 20),
-        reason: null,
+        reason: "wall-clock",
       },
     });
     const unrelated = evidenceFor(nextFence(nextFence(attempt)) + 5);
@@ -446,5 +453,137 @@ describe("trace evidence", () => {
     expect(() => collectTraceEvidence([invalid], options)).toThrow("unsanitized");
     buffer.record("run-a", "provider.started", { requestId: "request with private body" });
     expect(buffer.snapshot().counters.invalid).toBe(1);
+  });
+
+  it("reports cross-process spans as wall-clock intervals and leaves an unmeasured crash incomplete", () => {
+    const attempt = 4;
+    const killedOrigin = 1_700_000_000_000;
+    const recoveredOrigin = 1_700_000_003_000;
+    const startedAt = 20;
+    const finishedAt = 35;
+    const wall = recoveredOrigin + finishedAt - (killedOrigin + startedAt);
+    const spanOf = (
+      origins: { killed?: number; recovered?: number },
+      uncertainty?: { killed?: number; recovered?: number },
+      endAt = finishedAt,
+    ) => {
+      const killed = createTraceBuffer({
+        processId: "interrupted-worker",
+        now: () => 1,
+        timeOrigin: origins.killed,
+        clockUncertaintyMs: uncertainty?.killed,
+      });
+      const recovered = createTraceBuffer({
+        processId: "recovered-worker",
+        now: () => 1,
+        timeOrigin: origins.recovered,
+        clockUncertaintyMs: uncertainty?.recovered,
+      });
+      killed.record("run-a", "admission.started", {}, 0);
+      killed.record("run-a", "tool.started", { operationId: "tool-1", attempt }, startedAt);
+      recovered.record(
+        "run-a",
+        "tool.finished",
+        { operationId: "tool-1", attempt: nextFence(attempt), outcome: "success" },
+        endAt,
+      );
+      recovered.record("run-a", "terminal.committed", { outcome: "success" }, endAt + 1);
+      const batches = [killed.snapshot(), recovered.snapshot()];
+      if (origins.killed === undefined) delete batches[0]!.timeOrigin;
+      if (origins.recovered === undefined) delete batches[1]!.timeOrigin;
+      const evidence = collectTraceEvidence(batches, {
+        sessionId: "crash",
+        pairId: null,
+        requiredBoundaries: [
+          "admission.started",
+          "tool.started",
+          "tool.finished",
+          "terminal.committed",
+        ],
+        pairAcrossProcesses: true,
+      });
+      return evidence.derived[0]!.operations[0]!.duration;
+    };
+    const forward = spanOf({ killed: killedOrigin, recovered: recoveredOrigin });
+    expect(forward.reason).toBe("wall-clock");
+    expect(forward.value).toBe(wall);
+    expect(forward.lowerMs).toBe(wall - 1000);
+    expect(forward.upperMs).toBe(wall + 1000);
+    const widened = spanOf(
+      { killed: killedOrigin, recovered: recoveredOrigin },
+      { killed: 40, recovered: 60 },
+    );
+    expect(widened).toEqual({
+      value: wall,
+      lowerMs: wall - 100,
+      upperMs: wall + 100,
+      reason: "wall-clock",
+    });
+    const crash = (
+      origins: { killed?: number; recovered?: number },
+      endAt: number,
+    ): MatrixResult => {
+      const killed = createTraceBuffer({ processId: "interrupted-worker", now: () => 1 });
+      const recovered = createTraceBuffer({ processId: "recovered-worker", now: () => 1 });
+      killed.record("run-a", "admission.started", {}, 0);
+      killed.record("run-a", "tool.started", { operationId: "tool-1", attempt }, startedAt);
+      recovered.record(
+        "run-a",
+        "tool.finished",
+        { operationId: "tool-1", attempt: nextFence(attempt), outcome: "success" },
+        endAt,
+      );
+      recovered.record("run-a", "terminal.committed", { outcome: "success" }, endAt + 1);
+      const before = killed.snapshot();
+      const after = recovered.snapshot();
+      if (origins.killed === undefined) delete before.timeOrigin;
+      else before.timeOrigin = origins.killed;
+      if (origins.recovered === undefined) delete after.timeOrigin;
+      else after.timeOrigin = origins.recovered;
+      const stored = ["admission.started", "tool.started", "tool.finished", "terminal.committed"];
+      const phase = (batch: TraceBatch) => ({
+        ...collectTraceEvidence([batch], {
+          sessionId: "matrix-fault",
+          pairId: null,
+          requiredBoundaries: stored,
+        }),
+        requiredBoundaries: stored,
+      });
+      return {
+        id: "crash-04",
+        experiment: "O9",
+        tier: "T1",
+        status: "passed",
+        checks: { killedAtBoundary: true },
+        measurements: {
+          before: { trace: phase(before) },
+          after: { autonomousCompletion: false, trace: phase(after) },
+        },
+        coverage: [],
+        gaps: [],
+      };
+    };
+    expect(
+      matrixEvidence([crash({ killed: undefined, recovered: recoveredOrigin }, 40)]).crashes[3],
+    ).toMatchObject({
+      status: "incomplete",
+      missingReason: "crash-span-unmeasured",
+      safetyPassed: null,
+      recovery: null,
+    });
+    expect(
+      matrixEvidence([crash({ killed: recoveredOrigin, recovered: killedOrigin }, 10)]).crashes[3],
+    ).toMatchObject({
+      status: "incomplete",
+      missingReason: "crash-span-unmeasured",
+      safetyPassed: null,
+      recovery: null,
+    });
+    expect(spanOf({ killed: undefined, recovered: recoveredOrigin }).reason).toBe(
+      "clock-not-calibrated",
+    );
+    expect(spanOf({ killed: recoveredOrigin, recovered: killedOrigin }, undefined, 10).reason).toBe(
+      "clock-skew",
+    );
   });
 });

@@ -393,6 +393,68 @@ import {
 import { createWebProvider } from "./web-provider-factory.js";
 import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
 
+export interface InFlightTool {
+  name: string;
+  executionId: string;
+}
+
+/**
+ * Records a tool the executor is about to run.
+ * A tool still open from the killed attempt keeps that execution id and is not started again.
+ * The finish is recorded later on the new lease fence.
+ */
+export function beginRecordedTool(input: {
+  runId: string;
+  fence: number;
+  name: string;
+  executionId: string;
+  unfinished: InFlightTool[];
+}): { operationId: string; resumed: boolean } {
+  const index = input.unfinished.findIndex((tool) => tool.name === input.name);
+  const prior = index >= 0 ? input.unfinished.splice(index, 1)[0] : undefined;
+  const operationId = prior?.executionId ?? input.executionId;
+  if (!prior) {
+    tracePoint(input.runId, "tool.started", {
+      attempt: input.fence,
+      operationId,
+    });
+  }
+  return { operationId, resumed: prior !== undefined };
+}
+
+/** Called events that never received a completion, in call order. */
+export function unfinishedToolCalls(
+  events: readonly { type: string; payload: unknown }[],
+): InFlightTool[] {
+  const open: InFlightTool[] = [];
+  for (const event of events) {
+    if (event.type !== "agent.tool.called" && event.type !== "agent.tool.completed") continue;
+    if (!event.payload || typeof event.payload !== "object") continue;
+    const record = event.payload as { name?: unknown; executionId?: unknown };
+    if (typeof record.name !== "string" || typeof record.executionId !== "string") continue;
+    if (event.type === "agent.tool.called") {
+      open.push({ name: record.name, executionId: record.executionId });
+      continue;
+    }
+    const finished = open.findIndex((tool) => tool.executionId === record.executionId);
+    if (finished >= 0) open.splice(finished, 1);
+  }
+  return open;
+}
+
+export function finishRecordedTool(input: {
+  runId: string;
+  fence: number;
+  operationId: string;
+  outcome: "success" | "failed" | "uncertain";
+}) {
+  tracePoint(input.runId, "tool.finished", {
+    attempt: input.fence,
+    operationId: input.operationId,
+    outcome: input.outcome,
+  });
+}
+
 const modelCredentialLocks = new Map<string, Promise<void>>();
 const READ_ONLY_AGENT_TOOLS = new Set([
   "board_ready",
@@ -4305,18 +4367,45 @@ export function createRunExecutor(deps: ExecutorDeps) {
             computer.kind === "desktop" && !commandReplay
               ? await deps.sandbox.environmentNote?.(computer, context)
               : undefined;
+          const eventLog = (
+            deps.prisma as {
+              event?: {
+                findMany?: (query: object) => Promise<{ type: string; payload: unknown }[]>;
+              };
+            }
+          ).event;
+          const priorToolEvents = eventLog?.findMany
+            ? await eventLog.findMany({
+                where: {
+                  runId,
+                  type: { in: ["agent.tool.called", "agent.tool.completed"] },
+                },
+                orderBy: { seq: "asc" },
+                select: { type: true, payload: true },
+              })
+            : [];
+          const unfinishedTools = unfinishedToolCalls(priorToolEvents);
+          const resumedIds = new Map<string, string>();
           const recordedApplyTool = async (
             name: string,
             args: Record<string, unknown>,
             executionId: string,
           ) => {
-            tracePoint(runId, "tool.started", { attempt: fence, operationId: executionId });
+            const claim = beginRecordedTool({
+              runId,
+              fence,
+              name,
+              executionId,
+              unfinished: unfinishedTools,
+            });
+            resumedIds.set(executionId, claim.operationId);
             try {
               const result = await commandRecording.invoke(name, args, executionId, applyTool);
               briefToolResults = appendBriefToolResult(briefToolResults, name, result, runSecrets);
-              tracePoint(runId, "tool.finished", {
-                attempt: fence,
-                operationId: executionId,
+              finishRecordedTool({
+                runId,
+                fence,
+                operationId: claim.operationId,
                 outcome: isToolPauseResult(result)
                   ? "uncertain"
                   : toolResultError(result) !== undefined
@@ -4326,9 +4415,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (isToolPauseResult(result)) tracePoint(runId, "wait.approval", { attempt: fence });
               return result;
             } catch (error) {
-              tracePoint(runId, "tool.finished", {
-                attempt: fence,
-                operationId: executionId,
+              finishRecordedTool({
+                runId,
+                fence,
+                operationId: claim.operationId,
                 outcome: "failed",
               });
               throw error;
@@ -4568,7 +4658,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     botId: bot.id,
                     runId,
                   },
-                  completion,
+                  {
+                    ...completion,
+                    executionId: resumedIds.get(completion.executionId) ?? completion.executionId,
+                  },
                   runSecrets,
                 ),
               claimSteering: scripted
@@ -4906,7 +4999,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     toolCompletionFromResult(
                       {
                         name: event.name,
-                        executionId: event.executionId,
+                        executionId: resumedIds.get(event.executionId) ?? event.executionId,
                         durationMs: Date.now() - startedAt,
                       },
                       result,
@@ -4925,7 +5018,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     },
                     {
                       name: event.name,
-                      executionId: event.executionId,
+                      executionId: resumedIds.get(event.executionId) ?? event.executionId,
                       durationMs: Date.now() - startedAt,
                       error,
                     },

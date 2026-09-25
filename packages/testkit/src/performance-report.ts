@@ -225,6 +225,7 @@ export const MISSING_REASONS = [
   "missing-pin-control",
   "missing-revoke-and-pin-controls",
   "trace-links-missing",
+  "crash-span-unmeasured",
   "redacted",
   "unknown",
 ] as const;

@@ -6,13 +6,21 @@ import { nextFence } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import { createTraceBuffer } from "../../../../adapters/src/scoreboard-trace.js";
 import { CRASH_BOUNDARIES, contentDigest, EXPERIMENT_DEFINITIONS } from "../manifest.js";
-import { collectTraceEvidence, LOCAL_TRACE_BOUNDARIES } from "../trace-collector.js";
+import {
+  collectTraceEvidence,
+  LOCAL_TRACE_BOUNDARIES,
+  SCRIPTED_TRACE_BOUNDARIES,
+} from "../trace-collector.js";
 import type { MatrixResult } from "./catalog.js";
 import { experimentCoverage, matrixExitCode, matrixPlan } from "./catalog.js";
 import { matrixEvidence, writeMatrixArtifact, writeMatrixEvidence } from "./evidence.js";
 import { classifyMemoryScale } from "./memory.js";
 
-const RECOVERED_BOUNDARIES = [
+const SCRIPTED_RECOVERED_BOUNDARIES = [
+  "tool.finished",
+  "terminal.committed",
+] as const satisfies readonly TraceBoundary[];
+const PI_RECOVERED_BOUNDARIES = [
   "tool.finished",
   "provider.finished",
   "terminal.committed",
@@ -30,19 +38,21 @@ function crashPhases(
     recoveredAttempt?: number;
     killedOrigin?: number;
     recoveredOrigin?: number;
+    runtime?: "scripted" | "pi";
   } = {},
 ) {
-  const earlier = LOCAL_TRACE_BOUNDARIES.filter(
-    (boundary) => !RECOVERED_BOUNDARIES.includes(boundary as (typeof RECOVERED_BOUNDARIES)[number]),
-  );
+  const stored = options.runtime === "pi" ? LOCAL_TRACE_BOUNDARIES : SCRIPTED_TRACE_BOUNDARIES;
+  const recovered: readonly TraceBoundary[] =
+    options.runtime === "pi" ? PI_RECOVERED_BOUNDARIES : SCRIPTED_RECOVERED_BOUNDARIES;
+  const earlier = stored.filter((boundary) => !recovered.includes(boundary));
   const attempt = options.attempt ?? 0;
   return {
-    before: phaseTrace(`${run}-interrupted`, run, earlier, LOCAL_TRACE_BOUNDARIES, {
+    before: phaseTrace(`${run}-interrupted`, run, earlier, stored, {
       openTool: options.openTool,
       attempt,
       timeOrigin: options.killedOrigin ?? KILLED_TIME_ORIGIN,
     }),
-    after: phaseTrace(`${run}-recovered`, run, RECOVERED_BOUNDARIES, LOCAL_TRACE_BOUNDARIES, {
+    after: phaseTrace(`${run}-recovered`, run, recovered, stored, {
       origin: options.origin ?? earlier.length,
       attempt: options.recoveredAttempt ?? nextFence(attempt),
       timeOrigin: options.recoveredOrigin ?? RECOVERED_TIME_ORIGIN,
@@ -402,7 +412,7 @@ describe("matrix selection and evidence", () => {
     });
   });
   it("completes the worker crash-04 split, including a span measured across the crash", () => {
-    const stored = LOCAL_TRACE_BOUNDARIES;
+    const stored = SCRIPTED_TRACE_BOUNDARIES;
     const phases = crashPhases("run-pair", { origin: 100, openTool: "tool-cut" });
     const crash = matrixEvidence([
       crashAttempt("crash-04", {
@@ -438,9 +448,9 @@ describe("matrix selection and evidence", () => {
     );
     const killedOrigin = phases.before.raw.batches[0]!.timeOrigin ?? 0;
     const recoveredOrigin = phases.after.raw.batches[0]!.timeOrigin ?? 0;
-    expect(tools.find((operation) => operation.duration.reason === null)?.duration.value).toBe(
-      recoveredOrigin + finished.at - (killedOrigin + started.at),
-    );
+    expect(
+      tools.find((operation) => operation.duration.reason === "wall-clock")?.duration.value,
+    ).toBe(recoveredOrigin + finished.at - (killedOrigin + started.at));
     expect(tools.find((operation) => operation.outcome === "interrupted")).toMatchObject({
       duration: { value: null, reason: "interrupted" },
     });
@@ -466,6 +476,22 @@ describe("matrix selection and evidence", () => {
         (operation) => operation.duration.reason === "boundary-not-observed",
       ),
     ).toBe(true);
+  });
+  it("keeps a Pi runtime fixture complete under the full boundary list", () => {
+    const phases = crashPhases("run-pi", { runtime: "pi" });
+    const crash = matrixEvidence([
+      crashAttempt("crash-04", {
+        before: { trace: phases.before },
+        after: { autonomousCompletion: false, trace: phases.after },
+      }),
+    ]).crashes.find((row) => row.id === "crash-04");
+    expect(crash).toMatchObject({
+      status: "complete",
+      missingReason: null,
+      recovery: "explicit-uncertainty",
+      safetyPassed: true,
+    });
+    expect(phases.before.requiredBoundaries).toEqual(LOCAL_TRACE_BOUNDARIES);
   });
   it("completes crashes 03 through 07 when recovery finishes on the next fence in wall time", () => {
     const attempt = 4;
@@ -537,12 +563,13 @@ describe("matrix selection and evidence", () => {
       {
         sessionId: "matrix-fault",
         pairId: null,
-        requiredBoundaries: LOCAL_TRACE_BOUNDARIES,
+        requiredBoundaries: SCRIPTED_TRACE_BOUNDARIES,
         pairAcrossProcesses: true,
       },
     );
     const tool = paired.derived[0]!.operations.find(
-      (operation) => operation.kind === "tool.started" && operation.duration.reason === null,
+      (operation) =>
+        operation.kind === "tool.started" && operation.duration.reason === "wall-clock",
     )!;
     expect(tool.duration).toMatchObject({
       value:
@@ -551,7 +578,7 @@ describe("matrix selection and evidence", () => {
         (killedOrigin +
           phases.before.raw.batches[0]!.points.find((point) => point.boundary === "tool.started")!
             .at),
-      reason: null,
+      reason: "wall-clock",
     });
     expect(tool.duration.reason).not.toBe("reversed-boundaries");
   });

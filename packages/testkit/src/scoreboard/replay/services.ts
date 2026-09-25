@@ -296,17 +296,20 @@ export class DepartmentSandbox extends FakeSandboxProvider {
     yield { type: "exit", code: 126 };
   }
 
-  async snapshotFiles(homeKey: string, botId: string): Promise<Record<string, string>> {
+  async snapshotFiles(
+    homeKey: string,
+    botId: string,
+  ): Promise<{ files: Record<string, string>; links: readonly string[] }> {
     const box = this.boxes.get(`fake-${homeKey}`);
-    const result: Record<string, string> = {};
-    if (!box) return result;
+    const files: Record<string, string> = {};
+    if (!box) return { files, links: [] };
     const prefix = `${teamBotWorkspaceDirectory(botId)}/`;
     for (const file of box.files.keys())
-      result[file.startsWith(prefix) ? file.slice(prefix.length) : file] = await readFile(
+      files[file.startsWith(prefix) ? file.slice(prefix.length) : file] = await readFile(
         this.filePath(box.ref, file),
         "utf8",
       );
-    return result;
+    return { files, links: [] };
   }
 }
 

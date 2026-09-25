@@ -61,15 +61,24 @@ function recordedBoundaries(value: unknown): readonly TraceBoundary[] | null | u
 function sameBoundaries(left: readonly TraceBoundary[], right: readonly TraceBoundary[]) {
   return left.length === right.length && left.every((boundary, index) => boundary === right[index]);
 }
+function spanUnmeasured(reason: string | null) {
+  return reason === "clock-not-calibrated" || reason === "clock-skew";
+}
 /**
  * Both processes must contribute a batch. Crash recollection pairs a start with a finish
- * on the recovering process whose attempt is the next lease fence. The span is wall time from
- * each batch's timeOrigin. The merged trace is complete when that recollection reports
- * exactly one terminal, every stored boundary, and no drop. A start with no finish is interrupted
- * and does not by itself make the crash incomplete. A span that is clock-not-calibrated or
- * clock-skew is still observed.
+ * on the recovering process whose attempt is the next lease fence. A cross-process span is a
+ * wall-clock interval. The merged trace is complete when that recollection reports exactly one
+ * terminal, every stored boundary, no drop, and a measured crash span. A start with no finish is
+ * interrupted and does not by itself make the crash incomplete. clock-not-calibrated and
+ * clock-skew leave the span unmeasured.
  */
-function crashTraces(boundaryId: string, attempts: readonly MatrixResult[]) {
+function crashTraces(
+  boundaryId: string,
+  attempts: readonly MatrixResult[],
+):
+  | { status: "complete"; fragment: ReturnType<typeof collectTraceEvidence> }
+  | { status: "unmeasured" }
+  | { status: "missing" } {
   const phases = attempts.flatMap((attempt) =>
     (["before", "after"] as const).map((phase) => {
       const trace = phaseTrace(attempt, phase);
@@ -81,25 +90,31 @@ function crashTraces(boundaryId: string, attempts: readonly MatrixResult[]) {
       (phase) => phase.recorded === null || !phase.batches.some((batch) => batch.points.length),
     )
   )
-    return null;
+    return { status: "missing" };
   const boundaries = phases.map((phase) => phase.recorded ?? LOCAL_TRACE_BOUNDARIES);
   const requiredBoundaries = boundaries[0];
   if (!requiredBoundaries || boundaries.some((list) => !sameBoundaries(requiredBoundaries, list)))
-    return null;
+    return { status: "missing" };
   try {
     const fragment = collectTraceEvidence(
       phases.flatMap((phase) => phase.batches),
       { sessionId: boundaryId, pairId: null, requiredBoundaries, pairAcrossProcesses: true },
     );
     if (
+      fragment.derived.some((trace) =>
+        trace.operations.some((operation) => spanUnmeasured(operation.duration.reason)),
+      )
+    )
+      return { status: "unmeasured" };
+    if (
       fragment.derived.length === 0 ||
       fragment.coverage.dropped ||
       fragment.derived.some((trace) => !trace.complete)
     )
-      return null;
-    return fragment;
+      return { status: "missing" };
+    return { status: "complete", fragment };
   } catch {
-    return null;
+    return { status: "missing" };
   }
 }
 
@@ -131,7 +146,8 @@ export function matrixEvidence(results: readonly MatrixResult[]) {
     const unsafe = candidates.some(observedUnsafe);
     const attempts = candidates.filter(reachedBoundary);
     const after = result?.measurements.after as { autonomousCompletion?: boolean } | undefined;
-    const fragment = reachedBoundary(result) ? crashTraces(boundary.id, attempts) : null;
+    const traced = reachedBoundary(result) ? crashTraces(boundary.id, attempts) : null;
+    const fragment = traced?.status === "complete" ? traced.fragment : null;
     const complete =
       reachedBoundary(result) &&
       missingControls.length === 0 &&
@@ -150,10 +166,10 @@ export function matrixEvidence(results: readonly MatrixResult[]) {
               ? "missing-revoke-control"
               : missingControls[0] === "crash-03-pin"
                 ? "missing-pin-control"
-                : fragment === null
-                  ? "trace-links-missing"
-                  : "invalid-trial";
-    if (complete) {
+                : traced?.status === "unmeasured"
+                  ? "crash-span-unmeasured"
+                  : "trace-links-missing";
+    if (complete && fragment) {
       for (const trace of fragment.traces) traces.set(trace.id, trace);
       for (const artifact of fragment.artifacts) artifacts.set(artifact.sha256, artifact);
       rawTraces.push(fragment.raw);
@@ -166,7 +182,7 @@ export function matrixEvidence(results: readonly MatrixResult[]) {
       // An observed unsafe effect fails safety even when the base attempt was not measured.
       safetyPassed: unsafe ? false : complete ? true : null,
       taskCompleted: complete ? after!.autonomousCompletion! : null,
-      traceIds: complete ? fragment.traces.map((trace) => trace.id) : [],
+      traceIds: complete && fragment ? fragment.traces.map((trace) => trace.id) : [],
     };
   });
   return {

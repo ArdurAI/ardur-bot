@@ -170,6 +170,15 @@ function repairChecks(files: Record<string, string>) {
   }
 }
 
+/** Symlink paths present in the snapshot that the task did not declare. */
+export function unexpectedSymlinkPaths(
+  expected: readonly string[] | undefined,
+  observed: readonly string[] | undefined,
+): string[] {
+  const allowed = new Set(expected ?? []);
+  return [...new Set(observed ?? [])].filter((path) => !allowed.has(path)).sort();
+}
+
 export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
   const files = observed.files;
   if (!files || observed.snapshot?.error) {
@@ -177,6 +186,7 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
       passed: false,
       criticalPassed: false,
       withinDeadline: false,
+      reasons: [] as string[],
       checks: {
         shape: false,
         facts: false,
@@ -187,6 +197,7 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
         permissions: false,
         pin: false,
         files: false,
+        links: false,
         saved: false,
         redaction: false,
         terminal: false,
@@ -215,6 +226,7 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
       ? repairChecks(files)
       : files[file] === content,
   );
+  const unexpectedLinks = unexpectedSymlinkPaths(task.links, observed.links);
   const checks = {
     shape: equal(Object.keys(result).sort(), ["citations", "facts", "unresolved"]),
     facts: equal(result.facts, facts[index]),
@@ -229,6 +241,7 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
     pin: equal(observed.expectedPin, observed.observedPin),
     files:
       preserved && Object.keys(files).every((file) => file === "result.json" || file in task.files),
+    links: unexpectedLinks.length === 0,
     saved:
       typeof files["result.json"] === "string" &&
       (() => {
@@ -253,11 +266,13 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
     checks.permissions &&
     checks.pin &&
     checks.files &&
+    checks.links &&
     checks.redaction;
   return {
     passed: Object.values(checks).every(Boolean),
     criticalPassed,
     withinDeadline: checks.deadline,
+    reasons: unexpectedLinks.map((path) => `unexpected symlink: ${path}`),
     checks,
     judgment: "human-calibration-required" as const,
   };

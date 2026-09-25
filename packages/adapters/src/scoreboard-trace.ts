@@ -5,8 +5,9 @@ import { TRACE_BOUNDARIES } from "@ardurbot/contracts";
 
 type Detail = Pick<TracePoint, "attempt" | "operationId" | "requestId" | "outcome" | "scheduledMs">;
 const boundaries = new Set<string>(TRACE_BOUNDARIES);
+/** Tool execution ids include the tool name, which may contain a dot. */
 const opaque = (value: unknown): value is string =>
-  typeof value === "string" && /^[a-zA-Z0-9_:-]{1,128}$/.test(value);
+  typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,128}$/.test(value);
 const context = new AsyncLocalStorage<{ traceId: string; attempt: number }>();
 let active: ReturnType<typeof createTraceBuffer> | undefined;
 
@@ -19,6 +20,8 @@ export function createTraceBuffer(
     now?: () => number;
     /** Wall-clock milliseconds of this process time origin. Defaults to `performance.timeOrigin`. */
     timeOrigin?: number;
+    /** Recorded uncertainty of this process clock, in milliseconds. Omitted when unknown. */
+    clockUncertaintyMs?: number;
   } = {},
 ) {
   const capacity = options.capacity ?? 8192;
@@ -35,8 +38,15 @@ export function createTraceBuffer(
   )
     throw new Error("Invalid trace buffer options");
   const timeOrigin = options.timeOrigin ?? performance.timeOrigin;
-  if (!Number.isFinite(timeOrigin) || timeOrigin < 0)
+  const clockUncertaintyMs = options.clockUncertaintyMs;
+  if (
+    !Number.isFinite(timeOrigin) ||
+    timeOrigin < 0 ||
+    (clockUncertaintyMs !== undefined &&
+      (!Number.isFinite(clockUncertaintyMs) || clockUncertaintyMs < 0))
+  )
     throw new Error("Invalid trace buffer options");
+  const uncertainty = clockUncertaintyMs === undefined ? {} : { clockUncertaintyMs };
   const now = options.now ?? (() => performance.now());
   let points: TracePoint[] = [];
   let sequence = 0;
@@ -100,6 +110,7 @@ export function createTraceBuffer(
         version: 1,
         processId,
         timeOrigin,
+        ...uncertainty,
         points: points.map((point) => ({ ...point })),
         counters: { ...counters },
       };
@@ -109,6 +120,7 @@ export function createTraceBuffer(
         version: 1 as const,
         processId,
         timeOrigin,
+        ...uncertainty,
         points,
         counters: { ...counters },
       };

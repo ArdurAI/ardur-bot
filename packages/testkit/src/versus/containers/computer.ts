@@ -351,11 +351,14 @@ export class ContainerComputer implements SandboxProvider {
   }
   async snapshotFiles(_homeKey: string, botId: string) {
     const snapshot = await this.session.snapshot(this.name(teamBotWorkspaceDirectory(botId)));
-    return Object.fromEntries(
-      Object.entries(snapshot).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
-      ),
-    );
+    const files: Record<string, string> = {};
+    const links: string[] = [];
+    for (const [name, entry] of Object.entries(snapshot)) {
+      if (typeof entry === "string") files[name] = entry;
+      else if (entry.kind === "link") links.push(name);
+    }
+    links.sort();
+    return { files, links };
   }
   async connectScreen(): Promise<never> {
     throw new Error("Graphical computer unsupported in controlled container lane");

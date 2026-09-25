@@ -52,6 +52,11 @@ export interface TraceBatch {
   processId: string;
   /** Wall-clock milliseconds of this process's time origin (`performance.timeOrigin`). */
   timeOrigin?: number;
+  /**
+   * Recorded uncertainty of this process clock, in milliseconds.
+   * A cross-process span widens by the sum of the two batches, or by one second when neither recorded it.
+   */
+  clockUncertaintyMs?: number;
   points: TracePoint[];
   counters: { recorded: number; dropped: number; sampledOut: number; invalid: number };
 }

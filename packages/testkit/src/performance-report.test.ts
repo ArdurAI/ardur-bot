@@ -34,7 +34,7 @@ import {
   SCOREBOARD_MANIFEST,
   TASK_DEFINITIONS,
 } from "./scoreboard/manifest.js";
-import { collectTraceEvidence, LOCAL_TRACE_BOUNDARIES } from "./scoreboard/trace-collector.js";
+import { collectTraceEvidence, SCRIPTED_TRACE_BOUNDARIES } from "./scoreboard/trace-collector.js";
 
 describe("performance report statistics", () => {
   it("summarizes a distribution without mutating it", () => {
@@ -648,7 +648,7 @@ describe("task, experiment and recovery evidence", () => {
     expect(() => parsePerformanceEvidenceReport(report, "matrix-finding")).not.toThrow();
   });
   it("accepts a complete crash from the matrix adapter only with trace links", () => {
-    const stored = LOCAL_TRACE_BOUNDARIES;
+    const stored = SCRIPTED_TRACE_BOUNDARIES;
     const killedOrigin = 1_700_000_000_000;
     const recoveredOrigin = 1_700_000_004_000;
     const phase = (
@@ -692,10 +692,7 @@ describe("task, experiment and recovery evidence", () => {
           trace: phase(
             "interrupted-worker",
             stored.filter(
-              (boundary) =>
-                boundary !== "tool.finished" &&
-                boundary !== "provider.finished" &&
-                boundary !== "terminal.committed",
+              (boundary) => boundary !== "tool.finished" && boundary !== "terminal.committed",
             ),
             0,
             killedOrigin,
@@ -705,7 +702,7 @@ describe("task, experiment and recovery evidence", () => {
           autonomousCompletion: false,
           trace: phase(
             "recovered-worker",
-            ["tool.finished", "provider.finished", "terminal.committed"],
+            ["tool.finished", "terminal.committed"],
             nextFence(0),
             recoveredOrigin,
           ),

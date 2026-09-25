@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { gradeOutcome } from "../../scoreboard/graders/outcome.js";
+import { gradeOutcome, unexpectedSymlinkPaths } from "../../scoreboard/graders/outcome.js";
 import { contentDigest } from "../../scoreboard/manifest.js";
 import { getTask } from "../../scoreboard/tasks/catalog.js";
 import { referenceSolution } from "../../scoreboard/tasks/reference.js";
@@ -62,13 +62,14 @@ assert not result['result'].get('isError'), result
 print('╭─⚕ Hermes──╮\n  Saved the requested result.\n╰────────────╯')
 `;
 
-/** Cancel and loss probes pass only when the guest retained neither files nor symlink paths. */
+/** Cancel and loss probes fail a symlink the task did not declare, the same rule as a success grade. */
 export function retainsReceiptsWithoutWorkspace(input: {
   cancelled: boolean;
   terminal: string;
   effects: readonly unknown[];
   files?: Record<string, string>;
   links?: readonly string[];
+  expectedLinks?: readonly string[];
   snapshot?: { error?: string };
   providerRequests: number;
   gradedPassed: boolean;
@@ -79,7 +80,7 @@ export function retainsReceiptsWithoutWorkspace(input: {
     input.terminal === (input.cancelled ? "cancelled" : "uncertain") &&
     input.effects.length === 1 &&
     Object.keys(input.files).length === 0 &&
-    input.links.length === 0 &&
+    unexpectedSymlinkPaths(input.expectedLinks, input.links).length === 0 &&
     input.providerRequests === 0 &&
     !input.gradedPassed
   );
@@ -431,6 +432,7 @@ print(json.dumps(out))
               effects: observed.effects,
               files: observed.files,
               links: observed.links,
+              expectedLinks: task.links,
               snapshot: observed.snapshot,
               providerRequests: gateway.requests.length,
               gradedPassed: gradeOutcome(task, observed).passed,

@@ -16,10 +16,10 @@ import {
 import { contentDigest } from "../manifest.js";
 import { redactMatrixDiagnostic } from "../redact.js";
 import { denyExternalTcp } from "../replay/offline.js";
-import { collectTraceEvidence, LOCAL_TRACE_BOUNDARIES } from "../trace-collector.js";
 import { auxiliaryFault } from "./auxiliary.js";
 import { RECOVERY_DEADLINE_MS, RECOVERY_OBSERVATION_MS } from "./deadlines.js";
 import { FaultSandbox } from "./sandbox.js";
+import { faultTraceEvidence } from "./trace.js";
 
 interface Input {
   databaseUrl: string;
@@ -45,15 +45,7 @@ const FIXTURE_PIN = {
 let activeTrace: ReturnType<typeof startScoreboardTrace> | undefined;
 function traceEvidence() {
   if (!activeTrace) return null;
-  const requiredBoundaries = LOCAL_TRACE_BOUNDARIES;
-  return {
-    ...collectTraceEvidence([activeTrace.snapshot()], {
-      sessionId: "matrix-fault",
-      pairId: null,
-      requiredBoundaries,
-    }),
-    requiredBoundaries,
-  };
+  return faultTraceEvidence(activeTrace.snapshot(), "scripted");
 }
 export async function reached(measurements: Record<string, unknown>) {
   process.send?.({
