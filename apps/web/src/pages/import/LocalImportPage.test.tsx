@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { LocalImportStatusSchema } from "@ardurbot/contracts/local-import";
 import {
   localImportFixture,
   localImportServerFixture,
@@ -11,6 +12,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { ImportedServerCredentials } from "./ImportedServerCredentials";
 import { LocalImportPage } from "./LocalImportPage";
+
+type LocalImportStatus = ReturnType<typeof LocalImportStatusSchema.parse>;
 
 const fake = vi.hoisted(() => ({
   status: vi.fn(),
@@ -124,7 +127,7 @@ it("scans automatically on first open and gives a retry action on host failure",
   expect(button(node, "Re-scan").disabled).toBe(false);
 });
 it("keeps the first import's selection when enabling automatic import without reopening", async () => {
-  let status = { ...localImportStatusFixture };
+  let status: LocalImportStatus = { ...localImportStatusFixture };
   fake.status.mockImplementation(async () => status);
   fake.run.mockImplementation(async (action) => {
     status = {
@@ -192,7 +195,7 @@ it("persists a category change immediately when automatic import is enabled", as
 });
 
 it("persists the displayed selection when enabling automatic import and restores it on reopen", async () => {
-  let status = {
+  let status: LocalImportStatus = {
     ...localImportStatusFixture,
     autoImport: false,
     importedAt: "2026-09-24T12:00:00.000Z",

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { LocalImportStatusSchema } from "@ardurbot/contracts/local-import";
 import {
   localImportFixture,
   localImportServerFixture,
@@ -10,6 +11,8 @@ import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import LocalImport from "../app/import";
+
+type LocalImportStatus = ReturnType<typeof LocalImportStatusSchema.parse>;
 
 const fake = vi.hoisted(() => ({
   status: vi.fn(),
@@ -89,7 +92,7 @@ vi.mock("react-native", () => ({
 it("persists displayed categories when enabling automatic import and restores them on reopen", async () => {
   vi.clearAllMocks();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  let status = {
+  let status: LocalImportStatus = {
     ...localImportStatusFixture,
     autoImport: false,
     importedAt: "2026-09-24T12:00:00.000Z",
@@ -125,7 +128,7 @@ it("persists displayed categories when enabling automatic import and restores th
 it("keeps the first import's selection when enabling automatic import without reopening", async () => {
   vi.clearAllMocks();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  let status = { ...localImportStatusFixture };
+  let status: LocalImportStatus = { ...localImportStatusFixture };
   fake.status.mockImplementation(async () => status);
   fake.run.mockImplementation(async (action) => {
     status = {
