@@ -17,6 +17,7 @@ import {
   changePassword,
   currentApiBase,
   deleteAccount,
+  isMobileThreadSnapshotEvent,
   loadApiBase,
   MAX_MOBILE_AUTH_RESPONSE_BYTES,
   MAX_MOBILE_RPC_RESPONSE_BYTES,
@@ -1563,6 +1564,34 @@ describe("mobile API authentication", () => {
 });
 
 describe("mobile thread subscription", () => {
+  it("delivers live context through the screen subscription filter", async () => {
+    const payload = {
+      layers: { stable: 100, brief: 20, summary: 0, messages: 10, recall: 0, message: 30 },
+      recallRan: false,
+      recallCalls: 0,
+      cachedTokens: 0,
+      inputTokens: 100,
+      timeToFirstTokenMs: 12,
+      queueWaitMs: 8,
+      routingRule: "last-active-thread",
+    };
+    const event = { type: "run.context", runId: "run-1", seq: 4, payload };
+    let state: MobileSnapshot | null = { ...snapshot(), run: { id: "run-1", status: "running" } };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(`data: ${JSON.stringify({ json: event })}\n\n`)),
+    );
+    await subscribeThread(
+      { botId: "bot-1" },
+      3,
+      (received) => {
+        if (isMobileThreadSnapshotEvent(received)) state = applyMobileThreadEvent(state, received);
+      },
+      new AbortController().signal,
+    );
+    expect(state?.run).toMatchObject({ contextSnapshot: payload });
+    expect(state?.cursor).toBe(4);
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.mocked(SecureStore.getItemAsync).mockReset();

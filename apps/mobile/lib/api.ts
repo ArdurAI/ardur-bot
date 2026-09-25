@@ -995,6 +995,24 @@ export async function subscribeThread(
   }
 }
 
+export function isMobileThreadSnapshotEvent(event: ThreadEvent): boolean {
+  return (
+    event.type === "run.context" ||
+    event.type === "thread.progress" ||
+    event.type === "agent.tool.called" ||
+    event.type === "agent.tool.completed" ||
+    event.type === "thread.message.created" ||
+    event.type === "thread.message.updated" ||
+    event.type === "thread.message.reaction" ||
+    event.type === "thread.subagent" ||
+    event.type === "thread.cloud_agent" ||
+    event.type === "thread.cleared" ||
+    event.type === "run.waiting_input" ||
+    event.type === "computer.takeover.requested" ||
+    isRunTerminalEvent(event)
+  );
+}
+
 export function applyMobileThreadEvent(
   prev: MobileSnapshot | null,
   event: ThreadEvent,

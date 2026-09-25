@@ -230,7 +230,7 @@ import { checkpointRunComputerWorkspace, isRemoteHostAbsolutePath } from "./comp
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { assembleTurnContext } from "./context/assemble.js";
 import { claimBotRun } from "./context/concurrency.js";
-import { resumeContextSnapshot } from "./context/metrics.js";
+import { recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
 import { fitContextRecall, recallLocalDocuments } from "./context/recall.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import { completeHelper } from "./delegation.js";
@@ -1047,7 +1047,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         memoryDocuments: deps.memoryDocuments,
         secrets: deps.secrets,
         claim: (input) => claimBotRun(deps.prisma, input),
-        recordUsage: (run, usage) => recordRunUsage(deps, run, usage),
+        recordUsage: async (run, usage) => {
+          await recordRunUsage(deps, run, usage);
+        },
         resolve: resolveBriefRuntime,
       },
       runId,
@@ -1456,12 +1458,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
           bot.runtimeExperimental,
         );
         if ("kind" in runtimeSelection) throw new RuntimePinError(runtimeSelection);
-        const accountContext = await loadAccountInstructionContext(deps.prisma, run);
+        const accountContext = messagingChannelRun
+          ? {
+              displayName: "",
+              workType: "" as const,
+              instructions: "",
+              revision: 0,
+              actorId: null,
+              origin: "human-settings" as const,
+            }
+          : await loadAccountInstructionContext(deps.prisma, run);
         accountContext.instructions = redactSecrets(accountContext.instructions, runSecrets);
         accountContext.displayName = redactSecrets(accountContext.displayName, runSecrets);
         const runtime = runtimeSelection.runtime;
         const native =
-          selected.pin.runtimeKind !== "pi" && !comparisonRun
+          selected.pin.runtimeKind !== "pi" && !comparisonRun && !messagingChannelRun
             ? await runtimeSession(deps.prisma, {
                 runId,
                 threadId: run.threadId,
@@ -1652,7 +1663,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         ]);
         const semanticMemoryEnabled = Boolean(semanticMemory) && !messagingChannelRun;
         const groupBrief =
-          !comparisonRun && !thread.externalConversationId && deps.memoryDocuments
+          !comparisonRun &&
+          !messagingChannelRun &&
+          !thread.externalConversationId &&
+          deps.memoryDocuments
             ? await readBrief(deps.memoryDocuments, bot.id, thread.groupId, context)
             : null;
         const contextSettings = await deps.prisma.space.findUnique({
@@ -1749,9 +1763,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const acceptsImages =
           runtime.describe().capabilities.scripted ||
           modelAcceptsImageInput(runModelProvider, runModelId, resolved.acceptsImages);
-        const groupContext = thread.groupId
-          ? await loadGroupContext(deps.prisma, thread.groupId, { id: bot.id, name: bot.name })
-          : undefined;
+        const groupContext =
+          !messagingChannelRun && thread.groupId
+            ? await loadGroupContext(deps.prisma, thread.groupId, { id: bot.id, name: bot.name })
+            : undefined;
         const hasMessagingIdentity = deps.messaging
           ? await deps.messaging.hasIdentity(bot.id)
           : false;
@@ -4329,8 +4344,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
           };
           if (!comparisonRun) await saveContextSnapshot();
           const modelStartedAt = Date.now();
-          let cacheReportedForEveryCall =
-            turnContext.snapshot.inputTokens === null || turnContext.snapshot.cachedTokens !== null;
           const runtimeEvents = withComparisonInput(
             deps,
             run,
@@ -4405,8 +4418,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 helperToolDelegations.set(executionId, id);
                 return recordedApplyTool(name, args, executionId);
               },
-              recordHelperUsage: (id, usage) =>
-                recordRunUsage(deps, { ...run, delegationId: id }, usage),
+              recordHelperUsage: async (id, usage) => {
+                await recordRunUsage(deps, { ...run, delegationId: id }, usage);
+              },
               finishHelper: (id, status, result) =>
                 completeHelper(
                   deps.prisma,
@@ -4784,25 +4798,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 },
               });
             } else if (event.type === "usage") {
-              if (!comparisonRun && !event.delegationId && event.reported !== false) {
-                turnContext.snapshot.inputTokens =
-                  (turnContext.snapshot.inputTokens ?? 0) + event.inputTokens;
-                cacheReportedForEveryCall &&= event.cachedTokens !== undefined;
-                turnContext.snapshot.cachedTokens = cacheReportedForEveryCall
-                  ? (turnContext.snapshot.cachedTokens ?? 0) + event.cachedTokens!
-                  : null;
-                await saveContextSnapshot();
-              }
-              await recordRunUsage(
+              const recorded = await recordRunUsage(
                 deps,
                 { ...run, delegationId: event.delegationId ?? run.delegationId },
-                {
-                  provider: event.provider,
-                  model: event.model,
-                  inputTokens: event.inputTokens,
-                  outputTokens: event.outputTokens,
-                },
+                event,
               );
+              if (!comparisonRun && recorded) {
+                recordContextUsage(turnContext.snapshot, recorded);
+                await saveContextSnapshot();
+              }
             } else if (event.type === "done") {
               if (!assembled && event.text) {
                 if (publishedMidTurnUserMessage || discardedMidTurnNarration) {

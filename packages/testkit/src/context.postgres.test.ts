@@ -33,6 +33,7 @@ describe.skipIf(!hasDb)("Chief of Staff context product journey", () => {
             if (index === 2) expect(history).toContain("Release Alpha");
           },
           response: { type: "text" as const, text: `Release ${group} on Friday.` },
+          usage: { inputTokens: 100, outputTokens: 20 },
         },
         {
           expect(request) {
@@ -43,6 +44,7 @@ describe.skipIf(!hasDb)("Chief of Staff context product journey", () => {
             type: "text" as const,
             text: `## Goal\nRelease ${group}\n## People and bots\nChief\n## Open items\nReview ${group}\n## Last decisions\nFriday\n## Pointers\n`,
           },
+          usage: { inputTokens: 40, outputTokens: 10 },
         },
       ]),
     });
@@ -164,6 +166,30 @@ describe.skipIf(!hasDb)("Chief of Staff context product journey", () => {
           timeToFirstTokenMs: expect.any(Number),
           queueWaitMs: expect.any(Number),
           layers: { stable: expect.any(Number), message: expect.any(Number) },
+        });
+        const usage = await handles.prisma.usageRecord.findMany({
+          where: { runId: row.id },
+          include: { observations: true },
+        });
+        const summaries = usage.filter((record) => record.purpose === "summary");
+        expect(summaries).toHaveLength(1);
+        expect(summaries[0]).toMatchObject({
+          rootTaskId: row.taskId,
+          provider: model.model.provider,
+          model: model.model.id,
+          coverage: "partial",
+          runtimePin: row.runtimePin,
+          inputTokens: 40,
+          outputTokens: 10,
+        });
+        expect(summaries[0]!.observations).toHaveLength(1);
+        expect(row.contextSnapshot).toMatchObject({
+          inputTokens: 100,
+        });
+        expect(row.contextSnapshot).toMatchObject({
+          inputTokens: usage
+            .filter((record) => record.purpose === "legacy")
+            .reduce((total, record) => total + record.inputTokens, 0),
         });
       }
       const metrics = await rpc<{

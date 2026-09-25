@@ -1,5 +1,20 @@
 import type { ContextAggregate, ContextSnapshot } from "@ardurbot/contracts";
 import { ContextSnapshotSchema } from "@ardurbot/contracts";
+import type { RecordedContextUsage } from "../run-usage.js";
+
+/** Apply the ledger's accepted delta, never the raw runtime observation. */
+export function recordContextUsage(
+  snapshot: ContextSnapshot,
+  usage: RecordedContextUsage | null,
+): void {
+  if (!usage) return;
+  const cacheComplete = snapshot.inputTokens === null || snapshot.cachedTokens !== null;
+  snapshot.inputTokens = (snapshot.inputTokens ?? 0) + usage.inputTokens;
+  snapshot.cachedTokens =
+    cacheComplete && usage.cachedTokens !== null
+      ? (snapshot.cachedTokens ?? 0) + usage.cachedTokens
+      : null;
+}
 
 /** Keep measured totals across approval and takeover continuations of the same run. */
 export function resumeContextSnapshot(

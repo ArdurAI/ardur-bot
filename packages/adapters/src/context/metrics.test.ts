@@ -1,6 +1,28 @@
 import type { ContextSnapshot } from "@ardurbot/contracts";
 import { expect, it } from "vitest";
-import { aggregateContext, resumeContextSnapshot } from "./metrics.js";
+import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./metrics.js";
+
+it("keeps missing cache coverage unknown across accepted deltas and continuations", () => {
+  const snapshot: ContextSnapshot = {
+    layers: { stable: 0, brief: 0, summary: 0, messages: 0, recall: 0, message: 0 },
+    recallRan: false,
+    recallCalls: 0,
+    cachedTokens: null,
+    inputTokens: null,
+    queueWaitMs: null,
+    timeToFirstTokenMs: null,
+    routingRule: null,
+  };
+  recordContextUsage(snapshot, null);
+  expect(snapshot.inputTokens).toBeNull();
+  recordContextUsage(snapshot, { inputTokens: 0, cachedTokens: 0 });
+  expect(snapshot).toMatchObject({ inputTokens: 0, cachedTokens: 0 });
+  recordContextUsage(snapshot, { inputTokens: 10, cachedTokens: null });
+  const resumed = resumeContextSnapshot(snapshot, snapshot);
+  recordContextUsage(resumed, { inputTokens: 20, cachedTokens: 5 });
+  recordContextUsage(resumed, null);
+  expect(resumed).toMatchObject({ inputTokens: 30, cachedTokens: null });
+});
 
 it("aggregates recorded samples for bot and group without inventing missing metrics", () => {
   const now = new Date("2026-09-24T12:00:00Z");

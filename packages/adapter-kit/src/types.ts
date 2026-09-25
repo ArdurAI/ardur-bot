@@ -418,6 +418,55 @@ export interface AgentRunModel {
   };
 }
 
+/** Disjoint normalized categories. Unknown provider detail is null, never invented zero. */
+export interface UsageCategories {
+  logicalInput: number | null;
+  uncachedInput: number | null;
+  cacheReadInput: number | null;
+  cacheWriteInput: number | null;
+  output: number | null;
+  reasoning: number | null;
+}
+
+export type UsagePurpose =
+  | "main"
+  | "retry"
+  | "helper"
+  | "summary"
+  | "delegated"
+  | "detached-learning";
+
+/** Provider-neutral persistence contract; see docs/request-usage.md. */
+export interface RequestUsageObservation {
+  requestId: string;
+  attemptId: string;
+  parentRequestId: string | null;
+  purpose: UsagePurpose;
+  counter: { mode: "delta" | "cumulative"; epochId: string; sequence: number };
+  inputSemantics: "total-with-cache-subsets" | "additive-cache-categories" | "unknown";
+  reasoningSemantics: "subset-of-output" | "separate" | "unknown";
+  categories: UsageCategories;
+  /** USD only when reported or calculated from an applicable dated rate. */
+  cost: number | null;
+  pricingProvenance: {
+    source: string;
+    datedAt: string;
+    kind: "provider-reported" | "rate-card";
+  } | null;
+}
+
+export interface AgentUsage {
+  provider: string;
+  model: string;
+  /** Legacy measurement coverage; normalized request categories take precedence. */
+  reported?: boolean;
+  cachedTokens?: number;
+  /** Legacy totals. With request present, its categories are authoritative. */
+  inputTokens: number;
+  outputTokens: number;
+  request?: RequestUsageObservation;
+}
+
 export interface AgentRunRequest {
   controlledComparison?: boolean;
   botId: string;
@@ -452,10 +501,7 @@ export interface AgentRunRequest {
     executionId: string,
     route?: ConnectorRoute,
   ) => Promise<unknown>;
-  recordHelperUsage?: (
-    id: string,
-    usage: { provider: string; model: string; inputTokens: number; outputTokens: number },
-  ) => Promise<void>;
+  recordHelperUsage?: (id: string, usage: AgentUsage) => Promise<void>;
   finishHelper?: (
     id: string,
     status: "completed" | "failed" | "cancelled",
@@ -511,16 +557,7 @@ export type AgentRuntimeEvent =
       actions?: Array<{ id: string; label: string }>;
     }
   | { type: "takeover"; reason: string }
-  | {
-      type: "usage";
-      reported?: boolean;
-      cachedTokens?: number;
-      delegationId?: string;
-      inputTokens: number;
-      outputTokens: number;
-      provider: string;
-      model: string;
-    }
+  | ({ type: "usage"; delegationId?: string } & AgentUsage)
   | { type: "checkpoint"; blob: string }
   | {
       type: "subagent";
