@@ -1,0 +1,60 @@
+import { describe, expect, it } from "vitest";
+import {
+  electronAuthCookie,
+  persistentAuthCookies,
+  SYNTHETIC_AUTH_LIFETIME_SECONDS,
+  selectPrimingCookieStore,
+} from "./desktop-session.js";
+
+describe("desktop priming session", () => {
+  it("gives synthetic auth cookies a bounded persistent lifetime", () => {
+    const nowMs = 1_700_000_000_000;
+    const cookies = persistentAuthCookies(
+      "better-auth.session_token=synthetic-token; better-auth.session_data=synthetic-data",
+      "http://127.0.0.1:4010",
+      nowMs,
+    );
+    expect(cookies.map((cookie) => cookie.name)).toEqual([
+      "better-auth.session_token",
+      "better-auth.session_data",
+    ]);
+    expect(cookies.map((cookie) => cookie.value)).toEqual(["synthetic-token", "synthetic-data"]);
+    for (const cookie of cookies) {
+      expect(cookie.url).toBe("http://127.0.0.1:4010");
+      expect(cookie.path).toBe("/");
+      expect(cookie.httpOnly).toBe(true);
+      expect(cookie.sameSite).toBe("Lax");
+      const lifetime = cookie.expires! - Math.floor(nowMs / 1000);
+      expect(lifetime).toBe(SYNTHETIC_AUTH_LIFETIME_SECONDS);
+      expect(lifetime).toBeGreaterThan(0);
+      expect(lifetime).toBeLessThanOrEqual(60 * 60);
+      const stored = electronAuthCookie(cookie);
+      expect(stored.expirationDate).toBe(cookie.expires);
+      expect(stored.sameSite).toBe("lax");
+      expect(stored).not.toHaveProperty("expires");
+    }
+  });
+
+  it("seeds the priming window session instead of the default browser context", async () => {
+    const seen: string[] = [];
+    const browserContext = {
+      kind: "browser-context" as const,
+      set: async () => {
+        seen.push("browser-context");
+      },
+    };
+    const webContentsSession = {
+      kind: "web-contents-session" as const,
+      set: async () => {
+        seen.push("web-contents-session");
+      },
+    };
+    const selected = selectPrimingCookieStore({ browserContext, webContentsSession });
+    expect(selected).toBe(webContentsSession);
+    await selected.set([]);
+    expect(seen).toEqual(["web-contents-session"]);
+    expect(() => selectPrimingCookieStore({ browserContext, webContentsSession: null })).toThrow(
+      /window session/,
+    );
+  });
+});
