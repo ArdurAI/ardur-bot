@@ -9,6 +9,7 @@ import { isTooManyDatabaseConnections } from "@ardurbot/db";
 import { runCorrelatedJob, unwrapJobPayload, wrapJobPayload } from "@ardurbot/logging";
 import { makeWorkerUtils, type Runner, run, type WorkerUtils } from "graphile-worker";
 import type { Pool } from "pg";
+import { tracePoint } from "./scoreboard-trace.js";
 
 function memoryDeliveryQueue(job: BackgroundJob): string | undefined {
   if (job.name === "memory.git-push") return `memory.git:${job.payload.spaceId}`;
@@ -29,6 +30,10 @@ export class GraphileJobPublisher implements JobPublisher {
 
   async enqueue(job: BackgroundJob): Promise<void> {
     const utils = await this.getUtils();
+    if (job.name === "run.continue")
+      tracePoint(job.payload.runId, "job.submitted", {
+        scheduledMs: Math.max(0, (job.availableAt?.getTime() ?? Date.now()) - Date.now()),
+      });
     await utils.addJob(job.name, wrapJobPayload(job.payload), {
       runAt: job.availableAt,
       jobKey: job.replaceKey,
@@ -37,6 +42,7 @@ export class GraphileJobPublisher implements JobPublisher {
         ? { queueName: memoryDeliveryQueue(job) }
         : {}),
     });
+    if (job.name === "run.continue") tracePoint(job.payload.runId, "job.enqueued");
   }
 
   async cancel(key: string): Promise<void> {
@@ -114,6 +120,14 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
         name,
         async (payload: unknown) => {
           const unpacked = unwrapJobPayload(withoutCronMarker(payload));
+          if (
+            name === "run.continue" &&
+            unpacked.payload &&
+            typeof unpacked.payload === "object" &&
+            "runId" in unpacked.payload &&
+            typeof unpacked.payload.runId === "string"
+          )
+            tracePoint(unpacked.payload.runId, "job.dequeued");
           await runCorrelatedJob({
             name,
             payload: unpacked.payload,

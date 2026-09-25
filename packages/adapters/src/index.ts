@@ -147,6 +147,7 @@ export { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "./runtimes/native-ho
 export * from "./sandbox-factory.js";
 export * from "./sandbox-provider-env.js";
 export * from "./schedule-tools.js";
+export * from "./scoreboard-trace.js";
 export * from "./scratchpad-context.js";
 export * from "./scratchpad-tools.js";
 export * from "./scripted-auto-review.js";

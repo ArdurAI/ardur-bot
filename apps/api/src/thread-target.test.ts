@@ -1,7 +1,8 @@
 import type { SandboxProvider } from "@ardurbot/adapter-kit";
+import { startScoreboardTrace } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cancelSupersededQueuedRuns,
   reactToThreadMessage,
@@ -949,7 +950,13 @@ function groupTarget() {
 }
 
 describe("sendThreadMessage", () => {
+  let trace: ReturnType<typeof startScoreboardTrace> | undefined;
+  afterEach(() => {
+    trace?.stop();
+    trace = undefined;
+  });
   it("stores Board identity and close permission on a newly queued run before enqueue", async () => {
+    trace = startScoreboardTrace();
     const tx = {
       thread: { update: vi.fn(async () => ({ nextMessageSeq: 1, nextEventSeq: 1 })) },
       message: {
@@ -965,7 +972,12 @@ describe("sendThreadMessage", () => {
       run: {
         findMany: vi.fn(async () => []),
         findUnique: vi.fn(async () => ({ status: "queued", startedAt: null })),
-        create: vi.fn(async () => ({ id: "run", taskId: "task", status: "queued" })),
+        create: vi.fn(async () => ({
+          id: "run",
+          taskId: "task",
+          status: "queued",
+          sourceMessageId: "message",
+        })),
       },
       task: { create: vi.fn(async () => ({ id: "task" })) },
       event: { create: vi.fn(async () => ({ id: "event", seq: 1, createdAt: new Date() })) },
@@ -975,6 +987,10 @@ describe("sendThreadMessage", () => {
       $transaction: vi.fn(async (work: (client: typeof tx) => unknown) => work(tx)),
     } as unknown as PrismaClient;
     const enqueue = vi.fn(async () => {
+      expect(trace!.snapshot().points.map((p) => p.boundary)).toEqual([
+        "admission.started",
+        "admission.committed",
+      ]);
       expect(tx.run.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           boardWorkspaceId: "workspace",
@@ -1451,6 +1467,7 @@ describe("sendThreadMessage", () => {
   });
 
   it("steers a waiting-takeover run instead of refusing the message", async () => {
+    trace = startScoreboardTrace();
     const tx = {
       thread: {
         update: vi
@@ -1528,6 +1545,7 @@ describe("sendThreadMessage", () => {
     });
     expect(tx.task.create).not.toHaveBeenCalled();
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ name: "run.continue" }));
+    expect(trace.snapshot().points).toEqual([]);
   });
   it("rejects a quote excerpt without a reply target", async () => {
     const prisma = {

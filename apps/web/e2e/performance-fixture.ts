@@ -58,7 +58,7 @@ export const tokenEvent = {
   createdAt,
   payload: { text: "First fixture token" },
 };
-export async function installPerformanceFixture(page: Page) {
+export async function installPerformanceFixture(page: Page, trace = false) {
   let sent = false;
   const snapshot = (index: number) => ({
     botId: bots[index]!.id,
@@ -103,7 +103,7 @@ export async function installPerformanceFixture(page: Page) {
     },
   ];
   await page.addInitScript(
-    ({ tokenEvent }) => {
+    ({ tokenEvent, trace }) => {
       const original = window.fetch.bind(window);
       const observeToken = () => {
         const observer = new MutationObserver(() => {
@@ -158,6 +158,34 @@ export async function installPerformanceFixture(page: Page) {
             stream.enqueue(
               encoder.encode(`event: message\ndata: ${JSON.stringify({ json: tokenEvent })}\n\n`),
             );
+          if (trace)
+            setTimeout(() => {
+              for (const stream of streams) {
+                for (const event of [
+                  {
+                    ...tokenEvent,
+                    seq: 102,
+                    id: "fixture-final",
+                    type: "thread.message.created",
+                    payload: {
+                      messageId: "fixture-final",
+                      role: "bot",
+                      blocks: [{ kind: "text", text: "First fixture token" }],
+                    },
+                  },
+                  {
+                    ...tokenEvent,
+                    seq: 103,
+                    id: "fixture-terminal",
+                    type: "run.completed",
+                    payload: {},
+                  },
+                ])
+                  stream.enqueue(
+                    encoder.encode(`event: message\ndata: ${JSON.stringify({ json: event })}\n\n`),
+                  );
+              }
+            }, 150);
         }
         return response;
       };
@@ -176,7 +204,12 @@ export async function installPerformanceFixture(page: Page) {
         true,
       );
     },
-    { tokenEvent },
+    {
+      tokenEvent: trace
+        ? { ...tokenEvent, payload: { ...tokenEvent.payload, streaming: true } }
+        : tokenEvent,
+      trace,
+    },
   );
   await page.route("**/api/auth/get-session", (route) =>
     route.fulfill({

@@ -113,6 +113,8 @@ export interface FinalizeRunResult {
 }
 
 interface FinalizeRunBase {
+  /** Best-effort observation after commit and before realtime delivery. */
+  onCommitted?: () => void;
   spaceId: string;
   threadId: string;
   botId: string;
@@ -1130,6 +1132,11 @@ export async function finalizeRun(
 ): Promise<FinalizeRunResult | false> {
   const committed = await withTransactionRetry(() => finalizeRunOnce(prisma, input));
   if (!committed) return false;
+  try {
+    input.onCommitted?.();
+  } catch {
+    /* Telemetry cannot invalidate a durable outcome. */
+  }
   await notifyRealtime(realtime, committed.threadId, committed.seq);
   if (committed.summary)
     await notifyRealtime(realtime, committed.summary.threadId, committed.summary.seq);

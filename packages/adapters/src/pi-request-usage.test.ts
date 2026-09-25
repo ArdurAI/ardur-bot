@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { piWireUsage } from "./pi-request-usage.js";
 import { PiAgentRuntime } from "./pi-runtime.js";
 import { ObservedUsageTotals } from "./runtime-usage.js";
+import { startScoreboardTrace, traceRuntime } from "./scoreboard-trace.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 async function collect(events: AsyncIterable<AgentRuntimeEvent>) {
@@ -87,42 +88,59 @@ describe("Pi raw numeric mappings", () => {
 });
 
 describe("Pi requests through real HTTP/SSE and SDK retry policy", () => {
-  it("records every retried attempt, including missing usage on the failed attempt", async () => {
-    const server = await startModelEmulator({
-      steps: [
-        {
-          expect() {},
-          response: { type: "error", status: 503, message: "Synthetic transient error" },
-        },
-        {
-          expect() {},
-          response: { type: "text", text: "done" },
-          usage: { inputTokens: 120, outputTokens: 40 },
-        },
-      ],
-    });
-    cleanups.push(server.close);
-    const events = await collect(new PiAgentRuntime().run(run(server.model)));
-    server.assertComplete();
-    const usage = events.filter((event) => event.type === "usage");
-    expect(totals(usage).tokens).toBe(160);
-    expect(new Set(usage.map((event) => event.request?.requestId)).size).toBe(1);
-    expect(new Set(usage.map((event) => event.request?.attemptId)).size).toBe(2);
-    expect(usage).toContainEqual(
-      expect.objectContaining({
-        request: expect.objectContaining({
-          purpose: "main",
-          collection: expect.objectContaining({ outcome: "failed", availability: "unavailable" }),
+  it.each([503, 429])(
+    "records every retried HTTP %s attempt and its failed usage",
+    async (status) => {
+      const server = await startModelEmulator({
+        steps: [
+          {
+            expect() {},
+            response: { type: "error", status, message: "Synthetic transient error" },
+          },
+          {
+            expect() {},
+            response: { type: "text", text: "done" },
+            usage: { inputTokens: 120, outputTokens: 40 },
+          },
+        ],
+      });
+      cleanups.push(server.close);
+      const trace = startScoreboardTrace();
+      cleanups.push(async () => trace.stop());
+      const events = await collect(
+        traceRuntime("run-trace", 1, new PiAgentRuntime().run(run(server.model))),
+      );
+      const points = trace.snapshot().points;
+      expect(points.filter((p) => p.boundary === "provider.started")).toHaveLength(2);
+      expect(
+        points.filter((p) => p.boundary === "provider.finished").map((p) => p.outcome),
+      ).toEqual(["failed", "success"]);
+      expect(new Set(points.map((p) => p.traceId))).toEqual(new Set(["run-trace"]));
+      expect(points.filter((p) => p.boundary === "provider.text")).toHaveLength(1);
+      expect(points.filter((p) => p.boundary === "wait.quota")).toHaveLength(
+        status === 429 ? 1 : 0,
+      );
+      server.assertComplete();
+      const usage = events.filter((event) => event.type === "usage");
+      expect(totals(usage).tokens).toBe(160);
+      expect(new Set(usage.map((event) => event.request?.requestId)).size).toBe(1);
+      expect(new Set(usage.map((event) => event.request?.attemptId)).size).toBe(2);
+      expect(usage).toContainEqual(
+        expect.objectContaining({
+          request: expect.objectContaining({
+            purpose: "main",
+            collection: expect.objectContaining({ outcome: "failed", availability: "unavailable" }),
+          }),
         }),
-      }),
-    );
-    expect(usage.at(-1)?.request).toMatchObject({
-      purpose: "retry",
-      collection: { outcome: "success", raw: { input: 120, output: 40 } },
-      cost: null,
-    });
-    expect(events.at(-1)).toEqual({ type: "done", text: "done" });
-  });
+      );
+      expect(usage.at(-1)?.request).toMatchObject({
+        purpose: "retry",
+        collection: { outcome: "success", raw: { input: 120, output: 40 } },
+        cost: null,
+      });
+      expect(events.at(-1)).toEqual({ type: "done", text: "done" });
+    },
+  );
   it("separates parent and helper requests while preserving parent identity and helper admission", async () => {
     const server = await startModelEmulator({
       steps: [
