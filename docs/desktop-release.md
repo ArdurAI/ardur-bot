@@ -114,8 +114,12 @@ builds come later and require an explicit change to this policy.
 4. Wait for the pre-release assets. Download the DMG matching the Mac architecture, drag
    **Ardur Bot.app** to **Applications**, eject the DMG, and follow the unsigned-opening steps
    in the [README](../README.md#install-a-desktop-preview). Open it, confirm the version in update
-   settings, and complete setup. “This computer” still requires Docker Desktop and published
-   backend images for the selected release; packaging a client does not prove those images exist.
+   settings, and complete setup. **This computer** starts the app's own database and services.
+   On this computer, approvals, folder allowlists, and secret redaction are enforced. Disk, CPU,
+   and time caps are advisory, and the setup screen says so. Connecting to an existing server is
+   unchanged. On Windows, stopping that database uses the embedded Postgres library's forced
+   process-tree kill, and the next start uses Postgres crash recovery. The release job copies only
+   that architecture's Postgres binaries into the app before packaging.
 5. Verify a real installed build before deciding whether `main` should move. Do not retag a
    published version; create a new version for fixes.
 

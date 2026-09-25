@@ -17,11 +17,13 @@
   },
   "dependencies": {
     "@ardurbot/contracts": "workspace:*",
-    "electron-updater": "6.8.9"
+    "@ardurbot/db": "workspace:*",
+    "electron-updater": "6.8.9",
+    "embedded-postgres": "16.14.0-beta.17"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0",
     "@ardurbot/ui-tokens": "workspace:*",
+    "@playwright/test": "1.63.0",
     "electron": "44.3.0",
     "electron-builder": "26.15.3",
     "typescript": "7.0.2",
@@ -35,7 +37,8 @@
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/@embedded-postgres/**"
     ],
     "extraResources": [
       {
@@ -68,6 +71,14 @@
         "filter": [
           "koffi.node"
         ]
+      },
+      {
+        "from": "build/postgres-modules",
+        "to": "postgres-modules"
+      },
+      {
+        "from": "../../packages/db/prisma/migrations",
+        "to": "migrations"
       }
     ],
     "extraMetadata": {

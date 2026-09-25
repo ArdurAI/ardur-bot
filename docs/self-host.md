@@ -4,7 +4,9 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
 
 ## Local (source checkout)
 
-Same as the README quick start: `.env` from `.env.example`, Postgres via Compose, `pnpm sandbox:build`, `pnpm dev`, then [http://127.0.0.1:5173](http://127.0.0.1:5173) (or `http://localhost:5173` — both loopback hosts are trusted). Electron: `pnpm --filter @ardurbot/desktop dev` while that stack is up, choosing **Existing instance** with that address. The desktop app's **This computer** option instead installs and runs the published images itself with Docker Compose (see [Published images](#published-images-no-checkout)), using port 45173 by default so it can run alongside `pnpm dev`. If that port is occupied, the app selects and remembers another loopback port. The managed API gets a Docker-assigned loopback port; all desktop traffic uses the web origin.
+Same as the README quick start: `.env` from `.env.example`, Postgres via Compose, `pnpm sandbox:build`, `pnpm dev`, then [http://127.0.0.1:5173](http://127.0.0.1:5173) (or `http://localhost:5173` — both loopback hosts are trusted). Electron during source development: `pnpm --filter @ardurbot/desktop dev` while that stack is up, choosing **Existing instance** with that address.
+
+The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. On this computer, approvals, folder allowlists, and secret redaction are enforced. Disk, CPU, and time caps are advisory, and the setup screen says so. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
 
 For source development in WSL, keep the checkout and `data` directory in the Linux filesystem (for example, `~/ardurbot`), and run `pnpm dev` as your normal user. The host-run supervisor matches bot container UID/GID to that user. If Docker Desktop container IPs are unreachable, set `SANDBOX_CONTROL_VIA_LOOPBACK=true` in `.env`; this publishes the token-protected control service on a random loopback port. Leave this unset for the Compose-hosted supervisor.
 
@@ -295,7 +297,7 @@ Optional messaging platforms (iMessage, Slack, WhatsApp, Telegram, Feishu/Lark) 
 
 ## Choosing a computer provider
 
-The Electron desktop app is a client of the same API. Docker and E2B still apply. On first launch, Electron asks the deployment owner whether bots should keep using Docker or run on this Mac as you. `SANDBOX_PROVIDER=desktop` is a separate, explicit provider that always runs commands on the service host.
+The Electron desktop app is a client of the same API. Docker and E2B still apply to a Compose server. The installed app's **This computer** path runs the API and worker with `SANDBOX_PROVIDER=desktop`, which always runs commands on that machine.
 
 - **Published images** (`docker-compose.images.yml`) default to `SANDBOX_PROVIDER=docker` with a
   local supervisor and published `ghcr.io/ardurai/ardur-bot/computer` image. No E2B account required.
@@ -313,10 +315,13 @@ The Electron desktop app is a client of the same API. Docker and E2B still apply
   workspace under `/home/user/ardurbot-home`, and refreshes a two-hour TTL. Box uses the shared Linux
   desktop runtime and protected port routes for concurrent bot desktops. Each bot has its own
   persistent Chrome profile; logins are not shared between bots.
-- **Desktop provider** / **This Mac** runs commands on the API/worker host. Docker stays the default.
-  The Electron app asks once; if you choose This Mac, bots can use working directories under your home
-  folder. Do not enable it on a public or shared service. macOS does not show its own permission
-  dialog for this.
+- **Desktop provider** / **This computer** is what the installed app uses for **This computer**.
+  The API and worker run on that machine. Approvals, folder allowlists, and secret redaction are
+  enforced. Disk, CPU, and time caps are advisory, and the app says so. Do not point a public or
+  shared service at this provider. macOS does not show its own permission dialog for these commands.
+  On Windows, stopping the embedded database uses the library's forced process-tree kill; the next
+  start uses Postgres crash recovery. Docker stays the default for Compose and for a setup that
+  already has a Compose environment file.
 - **Fake** is only an emulator for verification.
 - **None** boots the product without a computer host (fallback when Docker/supervisor is not
   configured, or when a remote provider is selected without its API key).

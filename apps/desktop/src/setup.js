@@ -1,6 +1,11 @@
 (() => {
   const bridge = window.ardurbotSetup;
   document.documentElement.dataset.platform = bridge?.platform ?? "browser";
+  const hostPosture = document.getElementById("host-posture");
+  if (hostPosture && bridge?.platform === "darwin") {
+    hostPosture.textContent =
+      "On this Mac, approvals, folder allowlists, and secret redaction are enforced. Disk, CPU, and time caps are advisory.";
+  }
 
   const form = document.getElementById("setup");
   const serverUrl = document.getElementById("server-url");
@@ -26,6 +31,9 @@
     pulling: "Downloading Ardur Bot…",
     starting: "Starting Ardur Bot…",
     "waiting-healthy": "Almost ready…",
+    database: "Starting the database.",
+    migrations: "Applying the database.",
+    services: "Starting services.",
     ready: "Ardur Bot is ready.",
   };
   const TERMINAL_PHASES = new Set([
@@ -41,6 +49,9 @@
     pulling: 0.2,
     starting: 0.82,
     "waiting-healthy": 0.92,
+    database: 0.25,
+    migrations: 0.55,
+    services: 0.8,
     ready: 1,
   };
   /** Docker reports bytes pulled but never a total, so the bar approaches the next phase without reaching it. */
@@ -355,7 +366,7 @@
       if (state.error) setStatus(state.error, "error");
       if (attached) {
         renderStack(stack);
-        if (!TERMINAL_PHASES.has(stack.phase)) void followStack();
+        if (stack.phase === "ready" || !TERMINAL_PHASES.has(stack.phase)) void followStack();
       } else if (selectedMode() === "existing") {
         serverUrl.focus();
       } else {

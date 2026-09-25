@@ -1,9 +1,11 @@
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopReachability, DesktopSetup } from "@ardurbot/contracts";
 import { LOCAL_SETTINGS_PAGE } from "@ardurbot/contracts/local-settings";
+import { applySqlMigrationsToDatabase, ensureApplicationDatabase } from "@ardurbot/db/migrate";
 import type { Session } from "electron";
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "electron";
 import type { ElectronAutoUpdater } from "./auto-update.js";
@@ -19,8 +21,15 @@ import {
   integrationReturnId,
   registerIntegrationProtocol,
 } from "./integration-return.js";
+import { LocalModeController, migrationsDir } from "./local-mode.js";
+import {
+  legacyStackEnvExists,
+  loadEmbeddedPostgres,
+  loopbackPortAvailable,
+} from "./local-postgres.js";
 import { requestLocalSettings } from "./local-settings.js";
 import {
+  allocateLoopbackPort,
   LocalStackController,
   readStackToken,
   readStackWebUrl,
@@ -133,6 +142,9 @@ const desktopUpdater = new DesktopUpdateController(
 );
 let launchUpdateCheckScheduled = false;
 let localStack: LocalStackController;
+let localMode: LocalModeController;
+let legacyCompose = false;
+let localShutdown: Promise<void> | null = null;
 const remoteListener = new RemoteListener();
 
 markOnce("rk:main:module-evaluated");
@@ -441,6 +453,8 @@ async function probeDocument(url: string): Promise<string | null> {
     });
     // Allow 3xx (e.g. / → /login); reject hard HTTP errors before opening a window.
     if (response.status >= 400) {
+      // The local API does not serve the UI. The bundled renderer does, after this probe.
+      if (response.status === 404 && localModeOwns(url)) return null;
       return `The server answered with HTTP ${response.status}.`;
     }
     return null;
@@ -592,12 +606,16 @@ async function installBundledRenderer(
   targetSession: Session,
   partition: string | null,
 ) {
-  if (!app.isPackaged || process.env.ARDURBOT_DISABLE_BUNDLED_RENDERER === "1") return;
+  const localRenderer = localModeOwns(targetUrl);
+  if ((!app.isPackaged && !localRenderer) || process.env.ARDURBOT_DISABLE_BUNDLED_RENDERER === "1")
+    return;
   if (!servesBundledRenderer(targetUrl)) return;
   const webUrl = new URL(targetUrl);
   const installationKey = `${partition ?? "default"}:${webUrl.protocol}`;
   if (bundledRendererInstallations.has(installationKey)) return;
-  const root = path.join(process.resourcesPath, "web");
+  const root = app.isPackaged
+    ? path.join(process.resourcesPath, "web")
+    : path.resolve(app.getAppPath(), "../web/dist");
 
   await targetSession.protocol.handle(webUrl.protocol.slice(0, -1), async (request) => {
     const forward = () => {
@@ -799,7 +817,9 @@ function installApplicationMenu() {
     label: "Stop Local Stack",
     // The stack keeps running after quit (bots are always on); this is the explicit off switch.
     click: () => {
-      if (currentSetup?.mode === "new") void localStack.stop();
+      if (currentSetup?.mode !== "new") return;
+      if (legacyCompose) void localStack.stop();
+      else void localMode.stop();
     },
   };
   const template: Electron.MenuItemConstructorOptions[] =
@@ -1076,6 +1096,17 @@ async function recoverFromCrashedSave(
   return message;
 }
 
+function localModeOwns(targetUrl: string): boolean {
+  if (legacyCompose || localMode === undefined) return false;
+  const origin = localMode.origin();
+  if (origin === "") return false;
+  try {
+    return new URL(targetUrl).origin === new URL(origin).origin;
+  } catch {
+    return false;
+  }
+}
+
 function safeOrigin(targetUrl: string) {
   try {
     return new URL(targetUrl).origin;
@@ -1090,11 +1121,26 @@ app.whenReady().then(async () => {
   if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
   installCustomizationIpc({ window: () => mainWindow, target: () => currentTargetUrl });
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
-  hostService = installHostService({
+  const host = installHostService({
     window: () => mainWindow,
     target: () => currentTargetUrl,
     tray: () => desktopTray,
   });
+  hostService = {
+    get keepRunning() {
+      return host.keepRunning;
+    },
+    windowClosed() {
+      host.windowClosed();
+    },
+    stop() {
+      host.stop();
+    },
+    async activate(target: string) {
+      if (localModeOwns(target)) return;
+      await host.activate(target);
+    },
+  };
   installSessionPermissions(session.defaultSession, permissionTarget);
   const userDataDir = app.getPath("userData");
   localStack = new LocalStackController({
@@ -1122,6 +1168,47 @@ app.whenReady().then(async () => {
       if (setupWindow !== null && !setupWindow.isDestroyed()) {
         setupWindow.webContents.send("desktop.setup.stack.changed", state);
       }
+    },
+  });
+  legacyCompose = await legacyStackEnvExists(userDataDir);
+  const EmbeddedPostgres = await loadEmbeddedPostgres({
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+  });
+  localMode = new LocalModeController({
+    userDataDir,
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+    execPath: process.execPath,
+    platform: process.platform,
+    env: process.env,
+    spawn,
+    fetch: (url, init) => net.fetch(url, init),
+    openApp: async () => true,
+    migrate: async (databaseUrl) => {
+      await ensureApplicationDatabase(databaseUrl);
+      await applySqlMigrationsToDatabase({
+        connectionString: databaseUrl,
+        migrationsDir: migrationsDir({
+          packaged: app.isPackaged,
+          resourcesPath: process.resourcesPath,
+          appPath: app.getAppPath(),
+        }),
+      });
+    },
+    postgresFactory: (options) => new EmbeddedPostgres(options),
+    allocatePort: allocateLoopbackPort,
+    portAvailable: loopbackPortAvailable,
+    randomHex: (bytes) => randomBytes(bytes).toString("hex"),
+    now: () => Date.now(),
+    onState: (state) => {
+      if (setupWindow !== null && !setupWindow.isDestroyed()) {
+        setupWindow.webContents.send("desktop.setup.stack.changed", state);
+      }
+    },
+    onFailed: (message) => {
+      setupError = message;
     },
   });
   currentSetup = await readSetup(userDataDir);
@@ -1353,7 +1440,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("desktop.setup.state", (event) => {
     if (!fromSetupWindow(event)) return null;
     return {
-      defaultLocalUrl: localStack.webUrl(),
+      defaultLocalUrl: legacyCompose ? localStack.webUrl() : localMode.origin(),
       saved: currentSetup,
       error: setupError ?? undefined,
     };
@@ -1384,9 +1471,14 @@ app.whenReady().then(async () => {
 
       // Only open the exact origin selected and authenticated by the managed stack.
       let openSetup = setup;
+      if (setup.mode === "existing" && !legacyCompose) await localMode.stop();
       if (setup.mode === "new") {
-        const managedUrl = managedLocalOpenUrl(setup.serverUrl, localStack.webUrl());
-        if (managedUrl === null || !(await localStack.matchesDesiredStack())) {
+        const managedBase = legacyCompose ? localStack.webUrl() : localMode.origin();
+        const managedUrl = managedLocalOpenUrl(setup.serverUrl, managedBase);
+        const ready = legacyCompose
+          ? managedUrl !== null && (await localStack.matchesDesiredStack())
+          : managedUrl !== null && localMode.state().phase === "ready";
+        if (!ready || managedUrl === null) {
           return {
             ok: false,
             error: "The app-managed Ardur Bot services are not ready. Retry setup.",
@@ -1457,14 +1549,19 @@ app.whenReady().then(async () => {
     if (!fromSetupWindow(event) || !isDesktopSetupLink(link)) return;
     await shell.openExternal(DOCKER_INSTALL_LINKS[link]);
   });
-  ipcMain.handle("desktop.setup.stack.state", (event) =>
-    fromSetupWindow(event) ? localStack.state() : null,
-  );
+  ipcMain.handle("desktop.setup.stack.state", (event) => {
+    if (!fromSetupWindow(event)) return null;
+    return legacyCompose ? localStack.state() : localMode.state();
+  });
   ipcMain.handle("desktop.setup.stack.start", (event) => {
     if (!fromSetupWindow(event)) return null;
     // Respond right away; the setup window polls `stack.state` until a terminal phase.
-    void localStack.start();
-    return localStack.state();
+    if (legacyCompose) {
+      void localStack.start();
+      return localStack.state();
+    }
+    void localMode.start();
+    return localMode.state();
   });
 
   // Register before startup awaits so macOS dock clicks during probe/open are handled.
@@ -1534,8 +1631,12 @@ app.whenReady().then(async () => {
 
   if (target.kind === "setup") {
     showSetupWindow();
+    if (!legacyCompose && process.env.ARDURBOT_FORCE_SETUP !== "1") void localMode.start();
   } else if (target.source === "saved") {
-    if (currentSetup?.mode === "new") {
+    if (currentSetup?.mode === "new" && !legacyCompose) {
+      showSetupWindow();
+      void localMode.start();
+    } else if (currentSetup?.mode === "new") {
       const managedUrl = managedLocalOpenUrl(target.url, localStack.webUrl());
       const managedStackReady =
         managedUrl !== null ? await localStack.matchesDesiredStack() : false;
@@ -1594,11 +1695,22 @@ app.on("before-quit", (event) => {
     }
     unsavedFiles.set(mainWindow, false);
   }
+  if (!legacyCompose && localMode?.running()) {
+    event.preventDefault();
+    quitting = false;
+    if (localShutdown === null) {
+      localShutdown = localMode.stop().then(() => {
+        app.quit();
+      });
+    }
+    return;
+  }
   hostService?.stop();
   desktopTray?.destroy();
   desktopTray = null;
   clearTimeout(warmWindowTimer);
-  // Containers keep running; only an in-flight pull/up is cut short.
+  // Compose containers keep running; only an in-flight pull/up is cut short.
+  // Local mode already stopped its worker, API, and database above.
   void remoteListener.stop();
   localStack?.abort();
 });

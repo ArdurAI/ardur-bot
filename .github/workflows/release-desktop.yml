@@ -79,6 +79,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build renderer and main process
         run: pnpm --filter @ardurbot/web build && pnpm --filter @ardurbot/desktop build
+      # Stage only this job's optional platform package. electron-builder's ${platform}
+      # macro is win32, while the package is @embedded-postgres/windows-x64, so the
+      # copy is explicit. https://www.electron.build/file-patterns
+      - name: Stage embedded Postgres for this architecture
+        run: node apps/desktop/scripts/stage-embedded-postgres.mjs
       - name: Package without signing or publishing
         run: pnpm --filter @ardurbot/desktop exec electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
       - name: Report unavailable optional ARM Linux toolchain

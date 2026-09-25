@@ -143,7 +143,9 @@ export interface DesktopStackProbeResponse {
 }
 
 /**
- * Lifecycle of the Docker Compose stack the desktop app manages for mode `new`.
+ * Lifecycle of the services the desktop app manages for mode `new`.
+ * `database`, `migrations`, and `services` are the embedded Postgres path.
+ * The docker phases remain for a setup that already has a Compose env file.
  * `docker-missing` and `docker-not-running` wait for the person to act; `ready` and
  * `failed` are terminal until the next start.
  */
@@ -156,6 +158,9 @@ export type DesktopLocalStackPhase =
   | "pulling"
   | "starting"
   | "waiting-healthy"
+  | "database"
+  | "migrations"
+  | "services"
   | "ready"
   | "failed";
 
