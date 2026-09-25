@@ -194,6 +194,26 @@ it("clears a rename failure when the selected board changes", async () => {
   expect(node.textContent).not.toContain("This name could not be saved.");
   expect(node.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe("Archive");
 });
+it("keeps the board picker locked until a pending action settles", async () => {
+  let reject: (error: unknown) => void = () => {};
+  api.configure.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  const node = await render(true, [], { second: true });
+  await act(async () => node.querySelector("form")!.requestSubmit());
+  const picker = node.querySelector<HTMLSelectElement>('select[aria-label="Board"]')!;
+  expect(picker.disabled).toBe(true);
+  await act(async () => {
+    reject(serverError("This name could not be saved."));
+  });
+  expect(picker.disabled).toBe(false);
+  expect(node.querySelector("form")?.parentElement?.textContent).toContain(
+    "This name could not be saved.",
+  );
+});
 it("shows a server sentence and hides a browser fetch failure", async () => {
   api.configure.mockRejectedValueOnce(new TypeError("Failed to fetch"));
   const node = await render();

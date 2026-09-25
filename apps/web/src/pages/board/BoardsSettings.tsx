@@ -147,6 +147,7 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
         <NativeSelect
           aria-label={t`Board`}
           value={board?.id ?? ""}
+          disabled={busy}
           onChange={(event) => {
             setId(event.target.value);
             setActionError(null);
