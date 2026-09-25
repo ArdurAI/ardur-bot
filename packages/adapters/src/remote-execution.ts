@@ -4,6 +4,7 @@ import { canonicalDispatchJson } from "@ardurbot/contracts";
 import {
   classifyRemoteTool,
   effectiveRemoteAuthority,
+  type RemotePolicyDecision,
   remotePermissionExpansion,
 } from "@ardurbot/core";
 import type {
@@ -90,6 +91,7 @@ export async function currentRemoteDecision(prisma: PrismaClient, runId: string,
         })
       : [];
   if (parents.some((parent) => parent.cancelRequestedAt)) throw new DispatchStopRequested();
+  let presence: Extract<RemotePolicyDecision, { kind: "presence" }> | null = null;
   for (const id of new Set(
     [
       run.originDeviceGrantId,
@@ -102,9 +104,14 @@ export async function currentRemoteDecision(prisma: PrismaClient, runId: string,
       { ...run, originDeviceGrantId: id },
       tool,
     );
-    if (!decision.allowed) return decision;
+    if (decision.allowed) continue;
+    if (decision.kind === "presence") {
+      presence ??= decision;
+      continue;
+    }
+    return decision;
   }
-  return { allowed: true as const };
+  return presence ?? { allowed: true as const };
 }
 /** Built-ins have a deployment-local resource boundary, just as connectors have a revisioned resource. */
 export function remoteBuiltinApprovalRoute(

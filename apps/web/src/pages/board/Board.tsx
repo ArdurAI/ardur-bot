@@ -31,6 +31,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { LoadingState } from "../../components/ai/primitives";
 import { rpc } from "../../lib/rpc";
 import { BoardColumns } from "./BoardColumns";
+import { FiledBy } from "./FiledBy";
 import { DependencyGraph } from "./Graph";
 import { ItemForm } from "./ItemForm";
 
@@ -575,6 +576,7 @@ export function Board({
                   <p className="text-sm text-muted-foreground">
                     {selected.id} · P{selected.priority} · {selected.type}
                   </p>
+                  {selected.filedBy ? <FiledBy filing={selected.filedBy} /> : null}
                   <p className="whitespace-pre-wrap">{selected.description}</p>
                   {selected.acceptanceCriteria ? (
                     <div>

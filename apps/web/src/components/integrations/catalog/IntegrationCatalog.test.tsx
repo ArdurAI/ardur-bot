@@ -9,6 +9,9 @@ import { IntegrationCatalog } from "./IntegrationCatalog";
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   servers: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
+  approve: vi.fn(),
   connect: vi.fn(),
   grants: vi.fn(),
   assign: vi.fn(),
@@ -16,6 +19,8 @@ const api = vi.hoisted(() => ({
   cancel: vi.fn(),
   bots: vi.fn(),
   consent: vi.fn(),
+  oauth: vi.fn(),
+  catalogSearch: vi.fn(),
   discover: vi.fn(),
   resourceTools: vi.fn(),
   searchResources: vi.fn(),
@@ -27,18 +32,24 @@ vi.mock("../../../lib/rpc", () => ({
     integrations: api,
     bots: { list: api.bots },
     computer: { list: api.computers },
-    mcp: { servers: { list: api.servers } },
+    capabilities: { catalogSearch: api.catalogSearch },
+    mcp: {
+      servers: { list: api.servers, create: api.create, update: api.update },
+      assignments: { approve: api.approve },
+    },
   },
 }));
 vi.mock("../../../lib/mcp-connect", () => ({
   MCP_OAUTH_CHANNEL: "test",
   waitForMcpOauth: api.consent,
+  connectMcpOauth: api.oauth,
 }));
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (parts: TemplateStringsArray, ...values: unknown[]) =>
       parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
   }),
+  Trans: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@ardurbot/ui-web", () => {
   const Container = (props: ComponentProps<"div">) => <div {...props} />;
@@ -214,6 +225,8 @@ beforeEach(() => {
     };
   });
   api.consent.mockResolvedValue("connected");
+  api.oauth.mockResolvedValue("connected");
+  api.catalogSearch.mockResolvedValue({ enabled: true, results: [] });
   api.revoke.mockImplementation(async () => {
     connections = [{ ...connected, state: "not-connected", manifest: null }];
   });
@@ -392,7 +405,124 @@ describe("Settings integration catalog", () => {
     expect(container.textContent).not.toContain("fake-sensitive");
     expect(button("Try again")).toBeDefined();
   });
+
+  it("keeps a built-in app's row when a raw server uses its address", async () => {
+    api.servers.mockImplementation(async () => [
+      {
+        id: "raw-server",
+        name: "Self-added server",
+        endpoint: "https://example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "connected",
+        connectionState: "not-connected",
+        catalogId: null,
+      },
+    ]);
+    await mount();
+    const githubRow = [...container.querySelectorAll("tbody tr")].find((entry) =>
+      entry.textContent?.includes("GitHub"),
+    );
+    expect(githubRow?.textContent).not.toContain("Manage");
+    expect(container.textContent).not.toContain("Self-added server");
+  });
+
+  it("renders Find apps and keeps public search closed until it is opened", async () => {
+    await mount();
+    expect(container.querySelector('[aria-label="Search apps"]')).toBeNull();
+    expect(button("Find apps")).toBeDefined();
+    await click(button("Find apps"));
+    expect(container.querySelector('[aria-label="Search apps"]')).not.toBeNull();
+    expect(button("Search integrations.sh")).toBeDefined();
+    expect(container.textContent).toContain("Add server URL");
+  });
+
+  it("searches the public catalog and lists each result with Connect", async () => {
+    api.catalogSearch.mockResolvedValue({
+      enabled: true,
+      results: [publicResult],
+    });
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "Figma");
+    await click(button("Search integrations.sh"));
+    expect(api.catalogSearch).toHaveBeenCalledWith({ query: "Figma", usePublicCatalog: true });
+    expect(resultConnect("Figma")).toBeDefined();
+  });
+
+  it("connecting a public catalog result refreshes the table", async () => {
+    const added: Array<Record<string, unknown>> = [];
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    api.servers.mockImplementation(async () => [
+      ...connections.map((connection) => ({
+        id: connection.id,
+        name: catalog.find((item) => item.id === connection.catalogId)?.name,
+        catalogId: connection.catalogId,
+        transport: "streamable_http",
+        enabled: connection.state !== "not-connected",
+        oauthStatus: "none",
+        connectionState: connection.state,
+      })),
+      ...added,
+    ]);
+    api.create.mockImplementation(async (input: { name: string; endpoint: string }) => {
+      const server = {
+        id: "added-server",
+        name: input.name,
+        endpoint: input.endpoint,
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "connected",
+        connectionState: "connected",
+        catalogId: null,
+      };
+      added.push(server);
+      return server;
+    });
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "Figma");
+    await click(button("Search integrations.sh"));
+    const listsBefore = api.list.mock.calls.length;
+    await click(resultConnect("Figma")!);
+    await vi.waitFor(() => {
+      expect(api.list.mock.calls.length).toBeGreaterThan(listsBefore);
+      const row = [...container.querySelectorAll("tbody tr")].find((entry) =>
+        entry.textContent?.includes("Figma"),
+      );
+      expect(row?.textContent).toContain("Connected");
+    });
+    expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Figma",
+        transport: "streamable_http",
+        endpoint: "https://mcp.figma.example.test/mcp",
+      }),
+    );
+  });
 });
+
+const publicResult = {
+  domain: "figma.example.test",
+  name: "Figma",
+  description: "",
+  pageUrl: null,
+  surfaces: [
+    {
+      kind: "mcp" as const,
+      slug: "figma",
+      source: "https://mcp.figma.example.test/mcp",
+      auth: null,
+    },
+  ],
+};
+
+function resultConnect(name: string) {
+  const label = [...container.querySelectorAll("span")].find((node) => node.textContent === name);
+  return [...(label?.parentElement?.querySelectorAll("button") ?? [])].find(
+    (node) => node.textContent === "Connect",
+  );
+}
 
 async function fill(label: string, value: string) {
   const input = container.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)!;

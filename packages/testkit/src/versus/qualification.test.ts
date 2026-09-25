@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { contentDigest } from "../scoreboard/manifest.js";
 import {
+  assessContainerCohort,
   inspectLocalRoute,
   parseQualificationArguments,
   runQualification,
@@ -41,6 +42,103 @@ function fixture() {
   return { responses, show, transport, requests };
 }
 describe("non-generating live prerequisites", () => {
+  it("plans a container cohort only from an explicit lane and approval value", () => {
+    const required = [
+      "--expected-hermes-revision",
+      "29112bef099274229cadff79cdff7bf7b99c4b77",
+      "--endpoint",
+      "http://127.0.0.1:11434",
+      "--model",
+      "qwen3:8b",
+      "--model-digest",
+      "a".repeat(64),
+      "--quantization",
+      "Q4_K_M",
+      "--context-size",
+      "32768",
+      "--out",
+      "report",
+    ];
+    expect(parseQualificationArguments(required)).not.toHaveProperty("--container-cohort-approval");
+    expect(
+      parseQualificationArguments([
+        ...required,
+        "--lane",
+        "container",
+        "--container-cohort-approval",
+        "approved",
+        "--container-report",
+        "container-qualification.json",
+      ]),
+    ).toMatchObject({
+      "--lane": "container",
+      "--container-cohort-approval": "approved",
+    });
+    expect(() => parseQualificationArguments([...required, "--lane", "native"])).toThrow(
+      "Unknown qualification lane",
+    );
+    expect(() =>
+      parseQualificationArguments([...required, "--container-cohort-approval", "approved"]),
+    ).toThrow("require --lane container");
+    expect(() =>
+      parseQualificationArguments([
+        ...required,
+        "--lane",
+        "container",
+        "--container-cohort-approval",
+        "yes",
+      ]),
+    ).toThrow("explicit value approved");
+  });
+  it("keeps the container canary blocked when the approved context is below the Hermes minimum", () => {
+    const counter = { cap: 2, admitted: 2, nextRefused: true, effectAfterRefusal: false };
+    const report = {
+      realModelCalls: 0,
+      imagePulls: 0,
+      packageDownloads: 0,
+      checks: [
+        {
+          name: "aggregate-disk-cap",
+          passed: true,
+          evidence: { mechanism: "tmpfs-size", capBytes: 8388608, containerAlive: true },
+        },
+        {
+          name: "tool-and-descendant-admission",
+          passed: true,
+          evidence: {
+            toolCalls: counter,
+            descendants: { helpers: counter, commands: counter },
+          },
+        },
+        { name: "product-tool-round-trip", passed: true, evidence: {} },
+        {
+          name: "dependency-manifest",
+          passed: true,
+          evidence: { missingPackages: [], missingBytes: 0 },
+        },
+      ],
+    };
+    const blocked = assessContainerCohort({
+      approval: "approved",
+      report,
+      routeContext: 32768,
+      architectureMaximum: 40960,
+    });
+    expect(blocked.ready).toBe(false);
+    expect(blocked.gates.aggregateDisk).toBe(true);
+    expect(blocked.gates.toolAndDescendantAdmission).toBe(true);
+    expect(blocked.gates.productToolRoundTrip).toBe(true);
+    expect(blocked.failures.join("\n")).toContain("64000");
+    expect(blocked.failures.join("\n")).toContain("active context");
+    expect(
+      assessContainerCohort({
+        approval: undefined,
+        report: null,
+        routeContext: 32768,
+        architectureMaximum: 40960,
+      }).gates.approval,
+    ).toBe(false);
+  });
   it("prints help without probing or discovery and rejects accidental live options", async () => {
     const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
     try {

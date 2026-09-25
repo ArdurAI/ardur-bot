@@ -444,7 +444,7 @@ msgstr "Add remote MCP server"
 msgid "Add server"
 msgstr "Add server"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Add server URL"
 msgstr "Add server URL"
 
@@ -1113,6 +1113,11 @@ msgstr "Bots act without asking by default. Add an exception only when you want 
 msgid "Bots are working"
 msgstr "Bots are working"
 
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Bots keep the board and memory current"
+msgstr "Bots keep the board and memory current"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr "Brain label"
@@ -1717,6 +1722,7 @@ msgid "Confluence space keys or IDs"
 msgstr "Confluence space keys or IDs"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -1769,6 +1775,7 @@ msgid "Connect Treg"
 msgstr "Connect Treg"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/IntegrationTable.tsx
@@ -2032,11 +2039,13 @@ msgstr "Could not complete the request."
 msgid "Could not complete the update. Try again."
 msgstr "Could not complete the update. Try again."
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Could not complete this action."
 msgstr "Could not complete this action."
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
@@ -3155,6 +3164,7 @@ msgstr "Effort: not applicable"
 msgid "Email"
 msgstr "Email"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3385,6 +3395,10 @@ msgstr "Failures"
 msgid "Feedback corrections"
 msgstr "Feedback corrections"
 
+#: src/pages/board/FiledBy.tsx
+msgid "Filed by {name}"
+msgstr "Filed by {name}"
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr "Filter"
@@ -3392,6 +3406,10 @@ msgstr "Filter"
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
 msgstr "Find a destination"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Find apps"
+msgstr "Find apps"
 
 #: src/pages/shell/terminal-session.tsx
 msgid "Find in terminal"
@@ -4067,6 +4085,19 @@ msgstr "Learning inbox"
 #: src/pages/LearningInbox.tsx
 msgid "Learning is off for this space."
 msgstr "Learning is off for this space."
+
+#: src/pages/board/BoardsSettings.tsx
+#: src/pages/settings-sections.ts
+msgid "Learning review"
+msgstr "Learning review"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is off"
+msgstr "Learning review is off"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "Learning review is on"
+msgstr "Learning review is on"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -4881,7 +4912,7 @@ msgstr "No providers found."
 msgid "No ready work"
 msgstr "No ready work"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "No remote MCP servers found"
 msgstr "No remote MCP servers found"
 
@@ -4890,6 +4921,10 @@ msgstr "No remote MCP servers found"
 #: src/pages/SpaceSearch.tsx
 msgid "No results"
 msgstr "No results"
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "No reviewer model yet."
+msgstr "No reviewer model yet."
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
@@ -6154,6 +6189,10 @@ msgstr "Review tools before your bots can use this account."
 msgid "Reviewer"
 msgstr "Reviewer"
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "Reviewer: {reviewer}"
+msgstr "Reviewer: {reviewer}"
+
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."
 msgstr "Reviews use this connection and may incur model charges."
@@ -6421,7 +6460,7 @@ msgstr "Screen recording"
 msgid "Search"
 msgstr "Search"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Search apps"
 msgstr "Search apps"
@@ -6438,7 +6477,7 @@ msgstr "Search by domain"
 msgid "Search integrations"
 msgstr "Search integrations"
 
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Search integrations.sh"
 msgstr "Search integrations.sh"
 
@@ -6571,6 +6610,7 @@ msgstr "Server logs"
 msgid "Server name"
 msgstr "Server name"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/components/OllamaSettings.tsx
 #: src/pages/customize/DeveloperPage.tsx

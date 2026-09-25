@@ -38,6 +38,14 @@ const commands: Record<string, { values?: string[]; flags?: string[]; min: numbe
 const refuse = () => {
   throw new BoardError({ code: "forbidden", message: "This board command is not allowed." });
 };
+function allowedBoardMetadata(value: string): boolean {
+  return (
+    /^ardur_close_when_done=(true|false)$/.test(value) ||
+    /^ardur_run_id=[A-Za-z0-9_-]{1,128}$/.test(value) ||
+    /^ardur_bot_id=[A-Za-z0-9_-]{1,128}$/.test(value) ||
+    /^ardur_filed_by=[\p{L}\p{N}][\p{L}\p{N} ._'’-]{0,79}$/u.test(value)
+  );
+}
 /** Validate a complete command grammar. Global flags, file inputs and shell execution are absent. */
 export function validateBoardArgv(argv: string[]) {
   if (!argv.length || argv.length > 128 || argv.some((s) => s.includes("\0") || s.length > 32_000))
@@ -57,8 +65,7 @@ export function validateBoardArgv(argv: string[]) {
     if (!literal && arg.startsWith("-")) {
       if (spec.flags?.includes(arg)) continue;
       if (!spec.values?.includes(arg) || ++i >= argv.length) return refuse();
-      if (arg === "--set-metadata" && !/^ardur_close_when_done=(true|false)$/.test(argv[i]!))
-        return refuse();
+      if (arg === "--set-metadata" && !allowedBoardMetadata(argv[i]!)) return refuse();
       if (arg === "--limit" && !/^(0|[1-9][0-9]{0,3})$/.test(argv[i]!)) return refuse();
       continue;
     }

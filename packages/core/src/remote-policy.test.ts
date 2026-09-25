@@ -77,6 +77,26 @@ describe("remote execution ceiling", () => {
   ])("classifies %s on the server, without trusting a connector hint", (tool) => {
     expect(classifyRemoteTool(tool)).toBe("consequential");
   });
+  it("separates a stale presence from missing authority", () => {
+    expect(
+      checkRemoteTool({
+        tool: "board_create",
+        authority,
+        revoked: false,
+        lastPresenceAt: now - 11 * 60_000,
+        now,
+      }),
+    ).toMatchObject({ allowed: false, kind: "presence", action: "Confirm on your phone" });
+    expect(
+      checkRemoteTool({
+        tool: "board_create",
+        authority: { ...authority, device: ["dispatch", "ordinary"] },
+        revoked: false,
+        lastPresenceAt: now,
+        now,
+      }),
+    ).toMatchObject({ allowed: false, kind: "authority", action: "Approve on your Mac" });
+  });
   it("allows a deploy only with scope and a fresh, non-future presence proof", () => {
     const input = { tool: "deploy", authority, revoked: false, now };
     expect(checkRemoteTool({ ...input, lastPresenceAt: now - 599_999 }).allowed).toBe(true);

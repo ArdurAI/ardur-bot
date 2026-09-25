@@ -4,6 +4,7 @@ import {
   BOARD_LINK_TYPES,
   BoardClaimFilterSchema,
   BoardCreateSchema,
+  BoardDeniedError,
   BoardError,
   BoardFilterSchema,
   BoardItemIdSchema,
@@ -13,6 +14,26 @@ import type { PrismaClient } from "@ardurbot/db";
 import { z } from "zod";
 import type { BoardScope } from "./service.js";
 import { BoardService } from "./service.js";
+import {
+  alternateBoardSentence,
+  BOARD_WRITE_TOOLS,
+  type BoardToolAccess,
+  type BoardUnavailableReason,
+  boardUnavailableSentence,
+  duplicateBoardItemMessage,
+  filingBotName,
+  isBoardUnreachable,
+  normalizeBoardTitle,
+  redactBoardText,
+  withBotFiledLabel,
+} from "./upkeep.js";
+
+export type BoardToolRunOptions = {
+  upkeep?: boolean;
+  secrets?: string[];
+  board?: BoardToolAccess;
+  reason?: BoardUnavailableReason | null;
+};
 
 const workspace = z.object({ workspaceId: z.string().optional() });
 const item = workspace.extend({ id: BoardItemIdSchema });
@@ -57,28 +78,144 @@ export const boardTools: ConnectorTool[] = Object.entries(boardToolSchemas).map(
   }),
 );
 export const BOARD_TOOL_NAMES = new Set(boardTools.map((tool) => tool.name));
+function workspaceIdOf(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object" || !("workspaceId" in raw)) return undefined;
+  return typeof raw.workspaceId === "string" && raw.workspaceId ? raw.workspaceId : undefined;
+}
+function createdIncomplete(error: unknown): boolean {
+  return error instanceof BoardError && error.problem.code === "created_incomplete";
+}
+async function admittedWorkspaceIds(service: BoardService, scope: BoardScope) {
+  try {
+    return (await service.botBoardChoices(scope)).admitted.map((row) => row.id);
+  } catch (error) {
+    if (isBoardUnreachable(error)) return "unreachable" as const;
+    throw error;
+  }
+}
+async function deniedBoardError(service: BoardService, scope: BoardScope, error: unknown) {
+  if (isBoardUnreachable(error)) return { error: boardUnavailableSentence("unreachable") };
+  if (!(error instanceof BoardDeniedError)) return null;
+  const ids = await admittedWorkspaceIds(service, scope);
+  if (ids === "unreachable") return { error: boardUnavailableSentence("unreachable") };
+  if (ids.length) return { error: alternateBoardSentence(ids) };
+  return null;
+}
 export async function executeBoardTool(
   service: BoardService,
   scope: BoardScope,
   name: string,
   raw: unknown,
+  options: BoardToolRunOptions = {},
 ) {
   const schema = boardToolSchemas[name as keyof typeof boardToolSchemas];
   if (!schema) throw new Error("Unknown board tool.");
+  const blocked =
+    Boolean(options.upkeep && options.board && options.board !== "write") &&
+    (options.board === "none" || BOARD_WRITE_TOOLS.has(name));
+  if (blocked) {
+    const reason = options.reason ?? (options.board === "read" ? "read-only" : "no-board");
+    if (!(options.board === "none" && reason === "no-board"))
+      return { error: boardUnavailableSentence(reason) };
+    const requestedId = workspaceIdOf(raw);
+    if (!requestedId) {
+      const ids = await admittedWorkspaceIds(service, scope);
+      if (ids === "unreachable") return { error: boardUnavailableSentence("unreachable") };
+      if (ids.length) return { error: alternateBoardSentence(ids) };
+      return { error: boardUnavailableSentence("no-board") };
+    }
+    try {
+      await service.workspace(scope, requestedId);
+    } catch (error) {
+      const hinted = await deniedBoardError(service, scope, error);
+      if (hinted) return hinted;
+      if (!(error instanceof BoardError)) throw error;
+      return { error: boardUnavailableSentence("no-board") };
+    }
+  }
   const input = schema.parse(raw);
-  const provider = await service.provider(scope, input.workspaceId);
+  const secrets = options.secrets ?? [];
+  let provider: Awaited<ReturnType<BoardService["provider"]>>;
+  try {
+    provider = await service.provider(scope, input.workspaceId);
+  } catch (error) {
+    const hinted = await deniedBoardError(service, scope, error);
+    if (hinted) return hinted;
+    throw error;
+  }
   switch (name) {
     case "board_ready":
       return { items: await provider.ready(boardToolSchemas.board_ready.parse(raw).filter) };
     case "board_show":
       return provider.show(boardToolSchemas.board_show.parse(raw).id);
-    case "board_create":
-      return provider.create(boardToolSchemas.board_create.parse(raw).item);
+    case "board_create": {
+      const args = boardToolSchemas.board_create.parse(raw);
+      const item = {
+        ...args.item,
+        ...(args.item.title ? { title: redactBoardText(args.item.title, secrets) } : {}),
+        ...(args.item.description !== undefined
+          ? { description: redactBoardText(args.item.description, secrets) }
+          : {}),
+        ...(args.item.acceptanceCriteria !== undefined
+          ? { acceptanceCriteria: redactBoardText(args.item.acceptanceCriteria, secrets) }
+          : {}),
+      };
+      if (!options.upkeep) return provider.create(item);
+      const outcome = await service.withFilingLock(scope, async (tx) => {
+        const title = normalizeBoardTitle(item.title);
+        const existing = (await provider.list()).find(
+          (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
+        );
+        if (existing)
+          return {
+            kind: "done" as const,
+            value: {
+              item: existing,
+              duplicate: true,
+              message: duplicateBoardItemMessage(existing.id),
+            },
+          };
+        const reserved = await service.reserveBotFiling(scope, tx);
+        if (!reserved.ok) return { kind: "done" as const, value: { error: reserved.message } };
+        let created: Awaited<ReturnType<typeof provider.create>> | undefined;
+        try {
+          created = await provider.create({ ...item, labels: withBotFiledLabel(item.labels) });
+          if (!scope.runId || !scope.botId || typeof provider.noteFiling !== "function")
+            return { kind: "done" as const, value: created };
+          const actor = await service.actor(scope);
+          return {
+            kind: "done" as const,
+            value: await provider.noteFiling(created.id, {
+              runId: scope.runId,
+              botId: scope.botId,
+              botName: filingBotName(actor.startsWith("bot:") ? actor.slice(4) : actor),
+            }),
+          };
+        } catch (error) {
+          if (created || createdIncomplete(error)) return { kind: "incomplete" as const, error };
+          throw error;
+        }
+      });
+      if (outcome.kind === "incomplete") throw outcome.error;
+      return outcome.value;
+    }
     case "board_update": {
       const args = boardToolSchemas.board_update.parse(raw);
       if (args.patch.status === "closed")
         await service.assertBotMayClose(scope, input.workspaceId, [args.id]);
-      return provider.update(args.id, args.patch);
+      const patch = {
+        ...args.patch,
+        ...(args.patch.title !== undefined
+          ? { title: redactBoardText(args.patch.title, secrets) }
+          : {}),
+        ...(args.patch.description != null
+          ? { description: redactBoardText(args.patch.description, secrets) }
+          : {}),
+        ...(args.patch.acceptanceCriteria != null
+          ? { acceptanceCriteria: redactBoardText(args.patch.acceptanceCriteria, secrets) }
+          : {}),
+      };
+      return provider.update(args.id, patch);
     }
     case "board_claim": {
       const args = boardToolSchemas.board_claim.parse(raw);
@@ -87,11 +224,11 @@ export async function executeBoardTool(
     case "board_close": {
       const args = boardToolSchemas.board_close.parse(raw);
       await service.assertBotMayClose(scope, input.workspaceId, args.ids);
-      return provider.close(args.ids, args.reason);
+      return provider.close(args.ids, redactBoardText(args.reason, secrets));
     }
     case "board_comment": {
       const args = boardToolSchemas.board_comment.parse(raw);
-      return provider.comment(args.id, args.text);
+      return provider.comment(args.id, redactBoardText(args.text, secrets));
     }
     case "board_link": {
       const args = boardToolSchemas.board_link.parse(raw);

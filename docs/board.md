@@ -57,9 +57,14 @@ one `<app home>/board/.beads/` for every space would share unrelated work. Prefi
 are derived from the space name. `board_workspaces` records kind, path, prefix,
 enabled state and ownership. Existing folder prefixes are read from Beads.
 
-Registered folders appear in the picker. Existing `.beads/` folders are opened
-directly. An empty registered folder requires the owner to choose
-`Start board`; a dialog lists the files before initialization.
+Registered folders appear in the picker. A folder whose `.beads/` directory
+contains `metadata.json` or `config.yaml` is opened directly. A `.beads/`
+directory that has `beads.db` or `embeddeddolt/` but neither settings file is
+not a board: discovery reports it as not initialized, and Start board refuses
+with "This folder has board data without its settings files. Move its .beads
+folder aside, then start the board." Nothing is deleted. An empty registered
+folder requires the owner to choose `Start board`; a dialog lists the files
+before initialization.
 The exact initialization flags tested against `bd version 1.2.2 (6c124203e)` are:
 
 ```text
@@ -138,9 +143,31 @@ not a full Dolt backup.
 
 `board_ready`, `board_show`, `board_create`, `board_update`, `board_claim`,
 `board_close`, `board_comment` and `board_link` use the shared tool registry for
-all supported runtimes. Reads are read-only; writes go through the existing
-low-risk action approval rules. Webhook authority does not bypass approvals.
-There is no delete tool.
+all supported runtimes, including Pi, Claude Code and Codex. Reads are read-only;
+writes go through the existing low-risk action approval rules. Webhook authority
+does not bypass approvals. There is no delete tool.
+
+Settings → Customize → Boards includes "Bots keep the board and memory current".
+It is on by default. While it is on, a bot that can reach an enabled board receives
+those tools and a short instruction: claim or link the item this run serves, file
+unfinished work after checking for an open item with the same title, comment
+outcomes, close finished items with a reason, and record durable learnings with
+`remember`. If there is no board, the computer is unreachable, or the run is
+read-only, the instruction says so in one sentence and only tools that can run are
+offered. If the default board does not admit the bot but another initialized board
+does, the tools stay and the instruction adds `Pass workspaceId <id>.` Turning the
+setting off removes that instruction, the filing caps, the duplicate-title check
+and the `bot-filed` label. The same row shows whether learning review is on, the
+reviewer model, and Enable. Enable uses the existing learning configure call. Learning review stays
+off until someone turns it on.
+
+Bot-created items keep the actor `bot:<name>`, the label `bot-filed`, and the run
+id in Beads metadata while the setting is on. The server allows 5 new items per run
+and 30 per space each hour, and returns an existing open item when the normalized
+title matches. It redacts that run's secrets from titles, descriptions, acceptance
+criteria, comments and close reasons whether or not the setting is on. Read-only
+grants still reject writes. A stale phone confirmation does not make the board
+read-only; the run pauses for confirmation the same way as other consequential tools.
 
 Send to a bot creates a normal conversation turn containing the item's title,
 description and acceptance criteria. The item becomes in progress, assigned to

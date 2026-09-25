@@ -22,15 +22,25 @@ import {
   stopNative,
 } from "./native-process.js";
 
-function claudePatch(version?: string): number | undefined {
-  const match = version?.match(/^2\.1\.(\d+)$/);
-  return match ? Number(match[1]) : undefined;
+function supportedClaudeVersion(version?: string) {
+  const match = version?.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return false;
+  const [, major, minor, patch] = match.map(Number);
+  return major! > 2 || (major === 2 && (minor! > 1 || (minor === 1 && patch! >= 259)));
 }
 
-export function claudeModels(version?: string): RuntimeAvailability["models"] {
-  // CLI/model documentation checked through 2.1.281; unknown versions retain low only.
-  const patch = claudePatch(version);
-  const documented = patch !== undefined && patch >= 259 && patch <= 281;
+const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+export function parseClaudeEfforts(help: string) {
+  const advertised = /--effort\s+<level>[\s\S]{0,240}?\(([^)\r\n]+)\)/.exec(help)?.[1];
+  if (!advertised) return ["low"];
+  const values = advertised.split(",").map((value) => value.trim());
+  const efforts = CLAUDE_EFFORTS.filter((effort) => values.includes(effort));
+  return efforts.includes("low") ? efforts : ["low"];
+}
+
+export function claudeModels(version?: string, help = ""): RuntimeAvailability["models"] {
+  const efforts = supportedClaudeVersion(version) ? parseClaudeEfforts(help) : ["low"];
   // Native compatibility is explicit; importing the Pi provider registry here pulls
   // unrelated SDKs into the packaged host. Keep the catalog conformance test in sync.
   return [
@@ -46,11 +56,9 @@ export function claudeModels(version?: string): RuntimeAvailability["models"] {
   ].map(([id, label]) => ({
     id: id!,
     label: label!,
-    efforts: !documented
-      ? ["low"]
-      : id === "claude-opus-4-6" || id === "claude-sonnet-4-6"
-        ? ["low", "medium", "high", "max"]
-        : ["low", "medium", "high", "xhigh", "max"],
+    efforts: efforts.filter(
+      (effort) => effort !== "xhigh" || (id !== "claude-opus-4-6" && id !== "claude-sonnet-4-6"),
+    ),
   }));
 }
 
@@ -63,22 +71,27 @@ export async function probeClaude(start = spawnNative): Promise<RuntimeAvailabil
     const { code, version } = await probeCommand(binary, ["--version"], true, start);
     if (code !== 0 || !version)
       return { ...base, available: false, reason: "Claude Code is unavailable on this computer." };
-    const patch = claudePatch(version);
-    if (patch === undefined || patch < 259)
+    if (!supportedClaudeVersion(version))
       return {
         ...base,
         version,
         available: false,
         reason: "Update Claude Code to use this runtime.",
       };
+    const help = await probeCommand(binary, ["--help"], true, start);
+    const hasEffortLine = help.code === 0 && /--effort\s+<level>/.test(help.output ?? "");
     // Documented exit status only. Authentication output is consumed and discarded.
     const auth = await probeCommand(binary, ["auth", "status"], false, start);
     return {
       ...base,
       version,
-      models: claudeModels(version),
+      models: claudeModels(version, help.output),
       available: auth.code === 0,
-      ...(auth.code === 0 ? {} : { reason: "Not signed in — run `claude` in a terminal once" }),
+      ...(auth.code !== 0
+        ? { reason: "Not signed in — run `claude` in a terminal once" }
+        : !hasEffortLine
+          ? { reason: "Update Claude Code to choose a thinking effort." }
+          : {}),
     };
   } catch {
     return { ...base, available: false, reason: "Claude Code is unavailable on this computer." };
@@ -322,13 +335,16 @@ export class ClaudeCodeRuntime implements AgentRuntime {
     const { code, version } = await probeCommand(binary, ["--version"], true, this.start).catch(
       () => ({ code: -1, version: undefined }),
     );
-    const patch = claudePatch(version);
-    if (code !== 0 || patch === undefined || patch < 259)
+    if (code !== 0 || !supportedClaudeVersion(version))
       throw new RuntimePinError(
         runtimePinProblem(pin, "runtime-unavailable", "Update Claude Code to use this runtime."),
       );
-    const model = claudeModels(version).find((entry) => entry.id === pin.modelId);
-    if (!model || !model.efforts.includes(pin.effort ?? ""))
+    const help = await probeCommand(binary, ["--help"], true, this.start).catch(() => ({
+      code: -1,
+      output: undefined,
+    }));
+    const model = claudeModels(version, help.output).find((entry) => entry.id === pin.modelId);
+    if (!model?.efforts.includes(pin.effort ?? ""))
       throw new RuntimePinError(
         runtimePinProblem(
           pin,

@@ -10,6 +10,12 @@ import { RuntimeInfoSchema } from "@ardurbot/contracts/runtime-pins";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import * as z from "zod";
 
+/** The host turn receives the same tool catalog the executor selected, including board tools. */
+export function advertisedHostTools(tools: AgentRunRequest["tools"]) {
+  if (tools === "none") return "none" as const;
+  return tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+}
+
 export class RemoteHostRuntime implements AgentRuntime {
   private active = new Map<string, AbortController>();
   constructor(
@@ -52,14 +58,7 @@ export class RemoteHostRuntime implements AgentRuntime {
       nativeSession: request.nativeSession,
       nativeCwd: request.nativeCwd?.startsWith("host:") ? undefined : request.nativeCwd,
       sourceMessageId: request.sourceMessageId,
-      tools:
-        request.tools === "none"
-          ? "none"
-          : request.tools.map(({ name, description, inputSchema }) => ({
-              name,
-              description,
-              inputSchema,
-            })),
+      tools: advertisedHostTools(request.tools),
       model: {
         runtimePin: request.model.runtimePin,
         provider: request.model.provider,

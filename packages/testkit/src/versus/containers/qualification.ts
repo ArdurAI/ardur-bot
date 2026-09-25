@@ -13,7 +13,7 @@ import { startGateway } from "../gateway.js";
 import { createTrialDirectory, destroyOwnedDirectory } from "../isolation.js";
 import { bytesHash, inspectBuild, sanitize } from "../provenance.js";
 import { selfTestBudget } from "../self-test.js";
-import { probeCommandAdmission } from "./command-probe.js";
+import { probeBudgetAdmission } from "./command-probe.js";
 import { qualifyCancellation, qualifyOrdinaryExecution } from "./ordinary.js";
 import {
   COMPUTER_IMAGE,
@@ -22,6 +22,7 @@ import {
   HERMES_IMAGE_PAYLOAD_BYTES,
   HERMES_PULL,
 } from "./policy.js";
+import { assessAggregateDisk, qualifyHermesProduct } from "./product-roundtrip.js";
 import { ContainerSession, inspectImage } from "./session.js";
 
 export async function capture(session: ContainerSession, script: string) {
@@ -51,7 +52,7 @@ config = json.load(open('/opt/data/state/config.yaml'))
 def post(url, value):
     req = urllib.request.Request(url, data=json.dumps(value).encode(), headers={'Content-Type':'application/json'})
     with urllib.request.urlopen(req, timeout=10) as response: return json.load(response)
-broker = config['mcp_servers']['scoreboard']['url']
+broker = config['mcp_servers']['mcp-scoreboard']['url']
 post(broker, {'jsonrpc':'2.0','id':1,'method':'initialize','params':{}})
 post(broker, {'jsonrpc':'2.0','id':2,'method':'tools/call','params':{'name':'read_file','arguments':{'path': config.get('fixture_input', 'brief.md')}}})
 response = post(config['model']['base_url'] + '/chat/completions', {'model':config['model']['default'],'messages':[{'role':'user','content':open('/opt/data/state/query.txt').read()}]})
@@ -180,10 +181,11 @@ print(json.dumps(out))
       evidence: other.proof,
     });
     await other.destroy();
+    const admission = await probeBudgetAdmission(session, budget);
     report.checks.push({
-      name: "command-pre-effect-descendant-admission",
-      passed: true,
-      evidence: await probeCommandAdmission(session),
+      name: "tool-and-descendant-admission",
+      passed: admission.passed,
+      evidence: admission.evidence,
     });
     const cpu = await capture(
       session,
@@ -212,18 +214,25 @@ print(json.dumps(out))
     });
     const disk = await capture(
       session,
-      `import json,os,errno\na='/opt/data/first'; b='/opt/data/second'; denied=False\nwith open(a,'wb') as f:f.write(b'a'*(3*1024*1024))\ntry:\n with open(b,'wb') as f:\n  for i in range(96):f.write(b'b'*65536)\nexcept OSError as e:denied=e.errno==errno.ENOSPC\nsizes=[os.stat(a).st_size,os.stat(b).st_size]\nprint(json.dumps({'enospc':denied,'sizes':sizes,'aggregateBytes':sum(sizes)}))\nos.unlink(a);os.unlink(b)`,
+      `import json,os,errno\nmount=""\nfor line in open("/proc/mounts"):\n parts=line.split()\n if len(parts)>1 and parts[1]=="/opt/data": mount=line.strip()\na="/opt/data/first"; b="/opt/data/second"; denied=False\nwith open(a,"wb") as f: f.write(b"a"*(3*1024*1024))\ntry:\n with open(b,"wb") as f:\n  for i in range(96): f.write(b"b"*65536)\nexcept OSError as e: denied=e.errno==errno.ENOSPC\nsizes=[os.stat(a).st_size, os.stat(b).st_size]\nprint(json.dumps({"enospc":denied,"sizes":sizes,"aggregateBytes":sum(sizes),"mount":mount}))\nos.unlink(a); os.unlink(b)`,
     );
-    const diskResult = JSON.parse(disk.stdout);
+    const diskResult = JSON.parse(disk.stdout) as {
+      enospc?: boolean;
+      sizes?: number[];
+      aggregateBytes?: number;
+      mount?: string;
+    };
+    const alive = disk.code === 0 ? await capture(session, "print('container-alive')") : null;
+    const diskAssessment = assessAggregateDisk({
+      code: disk.code,
+      probe: diskResult,
+      capBytes: budget.resources.diskBytes,
+      followUpCode: alive?.code ?? null,
+    });
     report.checks.push({
       name: "aggregate-disk-cap",
-      passed:
-        disk.code === 0 &&
-        diskResult.enospc &&
-        diskResult.sizes[0] === 3 * 1048576 &&
-        diskResult.sizes[1] < 6 * 1048576 &&
-        diskResult.aggregateBytes <= budget.resources.diskBytes,
-      evidence: diskResult,
+      passed: diskAssessment.passed && alive?.stdout.trim() === "container-alive",
+      evidence: diskAssessment.evidence,
     });
     const oom = await capture(session, "x=bytearray(256*1024*1024); print(len(x))");
     const memory = await capture(session, "print(open('/sys/fs/cgroup/memory.events').read())");
@@ -399,12 +408,32 @@ print(json.dumps(out))
           await destroyOwnedDirectory(trial);
         }
       }
+    } else if (report.checks.every((check) => check.passed)) {
+      const product = await qualifyHermesProduct(resource.state);
+      report.checks.push({
+        name: "dependency-manifest",
+        passed:
+          product.dependencyManifest.missingBytes === 0 &&
+          product.dependencyManifest.revisionMatchesImageLabel &&
+          product.dependencyManifest.packageDownloads === 0,
+        evidence: product.dependencyManifest,
+      });
+      report.checks.push({
+        name: "product-tool-round-trip",
+        passed: product.passed,
+        evidence: product.roundTrip ?? { failure: product.failure },
+      });
     }
-    report.status = report.checks.every((check) => check.passed)
-      ? standin
+    const productRoundTrip = report.checks.find(
+      (check) => check.name === "product-tool-round-trip",
+    );
+    report.status = !report.checks.every((check) => check.passed)
+      ? "failed"
+      : standin
         ? "standin-qualified"
-        : "container-boundary-qualified-product-unqualified"
-      : "failed";
+        : productRoundTrip?.passed
+          ? "product-qualified"
+          : "container-boundary-qualified-product-unqualified";
     if (report.status === "failed")
       report.failures.push(
         ...report.checks.filter((check) => !check.passed).map((check) => check.name),
@@ -442,7 +471,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     qualifyContainers(path.resolve(args[2]!), args[0] === "--stand-in")
       .then((report) => {
         console.log(`${report.status}; real model calls: 0`);
-        process.exitCode = report.status === "standin-qualified" ? 0 : 2;
+        process.exitCode =
+          report.status === "standin-qualified" || report.status === "product-qualified" ? 0 : 2;
       })
       .catch((error) => {
         console.error(sanitize(String(error)));

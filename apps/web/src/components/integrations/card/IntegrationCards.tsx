@@ -2,6 +2,7 @@ import type {
   IntegrationCatalogList,
   IntegrationConnection,
   IntegrationDescriptor,
+  McpServer,
 } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
@@ -14,6 +15,7 @@ import type { CatalogTab } from "../../../pages/customize/CustomizeControls";
 import { CustomizeToolbar } from "../../../pages/customize/CustomizeControls";
 import { connectorRows } from "../../../pages/customize/connector-rows";
 import { IntegrationTable } from "../../../pages/customize/IntegrationTable";
+import { DirectMcpSearch } from "../DirectMcpSearch";
 import { IntegrationDetails } from "../manage/IntegrationDetails";
 
 export function IntegrationCards({
@@ -26,7 +28,10 @@ export function IntegrationCards({
   const { t } = useLingui();
   const [tab, setTab] = useState<CatalogTab>("catalog");
   const [query, setQuery] = useState("");
+  const [finding, setFinding] = useState(false);
   const [data, setData] = useState<IntegrationCatalogList>({ catalog: [], connections: [] });
+  const [remoteServers, setRemoteServers] = useState<McpServer[]>([]);
+  const [linked, setLinked] = useState<ReadonlySet<string>>(() => new Set());
   const [selected, setSelected] = useState<string | null>(reconnectId ?? null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -42,15 +47,19 @@ export function IntegrationCards({
     return () => onBusyChange?.(false);
   }, [busy, onBusyChange]);
   const refresh = async () => {
-    setData(await refreshIntegrationCatalog());
+    const value = await readIntegrationPage();
+    setData(value.catalog);
+    setRemoteServers(value.servers);
     setError(false);
   };
   useEffect(() => {
     let active = true;
     const load = () => {
-      void refreshIntegrationCatalog()
+      void readIntegrationPage()
         .then((value) => {
-          if (active) setData(value);
+          if (!active) return;
+          setData(value.catalog);
+          setRemoteServers(value.servers);
         })
         .catch(() => {
           if (active) setError(true);
@@ -118,6 +127,7 @@ export function IntegrationCards({
       setBusy(null);
     }
   }
+  const customServers = customServerRows(data, remoteServers, linked);
   const active = data.connections.find(
     (row) =>
       row.id === selected &&
@@ -162,13 +172,38 @@ export function IntegrationCards({
         return null;
     }
   }
-  const rows = connectorRows({ ...data, servers: [], catalogTab: true }).filter(
+  const rows = [
+    ...connectorRows({ ...data, servers: [], catalogTab: true }),
+    ...connectorRows({ catalog: [], connections: [], servers: customServers }),
+  ].filter(
     (row) =>
       (tab === "catalog" || !row.id.startsWith("catalog:")) &&
       row.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
   );
   return (
     <div className="space-y-4" data-testid="integration-catalog">
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          aria-expanded={finding}
+          onClick={() => setFinding((open) => !open)}
+        >
+          {t`Find apps`}
+        </Button>
+      </div>
+      {finding ? (
+        <DirectMcpSearch
+          onConnected={async (id) => {
+            setLinked((current) => new Set(current).add(id));
+            try {
+              await refresh();
+            } catch {
+              setError(true);
+            }
+          }}
+        />
+      ) : null}
       <CustomizeToolbar
         tab={tab}
         onTab={setTab}
@@ -207,7 +242,8 @@ export function IntegrationCards({
           );
         }}
         renderActions={(row) => {
-          const entry = data.catalog.find((item) => item.id === row.catalogId)!;
+          const entry = data.catalog.find((item) => item.id === row.catalogId);
+          if (!entry) return null;
           const remote = data.connections.find(
             (row) => row.catalogId === entry.id && row.transport !== "host-cli",
           );
@@ -394,4 +430,60 @@ export function IntegrationCards({
       />
     </div>
   );
+}
+
+async function readIntegrationPage() {
+  const [catalog, servers] = await Promise.all([
+    refreshIntegrationCatalog(),
+    rpc.mcp.servers.list(),
+  ]);
+  return { catalog, servers };
+}
+
+/**
+ * integrations.list omits remote servers that have no catalog id. Only servers that match no
+ * built-in app get a row here: a built-in app keeps its own row and connect flow, because its
+ * access controls live on catalog connections, not on a raw server at the same address.
+ */
+function customServerRows(
+  data: IntegrationCatalogList,
+  servers: McpServer[],
+  linked: ReadonlySet<string>,
+): McpServer[] {
+  const known = new Set(data.connections.map((row) => row.id));
+  const builtInEndpoints = new Set(data.catalog.flatMap((entry) => entry.endpoint ?? []));
+  return servers.flatMap((server) => {
+    if (
+      known.has(server.id) ||
+      server.catalogId ||
+      (server.endpoint !== null && builtInEndpoints.has(server.endpoint))
+    )
+      return [];
+    const state = liveRemoteState(server, linked);
+    if (!state) return [];
+    return [
+      state === "connected"
+        ? { ...server, enabled: true, oauthStatus: "connected", connectionState: "connected" }
+        : { ...server, enabled: true, oauthStatus: "reconnect", connectionState: state },
+    ];
+  });
+}
+
+function liveRemoteState(
+  server: McpServer,
+  linked: ReadonlySet<string>,
+): IntegrationConnection["state"] | null {
+  if (server.managedBy) return null;
+  if (server.transport !== "streamable_http" && server.transport !== "sse") return null;
+  if (!server.enabled && !linked.has(server.id)) return null;
+  if (
+    linked.has(server.id) ||
+    server.oauthStatus === "connected" ||
+    server.connectionState === "connected"
+  )
+    return "connected";
+  if (server.oauthStatus === "reconnect" || server.connectionState === "needs-sign-in")
+    return "needs-sign-in";
+  if (server.connectionState === "discovery-failed") return "discovery-failed";
+  return null;
 }
