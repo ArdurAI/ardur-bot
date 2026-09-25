@@ -55,10 +55,13 @@ no development-Electron fallback. Headless Chromium is a separate web stratum. B
 W0-5 long `task-01` fixture, ordinary Pi adapter, real HTTP API, PostgreSQL and Graphile worker.
 The fixture is synthetic. Its normal pins, tools, Ask-first policy, revision checks, redaction and
 effect fences remain in force. Submission goes through the production composer; the existing
-hidden grader checks the saved outcome. Cookie/profile state is synthetic and discarded. A fresh
-loopback listener avoids contacting a running development server. Cached PostgreSQL and cleanup
-images are checked before provisioning. Provider credentials are omitted and the replay uses its
-existing loopback network boundary. That boundary is an in-process assertion, not an OS firewall.
+hidden grader checks the saved outcome. For desktop, synthetic cookies are written to the priming
+window's partition with a one-hour expiry so the measured relaunch stays authenticated, then the
+profile is removed. A fresh loopback listener avoids contacting a running development server. Cached
+PostgreSQL and cleanup images are checked before provisioning. Provider credentials are omitted.
+`DISPLAY`, `XAUTHORITY`, and `WAYLAND_DISPLAY` are kept so Electron can open the runner's virtual
+display. The replay uses its existing loopback network boundary. That boundary is an in-process
+assertion, not an OS firewall.
 
 The local driver currently supports process-cold/OS-warm, Chromium-cache-cold and primed warm
 relaunch for desktop, and fresh-context Chromium for web. Fresh-install, local-stack-cold and
@@ -99,8 +102,10 @@ reuse; Unix `ps` start-time precision is limited, so subsecond reuse still needs
 `RESOURCE_PROFILES` retains a 60-second stabilization phase followed by 15 minutes of idle,
 a separately named 30-minute quiet interval, or a two-hour mixed soak. One-second sample slots are
 fixed before collection. Failed and missed slots remain visible, sampling never overlaps itself,
-and mixed work runs independently of the sampler. `captureStackResources` persists each frame before
-continuing. `attachResourceMetrics` consumes the complete profile only; failed windows cannot
+and mixed work runs independently of the sampler. Stopping that work at the end of the window is
+not a workload failure; a workload that rejects for another reason still makes the window
+incomplete. `captureStackResources` persists each frame before continuing. `attachResourceMetrics`
+consumes the complete profile only; failed windows cannot
 establish idle/peak means or CPU deltas. Mixed soak requires a declared workload callback through
 the library API. High-water values remain in raw per-process records and are not replaced by a
 sampled peak. Network/writes are raw counters, not silently equated to process or machine energy.

@@ -256,6 +256,61 @@ describe("stabilized profiles", () => {
     expect(result.attempts).toBe(1);
     expect(result.complete).toBe(false);
   });
+  it("keeps a fully sampled soak when the collector cancels the last workload", async () => {
+    let now = 0;
+    let starts = 0;
+    const result = await collectResourceProfile({
+      profile: "mixed-soak",
+      signal: new AbortController().signal,
+      clock: {
+        now: () => now,
+        sleep: async (ms) => {
+          now += ms;
+        },
+      },
+      sample: async () => ({ atMs: now, processes: [] }),
+      mixedWork: (signal) =>
+        new Promise<void>((_resolve, reject) => {
+          starts++;
+          if (signal.aborted) {
+            reject(signal.reason);
+            return;
+          }
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+      onAttempt: async () => {},
+    });
+    expect(starts).toBe(1);
+    expect(result.attempts).toBe(RESOURCE_PROFILES["mixed-soak"].durationMs / 1000 + 1);
+    expect(result.failures).toBe(0);
+    expect(result.missed).toBe(0);
+    expect(result.workloadFailures).toBe(0);
+    expect(result.complete).toBe(true);
+  });
+  it("counts a workload that fails for its own reason", async () => {
+    let now = 0;
+    let runs = 0;
+    const result = await collectResourceProfile({
+      profile: "mixed-soak",
+      signal: new AbortController().signal,
+      clock: {
+        now: () => now,
+        sleep: async (ms) => {
+          now += ms;
+        },
+      },
+      sample: async () => ({ atMs: now, processes: [] }),
+      mixedWork: async () => {
+        runs++;
+        if (runs === 1) throw new Error("workload broke");
+      },
+      onAttempt: async () => {},
+    });
+    expect(runs).toBeGreaterThan(1);
+    expect(result.workloadFailures).toBeGreaterThan(0);
+    expect(result.complete).toBe(false);
+    expect(result.attempts).toBe(RESOURCE_PROFILES["mixed-soak"].durationMs / 1000 + 1);
+  });
 });
 
 const energyBinding: EnergyBinding = {
@@ -511,6 +566,48 @@ describe("client strata and immutable attempts", () => {
     const result = ingestClientCapture(data, data);
     expect(result.complete).toBe(false);
     expect(result.trace.metrics.every((m) => m.coverage.observed === 0)).toBe(true);
+  });
+  it("rejects a reset cache that contradicts the planned stratum", () => {
+    const data = capture();
+    expect(data.trial.stratum).toBe("chromium-cache-cold");
+    data.reset.cache = "warm-relaunch";
+    expect(() => ingestClientCapture(data, data)).toThrow(/planned stratum/);
+  });
+  it.each(["failed", "cancelled", "timed-out", "uncertain"] as const)(
+    "rejects a working turn when the terminal trace is %s",
+    (outcome) => {
+      const data = capture();
+      const terminal = data.batches[0]!.points.find(
+        (point) => point.boundary === "terminal.committed",
+      );
+      expect(terminal?.outcome).toBe("success");
+      terminal!.outcome = outcome;
+      expect(() => ingestClientCapture(data, data)).toThrow(/terminal trace/);
+    },
+  );
+  it("does not keep contradictory startup evidence as a complete trial", async () => {
+    const output = await directory();
+    const warm = capture();
+    warm.reset.cache = "warm-relaunch";
+    const failedTerminal = capture();
+    const terminal = failedTerminal.batches[0]!.points.find(
+      (point) => point.boundary === "terminal.committed",
+    );
+    terminal!.outcome = "failed";
+    for (const data of [warm, failedTerminal]) {
+      const result = await runPackagedPlan({
+        output,
+        plan: [data.trial],
+        signal: new AbortController().signal,
+        expected: { parent: data, candidate: data, "fixed-release": data },
+        driver: {
+          run: async () => data,
+          close: async () => {},
+        },
+      });
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0]).toMatchObject({ status: "incomplete" });
+    }
   });
   it("retains failures and remaining cancelled slots and closes the driver", async () => {
     const output = await directory();
