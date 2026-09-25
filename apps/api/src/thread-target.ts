@@ -4,6 +4,8 @@ import {
   routeIncoming,
   screenLeaseIdForRun,
   toComputerRef,
+  traceNow,
+  tracePoint,
 } from "@ardurbot/adapters";
 import {
   type Actor,
@@ -664,8 +666,12 @@ export async function sendThreadMessage(
     clientNonce?: string;
   },
 ) {
+  const traceStarted = traceNow();
   const existing = await replayExistingSend(deps, target.threadId, input.clientNonce);
-  if (existing) return existing;
+  if (existing) {
+    tracePoint(existing.runId, "admission.replayed");
+    return existing;
+  }
   const requestedReplyQuote = input.replyQuote?.trim() || undefined;
   if (requestedReplyQuote && !input.replyToMessageId) {
     throw new ORPCError("BAD_REQUEST", { message: "replyQuote requires replyToMessageId." });
@@ -1079,7 +1085,16 @@ export async function sendThreadMessage(
     if (winner) return { replay: winner } as const;
     throw error;
   });
-  if ("replay" in committed) return committed.replay;
+  if ("replay" in committed) {
+    tracePoint(committed.replay.runId, "admission.replayed");
+    return committed.replay;
+  }
+  for (const run of committed.runs) {
+    if (!("sourceMessageId" in run) || run.sourceMessageId !== committed.message.id) continue;
+    if (traceStarted !== undefined)
+      tracePoint(run.id, "admission.started", undefined, traceStarted);
+    tracePoint(run.id, "admission.committed");
+  }
   await deps.events.notify(target.threadId, committed.eventSeq).catch((error) => {
     // Subscribers catch up from the durable event cursor after a missed realtime wake.
     getLogger().error("thread send realtime notification", error);

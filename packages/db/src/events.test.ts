@@ -109,12 +109,17 @@ describe("finalizeRun", () => {
       .fn()
       .mockRejectedValueOnce(conflict)
       .mockImplementation(async (operation: (client: typeof tx) => unknown) => operation(tx));
+    const onCommitted = vi.fn(() => {
+      expect(publish).not.toHaveBeenCalled();
+      throw new Error("telemetry unavailable");
+    });
     const publish = vi.fn(async () => undefined);
 
     await expect(
       finalizeRun(
         { $transaction: transaction } as unknown as PrismaClient,
         {
+          onCommitted,
           spaceId: "space-1",
           threadId: "thread-1",
           botId: "bot-1",
@@ -144,6 +149,7 @@ describe("finalizeRun", () => {
         { publish } as never,
       ),
     ).resolves.toEqual({ continuationRunId: null });
+    expect(onCommitted).toHaveBeenCalledTimes(1);
     expect(transaction).toHaveBeenCalledTimes(2);
     expect(createEvent).toHaveBeenCalledOnce();
     expect(createEvent).toHaveBeenCalledWith(
