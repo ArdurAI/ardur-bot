@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { CRASH_BOUNDARIES, contentDigest, EXPERIMENT_DEFINITIONS } from "../manifest.js";
 import { experimentCoverage, matrixExitCode, matrixPlan } from "./catalog.js";
 import { matrixEvidence, writeMatrixArtifact } from "./evidence.js";
+import { classifyMemoryScale } from "./memory.js";
 
 describe("matrix selection and evidence", () => {
   it("keeps absent canonical crash results unknown and observed safety failures failed", () => {
@@ -66,6 +67,23 @@ describe("matrix selection and evidence", () => {
       crash03([passed, { ...passed, id: "crash-03-revoke" }, { ...passed, id: "crash-03-pin" }])
         ?.safetyPassed,
     ).toBe(true);
+    // The base attempt never reached its boundary. A failed pin control is still a failure.
+    expect(
+      crash03([
+        { ...passed, status: "incomplete", checks: { killedAtBoundary: false } },
+        {
+          ...passed,
+          id: "crash-03-pin",
+          status: "finding",
+          checks: { killedAtBoundary: true, noWrongPin: false },
+        },
+      ]),
+    ).toMatchObject({
+      status: "incomplete",
+      safetyPassed: false,
+      recovery: null,
+      taskCompleted: null,
+    });
   });
   it("retains every canonical experiment, variant and owner without marking declarations passed", () => {
     const coverage = experimentCoverage();
@@ -110,6 +128,30 @@ describe("matrix selection and evidence", () => {
     expect(matrixExitCode([result], true)).toBe(2);
     expect(matrixExitCode([{ ...result, checks: { safety: false } }], false)).toBe(1);
     expect(matrixExitCode([{ ...result, status: "incomplete" }], false)).toBe(2);
+    const unobserved = classifyMemoryScale([], true, true);
+    expect(unobserved.status).toBe("incomplete");
+    expect(Object.values(unobserved.checks)).toContain(false);
+    expect(
+      matrixExitCode(
+        [{ ...result, id: "O5-unread", status: unobserved.status, checks: unobserved.checks }],
+        false,
+      ),
+    ).toBe(2);
+    const materialized = classifyMemoryScale([{ documents: 100, revisions: 2000 }], true, true);
+    expect(materialized.status).toBe("finding");
+    expect(
+      matrixExitCode(
+        [
+          {
+            ...result,
+            id: "O5-scale",
+            status: materialized.status,
+            checks: materialized.checks,
+          },
+        ],
+        false,
+      ),
+    ).toBe(1);
   });
   it("writes checksummed immutable evidence and refuses replacing an attempt", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "matrix-evidence-test-"));

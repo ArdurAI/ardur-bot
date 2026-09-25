@@ -11,7 +11,12 @@ import { redactMatrixDiagnostic } from "../redact.js";
 import { credentialFreeEnvironment } from "../replay/offline.js";
 import { isOwnedReplayDatabase } from "../replay/postgres.js";
 import { faultPhaseBudgetMs } from "./deadlines.js";
-import { classifyComputerLeaseReclaim, runWillContinue } from "./lease.js";
+import {
+  classifyComputerLeaseReclaim,
+  faultRecoveryClocks,
+  leaseMayHoldFence,
+  runWillContinue,
+} from "./lease.js";
 import type { NativeHostReady } from "./native-host.js";
 import { observeNativeDisconnect } from "./native-host.js";
 
@@ -152,7 +157,7 @@ export async function runCrashCase(
     const before = await faultChild({ databaseUrl, directory, id, phase: "interrupt" });
     // Expire run leases and computer-execution tombstones. Deleting the computer lease
     // would make the next acquire insert fence 1 and skip production reclaim.
-    await db.prisma.run.updateMany({
+    const expiredRunLeases = await db.prisma.run.updateMany({
       where: { status: { in: ["leased", "running"] } },
       data: { leaseExpiresAt: new Date(0) },
     });
@@ -191,17 +196,24 @@ export async function runCrashCase(
     const leasesAfter = await db.prisma.computerExecutionLease.findMany({
       select: { id: true, fence: true, computerId: true, botId: true },
     });
+    const statusesAtDeath = runsAtDeath.map((run) => run.status);
     const leaseVerdict = classifyComputerLeaseReclaim({
       before: leasesBefore,
       after: leasesAfter,
-      continuing: runWillContinue(runsAtDeath.map((run) => run.status)),
+      continuing: runWillContinue(statusesAtDeath) && !leaseMayHoldFence(statusesAtDeath),
+      reclaimOrHold: leaseMayHoldFence(statusesAtDeath),
+    });
+    const clocks = faultRecoveryClocks({
+      runLeasesExpired: expiredRunLeases.count,
+      computerLeasesAtDeath: leasesBefore.length,
+      verdict: leaseVerdict,
     });
     const checks: Record<string, boolean> = {
       killedAtBoundary: before.killed,
       ...before.message.checks,
       ...after.message.checks,
+      ...clocks.checks,
     };
-    if (leasesBefore.length > 0) checks.computerLeaseReclaimed = leaseVerdict.ok;
     return {
       id: `${id}${negative ? `-${negative}` : ""}`,
       experiment: "O9",
@@ -213,8 +225,9 @@ export async function runCrashCase(
         before: before.message.measurements,
         after: after.message.measurements,
         recoveryMs: performance.now() - started,
-        leaseClockAdvanced: leaseVerdict.reclaimed || leaseVerdict.reason === "tombstone-retained",
-        computerLeaseReclaim: leaseVerdict.reason,
+        runLeaseClockAdvanced: clocks.runLeaseClockAdvanced,
+        computerLeaseReclaimed: clocks.computerLeaseReclaimed,
+        computerLeaseVerdict: clocks.computerLeaseVerdict,
         computerLeaseFences: {
           before: leasesBefore.map(({ id: leaseId, fence }) => ({ id: leaseId, fence })),
           after: leasesAfter.map(({ id: leaseId, fence }) => ({ id: leaseId, fence })),
@@ -229,7 +242,7 @@ export async function runCrashCase(
         "durable-state-oracle",
       ],
       gaps: [
-        "Run/computer and Graphile stale-lock expiry accelerated after confirmed process death; not autonomous wall-clock recovery latency.",
+        "Run leases still leased or running are expired to the epoch after confirmed process death (runLeaseClockAdvanced). That acceleration is not autonomous wall-clock recovery. computerLeaseVerdict is the separate computer-lease oracle.",
         "Synthetic runtime/tool boundaries; full production provider replay is measured separately.",
         "No native CLI or UI paint acceptance.",
       ],

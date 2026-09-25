@@ -29,11 +29,56 @@ export interface SampleAttempt {
   status: "measured" | "failed" | "missed";
 }
 
-function isCollectorAbort(error: unknown, signal: AbortSignal): boolean {
-  if (error === signal.reason) return true;
-  return (
-    typeof error === "object" && error !== null && "name" in error && error.name === "AbortError"
+/** True when the rejection is the collector abort the workload just observed. */
+function instrumentCollectorAbort(signal: AbortSignal): (error: unknown) => boolean {
+  let observed = false;
+  const note = () => {
+    observed = true;
+    // The clear runs after promise reactions queued while the workload handles this abort.
+    queueMicrotask(() => {
+      queueMicrotask(() => {
+        observed = false;
+      });
+    });
+  };
+  const abortedDescriptor = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(signal),
+    "aborted",
   );
+  const readAborted = () =>
+    abortedDescriptor?.get ? (abortedDescriptor.get.call(signal) as boolean) : signal.aborted;
+  try {
+    if (abortedDescriptor?.get)
+      Object.defineProperty(signal, "aborted", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          const value = abortedDescriptor.get!.call(signal) as boolean;
+          if (value) note();
+          return value;
+        },
+      });
+  } catch {
+    // Some engines refuse an own aborted getter. Listener wrapping still marks the abort turn.
+  }
+  const addEventListener = signal.addEventListener.bind(signal);
+  signal.addEventListener = ((
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: boolean | AddEventListenerOptions,
+  ) => {
+    if (type !== "abort" || typeof listener !== "function")
+      return addEventListener(type, listener as EventListener, options);
+    return addEventListener(
+      type,
+      (event) => {
+        note();
+        listener(event);
+      },
+      options,
+    );
+  }) as typeof signal.addEventListener;
+  return (error: unknown) => readAborted() && (error === signal.reason || observed);
 }
 
 /** Absolute scheduling retains missed slots; a slow sampler never overlaps itself or hides load. */
@@ -59,6 +104,7 @@ export async function collectResourceProfile(options: {
   const start = clock.now();
   const workload = new AbortController();
   const workSignal = AbortSignal.any([options.signal, workload.signal]);
+  const causedByCollectorAbort = instrumentCollectorAbort(workSignal);
   let work: Promise<void> | undefined;
   let workRunning = false;
   let workloadFailures = 0;
@@ -81,7 +127,7 @@ export async function collectResourceProfile(options: {
           .mixedWork(workSignal)
           .catch((error: unknown) => {
             // Ending the window aborts leftover work. That cancellation is not a failed sample.
-            if (collectorStopped && !options.signal.aborted && isCollectorAbort(error, workSignal))
+            if (collectorStopped && !options.signal.aborted && causedByCollectorAbort(error))
               return;
             workloadFailures++;
           })

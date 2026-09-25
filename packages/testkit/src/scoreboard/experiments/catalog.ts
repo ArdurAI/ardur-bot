@@ -97,7 +97,9 @@ export interface MatrixResult {
 export function matrixExitCode(results: readonly MatrixResult[], release: boolean): 0 | 1 | 2 {
   if (
     results.some(
-      (result) => result.status === "finding" || Object.values(result.checks).includes(false),
+      (result) =>
+        result.status === "finding" ||
+        (result.status !== "incomplete" && Object.values(result.checks).includes(false)),
     )
   )
     return 1;

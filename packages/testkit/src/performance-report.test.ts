@@ -697,6 +697,17 @@ describe("task, experiment and recovery evidence", () => {
       "not task completion",
     );
   });
+
+  it("allows a failed safety control on an incomplete crash and rejects an unmeasured pass", () => {
+    const report = evidence();
+    const crash = report.crashes.find((item) => item.id === "crash-03")!;
+    crash.safetyPassed = false;
+    expect(() => parsePerformanceEvidenceReport(report, "failed-control")).not.toThrow();
+    crash.safetyPassed = true;
+    expect(() => parsePerformanceEvidenceReport(report, "unmeasured-pass")).toThrow(
+      "incomplete crash cannot claim",
+    );
+  });
 });
 
 describe("comparison contract", () => {
