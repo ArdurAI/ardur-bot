@@ -4,6 +4,7 @@ import {
   ComputerConnectionSettingsSchema,
   hostComputerLabel,
   moveOntoThisMacUnavailableMessage,
+  refuseConfiguration,
   thisMacUnavailableMessage,
 } from "@ardurbot/contracts";
 import { PlacementSettingsSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
@@ -15,9 +16,38 @@ import type { ComputerRouter } from "../host-aware-sandbox.js";
 import { isComputerRouter, sandboxKindForBot } from "../host-aware-sandbox.js";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "../sandbox-factory.js";
+import { kubernetesDeploymentConfigured } from "../sandbox-factory.js";
 import { hostCapacity } from "./service.js";
 
-/** Built-in row for a computer with no saved connection. Local Docker keeps its own row. */
+const FLEET_KINDS = new Set([
+  "host",
+  "docker",
+  "podman",
+  "kubernetes",
+  "ssh",
+  "tailscale",
+  "default",
+  "e2b",
+  "daytona",
+  "box",
+]);
+
+function fleetKind(kind: string): FleetTarget["kind"] {
+  return (FLEET_KINDS.has(kind) ? kind : "default") as FleetTarget["kind"];
+}
+
+function connectionlessKindName(kind: string): string {
+  if (kind === "e2b") return "E2B";
+  if (kind === "daytona") return "Daytona";
+  if (kind === "box") return "Box";
+  if (kind === "kubernetes") return "Kubernetes";
+  if (kind === "ssh") return "SSH";
+  if (kind === "podman") return "Podman";
+  if (kind === "tailscale") return "Tailscale";
+  return kind;
+}
+
+/** Built-in row for a computer with no saved connection. Each kind keeps its own row. */
 export function fleetComputerTargetId(
   computer: { connectionId?: string | null; kind?: string | null } | null | undefined,
   fleet: {
@@ -27,13 +57,13 @@ export function fleetComputerTargetId(
 ): string {
   if (computer?.connectionId) return computer.connectionId;
   if (computer?.kind === "desktop") return "host";
-  if (computer?.kind === "docker") {
-    return (
-      fleet.targets.find((target) => target.connectionId === null && target.kind === "docker")
-        ?.id ?? fleet.defaultTargetId
-    );
-  }
-  return fleet.defaultTargetId;
+  if (!computer?.kind) return fleet.defaultTargetId;
+  const own = fleet.targets.find(
+    (target) => target.connectionId === null && target.kind === computer.kind,
+  );
+  if (own) return own.id;
+  if (computer.kind === "docker") return fleet.defaultTargetId;
+  return `kind:${computer.kind}`;
 }
 
 /** Local Docker and remote Docker (socket, endpoint, or context) are one family. */
@@ -75,8 +105,10 @@ export class FleetCatalog {
     target: Pick<FleetTarget, "kind" | "connectionId">,
     context: AdapterContext,
   ): Promise<SandboxProvider> {
-    if (!target.connectionId && (target.kind === "host" || target.kind === "docker"))
-      return this.resolveComputer({ kind: target.kind === "host" ? "desktop" : "docker" }, context);
+    if (!target.connectionId && target.kind === "host")
+      return this.resolveComputer({ kind: "desktop" }, context);
+    if (!target.connectionId && target.kind !== "default")
+      return this.resolveComputer({ kind: target.kind }, context);
     return this.routing.target(target, context);
   }
   async compatibleTargets(
@@ -105,7 +137,7 @@ export class FleetCatalog {
   ): Promise<{ source: SandboxProvider; target: SandboxProvider }> {
     const source = await this.resolveComputer(computer, context);
     if (configuration.targetId === undefined) {
-      if (configuration.thisMac) throw new Error(thisMacUnavailableMessage(this.hostPlatform));
+      if (configuration.thisMac) refuseConfiguration(thisMacUnavailableMessage(this.hostPlatform));
       if (
         configuration.connectionId === undefined ||
         configuration.connectionId === computer.connectionId
@@ -119,7 +151,7 @@ export class FleetCatalog {
               ? undefined
               : await this.prisma.deploymentSettings.findUnique({ where: { id: "default" } });
           if (sandboxKindForBot(fallbackId, deployment?.computerHost) === "desktop")
-            throw new Error(moveOntoThisMacUnavailableMessage(this.hostPlatform));
+            refuseConfiguration(moveOntoThisMacUnavailableMessage(this.hostPlatform));
         }
       }
       // A Settings connection change is already confirmed and may cross kinds.
@@ -156,6 +188,28 @@ export class FleetCatalog {
       signal: AbortSignal.any([context.signal, AbortSignal.timeout(10000)]),
     });
     this.recordTest("default", { version: info.version, os: info.os });
+  }
+  /** In-cluster Kubernetes, listed only when that provider is registered for this deployment. */
+  private async deploymentClusterTarget(context: AdapterContext): Promise<FleetTarget> {
+    const signal = AbortSignal.any([context.signal, AbortSignal.timeout(10000)]);
+    const timed = { ...context, signal };
+    let state: FleetTarget["state"] = "connected";
+    const capacity = await this.resolveComputer({ kind: "kubernetes" }, timed)
+      .then((provider) => provider.capacity?.(timed) ?? Promise.resolve(unknownCapacity()))
+      .catch(() => {
+        state = "unavailable";
+        return unknownCapacity();
+      });
+    if (capacity.source === "not-reported") state = "unavailable";
+    return {
+      id: "kind:kubernetes",
+      name: "Kubernetes",
+      kind: "kubernetes",
+      connectionId: null,
+      state,
+      capacity,
+      bots: [],
+    };
   }
   async list(context: AdapterContext) {
     const [rows, bots, space, deployment] = await Promise.all([
@@ -271,6 +325,26 @@ export class FleetCatalog {
         }),
       );
       targets.push(...entries);
+    }
+    if (
+      kubernetesDeploymentConfigured() &&
+      !targets.some((target) => target.connectionId === null && target.kind === "kubernetes")
+    )
+      targets.push(await this.deploymentClusterTarget(context));
+    for (const bot of bots) {
+      const computer = bot.computer;
+      if (!computer || computer.connectionId || !computer.kind) continue;
+      const id = fleetComputerTargetId(computer, { defaultTargetId, targets });
+      if (targets.some((target) => target.id === id)) continue;
+      targets.push({
+        id,
+        name: connectionlessKindName(computer.kind),
+        kind: fleetKind(computer.kind),
+        connectionId: null,
+        state: "unavailable",
+        capacity: unknownCapacity(),
+        bots: [],
+      });
     }
     for (const bot of bots) {
       const targetId = fleetComputerTargetId(bot.computer, { defaultTargetId, targets });

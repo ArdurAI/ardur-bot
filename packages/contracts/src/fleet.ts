@@ -89,7 +89,18 @@ export const FleetTargetSchema = /* @__PURE__ */ (() =>
   z.object({
     id: z.string(),
     name: z.string(),
-    kind: z.enum(["host", "docker", "podman", "kubernetes", "ssh", "tailscale", "default"]),
+    kind: z.enum([
+      "host",
+      "docker",
+      "podman",
+      "kubernetes",
+      "ssh",
+      "tailscale",
+      "default",
+      "e2b",
+      "daytona",
+      "box",
+    ]),
     connectionId: z.string().nullable(),
     state: z.enum(["connected", "discovered", "unavailable"]),
     capacity: CapacitySnapshotSchema,
@@ -150,9 +161,11 @@ export function choosePlacement(
     );
   });
   const current = valid.find((target) => target.id === currentTargetId);
+  // A missing or unreachable current row is not a reason to leave. Free-memory and threshold
+  // both stay put until that computer's own row is connected and fresh.
+  if (!current) return null;
   const threshold = settings.minimumFreeGb * 1024 ** 3;
-  if (settings.mode === "threshold" && (!current || current.capacity.memoryFree! >= threshold))
-    return null;
+  if (settings.mode === "threshold" && current.capacity.memoryFree! >= threshold) return null;
   const ranked = [...valid].sort(
     (a, b) =>
       b.capacity.memoryFree! - a.capacity.memoryFree! ||
@@ -166,13 +179,13 @@ export function choosePlacement(
   if (
     !best ||
     best.id === currentTargetId ||
-    (current && best.capacity.memoryFree! <= current.capacity.memoryFree!)
+    best.capacity.memoryFree! <= current.capacity.memoryFree!
   )
     return null;
   if (settings.mode === "threshold" && best.capacity.memoryFree! < threshold) return null;
   const reason =
     settings.mode === "threshold"
-      ? `${current!.name} had ${(current!.capacity.memoryFree! / 1024 ** 3).toFixed(1)} GB free`
+      ? `${current.name} had ${(current.capacity.memoryFree! / 1024 ** 3).toFixed(1)} GB free`
       : "it had the most free memory";
   return {
     targetId: best.id,

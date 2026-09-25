@@ -84,6 +84,9 @@ export async function placeRunComputer(
     }
     candidates = candidates.filter((target) => supported.has(target.id));
   }
+  const fromTarget = fleet.targets.find((target) => target.id === from);
+  if (fromTarget && !candidates.some((target) => target.id === from))
+    candidates = [fromTarget, ...candidates];
   const decision = choosePlacement(policy, from, candidates);
   if (!decision) return true;
   const owners = computer.bots.filter((bot) => bot.archivedAt === null);

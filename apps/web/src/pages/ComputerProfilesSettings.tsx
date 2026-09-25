@@ -253,7 +253,7 @@ export function ComputerProfile({
       {connectionless && connections.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {/* biome-ignore format: one catalog sentence */}
-          <Trans>Add a connection under Settings, Connections, to move this computer to another machine.</Trans>
+          <Trans>Add a computer under Settings, Computers, then choose it here to move this computer.</Trans>
         </p>
       ) : null}
       {supported && !hostComputer ? (

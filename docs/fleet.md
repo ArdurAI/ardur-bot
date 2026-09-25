@@ -65,7 +65,7 @@ computer before the new one has accepted the workspace. Verified migration will 
 destination, import and verify the workspace, point the computer at it, and only then remove the
 old one. Moving a connectionless computer between Docker and This Mac is not available until that
 migration lands. Settings shows the engine the computer runs on. A computer with no connection can
-move to a saved connection; with none, Settings says to add one under Settings, Connections.
+move to a saved connection; with none, Settings says: Add a computer under Settings, Computers, then choose it here to move this computer.
 Deployment default and This Mac are not offered for that computer. A computer that already has a
 connection can move to another saved connection. The control names those machines. The selected
 option is the current connection's name, and every other saved connection is listed by name.

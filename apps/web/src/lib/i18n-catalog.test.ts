@@ -259,8 +259,20 @@ describe("lingui catalogs", () => {
     );
   });
 
+  it("names Settings, Computers, and adding a computer in the fleet guide", () => {
+    const guide = readFileSync(
+      fileURLToPath(new URL("../../../../docs/fleet.md", import.meta.url)),
+      "utf8",
+    );
+    expect(guide).toContain(
+      "Add a computer under Settings, Computers, then choose it here to move this computer.",
+    );
+    expect(guide).not.toContain("Settings, Connections");
+  });
+
   it("ships the fleet move sentences in every catalog, with Russian and Chinese filled", () => {
     const sentences = [
+      "Add a computer under Settings, Computers, then choose it here to move this computer.",
       "Add a connection under Settings, Connections, to move this computer to another machine.",
       "The computer changed before the move, so it stayed where it is.",
       "Deployment default (Docker)",
@@ -273,27 +285,30 @@ describe("lingui catalogs", () => {
     const translations: Record<string, Record<string, string>> = {
       ru: {
         [sentences[0]!]:
+          "Добавьте компьютер в разделе «Настройки», «Компьютеры», затем выберите его здесь, чтобы перенести этот компьютер.",
+        [sentences[1]!]:
           "Добавьте подключение в разделе «Настройки», «Подключения», чтобы перенести этот компьютер на другую машину.",
-        [sentences[1]!]: "Компьютер изменился до переноса, поэтому он остался на месте.",
-        [sentences[2]!]: "Развертывание по умолчанию (Docker)",
-        [sentences[3]!]:
+        [sentences[2]!]: "Компьютер изменился до переноса, поэтому он остался на месте.",
+        [sentences[3]!]: "Развертывание по умолчанию (Docker)",
+        [sentences[4]!]:
           "Перенос этого компьютера на этот Mac пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
-        [sentences[4]!]: "Это переносит компьютер с {0} на {1} и заменяет его файлы. Продолжить?",
-        [sentences[5]!]: "этот механизм",
-        [sentences[6]!]:
-          "Перенос этого компьютера на {0} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
+        [sentences[5]!]: "Это переносит компьютер с {0} на {1} и заменяет его файлы. Продолжить?",
+        [sentences[6]!]: "этот механизм",
         [sentences[7]!]:
+          "Перенос этого компьютера на {0} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
+        [sentences[8]!]:
           "{0} недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
       },
       "zh-CN": {
-        [sentences[0]!]: "在“设置”的“连接”中添加连接，即可将此电脑移到另一台机器。",
-        [sentences[1]!]: "电脑在移动前已更改，因此仍留在原处。",
-        [sentences[2]!]: "部署默认（Docker）",
-        [sentences[3]!]: "暂时无法将此电脑移到这台 Mac。请选择已保存的连接，或保留当前引擎。",
-        [sentences[4]!]: "这将把电脑从 {0} 移到 {1}，并替换其中的文件。要继续吗？",
-        [sentences[5]!]: "此引擎",
-        [sentences[6]!]: "暂时无法将此电脑移到{0}。请选择已保存的连接，或保留当前引擎。",
-        [sentences[7]!]: "{0}尚不可用。请选择已保存的连接，或保留当前引擎。",
+        [sentences[0]!]: "在“设置”的“电脑”中添加电脑，然后在此处选择它，以移动此电脑。",
+        [sentences[1]!]: "在“设置”的“连接”中添加连接，即可将此电脑移到另一台机器。",
+        [sentences[2]!]: "电脑在移动前已更改，因此仍留在原处。",
+        [sentences[3]!]: "部署默认（Docker）",
+        [sentences[4]!]: "暂时无法将此电脑移到这台 Mac。请选择已保存的连接，或保留当前引擎。",
+        [sentences[5]!]: "这将把电脑从 {0} 移到 {1}，并替换其中的文件。要继续吗？",
+        [sentences[6]!]: "此引擎",
+        [sentences[7]!]: "暂时无法将此电脑移到{0}。请选择已保存的连接，或保留当前引擎。",
+        [sentences[8]!]: "{0}尚不可用。请选择已保存的连接，或保留当前引擎。",
       },
     };
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {

@@ -357,6 +357,9 @@ msgid "Add"
 msgstr "Adicionar"
 
 #: src/pages/ComputerProfilesSettings.tsx
+msgid "Add a computer under Settings, Computers, then choose it here to move this computer."
+msgstr ""
+
 msgid "Add a connection under Settings, Connections, to move this computer to another machine."
 msgstr ""
 

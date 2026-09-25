@@ -79,6 +79,35 @@ export function matchesHostRefusal(message: string, kind: "unavailable" | "move"
   const sentence = kind === "move" ? moveOntoThisMacUnavailableMessage : thisMacUnavailableMessage;
   return (["darwin", "linux"] as const).some((platform) => message === sentence(platform));
 }
+
+const ORPC_ERROR_CONSTRUCTORS = Symbol.for("__@orpc/client@1.15.0/error/ORPC_ERROR_CONSTRUCTORS__");
+
+/** A refusal sentence. Registered with the RPC error constructors so the caller sees the sentence. */
+export class ConfigurationRefusal extends Error {
+  readonly code = "BAD_REQUEST" as const;
+  readonly status = 400;
+  readonly defined = false;
+  readonly data = undefined;
+  constructor(message: string) {
+    super(message);
+    this.name = "ORPCError";
+  }
+  toJSON() {
+    return {
+      defined: this.defined,
+      code: this.code,
+      status: this.status,
+      message: this.message,
+      data: this.data,
+    };
+  }
+}
+
+export function refuseConfiguration(message: string): never {
+  const set = (globalThis as Record<symbol, WeakSet<object> | undefined>)[ORPC_ERROR_CONSTRUCTORS];
+  set?.add(ConfigurationRefusal);
+  throw new ConfigurationRefusal(message);
+}
 export const ComputerConfigurationSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema.optional(),

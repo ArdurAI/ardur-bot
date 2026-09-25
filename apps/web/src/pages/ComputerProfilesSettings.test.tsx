@@ -143,7 +143,7 @@ it("keeps a connectionless computer on its engine and does not offer deployment 
   expect(element.textContent).toContain("Engine: Docker");
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.textContent).toContain(
-    "Add a connection under Settings, Connections, to move this computer to another machine.",
+    "Add a computer under Settings, Computers, then choose it here to move this computer.",
   );
   expect(api.engine).not.toHaveBeenCalled();
   await act(async () => root.unmount());
@@ -168,7 +168,7 @@ it("shows a desktop computer as this computer when This Mac is off and hides ima
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.textContent).not.toContain("Engine: Docker");
   expect(element.textContent).toContain(
-    "Add a connection under Settings, Connections, to move this computer to another machine.",
+    "Add a computer under Settings, Computers, then choose it here to move this computer.",
   );
   expect(api.engine).not.toHaveBeenCalled();
   expect(element.querySelector('[aria-label="Image profile"]')).toBeNull();
@@ -231,7 +231,7 @@ it("moves a connectionless computer to a saved connection and explains when none
   expect(empty.disabled).toBe(true);
   expect([...empty.options].map((option) => option.textContent)).toEqual(["Docker"]);
   expect(element.textContent).toContain(
-    "Add a connection under Settings, Connections, to move this computer to another machine.",
+    "Add a computer under Settings, Computers, then choose it here to move this computer.",
   );
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.textContent).not.toContain("This Mac");
@@ -512,6 +512,28 @@ it("hides image profiles on a desktop computer and still sends one for Docker", 
     connectionId: null,
     confirmed: true,
   });
+  await act(async () => root.unmount());
+});
+
+it("names Settings, Computers, and adding a computer when no connection is saved", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={status}
+        connections={[]}
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  expect(element.textContent).toContain(
+    "Add a computer under Settings, Computers, then choose it here to move this computer.",
+  );
+  expect(element.textContent).not.toContain("Settings, Connections");
   await act(async () => root.unmount());
 });
 

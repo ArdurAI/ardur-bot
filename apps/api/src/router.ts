@@ -101,6 +101,7 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
+  ConfigurationRefusal,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -2032,6 +2033,8 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         } catch (error) {
           if (error instanceof ComputerBusyError)
             throw new ORPCError("CONFLICT", { message: "Computer is busy" });
+          if (error instanceof ConfigurationRefusal)
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
           throw error;
         }
       }),

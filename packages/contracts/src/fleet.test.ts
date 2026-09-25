@@ -37,6 +37,19 @@ it("keeps manual placement, ranks fresh free memory and never selects unavailabl
   expect(choosePlacement(policy, "host", targets, now + 31000)).toBeNull();
   expect(choosePlacement(policy, "host", [target("host", 8), target("tie", 8)], now)).toBeNull();
 });
+it("does not leave a computer whose current row is unreachable", () => {
+  const policy = PlacementSettingsSchema.parse({ mode: "free-memory" });
+  const current = {
+    ...target("kind:kubernetes", 1),
+    id: "kind:kubernetes",
+    kind: "kubernetes" as const,
+    connectionId: null,
+    state: "unavailable" as const,
+  };
+  const richer = { ...target("cluster", 32), kind: "kubernetes" as const };
+  expect(choosePlacement(policy, "kind:kubernetes", [current, richer], now)).toBeNull();
+  expect(choosePlacement(policy, "kind:kubernetes", [richer], now)).toBeNull();
+});
 it("uses the threshold only at low capacity and records the measured reason", () => {
   const policy = PlacementSettingsSchema.parse({ mode: "threshold" });
   expect(choosePlacement(policy, "host", [target("host", 4), target("other", 16)], now)).toBeNull();

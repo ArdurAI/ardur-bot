@@ -129,8 +129,12 @@ export async function validateComputerConfiguration(
   platform: string | null | undefined = process.platform,
 ) {
   const configuration = ComputerConfigurationSchema.parse(raw);
-  if (!configuration.confirmed) throw new Error("This replaces the computer's files. Continue?");
-  if (configuration.thisMac) throw new Error(thisMacUnavailableMessage(platform));
+  if (!configuration.confirmed)
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This replaces the computer's files. Continue?",
+    });
+  if (configuration.thisMac)
+    throw new ORPCError("BAD_REQUEST", { message: thisMacUnavailableMessage(platform) });
   if (configuration.connectionId === null) {
     const bot = await prisma.bot.findFirst({
       where: { id: configuration.botId, spaceId },
@@ -142,7 +146,9 @@ export async function validateComputerConfiguration(
           ? await prisma.deploymentSettings.findUnique({ where: { id: "default" } })
           : null;
       if (sandboxKindForBot(sandboxProvider, deployment?.computerHost) === "desktop")
-        throw new Error(moveOntoThisMacUnavailableMessage(platform));
+        throw new ORPCError("BAD_REQUEST", {
+          message: moveOntoThisMacUnavailableMessage(platform),
+        });
     }
   }
   if (
@@ -151,7 +157,7 @@ export async function validateComputerConfiguration(
       where: { id: configuration.connectionId, spaceId, connectorId: "computer" },
     }))
   )
-    throw new Error("Choose an available computer connection.");
+    throw new ORPCError("BAD_REQUEST", { message: "Choose an available computer connection." });
   return configuration;
 }
 
