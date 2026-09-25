@@ -1,50 +1,17 @@
 import type { RequestUsageObservation, UsageCategories } from "@ardurbot/adapter-kit";
+import { hasIncompleteUsage } from "@ardurbot/adapter-kit";
+import { RequestUsageObservationSchema, UsageCategoriesSchema } from "@ardurbot/contracts";
 import { z } from "zod";
 
 const token = z.number().int().min(0).max(2_147_483_647);
-const identity = z.string().min(1).max(200);
-const categoriesSchema = z
-  .object({
-    logicalInput: token.nullable(),
-    uncachedInput: token.nullable(),
-    cacheReadInput: token.nullable(),
-    cacheWriteInput: token.nullable(),
-    output: token.nullable(),
-    reasoning: token.nullable(),
-  })
-  .strict();
+const categoriesSchema = UsageCategoriesSchema;
 
 export const REQUEST_USAGE_CATEGORIES = categoriesSchema.keyof().options;
 export type CategoryCoverage = Record<keyof UsageCategories, "complete" | "partial" | "unknown">;
 
 /** Strictly whitelist metadata: provider responses, prompts and credentials do not belong here. */
-export const requestUsageSchema = z
-  .object({
-    requestId: identity,
-    attemptId: identity,
-    parentRequestId: identity.nullable(),
-    purpose: z.enum(["main", "retry", "helper", "summary", "delegated", "detached-learning"]),
-    counter: z
-      .object({
-        mode: z.enum(["delta", "cumulative"]),
-        epochId: identity,
-        sequence: token,
-      })
-      .strict(),
-    inputSemantics: z.enum(["total-with-cache-subsets", "additive-cache-categories", "unknown"]),
-    reasoningSemantics: z.enum(["subset-of-output", "separate", "unknown"]),
-    categories: categoriesSchema,
-    cost: z.number().finite().nonnegative().nullable(),
-    pricingProvenance: z
-      .object({
-        source: z.string().min(1).max(500),
-        datedAt: z.iso.date(),
-        kind: z.enum(["provider-reported", "rate-card"]),
-      })
-      .strict()
-      .nullable(),
-  })
-  .strict() satisfies z.ZodType<RequestUsageObservation>;
+export const requestUsageSchema =
+  RequestUsageObservationSchema satisfies z.ZodType<RequestUsageObservation>;
 
 export interface RequestUsageTotals {
   categories: UsageCategories;
@@ -118,7 +85,8 @@ export function accumulateRequestUsage(
     categoryCoverage[key] =
       categories[key] === null
         ? "unknown"
-        : value !== null &&
+        : !hasIncompleteUsage(request.collection) &&
+            value !== null &&
             (request.counter.mode === "cumulative" ||
               !previous ||
               previous.categoryCoverage[key] === "complete")

@@ -289,7 +289,11 @@ async function recordRequestUsage(deps: UsageDependencies, run: UsageRun, usage:
                   cachedTokens:
                     totals.categoryCoverage.logicalInput === "complete" &&
                     totals.categoryCoverage.cacheReadInput === "complete"
-                      ? categories.cacheReadInput! - (existing?.cacheReadInputTokens ?? 0)
+                      ? categories.cacheReadInput! -
+                        // Cache counts are withheld from context until logical input is known.
+                        (existing?.logicalInputTokens == null
+                          ? 0
+                          : (existing.cacheReadInputTokens ?? 0))
                       : null,
                 }
               : null,

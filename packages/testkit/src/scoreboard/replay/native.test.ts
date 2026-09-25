@@ -1,4 +1,4 @@
-import type { AgentRunRequest } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { expect, it } from "vitest";
 import {
   ClaudeStreamParser,
@@ -79,8 +79,23 @@ it("matches the complete Claude invocation and tool schema before releasing pars
   await new Promise<void>((resolve) => setImmediate(resolve));
   fixture.close();
   const parser = new ClaudeStreamParser(request.model.runtimePin!);
-  const events = [];
+  const events: AgentRuntimeEvent[] = [parser.startUsage()];
   for await (const message of jsonLines(fixture.child)) events.push(...parser.parse(message));
   fixture.assertComplete();
-  expect(events).toEqual([{ type: "text", text: "Policy received." }, { type: "done" }]);
+  expect(events).toMatchObject([
+    { type: "usage", request: { collection: { outcome: "started" } } },
+    { type: "text", text: "Policy received." },
+    { type: "usage", request: { collection: { outcome: "success" } } },
+    { type: "done" },
+  ]);
+  const usage = events.filter((event) => event.type === "usage");
+  expect(usage[0]!.request!.requestId).toBe(usage[1]!.request!.requestId);
+  for (const observation of usage)
+    expect(observation).toMatchObject({
+      reported: false,
+      request: {
+        categories: { logicalInput: null, output: null },
+        collection: { scope: "native-turn", availability: "unavailable" },
+      },
+    });
 });

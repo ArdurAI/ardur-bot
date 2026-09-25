@@ -162,7 +162,23 @@ describe("Claude subprocess lifecycle", () => {
   );
   it("streams a fake process, records its session and resumes only that session", async () => {
     const f = fixture(0, true);
-    expect(await f.run()).toEqual([{ type: "text", text: "Hello" }, { type: "done" }]);
+    const events = await f.run();
+    expect(events).toMatchObject([
+      { type: "usage", request: { collection: { outcome: "started" } } },
+      { type: "text", text: "Hello" },
+      { type: "usage", request: { collection: { outcome: "success" } } },
+      { type: "done" },
+    ]);
+    const usage = events.filter((event) => event.type === "usage");
+    expect(usage[0]!.request!.requestId).toBe(usage[1]!.request!.requestId);
+    for (const observation of usage)
+      expect(observation).toMatchObject({
+        reported: false,
+        request: {
+          categories: { logicalInput: null, output: null },
+          collection: { scope: "native-turn", availability: "unavailable" },
+        },
+      });
     expect(f.spawn.mock.calls[1]?.[1]).toEqual(
       expect.arrayContaining([
         "--resume",

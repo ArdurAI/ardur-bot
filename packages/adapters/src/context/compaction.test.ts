@@ -15,7 +15,10 @@ it.each(["completed", "failed", "waiting_input"])(
     const enqueue = vi.fn();
     await scheduleCompactionAfterTurn(prisma, { enqueue } as unknown as JobPublisher, "run");
     expect(enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "history.compact", payload: { threadId: "group-thread" } }),
+      expect.objectContaining({
+        name: "history.compact",
+        payload: { threadId: "group-thread", sourceRunId: "run" },
+      }),
     );
     enqueue.mockClear();
     run.thread.historyCompactedUpToSeq = 49 as never;

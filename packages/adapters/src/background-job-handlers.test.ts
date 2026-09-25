@@ -135,7 +135,7 @@ describe("createBackgroundJobHandlers", () => {
       deploymentModelKey: "openrouter-key",
     });
 
-    await handlers["history.compact"]({ threadId: "thread-1" });
+    await handlers["history.compact"]({ threadId: "thread-1", sourceRunId: "source-run" });
 
     expect(compactHistory).toHaveBeenCalledWith(
       {
@@ -145,8 +145,10 @@ describe("createBackgroundJobHandlers", () => {
         memoryProviders,
         deploymentModelKey: "openrouter-key",
         resolveModel,
+        recordUsage: expect.any(Function),
       },
       "thread-1",
+      "source-run",
     );
   });
 

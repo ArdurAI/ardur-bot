@@ -391,6 +391,70 @@ function compactionHarness(
 }
 
 describe("compactHistory", () => {
+  it("records summary usage against its scoped source even when generation changes", async () => {
+    const harness = compactionHarness({ deploymentModelKey: "fixture-key" });
+    const findFirst = vi.fn(async () => ({ id: "source-run" }));
+    Object.assign(harness.prisma, { run: { findFirst } });
+    const recordUsage = vi.fn(async () => undefined);
+    harness.runtime.run.mockImplementation(async function* () {
+      yield {
+        type: "usage",
+        provider: "fixture",
+        model: "fixture",
+        inputTokens: 100,
+        outputTokens: 20,
+      };
+      harness.thread.historyCompactionGeneration++;
+      yield { type: "done", text: "Discarded by the existing generation fence." };
+    });
+    await compactHistory({ ...harness.deps, recordUsage }, "thread-1", "source-run");
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: "source-run",
+          threadId: "thread-1",
+          spaceId: "workspace-1",
+          userId: "user-1",
+          botId: "bot-1",
+        }),
+      }),
+    );
+    expect(recordUsage).toHaveBeenCalledWith(
+      "source-run",
+      expect.objectContaining({
+        inputTokens: 100,
+        outputTokens: 20,
+        request: expect.objectContaining({ purpose: "summary" }),
+      }),
+    );
+    expect(harness.thread.historyCompactionSummary).toBeNull();
+  });
+  it("records missing summary usage on failure and does not spend without an attributable run", async () => {
+    const harness = compactionHarness({ deploymentModelKey: "fixture-key" });
+    const findFirst = vi.fn(async (): Promise<{ id: string } | null> => ({ id: "source-run" }));
+    Object.assign(harness.prisma, { run: { findFirst } });
+    const recordUsage = vi.fn(async () => undefined);
+    harness.runtime.run.mockImplementation(async function* () {
+      yield* [];
+      throw new Error("summary failed");
+    });
+    await expect(
+      compactHistory({ ...harness.deps, recordUsage }, "thread-1", "source-run"),
+    ).rejects.toThrow("summary failed");
+    expect(recordUsage).toHaveBeenLastCalledWith(
+      "source-run",
+      expect.objectContaining({
+        request: expect.objectContaining({
+          purpose: "summary",
+          collection: expect.objectContaining({ outcome: "failed", availability: "unavailable" }),
+        }),
+      }),
+    );
+    findFirst.mockResolvedValue(null);
+    await compactHistory({ ...harness.deps, recordUsage }, "thread-1", "missing-run");
+    expect(harness.runtime.run).toHaveBeenCalledTimes(1);
+    expect(harness.thread.historyCompactionSummary).toBeNull();
+  });
   it("summarizes the next batch locally and advances the cursor without external writes", async () => {
     const harness = compactionHarness({ deploymentModelKey: "openrouter-key" });
 

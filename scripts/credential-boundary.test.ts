@@ -97,6 +97,7 @@ describe("subscription credential boundary", () => {
       ".vercel",
       ".turbo",
       ".cache",
+      ".context",
       ".DS_Store",
       ".env",
       ".env.*",
@@ -121,6 +122,7 @@ describe("subscription credential boundary", () => {
     expect(ignored("packages/adapters/src/restored-login.ts")).toBe(false);
     expect(ignored("apps/api/src/router.ts")).toBe(false);
     expect(ignored("packages/adapters/node_modules")).toBe(true);
+    expect(ignored(".context")).toBe(true);
   });
 
   it("detects every forbidden marker and limits historical exceptions to decisions and NOTICE", () => {
