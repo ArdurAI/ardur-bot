@@ -15,6 +15,7 @@ import {
   SCOREBOARD_MANIFEST,
   TASK_DEFINITIONS,
 } from "../packages/testkit/src/scoreboard/manifest.ts";
+import { STARTUP_STRATA } from "../packages/testkit/src/scoreboard/packaged/plan.ts";
 import { inventoryArtifact } from "../packages/testkit/src/scoreboard/resources/artifacts.ts";
 import {
   createBudgetPolicy,
@@ -73,8 +74,10 @@ on:
 concurrency:
   cancel-in-progress: false
 jobs:
+  budgets:
+    if: inputs.gate != 'required'
   release-gate:
-    if: github.event_name == 'workflow_call' && inputs.gate == 'required'
+    if: inputs.gate == 'required'
     steps:
       - uses: actions/checkout@v5
         with:
@@ -85,7 +88,16 @@ jobs:
         run: node scripts/scoreboard-index.mjs release-gate
   index:
     needs: budgets
+    if: always() && inputs.gate != 'required'
+    concurrency:
+      group: scoreboard-index-\${{ github.ref }}
+      cancel-in-progress: false
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: prior-run
+          github-token: token
+      - run: node scripts/scoreboard-index.mjs restore-index
       - env:
           SCOREBOARD_HEAD: github.event.pull_request.head.sha
           SCOREBOARD_PENDING: needs.budgets.outputs.pending_reason
@@ -247,6 +259,29 @@ function syntheticReport(count: number, id: string) {
   return report;
 }
 
+function addStartupSamples(report: ReturnType<typeof syntheticReport>, count: number) {
+  for (const metric of report.metrics) {
+    if (!metric.id.startsWith("m09.")) continue;
+    metric.missingReason = null;
+    metric.coverage = {
+      expected: count * STARTUP_STRATA.length,
+      observed: count * STARTUP_STRATA.length,
+    };
+    metric.observations = STARTUP_STRATA.flatMap((stratum) =>
+      Array.from({ length: count }, (_, index) => ({
+        id: `startup-${metric.id}-${stratum}-${index}`,
+        sessionId: `session-${stratum}-${index}`,
+        pairId: `${stratum}-${index}`,
+        traceId: "trace-01",
+        outcome: "success" as const,
+        value: 1,
+        missingReason: null,
+        provenance: { kind: "measured" as const, sourceHash: hash("raw") },
+      })),
+    );
+  }
+}
+
 const TARGETS = [
   ["desktop-mac-arm64", "desktop-darwin-arm64", "synthetic.dmg", "darwin"],
   ["desktop-mac-x64", "desktop-darwin-x64", "synthetic.dmg", "darwin"],
@@ -254,16 +289,15 @@ const TARGETS = [
   ["desktop-win-x64", "desktop-win32-x64", "synthetic.exe", "win32"],
 ] as const;
 
-function energyPair(artifactHash: string, platform: "darwin" | "linux" | "win32") {
-  const binding = {
-    artifactHash,
-    environmentHash: hash("energy-env"),
-    workloadHash: hash("energy-work"),
-    platform,
-    hardwareClass: "fixture-small",
-    conditionsHash: hash("energy-conditions"),
-    durationMs: 1000,
-  };
+function energyPair(binding: {
+  artifactHash: string;
+  environmentHash: string;
+  workloadHash: string;
+  platform: "darwin" | "linux" | "win32";
+  hardwareClass: string;
+  conditionsHash: string;
+  durationMs: number;
+}) {
   const instrument = {
     id: "fixture-meter",
     method: "joule-counter" as const,
@@ -281,7 +315,7 @@ function energyPair(artifactHash: string, platform: "darwin" | "linux" | "win32"
     physical: true as const,
     samples: [
       { atMs: 0, value: 0 },
-      { atMs: 1000, value: 1 },
+      { atMs: binding.durationMs, value: 1 },
     ],
     idleControlHash: null,
   };
@@ -290,7 +324,7 @@ function energyPair(artifactHash: string, platform: "darwin" | "linux" | "win32"
       ...structuredClone(idle),
       samples: [
         { atMs: 0, value: 10 },
-        { atMs: 1000, value: 12 },
+        { atMs: binding.durationMs, value: 12 },
       ],
       idleControlHash: contentDigest(idle),
     },
@@ -304,6 +338,7 @@ async function writeReleaseCase(count: number, withEnergy: boolean) {
   const reportsRoot = path.join(root, "reports");
   await mkdir(reportsRoot, { recursive: true });
   const parent = syntheticReport(count, "parent-report");
+  addStartupSamples(parent, SCOREBOARD_MANIFEST.samplePlan.releaseStartupObservationsPerStratum);
   parent.build.commit = B;
   parent.build.parentCommit = D;
   parent.build.fixedReleaseCommit = C;
@@ -362,10 +397,9 @@ async function writeReleaseCase(count: number, withEnergy: boolean) {
     path.join(reportsRoot, "parent.json"),
     JSON.stringify(createPerformanceEvidenceEnvelope(parent)),
   );
-  await writeFile(
-    path.join(reportsRoot, "candidate.json"),
-    JSON.stringify(createPerformanceEvidenceEnvelope(candidate)),
-  );
+  const candidateBytes = JSON.stringify(createPerformanceEvidenceEnvelope(candidate));
+  await writeFile(path.join(reportsRoot, "candidate.json"), candidateBytes);
+  await writeFile(path.join(artifactRoot, "scoreboard-candidate.json"), candidateBytes);
   await writeFile(
     path.join(reportsRoot, "fixed-release.json"),
     JSON.stringify(createPerformanceEvidenceEnvelope(fixed)),
@@ -375,10 +409,27 @@ async function writeReleaseCase(count: number, withEnergy: boolean) {
     await writeFile(
       path.join(reportsRoot, "energy.json"),
       JSON.stringify(
-        files.map((file) => ({
-          target: file.target,
-          ...energyPair(file.sha256, file.platform),
-        })),
+        files.map((file) => {
+          const plan = {
+            artifactHash: file.sha256,
+            environmentHash: hash(`energy-env-${file.target}`),
+            workloadHash: contentDigest({
+              suiteVersion: SCOREBOARD_MANIFEST.suiteVersion,
+              releaseSamplePlan: {
+                replayPairs: SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs,
+                startupObservationsPerStratum:
+                  SCOREBOARD_MANIFEST.samplePlan.releaseStartupObservationsPerStratum,
+                startupStrata: STARTUP_STRATA,
+              },
+              target: file.target,
+            }),
+            platform: file.platform,
+            hardwareClass: `fixture-${file.target}`,
+            conditionsHash: hash(`energy-conditions-${file.target}`),
+            durationMs: SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs * 1000,
+          };
+          return { target: file.target, plan, ...energyPair(plan) };
+        }),
       ),
     );
   }
@@ -465,6 +516,10 @@ describe("scoreboard index", () => {
     });
     expect(selectCommitRange({ eventName: "pull_request", base: B, head: A }).kind).toBe("range");
     expect(selectCommitRange({ eventName: "workflow_call", head: A })).toEqual({
+      kind: "single",
+      head: A,
+    });
+    expect(selectCommitRange({ mode: "release", eventName: "push", before: B, head: A })).toEqual({
       kind: "single",
       head: A,
     });
@@ -555,7 +610,6 @@ describe("scoreboard index", () => {
     try {
       const first = appendIndexRecord(root, pending(A), {
         staleMs: 30,
-        heartbeatMs: 0,
         timeoutMs: 2000,
         beforeAppend: () => {
           markHolding();
@@ -569,14 +623,13 @@ describe("scoreboard index", () => {
       if (started === "held") await new Promise((resolve) => setTimeout(resolve, 50));
       const second = appendIndexRecord(root, pending(B), {
         staleMs: 30,
-        heartbeatMs: 0,
         timeoutMs: 2000,
       });
       const settled = await Promise.allSettled([first, second]);
       const records = await readIndex(root);
-      expect(records).toHaveLength(1);
-      expect(settled.filter((item) => item.status === "fulfilled")).toHaveLength(1);
-      expect(settled.filter((item) => item.status === "rejected")).toHaveLength(1);
+      expect(records.map((record) => record.commit)).toEqual([A, B]);
+      expect(settled.filter((item) => item.status === "fulfilled")).toHaveLength(2);
+      expect(settled.filter((item) => item.status === "rejected")).toHaveLength(0);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -738,6 +791,97 @@ describe("scoreboard index", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("restores a prior artifact before appending and refuses a broken restored chain", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-restore-"));
+    const restored = path.join(root, "restored");
+    const next = path.join(root, "next");
+    try {
+      const first = await appendIndexRecord(restored, pending(A));
+      const restore = spawnSync(
+        process.execPath,
+        [
+          "scripts/scoreboard-index.mjs",
+          "restore-index",
+          "--source",
+          restored,
+          "--root",
+          next,
+          "--missing-reason",
+          "expired-after-90-days-inactivity",
+        ],
+        { cwd: repo, encoding: "utf8" },
+      );
+      expect(restore.status).toBe(0);
+      const second = await appendIndexRecord(next, pending(B));
+      expect(second.previousHash).toBe(first.recordHash);
+      expect((await readIndex(next)).map((record) => record.commit)).toEqual([A, B]);
+
+      const broken = path.join(root, "broken");
+      await cp(restored, broken, { recursive: true });
+      const recordsFile = path.join(broken, "records.jsonl");
+      await writeFile(recordsFile, (await readFile(recordsFile, "utf8")).replace(A, C));
+      const refused = spawnSync(
+        process.execPath,
+        [
+          "scripts/scoreboard-index.mjs",
+          "restore-index",
+          "--source",
+          broken,
+          "--root",
+          path.join(root, "refused"),
+          "--missing-reason",
+          "expired-after-90-days-inactivity",
+        ],
+        { cwd: repo, encoding: "utf8" },
+      );
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain("corrupt-index");
+
+      const genesis = path.join(root, "genesis");
+      const missing = spawnSync(
+        process.execPath,
+        [
+          "scripts/scoreboard-index.mjs",
+          "restore-index",
+          "--source",
+          path.join(root, "missing"),
+          "--root",
+          genesis,
+          "--missing-reason",
+          "expired-after-90-days-inactivity",
+        ],
+        { cwd: repo, encoding: "utf8" },
+      );
+      expect(missing.status).toBe(0);
+      const commits = path.join(root, "commits.json");
+      await writeFile(commits, JSON.stringify([{ commit: A, parentCommit: null }]));
+      const indexed = spawnSync(
+        process.execPath,
+        [
+          "scripts/scoreboard-index.mjs",
+          "index-push",
+          "--commits-file",
+          commits,
+          "--root",
+          genesis,
+          "--runner-sha",
+          A,
+          "--environment",
+          "ubuntu-24.04-diagnostic",
+          "--suite-version",
+          "scoreboard-1",
+          "--mode",
+          "commit",
+        ],
+        { cwd: repo, encoding: "utf8" },
+      );
+      expect(indexed.status).toBe(0);
+      expect((await readIndex(genesis))[0]?.chainOrigin).toBe("expired-after-90-days-inactivity");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("release publication gate", () => {
@@ -751,7 +895,18 @@ describe("release publication gate", () => {
     expect(result.code).toBe(0);
     expect(result.gate.allowPublication).toBe(true);
     expect(result.gate.observedSamples).toBe(200);
-    expect(result.gate.unknowns).toContain("startup strata: not measured by this gate");
+    expect(result.gate.observedStartupSamples).toEqual(
+      Object.fromEntries(
+        [
+          "process-cold-os-warm",
+          "chromium-cache-cold",
+          "warm-relaunch",
+          "fresh-install",
+          "local-stack-cold",
+          "reboot-cold",
+        ].map((stratum) => [stratum, 100]),
+      ),
+    );
     expect(result.gate.energySummary).toContain("desktop-darwin-arm64");
     const records = await readIndex(result.indexRoot);
     expect(
@@ -774,6 +929,14 @@ describe("release publication gate", () => {
     );
     expect(notes).toContain("within-budget");
     expect(notes).toContain("Observed samples: 200");
+    const candidateBytes = await readFile(
+      path.join(passing.artifactRoot, "scoreboard-candidate.json"),
+    );
+    const attachedDigest = createHash("sha256").update(candidateBytes).digest("hex");
+    expect(result.gate.attachedEvidenceSha256).toBe(attachedDigest);
+    expect(result.gate.canonicalEnvelopeSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(notes).toContain(`The attached evidence file SHA-256 is ${attachedDigest}.`);
+    expect(notes).toContain("The canonical evidence envelope SHA-256 is ");
     expect(notes).toContain("Task success: unknown.");
     expect(notes).not.toContain("Suite scoreboard-1 (");
     expect(notes).not.toContain("Person");
@@ -800,6 +963,29 @@ describe("release publication gate", () => {
       ).toBe(false);
     } finally {
       await rm(short.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("blocks a release report with missing startup strata", async () => {
+    const missingStartup = await stagePassing();
+    try {
+      await rewriteCandidate(missingStartup.reportsRoot, (report) => {
+        for (const metric of report.metrics) {
+          if (!metric.id.startsWith("m09.")) continue;
+          metric.coverage = { expected: 0, observed: 0 };
+          metric.observations = [];
+          metric.missingReason = "not-measured";
+        }
+      });
+      const result = await gate(missingStartup, "index-missing-startup");
+      expect(result.code).not.toBe(0);
+      expect(
+        result.gate.reasons.some(
+          (reason: { code: string }) => reason.code === "insufficient-startup-samples",
+        ),
+      ).toBe(true);
+    } finally {
+      await rm(missingStartup.root, { recursive: true, force: true });
     }
   }, 60_000);
 
@@ -868,9 +1054,11 @@ describe("release publication gate", () => {
       report: ReturnType<typeof syntheticReport>;
     };
     edit(envelope.report);
+    const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report));
+    await writeFile(candidatePath, bytes);
     await writeFile(
-      candidatePath,
-      JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report)),
+      path.join(path.dirname(reportsRoot), "artifacts", "scoreboard-candidate.json"),
+      bytes,
     );
   }
 
@@ -881,13 +1069,18 @@ describe("release publication gate", () => {
     platform: "darwin" | "linux" | "win32",
   ) {
     const energyPath = path.join(reportsRoot, "energy.json");
-    const entries = JSON.parse(await readFile(energyPath, "utf8")) as { target: string }[];
+    const entries = JSON.parse(await readFile(energyPath, "utf8")) as {
+      target: string;
+      plan: Parameters<typeof energyPair>[0];
+    }[];
     await writeFile(
       energyPath,
       JSON.stringify(
-        entries.map((entry) =>
-          entry.target === target ? { target, ...energyPair(artifactHash, platform) } : entry,
-        ),
+        entries.map((entry) => {
+          if (entry.target !== target) return entry;
+          const plan = { ...entry.plan, artifactHash, platform };
+          return { target, plan, ...energyPair(plan) };
+        }),
       ),
     );
   }
@@ -989,6 +1182,28 @@ describe("release publication gate", () => {
     }
   }, 60_000);
 
+  it("refuses a one-second unrelated workload carrying a valid installer hash", async () => {
+    const unrelated = await stagePassing();
+    try {
+      const energyPath = path.join(unrelated.reportsRoot, "energy.json");
+      const entries = JSON.parse(await readFile(energyPath, "utf8")) as {
+        target: string;
+        capture: { binding: { workloadHash: string; durationMs: number } };
+      }[];
+      const target = entries.find((entry) => entry.target === "desktop-linux-x64")!;
+      target.capture.binding.workloadHash = hash("one-second-unrelated-workload");
+      target.capture.binding.durationMs = 1000;
+      await writeFile(energyPath, JSON.stringify(entries));
+      const result = await gate(unrelated, "index-unrelated-workload");
+      expect(result.code).not.toBe(0);
+      expect(
+        result.gate.reasons.some((reason: { code: string }) => reason.code === "missing-energy"),
+      ).toBe(true);
+    } finally {
+      await rm(unrelated.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("records a safety refusal with every gate code instead of a missing-report pending line", async () => {
     const refusedCase = await stagePassing();
     try {
@@ -1040,6 +1255,14 @@ describe("workflow contracts", () => {
     expect(releaseYaml).toContain("verify-publication");
     expect(releaseYaml.split("\n  publish:\n")[1]).not.toContain("desktop-release-assets.mjs");
     expect(performanceYaml).toContain("SCOREBOARD_ARTIFACTS: publication/release-ready");
+    expect(performanceYaml).not.toMatch(/github\.event_name\s*[!=]=\s*'workflow_call'/);
+    expect(performanceYaml).toContain("if: inputs.gate == 'required'");
+    expect(performanceYaml).toContain("if: inputs.gate != 'required'");
+    expect(performanceYaml).toContain("actions/download-artifact@");
+    expect(performanceYaml).toContain("run-id:");
+    expect(performanceYaml).toContain("github-token:");
+    expect(performanceYaml).toContain("group: scoreboard-index-");
+    expect(performanceYaml).toContain("node scripts/scoreboard-index.mjs restore-index");
     expect(docs).not.toContain("third worktree");
     expect(docs).toContain("harness in the base worktree");
     expect(docs).toContain("budgets job's pending reason");

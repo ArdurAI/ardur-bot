@@ -1,13 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, mkdir, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tsImport } from "tsx/esm/api";
 
 /** Local historical scoreboard. Workflow artifacts are a transport copy, not this store. */
 export const SCOREBOARD_INDEX_RELATIVE_PATH = ".context/performance/scoreboard-index";
-export const INDEX_SCHEMA_VERSION = 2;
+export const INDEX_SCHEMA_VERSION = 3;
 export const COMMIT_OBJECT_RETENTION_DAYS = 180;
 export const WORKFLOW_ARTIFACT_RETENTION_DAYS = 90;
 export const RELEASE_EVIDENCE_RETENTION = "github-release-lifetime";
@@ -30,6 +30,7 @@ export const PENDING_REASONS = Object.freeze([
   "missing-energy",
   "missing-platform",
   "insufficient-samples",
+  "insufficient-startup-samples",
   "tier-not-releasable",
   "missing-fixed-release",
   "release-commit-mismatch",
@@ -62,9 +63,11 @@ const RECORD_KEYS = [
   "gateCodes",
   "supersedes",
   "expiresRecord",
+  "chainOrigin",
   "previousHash",
 ];
-const LEGACY_RECORD_KEYS = RECORD_KEYS.filter((key) => key !== "gateCodes");
+const V2_RECORD_KEYS = RECORD_KEYS.filter((key) => key !== "chainOrigin");
+const LEGACY_RECORD_KEYS = V2_RECORD_KEYS.filter((key) => key !== "gateCodes");
 const DIRECTORY_TARGETS = {
   "desktop-mac-arm64": "desktop-darwin-arm64",
   "desktop-mac-x64": "desktop-darwin-x64",
@@ -128,6 +131,7 @@ function loadScoreboard() {
     comparePerformanceEvidence: statistics.comparePerformanceEvidence,
     packagedCoverage: plan.packagedCoverage,
     RELEASE_TARGETS: plan.RELEASE_TARGETS,
+    STARTUP_STRATA: plan.STARTUP_STRATA,
     inventoryArtifact: artifacts.inventoryArtifact,
     ingestPhysicalEnergy: energy.ingestPhysicalEnergy,
   }));
@@ -202,26 +206,27 @@ async function exists(file) {
   }
 }
 
-export function selectCommitRange({ eventName, before, base, head }) {
+export function selectCommitRange({ mode = "commit", before, base, head }) {
   sha40(head);
   const zero = "0".repeat(40);
-  if (eventName === "pull_request") {
-    sha40(base);
-    return { kind: "range", base, head };
-  }
-  if (eventName === "push") {
-    if (before === zero) return { kind: "history", head };
-    sha40(before);
-    return { kind: "range", base: before, head };
-  }
-  if (eventName === "workflow_dispatch" || eventName === "workflow_call") {
+  if (mode === "release") {
     if (base && base !== zero) {
       sha40(base);
       return { kind: "range", base, head };
     }
     return { kind: "single", head };
   }
-  fail("unsupported-event", "unsupported-event");
+  if (mode !== "commit") fail("invalid-mode", "invalid-mode");
+  if (base && base !== zero) {
+    sha40(base);
+    return { kind: "range", base, head };
+  }
+  if (before) {
+    if (before === zero) return { kind: "history", head };
+    sha40(before);
+    return { kind: "range", base: before, head };
+  }
+  return { kind: "single", head };
 }
 
 export function parseRevListParents(text) {
@@ -306,18 +311,20 @@ export async function samplePlanFor(mode) {
 async function withIndexLock(root, fn, options = {}) {
   const timeoutMs = options.timeoutMs ?? 10_000;
   const staleMs = options.staleMs ?? 30_000;
+  const heartbeatMs = options.heartbeatMs ?? Math.max(5, Math.floor(staleMs / 3));
+  if (heartbeatMs >= staleMs) fail("invalid-lock", "Lock heartbeat must precede stale takeover.");
   await mkdir(root, { recursive: true });
   const lockDir = path.join(root, "lock");
+  const ownerPath = path.join(lockDir, "owner");
   const token = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const started = Date.now();
   for (;;) {
     try {
       await mkdir(lockDir);
-      await writeFile(path.join(lockDir, "owner"), token);
+      await writeFile(ownerPath, token);
       break;
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      const ownerPath = path.join(lockDir, "owner");
       let stale = false;
       try {
         stale = Date.now() - (await stat(ownerPath)).mtimeMs > staleMs;
@@ -337,7 +344,25 @@ async function withIndexLock(root, fn, options = {}) {
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
   }
+  const ownerHandle = await open(ownerPath, "r+");
+  let heartbeatFailure = null;
+  let heartbeat = Promise.resolve();
+  const timer = setInterval(() => {
+    heartbeat = heartbeat
+      .then(async () => {
+        if ((await readFile(ownerPath, "utf8")) !== token)
+          fail("lock-lost", "Scoreboard index lock ownership was lost.");
+        const now = new Date();
+        await ownerHandle.utimes(now, now);
+      })
+      .catch((error) => {
+        heartbeatFailure = error;
+      });
+  }, heartbeatMs);
+  timer.unref?.();
   const assertOwner = async () => {
+    await heartbeat;
+    if (heartbeatFailure) throw heartbeatFailure;
     let owner = null;
     try {
       owner = await readFile(path.join(lockDir, "owner"), "utf8");
@@ -349,8 +374,11 @@ async function withIndexLock(root, fn, options = {}) {
   try {
     return await fn(assertOwner);
   } finally {
+    clearInterval(timer);
+    await heartbeat;
+    await ownerHandle.close();
     try {
-      if ((await readFile(path.join(lockDir, "owner"), "utf8")) === token)
+      if ((await readFile(ownerPath, "utf8")) === token)
         await rm(lockDir, { recursive: true, force: true });
     } catch {
       /* A stale lock was already replaced. */
@@ -380,10 +408,13 @@ async function readIndexUnlocked(root) {
     } catch {
       fail("corrupt-index", "corrupt-index");
     }
-    exactKeys(record, [
-      ...(record?.schemaVersion === 1 ? LEGACY_RECORD_KEYS : RECORD_KEYS),
-      "recordHash",
-    ]);
+    const keys =
+      record?.schemaVersion === 1
+        ? LEGACY_RECORD_KEYS
+        : record?.schemaVersion === 2
+          ? V2_RECORD_KEYS
+          : RECORD_KEYS;
+    exactKeys(record, [...keys, "recordHash"]);
     const actual = hashRecord(record, contentDigest);
     if (record.recordHash !== actual || record.previousHash !== previous)
       fail("corrupt-index", "corrupt-index");
@@ -515,8 +546,14 @@ async function normalizeRecord(input, existing) {
     gateCodes: [],
     supersedes: input.supersedes,
     expiresRecord: input.expiresRecord ?? null,
+    chainOrigin: existing.length === 0 ? (input.chainOrigin ?? "first-run") : null,
     previousHash: existing.at(-1)?.recordHash ?? GENESIS,
   };
+  if (
+    body.chainOrigin !== null &&
+    !["first-run", "expired-after-90-days-inactivity"].includes(body.chainOrigin)
+  )
+    fail("invalid-chain-origin", "invalid-chain-origin");
   const prior = existing.filter((record) => sameKey(record, body));
   if (body.status === "pending" && prior.some((record) => record.status === "measured"))
     fail("pending-hides-measurement", "pending-hides-measurement");
@@ -645,6 +682,38 @@ export async function appendIndexRecord(root, input, options = {}) {
     },
     options,
   );
+}
+
+const CHAIN_ORIGIN_FILE = ".chain-origin";
+
+export async function restoreIndex(source, root, missingReason) {
+  if (!["first-run", "expired-after-90-days-inactivity"].includes(missingReason))
+    fail("invalid-chain-origin", "invalid-chain-origin");
+  if (await exists(recordsPath(source))) {
+    await readIndex(source);
+    if (await exists(root)) {
+      const entries = await readdir(root);
+      if (entries.length) fail("restore-target-not-empty", "restore-target-not-empty");
+    }
+    await cp(source, root, { recursive: true, errorOnExist: true, force: false });
+    return "restored";
+  }
+  await mkdir(root, { recursive: true });
+  await writeFile(path.join(root, CHAIN_ORIGIN_FILE), `${missingReason}\n`, { flag: "wx" });
+  return missingReason;
+}
+
+async function chainOrigin(root) {
+  try {
+    const value = (await readFile(path.join(root, CHAIN_ORIGIN_FILE), "utf8")).trim();
+    if (!["first-run", "expired-after-90-days-inactivity"].includes(value))
+      fail("invalid-chain-origin", "invalid-chain-origin");
+    return value;
+  } catch (error) {
+    if (error instanceof ScoreboardIndexError) throw error;
+    if (error.code !== "ENOENT") throw error;
+    return "first-run";
+  }
 }
 
 export async function pruneCommitObjects(root, now, retentionDays = COMMIT_OBJECT_RETENTION_DAYS) {
@@ -779,7 +848,8 @@ function primaryInstallers(files) {
 
 async function validatedEnergy(file, artifactRoot, installers) {
   if (!(await exists(file))) return new Set();
-  const { ingestPhysicalEnergy } = await loadScoreboard();
+  const scoreboard = await loadScoreboard();
+  const { ingestPhysicalEnergy } = scoreboard;
   let entries;
   try {
     entries = JSON.parse(await readFile(file, "utf8"));
@@ -800,23 +870,45 @@ async function validatedEnergy(file, artifactRoot, installers) {
     accepted.set(installer.target, values);
   }
   const observed = new Set();
+  const workloadHash = (target) =>
+    scoreboard.contentDigest({
+      suiteVersion: scoreboard.SCOREBOARD_MANIFEST.suiteVersion,
+      releaseSamplePlan: {
+        replayPairs: scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs,
+        startupObservationsPerStratum:
+          scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseStartupObservationsPerStratum,
+        startupStrata: scoreboard.STARTUP_STRATA,
+      },
+      target,
+    });
   for (const entry of entries) {
     try {
-      exactKeys(entry, ["target", "capture", "idle"], "missing-energy");
+      exactKeys(entry, ["target", "plan", "capture", "idle"], "missing-energy");
       assertPublicValue(entry);
       const platform = TARGET_PLATFORM[entry.target];
       const acceptedHashes = accepted.get(entry.target);
       if (!acceptedHashes || !platform || observed.has(entry.target)) continue;
-      if (!acceptedHashes.has(entry.capture?.binding?.artifactHash)) continue;
-      const result = ingestPhysicalEnergy(
-        entry.capture,
-        {
-          ...entry.capture.binding,
-          artifactHash: entry.capture.binding.artifactHash,
-          platform,
-        },
-        entry.idle,
+      exactKeys(
+        entry.plan,
+        [
+          "artifactHash",
+          "environmentHash",
+          "workloadHash",
+          "platform",
+          "hardwareClass",
+          "conditionsHash",
+          "durationMs",
+        ],
+        "missing-energy",
       );
+      if (
+        !acceptedHashes.has(entry.plan.artifactHash) ||
+        entry.plan.platform !== platform ||
+        entry.plan.workloadHash !== workloadHash(entry.target) ||
+        entry.plan.durationMs < scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs * 1000
+      )
+        continue;
+      const result = ingestPhysicalEnergy(entry.capture, entry.plan, entry.idle);
       if (result.scope === "cpu-package" || result.systemEnergy?.missingReason) continue;
       observed.add(entry.target);
     } catch {
@@ -928,10 +1020,32 @@ function recoverySummary(report) {
     .join("; ");
 }
 
+function startupSampleCounts(report, strata) {
+  const metrics = report.metrics.filter((metric) => metric.id.startsWith("m09."));
+  return Object.fromEntries(
+    strata.map((stratum) => {
+      const counts = metrics.map(
+        (metric) =>
+          new Set(
+            metric.observations
+              .filter(
+                (observation) =>
+                  observation.value !== null &&
+                  observation.missingReason === null &&
+                  observation.pairId.startsWith(`${stratum}-`),
+              )
+              .map((observation) => observation.pairId),
+          ).size,
+      );
+      return [stratum, counts.length ? Math.min(...counts) : 0];
+    }),
+  );
+}
+
 export async function evaluatePublicationGate(input) {
   const scoreboard = await loadScoreboard();
   const reasons = [];
-  const unknowns = ["startup strata: not measured by this gate"];
+  const unknowns = [];
   const push = (code, scope, detail = code) => {
     let text = typeof detail === "string" ? detail : code;
     if (text.length > 240 || PRIVATE_MARKERS.some((marker) => text.includes(marker))) text = code;
@@ -985,6 +1099,9 @@ export async function evaluatePublicationGate(input) {
     if (cell.energy !== "observed") unknowns.push(`${cell.target} energy: not-measured`);
   }
   let observedSamples = null;
+  let observedStartupSamples = Object.fromEntries(
+    scoreboard.STARTUP_STRATA.map((stratum) => [stratum, 0]),
+  );
   if (candidateReport) {
     const candidateSha = /^[a-f0-9]{40}$/.test(input.candidateSha ?? "")
       ? input.candidateSha
@@ -1003,10 +1120,7 @@ export async function evaluatePublicationGate(input) {
     )
       push("release-commit-mismatch", "reports");
     if (candidateReport.scenario.tier === "T0") push("tier-not-releasable", "scenario");
-    const floor =
-      candidateReport.scenario.tier === "T2"
-        ? scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseStartupObservationsPerStratum
-        : scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs;
+    const floor = scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs;
     const requiredIds = Array.isArray(input.policy?.policy?.required?.metricIds)
       ? input.policy.policy.required.metricIds
       : [];
@@ -1020,6 +1134,32 @@ export async function evaluatePublicationGate(input) {
         "sample-plan",
         `observed ${observedSamples}; release plan ${floor}`,
       );
+    const startupReports = [
+      verdict?.evidence?.parent?.report,
+      verdict?.evidence?.candidate?.report,
+      verdict?.evidence?.fixedRelease?.report,
+    ].filter(Boolean);
+    const startupCounts = startupReports.map((report) =>
+      startupSampleCounts(report, scoreboard.STARTUP_STRATA),
+    );
+    observedStartupSamples = Object.fromEntries(
+      scoreboard.STARTUP_STRATA.map((stratum) => [
+        stratum,
+        startupCounts.length
+          ? Math.min(...startupCounts.map((countsByStratum) => countsByStratum[stratum]))
+          : 0,
+      ]),
+    );
+    const startupFloor =
+      scoreboard.SCOREBOARD_MANIFEST.samplePlan.releaseStartupObservationsPerStratum;
+    for (const [stratum, count] of Object.entries(observedStartupSamples)) {
+      if (count < startupFloor)
+        push(
+          "insufficient-startup-samples",
+          stratum,
+          `observed ${count}; release plan ${startupFloor}`,
+        );
+    }
     const buildArtifacts = candidateReport.artifacts.filter(
       (artifact) => artifact.kind === "build",
     );
@@ -1034,6 +1174,8 @@ export async function evaluatePublicationGate(input) {
       .join(",");
     if (!files.length || left !== right) push("artifact-digest-mismatch", "artifacts");
   }
+  if (input.attachedEvidenceValid !== true)
+    push("artifact-digest-mismatch", "scoreboard-candidate.json");
   const unique = [];
   for (const reason of reasons) {
     if (!unique.some((item) => item.code === reason.code && item.scope === reason.scope))
@@ -1095,6 +1237,7 @@ export async function evaluatePublicationGate(input) {
     samplePlan: plan.label,
     declaredSamples: plan.declaredSamples,
     observedSamples,
+    observedStartupSamples,
     calibration: verdict?.calibration ?? "missing",
     policyHash: verdict?.policyHash ?? null,
     verdictStatus: verdict?.status ?? "missing",
@@ -1104,7 +1247,10 @@ export async function evaluatePublicationGate(input) {
       requiredEnergy.length === REQUIRED_RELEASE_TARGETS.length
         ? `observed on ${requiredEnergy.join(", ")}`
         : "unknown",
-    rawObjectDigest: verdict?.evidence?.candidate.sha256 ?? null,
+    attachedEvidenceSha256: input.attachedEvidenceDigest ?? null,
+    canonicalEnvelopeSha256: input.candidate
+      ? sha256(Buffer.from(scoreboard.canonicalSerialize(input.candidate)))
+      : null,
     distributedDigests: files.map(({ target, name, sha256: digestValue, bytes }) => ({
       target,
       name,
@@ -1143,6 +1289,7 @@ export function renderScoreboardNotes(gate) {
       "samplePlan",
       "declaredSamples",
       "observedSamples",
+      "observedStartupSamples",
       "calibration",
       "policyHash",
       "verdictStatus",
@@ -1156,7 +1303,8 @@ export function renderScoreboardNotes(gate) {
       "memorySummary",
       "bundleSummary",
       "energySummary",
-      "rawObjectDigest",
+      "attachedEvidenceSha256",
+      "canonicalEnvelopeSha256",
       "distributedDigests",
       "coverage",
       "releaseEligible",
@@ -1178,6 +1326,9 @@ export function renderScoreboardNotes(gate) {
     `The scoreboard suite is ${gate.suiteVersion}.`,
     `These measurements were taken in the ${gate.environment} environment.`,
     `The ${gate.samplePlan} plan requires ${gate.declaredSamples.pairs} paired observations and ${cell(gate.declaredSamples.startupPerStratum)} startup observations per stratum. Observed samples: ${cell(gate.observedSamples)}.`,
+    `Observed startup samples by stratum: ${Object.entries(gate.observedStartupSamples)
+      .map(([stratum, count]) => `${stratum} ${count}`)
+      .join("; ")}.`,
     `The budget policy is ${gate.calibration}. The measured evidence verdict is ${gate.verdictStatus}.`,
     "",
     "| Metric | Baseline | Outcome | Statistic | Samples | Estimate | Interval | Delta | Verdict |",
@@ -1211,7 +1362,8 @@ export function renderScoreboardNotes(gate) {
   for (const unknown of gate.unknowns) lines.push(`- ${unknown}`);
   lines.push(
     "",
-    `The raw evidence object digest is ${cell(gate.rawObjectDigest)}.`,
+    `The attached evidence file SHA-256 is ${cell(gate.attachedEvidenceSha256)}.`,
+    `The canonical evidence envelope SHA-256 is ${cell(gate.canonicalEnvelopeSha256)}.`,
     `The budget decision is ${gate.verdictStatus}.`,
     "",
     "Human acceptance is separate and is not granted by this evidence.",
@@ -1259,6 +1411,21 @@ export async function runReleaseGate(options) {
   const [parent, candidate, fixedRelease, policy] = await Promise.all(
     names.map((name) => readJson(path.join(options.reportsRoot, name))),
   );
+  const attachedCandidate = files.find((file) => file.name === "scoreboard-candidate.json");
+  let attachedEvidenceDigest = null;
+  let attachedEvidenceValid = false;
+  if (attachedCandidate && candidate) {
+    try {
+      const bytes = await readFile(path.join(options.artifactRoot, attachedCandidate.relativePath));
+      attachedEvidenceDigest = sha256(bytes);
+      const parsed = JSON.parse(bytes.toString("utf8"));
+      attachedEvidenceValid =
+        attachedEvidenceDigest === attachedCandidate.sha256 &&
+        scoreboard.canonicalSerialize(parsed) === scoreboard.canonicalSerialize(candidate);
+    } catch {
+      attachedEvidenceValid = false;
+    }
+  }
   const gate = await evaluatePublicationGate({
     parent,
     candidate,
@@ -1267,6 +1434,8 @@ export async function runReleaseGate(options) {
     files,
     energyTargets,
     unmapped,
+    attachedEvidenceDigest,
+    attachedEvidenceValid,
     candidateSha: options.candidateSha,
     baseSha: options.baseSha,
     fixedReleaseSha: options.fixedReleaseSha || null,
@@ -1375,7 +1544,7 @@ export async function runIndexPush(options) {
   }
   if (!commits) {
     const range = selectCommitRange({
-      eventName: options.eventName,
+      mode: options.mode ?? "commit",
       before: options.before,
       base: options.base,
       head: options.head,
@@ -1419,6 +1588,7 @@ export async function runIndexPush(options) {
   });
   const indexedAt = options.indexedAt ?? new Date().toISOString();
   let records = await readIndex(options.root);
+  const origin = records.length ? null : await chainOrigin(options.root);
   for (const item of planned) {
     const mode = options.mode ?? "commit";
     const key = {
@@ -1448,6 +1618,7 @@ export async function runIndexPush(options) {
       runnerCommit: options.runnerCommit,
       attempt: nextAttempt(records, key),
       supersedes: prior.at(-1)?.recordHash ?? null,
+      chainOrigin: records.length ? null : origin,
       pendingReason: item.pendingReason,
       envelope: item.envelope,
     });
@@ -1508,6 +1679,8 @@ export function assertWorkflowContracts(performanceText, releaseText) {
     if (!value.includes(needle)) errors.push(label);
   };
   requireText(performanceText, "workflow_call:", "performance workflow_call");
+  if (/github\.event_name\s*[!=]=\s*['"]workflow_call['"]/.test(performanceText))
+    errors.push("workflow_call decisions must use declared inputs");
   for (const input of [
     "candidate_sha:",
     "base_sha:",
@@ -1525,6 +1698,9 @@ export function assertWorkflowContracts(performanceText, releaseText) {
     errors.push("performance copies candidate code into the baseline");
   if (performanceText.includes("secrets.")) errors.push("performance workflow uses secrets");
   requireText(performanceText, "node scripts/scoreboard-index.mjs index-push", "index-push");
+  requireText(performanceText, "node scripts/scoreboard-index.mjs restore-index", "index restore");
+  requireText(performanceText, "run-id:", "prior index run");
+  requireText(performanceText, "github-token:", "artifact read token");
   requireText(
     performanceText,
     "node scripts/scoreboard-index.mjs baseline-decision",
@@ -1551,12 +1727,14 @@ export function assertWorkflowContracts(performanceText, releaseText) {
   );
   if (performanceText.includes("performance-runner"))
     errors.push("unused performance runner worktree");
+  const budgets = jobBlock(performanceText, "budgets");
+  requireText(budgets, "if: inputs.gate != 'required'", "advisory budgets condition");
+  const index = jobBlock(performanceText, "index");
+  requireText(index, "inputs.gate != 'required'", "advisory index condition");
+  requireText(index, "group: scoreboard-index-", "serialized index writers");
+  requireText(index, "cancel-in-progress: false", "index writers must wait");
   const releaseGate = jobBlock(performanceText, "release-gate");
-  requireText(
-    releaseGate,
-    "github.event_name == 'workflow_call' && inputs.gate == 'required'",
-    "required gate condition",
-  );
+  requireText(releaseGate, "if: inputs.gate == 'required'", "required gate condition");
   const gateCommand = releaseGate.split("node scripts/scoreboard-index.mjs release-gate")[0] ?? "";
   if (gateCommand.split("\n").slice(-8).join("\n").includes("continue-on-error"))
     errors.push("release gate continues on error");
@@ -1638,7 +1816,6 @@ async function main(argv) {
     process.exitCode = await runIndexPush({
       root: args.root || env("SCOREBOARD_ROOT") || SCOREBOARD_INDEX_RELATIVE_PATH,
       commitsFile: args["commits-file"] ?? null,
-      eventName: env("SCOREBOARD_EVENT") || "push",
       before: env("SCOREBOARD_BEFORE"),
       base: args.base || env("SCOREBOARD_BASE"),
       head: args.head || env("SCOREBOARD_HEAD"),
@@ -1649,6 +1826,10 @@ async function main(argv) {
       fixedReleaseCommit: blank(args["fixed-release-sha"] || env("SCOREBOARD_FIXED")),
       pendingReason: args["pending-reason"] || env("SCOREBOARD_PENDING") || undefined,
     });
+    return;
+  }
+  if (command === "restore-index") {
+    await restoreIndex(args.source, args.root, args["missing-reason"]);
     return;
   }
   if (command === "release-gate") {
@@ -1686,7 +1867,7 @@ async function main(argv) {
   }
   fail(
     "invalid-argument",
-    "Expected baseline-decision, index-push, release-gate, verify-publication, list-upload, or check-workflows.",
+    "Expected baseline-decision, restore-index, index-push, release-gate, verify-publication, list-upload, or check-workflows.",
   );
 }
 

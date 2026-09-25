@@ -229,20 +229,33 @@ the measured line remains.
 
 Workflow artifacts expire after 90 days and are not the historical scoreboard. Release evidence is
 attached to the GitHub release and kept for the github-release-lifetime of that release. Development
-pushes record every new commit as measured or pending and stay advisory. The release invocation is
+pushes record every new commit as measured or pending and stay advisory. Before appending, the index
+job restores and verifies the previous successful `scoreboard-index` artifact for the same branch.
+Index writers for one ref are serialized, so concurrent runs cannot fork the chain. The next upload
+contains the complete restored chain plus the new records. A branch with no successful run starts
+with `first-run`; when the prior artifact has expired after 90 days without a successful refresh, the
+new genesis records `expired-after-90-days-inactivity`. A downloaded chain with a broken hash fails
+the job instead of silently starting over. The release invocation is
 mandatory: `publish` depends on the evidence job, and that job fails closed when the report,
 platform, energy, or digest check is incomplete. The asset assembler merges update feeds and writes
 the cask before the gate. The gate requires the measured installer set to equal the candidate
 report, records every derived publication file, and publication re-hashes that exact flat file set
-before upload. A failed draft creation or upload is cleaned up so the same tag can be retried.
+before upload. Release notes and the gate label the SHA-256 of the exact attached
+`scoreboard-candidate.json` bytes separately from the canonical evidence-envelope SHA-256. A failed
+draft creation or upload is cleaned up so the same tag can be retried.
 Credential-free pull-request runners do not receive provider credentials. Live provider evaluation
 stays explicit and budgeted. Physical release runners
 are not provisioned by this workflow; until they upload `scoreboard-reports`, publication stops
 with the missing evidence visible.
 
 The commit sample plan is 20 paired observations. The release plan is 200 replay pairs and 100
-observations per startup stratum. Startup strata that this gate did not collect stay labeled
-unknown. Human acceptance is separate and is not granted by the evidence.
+observations for every required startup stratum. Missing or short startup strata fail with
+`insufficient-startup-samples`; they are not informational unknowns. Each physical-energy file also
+contains the predeclared binding used to start the measurement. The gate derives the target,
+platform, workload hash, and minimum 200-second window from the gated installer and release sample
+plans, then requires the capture and matched idle control to reproduce that plan's environment,
+hardware class, conditions, and duration exactly. Human acceptance is separate and is not granted
+by the evidence.
 
 The `performance` workflow uses the production Vite build with synthetic auth/RPC responses and a
 fake streamed provider; it has no Docker or hosted-provider dependency. It measures five fresh
