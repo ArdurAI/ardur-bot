@@ -1059,6 +1059,7 @@ model Computer {
   kind                    String
   providerRef             String?
   state                   String                   @default("stopped")
+  provisioningId          String?
   controlHolder           String                   @default("none")
   controlLeaseId          String?
   controlLeaseExpiresAt   DateTime?
