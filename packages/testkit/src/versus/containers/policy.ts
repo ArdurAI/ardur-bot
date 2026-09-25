@@ -7,6 +7,8 @@ export const COMPUTER_IMAGE =
 export const HERMES_IMAGE =
   "nousresearch/hermes-agent@sha256:c64666f62179b6cd7d2df3348a30907b383a82a8e0d2400083b8004e24615780";
 export const HERMES_CONTAINER_REVISION = "29112bef099274229cadff79cdff7bf7b99c4b77";
+/** This image's agent_init rejects a declared context below this token count. */
+export const HERMES_MINIMUM_CONTEXT_TOKENS = 64_000;
 export const HERMES_IMAGE_PAYLOAD_BYTES = 938742461;
 export const HERMES_PULL = `docker pull --platform linux/arm64 ${HERMES_IMAGE}`;
 export const CONTAINER_ROOT = "/opt/data";
