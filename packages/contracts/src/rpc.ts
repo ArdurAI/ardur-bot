@@ -268,6 +268,26 @@ function createIdeContract() {
   };
 }
 
+// Keep Fleet-only construction removable from the browser contracts barrel.
+const fleetContract = /* @__PURE__ */ createFleetContract();
+function createFleetContract() {
+  return {
+    list: oc.output(FleetSchema),
+    discover: oc.output(FleetTargetSchema.array()),
+    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTargetSchema.array()),
+    placement: oc.input(PlacementSettingsSchema).output(PlacementSettingsSchema),
+    bot: oc
+      .input(
+        z.object({
+          botId: Id,
+          moveAutomatically: z.boolean().optional(),
+          decision: z.enum(["accept", "decline"]).optional(),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+  };
+}
+
 export const appContract = {
   ...customizationContract,
   account: accountContract,
@@ -563,21 +583,7 @@ export const appContract = {
       )
       .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
   },
-  fleet: {
-    list: oc.output(FleetSchema),
-    discover: oc.output(FleetTargetSchema.array()),
-    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTargetSchema.array()),
-    placement: oc.input(PlacementSettingsSchema).output(PlacementSettingsSchema),
-    bot: oc
-      .input(
-        z.object({
-          botId: Id,
-          moveAutomatically: z.boolean().optional(),
-          decision: z.enum(["accept", "decline"]).optional(),
-        }),
-      )
-      .output(z.object({ ok: z.literal(true) })),
-  },
+  fleet: fleetContract,
   computer: {
     engine: oc.input(z.object({ connectionId: Id.nullable() })).output(
       z.object({

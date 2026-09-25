@@ -214,7 +214,6 @@ import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { CompareStart } from "./CompareStart";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
-import { PlacementNotice } from "./fleet/PlacementNotice";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
 import type { RoutineDraftState } from "./RoutineEditor";
@@ -265,6 +264,9 @@ const MessagingSettingsOverlay = lazy(() =>
 );
 const SettingsOverlay = lazy(() =>
   import("./SettingsOverlay").then((module) => ({ default: module.SettingsOverlay })),
+);
+const PlacementNotice = lazy(() =>
+  import("./fleet/PlacementNotice").then((module) => ({ default: module.PlacementNotice })),
 );
 const PeerMessagesOverlay = lazy(() =>
   import("./PeerMessagesOverlay").then((module) => ({ default: module.PeerMessagesOverlay })),
@@ -3292,9 +3294,13 @@ export function ShellPage({ team = false }: { team?: boolean }) {
           </div>
         </div>
         {bootstrapMe?.isDeploymentOwner
-          ? currentRuns.map((run) => (
-              <PlacementNotice key={run.id} run={run} onOpen={() => openSettings("computer")} />
-            ))
+          ? currentRuns.map((run) =>
+              run.status === "waiting_input" && run.placement?.status === "pending" ? (
+                <Suspense key={run.id} fallback={null}>
+                  <PlacementNotice run={run} onOpen={() => openSettings("computer")} />
+                </Suspense>
+              ) : null,
+            )
           : null}
         {!active && !activeGroup && initialBotsLoaded ? (
           <div className="grid flex-1 place-items-center">

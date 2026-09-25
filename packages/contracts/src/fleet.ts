@@ -78,26 +78,28 @@ export const EngineEndpointSchema = z
     }
   }, "Choose a Unix socket, SSH endpoint, or TLS endpoint on port 2376.");
 
-export const PlacementSettingsSchema = z.object({
-  mode: z.enum(["manual", "free-memory", "threshold"]).default("manual"),
-  preferredTargetId: z.string().max(160).default("host"),
-  minimumFreeGb: z.number().finite().min(0.25).max(65536).default(4),
-});
+export const PlacementSettingsSchema = /* @__PURE__ */ (() =>
+  z.object({
+    mode: z.enum(["manual", "free-memory", "threshold"]).default("manual"),
+    preferredTargetId: z.string().max(160).default("host"),
+    minimumFreeGb: z.number().finite().min(0.25).max(65536).default(4),
+  }))();
 export type PlacementSettings = z.infer<typeof PlacementSettingsSchema>;
-export const FleetTargetSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  kind: z.enum(["host", "docker", "podman", "kubernetes", "ssh", "tailscale"]),
-  connectionId: z.string().nullable(),
-  state: z.enum(["connected", "discovered", "unavailable"]),
-  capacity: CapacitySnapshotSchema,
-  version: z.string().optional(),
-  os: z.string().optional(),
-  endpoint: z.string().optional(),
-  context: z.string().optional(),
-  ssh: SshSettingsSchema.optional(),
-  bots: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
-});
+export const FleetTargetSchema = /* @__PURE__ */ (() =>
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    kind: z.enum(["host", "docker", "podman", "kubernetes", "ssh", "tailscale"]),
+    connectionId: z.string().nullable(),
+    state: z.enum(["connected", "discovered", "unavailable"]),
+    capacity: CapacitySnapshotSchema,
+    version: z.string().optional(),
+    os: z.string().optional(),
+    endpoint: z.string().optional(),
+    context: z.string().optional(),
+    ssh: SshSettingsSchema.optional(),
+    bots: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
+  }))();
 export type FleetTarget = z.infer<typeof FleetTargetSchema>;
 export const PlacementDecisionSchema = z.object({
   targetId: z.string(),
@@ -112,20 +114,21 @@ export const RunPlacementSchema = z.union([
   PlacementDecisionSchema.extend({ status: z.enum(["pending", "moving", "moved", "failed"]) }),
   z.object({ status: z.literal("declined") }),
 ]);
-export const FleetSchema = z.object({
-  targets: z.array(FleetTargetSchema),
-  placement: PlacementSettingsSchema,
-  bots: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        moveAutomatically: z.boolean(),
-        pending: PlacementDecisionSchema.nullable(),
-      }),
-    )
-    .default([]),
-});
+export const FleetSchema = /* @__PURE__ */ (() =>
+  z.object({
+    targets: z.array(FleetTargetSchema),
+    placement: PlacementSettingsSchema,
+    bots: z
+      .array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          moveAutomatically: z.boolean(),
+          pending: PlacementDecisionSchema.nullable(),
+        }),
+      )
+      .default([]),
+  }))();
 
 /** Unknown, stale, disconnected and merely discovered machines are never placement candidates. */
 export function choosePlacement(
