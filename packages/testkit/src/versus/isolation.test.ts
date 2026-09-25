@@ -8,6 +8,7 @@ import { startBroker, TrialBroker } from "./broker.js";
 import { BudgetLedger } from "./budget.js";
 import {
   assertIsolation,
+  assertNativeProductIsolation,
   assertOwnedTrial,
   createTrialDirectory,
   destroyOwnedDirectory,
@@ -63,6 +64,8 @@ describe("isolated authority", () => {
     expect(profile).toContain('(remote ip "localhost:12345")');
     expect(profile).not.toContain("network*");
     expect(profile).toContain("auth[.]json");
+    expect(profile).toContain('(allow file-read* (literal "/"))');
+    expect(profile).not.toContain('(allow file-read* (subpath "/"))');
     expect(() =>
       assertIsolation(
         {
@@ -87,6 +90,9 @@ describe("isolated authority", () => {
       expect(Object.values(proof.result.checks).every(Boolean)).toBe(true);
       expect(() => assertIsolation(proof, policy)).not.toThrow();
       expect(() => assertIsolation(proof, { ...policy, ports: [9000] })).toThrow();
+      expect(Object.isFrozen(proof)).toBe(true);
+      expect(Object.isFrozen(proof.result)).toBe(true);
+      expect(() => assertNativeProductIsolation(proof, policy)).toThrow("hard process-tree");
     } else expect(() => assertIsolation(proof, policy)).toThrow();
     expect(proof.result.resourceEnforcement).toBe("watchdog-only");
   });

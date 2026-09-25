@@ -27,6 +27,31 @@ async function directory() {
   return root;
 }
 describe("zero-inference dry run", () => {
+  it("labels non-generating qualification separately and forbids trial observations", async () => {
+    const out = await directory();
+    const input = {
+      mode: "qualification" as const,
+      build: await inspectBuild(),
+      hermes: (await inspectHermes()).identity,
+      plan: planPairs(selfTestBudget().cohort),
+      budget: selfTestBudget(),
+      trials: [],
+      results: [],
+      prerequisites: ["Hard resource enforcement remains unqualified"],
+      launchPlan: { startsProducts: false },
+      protocolResults: { productLaunches: 0, modelCalls: 0, status: "blocked" },
+    };
+    await writeEvidence(out, input);
+    await validateEvidenceDirectory(out);
+    const manifest = JSON.parse(await fs.readFile(path.join(out, "versus-manifest.json"), "utf8"));
+    expect(manifest.mode).toBe("qualification");
+    const checksums = JSON.parse(await fs.readFile(path.join(out, "checksums.json"), "utf8"));
+    expect(checksums.map((item: { name: string }) => item.name)).toContain("qualification.json");
+    expect(checksums.map((item: { name: string }) => item.name)).toContain("canary-budget.json");
+    await expect(writeEvidence(out, { ...input, trials: [{} as never] })).rejects.toThrow(
+      "cannot contain product trials",
+    );
+  });
   it("rejects accidental live invocation before any product startup", async () => {
     const spawn = vi.spyOn(childProcess, "spawn").mockImplementation(() => {
       throw new Error("Unexpected subprocess");
