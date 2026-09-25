@@ -79,7 +79,8 @@ export const channelPairingContract = {
 
 /** Reject likely credentials before content reaches a durable queue, prompt, or audit. */
 export function looksLikeChatSecret(text: string): boolean {
-  return /(?:(?:^|[^a-z0-9+.-])[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/@]+@|\b(?=[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|API_KEY|ACCESS_KEY))[A-Z0-9_]+\s*=\s*\S+|(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk-[\w-]{12,}|gh[pousr]_[\w]{20,}|github_pat_[\w]{20,}|xox[baprs]-[\w-]{10,}|xapp-[\w-]{10,}|AKIA[A-Z0-9]{16})|(?:^|[^\w-])(?=[\w-]*\beyJ[\w-])[\w-]+\.[\w-]+\.[\w-]+|\b\d{6,}:[A-Za-z0-9_-]{25,}|\bBearer\s+\S+|(?:password|secret|api[_ -]?key|access[_ -]?token|bot[_ -]?token)\s*[:=]\s*\S+)/i.test(
+  // Scan a whole scheme-like run so punctuation cannot hide a URL or trigger suffix retries.
+  return /(?:(?:^|[^a-z0-9+.-])(?=[a-z0-9+.-]*[a-z])[a-z0-9+.-]+:\/\/[^\s/:@]+:[^\s/@]+@|\b(?=[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|API_KEY|ACCESS_KEY))[A-Z0-9_]+\s*=\s*\S+|(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk-[\w-]{12,}|gh[pousr]_[\w]{20,}|github_pat_[\w]{20,}|xox[baprs]-[\w-]{10,}|xapp-[\w-]{10,}|AKIA[A-Z0-9]{16})|(?:^|[^\w-])(?=[\w-]*\beyJ[\w-])[\w-]+\.[\w-]+\.[\w-]+|\b\d{6,}:[A-Za-z0-9_-]{25,}|\bBearer\s+\S+|(?:password|secret|api[_ -]?key|access[_ -]?token|bot[_ -]?token)\s*[:=]\s*\S+)/i.test(
     text,
   );
 }

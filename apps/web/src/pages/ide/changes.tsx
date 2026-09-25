@@ -5,22 +5,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
 import { todayRange } from "./model";
 
+type ChangeHistory = {
+  items: IdeChange[];
+  retained: IdeChange[];
+  cursor: string | null;
+  headCursor?: string | null;
+};
+
 export function useChanges(
   rootId: string | undefined,
   enabled: boolean,
   onError: (error: unknown) => void,
   onFilesChanged: () => void,
 ) {
-  const [items, setItems] = useState<IdeChange[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const history = useRef<ChangeHistory>({ items: [], retained: [], cursor: null });
+  const [state, setState] = useState(history.current);
   const generation = useRef(0);
   const loadingMore = useRef(false);
-  const loadedMore = useRef(false);
   const day = useRef(todayRange().since);
   useEffect(() => {
-    setItems([]);
-    setCursor(null);
-    loadedMore.current = false;
+    history.current = { items: [], retained: [], cursor: null };
+    setState(history.current);
     loadingMore.current = false;
     day.current = todayRange().since;
   }, [rootId]);
@@ -50,16 +55,32 @@ export function useChanges(
       if (day.current !== range.since) {
         generation.current++;
         day.current = range.since;
-        loadedMore.current = false;
         loadingMore.current = false;
-        setItems([]);
-        setCursor(null);
+        history.current = { items: [], retained: [], cursor: null };
+        setState(history.current);
       }
       try {
         const page = await rpc.ide.changes({ rootId, ...range }, { signal: abort.signal });
         if (abort.signal.aborted) return;
-        setItems((current) => mergeChanges(page.items, current));
-        if (!loadedMore.current) setCursor(page.nextCursor);
+        const previous = history.current;
+        const ids = new Set(previous.items.map((item) => item.id));
+        const continuous =
+          previous.headCursor !== undefined &&
+          (page.nextCursor === previous.headCursor || page.items.some((item) => ids.has(item.id)));
+        if (!continuous) {
+          generation.current++;
+          loadingMore.current = false;
+        }
+        // Retain older rows for display, but page through a disjoint head's missing interval first.
+        history.current = {
+          items: continuous ? mergeChanges(page.items, previous.items) : page.items,
+          retained: continuous
+            ? previous.retained
+            : mergeChanges(previous.items, previous.retained),
+          cursor: continuous ? previous.cursor : page.nextCursor,
+          headCursor: page.nextCursor,
+        };
+        setState(history.current);
       } catch (error) {
         if (!abort.signal.aborted) onError(error);
       } finally {
@@ -83,22 +104,29 @@ export function useChanges(
     };
   }, [rootId, enabled, onError]);
   const more = useCallback(async () => {
+    const cursor = history.current.cursor;
     if (!enabled || !rootId || !cursor || loadingMore.current) return;
     const range = todayRange();
     if (range.since !== day.current) return;
     loadingMore.current = true;
-    loadedMore.current = true;
     const request = generation.current;
     try {
       const page = await rpc.ide.changes({ rootId, ...range, cursor });
       if (request !== generation.current) return;
-      setItems((current) => mergeChanges(current, page.items));
-      setCursor(page.nextCursor);
+      history.current = {
+        ...history.current,
+        items: mergeChanges(history.current.items, page.items),
+        cursor: page.nextCursor,
+      };
+      setState(history.current);
     } finally {
       if (request === generation.current) loadingMore.current = false;
     }
-  }, [rootId, cursor, enabled]);
-  return { items, more: cursor ? more : undefined };
+  }, [rootId, enabled]);
+  return {
+    items: mergeChanges(state.items, state.retained),
+    more: state.cursor ? more : undefined,
+  };
 }
 
 function mergeChanges(first: IdeChange[], rest: IdeChange[]) {

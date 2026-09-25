@@ -33,6 +33,9 @@ export function QuickOpen({
   const [busy, setBusy] = useState(true);
   useEffect(() => {
     const abort = new AbortController();
+    setFiles([]);
+    setSelected(0);
+    setBusy(true);
     void scanFiles(list, abort.signal, (rows) => setFiles((current) => [...current, ...rows]))
       .catch((error) => {
         if (!abort.signal.aborted) onError(error);
