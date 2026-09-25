@@ -17,4 +17,5 @@ await mkdir(dist, { recursive: true });
 await Promise.all([
   ...STATIC_FILES.map((file) => copyFile(path.join(root, "src", file), path.join(dist, file))),
   copyFile(TOKENS_FILE, path.join(dist, "tokens.css")),
+  copyFile(path.join(root, "scripts/desktop-loader.mjs"), path.join(dist, "desktop-loader.mjs")),
 ]);

@@ -1,7 +1,8 @@
 import { lstat } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { createRequire, registerHooks } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface EmbeddedPostgresOptions {
@@ -33,19 +34,44 @@ export type EmbeddedPostgresConstructor = new (
 
 /**
  * Packaged builds keep the platform binaries in extraResources, outside asar.
- * `embedded-postgres` loads them with a dynamic import of the optional package,
- * so Node has to see that package on NODE_PATH before the wrapper is imported.
+ * The directory is not named node_modules: electron-builder drops a copied
+ * directory with that name. The wrapper loads the optional package with an
+ * ESM dynamic import, which does not read NODE_PATH, so a resolve hook maps
+ * `@embedded-postgres/*` onto that directory. NODE_PATH still covers the
+ * hook's CommonJS lookup.
  * On Windows, `stop()` uses `taskkill /pid /f /t` (forced kill, not a fast
  * shutdown). The next start relies on Postgres crash recovery. That is the
  * library's behavior and is accepted here.
  * https://github.com/leinelissen/embedded-postgres
  */
+let postgresModuleHook = false;
+
+function registerPostgresModuleHook(): void {
+  if (postgresModuleHook) return;
+  postgresModuleHook = true;
+  const nodeRequire = createRequire(import.meta.url);
+  registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (!specifier.startsWith("@embedded-postgres/")) return nextResolve(specifier, context);
+      try {
+        const resolved = nodeRequire.resolve(specifier);
+        if (path.isAbsolute(resolved)) {
+          return { url: pathToFileURL(resolved).href, shortCircuit: true };
+        }
+      } catch {
+        // Fall through when this platform's package was not staged.
+      }
+      return nextResolve(specifier, context);
+    },
+  });
+}
+
 export async function loadEmbeddedPostgres(input: {
   packaged: boolean;
   resourcesPath: string;
 }): Promise<EmbeddedPostgresConstructor> {
   if (input.packaged) {
-    const modules = path.join(input.resourcesPath, "postgres-modules", "node_modules");
+    const modules = path.join(input.resourcesPath, "postgres-modules");
     const current = process.env.NODE_PATH?.split(path.delimiter).filter(Boolean) ?? [];
     if (!current.includes(modules)) {
       process.env.NODE_PATH = [modules, ...current].join(path.delimiter);
@@ -55,6 +81,7 @@ export async function loadEmbeddedPostgres(input: {
       };
       (nodeModule.Module?._initPaths ?? nodeModule._initPaths)?.();
     }
+    registerPostgresModuleHook();
   }
   const imported = (await import("embedded-postgres")) as {
     default?: EmbeddedPostgresConstructor;

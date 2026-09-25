@@ -88,7 +88,8 @@ if (versionOutput !== null) {
   process.exit(0);
 }
 
-const PERFORMANCE_USER_DATA = process.env.ARDURBOT_PERFORMANCE_USER_DATA;
+const PERFORMANCE_USER_DATA =
+  process.env.ARDURBOT_USER_DATA_DIR || process.env.ARDURBOT_PERFORMANCE_USER_DATA;
 /** Test hook: where the app-managed stack answers. Mode `new` still requires loopback. */
 const LOCAL_WEB_URL = process.env.ARDURBOT_LOCAL_WEB_URL?.trim() || DEFAULT_LOCAL_WEB_URL;
 const PROBE_TIMEOUT_MS = 8_000;
@@ -1171,10 +1172,19 @@ app.whenReady().then(async () => {
     },
   });
   legacyCompose = await legacyStackEnvExists(userDataDir);
-  const EmbeddedPostgres = await loadEmbeddedPostgres({
-    packaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-  });
+  let EmbeddedPostgres: Awaited<ReturnType<typeof loadEmbeddedPostgres>>;
+  try {
+    EmbeddedPostgres = await loadEmbeddedPostgres({
+      packaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Embedded Postgres could not be loaded.";
+    setupError = message;
+    showSetupWindow(message);
+    return;
+  }
   localMode = new LocalModeController({
     userDataDir,
     packaged: app.isPackaged,

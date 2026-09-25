@@ -77,8 +77,12 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
+      - name: Generate the Prisma client
+        run: pnpm db:generate
       - name: Build renderer and main process
         run: pnpm --filter @ardurbot/web build && pnpm --filter @ardurbot/desktop build
+      - name: Bundle the API and worker
+        run: node apps/desktop/scripts/bundle-services.mjs
       # Stage only this job's optional platform package. electron-builder's ${platform}
       # macro is win32, while the package is @embedded-postgres/windows-x64, so the
       # copy is explicit. https://www.electron.build/file-patterns

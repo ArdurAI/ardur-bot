@@ -55,6 +55,10 @@ can overwrite the other's ZIP entry. Each feed's version and referenced assets a
 installers, blockmaps, channel feeds, and the generated cask are attached to a GitHub **pre-release**.
 It is never marked latest. The application feed remains `ArdurAI/ardur-bot`.
 
+The desktop entry is `dist/desktop-loader.mjs`. It strips TypeScript that packaging places under
+`node_modules` (the SQL migrator) and then loads `dist/main.js`. Node otherwise refuses those
+files with `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, and the packaged app never reaches ready.
+
 The root version is the sole editable input. `scripts/desktop-version.mjs` copies it into the
 desktop package before every desktop build; that package field is derived packaging metadata.
 The executable's `--version` flag prints `app.getVersion()` and exits before taking the instance
@@ -128,6 +132,11 @@ For an unsigned host directory build:
 ```sh
 CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @ardurbot/desktop pack:dir
 ```
+
+`ARDURBOT_USER_DATA_DIR` overrides Electron's user-data directory for a packaged or
+unpackaged launch. Point it at an empty temporary directory when checking a packaged
+build so the app does not write into the default profile. `ARDURBOT_PERFORMANCE_USER_DATA`
+is still used when `ARDURBOT_USER_DATA_DIR` is unset.
 
 `--dir` validates and packages an unpacked app; it does not exercise DMG mounting, quarantine,
 NSIS installation, or deb dependencies. The desktop Playwright suite belongs in CI, where it

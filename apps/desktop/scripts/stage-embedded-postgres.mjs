@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -32,8 +33,43 @@ export function stagePlan(platform, arch) {
     packageName,
     from: "build/postgres-modules",
     to: "postgres-modules",
-    destination: path.join("build", "postgres-modules", "node_modules", packageName),
+    destination: path.join("build", "postgres-modules", packageName),
   };
+}
+
+function packageRoot(require, name) {
+  try {
+    return path.dirname(require.resolve(`${name}/package.json`));
+  } catch (error) {
+    if (error?.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") throw error;
+  }
+  let dir = path.dirname(require.resolve(name));
+  while (dir !== path.dirname(dir)) {
+    const manifestPath = path.join(dir, "package.json");
+    if (existsSync(manifestPath)) {
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      if (manifest.name === name) return dir;
+    }
+    dir = path.dirname(dir);
+  }
+  return null;
+}
+
+function resolveEmbeddedPostgresRoot(desktopDir, packageName) {
+  const desktopRequire = createRequire(path.join(desktopDir, "package.json"));
+  try {
+    const direct = packageRoot(desktopRequire, packageName);
+    if (direct) return direct;
+  } catch (error) {
+    if (error?.code !== "MODULE_NOT_FOUND") throw error;
+  }
+  const wrapperRoot = packageRoot(desktopRequire, "embedded-postgres");
+  if (!wrapperRoot) {
+    throw new Error(`Cannot find ${packageName} to stage beside the desktop app.`);
+  }
+  const nested = path.join(path.dirname(wrapperRoot), ...packageName.split("/"));
+  if (existsSync(path.join(nested, "package.json"))) return nested;
+  return packageRoot(createRequire(path.join(wrapperRoot, "package.json")), packageName);
 }
 
 export async function stageEmbeddedPostgres(options = {}) {
@@ -41,9 +77,8 @@ export async function stageEmbeddedPostgres(options = {}) {
   const arch = options.arch ?? process.arch;
   const desktopDir = options.desktopDir ?? fileURLToPath(new URL("..", import.meta.url));
   const plan = stagePlan(platform, arch);
-  const require = createRequire(path.join(desktopDir, "package.json"));
-  const packageJson = require.resolve(`${plan.packageName}/package.json`);
-  const source = path.dirname(packageJson);
+  const source = resolveEmbeddedPostgresRoot(desktopDir, plan.packageName);
+  if (!source) throw new Error(`Cannot find ${plan.packageName} to stage beside the desktop app.`);
   const destination = path.join(desktopDir, plan.destination);
   await rm(path.join(desktopDir, "build", "postgres-modules"), { recursive: true, force: true });
   await mkdir(path.dirname(destination), { recursive: true });

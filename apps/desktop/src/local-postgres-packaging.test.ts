@@ -29,9 +29,7 @@ describe("embedded Postgres packaging", () => {
       const plan = stagePlan(target.platform, target.arch);
       expect(plan.packageName).toBe(target.packageName);
       expect(plan.packageName).not.toBe("embedded-postgres");
-      expect(plan.destination).toBe(
-        path.join("build", "postgres-modules", "node_modules", target.packageName),
-      );
+      expect(plan.destination).toBe(path.join("build", "postgres-modules", target.packageName));
     }
     const postgresResources = packageJson.build.extraResources.filter(
       (resource) =>

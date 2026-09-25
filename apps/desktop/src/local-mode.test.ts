@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appendCappedLog, LOG_CAP_BYTES } from "./local-logs.js";
-import { LocalModeController, launchDesktopServices } from "./local-mode.js";
+import { LocalModeController, launchDesktopServices, localServiceLaunch } from "./local-mode.js";
 import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-postgres.js";
 
 const directories: string[] = [];
@@ -89,6 +89,7 @@ describe("local mode start", () => {
       expect(env.BETTER_AUTH_URL).toBe(`http://127.0.0.1:${port}`);
       expect(env.WEB_ORIGIN).toBe(`http://127.0.0.1:${port}`);
       expect(env.API_URL).toBe(`http://127.0.0.1:${port}`);
+      expect(env.SANDBOX_SUPERVISOR_TOKEN?.length).toBeGreaterThanOrEqual(32);
     }
     expect(port).not.toBe(5432);
     expect(port).not.toBe(5433);
@@ -235,6 +236,54 @@ describe("local mode persistence and supervision", () => {
     restarted.reportDatabaseDown();
     expect(failed).toContain("The database stopped.");
     expect(children).toHaveLength(starts);
+  });
+});
+
+describe("packaged and unpackaged service launch", () => {
+  it("starts packaged services from api.mjs and worker.mjs with the loader and NODE_PATH", async () => {
+    const root = await userData();
+    const spawned: { command: string; args: string[]; env: NodeJS.ProcessEnv }[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        packaged: true,
+        resourcesPath: "/fixture/resources",
+        execPath: "/fixture/electron",
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+        spawn: (command, args, options) => {
+          spawned.push({ command, args, env: options.env ?? {} });
+          return fakeChild();
+        },
+      }),
+    );
+    const state = await controller.start();
+    expect(state.phase).toBe("ready");
+    const services = path.join("/fixture/resources", "services");
+    const loader = path.join(services, "services-loader.mjs");
+    for (const entry of ["api.mjs", "worker.mjs"]) {
+      const child = spawned.find((item) => item.args.at(-1) === path.join(services, entry));
+      expect(child?.command).toBe("/fixture/electron");
+      expect(child?.args).toEqual(["--import", loader, path.join(services, entry)]);
+      expect(child?.env.ELECTRON_RUN_AS_NODE).toBe("1");
+      expect(child?.env.NODE_PATH).toBe(path.join(services, "modules"));
+    }
+  });
+
+  it("keeps tsx for an unpackaged checkout", () => {
+    const launch = localServiceLaunch({
+      service: "worker",
+      packaged: false,
+      execPath: "/fixture/electron",
+      resourcesPath: "/fixture/resources",
+      appPath: "/fixture/desktop",
+    });
+    expect(launch.args[0]).toBe("--import");
+    expect(launch.args[1]).toBe(
+      path.join("/fixture/desktop", "../../node_modules/tsx/dist/loader.mjs"),
+    );
+    expect(launch.args[2]).toBe(path.join("/fixture/desktop", "..", "worker", "src", "index.ts"));
+    expect(launch.nodePath).toBeUndefined();
   });
 });
 

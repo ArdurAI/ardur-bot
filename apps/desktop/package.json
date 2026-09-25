@@ -4,10 +4,10 @@
   "version": "0.1.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
-  "main": "dist/main.js",
+  "main": "dist/desktop-loader.mjs",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs",
+    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs && node scripts/bundle-services.mjs",
     "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --mac --win --linux",
     "pack:dir": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json",
@@ -79,10 +79,14 @@
       {
         "from": "../../packages/db/prisma/migrations",
         "to": "migrations"
+      },
+      {
+        "from": "build/services",
+        "to": "services"
       }
     ],
     "extraMetadata": {
-      "main": "dist/main.js"
+      "main": "dist/desktop-loader.mjs"
     },
     "mac": {
       "icon": "assets/icon-macos.png",

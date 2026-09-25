@@ -25,6 +25,7 @@ const SECRET_KEYS = {
   BETTER_AUTH_SECRET: 32,
   ENCRYPTION_KEY: 32,
   SCREEN_PROXY_SECRET: 32,
+  SANDBOX_SUPERVISOR_TOKEN: 32,
 } as const;
 
 type SecretKey = keyof typeof SECRET_KEYS;
@@ -81,15 +82,31 @@ export function localServiceLaunch(input: {
   appPath: string;
 }) {
   const entry = input.service === "api" ? "api" : "worker";
+  if (!input.packaged) {
+    return {
+      command: input.execPath,
+      args: [
+        "--import",
+        path.join(input.appPath, "../../node_modules/tsx/dist/loader.mjs"),
+        path.join(input.appPath, "..", entry, "src", "index.ts"),
+      ],
+      nodePath: undefined,
+    };
+  }
+  // The bundles are ESM so top-level await in the API entry can stay. Prisma's
+  // WASM and native addons are real files next to the bundles. electron-builder
+  // drops a copied directory named node_modules, so those files live in
+  // `modules`. The loader resolves ESM imports from there. NODE_PATH covers
+  // CommonJS require().
+  const services = path.join(input.resourcesPath, "services");
   return {
     command: input.execPath,
-    args: input.packaged
-      ? [path.join(input.resourcesPath, "services", `${entry}.cjs`)]
-      : [
-          "--import",
-          path.join(input.appPath, "../../node_modules/tsx/dist/loader.mjs"),
-          path.join(input.appPath, "..", entry, "src", "index.ts"),
-        ],
+    args: [
+      "--import",
+      path.join(services, "services-loader.mjs"),
+      path.join(services, `${entry}.mjs`),
+    ],
+    nodePath: path.join(services, "modules"),
   };
 }
 
@@ -226,18 +243,20 @@ export class LocalModeController {
       resourcesPath: this.deps.resourcesPath,
       appPath: this.deps.appPath,
     });
+    const env = serviceEnvironment(this.deps.env, this.deps.platform, {
+      databaseUrl: this.databaseUrl,
+      dataDir: path.join(this.deps.userDataDir, "data"),
+      origin: this.originUrl,
+      apiPort: this.apiPort,
+      secrets: this.secrets,
+    });
+    if (launch.nodePath) env.NODE_PATH = launch.nodePath;
     const child = this.deps.spawn(launch.command, launch.args, {
       shell: false,
       windowsHide: true,
       detached: this.deps.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
-      env: serviceEnvironment(this.deps.env, this.deps.platform, {
-        databaseUrl: this.databaseUrl,
-        dataDir: path.join(this.deps.userDataDir, "data"),
-        origin: this.originUrl,
-        apiPort: this.apiPort,
-        secrets: this.secrets,
-      }),
+      env,
     });
     this.children.set(service, child);
     const log = path.join(this.deps.userDataDir, "logs", `${service}.log`);
@@ -403,6 +422,7 @@ function serviceEnvironment(
     BETTER_AUTH_SECRET: settings.secrets.BETTER_AUTH_SECRET,
     ENCRYPTION_KEY: settings.secrets.ENCRYPTION_KEY,
     SCREEN_PROXY_SECRET: settings.secrets.SCREEN_PROXY_SECRET,
+    SANDBOX_SUPERVISOR_TOKEN: settings.secrets.SANDBOX_SUPERVISOR_TOKEN,
     BETTER_AUTH_URL: settings.origin,
     WEB_ORIGIN: settings.origin,
     API_URL: settings.origin,
