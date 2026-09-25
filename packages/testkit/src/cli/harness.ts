@@ -4,6 +4,7 @@ import path from "node:path";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { createApp } from "../../../../apps/api/src/app.ts";
+import { runIntegrationSuites } from "./integration.js";
 import { runProcess } from "./process.js";
 
 loadRootEnv();
@@ -112,7 +113,6 @@ async function main() {
       // Each app reconciles all durable work in its database, including intentionally
       // unfinished fixture runs. Clone the pristine migrated schema so one suite
       // cannot execute another suite's backlog or wait for it during shutdown.
-      const template = container.getDatabase().replaceAll('"', '""');
       const databaseCommand = async (statement: string) => {
         const result = await container.exec([
           "psql",
@@ -128,29 +128,20 @@ async function main() {
         if (result.exitCode !== 0)
           throw new Error("Isolated integration database operation failed");
       };
-      for (const [index, suite] of suites.entries()) {
-        const database = `integration_${index}`;
-        await databaseCommand(`CREATE DATABASE "${database}" TEMPLATE "${template}"`);
-        const suiteUrl = new URL(databaseUrl);
-        suiteUrl.pathname = `/${database}`;
-        try {
-          await runProcess("pnpm", ["exec", "vitest", "run", suite], {
-            ...process.env,
-            DATABASE_URL: suiteUrl.toString(),
-            REALTIME_DATABASE_URL: suiteUrl.toString(),
-            OPENROUTER_API_KEY: "",
-            MODEL_API_KEY: "",
-          });
-        } finally {
-          await databaseCommand(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
-        }
-      }
+      const result = await runIntegrationSuites({
+        suites,
+        databaseUrl,
+        template: container.getDatabase(),
+        databaseCommand,
+        env: process.env,
+      });
       await writeSummary(reportDir, {
-        ok: true,
+        ...result,
         mode,
         sandbox: process.env.SANDBOX_PROVIDER,
         runtime: process.env.AGENT_RUNTIME,
       });
+      if (!result.ok) process.exitCode = 1;
       return;
     }
 
