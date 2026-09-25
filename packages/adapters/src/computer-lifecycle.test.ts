@@ -2061,7 +2061,7 @@ describe("computer replacement", () => {
     }
   });
 
-  it("destroys a moved computer through its source provider and restores on the target", async () => {
+  it("destroys a same-kind move through its source provider and restores on the target", async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-move-"));
     const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-move-home-"));
     const home = new LocalAgentHomeStore(homeRoot);
@@ -2078,7 +2078,7 @@ describe("computer replacement", () => {
       id: "computer-1",
       homeKey: "bot-1",
       providerRef: first.providerRef,
-      kind: "docker",
+      kind: first.kind,
       scope: "dedicated",
       state: "running",
       connectionId: null,
@@ -2139,10 +2139,10 @@ describe("computer replacement", () => {
           placementRunId: "run",
           targetId: "default",
         },
-        { source, target, targetId: "default" },
+        { source, target },
       );
       expect(sourceDestroy).toHaveBeenCalledWith(
-        expect.objectContaining({ providerRef: first.providerRef, kind: "docker" }),
+        expect.objectContaining({ providerRef: first.providerRef, kind: first.kind }),
         expect.any(Object),
       );
       expect(targetDestroy).not.toHaveBeenCalled();

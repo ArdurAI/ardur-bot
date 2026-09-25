@@ -9,8 +9,11 @@ import {
   computerSupportsUpdate,
   replaceComputer,
 } from "./computer-lifecycle.js";
+import type { FleetCatalog } from "./fleet/catalog.js";
 
-type Deps = Parameters<typeof replaceComputer>[0];
+type Deps = Parameters<typeof replaceComputer>[0] & {
+  fleet: Pick<FleetCatalog, "resolveReplacementRouting">;
+};
 const STALE_MS = 10 * 60_000;
 
 export function computerUpdateView(
@@ -129,18 +132,27 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
       select: { userId: true },
     });
     if (!bot) throw new Error("Computer update target is unavailable");
+    const context = {
+      operationId: updateId,
+      traceId: updateId,
+      botId: update.botId,
+      spaceId: update.computer.spaceId,
+      userId: bot.userId,
+      signal: controller.signal,
+    };
+    const configuration = update.configuration
+      ? ComputerReplacementConfigurationSchema.parse(update.configuration)
+      : undefined;
+    const routing = await deps.fleet.resolveReplacementRouting(
+      update.computer,
+      configuration ?? {},
+      context,
+    );
     await replaceComputer(
       deps,
       update.computerId,
       update.action === "recover" ? "recover" : "update",
-      {
-        operationId: updateId,
-        traceId: updateId,
-        botId: update.botId,
-        spaceId: update.computer.spaceId,
-        userId: bot.userId,
-        signal: controller.signal,
-      },
+      context,
       "none",
       async (stage) => {
         controller.signal.throwIfAborted();
@@ -150,9 +162,8 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
         });
         if (result.count !== 1) throw new Error("Computer update interrupted");
       },
-      update.configuration
-        ? ComputerReplacementConfigurationSchema.parse(update.configuration)
-        : undefined,
+      configuration,
+      routing,
     );
     await finishUpdate(deps.prisma, updateId, update.computerId, "completed");
     scheduleComputerSleep(deps.jobs, update.computerId);

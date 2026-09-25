@@ -670,12 +670,8 @@ export async function replaceComputer(
   routing?: {
     source: SandboxProvider;
     target: SandboxProvider;
-    targetId: string;
   },
 ): Promise<ComputerRef> {
-  if (configuration?.targetId && routing?.targetId !== configuration.targetId) {
-    throw new Error("Computer replacement target is unavailable");
-  }
   const sourceSandbox = routing?.source ?? deps.sandbox;
   const targetSandbox = routing?.target ?? deps.sandbox;
   let placementRunId: string | undefined;

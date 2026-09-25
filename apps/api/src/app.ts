@@ -474,6 +474,7 @@ export async function createApp(
     home,
     jobs,
     events,
+    fleet: fleetPlacementCatalog,
     workerId: "api",
     localImport: {
       apiUrl: process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://127.0.0.1:3100",

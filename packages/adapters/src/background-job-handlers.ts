@@ -19,6 +19,7 @@ import { expireComputerControl } from "./computer-control.js";
 import { scheduleComputerSleep, sleepComputerIfIdle } from "./computer-idle.js";
 import { performComputerUpdate } from "./computer-update.js";
 import type { createRunExecutor } from "./executor.js";
+import type { FleetCatalog } from "./fleet/catalog.js";
 import { compactHistory } from "./history-compaction.js";
 import { curateLearningSpaces } from "./learning-curator.js";
 import { enqueueLearningReview } from "./learning-queue.js";
@@ -38,6 +39,7 @@ export function createBackgroundJobHandlers(deps: {
   home: AgentHomeStore;
   jobs: JobPublisher;
   events: ThreadEvents;
+  fleet: FleetCatalog;
   workerId: string;
   runtime: AgentRuntime;
   secretStore: EncryptedSecretStore;

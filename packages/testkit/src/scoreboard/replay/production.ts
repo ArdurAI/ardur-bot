@@ -6,6 +6,7 @@ import type { createRunExecutor } from "@ardurbot/adapters";
 import {
   createBackgroundJobHandlers,
   EncryptedSecretStore,
+  FleetCatalog,
   GraphileJobWorkerHost,
   LocalAgentHomeStore,
   SpaceMemoryProviderResolver,
@@ -114,6 +115,7 @@ export async function runProductionTask(options: {
         home: new LocalAgentHomeStore(options.dataDir),
         jobs: handles.jobs,
         events: createThreadEvents(handles.prisma),
+        fleet: new FleetCatalog(handles.prisma, secretStore, {}, handles.sandbox),
         workerId: "scoreboard-worker",
         runtime: handles.runtime,
         secretStore,

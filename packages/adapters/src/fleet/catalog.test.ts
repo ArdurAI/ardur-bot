@@ -197,6 +197,24 @@ it("lists a local Docker computer separately when Kubernetes is the default and 
     DockerSandboxProvider,
   );
   await expect(catalog.resolveTarget(kubernetes!, context)).resolves.toBe(fallback);
+  await expect(
+    catalog.compatibleTargets(computer, [docker!, kubernetes!], context),
+  ).resolves.toEqual([docker]);
+  const settingsRouting = await catalog.resolveReplacementRouting(
+    computer,
+    { connectionId: null },
+    context,
+  );
+  expect(settingsRouting.source).toBeInstanceOf(DockerSandboxProvider);
+  expect(settingsRouting.target).toBe(settingsRouting.source);
+  await expect(
+    catalog.resolveReplacementRouting(
+      computer,
+      { connectionId: null, targetId: kubernetes!.id },
+      context,
+      fleet,
+    ),
+  ).rejects.toThrow("Computer replacement target is unavailable");
   const deps = {
     prisma: prisma as unknown as PrismaClient,
     home: {} as AgentHomeStore,
@@ -204,12 +222,6 @@ it("lists a local Docker computer separately when Kubernetes is the default and 
     jobs: {} as JobPublisher,
     events: { append: vi.fn(), notify: vi.fn(async () => undefined) } as unknown as ThreadEvents,
   };
-  expect(await placeRunComputer(deps, catalog, "run", new AbortController().signal)).toBe(false);
-  expect(prisma.bot.update).toHaveBeenCalledWith(
-    expect.objectContaining({
-      data: {
-        pendingPlacement: expect.objectContaining({ fromTargetId: docker?.id, runId: "run" }),
-      },
-    }),
-  );
+  expect(await placeRunComputer(deps, catalog, "run", new AbortController().signal)).toBe(true);
+  expect(prisma.bot.update).not.toHaveBeenCalled();
 });

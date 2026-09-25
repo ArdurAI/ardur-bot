@@ -63,6 +63,51 @@ export class FleetCatalog {
     if (target.connectionId) return this.connections.resolve(target.connectionId, context);
     return target.id === "docker" ? this.docker : this.fallback;
   }
+  async compatibleTargets(
+    computer: { connectionId?: string | null; kind?: string | null },
+    targets: FleetTarget[],
+    context: AdapterContext,
+  ): Promise<FleetTarget[]> {
+    const sourceKind = (await this.resolveComputer(computer, context)).describe().id;
+    const compatible = await Promise.all(
+      targets.map(async (target) => {
+        const targetKind = await this.resolveTarget(target, context)
+          .then((provider) => provider.describe().id)
+          .catch(() => null);
+        return targetKind === sourceKind ? target : null;
+      }),
+    );
+    return compatible.filter((target): target is FleetTarget => target !== null);
+  }
+  async resolveReplacementRouting(
+    computer: { connectionId?: string | null; kind?: string | null },
+    configuration: { connectionId?: string | null; targetId?: string },
+    context: AdapterContext,
+    listedFleet?: Awaited<ReturnType<FleetCatalog["list"]>>,
+  ): Promise<{ source: SandboxProvider; target: SandboxProvider }> {
+    const source = await this.resolveComputer(computer, context);
+    if (
+      configuration.targetId === undefined &&
+      (configuration.connectionId === undefined ||
+        configuration.connectionId === computer.connectionId)
+    ) {
+      return { source, target: source };
+    }
+    const target = configuration.targetId
+      ? (listedFleet ?? (await this.list(context))).targets.find(
+          (candidate) => candidate.id === configuration.targetId,
+        )
+      : {
+          id: configuration.connectionId ?? "default",
+          connectionId: configuration.connectionId ?? null,
+        };
+    if (!target) throw new Error("Computer replacement target is unavailable");
+    const targetProvider = await this.resolveTarget(target, context);
+    if (targetProvider.describe().id !== source.describe().id) {
+      throw new Error("Computer replacement target is unavailable");
+    }
+    return { source, target: targetProvider };
+  }
   async testDefault(context: AdapterContext) {
     const deployment = await this.prisma.deploymentSettings.findUnique({
       where: { id: "default" },

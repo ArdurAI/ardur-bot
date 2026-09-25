@@ -243,6 +243,7 @@ async function main() {
     home,
     jobs,
     events,
+    fleet: fleetPlacementCatalog,
     workerId: process.pid.toString(),
     localImport: {
       apiUrl: process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://127.0.0.1:3100",

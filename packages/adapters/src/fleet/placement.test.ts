@@ -96,8 +96,13 @@ function fixture(approved = false) {
   const catalog = {
     list: vi.fn(async () => ({ targets, defaultTargetId: "host" })),
     connections: { resolve: vi.fn(async () => ({ supportsNetworkEgress })) },
+    compatibleTargets: vi.fn(async (_computer, candidates) => candidates),
     resolveComputer: vi.fn(async () => sourceSandbox),
     resolveTarget: vi.fn(async () => targetSandbox),
+    resolveReplacementRouting: vi.fn(async () => ({
+      source: sourceSandbox,
+      target: targetSandbox,
+    })),
   };
   const deps = {
     prisma: prisma as unknown as PrismaClient,
@@ -190,7 +195,6 @@ it("uses the checkpoint lifecycle before execution and persists the move reason"
     {
       source: f.sourceSandbox,
       target: f.targetSandbox,
-      targetId: "remote",
     },
   );
   expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
@@ -207,7 +211,7 @@ it("uses the checkpoint lifecycle before execution and persists the move reason"
     expect.objectContaining({ data: { maintenanceId: null } }),
   );
 });
-it("moves an automatic local Docker computer to the Kubernetes default", async () => {
+it("keeps an automatic local Docker computer when only Kubernetes has room", async () => {
   const f = fixture();
   f.computer.kind = "docker";
   f.computer.providerRef = "docker-computer";
@@ -238,40 +242,13 @@ it("moves an automatic local Docker computer to the Kubernetes default", async (
     targets: [docker, kubernetes],
     defaultTargetId: "default",
   } as never);
-  const dockerProvider = { describe: () => ({ id: "docker" }) } as SandboxProvider;
-  const kubernetesProvider = { describe: () => ({ id: "kubernetes" }) } as SandboxProvider;
-  vi.mocked(f.catalog.resolveComputer).mockResolvedValue(dockerProvider);
-  vi.mocked(f.catalog.resolveTarget).mockResolvedValue(kubernetesProvider);
+  vi.mocked(f.catalog.compatibleTargets).mockResolvedValue([docker] as never);
 
   expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
-  expect(replace).toHaveBeenCalledWith(
-    f.deps,
-    "computer",
-    "update",
-    expect.objectContaining({ operationId: "move", runId: "run" }),
-    "none",
-    expect.any(Function),
-    {
-      imageProfile: "base",
-      connectionId: null,
-      placementRunId: "run",
-      targetId: "default",
-    },
-    {
-      source: dockerProvider,
-      target: kubernetesProvider,
-      targetId: "default",
-    },
-  );
-  expect(f.prisma.computerUpdate.update).toHaveBeenCalledWith({
-    where: { id: "move" },
-    data: { status: "completed" },
-  });
-  expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
-    expect.objectContaining({
-      data: { placement: expect.objectContaining({ status: "moved" }) },
-    }),
-  );
+  expect(replace).not.toHaveBeenCalled();
+  expect(f.computer.state).toBe("running");
+  expect(f.prisma.computerUpdate.create).not.toHaveBeenCalled();
+  expect(f.prisma.run.updateMany).not.toHaveBeenCalled();
 });
 it("never moves an existing run snapshot or a pinned native runtime", async () => {
   const f = fixture(true);

@@ -54,6 +54,7 @@ export async function placeRunComputer(
     (target) =>
       target.connectionId !== null || target.id === fleet.defaultTargetId || target.id === from,
   );
+  candidates = await catalog.compatibleTargets(computer, candidates, context);
   if (computer.networkEgress === false) {
     const supported = new Set([from]);
     for (const target of candidates) {
@@ -246,10 +247,12 @@ export async function placeRunComputer(
   try {
     const moveSignal = AbortSignal.any([signal, abort.signal]);
     moveSignal.throwIfAborted();
-    const [sourceSandbox, targetSandbox] = await Promise.all([
-      catalog.resolveComputer(computer, context),
-      catalog.resolveTarget(target, context),
-    ]);
+    const routing = await catalog.resolveReplacementRouting(
+      computer,
+      { connectionId: decision.connectionId, targetId: decision.targetId },
+      context,
+      fleet,
+    );
     await replaceComputer(
       deps,
       computer.id,
@@ -271,11 +274,7 @@ export async function placeRunComputer(
         placementRunId: runId,
         targetId: decision.targetId,
       },
-      {
-        source: sourceSandbox,
-        target: targetSandbox,
-        targetId: decision.targetId,
-      },
+      routing,
     );
     const committed = await deps.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${run.threadId} FOR UPDATE`;
