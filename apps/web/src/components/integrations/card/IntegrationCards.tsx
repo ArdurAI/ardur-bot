@@ -93,13 +93,14 @@ export function IntegrationCards({
     descriptor: IntegrationDescriptor,
     connection?: IntegrationConnection,
     authKind: "host" | "oauth" | "token" = descriptor.authKind,
+    suppliedToken?: string,
   ): Promise<boolean> {
     setBusy(descriptor.id);
     setError(false);
     try {
       const current = await connectIntegration(descriptor, connection, {
         authKind,
-        token,
+        token: suppliedToken ?? token,
         host: hosts[descriptor.id] || undefined,
         ...(authKind === "oauth" && clients[descriptor.id]?.clientId
           ? { oauthClient: clients[descriptor.id] }
@@ -235,10 +236,12 @@ export function IntegrationCards({
       {finding ? (
         <DirectMcpSearch
           catalog={data.catalog}
-          onConnectCatalog={(descriptor) =>
+          onConnectCatalog={(descriptor, accessToken) =>
             connect(
               descriptor,
               data.connections.find((connection) => connection.catalogId === descriptor.id),
+              accessToken?.trim() ? "token" : descriptor.authKind,
+              accessToken,
             )
           }
           onConnected={async () => {

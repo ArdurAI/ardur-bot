@@ -65,8 +65,14 @@ async function fixture(
         const matches = Object.entries(where).every(
           ([key, value]) => server[key as keyof typeof server] === value,
         );
-        if (matches) server = { ...server, ...data };
-        return { count: matches ? 1 : 0 };
+        if (!matches) return { count: 0 };
+        const revision =
+          data.revision && typeof data.revision === "object" && "increment" in data.revision
+            ? server.revision + Number(data.revision.increment)
+            : server.revision;
+        const { revision: _revision, ...rest } = data;
+        server = { ...server, ...rest, ...(data.revision ? { revision } : {}) };
+        return { count: 1 };
       }),
     },
     secret: {
@@ -192,7 +198,7 @@ describe("managed OAuth lifecycle", () => {
   });
   it.each([
     ["declines", { error: "access_denied" }, "cancelled"],
-    ["fails", { code: "fake-code" }, "needs-sign-in"],
+    ["fails", { code: "fake-code" }, "discovery-failed"],
   ])("records the outcome when a custom server's sign-in %s", async (_, callback, state) => {
     const f = await fixture(async () => Response.json({}), {
       catalogId: null,

@@ -733,13 +733,16 @@ export class McpConnector implements ConnectorProvider {
           !localHttp && this.oauth
             ? await this.oauth.providerFor(server, context, loaded)
             : undefined;
-        const staticToken = material.secret
-          ? material.secret.startsWith("Bearer ")
-            ? material.secret
-            : `Bearer ${material.secret}`
-          : undefined;
+        const credentialHeaders = { ...(material.headers ?? {}) };
+        const namedCredential = Object.keys(credentialHeaders).length > 0;
+        const staticToken =
+          !namedCredential && material.secret
+            ? material.secret.startsWith("Bearer ")
+              ? material.secret
+              : `Bearer ${material.secret}`
+            : undefined;
         const headers = {
-          ...(material.headers ?? {}),
+          ...credentialHeaders,
           ...(staticToken ? { Authorization: staticToken } : {}),
         };
         await session.connectRemote({

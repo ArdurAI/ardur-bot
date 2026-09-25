@@ -158,7 +158,7 @@ it("shows a recorded discovery failure instead of a connected label", async () =
         lastError: "Could not reach this integration. Try again.",
       },
     ]);
-    return "discovery-failed";
+    return "sign-in-failed";
   });
   const container = await mount();
   await click("Connect OAuth");

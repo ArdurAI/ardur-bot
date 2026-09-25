@@ -460,6 +460,18 @@ describe("catalog connection lifecycle", () => {
     expect(f.row().connectionState).toBe(state);
     expect(JSON.stringify(f.row())).not.toContain("fake-secret");
   });
+  it("keeps a connected custom server connected when re-authorization starts", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: null, connectionState: "connected", revision: 4 });
+    await f.service.beginAuthorization(actor, {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    });
+    expect(f.row()).toMatchObject({ connectionState: "connected", revision: 4 });
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+    await f.service.capture(actor, "connection");
+    expect(f.row().connectionState).toBe("connected");
+  });
   it("clears a custom server's earlier result while its browser sign-in is pending", async () => {
     const f = fixture();
     f.setRow({ catalogId: null, connectionState: "discovery-failed" });

@@ -233,7 +233,21 @@ export function IntegrationSetup({
                   credential: apiKey.trim() ? { value: apiKey } : undefined,
                   botId,
                 });
-                if (typeof outcome === "object") onServerConnected?.(outcome.serverId);
+                if (typeof outcome === "object") {
+                  onServerConnected?.(outcome.serverId);
+                  return;
+                }
+                setError(
+                  outcome === "credential-rejected"
+                    ? t`That token was not accepted. Check it and try again.`
+                    : outcome === "needs-credential"
+                      ? t`Enter a credential for this server and try again.`
+                      : outcome === "cancelled"
+                        ? t`Sign-in was declined. Reconnect to try again.`
+                        : outcome === "needs-sign-in"
+                          ? t`Sign-in did not finish. Try again.`
+                          : t`Could not finish sign-in. Try again.`,
+                );
               })
             }
           >

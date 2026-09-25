@@ -69,17 +69,26 @@ async function click(label: string) {
 }
 
 it("does not approve a bot when tool discovery failed", async () => {
-  api.oauth.mockResolvedValue("discovery-failed");
+  api.oauth.mockResolvedValue("sign-in-failed");
   api.list.mockResolvedValue([
     {
       id: "server-1",
       connectionState: "discovery-failed",
-      lastError: "Could not reach this integration. Try again.",
+      lastError: "Could not complete sign-in. Connect again.",
     },
   ]);
   const container = await mount();
   await click("Authorize");
   expect(api.approve).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Could not reach this integration. Try again.");
+  expect(container.textContent).toContain("Could not complete sign-in. Connect again.");
+  expect(container.textContent).not.toContain("Connected. Review tools in MCP settings.");
+});
+
+it("says sign-in was declined and does not approve the bot", async () => {
+  api.oauth.mockResolvedValue("cancelled");
+  const container = await mount();
+  await click("Authorize");
+  expect(api.approve).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Sign-in was declined.");
   expect(container.textContent).not.toContain("Connected. Review tools in MCP settings.");
 });

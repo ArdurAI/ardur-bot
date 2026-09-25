@@ -825,11 +825,7 @@ describe("MCP connector session cache", () => {
     const connector = new McpConnector(
       prisma as never,
       {
-        load: vi
-          .fn()
-          .mockReturnValue(
-            JSON.stringify({ secret: "local-token", headers: { "X-Api-Key": "local-key" } }),
-          ),
+        load: vi.fn().mockReturnValue(JSON.stringify({ secret: "local-token" })),
       } as never,
     );
 
@@ -841,7 +837,39 @@ describe("MCP connector session cache", () => {
     } as never);
 
     expect(state.headers[0]?.authorization).toBe("Bearer local-token");
+    expect(state.headers[0]?.["x-api-key"]).toBeUndefined();
+    await connector.close();
+  });
+
+  it("sends a named header and no Authorization bearer when that is the only credential", async () => {
+    const state = { failNext: false, initializations: 0, headers: [] as Record<string, string>[] };
+    const localAssignment = {
+      ...ASSIGNMENT,
+      server: { ...SERVER, endpoint: "http://localhost:8123/api/mcp", secretId: "secret-1" },
+    };
+    vi.stubGlobal("fetch", mcpFetch(state, "http://localhost:8123/api/mcp"));
+    const prisma = {
+      botMcpServer: { findMany: vi.fn().mockResolvedValue([localAssignment]) },
+      secret: { findFirst: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "encrypted" }) },
+    };
+    const connector = new McpConnector(
+      prisma as never,
+      {
+        load: vi
+          .fn()
+          .mockReturnValue(
+            JSON.stringify({ secret: "stale-bearer", headers: { "X-Api-Key": "local-key" } }),
+          ),
+      } as never,
+    );
+    await connector.discoverTools({
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never);
     expect(state.headers[0]?.["x-api-key"]).toBe("local-key");
+    expect(state.headers[0]?.authorization).toBeUndefined();
     await connector.close();
   });
 

@@ -198,8 +198,10 @@ export class IntegrationConnections {
       throw error;
     }
     if (started.status !== "authorization_required") await this.capture(actor, input.serverId);
-    else if (!server.catalogId)
-      // An earlier result must not read as the outcome of this pending sign-in.
+    else if (!server.catalogId && server.connectionState !== "connected")
+      // A server that is not connected yet can drop its previous result. A connected
+      // server stays connected until this attempt records an outcome; the client
+      // tells the attempts apart by revision.
       await this.prisma.mcpServer.updateMany({
         where: {
           id: server.id,
@@ -208,7 +210,7 @@ export class IntegrationConnections {
           enabled: true,
           revision: server.revision,
         },
-        data: { connectionState: "not-connected" },
+        data: { connectionState: "not-connected", revision: { increment: 1 } },
       });
     return started;
   }

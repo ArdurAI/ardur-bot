@@ -24,7 +24,7 @@ export function DirectMcpSearch({
 }: {
   botId?: string;
   catalog?: IntegrationDescriptor[];
-  onConnectCatalog?: (descriptor: IntegrationDescriptor) => Promise<boolean>;
+  onConnectCatalog?: (descriptor: IntegrationDescriptor, token?: string) => Promise<boolean>;
   onConnected?: (serverId: string) => void | Promise<void>;
 }) {
   const { t } = useLingui();
@@ -39,6 +39,7 @@ export function DirectMcpSearch({
   // A credential belongs to the one result it was typed for.
   const [credential, setCredential] = useState<{ endpoint: string; value: string } | null>(null);
   const [rejectedEndpoint, setRejectedEndpoint] = useState<string | null>(null);
+  const [declined, setDeclined] = useState(false);
   const remoteResults = [
     ...new Map(
       results.flatMap((result) =>
@@ -98,9 +99,11 @@ export function DirectMcpSearch({
     setBusy(true);
     setError(null);
     setRejectedEndpoint(null);
+    setDeclined(false);
     try {
       if (target.descriptor) {
-        if (await onConnectCatalog?.(target.descriptor))
+        const typedToken = target.descriptor.authKind === "oauth" ? "" : token.trim();
+        if (await onConnectCatalog?.(target.descriptor, typedToken || undefined))
           setConnected((current) => [...current, target.endpoint]);
         return;
       }
@@ -120,7 +123,14 @@ export function DirectMcpSearch({
         setCredential({ endpoint: target.endpoint, value: "" });
         return;
       }
-      if (outcome === "cancelled") return;
+      if (outcome === "cancelled") {
+        setDeclined(true);
+        return;
+      }
+      if (typeof outcome !== "object") {
+        if (outcome === "sign-in-failed") setError("connect");
+        return;
+      }
       setConnected((current) => [...current, target.endpoint]);
       setCredential(null);
       setUrlToken("");
@@ -206,13 +216,15 @@ export function DirectMcpSearch({
           {typedDescriptor ? (
             <p className="text-sm text-muted-foreground">{typedDescriptor.name}</p>
           ) : null}
-          <Input
-            type="password"
-            autoComplete="off"
-            aria-label={t`Access token (optional)`}
-            value={urlToken}
-            onChange={(event) => setUrlToken(event.target.value)}
-          />
+          {typedDescriptor?.authKind === "oauth" ? null : (
+            <Input
+              type="password"
+              autoComplete="off"
+              aria-label={t`Access token (optional)`}
+              value={urlToken}
+              onChange={(event) => setUrlToken(event.target.value)}
+            />
+          )}
           {rejectedEndpoint === endpoint.trim() ? (
             <p className="text-sm text-destructive" role="alert">
               {t`That token was not accepted. Check it and try again.`}
@@ -235,6 +247,11 @@ export function DirectMcpSearch({
           </Button>
         </div>
       </details>
+      {declined ? (
+        <p className="text-sm text-muted-foreground">
+          {t`Sign-in was declined. Reconnect to try again.`}
+        </p>
+      ) : null}
       {error ? (
         <div role="alert" className="space-y-2">
           <p className="text-sm text-destructive">

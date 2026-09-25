@@ -2163,6 +2163,10 @@ msgstr "Could not export data. Try again."
 msgid "Could not export memory. Retry."
 msgstr "Could not export memory. Retry."
 
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Could not finish sign-in. Try again."
+msgstr "Could not finish sign-in. Try again."
+
 #: src/pages/MemoryImportExport.tsx
 msgid "Could not import these documents. Check scopes and conflicts, then preview again."
 msgstr "Could not import these documents. Check scopes and conflicts, then preview again."
@@ -3201,6 +3205,10 @@ msgstr "Engineering"
 #: src/pages/DevicesSettings.tsx
 msgid "Enter a code instead"
 msgstr "Enter a code instead"
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Enter a credential for this server and try again."
+msgstr "Enter a credential for this server and try again."
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
@@ -6764,6 +6772,11 @@ msgstr "Sign out"
 msgid "Sign up"
 msgstr "Sign up"
 
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Sign-in did not finish. Try again."
+msgstr "Sign-in did not finish. Try again."
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in expired. Connect Codex again."
 msgstr "Sign-in expired. Connect Codex again."
@@ -6775,6 +6788,15 @@ msgstr "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, to
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr "Sign-in timed out."
+
+#: src/pages/shell/message-cards.tsx
+msgid "Sign-in was declined."
+msgstr "Sign-in was declined."
+
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Sign-in was declined. Reconnect to try again."
+msgstr "Sign-in was declined. Reconnect to try again."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
@@ -7180,6 +7202,7 @@ msgid "That shortcut is already in use; choose another."
 msgstr "That shortcut is already in use; choose another."
 
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
 msgid "That token was not accepted. Check it and try again."
 msgstr "That token was not accepted. Check it and try again."
 

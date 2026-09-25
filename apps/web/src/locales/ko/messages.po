@@ -2163,6 +2163,10 @@ msgstr ""
 msgid "Could not export memory. Retry."
 msgstr ""
 
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Could not finish sign-in. Try again."
+msgstr ""
+
 #: src/pages/MemoryImportExport.tsx
 msgid "Could not import these documents. Check scopes and conflicts, then preview again."
 msgstr ""
@@ -3200,6 +3204,10 @@ msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Enter a code instead"
+msgstr ""
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Enter a credential for this server and try again."
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -6764,6 +6772,11 @@ msgstr ""
 msgid "Sign up"
 msgstr "가입하기"
 
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Sign-in did not finish. Try again."
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in expired. Connect Codex again."
 msgstr ""
@@ -6774,6 +6787,15 @@ msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
+msgstr ""
+
+#: src/pages/shell/message-cards.tsx
+msgid "Sign-in was declined."
+msgstr ""
+
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Sign-in was declined. Reconnect to try again."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -7180,6 +7202,7 @@ msgid "That shortcut is already in use; choose another."
 msgstr ""
 
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
 msgid "That token was not accepted. Check it and try again."
 msgstr ""
 

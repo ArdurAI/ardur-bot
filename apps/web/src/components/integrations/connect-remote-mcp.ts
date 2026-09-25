@@ -3,11 +3,21 @@ import { rpc } from "../../lib/rpc";
 
 export type RemoteMcpCredential = { value: string; headerName?: string | null };
 
+export type RemoteMcpOutcome =
+  | { serverId: string }
+  | "cancelled"
+  | "needs-sign-in"
+  | "needs-credential"
+  | "credential-rejected"
+  | "sign-in-failed";
+
 /**
  * Connects a remote MCP server and trusts only the connection state the API recorded.
- * "mixed" servers try browser sign-in first and return "needs-credential" when the server
- * offers none. A token the server rejects returns "credential-rejected" and leaves the
- * server and its stored error in place. "cancelled" means the person stopped browser sign-in.
+ * A server created here is never removed: the person deletes it. "mixed" servers try
+ * browser sign-in first and return "needs-credential" when the server offers none.
+ * A token the server rejects returns "credential-rejected". "cancelled" means the
+ * person declined. "needs-sign-in" means the popup closed or never finished.
+ * "sign-in-failed" means token exchange or discovery failed after consent.
  */
 export async function connectRemoteMcp(input: {
   name: string;
@@ -15,7 +25,7 @@ export async function connectRemoteMcp(input: {
   botId?: string;
   auth?: "none" | "oauth" | "mixed";
   credential?: RemoteMcpCredential;
-}): Promise<{ serverId: string } | "cancelled" | "needs-credential" | "credential-rejected"> {
+}): Promise<RemoteMcpOutcome> {
   const endpoint = input.endpoint.trim();
   const value = input.credential?.value.trim();
   const headerName = input.credential?.headerName;
@@ -54,39 +64,29 @@ export async function connectRemoteMcp(input: {
   else if (existing && secret) await rpc.mcp.servers.update({ id: existing.id, secret });
   let failed = false;
   let failure: unknown;
-  let cancelled = false;
-  let discoveryFailed = false;
+  let oauth: Awaited<ReturnType<typeof connectMcpOauth>> | undefined;
   try {
     if (value || input.auth === "none") await rpc.mcp.servers.tools({ serverId: server.id });
-    else {
-      const oauth = await connectMcpOauth(server.id);
-      cancelled = oauth === "cancelled";
-      discoveryFailed = oauth === "discovery-failed";
-    }
+    else oauth = await connectMcpOauth(server.id);
   } catch (error) {
     failed = true;
     failure = error;
   }
+  // A declined, unfinished, or failed sign-in is the attempt's outcome even when an
+  // older "connected" row is still what the list shows.
+  if (oauth === "cancelled" || oauth === "needs-sign-in" || oauth === "sign-in-failed")
+    return oauth;
   const state = (await rpc.mcp.servers.list()).find(
     (candidate) => candidate.id === server.id,
   )?.connectionState;
-  if (!failed && !cancelled && !discoveryFailed && state === "connected") {
+  if (!failed && state === "connected") {
     if (input.botId) await rpc.mcp.assignments.approve({ botId: input.botId, serverId: server.id });
     return { serverId: server.id };
   }
   // The first prompt has no token yet. A token the server refused stays stored with the server.
   if (value && failed && state === "needs-sign-in") return "credential-rejected";
-  const needsCredential = !value && failed && input.auth === "mixed" && state === "needs-sign-in";
-  if (needsCredential || (cancelled && state !== "needs-sign-in")) {
-    if (!existing) {
-      try {
-        await rpc.mcp.servers.remove({ id: server.id });
-      } catch {
-        await rpc.mcp.servers.update({ id: server.id, enabled: false });
-      }
-    }
-    return needsCredential ? "needs-credential" : "cancelled";
-  }
+  if (!value && failed && input.auth === "mixed" && state === "needs-sign-in")
+    return "needs-credential";
   throw failure instanceof Error
     ? failure
     : new Error("Could not connect this server. Check its configuration and try again.");

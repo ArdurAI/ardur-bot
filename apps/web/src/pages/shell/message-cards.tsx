@@ -357,27 +357,29 @@ export function McpApprovalCard({
       if (needsOAuth) {
         const result = await connectMcpOauth(serverId);
         if (result !== "connected") {
-          if (result !== "cancelled") {
-            let recorded = "";
-            if (result === "discovery-failed") {
-              try {
-                recorded =
-                  (await rpc.mcp.servers.list())
-                    .find((server) => server.id === serverId)
-                    ?.lastError?.trim() ?? "";
-              } catch {
-                recorded = "";
-              }
+          let recorded = "";
+          if (result === "sign-in-failed") {
+            try {
+              recorded =
+                (await rpc.mcp.servers.list())
+                  .find((server) => server.id === serverId)
+                  ?.lastError?.trim() ?? "";
+            } catch {
+              recorded = "";
             }
-            setError(
-              recorded ||
-                (result === "already_connected"
-                  ? t`This server is already connected. Disconnect it first to authorize again.`
-                  : result === "authorization_not_requested"
-                    ? t`This server did not request browser authorization.`
-                    : t`Could not load this account’s tools.`),
-            );
           }
+          setError(
+            result === "cancelled"
+              ? t`Sign-in was declined.`
+              : result === "needs-sign-in"
+                ? t`Sign-in did not finish. Try again.`
+                : recorded ||
+                  (result === "already_connected"
+                    ? t`This server is already connected. Disconnect it first to authorize again.`
+                    : result === "authorization_not_requested"
+                      ? t`This server did not request browser authorization.`
+                      : t`Could not load this account’s tools.`),
+          );
           setState("pending");
           return;
         }

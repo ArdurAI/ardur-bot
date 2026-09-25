@@ -217,7 +217,7 @@ export function McpServersOverlay({
       if (result !== "cancelled") setOauthPending(null);
       const listed = await refresh();
       if (result === "connected") return;
-      if (result === "discovery-failed") {
+      if (result === "sign-in-failed") {
         setError(
           listed.find((item) => item.id === server.id)?.lastError?.trim() ||
             t`Could not load this account’s tools.`,

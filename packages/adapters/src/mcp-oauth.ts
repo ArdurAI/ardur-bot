@@ -535,6 +535,10 @@ export class McpOAuthBroker {
         });
       }
       // Custom servers wait in "not-connected" while their sign-in is pending.
+      // A decline is "cancelled". Any other post-consent failure is "discovery-failed"
+      // (the same stored state catalog rows use) so callers can show lastError.
+      // The revision bump is this attempt's outcome, not the row's previous one.
+      // A server that is still "connected" is left alone: closing the popup writes nothing.
       await this.prisma.mcpServer.updateMany({
         where: {
           id: session.serverId,
@@ -544,8 +548,9 @@ export class McpOAuthBroker {
           connectionState: "not-connected",
         },
         data: {
-          connectionState: input.error === "access_denied" ? "cancelled" : "needs-sign-in",
+          connectionState: input.error === "access_denied" ? "cancelled" : "discovery-failed",
           lastError: "Could not complete sign-in. Connect again.",
+          revision: { increment: 1 },
         },
       });
       throw new Error("MCP OAuth sign-in failed");

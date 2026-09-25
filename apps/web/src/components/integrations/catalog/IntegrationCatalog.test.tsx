@@ -556,25 +556,32 @@ describe("Settings integration catalog", () => {
     expect(api.oauth).not.toHaveBeenCalled();
   });
 
-  it("removes a newly created server when browser sign-in is cancelled", async () => {
-    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
-    api.create.mockResolvedValue({
-      id: "cancelled-server",
-      name: "Figma",
-      endpoint: "https://mcp.figma.example.test/mcp",
-      transport: "streamable_http",
-      enabled: true,
-      oauthStatus: "none",
-      connectionState: "not-connected",
-      catalogId: null,
+  it("keeps a just-created custom server when sign-in is declined and offers reconnect", async () => {
+    const polls: Array<() => void> = [];
+    const setInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, ms?: number) => {
+      if (ms !== 5000) return setInterval(handler, ms);
+      polls.push(handler);
+      return 0;
+    }) as typeof window.setInterval);
+    const added = createdServers();
+    api.oauth.mockImplementation(async (serverId: string) => {
+      const server = added.find((entry) => entry.id === serverId)!;
+      server.connectionState = "cancelled";
+      return "cancelled";
     });
-    api.oauth.mockResolvedValueOnce("cancelled");
-    await mount();
-    await click(button("Find apps"));
-    await fill("Search apps", "figma");
-    await click(button("Search integrations.sh"));
+    await openResults([publicResult]);
     await click(resultConnect("Figma")!);
-    expect(api.remove).toHaveBeenCalledWith({ id: "cancelled-server" });
+    expect(api.create).toHaveBeenCalled();
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(api.update).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Sign-in was declined. Reconnect to try again.");
+    await act(async () => polls[0]!());
+    const row = serverRow("Figma");
+    expect(row?.textContent).toContain("Needs sign-in");
+    expect(row?.textContent).toContain("Reconnect");
+    expect(row?.textContent).toContain("Manage");
+    expect(row?.textContent).toContain("Delete");
   });
 
   it("does not report authorization-not-requested when discovery failed", async () => {
@@ -796,14 +803,16 @@ describe("Settings integration catalog", () => {
     ]);
     await click(resultConnect("Either")!);
     expect(api.oauth).toHaveBeenCalledExactlyOnceWith("created-1");
-    expect(api.remove).toHaveBeenCalledWith({ id: "created-1" });
+    expect(api.remove).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')).toBeNull();
     await fill("Credential", "synthetic-token");
     await click(resultConnect("Either")!);
-    expect(api.create).toHaveBeenLastCalledWith(
-      expect.objectContaining({ secret: "synthetic-token" }),
-    );
-    expect(api.tools).toHaveBeenCalledExactlyOnceWith({ serverId: "created-2" });
+    expect(api.create).toHaveBeenCalledOnce();
+    expect(api.update).toHaveBeenCalledExactlyOnceWith({
+      id: "created-1",
+      secret: "synthetic-token",
+    });
+    expect(api.tools).toHaveBeenCalledExactlyOnceWith({ serverId: "created-1" });
     expect(api.oauth).toHaveBeenCalledOnce();
     expect(resultConnect("Either")).toBeUndefined();
   });
@@ -820,6 +829,47 @@ describe("Settings integration catalog", () => {
     );
     expect(api.oauth).toHaveBeenCalledExactlyOnceWith("created-1");
     expect(api.tools).not.toHaveBeenCalled();
+  });
+
+  it("starts the catalog flow with a token typed beside a built-in URL", async () => {
+    const github = {
+      ...remoteApp("github", "GitHub", "https://api.githubcopilot.com/mcp/"),
+      authKind: "token" as const,
+    };
+    api.list.mockImplementation(async () => ({ catalog: [github], connections }));
+    api.connect.mockResolvedValue({
+      connection: { ...connected, catalogId: "github", state: "connected" },
+      authorizationUrl: null,
+      sessionId: null,
+    });
+    await mount();
+    await click(button("Find apps"));
+    const details = container.querySelector("details")!;
+    await fill("Server URL", "https://api.githubcopilot.com/mcp/");
+    expect(details.textContent).toContain("GitHub");
+    await fill("Access token (optional)", "synthetic-test-value");
+    await click(button("Connect", details));
+    expect(api.connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catalogId: "github",
+        authKind: "token",
+        token: "synthetic-test-value",
+      }),
+    );
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it("hides the token field for a built-in app that uses sign-in only", async () => {
+    api.list.mockImplementation(async () => ({
+      catalog: [remoteApp("atlassian", "Atlassian", "https://mcp.atlassian.com/v2/mcp?tools=all")],
+      connections,
+    }));
+    await mount();
+    await click(button("Find apps"));
+    const details = container.querySelector("details")!;
+    await fill("Server URL", "https://mcp.atlassian.com/v2/mcp?tools=all");
+    expect(details.textContent).toContain("Atlassian");
+    expect(details.querySelector('[aria-label="Access token (optional)"]')).toBeNull();
   });
 
   it("ignores an older server-list response that resolves after a refresh", async () => {
@@ -1060,16 +1110,16 @@ describe("Settings integration catalog", () => {
       "That token was not accepted. Check it and try again.",
     );
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(api.remove).toHaveBeenCalledWith({ id: "created-1" });
+    expect(api.remove).not.toHaveBeenCalled();
     await fill("Credential", "synthetic-token");
     await click(resultConnect("Either")!);
-    const kept = added.find((entry) => entry.id === "created-2");
+    const kept = added.find((entry) => entry.id === "created-1");
     expect(kept).toMatchObject({
       connectionState: "needs-sign-in",
       lastError: "Needs sign-in (invalid_token).",
     });
-    expect(api.remove).not.toHaveBeenCalledWith({ id: "created-2" });
-    expect(api.update).not.toHaveBeenCalled();
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(api.update).toHaveBeenCalledWith({ id: "created-1", secret: "synthetic-token" });
     const either = resultBlock("Either");
     expect(either?.textContent).toContain("That token was not accepted. Check it and try again.");
     expect(container.textContent).not.toContain("Could not connect or load integrations.");
@@ -1080,11 +1130,11 @@ describe("Settings integration catalog", () => {
     await click(resultConnect("Bearer")!);
     await fill("Credential", "synthetic-bearer");
     await click(resultConnect("Bearer")!);
-    expect(added.find((entry) => entry.id === "created-3")).toMatchObject({
+    expect(added.find((entry) => entry.id === "created-2")).toMatchObject({
       connectionState: "needs-sign-in",
       lastError: "Needs sign-in (invalid_token).",
     });
-    expect(api.remove).not.toHaveBeenCalledWith({ id: "created-3" });
+    expect(api.remove).not.toHaveBeenCalledWith({ id: "created-2" });
     expect(resultBlock("Bearer")?.textContent).toContain(
       "That token was not accepted. Check it and try again.",
     );

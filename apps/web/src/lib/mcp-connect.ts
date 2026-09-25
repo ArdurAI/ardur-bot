@@ -6,32 +6,41 @@ const MCP_OAUTH_TIMEOUT_MS = 10 * 60 * 1000;
 
 export type McpOauthResult =
   | "connected"
+  | "needs-sign-in"
   | "cancelled"
+  | "sign-in-failed"
   | "already_connected"
-  | "authorization_not_requested"
-  | "discovery-failed";
+  | "authorization_not_requested";
+
+/** A post-consent failure is stored as "discovery-failed" and reported as "sign-in-failed". */
+function recordedOauthOutcome(state: string | undefined): McpOauthResult | null {
+  if (state === "connected") return "connected";
+  if (state === "discovery-failed") return "sign-in-failed";
+  if (state === "cancelled") return "cancelled";
+  if (state === "needs-sign-in") return "needs-sign-in";
+  return null;
+}
 
 /** Run the browser OAuth popup flow for an MCP server: request an
  * authorization URL, open the popup, and wait until the callback page
  * broadcasts completion or the API records the sign-in's outcome.
  *
  * The BroadcastChannel (not window.opener) is the completion signal because
- * provider login pages with COOP sever the opener link. */
+ * provider login pages with COOP sever the opener link. An unchanged
+ * revision is the previous attempt, not this one. */
 export async function connectMcpOauth(serverId: string): Promise<McpOauthResult> {
+  const baseline = (await rpc.mcp.servers.list()).find(
+    (server) => server.id === serverId,
+  )?.revision;
   const started = await rpc.mcp.oauth.begin({
     serverId,
     redirectUri: `${window.location.origin}/api/oauth/done`,
   });
   if (started.status !== "authorization_required") return started.status;
   return waitForMcpOauth(started.authorizationUrl, undefined, started.sessionId, async () => {
-    // The API holds a pending sign-in at "not-connected" until the callback records a result.
-    const state = (await rpc.mcp.servers.list()).find(
-      (server) => server.id === serverId,
-    )?.connectionState;
-    if (state === "connected") return "connected";
-    if (state === "discovery-failed") return "discovery-failed";
-    if (state === "needs-sign-in" || state === "cancelled") return "cancelled";
-    return null;
+    const server = (await rpc.mcp.servers.list()).find((item) => item.id === serverId);
+    if (!server || (baseline !== undefined && server.revision === baseline)) return null;
+    return recordedOauthOutcome(server.connectionState);
   });
 }
 
@@ -86,7 +95,8 @@ export async function waitForMcpOauth(
     }, 1000);
     timeoutTimer = window.setTimeout(() => {
       popup?.close();
-      finish("cancelled");
+      // The person closed the window or never finished. That is not a decline.
+      finish("needs-sign-in");
     }, MCP_OAUTH_TIMEOUT_MS);
     channel.onmessage = (event: MessageEvent) => {
       const data = event.data as { type?: string; sessionId?: string } | null;

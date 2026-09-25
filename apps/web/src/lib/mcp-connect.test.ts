@@ -80,10 +80,10 @@ describe("MCP browser consent", () => {
     );
     expect(window.location.assign).toHaveBeenCalledWith("https://auth.example.test/authorize");
   });
-  it("cancels a consent window that times out", async () => {
+  it("treats a consent window that times out as unfinished sign-in", async () => {
     const result = waitForMcpOauth("https://auth.example.test/authorize");
     await vi.advanceTimersByTimeAsync(600_000);
-    expect(await result).toBe("cancelled");
+    expect(await result).toBe("needs-sign-in");
     expect(popup.close).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -112,15 +112,73 @@ describe("MCP browser consent", () => {
       authorizationUrl: "https://auth.example.test/authorize",
       sessionId: "ours",
     });
-    list.mockResolvedValue([
-      { id: "connection", oauthStatus: "reconnect", connectionState: "needs-sign-in" },
-    ]);
+    const server = {
+      id: "connection",
+      oauthStatus: "reconnect",
+      connectionState: "cancelled",
+      revision: 1,
+    };
+    list.mockImplementation(async () => [{ ...server }]);
     const result = connectMcpOauth("connection");
+    await vi.advanceTimersByTimeAsync(0);
+    server.revision = 2;
     await vi.advanceTimersByTimeAsync(1000);
     expect(await result).toBe("cancelled");
     expect(popup.close).toHaveBeenCalledOnce();
   });
-  it("reports discovery-failed instead of a completed sign-in", async () => {
+  it("reports an unfinished sign-in separately from a decline", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    const server = {
+      id: "connection",
+      oauthStatus: "reconnect",
+      connectionState: "needs-sign-in",
+      revision: 1,
+    };
+    list.mockImplementation(async () => [{ ...server }]);
+    const result = connectMcpOauth("connection");
+    await vi.advanceTimersByTimeAsync(0);
+    server.revision = 2;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await result).toBe("needs-sign-in");
+  });
+  it("does not treat a connected server as this attempt until its revision changes", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    const server = { id: "connection", connectionState: "connected", revision: 4 };
+    list.mockImplementation(async () => [server]);
+    const result = connectMcpOauth("connection");
+    let settled = false;
+    void result.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(settled).toBe(false);
+    expect(server).toMatchObject({ connectionState: "connected", revision: 4 });
+    server.revision = 5;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await result).toBe("connected");
+  });
+  it("leaves a connected server connected when the popup closes without a callback", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    const server = { id: "connection", connectionState: "connected", revision: 4 };
+    list.mockImplementation(async () => [server]);
+    const result = connectMcpOauth("connection");
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(await result).toBe("needs-sign-in");
+    expect(server).toMatchObject({ connectionState: "connected", revision: 4 });
+  });
+  it("reports a post-consent failure instead of a completed sign-in", async () => {
     begin.mockResolvedValue({
       status: "authorization_required",
       authorizationUrl: "https://auth.example.test/authorize",
@@ -136,7 +194,7 @@ describe("MCP browser consent", () => {
     ]);
     const result = connectMcpOauth("connection");
     await vi.advanceTimersByTimeAsync(1000);
-    expect(await result).toBe("discovery-failed");
+    expect(await result).toBe("sign-in-failed");
     expect(popup.close).toHaveBeenCalledOnce();
   });
 });
