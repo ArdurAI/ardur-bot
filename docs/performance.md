@@ -222,8 +222,10 @@ named by the SHA-256 of their canonical bytes. A record is appended only after t
 The directory is local-first and is not a hosted telemetry store. Public records use synthetic
 tasks and hardware-class labels.
 
-Commit object bytes are retained for 180 days. Pruning removes only those bytes, writes an expiry
-record first, and leaves the original line in place. Release objects are not pruned.
+Commit object bytes are retained for 180 days. An object stays while any record inside that
+window, commit or release, references its digest. A release record also keeps its object after
+the window. Pruning removes only bytes that fail both of those checks, writes an expiry record
+first, and leaves the original line in place.
 A pending record is never deleted to hide an earlier measurement. A later rejection is a new line;
 the measured line remains.
 
@@ -233,7 +235,13 @@ pushes record every new commit as measured or pending and stay advisory. Only a 
 `main` of this repository extends the durable chain. Before appending, the index job lists every
 page of this workflow's successful push runs for the same branch, newest first, and keeps walking
 until a run has a `scoreboard-index` artifact that has not expired or the run is older than the
-90-day window. The walk is bounded by that window, not by a run count. A live artifact restores
+90-day window. The walk is bounded by that window, not by a run count. GitHub's list-workflow-runs
+endpoint returns at most 1,000 results for a search filtered by `branch`, `event`, `status`, or
+`created`
+([workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow)).
+When `total_count` is above 1,000, or a listing returns 1,000 runs, the walk halves the `created`
+range and lists every slice, newest first, until each slice is under that cap. A chain origin is
+chosen only after every slice back to the start of the window has been inspected. A live artifact restores
 that chain and does not write a chain origin. Pull-request, manual, and fork runs never restore or
 upload `scoreboard-index`; they build a throwaway `scoreboard-index-check` chain. A downloaded
 chain with a broken hash fails the job instead of silently starting over.
@@ -261,6 +269,12 @@ The five effect-safety counts are checked by their guardrail and the safety verd
 budget selection, because seven reliability metrics in one family exceed the resample limit. Tool
 termination and retained-session growth have no reviewed declaration yet. retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared. That pending result is recorded as `undeclared-budget` with those metric ids. It is
 not a missing-report failure and it does not refuse the candidate.
+
+The previous fixed release is the closest `v*` tag on the first-parent history of the commit
+being published. The release workflow resolves it with `git describe --tags --abbrev=0 --match
+'v*' --first-parent`. `--first-parent` follows only the first parent of a merge, so a tag on a
+merged side branch is not selected
+([git describe](https://git-scm.com/docs/git-describe#Documentation/git-describe.txt---first-parent)).
 
 The release invocation is mandatory: `publish` depends on the evidence job, and that job fails
 closed when the report, platform, energy, or digest check is incomplete. The asset assembler merges

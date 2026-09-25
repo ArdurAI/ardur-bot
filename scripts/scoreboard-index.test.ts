@@ -810,6 +810,44 @@ describe("scoreboard index", () => {
     }
   });
 
+  it("keeps a shared commit object while any record is inside the retention window", async () => {
+    const measured = (indexedAt: string, attempt = 1, supersedes: string | null = null) => ({
+      ...pending(A, attempt, supersedes),
+      status: "measured" as const,
+      indexedAt,
+      envelope: syntheticReport(1, "shared-window"),
+    });
+    const kept = await mkdtemp(path.join(os.tmpdir(), "scoreboard-shared-kept-"));
+    try {
+      const older = await appendIndexRecord(kept, measured("2020-01-01T00:00:00.000Z"));
+      const newer = await appendIndexRecord(
+        kept,
+        measured("2026-09-01T00:00:00.000Z", 2, older.recordHash),
+      );
+      expect(newer.objectDigest).toBe(older.objectDigest);
+      await pruneCommitObjects(kept, new Date("2026-09-25T00:00:00.000Z"));
+      expect(await readFile(path.join(kept, "objects", older.objectDigest!))).toBeInstanceOf(
+        Buffer,
+      );
+    } finally {
+      await rm(kept, { recursive: true, force: true });
+    }
+
+    const dropped = await mkdtemp(path.join(os.tmpdir(), "scoreboard-shared-dropped-"));
+    try {
+      const first = await appendIndexRecord(dropped, measured("2020-01-01T00:00:00.000Z"));
+      const second = await appendIndexRecord(
+        dropped,
+        measured("2020-06-01T00:00:00.000Z", 2, first.recordHash),
+      );
+      expect(second.objectDigest).toBe(first.objectDigest);
+      await pruneCommitObjects(dropped, new Date("2026-09-25T00:00:00.000Z"));
+      await expect(readFile(path.join(dropped, "objects", first.objectDigest!))).rejects.toThrow();
+    } finally {
+      await rm(dropped, { recursive: true, force: true });
+    }
+  });
+
   it("indexes a push as pending without claiming schema-3 measurements", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-push-"));
     const commits = path.join(root, "commits.json");
@@ -1829,6 +1867,21 @@ describe("committed release policy", () => {
   });
 });
 
+function fixedReleaseDescribeArgs(yaml: string, sha: string) {
+  const line = yaml
+    .split("\n")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith('fixed_tag="$(git describe'));
+  const inner = line?.match(/^fixed_tag="\$\((git describe .+) 2>/)?.[1];
+  const tokens = inner?.match(/'[^']*'|"[^"]*"|\S+/g);
+  if (!tokens) throw new Error("release workflow is missing the fixed release lookup");
+  const [command, ...args] = tokens.map((token) =>
+    token.replace(/^['"]|['"]$/g, "").replaceAll(`$` + `{sha}`, sha),
+  );
+  if (command !== "git") throw new Error("release workflow is missing the fixed release lookup");
+  return args;
+}
+
 function fixtureGit(cwd: string, args: string[], date = "2026-09-01T00:00:00Z") {
   const result = spawnSync("git", args, {
     cwd,
@@ -1954,6 +2007,16 @@ describe("prior index chain", () => {
     workflow_run: { id: runId },
   });
 
+  function matchesCreated(createdAt: string, created: string) {
+    const timestamp = Date.parse(createdAt);
+    if (created.startsWith(">=")) return timestamp >= Date.parse(created.slice(2));
+    const bounds = created.split("..");
+    if (bounds.length === 2) {
+      return timestamp >= Date.parse(bounds[0] ?? "") && timestamp <= Date.parse(bounds[1] ?? "");
+    }
+    return true;
+  }
+
   function fakeGitHub(
     runs: Run[],
     artifacts: Record<number, ReturnType<typeof artifact>[]>,
@@ -1963,15 +2026,30 @@ describe("prior index chain", () => {
     const request = async (pathname: string, query: Record<string, string | number>) => {
       calls.push({ pathname, query });
       if (pathname.endsWith("/runs")) {
+        const matched = runs.filter((item) =>
+          matchesCreated(item.created_at, String(query.created ?? "")),
+        );
+        // Filtered workflow-run searches return at most 1,000 results.
+        const visible = matched.length > 1000 ? matched.slice(0, 1000) : matched;
         const page = Number(query.page);
-        const workflowRuns = runs.slice((page - 1) * pageSize, page * pageSize);
-        return { total_count: runs.length, workflow_runs: workflowRuns };
+        const workflowRuns = visible.slice((page - 1) * pageSize, page * pageSize);
+        return { total_count: matched.length, workflow_runs: workflowRuns };
       }
       const id = Number(/\/runs\/(\d+)\/artifacts$/.exec(pathname)?.[1]);
       const list = artifacts[id] ?? [];
       return { total_count: list.length, artifacts: list };
     };
     return { request, calls };
+  }
+
+  function spreadPushes(count: number, order: "newest-first" | "oldest-first") {
+    const oldestAt = Date.parse("2026-06-28T00:00:00.000Z");
+    const newestAt = Date.parse("2026-09-24T00:00:00.000Z");
+    const items = Array.from({ length: count }, (_, index) => {
+      const created = new Date(oldestAt + ((newestAt - oldestAt) * index) / (count - 1));
+      return run(index + 1, created.toISOString());
+    });
+    return order === "newest-first" ? items.toReversed() : items;
   }
 
   const find = (
@@ -2069,6 +2147,29 @@ describe("prior index chain", () => {
     expect(outside.calls.map((call) => call.pathname)).not.toContain(
       `/repos/${REPOSITORY}/actions/runs/9/artifacts`,
     );
+  });
+
+  it("lists every run inside the window once a search passes 1000 results", async () => {
+    const oldestOnly = spreadPushes(1001, "newest-first");
+    const oldest = oldestOnly[1000];
+    if (!oldest) throw new Error("missing oldest run");
+    const capped = fakeGitHub(oldestOnly, { [oldest.id]: [artifact(oldest.id, false)] });
+    await expect(find(capped)).resolves.toEqual({ runId: oldest.id, missingReason: null });
+    expect(capped.calls.some((call) => String(call.query.created).includes(".."))).toBe(true);
+
+    const several = spreadPushes(2001, "oldest-first");
+    const olderLive = several[999];
+    const newestLive = several[2000];
+    if (!olderLive || !newestLive) throw new Error("missing slice runs");
+    const slices = fakeGitHub(several, {
+      [olderLive.id]: [artifact(olderLive.id, false)],
+      [newestLive.id]: [artifact(newestLive.id, false)],
+    });
+    await expect(find(slices)).resolves.toEqual({ runId: newestLive.id, missingReason: null });
+    const created = slices.calls
+      .filter((call) => call.pathname.endsWith("/runs"))
+      .map((call) => String(call.query.created));
+    expect(new Set(created).size).toBeGreaterThan(2);
   });
 
   it("counts a listed scoreboard-reports artifact even after it expires", async () => {
@@ -2176,6 +2277,40 @@ describe("prior index chain", () => {
       expect(history.indexJobPredates(new Date("2026-06-26T00:00:00.000Z"))).toBe(false);
       expect(history.indexJobPredates(new Date("2026-09-02T00:00:00.000Z"))).toBe(true);
       expect(history.hasIndexJob("not-a-commit")).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("fixed release lookup", () => {
+  it("picks the first-parent tag when a merged side branch tag is closer", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-describe-"));
+    try {
+      fixtureGit(root, ["init", "-q", "-b", "dev"]);
+      await fixtureCommit(root, "base");
+      fixtureGit(root, ["tag", "v1.0.0"]);
+      await fixtureCommit(root, "main-1");
+      fixtureGit(root, ["checkout", "-q", "-b", "side"]);
+      await fixtureCommit(root, "side-1");
+      fixtureGit(root, ["tag", "v9.0.0"]);
+      await fixtureCommit(root, "side-2");
+      fixtureGit(root, ["checkout", "-q", "dev"]);
+      await fixtureCommit(root, "main-2");
+      fixtureGit(root, ["merge", "--no-ff", "-q", "-m", "merge side", "side"]);
+      await fixtureCommit(root, "release");
+      const sha = fixtureGit(root, ["rev-parse", "HEAD"]);
+      const described = spawnSync("git", fixedReleaseDescribeArgs(releaseYaml, sha), {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GIT_CONFIG_GLOBAL: os.devNull,
+          GIT_CONFIG_NOSYSTEM: "1",
+        },
+      });
+      expect(described.status).toBe(0);
+      expect(described.stdout.trim()).toBe("v1.0.0");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

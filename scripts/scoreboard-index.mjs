@@ -915,7 +915,12 @@ export async function pruneCommitObjects(root, now, retentionDays = COMMIT_OBJEC
     const cutoff = now.getTime() - retentionDays * 24 * 60 * 60 * 1000;
     const protectedDigests = new Set(
       existing
-        .filter((record) => record.tier === "release" && record.objectDigest)
+        .filter((record) => {
+          if (!record.objectDigest) return false;
+          if (record.tier === "release") return true;
+          const indexedAt = Date.parse(record.indexedAt);
+          return Number.isFinite(indexedAt) && indexedAt >= cutoff;
+        })
         .map((record) => record.objectDigest),
     );
     const tombstoned = new Set(
@@ -2028,12 +2033,50 @@ async function listRunArtifacts(request, repository, runId, name) {
 }
 
 /**
- * Filtered workflow-run listings stop at 1,000 results and do not document an order,
- * so every page inside the retention window is collected and sorted. Artifact inspection
- * then walks newest first until a live scoreboard-index artifact or a run older than
- * the 90-day window. The listing date is one day earlier because the created filter is
- * calendar-day granularity.
+ * A filtered workflow-run search returns at most 1,000 results for actor, branch,
+ * check_suite_id, created, event, head_sha, and status:
+ * https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow
+ * The listing order is not documented. When total_count is above 1,000 or the
+ * listing returns 1,000 runs, the created range is halved until each slice lists
+ * under that cap. Slices are walked newest first. A chain origin is returned only
+ * after every slice down to the window start has been inspected. The first listing
+ * starts one day before the window because the created filter is calendar-day
+ * granularity.
  */
+const WORKFLOW_RUN_SEARCH_CAP = 1000;
+
+/** Search date-time form documented for the workflow-run `created` parameter. */
+function createdBound(date) {
+  return date.toISOString().replace(/\.\d{3}Z$/, "+00:00");
+}
+
+async function listFilteredWorkflowRuns(request, repository, branch, created, pageSize) {
+  const runs = [];
+  let totalCount = 0;
+  for (let page = 1; runs.length < WORKFLOW_RUN_SEARCH_CAP; page += 1) {
+    const response = await request(`/repos/${repository}/actions/workflows/performance.yml/runs`, {
+      branch,
+      event: "push",
+      status: "success",
+      created,
+      exclude_pull_requests: "true",
+      per_page: pageSize,
+      page,
+    });
+    const reported = Number(response?.total_count);
+    if (Number.isFinite(reported)) totalCount = reported;
+    const listed = Array.isArray(response?.workflow_runs) ? response.workflow_runs : [];
+    runs.push(...listed);
+    if (reported > WORKFLOW_RUN_SEARCH_CAP || runs.length >= WORKFLOW_RUN_SEARCH_CAP)
+      return { runs, capped: true };
+    if (listed.length < pageSize) break;
+  }
+  return {
+    runs,
+    capped: totalCount > WORKFLOW_RUN_SEARCH_CAP || runs.length >= WORKFLOW_RUN_SEARCH_CAP,
+  };
+}
+
 export async function findPriorIndexArtifact({
   repository,
   branch,
@@ -2047,50 +2090,64 @@ export async function findPriorIndexArtifact({
     now.getTime() - WORKFLOW_ARTIFACT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
   );
   const listedFrom = new Date(windowStart.getTime() - 24 * 60 * 60 * 1000);
-  const runs = [];
-  for (let page = 1; runs.length < 1000; page += 1) {
-    const response = await request(`/repos/${repository}/actions/workflows/performance.yml/runs`, {
-      branch,
-      event: "push",
-      status: "success",
-      created: `>=${listedFrom.toISOString().slice(0, 10)}`,
-      exclude_pull_requests: "true",
-      per_page: pageSize,
-      page,
-    });
-    const listed = Array.isArray(response?.workflow_runs) ? response.workflow_runs : [];
-    runs.push(...listed);
-    if (listed.length < pageSize) break;
+  const seen = new Set();
+
+  async function walkSlice(runs) {
+    const candidates = (Array.isArray(runs) ? runs : [])
+      .filter(
+        (run) =>
+          run?.event === "push" &&
+          run.head_branch === branch &&
+          run.head_repository?.full_name === repository &&
+          run.conclusion === "success" &&
+          Number.isSafeInteger(run.id) &&
+          !seen.has(run.id) &&
+          hasIndexJob(run.head_sha),
+      )
+      .sort(
+        (left, right) =>
+          Date.parse(right.created_at) - Date.parse(left.created_at) || right.id - left.id,
+      );
+    let expired = false;
+    let sawRun = false;
+    for (const run of candidates) {
+      seen.add(run.id);
+      const createdAt = Date.parse(run.created_at);
+      if (!Number.isFinite(createdAt) || createdAt < windowStart.getTime()) break;
+      sawRun = true;
+      const artifacts = (
+        await listRunArtifacts(request, repository, run.id, INDEX_ARTIFACT)
+      ).filter((artifact) => artifact.workflow_run?.id === run.id);
+      if (artifacts.some((artifact) => artifact.expired === false))
+        return { live: run.id, expired, sawRun };
+      if (artifacts.some((artifact) => artifact.expired === true)) expired = true;
+    }
+    return { live: null, expired, sawRun };
   }
-  const candidates = runs
-    .filter(
-      (run) =>
-        run?.event === "push" &&
-        run.head_branch === branch &&
-        run.head_repository?.full_name === repository &&
-        run.conclusion === "success" &&
-        Number.isSafeInteger(run.id) &&
-        hasIndexJob(run.head_sha),
-    )
-    .sort(
-      (left, right) =>
-        Date.parse(right.created_at) - Date.parse(left.created_at) || right.id - left.id,
-    );
-  let expired = false;
-  let sawRun = false;
-  for (const run of candidates) {
-    const createdAt = Date.parse(run.created_at);
-    if (!Number.isFinite(createdAt) || createdAt < windowStart.getTime()) break;
-    sawRun = true;
-    const artifacts = (await listRunArtifacts(request, repository, run.id, INDEX_ARTIFACT)).filter(
-      (artifact) => artifact.workflow_run?.id === run.id,
-    );
-    if (artifacts.some((artifact) => artifact.expired === false))
-      return { runId: run.id, missingReason: null };
-    if (artifacts.some((artifact) => artifact.expired === true)) expired = true;
+
+  async function inspectRange(start, end, root) {
+    const created = root
+      ? `>=${start.toISOString().slice(0, 10)}`
+      : `${createdBound(start)}..${createdBound(end)}`;
+    const listed = await listFilteredWorkflowRuns(request, repository, branch, created, pageSize);
+    if (listed.capped && end.getTime() - start.getTime() >= 2) {
+      const mid = start.getTime() + Math.floor((end.getTime() - start.getTime()) / 2);
+      const newer = await inspectRange(new Date(mid + 1), end, false);
+      if (newer.live != null) return newer;
+      const older = await inspectRange(start, new Date(mid), false);
+      return {
+        live: older.live,
+        expired: newer.expired || older.expired,
+        sawRun: newer.sawRun || older.sawRun,
+      };
+    }
+    return walkSlice(listed.runs);
   }
-  if (expired) return { runId: null, missingReason: "expired-after-90-days-inactivity" };
-  if (sawRun) return { runId: null, missingReason: "prior-artifact-missing" };
+
+  const found = await inspectRange(listedFrom, now, true);
+  if (found.live != null) return { runId: found.live, missingReason: null };
+  if (found.expired) return { runId: null, missingReason: "expired-after-90-days-inactivity" };
+  if (found.sawRun) return { runId: null, missingReason: "prior-artifact-missing" };
   return {
     runId: null,
     missingReason: indexJobPredates(windowStart) ? "expired-after-90-days-inactivity" : "first-run",

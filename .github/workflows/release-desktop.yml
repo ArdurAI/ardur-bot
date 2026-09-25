@@ -53,7 +53,10 @@ jobs:
           parent="$(git rev-parse "${sha}^" 2>/dev/null || true)"
           if [[ ! "$parent" =~ ^[0-9a-f]{40}$ ]]; then parent=""; fi
           fixed_sha=""
-          fixed_tag="$(git describe --tags --abbrev=0 --match 'v*' "${sha}^" 2>/dev/null || true)"
+          # --first-parent follows only the first parent of a merge, so a tag on a
+          # merged side branch is not the previous desktop release.
+          # https://git-scm.com/docs/git-describe#Documentation/git-describe.txt---first-parent
+          fixed_tag="$(git describe --tags --abbrev=0 --match 'v*' --first-parent "${sha}^" 2>/dev/null || true)"
           if [[ -n "$fixed_tag" ]]; then
             fixed_sha="$(git rev-parse "${fixed_tag}^{commit}" 2>/dev/null || true)"
             if [[ ! "$fixed_sha" =~ ^[0-9a-f]{40}$ ]]; then fixed_sha=""; fi
