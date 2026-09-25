@@ -1,8 +1,13 @@
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@ardurbot/contracts";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const VISION_ENV = "ARDURBOT_OPENAI_COMPATIBLE_VISION_MODELS";
 const LOCAL_VISION_ENV = "ARDURBOT_LOCAL_VISION_MODELS";
+
+beforeAll(async () => {
+  // Load the provider SDK graph as setup; withEnv still resets the catalog for every case.
+  await import("./model-vision.js");
+});
 
 /**
  * The vision gate memoizes its catalog at module scope, so every case has to

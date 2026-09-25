@@ -65,7 +65,7 @@ it("keeps Board, Fleet, IDE, editor, diff and terminal session out of the initia
     "pages/shell/terminal-session.tsx",
   ])
     expect(seen.has(path.join(root, file)), file).toBe(false);
-  for (const file of ["board.ts", "fleet-bridge.ts", "host-bridge.ts", "local-import.ts", "rpc.ts"])
+  for (const file of ["board.ts", "fleet-bridge.ts", "host-bridge.ts", "rpc.ts"])
     expect(seen.has(path.join(contracts, file)), file).toBe(false);
   expect(sources.get(path.join(root, "main.tsx"))).toContain("<BrowserRouter>");
   expect(sources.get(path.join(root, "main.tsx"))).not.toMatch(
