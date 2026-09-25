@@ -237,6 +237,11 @@ msgstr ""
 msgid "Acceptance"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Acceptance criteria"
+msgstr ""
+
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Accepted"
@@ -792,6 +797,11 @@ msgstr "Попросите владельца сервера настроить 
 msgid "asks first"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Assignee"
+msgstr ""
+
 #. placeholder {0}: preset.time
 #: src/pages/RoutineSchedule.tsx
 msgid "at {0}"
@@ -938,9 +948,27 @@ msgstr ""
 msgid "Block link copied."
 msgstr ""
 
+#: src/pages/board/Board.tsx
+msgid "Blocked"
+msgstr ""
+
 #. placeholder {0}: row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Blocked by"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Blocks"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+#: src/pages/Shell.tsx
+msgid "Board"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -956,6 +984,7 @@ msgstr "Загрузка компьютера {0}"
 msgid "bot"
 msgstr "бот"
 
+#: src/pages/board/Board.tsx
 #: src/pages/ChannelPairingSettings.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/MemoryHistory.tsx
@@ -1288,6 +1317,10 @@ msgstr "Выберите, какую подключенную модель ис�
 msgid "Chromium — {0}"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+msgid "Claim"
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr ""
@@ -1324,6 +1357,7 @@ msgstr "ID клиента"
 msgid "Client secret"
 msgstr "Секрет клиента"
 
+#: src/pages/board/Board.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -1394,6 +1428,10 @@ msgstr "Закрыть настройки пользователя"
 msgid "Close voice settings"
 msgstr "Закрыть настройки голоса"
 
+#: src/pages/board/Board.tsx
+msgid "Close when the bot reports done"
+msgstr ""
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
 msgstr "Облако"
@@ -1442,6 +1480,10 @@ msgstr "Команда"
 
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Comment"
 msgstr ""
 
 #: src/components/composer/command-description.ts
@@ -2407,6 +2449,11 @@ msgstr "Не удалось обновить реакцию"
 msgid "Could not update this computer. Try again."
 msgstr ""
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "Could not update this item."
+msgstr ""
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Could not update this suggestion. Try again."
 msgstr ""
@@ -2491,6 +2538,10 @@ msgstr "Создано"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Created by you"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
@@ -2607,6 +2658,14 @@ msgstr "Область действия по умолчанию"
 msgid "Default servers"
 msgstr ""
 
+#: src/pages/board/ItemForm.tsx
+msgid "Defer until"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Deferred"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -2669,6 +2728,11 @@ msgstr "Отклонено"
 msgid "Deny"
 msgstr "Запретить"
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/Graph.tsx
+msgid "Dependencies"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Deploy private key"
 msgstr ""
@@ -2682,6 +2746,7 @@ msgstr "Развертывание по умолчанию"
 msgid "Describe what this bot does"
 msgstr "Опишите, что делает этот бот"
 
+#: src/pages/board/ItemForm.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "Описание"
@@ -2856,6 +2921,7 @@ msgid "Don’t have an account?"
 msgstr "У вас нет учетной записи?"
 
 #: src/lib/run-status-label.ts
+#: src/pages/board/Board.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Готово"
@@ -2897,6 +2963,10 @@ msgstr ""
 msgid "Drag, drop, or paste an image"
 msgstr "Перетащите или вставьте изображение"
 
+#: src/pages/board/ItemForm.tsx
+msgid "Due"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Duplicate"
 msgstr "Дублировать"
@@ -2914,6 +2984,7 @@ msgid "Earlier message"
 msgstr "Предыдущее сообщение"
 
 #: src/components/Context.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
@@ -3008,6 +3079,14 @@ msgstr ""
 msgid "Environment variables"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+msgid "Epic"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Epics"
+msgstr ""
+
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Error"
 msgstr ""
@@ -3087,6 +3166,7 @@ msgstr ""
 msgid "Expires in five minutes."
 msgstr ""
 
+#: src/pages/board/Board.tsx
 #: src/pages/settings/PrivacySettings.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
@@ -3380,6 +3460,7 @@ msgstr "Скрыть пароль"
 msgid "high — slower, checks more carefully"
 msgstr ""
 
+#: src/pages/board/Board.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 msgid "History"
@@ -3497,6 +3578,10 @@ msgstr ""
 msgid "Imported from {0}"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+msgid "In progress"
+msgstr ""
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "In this space"
 msgstr ""
@@ -3556,6 +3641,10 @@ msgstr ""
 
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Install {name}"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Install Beads"
 msgstr ""
 
 #: src/pages/customize/PluginsPage.tsx
@@ -3717,6 +3806,14 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Kubernetes context"
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Label"
+msgstr ""
+
+#: src/pages/board/ItemForm.tsx
+msgid "Labels"
 msgstr ""
 
 #: src/pages/account/AccountLanguage.tsx
@@ -3908,6 +4005,7 @@ msgid "Loading your tools."
 msgstr ""
 
 #: src/App.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -4281,6 +4379,7 @@ msgstr "Модели с сервера"
 msgid "Monthly"
 msgstr "Ежемесячно"
 
+#: src/pages/board/ItemForm.tsx
 #: src/pages/Shell.tsx
 msgid "More"
 msgstr "Ещё"
@@ -4392,6 +4491,11 @@ msgstr "Новый бот"
 #: src/pages/GroupPanel.tsx
 msgid "New group"
 msgstr "Новая группа"
+
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
+msgid "New item"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New open-work item"
@@ -4941,6 +5045,10 @@ msgstr ""
 msgid "Pairing code"
 msgstr ""
 
+#: src/pages/board/ItemForm.tsx
+msgid "Parent"
+msgstr ""
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Parent page"
 msgstr ""
@@ -5088,6 +5196,10 @@ msgstr ""
 msgid "Previous"
 msgstr ""
 
+#: src/pages/board/ItemForm.tsx
+msgid "Priority"
+msgstr ""
+
 #: src/pages/settings-sections.ts
 msgid "Privacy"
 msgstr ""
@@ -5233,6 +5345,10 @@ msgstr "только для чтения"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
+msgstr ""
+
+#: src/pages/board/Board.tsx
+msgid "Ready"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5634,6 +5750,7 @@ msgstr ""
 
 #: src/components/Context.tsx
 #: src/pages/account/AccountSettings.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/GitMemorySettings.tsx
@@ -5857,6 +5974,7 @@ msgstr ""
 #: src/components/OllamaSettings.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
@@ -5969,6 +6087,7 @@ msgstr ""
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
+#: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -6068,6 +6187,11 @@ msgstr "Отправить ссылку для сброса"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Send this code to the bot in a private message. Expires in five minutes."
+msgstr ""
+
+#. placeholder {0}: chosenBot.name
+#: src/pages/board/Board.tsx
+msgid "Send to {0}"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -6403,6 +6527,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+msgid "Start a board in this folder"
+msgstr ""
+
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
@@ -6726,6 +6854,10 @@ msgstr ""
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Этот файл недействителен в формате UTF-8 Markdown."
 
+#: src/pages/board/Board.tsx
+msgid "This folder has no board"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
 msgstr ""
@@ -6808,6 +6940,7 @@ msgstr "Время до первого токена"
 msgid "Timeline"
 msgstr ""
 
+#: src/pages/board/ItemForm.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Заголовок"
@@ -6889,6 +7022,8 @@ msgstr ""
 msgid "Turn on"
 msgstr ""
 
+#: src/pages/board/Board.tsx
+#: src/pages/board/ItemForm.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Type"
 msgstr ""
@@ -7090,6 +7225,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "Проверка…"
+
+#: src/pages/board/Board.tsx
+msgid "View"
+msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "View logs"

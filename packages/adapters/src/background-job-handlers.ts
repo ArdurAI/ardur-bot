@@ -12,6 +12,7 @@ import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { deliverMemory, maintainBriefs } from "@ardurbot/memory";
+import { executeBoardCommand } from "./board/worker.js";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { expireComputerControl } from "./computer-control.js";
@@ -46,6 +47,7 @@ export function createBackgroundJobHandlers(deps: {
   deploymentModelKey?: string;
   messaging?: MessagingSurface;
   cloudAgent?: CloudAgentConnection | null;
+  dataDir?: string;
 }): BackgroundJobHandlers {
   const recordUsage = async (sourceRunId: string, usage: AgentUsage) => {
     const run = await deps.prisma.run.findUniqueOrThrow({ where: { id: sourceRunId } });
@@ -67,6 +69,8 @@ export function createBackgroundJobHandlers(deps: {
   };
 
   return {
+    "board.run": ({ requestId }) =>
+      executeBoardCommand({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" }, requestId),
     ...(deps.localImport && deps.memoryDocuments
       ? createLocalImportJobs(deps.prisma, deps.memoryDocuments, deps.localImport)
       : {}),

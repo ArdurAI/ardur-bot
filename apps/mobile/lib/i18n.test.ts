@@ -110,12 +110,12 @@ describe("mobile i18n", () => {
     const { ZH_MESSAGES } = await import("./locales/zh");
     const { RU_MESSAGES } = await import("./locales/ru");
     const { EMPTY_PLUGIN_CATALOG_MESSAGE, SLASH_ACTIONS } = await import("@ardurbot/core");
-    const {
-      OPENAI_COMPATIBLE_BASE_URL_HINT,
-      MEMORY_IMPORT_PROMPT,
-      LOCAL_IMPORT_PRIVACY,
-      LOCAL_IMPORT_EXCLUSIONS,
-    } = await import("@ardurbot/contracts");
+    const { OPENAI_COMPATIBLE_BASE_URL_HINT, MEMORY_IMPORT_PROMPT } = await import(
+      "@ardurbot/contracts"
+    );
+    const { LOCAL_IMPORT_PRIVACY, LOCAL_IMPORT_EXCLUSIONS } = await import(
+      "@ardurbot/contracts/local-import"
+    );
     const { COMPOSER_MENU_OPTIONS } = await import("./composer-menu");
     const mobileRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
     const ids = new Set<string>([

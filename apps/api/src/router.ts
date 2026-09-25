@@ -101,12 +101,12 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
-  appContract,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@ardurbot/contracts";
+import { appContract } from "@ardurbot/contracts/rpc";
 import {
   ACTIVE_RUN_STATUSES,
   AttachmentValidationError,
@@ -169,6 +169,7 @@ import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-sec
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
+import { boardCall, createBoard } from "./board.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
 import { createCapabilitySettings } from "./capability-settings.js";
@@ -505,6 +506,7 @@ function mapSpaceLifecycleError(error: unknown): unknown {
 }
 
 export function createRouter(deps: RouterDeps): Router<typeof appContract, RouterContext> {
+  const board = createBoard(deps);
   const comparisons = createComparisons({
     prisma: deps.prisma,
     jobs: deps.jobs,
@@ -5185,6 +5187,84 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       list: authed.comparisons.list.handler(({ context }) => comparisons.list(context.actor)),
       merge: authed.comparisons.merge.handler(({ context, input }) =>
         comparisons.merge(context.actor, input),
+      ),
+    },
+    board: {
+      workspaces: authed.board.workspaces.handler(({ context }) =>
+        boardCall(() => board.service.workspaces(context.actor)),
+      ),
+      start: authed.board.start.handler(({ context, input }) =>
+        boardCall(() => board.service.start(context.actor, input.workspaceId)),
+      ),
+      snapshot: authed.board.snapshot.handler(({ context, input }) =>
+        boardCall(() => board.snapshot(context.actor, input)),
+      ),
+      send: authed.board.send.handler(async ({ context, input }) => {
+        if ((await modelSetup(deps, context.actor)).needsModel)
+          throw new ORPCError("BAD_REQUEST", { message: "Connect a model to start a run." });
+        return boardCall(() => board.send(context.actor, input));
+      }),
+      show: authed.board.show.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).show(input.id),
+        ),
+      ),
+      create: authed.board.create.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).create(input.item),
+        ),
+      ),
+      update: authed.board.update.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).update(
+            input.id,
+            input.patch,
+          ),
+        ),
+      ),
+      claim: authed.board.claim.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).claim(
+            input.id,
+            await board.service.actor(context.actor),
+          ),
+        ),
+      ),
+      close: authed.board.close.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).close(
+            input.ids,
+            input.reason,
+          ),
+        ),
+      ),
+      comment: authed.board.comment.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).comment(
+            input.id,
+            input.text,
+          ),
+        ),
+      ),
+      graph: authed.board.graph.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).graph(input.rootId),
+        ),
+      ),
+      export: authed.board.export.handler(({ context, input }) =>
+        boardCall(async () =>
+          (await board.service.provider(context.actor, input.workspaceId)).export(),
+        ),
+      ),
+      link: authed.board.link.handler(({ context, input }) =>
+        boardCall(async () => {
+          await (await board.service.provider(context.actor, input.workspaceId)).link(
+            input.from,
+            input.to,
+            input.type,
+          );
+          return { ok: true as const };
+        }),
       ),
     },
     team: {

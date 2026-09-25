@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const records = JSON.parse(fs.readFileSync(path.join(__dirname, "responses.json"), "utf8"));
+const args = process.argv.slice(2);
+if (args.includes("--version")) { process.stdout.write(process.env.BOARD_FIXTURE_VERSION || records.version); process.exit(0); }
+const words = [];
+for (let i = 0; i < args.length; i++) {
+  if (["--actor", "-C", "--dolt-auto-commit"].includes(args[i])) { i++; continue; }
+  if (["--json", "--sandbox"].includes(args[i])) continue;
+  words.push(args[i]);
+}
+const key = ["comments", "dep"].includes(words[0]) ? words.slice(0, 2).join(" ") : words[0];
+const log = process.env.BOARD_FIXTURE_LOG;
+if (log) fs.appendFileSync(log, JSON.stringify({ event: "start", argv: args }) + "\n");
+setTimeout(() => {
+  if (log) fs.appendFileSync(log, JSON.stringify({ event: "end", argv: args }) + "\n");
+  if (process.env.BOARD_FIXTURE_BUSY) { process.stderr.write("database is locked by another process"); process.exitCode = 1; return; }
+  if (key === "init") { fs.mkdirSync(process.env.BEADS_DIR, { recursive: true }); process.stdout.write("Initialized"); return; }
+  if (key === "config") { process.stdout.write("{}"); return; }
+  if (key === "export") { process.stdout.write(records.list.map((item) => JSON.stringify(item)).join("\n") + "\n"); return; }
+  let value = records[key];
+  if (key === "ready" && words.includes("--claim")) value = records.update;
+  if (process.env.BOARD_FIXTURE_BAD_JSON) { process.stdout.write("not json"); return; }
+  if (value === undefined) { process.stderr.write("unknown command"); process.exitCode = 1; return; }
+  process.stdout.write(JSON.stringify(value));
+}, Number(process.env.BOARD_FIXTURE_DELAY || 0));

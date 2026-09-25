@@ -618,6 +618,7 @@ export interface VoiceTranscribeRequest {
 }
 
 export interface BackgroundJobPayloads {
+  "board.run": { requestId: string };
   "local-import.run": LocalImportJob;
   "local-import.refresh": Record<string, never>;
   "briefs.maintain": { runId?: string };
