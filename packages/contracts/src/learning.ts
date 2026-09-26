@@ -200,7 +200,7 @@ export const LearningProposalSchema = z
     boardOutcome: z
       .object({
         closedAt: z.string().datetime().nullable(),
-        outcome: z.enum(["completed", "closed-other"]).nullable(),
+        outcome: z.enum(["completed", "closed", "closed-other"]).nullable(),
         closeReason: z.string().nullable().optional(),
       })
       .strict()

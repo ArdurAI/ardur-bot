@@ -547,6 +547,53 @@ it("says a board item was closed without being completed and what to do", async 
   }
 });
 
+it("says a board item was closed, without calling it done or not done, for an unrecognized close reason", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    diff: "+Finish the import follow-up",
+    status: "applied",
+    appliedBoardItem: {
+      workspaceId: "workspace",
+      itemId: "board-a",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      duplicate: false,
+    },
+    boardOutcome: {
+      closedAt: "2026-09-25T13:00:00.000Z",
+      outcome: "closed",
+      closeReason: null,
+    },
+  };
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/journey") return [];
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    return { reviews: [], proposals: [board], pendingCount: 0, appliedThisWeek: 1 };
+  });
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    const details = [...container.querySelectorAll("button")].filter(
+      (button) => button.textContent === "Details",
+    );
+    await act(async () => details[0]!.click());
+    expect(container.textContent).toContain("This board item was closed.");
+    expect(container.textContent).not.toContain("closed without being completed");
+    expect(container.textContent).not.toContain("was completed");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it("says what happened when a filed board item changed before Undo", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const board = {

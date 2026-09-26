@@ -178,12 +178,14 @@ it("records a closed filing outcome once, and a reopened item clears it so the n
   ]);
   expect(filing).toMatchObject({
     closedAt: new Date("2026-09-26T09:00:00.000Z"),
-    outcome: "closed-other",
+    outcome: "closed",
   });
   expect(proposal.row.body).toMatchObject({
     appliedBoardItem: { closeReason: "No longer needed" },
   });
-  expect(boardFilingOutcome("No longer needed")).toBe("closed-other");
+  // "No longer needed" has no recognized completion or negative-resolution phrase ("not
+  // needed" is the recognized one), so it is unclassified: closed, not closed-other.
+  expect(boardFilingOutcome("No longer needed")).toBe("closed");
   expect(boardFilingOutcome("")).toBe("completed");
 });
 
@@ -432,9 +434,17 @@ it.each(["ticket no 12 resolved", "case no 5 fixed", "Item no 1 done"])(
     expect(boardFilingOutcome(reason)).toBe("completed");
   },
 );
-it("keeps a numbered label from turning a real negation into a completion", () => {
-  expect(boardFilingOutcome("no fix was possible")).toBe("closed-other");
+it("does not let a numbered label turn into a false negation", () => {
+  // "no" here has nothing to negate ("fix" is not the completion word "fixed"), so this is
+  // an unrecognized reason, not a real negative signal.
+  expect(boardFilingOutcome("no fix was possible")).toBe("closed");
 });
+it.each(["Готово", "Closed via PR #12", "See the linked ticket"])(
+  "classifies the unrecognized close reason %j as closed, neither done nor not done",
+  (reason) => {
+    expect(boardFilingOutcome(reason)).toBe("closed");
+  },
+);
 it("leaves the filing outcome null when the proposal close reason write fails, and the next read sets both", async () => {
   const filing = {
     id: "filing",
@@ -500,7 +510,7 @@ it("leaves the filing outcome null when the proposal close reason write fails, a
   expect(proposal.body.appliedBoardItem.closeReason).toBeUndefined();
   failWrite = false;
   await observeBoardItems(prisma as unknown as PrismaClient, "board", [closed]);
-  expect(filing.outcome).toBe("closed-other");
+  expect(filing.outcome).toBe("closed");
   expect(proposal.body.appliedBoardItem.closeReason).toBe("No longer needed");
 });
 

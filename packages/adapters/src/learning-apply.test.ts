@@ -1,5 +1,6 @@
 import type { LearningProposal, RuntimePin } from "@ardurbot/contracts";
 import type { BoardRun } from "@ardurbot/contracts/board";
+import { BoardError } from "@ardurbot/contracts/board";
 import { IsolationError, observeBoardItems, type Pool, type PrismaClient } from "@ardurbot/db";
 import { MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import { memoryDatabaseFake, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
@@ -938,6 +939,10 @@ function boardFixture(filed: { duplicate: boolean; updatedAt?: string }) {
       const previous = typeof row.closeAttempts === "number" ? row.closeAttempts : 0;
       row.closeAttempts = previous + 1;
       row.closeNextAt = new Date();
+    }),
+    dropFinalPendingClose: vi.fn(async (filingId: string) => {
+      const index = f.filings.findIndex((filing) => filing.id === filingId);
+      if (index >= 0) f.filings.splice(index, 1);
     }),
     finishClose: vi.fn(
       async (
@@ -2093,6 +2098,40 @@ it("leaves Undo reverted with a close marker when the board close fails, and a r
   expect(f.filings).toEqual([]);
 });
 
+it("drops the filing for good, with no closing marker, when Undo's close can never succeed", async () => {
+  const {
+    f,
+    apply,
+    boardService,
+    close,
+    show,
+    proposal: create,
+  } = boardFixture({
+    duplicate: false,
+  });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(
+    new BoardError({
+      code: "forbidden",
+      message: "This board is only available to this computer's owner.",
+    }),
+  );
+  const result = await apply.revert(proposal.id, actor);
+  expect(result).not.toMatchObject({ code: "board-closing" });
+  expect(result.proposal.status).toBe("reverted");
+  expect(boardService.dropFinalPendingClose).toHaveBeenCalledOnce();
+  expect(f.filings).toEqual([]);
+});
+
 it("treats a board item already closed as Undone from Learning as a finished Undo", async () => {
   const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
   const proposal = await create();
@@ -2183,6 +2222,45 @@ it("leaves Reject rejected with a close marker when the board close fails, and a
   const rejected = await apply.reject(proposal.id, actor);
   expect(rejected.proposal.status).toBe("rejected");
   expect(close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("drops the filing for good, with no closing marker, when Reject's close can never succeed", async () => {
+  const {
+    f,
+    apply,
+    boardService,
+    close,
+    show,
+    proposal: create,
+  } = boardFixture({
+    duplicate: false,
+  });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+  });
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(
+    new BoardError({ code: "no_board", message: "This folder has no board" }),
+  );
+  const result = await apply.reject(proposal.id, actor);
+  expect(result).not.toMatchObject({ code: "board-closing" });
+  expect(result.proposal.status).toBe("rejected");
+  expect(boardService.dropFinalPendingClose).toHaveBeenCalledOnce();
   expect(f.filings).toEqual([]);
 });
 

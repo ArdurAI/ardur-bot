@@ -472,6 +472,40 @@ it("says a board item was closed without being completed and what to do", async 
   );
   expect(container.textContent).not.toContain("closed otherwise");
 });
+it("says a board item was closed, without calling it done or not done, for an unrecognized close reason", async () => {
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    status: "applied",
+    appliedBoardItem: {
+      workspaceId: "workspace",
+      itemId: "board-a",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      duplicate: false,
+    },
+    boardOutcome: {
+      closedAt: "2026-09-25T13:00:00.000Z",
+      outcome: "closed" as const,
+      closeReason: null,
+    },
+  };
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [board],
+    pendingCount: 0,
+    appliedThisWeek: 1,
+  });
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  expect(container.textContent).toContain("This board item was closed.");
+  expect(container.textContent).not.toContain("closed without being completed");
+  expect(container.textContent).not.toContain("was completed");
+});
 it("says what happened when a filed board item changed before Undo", async () => {
   const board = {
     ...proposal,

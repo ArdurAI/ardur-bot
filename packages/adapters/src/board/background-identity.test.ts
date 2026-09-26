@@ -1,4 +1,4 @@
-import type { BoardRun } from "@ardurbot/contracts/board";
+import type { BoardProblem, BoardRun } from "@ardurbot/contracts/board";
 import { getLogger } from "@ardurbot/logging";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ExecutorDeps } from "../executor.js";
@@ -42,6 +42,9 @@ function fixture(
     untickedBot?: boolean;
     itemStatus?: string;
     itemUpdatedAt?: string;
+    boardOff?: boolean;
+    itemDeleted?: boolean;
+    showProblem?: BoardProblem;
   } = {},
 ) {
   const state = {
@@ -49,6 +52,9 @@ function fixture(
     itemStatus: options.itemStatus ?? beadsItem.status,
     itemUpdatedAt: options.itemUpdatedAt ?? beadsItem.updated_at,
     computerOwner: "owner",
+    boardOff: options.boardOff ?? false,
+    itemDeleted: options.itemDeleted ?? false,
+    showProblem: options.showProblem as BoardProblem | undefined,
     proposalBody: { status: "rejected" } as Record<string, unknown>,
   };
   const filing = {
@@ -93,7 +99,12 @@ function fixture(
       findFirst: async () =>
         state.archivedBot ? null : { id: "bot", name: "Builder", computer: { kind: "desktop" } },
     },
-    boardWorkspace: { findFirst: async () => workspace, findUnique: async () => workspace },
+    boardWorkspace: {
+      // findFirst is workspace()'s own lookup (filtered by enabled: true); findUnique is
+      // closeNoticeOwner's, which only ever needs the still-existing row's owner.
+      findFirst: async () => (state.boardOff ? null : workspace),
+      findUnique: async () => workspace,
+    },
     learningProposal: {
       findUnique: async () => ({ id: "proposal", userId: "owner", body: state.proposalBody }),
       update: vi.fn(async ({ data }: { data: { body: Record<string, unknown> } }) => {
@@ -141,18 +152,22 @@ function fixture(
   const ownerRun = vi.fn(async (request: BoardRun) => {
     requests.push(request);
     const command = request.argv[0];
-    if (command === "show")
+    if (command === "show") {
+      if (state.showProblem) return { ok: false as const, problem: state.showProblem };
       return {
         ok: true as const,
-        stdout: JSON.stringify([
-          {
-            ...beadsItem,
-            status: state.itemStatus,
-            updated_at: state.itemUpdatedAt,
-            ...(state.itemStatus === "closed" ? { close_reason: "Handled by hand" } : {}),
-          },
-        ]),
+        stdout: state.itemDeleted
+          ? "[]"
+          : JSON.stringify([
+              {
+                ...beadsItem,
+                status: state.itemStatus,
+                updated_at: state.itemUpdatedAt,
+                ...(state.itemStatus === "closed" ? { close_reason: "Handled by hand" } : {}),
+              },
+            ]),
       };
+    }
     if (command === "close")
       return {
         ok: true as const,
@@ -281,15 +296,43 @@ it("releases the close as changed when the person edited the item and kept it op
   expect(prisma.boardNotification.create).not.toHaveBeenCalled();
 });
 
-it("counts a failed try when the person can no longer close the item, and sends the notice after five", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-09-25T12:00:00.000Z"));
-  const { prisma, filing, filings, requests, ownerRun, state } = fixture({ archivedBot: true });
+it("drops a pending close for good, with no notice, when the person who asked for it lost access", async () => {
+  const { prisma, filings, requests, ownerRun, state } = fixture({ archivedBot: true });
   // The computer now belongs to someone else, so the person's own board access is gone too.
   state.computerOwner = "someone-else";
   const app = new BoardService({ prisma: prisma as never, dataDir: "/fixture", ownerRun });
   await app.sweepPendingCloses();
   expect(requests).toEqual([]);
+  expect(filings).toEqual([]);
+  expect(prisma.boardNotification.create).not.toHaveBeenCalled();
+});
+
+it("drops a pending close for good, with no notice, when the board was turned off", async () => {
+  const { prisma, filings, requests, ownerRun } = fixture({ boardOff: true });
+  const app = new BoardService({ prisma: prisma as never, dataDir: "/fixture", ownerRun });
+  await app.sweepPendingCloses();
+  expect(requests).toEqual([]);
+  expect(filings).toEqual([]);
+  expect(prisma.boardNotification.create).not.toHaveBeenCalled();
+});
+
+it("drops a pending close for good, with no notice, when the item was deleted outside the app", async () => {
+  const { prisma, filings, requests, ownerRun } = fixture({ itemDeleted: true });
+  const app = new BoardService({ prisma: prisma as never, dataDir: "/fixture", ownerRun });
+  await app.sweepPendingCloses();
+  expect(requests.map((request) => request.argv[0])).toEqual(["show"]);
+  expect(filings).toEqual([]);
+  expect(prisma.boardNotification.create).not.toHaveBeenCalled();
+});
+
+it("counts a failed try for a transient failure, and sends the notice after five", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-09-25T12:00:00.000Z"));
+  const { prisma, filing, filings, ownerRun } = fixture({
+    showProblem: { code: "timeout", message: "The board command timed out." },
+  });
+  const app = new BoardService({ prisma: prisma as never, dataDir: "/fixture", ownerRun });
+  await app.sweepPendingCloses();
   expect(filings).toEqual([filing]);
   expect(filing).toMatchObject({
     closePending: "Rejected from Learning",

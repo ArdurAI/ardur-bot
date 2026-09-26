@@ -23,6 +23,8 @@ import { BeadsBoardProvider } from "./beads.js";
 import type { PendingCloseRow } from "./pending-close.js";
 import {
   closeNoticeOwner,
+  dropPendingCloseFiling,
+  isFinalPendingCloseError,
   pendingCloseAction,
   recordPendingCloseFailure,
   releaseChangedBoardClose,
@@ -407,8 +409,15 @@ export class BoardService {
               getLogger().error("pending board close", error);
             continue;
           }
-          getLogger().error("pending board close", error);
           const failed = attempt.filing;
+          if (isFinalPendingCloseError(error)) {
+            // This close can never succeed. Drop it quietly: no notice, no more retries, no log.
+            await dropPendingCloseFiling(this.options.prisma, failed).catch((dropError) => {
+              getLogger().error("pending board close drop", dropError);
+            });
+            continue;
+          }
+          getLogger().error("pending board close", error);
           await recordPendingCloseFailure(this.options.prisma, failed, (itemId) =>
             this.showPendingCloseItem(failed, itemId, options.signal),
           ).catch((recordError) => {
@@ -428,6 +437,14 @@ export class BoardService {
     await recordPendingCloseFailure(this.options.prisma, filing, (itemId) =>
       this.showPendingCloseItem(filing, itemId),
     );
+  }
+  /** Drops a close that just failed for good, re-reading the filing so a caller's own copy,
+   * taken before the close was marked pending, cannot leave the guard matching nothing. */
+  async dropFinalPendingClose(filingId: string) {
+    const filing = await this.options.prisma.botBoardFiling.findUnique({
+      where: { id: filingId },
+    });
+    if (filing?.closePending) await dropPendingCloseFiling(this.options.prisma, filing);
   }
   /**
    * Reject and Undo left this close pending with the person's own board access, and only the
@@ -853,6 +870,7 @@ export class BoardService {
         filed: bigint;
         done: bigint;
         open: bigint;
+        closed: bigint;
         other: bigint;
       }>
     >(Prisma.sql`
@@ -860,6 +878,7 @@ export class BoardService {
         COUNT(*) AS filed,
         COUNT(*) FILTER (WHERE f.outcome = 'completed') AS done,
         COUNT(*) FILTER (WHERE f.outcome IS NULL) AS open,
+        COUNT(*) FILTER (WHERE f.outcome = 'closed') AS closed,
         COUNT(*) FILTER (WHERE f.outcome = 'closed-other') AS other
       FROM bot_board_filings f
       LEFT JOIN bots b ON b.id = f."botId" AND b."spaceId" = f."spaceId"
@@ -878,6 +897,7 @@ export class BoardService {
         filed: Number(row.filed),
         done: Number(row.done),
         open: Number(row.open),
+        closed: Number(row.closed),
         other: Number(row.other),
       })),
     };

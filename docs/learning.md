@@ -143,7 +143,8 @@ while it is still open and unchanged; otherwise, whether someone else closed it 
 “This board item changed after it was filed. Review it on the Board.” When approval matched an existing open item, the proposal links to it without
 owning it: Reject and Undo remove nothing from the board and never close the item. The proposal's
 observation is the recorded outcome of the linked item from later board reads, whether it was created
-or reused. A closed-otherwise outcome includes the close reason when the board recorded one.
+or reused. A closed-otherwise outcome includes the close reason when the board recorded one; an
+unclassified closed outcome (see `boardFilingOutcome` in board.md) never shows a reason.
 
 Preferences are restricted to boolean `bot.notifyOnFinish` and `bot.autoSpeak`, both existing
 visible bot settings. Setting history is retained as `preferences/` documents for inspection;

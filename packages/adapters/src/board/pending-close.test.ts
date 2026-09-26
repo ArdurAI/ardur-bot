@@ -512,6 +512,33 @@ it.each(["outcome", "changed"] as const)(
   },
 );
 
+it("writes nothing when the filing no longer matches the close being released", async () => {
+  const deleteMany = vi.fn(async () => ({ count: 0 }));
+  const update = vi.fn(async () => undefined);
+  const tx = {
+    $executeRaw: async () => undefined,
+    learningProposal: {
+      findUnique: async () => ({ body: { boardClosing: true } }),
+      update,
+    },
+    botBoardFiling: { deleteMany },
+  };
+  const prisma = { $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(tx) };
+  const filing = {
+    id: "filing",
+    spaceId: "space",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: "proposal",
+    closePending: "Undone from Learning",
+  };
+  await releaseChangedBoardClose(prisma as never, filing);
+  expect(deleteMany).toHaveBeenCalledWith({
+    where: { id: "filing", spaceId: "space", closePending: "Undone from Learning" },
+  });
+  expect(update).not.toHaveBeenCalled();
+});
+
 it("releases a pending close when someone commented, even though the comment left updatedAt alone", async () => {
   const previous = process.env.ARDURBOT_HOST_BRIDGE;
   delete process.env.ARDURBOT_HOST_BRIDGE;

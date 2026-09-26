@@ -57,10 +57,10 @@ afterEach(async () => {
 });
 
 it.each([
-  [0, 0, 0, 0],
-  [1, 1, 0, 0],
-  [6, 2, 3, 1],
-])("renders the per-bot filing line for %i filings", async (filed, done, open, other) => {
+  [0, 0, 0, 0, 0],
+  [1, 1, 0, 0, 0],
+  [8, 2, 3, 1, 2],
+])("renders the per-bot filing line for %i filings", async (filed, done, open, closed, other) => {
   const node = document.createElement("div");
   const root = createRoot(node);
   nodes.push({ node, root });
@@ -88,14 +88,14 @@ it.each([
             inProgress: 0,
             blocked: 0,
             items: [],
-            filingOutcomes: [{ botId: "bot", name: "Helper", filed, done, open, other }],
+            filingOutcomes: [{ botId: "bot", name: "Helper", filed, done, open, closed, other }],
           }}
         />
       </MemoryRouter>,
     ),
   );
   expect(node.textContent).toContain(
-    `Helper filed ${filed}: ${done} done, ${open} open, ${other} closed without being completed.`,
+    `Helper filed ${filed}: ${done} done, ${open} open, ${closed} closed, ${other} closed without being completed.`,
   );
   expect(node.textContent).not.toContain("closed otherwise");
 });
@@ -156,7 +156,7 @@ it("asks for the work list and the filing counts at once", async () => {
     }),
   );
   board.filingOutcomes.mockResolvedValue({
-    bots: [{ botId: "bot", name: "Helper", filed: 1, done: 1, open: 0, other: 0 }],
+    bots: [{ botId: "bot", name: "Helper", filed: 1, done: 1, open: 0, closed: 0, other: 0 }],
   });
   const loading = load({ spaceId: "space", signal: new AbortController().signal });
   await vi.waitFor(() => expect(board.work).toHaveBeenCalledOnce());

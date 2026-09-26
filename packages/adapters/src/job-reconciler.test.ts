@@ -138,6 +138,18 @@ describe("createJobReconciler", () => {
     expect(signals[0]?.aborted).toBe(true);
   });
 
+  it("starts board work even when the run, routine or control scan throws", async () => {
+    const prisma = fakePrisma();
+    (prisma as unknown as { run: { findMany: unknown } }).run.findMany = vi.fn(async () => {
+      throw new Error("statement timeout");
+    });
+    const { jobs } = publisher();
+    const reconcileBoardOutcomes = vi.fn(async () => undefined);
+    const reconciler = createJobReconciler({ prisma, jobs, reconcileBoardOutcomes });
+    await expect(reconciler.reconcileOnce()).rejects.toThrow("statement timeout");
+    expect(reconcileBoardOutcomes).toHaveBeenCalledOnce();
+  });
+
   it("restores a due pending messaging outbox drain", async () => {
     const prisma = fakePrisma();
     vi.mocked(prisma.messagingOutbound.findFirst).mockResolvedValue({ id: "outbound-1" } as never);

@@ -260,6 +260,7 @@ export const BoardFilingOutcomeCountSchema = z.object({
   filed: z.number().int().nonnegative(),
   done: z.number().int().nonnegative(),
   open: z.number().int().nonnegative(),
+  closed: z.number().int().nonnegative(),
   other: z.number().int().nonnegative(),
 });
 export type BoardFilingOutcomeCount = z.infer<typeof BoardFilingOutcomeCountSchema>;

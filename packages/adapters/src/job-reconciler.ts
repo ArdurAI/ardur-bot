@@ -138,240 +138,245 @@ export function createJobReconciler(
     if (reconciling) return reconciling;
     reconciling = (async () => {
       if (deps.leadership && !(await deps.leadership.tryAcquire())) return;
-
-      const auxiliary = await Promise.allSettled(
-        [
-          deps.reconcileCloudAgents,
-          deps.reconcileComputerUpdates,
-          deps.reconcileMemory,
-          deps.reconcileLocalImport,
-          async () => {
-            if (!deps.reconcileBriefs || Date.now() < nextBriefMaintenanceAt) return;
-            await deps.reconcileBriefs();
-            nextBriefMaintenanceAt = Date.now() + BRIEF_MAINTENANCE_INTERVAL_MS;
-          },
-        ].map(async (reconcile) => reconcile?.()),
-      );
-      for (const result of auxiliary) {
-        if (result.status === "rejected")
-          getLogger().error("auxiliary reconciliation", result.reason);
+      try {
+        await reconcileWhileLeading();
+      } finally {
+        startBoardWork();
       }
-
-      const now = new Date();
-      controlScanDeadline ??= new Date(now.getTime() + CONTROL_LOOKAHEAD_MS);
-      const runCursorFilter = runCursor
-        ? {
-            OR: [
-              { updatedAt: { gt: runCursor.at } },
-              { updatedAt: runCursor.at, id: { gt: runCursor.id } },
-            ],
-          }
-        : undefined;
-      const routineCursorFilter = routineCursor
-        ? {
-            OR: [
-              { nextRunAt: { gt: routineCursor.at } },
-              { nextRunAt: routineCursor.at, id: { gt: routineCursor.id } },
-            ],
-          }
-        : undefined;
-      const controlCursorFilter = controlCursor
-        ? controlCursor.at
-          ? {
-              OR: [
-                { controlLeaseExpiresAt: { gt: controlCursor.at } },
-                {
-                  controlLeaseExpiresAt: controlCursor.at,
-                  id: { gt: controlCursor.id },
-                },
-                { controlLeaseExpiresAt: null },
-              ],
-            }
-          : { controlLeaseExpiresAt: null, id: { gt: controlCursor.id } }
-        : undefined;
-      const [runs, routines, controls, dueOutbound, unmirroredMessagingRuns] = await Promise.all([
-        deps.prisma.run.findMany({
-          where: {
-            AND: [
-              {
-                OR: [
-                  { status: "queued" },
-                  {
-                    status: { in: ["waiting_input", "waiting_takeover"] },
-                    cancelRequestedAt: { not: null },
-                  },
-                  {
-                    status: { in: ["leased", "running"] },
-                    leaseExpiresAt: { lte: now },
-                  },
-                ],
-              },
-              ...(runCursorFilter ? [runCursorFilter] : []),
-            ],
-          },
-          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
-          take: batchSize,
-          select: { id: true, updatedAt: true },
-        }),
-        deps.prisma.routine.findMany({
-          where: {
-            AND: [
-              {
-                active: true,
-                nextRunAt: { lte: new Date(now.getTime() + ROUTINE_LOOKAHEAD_MS) },
-              },
-              ...(routineCursorFilter ? [routineCursorFilter] : []),
-            ],
-          },
-          orderBy: [{ nextRunAt: "asc" }, { id: "asc" }],
-          take: batchSize,
-          select: { id: true, nextRunAt: true },
-        }),
-        deps.prisma.computer.findMany({
-          where: {
-            AND: [
-              { controlLeaseId: { not: null } },
-              {
-                OR: [
-                  { controlLeaseExpiresAt: null },
-                  {
-                    controlLeaseExpiresAt: {
-                      lte: controlScanDeadline,
-                    },
-                  },
-                ],
-              },
-              ...(controlCursorFilter ? [controlCursorFilter] : []),
-            ],
-          },
-          orderBy: [{ controlLeaseExpiresAt: "asc" }, { id: "asc" }],
-          take: batchSize,
-          select: {
-            id: true,
-            controlBotId: true,
-            controlLeaseId: true,
-            controlLeaseExpiresAt: true,
-          },
-        }),
-        deps.prisma.messagingOutbound.findFirst({
-          where: {
-            status: "pending",
-            OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
-          },
-          select: { id: true },
-        }),
-        deps.prisma.run.findMany({
-          where: { trigger: "messaging", status: "completed", messagingMirroredAt: null },
-          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
-          take: batchSize,
-          select: { id: true },
-        }),
-      ]);
-
-      const events = deps.events;
-      if (events) {
-        const outcomes = await deps.prisma.run.findMany({
-          where: {
-            trigger: "bot_message",
-            status: { in: ["completed", "failed"] },
-            botOutcomeReturnedAt: null,
-          },
-          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
-          take: batchSize,
-          select: {
-            id: true,
-            spaceId: true,
-            threadId: true,
-            botId: true,
-            userId: true,
-            sourceMessageId: true,
-            status: true,
-            error: true,
-            bot: { select: { name: true } },
-          },
-        });
-        await Promise.all(
-          outcomes.map(async (run) => {
-            const transcript =
-              run.status === "failed"
-                ? { text: "", progressOnly: false }
-                : await botRunOutcomeText(deps.prisma, run.id);
-            const text =
-              run.status === "failed"
-                ? `Could not complete the delegated request: ${run.error ?? "unknown error"}`
-                : transcript.text ||
-                  "The delegated bot completed its turn without a written summary.";
-            // Same stable delivery key as the executor path (auto-outcome:<runId>), so a
-            // concurrent or earlier return is replayed instead of double-posted. Progress-only
-            // transcripts (all mid-turn user-progress messages) return as status.
-            const intent =
-              run.status === "failed" || !transcript.text.trim() || transcript.progressOnly
-                ? "status"
-                : ("result" as const);
-            const returned = await returnBotMessageOutcome(
-              { prisma: deps.prisma, jobs: deps.jobs, events },
-              run,
-              { id: run.botId, name: run.bot.name },
-              text,
-              intent,
-            ).catch((error) => {
-              getLogger().error("bot message outcome reconciliation", error);
-              return false;
-            });
-            if (!returned) {
-              await deps.prisma.run.updateMany({
-                where: { id: run.id, botOutcomeReturnedAt: null },
-                data: { updatedAt: new Date() },
-              });
-            }
-          }),
-        );
-      }
-
-      await Promise.all([
-        ...runs.map((run) => deps.jobs.enqueue(runContinueJob(run.id))),
-        ...routines.flatMap((routine) =>
-          routine.nextRunAt
-            ? [deps.jobs.enqueue(routineWakeupJob(routine.id, routine.nextRunAt))]
-            : [],
-        ),
-        ...controls.flatMap((computer) =>
-          computer.controlLeaseId
-            ? [
-                scheduleComputerControlExpiry(
-                  deps.jobs,
-                  computer.id,
-                  computer.controlLeaseId,
-                  computer.controlLeaseExpiresAt ?? now,
-                ),
-              ]
-            : [],
-        ),
-        ...(dueOutbound ? [deps.jobs.enqueue(messagingDeliverJob())] : []),
-        ...unmirroredMessagingRuns.map((run) => deps.jobs.enqueue(messagingDeliverJob(run.id))),
-      ]);
-
-      const lastRun = runs.at(-1);
-      runCursor =
-        runs.length === batchSize && lastRun
-          ? { at: lastRun.updatedAt, id: lastRun.id }
-          : undefined;
-      const lastRoutine = routines.at(-1);
-      routineCursor =
-        routines.length === batchSize && lastRoutine?.nextRunAt
-          ? { at: lastRoutine.nextRunAt, id: lastRoutine.id }
-          : undefined;
-      const lastControl = controls.at(-1);
-      controlCursor =
-        controls.length === batchSize && lastControl
-          ? { at: lastControl.controlLeaseExpiresAt, id: lastControl.id }
-          : undefined;
-      if (!controlCursor) controlScanDeadline = undefined;
-      startBoardWork();
     })().finally(() => {
       reconciling = undefined;
     });
     return reconciling;
+  };
+  /** Runs, routines, controls and the rest of recovery. Board work starts after this in a
+   * `finally`, whether or not this throws, so a statement timeout here never stalls it. */
+  const reconcileWhileLeading = async () => {
+    const auxiliary = await Promise.allSettled(
+      [
+        deps.reconcileCloudAgents,
+        deps.reconcileComputerUpdates,
+        deps.reconcileMemory,
+        deps.reconcileLocalImport,
+        async () => {
+          if (!deps.reconcileBriefs || Date.now() < nextBriefMaintenanceAt) return;
+          await deps.reconcileBriefs();
+          nextBriefMaintenanceAt = Date.now() + BRIEF_MAINTENANCE_INTERVAL_MS;
+        },
+      ].map(async (reconcile) => reconcile?.()),
+    );
+    for (const result of auxiliary) {
+      if (result.status === "rejected")
+        getLogger().error("auxiliary reconciliation", result.reason);
+    }
+
+    const now = new Date();
+    controlScanDeadline ??= new Date(now.getTime() + CONTROL_LOOKAHEAD_MS);
+    const runCursorFilter = runCursor
+      ? {
+          OR: [
+            { updatedAt: { gt: runCursor.at } },
+            { updatedAt: runCursor.at, id: { gt: runCursor.id } },
+          ],
+        }
+      : undefined;
+    const routineCursorFilter = routineCursor
+      ? {
+          OR: [
+            { nextRunAt: { gt: routineCursor.at } },
+            { nextRunAt: routineCursor.at, id: { gt: routineCursor.id } },
+          ],
+        }
+      : undefined;
+    const controlCursorFilter = controlCursor
+      ? controlCursor.at
+        ? {
+            OR: [
+              { controlLeaseExpiresAt: { gt: controlCursor.at } },
+              {
+                controlLeaseExpiresAt: controlCursor.at,
+                id: { gt: controlCursor.id },
+              },
+              { controlLeaseExpiresAt: null },
+            ],
+          }
+        : { controlLeaseExpiresAt: null, id: { gt: controlCursor.id } }
+      : undefined;
+    const [runs, routines, controls, dueOutbound, unmirroredMessagingRuns] = await Promise.all([
+      deps.prisma.run.findMany({
+        where: {
+          AND: [
+            {
+              OR: [
+                { status: "queued" },
+                {
+                  status: { in: ["waiting_input", "waiting_takeover"] },
+                  cancelRequestedAt: { not: null },
+                },
+                {
+                  status: { in: ["leased", "running"] },
+                  leaseExpiresAt: { lte: now },
+                },
+              ],
+            },
+            ...(runCursorFilter ? [runCursorFilter] : []),
+          ],
+        },
+        orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+        take: batchSize,
+        select: { id: true, updatedAt: true },
+      }),
+      deps.prisma.routine.findMany({
+        where: {
+          AND: [
+            {
+              active: true,
+              nextRunAt: { lte: new Date(now.getTime() + ROUTINE_LOOKAHEAD_MS) },
+            },
+            ...(routineCursorFilter ? [routineCursorFilter] : []),
+          ],
+        },
+        orderBy: [{ nextRunAt: "asc" }, { id: "asc" }],
+        take: batchSize,
+        select: { id: true, nextRunAt: true },
+      }),
+      deps.prisma.computer.findMany({
+        where: {
+          AND: [
+            { controlLeaseId: { not: null } },
+            {
+              OR: [
+                { controlLeaseExpiresAt: null },
+                {
+                  controlLeaseExpiresAt: {
+                    lte: controlScanDeadline,
+                  },
+                },
+              ],
+            },
+            ...(controlCursorFilter ? [controlCursorFilter] : []),
+          ],
+        },
+        orderBy: [{ controlLeaseExpiresAt: "asc" }, { id: "asc" }],
+        take: batchSize,
+        select: {
+          id: true,
+          controlBotId: true,
+          controlLeaseId: true,
+          controlLeaseExpiresAt: true,
+        },
+      }),
+      deps.prisma.messagingOutbound.findFirst({
+        where: {
+          status: "pending",
+          OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+        },
+        select: { id: true },
+      }),
+      deps.prisma.run.findMany({
+        where: { trigger: "messaging", status: "completed", messagingMirroredAt: null },
+        orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+        take: batchSize,
+        select: { id: true },
+      }),
+    ]);
+
+    const events = deps.events;
+    if (events) {
+      const outcomes = await deps.prisma.run.findMany({
+        where: {
+          trigger: "bot_message",
+          status: { in: ["completed", "failed"] },
+          botOutcomeReturnedAt: null,
+        },
+        orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+        take: batchSize,
+        select: {
+          id: true,
+          spaceId: true,
+          threadId: true,
+          botId: true,
+          userId: true,
+          sourceMessageId: true,
+          status: true,
+          error: true,
+          bot: { select: { name: true } },
+        },
+      });
+      await Promise.all(
+        outcomes.map(async (run) => {
+          const transcript =
+            run.status === "failed"
+              ? { text: "", progressOnly: false }
+              : await botRunOutcomeText(deps.prisma, run.id);
+          const text =
+            run.status === "failed"
+              ? `Could not complete the delegated request: ${run.error ?? "unknown error"}`
+              : transcript.text ||
+                "The delegated bot completed its turn without a written summary.";
+          // Same stable delivery key as the executor path (auto-outcome:<runId>), so a
+          // concurrent or earlier return is replayed instead of double-posted. Progress-only
+          // transcripts (all mid-turn user-progress messages) return as status.
+          const intent =
+            run.status === "failed" || !transcript.text.trim() || transcript.progressOnly
+              ? "status"
+              : ("result" as const);
+          const returned = await returnBotMessageOutcome(
+            { prisma: deps.prisma, jobs: deps.jobs, events },
+            run,
+            { id: run.botId, name: run.bot.name },
+            text,
+            intent,
+          ).catch((error) => {
+            getLogger().error("bot message outcome reconciliation", error);
+            return false;
+          });
+          if (!returned) {
+            await deps.prisma.run.updateMany({
+              where: { id: run.id, botOutcomeReturnedAt: null },
+              data: { updatedAt: new Date() },
+            });
+          }
+        }),
+      );
+    }
+
+    await Promise.all([
+      ...runs.map((run) => deps.jobs.enqueue(runContinueJob(run.id))),
+      ...routines.flatMap((routine) =>
+        routine.nextRunAt
+          ? [deps.jobs.enqueue(routineWakeupJob(routine.id, routine.nextRunAt))]
+          : [],
+      ),
+      ...controls.flatMap((computer) =>
+        computer.controlLeaseId
+          ? [
+              scheduleComputerControlExpiry(
+                deps.jobs,
+                computer.id,
+                computer.controlLeaseId,
+                computer.controlLeaseExpiresAt ?? now,
+              ),
+            ]
+          : [],
+      ),
+      ...(dueOutbound ? [deps.jobs.enqueue(messagingDeliverJob())] : []),
+      ...unmirroredMessagingRuns.map((run) => deps.jobs.enqueue(messagingDeliverJob(run.id))),
+    ]);
+
+    const lastRun = runs.at(-1);
+    runCursor =
+      runs.length === batchSize && lastRun ? { at: lastRun.updatedAt, id: lastRun.id } : undefined;
+    const lastRoutine = routines.at(-1);
+    routineCursor =
+      routines.length === batchSize && lastRoutine?.nextRunAt
+        ? { at: lastRoutine.nextRunAt, id: lastRoutine.id }
+        : undefined;
+    const lastControl = controls.at(-1);
+    controlCursor =
+      controls.length === batchSize && lastControl
+        ? { at: lastControl.controlLeaseExpiresAt, id: lastControl.id }
+        : undefined;
+    if (!controlCursor) controlScanDeadline = undefined;
   };
   const reconcileSafely = () => {
     void reconcileOnce().catch((error) =>

@@ -276,8 +276,6 @@ describe("lingui catalogs", () => {
           `#: src/lib/board-close-copy.ts\nmsgid ${JSON.stringify(sentence)}`,
         );
       }
-      // A pending close is retried as the person who asked for it, so no bot denial is shown.
-      expect(catalog, locale).not.toContain("can no longer use the board");
     }
   });
 

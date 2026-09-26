@@ -1067,11 +1067,12 @@ export const RU_MESSAGES: Record<string, string> = {
   "Some items exceeded the scan limits ({count} items were not scanned).":
     "Некоторые элементы превысили ограничения сканирования (не просканировано элементов: {count}).",
   Labels: "Метки",
-  "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
-    "{name} создал задач: {filed}; выполнено: {done}, открыто: {open}, закрыто без выполнения: {other}.",
+  "{name} filed {filed}: {done} done, {open} open, {closed} closed, {other} closed without being completed.":
+    "{name} создал задач: {filed}; выполнено: {done}, открыто: {open}, закрыто: {closed}, закрыто без выполнения: {other}.",
   "This board item is still open.": "Эта задача на доске всё ещё открыта.",
   "This board item was already closed on the Board.": "Эта задача на доске уже закрыта.",
   "This board item was completed.": "Эта задача на доске выполнена.",
+  "This board item was closed.": "Эта задача на доске закрыта.",
   "This board item was closed without being completed. Review it on the Board.":
     "Эта задача на доске закрыта без выполнения. Проверьте её на доске.",
   "This board item was closed without being completed: {reason}. Review it on the Board.":

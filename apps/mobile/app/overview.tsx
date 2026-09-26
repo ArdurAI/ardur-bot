@@ -107,7 +107,7 @@ export default function OverviewScreen() {
                 {data.filingOutcomes.map((row) => (
                   <Line key={row.botId}>
                     {t(
-                      "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.",
+                      "{name} filed {filed}: {done} done, {open} open, {closed} closed, {other} closed without being completed.",
                       row,
                     )}
                   </Line>

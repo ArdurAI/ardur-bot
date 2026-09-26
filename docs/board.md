@@ -198,9 +198,12 @@ Approve files a learning proposal's item as the proposal's bot, as a run's outco
 as the run's bot. Reject and Undo are the person's own actions, so they show and close the item
 with the person's own board access, and every retry of a close they left pending, scheduled or
 clicked, opens the board as that same person, never through the filing's bot. A bot that was
-archived or unticked from the board's allowed bots cannot block it. If the person can no longer
-close the item, for example because the computer now has another owner, the retry fails and
-counts as a failed try like any other. With the host bridge on (the packaged images), the
+archived or unticked from the board's allowed bots cannot block it. A retry that can never
+succeed — the item was deleted outside the app, the board was turned off in Settings, or the
+person lost their own access to it, for example because the computer now has another owner —
+drops the filing for good instead: no notice, no further retries, no error logged, and the
+proposal stays exactly as Reject or Undo left it. Any other failure counts as a failed try like
+any other. With the host bridge on (the packaged images), the
 desktop admits a bot only inside one of its runs, so board work with no run goes through the
 owner's connection in the API as the owner. The worker has no such connection, so there its
 notification tick and a run's outcome delivery leave every pending close to the API and do not
@@ -215,7 +218,9 @@ show and close, leaves a space another write holds for the next sweep, and stops
 the in-memory reconciler's sweep have the same deadline, and each passes its stop down to the
 board command. The reconciler recovers runs, leases and routines first and then starts its board
 work (run outcomes, and that sweep in the API) without waiting for it, one pass at a time, so a
-hung board command never delays recovery. Stopping the reconciler stops that pass.
+hung board command never delays recovery. Board work starts every tick once leadership is held,
+even when the recovery scan itself throws (a statement timeout, for example), so that failure
+cannot also stall run outcomes or pending closes. Stopping the reconciler stops that pass.
 If a person closes the item themselves, for any reason, before the sweep finishes, that ends the
 pending close quietly: the sweep clears the marker, deletes the filing, and leaves the item closed
 as they left it. Only an edit that leaves the item open — a different assignee, status or other
@@ -250,7 +255,7 @@ grants still reject writes. A stale phone confirmation does not make the board
 read-only; the run pauses for confirmation the same way as other consequential tools.
 
 The Work panel and mobile Overview group the last 30 days of filing records by bot
-and show completed, open and closed-without-being-completed counts. If that outcome
+and show completed, open, closed and closed-without-being-completed counts. If that outcome
 query fails or its answer is malformed, they still show the work list and leave the counts
 out. A board read finds the filings of the items it
 returned with one query, then records each closed filing's outcome and the proposal's close
@@ -271,9 +276,12 @@ negation comes up to three words before it. The negation words are not, never, n
 nobody, none, nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't,
 and unable to ("not done", "can't get it fixed", "nothing was resolved", "isn't done").
 "no" followed by a number is a label, not a negation ("ticket no 12 resolved", "case no 5 fixed",
-"Item no 1 done"). "no fix was possible" stays closed without being completed. A
-completion word with an un- prefix (unresolved, unfixed, undone, unfinished) is negated.
-Every other reason is closed without being completed. A learning proposal that
+"Item no 1 done"). A completion word with an un- prefix (unresolved, unfixed, undone,
+unfinished) is negated, so it is closed without being completed. Every other reason —
+including one with no recognized English completion or negation word, such as a
+non-English reason or one that just names what happened ("Готово", "Closed via PR #12",
+"no fix was possible") — is closed, neither done nor not done: there is nothing here that
+says which. A learning proposal that
 links to an existing item records its outcome but is not counted again. An item
 that nobody reads after it closes remains open in this projection until the next read,
 so staleness is unbounded for an abandoned board and otherwise lasts until the next

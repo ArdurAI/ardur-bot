@@ -41,16 +41,9 @@ describe("mobile i18n", () => {
     vi.unstubAllEnvs();
   });
 
-  it("translates the closing card in Russian and Chinese and keeps no dropped board sentence", async () => {
+  it("translates the closing card in Russian and Chinese", async () => {
     const { ZH_MESSAGES } = await import("./locales/zh");
     const { RU_MESSAGES } = await import("./locales/ru");
-    for (const dropped of [
-      "Board outcomes are unavailable right now.",
-      "The bot that filed this item can no longer use the board. Close it on the Board.",
-    ]) {
-      expect(RU_MESSAGES).not.toHaveProperty([dropped]);
-      expect(ZH_MESSAGES).not.toHaveProperty([dropped]);
-    }
     expect(RU_MESSAGES["Closing on the Board."]).toBe("Закрывается на доске.");
     expect(ZH_MESSAGES["Closing on the Board."]).toBe("正在看板上关闭。");
   });

@@ -271,11 +271,11 @@ it("returns one grouped 30-day filing outcome query scoped to the space", async 
   const { board, prisma } = fixture();
   Object.assign(prisma, {
     $queryRaw: vi.fn(async () => [
-      { botId: "builder", name: "Builder", filed: 4n, done: 2n, open: 1n, other: 1n },
+      { botId: "builder", name: "Builder", filed: 5n, done: 2n, open: 1n, closed: 1n, other: 1n },
     ]),
   });
   await expect(board.service.filingOutcomes(actor)).resolves.toEqual({
-    bots: [{ botId: "builder", name: "Builder", filed: 4, done: 2, open: 1, other: 1 }],
+    bots: [{ botId: "builder", name: "Builder", filed: 5, done: 2, open: 1, closed: 1, other: 1 }],
   });
   expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
 });
