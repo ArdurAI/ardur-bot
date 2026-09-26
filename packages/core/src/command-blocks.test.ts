@@ -10,6 +10,7 @@ import {
   exportCommandLog,
   projectCommandBlocks,
   reduceCommandMessages,
+  resumedCommandMessageId,
   searchCommandBlocks,
   stripCommandControls,
 } from "./command-blocks.js";
@@ -59,6 +60,70 @@ describe("command projection", () => {
       ]),
     ).toMatchSnapshot();
   });
+  it("joins a resumed call's card to the card its killed call published", () => {
+    const killed = { commandId: "card-a", executionId: "call-a", attemptId: "attempt-1" };
+    const resumed = { commandId: "card-b", executionId: "call-b", attemptId: "attempt-2" };
+    const events = sequence([
+      commandEvent("command.intent", { ...killed, ...open("waiting", "12:00:00") }),
+      commandEvent("command.started", { ...killed, ...open("running", "12:00:01") }),
+      resumedEvent("call-a", "call-b"),
+      commandEvent("command.intent", { ...resumed, ...open("waiting", "12:00:30") }),
+      commandEvent("command.started", { ...resumed, ...open("running", "12:00:31") }),
+      commandEvent("command.finished", {
+        ...resumed,
+        startedAt: "2026-09-23T12:00:31.000Z",
+        durationMs: 2_000,
+        stdout: "built\n",
+      }),
+    ]);
+    const merged = {
+      ...commandBlock({ ...resumed, stdout: "built\n" }),
+      startedAt: "2026-09-23T12:00:01.000Z",
+      durationMs: 32_000,
+    };
+    expect(projectCommandBlocks(events)).toEqual([merged]);
+    // The live thread keeps one card: the killed card's row takes the resumed call's output.
+    const live = events.reduce<ReturnType<typeof reduceCommandMessages>>(
+      (messages, event) => reduceCommandMessages(messages, event),
+      [],
+    );
+    expect(live).toHaveLength(1);
+    expect(live[0]).toMatchObject({
+      id: resumedCommandMessageId("run-1", "call-b"),
+      seq: 1,
+      blocks: [{ kind: "command", command: merged }],
+    });
+  });
+  it("keeps a killed card unknown when no call resumed it", () => {
+    const events = sequence([
+      commandEvent("command.started", {
+        commandId: "card-a",
+        executionId: "call-a",
+        ...open("running", "12:00:01"),
+      }),
+      commandEvent("command.finished", { commandId: "card-b", executionId: "call-b" }),
+    ]);
+    expect(projectCommandBlocks(events).map((block) => [block.executionId, block.outcome])).toEqual(
+      [
+        ["call-a", "unknown"],
+        ["call-b", "completed"],
+      ],
+    );
+  });
+  it("joins a resumed call to a killed call that never published a card", () => {
+    const events = sequence([
+      {
+        ...commandEvent(),
+        type: "agent.tool.called" as const,
+        payload: { name: "shell", executionId: "call-a" },
+      },
+      resumedEvent("call-a", "call-b"),
+      commandEvent("command.finished", { commandId: "card-b", executionId: "call-b" }),
+    ]);
+    expect(projectCommandBlocks(events)).toEqual([
+      commandBlock({ commandId: "card-b", executionId: "call-b" }),
+    ]);
+  });
   it("searches both retained streams and errors", () => {
     const block = commandBlock({ stderr: "Warning", error: "Stopped" });
     expect(searchCommandBlocks([block], "WARN")).toEqual([block]);
@@ -107,6 +172,25 @@ function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureComm
     rerunDisabledReason: null,
     ...overrides,
   };
+}
+
+function open(outcome: "waiting" | "running", time: string): Partial<FixtureCommandBlock> {
+  return {
+    outcome,
+    startedAt: `2026-09-23T${time}.000Z`,
+    durationMs: null,
+    exitCode: null,
+    stdout: null,
+    stderr: null,
+  };
+}
+
+function resumedEvent(from: string, to: string): FixtureProductEvent {
+  return { ...commandEvent(), type: "agent.tool.resumed", payload: { from, to } };
+}
+
+function sequence(events: FixtureProductEvent[]): FixtureProductEvent[] {
+  return events.map((event, index) => ({ ...event, id: `event-${index}`, seq: index + 1 }));
 }
 
 function commandEvent(

@@ -270,11 +270,14 @@ function operationFinish(
       point.sequence > start.sequence,
   );
   if (local || !pairAcrossProcesses || start.attempt === undefined) return local;
-  // Recovery leases the next fence and records that fence as the finish attempt.
+  // Recovery leases the next fence and records that fence as the finish attempt. The call may
+  // resume on its own id, or on a new id that names this one as the call it repeats.
   const recoveredAttempt = nextFence(start.attempt);
   return points.find(
     (point) =>
-      sameOperation(point) &&
+      point.boundary === boundary &&
+      (point.operationId === start.operationId ||
+        (start.boundary === "tool.started" && point.requestId === start.operationId)) &&
       point.attempt === recoveredAttempt &&
       point.processId !== start.processId,
   );
@@ -282,7 +285,7 @@ function operationFinish(
 
 /**
  * A crash may finish on the recovering process. The span is a wall-clock interval
- * (`timeOrigin + at`) widened by recorded clock uncertainty. Same-process spans stay exact.
+ * (`timeOrigin + at`) widened by both sides' clock uncertainty. Same-process spans stay exact.
  */
 function operationSpan(
   start: TracePoint,
@@ -306,14 +309,11 @@ function operationSpan(
   if (startOrigin === undefined || endOrigin === undefined) return missing("clock-not-calibrated");
   const value = endOrigin + end.at - (startOrigin + start.at);
   if (value < 0) return missing("clock-skew");
-  const startUncertainty = uncertainty.get(start.processId);
-  const endUncertainty = uncertainty.get(end.processId);
-  // A missing side uses the default. It does not contribute zero next to a real sample.
+  // Each side contributes its recorded uncertainty, or the default when it recorded none.
+  // Less recorded data never narrows the interval.
   const widen =
-    startUncertainty === undefined && endUncertainty === undefined
-      ? DEFAULT_CLOCK_UNCERTAINTY_MS
-      : (startUncertainty ?? DEFAULT_CLOCK_UNCERTAINTY_MS) +
-        (endUncertainty ?? DEFAULT_CLOCK_UNCERTAINTY_MS);
+    (uncertainty.get(start.processId) ?? DEFAULT_CLOCK_UNCERTAINTY_MS) +
+    (uncertainty.get(end.processId) ?? DEFAULT_CLOCK_UNCERTAINTY_MS);
   // A lower bound below zero does not show that the finish happened after the start.
   if (value - widen < 0) return missing("clock-uncertain");
   return { value, lowerMs: value - widen, upperMs: value + widen, reason: "wall-clock" };

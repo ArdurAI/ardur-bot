@@ -35,8 +35,8 @@ export type TraceBoundary = (typeof TRACE_BOUNDARIES)[number];
 export type TraceOutcome = "success" | "failed" | "cancelled" | "timed-out" | "uncertain";
 
 /**
- * Widening used when a batch omits `clockUncertaintyMs`, and the value a live buffer
- * records when a wall-clock versus monotonic cross-check cannot be measured.
+ * Each side's contribution to a cross-process span when its batch omits `clockUncertaintyMs`,
+ * and the value a live buffer records when a wall-clock versus monotonic cross-check cannot be measured.
  */
 export const DEFAULT_CLOCK_UNCERTAINTY_MS = 1000;
 export interface TracePoint {
@@ -47,7 +47,10 @@ export interface TracePoint {
   boundary: TraceBoundary;
   attempt?: number;
   operationId?: string;
-  /** One logical provider call across HTTP retries; operationId still identifies an attempt. */
+  /**
+   * One logical call across attempts; operationId still identifies an attempt.
+   * Provider retries share it. A resumed tool call carries the id of the call it resumes.
+   */
   requestId?: string;
   outcome?: TraceOutcome;
   /** Requested schedule delay; never inferred from another process's wall clock. */
@@ -61,7 +64,8 @@ export interface TraceBatch {
   /**
    * Recorded uncertainty of this process clock, in milliseconds.
    * A live buffer measures this once, or records `DEFAULT_CLOCK_UNCERTAINTY_MS` when it cannot.
-   * A cross-process span widens by the sum of the two batches, or by that default when neither recorded it.
+   * A cross-process span widens by the sum of both sides, where each side contributes its recorded
+   * value or `DEFAULT_CLOCK_UNCERTAINTY_MS` when its batch omits it.
    */
   clockUncertaintyMs?: number;
   points: TracePoint[];

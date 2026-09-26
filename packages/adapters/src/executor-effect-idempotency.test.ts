@@ -181,6 +181,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
       create: vi.fn(async () => ({ id: "admission" })),
     },
     event: {
+      findMany: vi.fn(async () => []),
       findFirst: vi.fn(async () => ({
         runId: "source-run",
         payload: {

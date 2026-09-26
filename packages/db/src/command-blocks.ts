@@ -1,9 +1,11 @@
 import type { CommandBlock, ThreadMessage } from "@ardurbot/contracts";
-import { CommandEventPayloadSchema } from "@ardurbot/contracts";
+import { CommandEventPayloadSchema, ToolResumedPayloadSchema } from "@ardurbot/contracts";
 import {
   commandRecordingIsLive,
   isCommandEvent,
+  mergeResumedCommand,
   projectCommandBlocks,
+  resumedCommandMessageId,
   settleCommandBlock,
 } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "./client.js";
@@ -21,31 +23,89 @@ export async function materializeCommandEvent(
     runId: string | null;
   },
 ) {
+  if (event.type === "agent.tool.resumed") return materializeResumedCall(tx, event);
   if (!isCommandEvent(event.type)) return;
   const { block } = CommandEventPayloadSchema.parse(event.payload);
-  const id = `command:${block.commandId}`;
-  const blocks = [{ kind: "command", command: block }] as Prisma.InputJsonValue;
-  const existing = await tx.message.findUnique({ where: { id }, select: { id: true } });
+  const own = `command:${block.commandId}`;
+  const existing = await tx.message.findUnique({ where: { id: own }, select: { id: true } });
   if (existing) {
-    await tx.message.update({ where: { id }, data: { blocks } });
-  } else {
-    const thread = await tx.thread.update({
-      where: { id: event.threadId },
-      data: { nextMessageSeq: { increment: 1 } },
-      select: { nextMessageSeq: true },
+    await tx.message.update({
+      where: { id: own },
+      data: { blocks: [{ kind: "command", command: block }] as Prisma.InputJsonValue },
     });
-    await tx.message.create({
-      data: {
-        id,
-        threadId: event.threadId,
-        botId: event.botId,
-        runId: event.runId,
-        role: "bot",
-        seq: thread.nextMessageSeq - 1,
-        blocks,
-      },
-    });
+    return;
   }
+  // A resumed call finishes the card its killed call published, keeping that card's start.
+  const resumed = await tx.message.findUnique({
+    where: { id: resumedCommandMessageId(block.runId, block.executionId) },
+    select: { id: true, blocks: true },
+  });
+  if (resumed) {
+    const [earlier] = resumed.blocks as MessageBlocks;
+    const command =
+      earlier?.kind === "command" ? mergeResumedCommand(earlier.command, block) : block;
+    await tx.message.update({
+      where: { id: resumed.id },
+      data: { blocks: [{ kind: "command", command }] as Prisma.InputJsonValue },
+    });
+    return;
+  }
+  const thread = await tx.thread.update({
+    where: { id: event.threadId },
+    data: { nextMessageSeq: { increment: 1 } },
+    select: { nextMessageSeq: true },
+  });
+  await tx.message.create({
+    data: {
+      id: own,
+      threadId: event.threadId,
+      botId: event.botId,
+      runId: event.runId,
+      role: "bot",
+      seq: thread.nextMessageSeq - 1,
+      blocks: [{ kind: "command", command: block }] as Prisma.InputJsonValue,
+    },
+  });
+}
+
+type MessageBlocks = ThreadMessage["blocks"];
+
+/** The killed call's card row is renamed for the call that resumes it; nothing else changes. */
+async function materializeResumedCall(
+  tx: Prisma.TransactionClient,
+  event: { payload: unknown; threadId: string; runId: string | null },
+) {
+  const link = ToolResumedPayloadSchema.safeParse(event.payload);
+  if (!link.success || !event.runId) return;
+  const target = resumedCommandMessageId(event.runId, link.data.to);
+  let id: string | undefined = (
+    await tx.message.findUnique({
+      where: { id: resumedCommandMessageId(event.runId, link.data.from) },
+      select: { id: true },
+    })
+  )?.id;
+  if (!id) {
+    const intent = await tx.event.findFirst({
+      where: {
+        threadId: event.threadId,
+        runId: event.runId,
+        type: "command.intent",
+        payload: { path: ["block", "executionId"], equals: link.data.from },
+      },
+      orderBy: { seq: "desc" },
+      select: { payload: true },
+    });
+    const parsed = CommandEventPayloadSchema.safeParse(intent?.payload);
+    if (!parsed.success) return;
+    id = (
+      await tx.message.findUnique({
+        where: { id: `command:${parsed.data.block.commandId}` },
+        select: { id: true },
+      })
+    )?.id;
+  }
+  if (!id || (await tx.message.findUnique({ where: { id: target }, select: { id: true } }))) return;
+  await tx.message.update({ where: { id }, data: { id: target } });
 }
 
 /** A stale lease or a later attempt must never present an interrupted command as live. */
@@ -91,7 +151,9 @@ export async function addHistoricalCommandBlocks(
   const events = await db.event.findMany({
     where: {
       runId: { in: runIds },
-      type: { in: ["agent.tool.called", "agent.tool.completed", "command.intent"] },
+      type: {
+        in: ["agent.tool.called", "agent.tool.completed", "agent.tool.resumed", "command.intent"],
+      },
     },
     orderBy: { seq: "asc" },
   });

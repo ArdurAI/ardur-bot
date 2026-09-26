@@ -52,27 +52,21 @@ type StoredComputer = {
   providerRef: string | null;
 };
 
-/** Keeps a command the killed attempt already published, so resume can finish that card. */
+/**
+ * Cards an earlier attempt left waiting or running, by execution id, so a call that resumes
+ * on the same id finishes its own card. Reads intents and starts only; `finished` names calls
+ * that already completed.
+ */
 export function adoptOpenCommands(
   target: Map<string, CommandBlock>,
   events: readonly { type: string; payload: unknown }[],
+  finished: ReadonlySet<string>,
 ) {
-  const finished = new Set<string>();
   for (const event of events) {
-    if (
-      event.type !== "command.intent" &&
-      event.type !== "command.started" &&
-      event.type !== "command.finished"
-    )
-      continue;
+    if (event.type !== "command.intent" && event.type !== "command.started") continue;
     const parsed = CommandEventPayloadSchema.safeParse(event.payload);
     if (!parsed.success) continue;
     const block = parsed.data.block;
-    if (event.type === "command.finished") {
-      finished.add(block.executionId);
-      target.delete(block.executionId);
-      continue;
-    }
     if (finished.has(block.executionId)) continue;
     if (block.outcome === "waiting" || block.outcome === "running")
       target.set(block.executionId, block);
@@ -92,6 +86,8 @@ export function createCommandRecording(input: {
   resolveCwd?: (requested: string | undefined, executionId: string) => string | undefined;
   /** Waiting or running cards from the killed attempt, keyed by execution id. */
   openCommands?: ReadonlyMap<string, CommandBlock>;
+  /** Calls an earlier attempt completed. Their recorded result returns without a second card. */
+  finishedCommands?: ReadonlySet<string>;
 }) {
   const entries = new Map<
     string,
@@ -101,6 +97,8 @@ export function createCommandRecording(input: {
       keepStart: boolean;
       suppress: boolean;
       request: { command: string; cwd?: string } | null;
+      /** Finished in an earlier attempt: its recorded result returns and nothing runs. */
+      finished: boolean;
     }
   >();
   const deliveries = new Map<string, Promise<unknown>>();
@@ -163,9 +161,8 @@ export function createCommandRecording(input: {
       cwd === resolvedCwd &&
       (request.cwd === undefined || safe(request.cwd) === request.cwd);
     const suppress = sensitiveShellCommand(request?.command ?? "") || !unchanged;
-    const prior = input.openCommands?.get(executionId);
-    const resumeCard =
-      prior && (prior.outcome === "waiting" || prior.outcome === "running") ? prior : undefined;
+    // The same call resuming on its own id finishes the card the killed attempt published.
+    const resumeCard = input.openCommands?.get(executionId);
     const commandId = resumeCard
       ? resumeCard.commandId
       : createHash("sha256")
@@ -181,7 +178,7 @@ export function createCommandRecording(input: {
       runId: input.context.runId,
       // The recovering attempt is the one whose fence matches the live lease.
       attemptId: input.attemptId,
-      executionId: resumeCard ? resumeCard.executionId : executionId,
+      executionId,
       command,
       cwd,
       computerId: input.storedComputer.id,
@@ -203,16 +200,18 @@ export function createCommandRecording(input: {
             ? "This computer did not record its working directory."
             : null,
     };
+    const finished = input.finishedCommands?.has(executionId) === true;
     const entry = {
       block,
       started: keepStart ? preservedStartMs : Date.now(),
       keepStart,
       suppress,
       request,
+      finished,
     };
     entries.set(executionId, entry);
     // A second intent for a card the killed attempt already published would open another row.
-    if (!resumeCard) {
+    if (!resumeCard && !finished) {
       // Failing this write prevents even approval-effect persistence or execution.
       await append("command.intent", {
         block,
@@ -237,7 +236,8 @@ export function createCommandRecording(input: {
                 "This command was not run because its arguments could not be retained safely; use managed credential variables.",
             }
           : await tool("shell", { ...request }, executionId);
-      if (isToolPauseResult(result)) return result;
+      // The earlier attempt's card already shows a finished call.
+      if (isToolPauseResult(result) || finished) return result;
       const value = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
       const executed = entry.block.outcome === "running";
       const code = typeof value.code === "number" ? value.code : null;
@@ -264,6 +264,7 @@ export function createCommandRecording(input: {
       await append("command.finished", { block: entry.block });
       return result;
     } catch (error) {
+      if (finished) throw error;
       const uncertain = commandStopUncertain(error);
       entry.block = {
         ...entry.block,
@@ -285,6 +286,8 @@ export function createCommandRecording(input: {
   ) {
     const entry = entries.get(executionId);
     if (!entry) throw new Error("Command launch intent is missing.");
+    // A finished call runs again only if its recorded result is gone; that is refused.
+    if (entry.finished) throw new Error("This command already finished in an earlier attempt.");
     input.context.signal.throwIfAborted();
     if (!entry.keepStart) entry.started = Date.now();
     entry.block = {

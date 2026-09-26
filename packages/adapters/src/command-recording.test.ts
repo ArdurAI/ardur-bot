@@ -1,16 +1,21 @@
 import { randomUUID } from "node:crypto";
 import type { ProcessEvent, SandboxProvider } from "@ardurbot/adapter-kit";
+import type { CommandBlock } from "@ardurbot/contracts";
 import { COMMAND_OUTPUT_LIMIT, COMMAND_SUPPRESSED, COMMAND_TRUNCATED } from "@ardurbot/contracts";
 import { projectCommandBlocks } from "@ardurbot/core";
 import type { AppendEventInput, ThreadEvents } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { approvalPausedToolResult } from "./approval-effect.js";
-import { createCommandRecording } from "./command-recording.js";
+import { adoptOpenCommands, createCommandRecording } from "./command-recording.js";
 
 function fixture(
   output: ProcessEvent[] = [{ type: "exit", code: 7 }],
   secrets: string[] = [],
   resolveCwd?: (requested: string | undefined, executionId: string) => string | undefined,
+  resume: Pick<
+    Parameters<typeof createCommandRecording>[0],
+    "openCommands" | "finishedCommands"
+  > = {},
 ) {
   const events: AppendEventInput[] = [];
   const order: string[] = [];
@@ -50,6 +55,7 @@ function fixture(
     attemptId: "attempt-1",
     secrets,
     resolveCwd,
+    ...resume,
   });
   const execute = () =>
     recording.execute("execution-1", ["bash", "-c", "pnpm test"], "project", {});
@@ -205,6 +211,87 @@ describe("command recording boundary", () => {
     expect(f.blocks()[0]?.error).toBe(
       "The command's cancellation timed out, so its outcome is uncertain.",
     );
+  });
+});
+
+describe("a call resuming after a killed attempt", () => {
+  const earlier = (overrides: Partial<CommandBlock>): CommandBlock => ({
+    commandId: "card-earlier",
+    runId: "run-1",
+    attemptId: "attempt-0",
+    executionId: "execution-1",
+    command: "pnpm test",
+    cwd: "/workspace/project",
+    computerId: "computer-1",
+    computer: "docker:container-1",
+    startedAt: "2026-09-23T12:00:00.000Z",
+    durationMs: null,
+    exitCode: null,
+    outcome: "running",
+    stdout: null,
+    stderr: null,
+    error: null,
+    redacted: false,
+    truncated: false,
+    replayOf: null,
+    rerunDisabledReason: null,
+    ...overrides,
+  });
+  it("adopts only waiting or running cards of calls that did not finish", () => {
+    const open = new Map<string, CommandBlock>();
+    adoptOpenCommands(
+      open,
+      [
+        { type: "command.intent", payload: { block: earlier({ outcome: "waiting" }) } },
+        {
+          type: "command.started",
+          payload: { block: earlier({ commandId: "card-2", executionId: "execution-2" }) },
+        },
+        {
+          type: "command.intent",
+          payload: { block: earlier({ commandId: "card-3", executionId: "execution-3" }) },
+        },
+        { type: "agent.tool.called", payload: { name: "shell", executionId: "execution-4" } },
+      ],
+      new Set(["execution-3"]),
+    );
+    expect([...open.keys()]).toEqual(["execution-1", "execution-2"]);
+  });
+  it("finishes the same call's card under this attempt and keeps its start", async () => {
+    const f = fixture([{ type: "exit", code: 0 }], [], undefined, {
+      openCommands: new Map([["execution-1", earlier({})]]),
+    });
+    await f.invoke();
+    expect(f.order).toEqual(["command.started", "execute", "command.finished"]);
+    expect(f.blocks()).toEqual([
+      expect.objectContaining({
+        commandId: "card-earlier",
+        attemptId: "attempt-1",
+        startedAt: "2026-09-23T12:00:00.000Z",
+        outcome: "completed",
+      }),
+    ]);
+  });
+  it("returns a finished call's recorded result without a second card and never runs it", async () => {
+    const recorded = { stdout: "ok", stderr: "", code: 0 };
+    const replayed = fixture(undefined, [], undefined, {
+      finishedCommands: new Set(["execution-1"]),
+    });
+    await expect(
+      replayed.recording.invoke(
+        "shell",
+        { command: "pnpm test" },
+        "execution-1",
+        async () => recorded,
+      ),
+    ).resolves.toBe(recorded);
+    expect(replayed.events).toEqual([]);
+    const refused = fixture(undefined, [], undefined, {
+      finishedCommands: new Set(["execution-1"]),
+    });
+    await expect(refused.invoke()).rejects.toThrow("already finished in an earlier attempt");
+    expect(refused.sandbox.execute).not.toHaveBeenCalled();
+    expect(refused.events).toEqual([]);
   });
 });
 

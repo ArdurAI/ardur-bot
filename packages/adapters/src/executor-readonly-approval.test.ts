@@ -273,6 +273,7 @@ function fixture({
     scratchpadItem: { findMany: vi.fn(async () => []) },
     actionApprovalRule: { findMany: vi.fn(async () => rules) },
     actionAutoReviewPreference: { findUnique: vi.fn(async () => ({ enabled: autoReview })) },
+    event: { findMany: vi.fn(async () => []) },
     externalEffect,
   };
   const pauseRunForInput = vi.fn(async () => {

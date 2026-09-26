@@ -9,8 +9,20 @@ vi.mock("../../../../adapters/src/run-usage.js", () => ({
 vi.mock("../../../../adapters/src/delegation-execution.js", () => ({
   checkDelegationExecution: vi.fn(async () => undefined),
 }));
+vi.mock("../../../../adapters/src/delegation-helpers.js", () => ({
+  admitRunHelper: vi.fn(async () => ({
+    id: "helper-1",
+    tokens: 10_000,
+    deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+  })),
+}));
 
-import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
+import type {
+  AgentRunRequest,
+  AgentRuntimeEvent,
+  ComputerRef,
+  ProcessEvent,
+} from "@ardurbot/adapter-kit";
 import type { CommandBlock } from "@ardurbot/contracts";
 import {
   type ActionApprovalRule,
@@ -21,9 +33,11 @@ import {
 import { afterEach, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "../../../../adapters/src/auto-review.js";
 import type * as ComputerLifecycleModule from "../../../../adapters/src/computer-lifecycle.js";
-import { createRunExecutor, unfinishedToolCalls } from "../../../../adapters/src/executor.js";
+import { checkDelegationExecution } from "../../../../adapters/src/delegation-execution.js";
+import { taskWorkspacePath } from "../../../../adapters/src/delegation-workspace.js";
+import { createRunExecutor } from "../../../../adapters/src/executor.js";
 import { startScoreboardTrace } from "../../../../adapters/src/scoreboard-trace.js";
-import { collectTraceEvidence } from "../trace-collector.js";
+import { collectTraceEvidence, crashSpanUnmeasured } from "../trace-collector.js";
 
 vi.mock("../../../../adapters/src/computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
@@ -60,17 +74,20 @@ type ToolCall = {
   name: string;
   args: Record<string, unknown>;
   executionId: string;
+  /** A helper call, issued after the parent call admitted the helper. */
+  helper?: { parent: string };
 };
 
 type Logged = { type: string; runId?: string; payload: unknown; seq: number };
+type Mode = "scripted" | "production" | "concurrent" | "beside" | "after";
 
 const RUN = "run-resume";
+const HELPER = "helper-1";
+const HELPER_WORKSPACE = "tasks/task-1/helper-1";
 const A = "run-resume:shell:a";
 const B = "run-resume:shell:b";
 const MINTED = "run-resume:shell:minted";
 const FRESH = "run-resume:shell:fresh";
-const MINT_A = "run-resume:shell:mint-a";
-const MINT_B = "run-resume:shell:mint-b";
 const ARGS_A = { command: "echo alpha" };
 const ARGS_B = { command: "echo beta" };
 const ARGS_SAME = { command: "echo same" };
@@ -82,39 +99,81 @@ afterEach(() => {
   releaseTools();
   stopTrace?.();
   stopTrace = undefined;
+  vi.mocked(checkDelegationExecution).mockClear();
 });
 
-function openExecutionIds(events: readonly { type: string; payload: unknown }[]) {
-  const open: string[] = [];
-  for (const event of events) {
-    if (!event.payload || typeof event.payload !== "object") continue;
-    const executionId = (event.payload as { executionId?: unknown }).executionId;
-    if (typeof executionId !== "string") continue;
-    if (event.type === "agent.tool.called") open.push(executionId);
-    if (event.type === "agent.tool.completed") {
-      const index = open.indexOf(executionId);
-      if (index >= 0) open.splice(index, 1);
-    }
-  }
-  return open;
+function executionIdOf(event: Logged) {
+  const payload = event.payload as {
+    executionId?: unknown;
+    block?: { executionId?: unknown };
+  } | null;
+  return payload?.block?.executionId ?? payload?.executionId;
 }
 
 function executionIds(events: readonly Logged[], type: string) {
-  return events
-    .filter((event) => event.type === type)
-    .map((event) => (event.payload as { executionId?: unknown }).executionId);
+  return events.filter((event) => event.type === type).map(executionIdOf);
 }
 
-function harness(scripted: boolean) {
+function links(events: readonly Logged[]) {
+  return events
+    .filter((event) => event.type === "agent.tool.resumed")
+    .map((event) => event.payload);
+}
+
+/** The event store refuses a second intent or start for one card in one attempt, and a second finish. */
+function duplicateCommandEvent(log: readonly Logged[], event: Logged) {
+  if (!event.type.startsWith("command.")) return false;
+  const block = (event.payload as { block: CommandBlock }).block;
+  return log.some((prior) => {
+    if (prior.type !== event.type) return false;
+    const other = (prior.payload as { block: CommandBlock }).block;
+    return (
+      other.commandId === block.commandId &&
+      (event.type === "command.finished" || other.attemptId === block.attemptId)
+    );
+  });
+}
+
+function projectedCommands(events: readonly Logged[]) {
+  return projectCommandBlocks(
+    events.map((event) => ({
+      id: String(event.seq),
+      seq: event.seq,
+      type: event.type,
+      runId: event.runId ?? RUN,
+      threadId: "thread-1",
+      createdAt: new Date("2026-09-24T12:00:00Z"),
+      payload: event.payload,
+    })),
+  );
+}
+
+function commandBlockOf(event: Logged | undefined): CommandBlock {
+  const block = (event?.payload as { block?: CommandBlock } | undefined)?.block;
+  if (!block) throw new Error("command block missing");
+  return block;
+}
+
+function harness(mode: Mode) {
+  const scripted = mode === "scripted";
   const log: Logged[] = [];
   let seq = 0;
   let persist = true;
-  let cutAfter: string | null = null;
+  let cut: ((event: Logged) => boolean) | null = null;
+  let survivingEffects: Effect[] | null = null;
   let barrier: Promise<void> = Promise.resolve();
   releaseTools = () => {};
   let calls: ToolCall[] = [];
-  let concurrent = false;
+  let rules: ActionApprovalRule[] = [];
+  let slowProgress = false;
+  let intentStored = () => {};
+  let intentSeen = new Promise<void>((resolve) => {
+    intentStored = resolve;
+  });
   const effects: Effect[] = [];
+  const executions: { cwd: string | undefined }[] = [];
+  const resolvedCwds: { cwd: string | undefined }[] = [];
+  const pauses: Record<string, unknown>[] = [];
   const run = {
     createdAt: new Date("2026-09-24T12:00:00Z"),
     id: RUN,
@@ -133,6 +192,7 @@ function harness(scripted: boolean) {
     boardCloseWhenDone: false,
     boardCommentedAt: null as Date | null,
     cancelRequestedAt: null as Date | null,
+    originDeviceGrantId: null as string | null,
   };
   const externalEffect = {
     findMany: vi.fn(
@@ -156,7 +216,7 @@ function harness(scripted: boolean) {
         ) ?? null,
     ),
     create: vi.fn(async ({ data }: { data: Omit<Effect, "id"> }) => {
-      const effect = { ...data, id: `effect-${effects.length + 1}` };
+      const effect = { ...data, id: `effect-${effects.length + 1}-${run.leaseFence}` };
       effects.push(effect);
       return { ...effect };
     }),
@@ -192,6 +252,14 @@ function harness(scripted: boolean) {
   };
   const prisma = {
     delegationRoot: { findUnique: vi.fn(async () => null) },
+    delegation: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: HELPER,
+        rootTaskId: "task-1",
+        workspacePath: HELPER_WORKSPACE,
+      })),
+    },
+    instanceIdentity: { findUnique: vi.fn(async () => null) },
     botBrief: { updateMany: vi.fn(async () => ({ count: 0 })) },
     runKnowledgeExposure: { createMany: vi.fn(async () => ({ count: 1 })) },
     space: {
@@ -292,49 +360,93 @@ function harness(scripted: boolean) {
     agentSecret: { findMany: vi.fn(async () => []) },
     agentSkill: { findMany: vi.fn(async () => []) },
     scratchpadItem: { findMany: vi.fn(async () => []) },
-    actionApprovalRule: { findMany: vi.fn(async (): Promise<ActionApprovalRule[]> => []) },
+    actionApprovalRule: { findMany: vi.fn(async (): Promise<ActionApprovalRule[]> => rules) },
     actionAutoReviewPreference: { findUnique: vi.fn(async () => ({ enabled: false })) },
     externalEffect,
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma)),
   };
   const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
+  const toolEvent = (call: ToolCall): AgentRuntimeEvent => ({
+    type: "tool",
+    name: call.name,
+    args: call.args,
+    executionId: call.executionId,
+    ...(call.helper ? { delegationId: HELPER } : {}),
+  });
+  // Each attempt's runtime admits its helpers again, as the parent call re-runs.
+  let admitted = new Set<string>();
+  const execute = async (request: AgentRunRequest, call: ToolCall) => {
+    if (call.helper && !admitted.has(call.helper.parent)) {
+      admitted.add(call.helper.parent);
+      await request.admitHelper!(call.helper.parent, "Builder", "Build the project");
+    }
+    const result = call.helper
+      ? await request.executeHelperTool!(HELPER, call.name, call.args, call.executionId)
+      : await request.executeTool!(call.name, call.args, call.executionId);
+    await request.onToolCompleted?.({
+      name: call.name,
+      executionId: call.executionId,
+      durationMs: 1,
+      result,
+    });
+  };
+  /** Like Pi: the tool event is queued and the tool starts beside the event stream. */
+  async function* besideStream(request: AgentRunRequest, batch: ToolCall[]) {
+    const queued: AgentRuntimeEvent[] = [];
+    let wake = () => {};
+    let closed = false;
+    const push = (event: AgentRuntimeEvent) => {
+      queued.push(event);
+      wake();
+    };
+    const work = (async () => {
+      push({ type: "progress", text: "Starting", activity: true });
+      for (const call of batch) {
+        push(toolEvent(call));
+        await execute(request, call);
+      }
+      push({ type: "done", text: "Done" });
+    })().finally(() => {
+      closed = true;
+      wake();
+    });
+    while (true) {
+      const next = queued.shift();
+      if (next) {
+        yield next;
+        continue;
+      }
+      if (closed) break;
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+    }
+    await work;
+  }
   const runtimeRun = vi.fn(async function* (
     request: AgentRunRequest,
   ): AsyncGenerator<AgentRuntimeEvent> {
     const batch = calls.slice();
-    const toolEvent = (call: ToolCall): AgentRuntimeEvent => ({
-      type: "tool",
-      name: call.name,
-      args: call.args,
-      executionId: call.executionId,
-    });
-    if (!scripted && concurrent) {
+    admitted = new Set();
+    if (mode === "beside") {
+      yield* besideStream(request, batch);
+      return;
+    }
+    if (mode === "concurrent") {
       for (const call of batch) yield toolEvent(call);
-      const results = await Promise.all(
-        batch.map((call) => request.executeTool!(call.name, call.args, call.executionId)),
-      );
-      for (const [index, call] of batch.entries()) {
-        await request.onToolCompleted?.({
-          name: call.name,
-          executionId: call.executionId,
-          durationMs: 1,
-          result: results[index],
-        });
-      }
+      await Promise.all(batch.map((call) => execute(request, call)));
       yield { type: "done", text: "Done" };
       return;
     }
     for (const call of batch) {
-      yield toolEvent(call);
-      if (!scripted) {
-        const result = await request.executeTool!(call.name, call.args, call.executionId);
-        await request.onToolCompleted?.({
-          name: call.name,
-          executionId: call.executionId,
-          durationMs: 1,
-          result,
-        });
+      // Some runtimes, such as the host bridge, report a call only after running it.
+      if (mode === "after") {
+        await execute(request, call);
+        yield toolEvent(call);
+        continue;
       }
+      yield toolEvent(call);
+      if (!scripted) await execute(request, call);
     }
     yield { type: "done", text: "Done" };
   });
@@ -349,9 +461,16 @@ function harness(scripted: boolean) {
     },
     sandbox: {
       describe: () => ({ capabilities: { graphical: false } }),
-      resolveCommandCwd: vi.fn(async () => "/workspace"),
+      resolveCommandCwd: vi.fn(async (_computer: ComputerRef, cwd: string | undefined) => {
+        resolvedCwds.push({ cwd });
+        return "/workspace";
+      }),
       environmentNote: vi.fn(async () => "Tools on this computer: gh 2.80.0 (signed in)."),
-      execute: async function* (): AsyncGenerator<ProcessEvent> {
+      execute: async function* (
+        _computer: ComputerRef,
+        spec: { cwd?: string },
+      ): AsyncGenerator<ProcessEvent> {
+        executions.push({ cwd: spec.cwd });
         await barrier;
         yield { type: "stdout", data: "ok" };
         yield { type: "exit", code: 0 };
@@ -367,16 +486,30 @@ function harness(scripted: boolean) {
     memoryProviders: { resolve: async () => null },
     events: {
       append: vi.fn(async (event: { type: string; runId?: string; payload?: unknown }) => {
+        if (slowProgress && event.type === "thread.progress")
+          await Promise.race([intentSeen, new Promise((resolve) => setTimeout(resolve, 100))]);
         if (!persist) return;
-        log.push({
+        const logged = {
           type: event.type,
           runId: event.runId,
           payload: event.payload ?? null,
           seq: seq++,
-        });
-        if (cutAfter && event.type === cutAfter) persist = false;
+        };
+        if (duplicateCommandEvent(log, logged)) return;
+        log.push(logged);
+        if (event.type === "command.intent") intentStored();
+        if (cut?.(logged)) {
+          // A killed worker stores nothing more; only effects it had completed survive.
+          persist = false;
+          survivingEffects = effects
+            .filter((effect) => effect.status === "completed")
+            .map((effect) => ({ ...effect }));
+        }
       }),
-      pauseRunForInput: vi.fn(async () => true),
+      pauseRunForInput: vi.fn(async (input: Record<string, unknown>) => {
+        pauses.push(input);
+        return true;
+      }),
       finalizeRun,
       notify: vi.fn(async () => undefined),
       claimSteering: vi.fn(async () => []),
@@ -402,16 +535,39 @@ function harness(scripted: boolean) {
         settled,
         new Promise<"wait">((resolve) => setTimeout(() => resolve("wait"), 20)),
       ]);
+      if (ready()) break;
       if (status === "failed") throw failure;
       if (status === "settled") throw new Error(`${label} finished before the call was in flight`);
       if (Date.now() - started > 8_000) throw new Error(`${label} timed out`);
     }
   }
 
+  async function finishKilled(pending: Promise<unknown>) {
+    releaseTools();
+    await pending;
+    effects.splice(0, effects.length, ...(survivingEffects ?? []));
+    survivingEffects = null;
+    persist = true;
+    cut = null;
+  }
+
   return {
     log,
     run,
+    effects,
+    executions,
+    resolvedCwds,
+    pauses,
     toolEvents,
+    requireApproval() {
+      rules = [{ effect: "require_approval", matchKind: "tool", matchValue: "shell", botId: null }];
+    },
+    slowProgress() {
+      slowProgress = true;
+      intentSeen = new Promise<void>((resolve) => {
+        intentStored = resolve;
+      });
+    },
     hold() {
       barrier = new Promise<void>((resolve) => {
         releaseTools = () => {
@@ -420,71 +576,55 @@ function harness(scripted: boolean) {
         };
       });
     },
-    async kill(next: ToolCall[], processId: string, timeOrigin: number, overlap: boolean) {
+    /** Kills a worker while its tools run and returns that worker's trace. */
+    async kill(next: ToolCall[], processId: string, timeOrigin: number) {
       calls = next;
-      concurrent = overlap;
       this.hold();
       const trace = startScoreboardTrace({ processId, timeOrigin, now: () => 1 });
       stopTrace = trace.stop;
       const pending = executor.continueRun(run.id, "worker-1");
       await waitUntil(
         "killed attempt",
-        () => {
-          const started = trace
-            .snapshot()
-            .points.filter((point) => point.boundary === "tool.started").length;
-          const called = toolEvents().filter((event) => event.type === "agent.tool.called").length;
-          return started >= next.length && called >= next.length;
-        },
+        () => executions.length >= next.length && log.some((e) => e.type === "command.started"),
         pending,
       );
       const killed = trace.snapshot();
+      cut = () => true;
       persist = false;
+      survivingEffects = effects
+        .filter((effect) => effect.status === "completed")
+        .map((effect) => ({ ...effect }));
       trace.stop();
       stopTrace = undefined;
-      releaseTools();
-      await pending;
-      persist = true;
+      await finishKilled(pending);
       return killed;
     },
-    async killAt(
-      next: ToolCall[],
-      eventType: "agent.tool.called" | "command.intent" | "command.started",
-    ) {
+    /** Kills a worker right after it stores the event `stop` selects. */
+    async killAt(next: ToolCall[], stop: (event: Logged) => boolean, holdTools = true) {
       calls = next;
-      concurrent = false;
-      this.hold();
-      cutAfter = eventType;
+      if (holdTools) this.hold();
+      cut = stop;
       const pending = executor.continueRun(run.id, "worker-1");
-      await waitUntil(
-        `kill after ${eventType}`,
-        () => !persist && log.some((event) => event.type === eventType),
-        pending,
-      );
-      releaseTools();
-      await pending;
-      // The dying process may have stored an effect result without a durable command finish.
-      // Drop that row so resume launches the command and records command.started.
-      effects.length = 0;
-      persist = true;
-      cutAfter = null;
+      await waitUntil("kill", () => !persist, pending);
+      await finishKilled(pending);
     },
-    async resume(next: ToolCall[], overlap = false) {
+    async resume(next: ToolCall[]) {
       calls = next;
-      concurrent = overlap;
       run.status = "queued";
       await executor.continueRun(run.id, "worker-1");
     },
   };
 }
 
-it("closes the killed call on resume and starts the next call fresh", async () => {
-  const h = harness(true);
+const at = (type: string, executionId?: string) => (event: Logged) =>
+  event.type === type && (executionId === undefined || executionIdOf(event) === executionId);
+
+it("links a resumed call and pairs the killed start with the resumed finish", async () => {
+  const h = harness("scripted");
   const killed = await h.kill(
     [{ name: "shell", args: ARGS_A, executionId: A }],
     "interrupted-worker",
     1_700_000_000_000,
-    false,
   );
   const recovered = startScoreboardTrace({
     processId: "recovered-worker",
@@ -493,194 +633,153 @@ it("closes the killed call on resume and starts the next call fresh", async () =
   });
   stopTrace = recovered.stop;
   await h.resume([{ name: "shell", args: ARGS_A, executionId: MINTED }]);
-  const afterResume = h.toolEvents();
-  expect(executionIds(afterResume, "agent.tool.called")).toEqual([A]);
-  expect(executionIds(afterResume, "agent.tool.completed")).toEqual([A]);
-  expect(openExecutionIds(afterResume)).toEqual([]);
-  expect(unfinishedToolCalls(afterResume)).toEqual([]);
-  expect(afterResume.find((event) => event.type === "agent.tool.called")?.payload).toMatchObject({
-    name: "shell",
-    executionId: A,
-    argumentDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
-  });
-
-  await h.resume([{ name: "shell", args: { command: "echo next" }, executionId: FRESH }]);
-  const afterNext = h.toolEvents();
-  expect(executionIds(afterNext, "agent.tool.called")).toEqual([A, FRESH]);
-  expect(executionIds(afterNext, "agent.tool.completed")).toEqual([A, FRESH]);
-  expect(openExecutionIds(afterNext)).toEqual([]);
-  const started = recovered
-    .snapshot()
-    .points.filter((point) => point.boundary === "tool.started")
-    .map((point) => point.operationId);
-  expect(started).toEqual([FRESH]);
-  expect(
-    recovered.snapshot().points.find((point) => point.boundary === "tool.finished"),
-  ).toMatchObject({ operationId: A, outcome: "success" });
+  const resumed = h.toolEvents();
+  // The runtime's id is kept; the link joins it to the call the killed worker left open.
+  expect(executionIds(resumed, "agent.tool.called")).toEqual([A, MINTED]);
+  expect(executionIds(resumed, "agent.tool.completed")).toEqual([MINTED]);
+  expect(links(h.log)).toEqual([{ from: A, to: MINTED }]);
+  expect(h.log.findIndex(at("agent.tool.resumed"))).toBeLessThan(
+    h.log.findIndex(at("command.intent", MINTED)),
+  );
+  const points = recovered.snapshot().points.filter((point) => point.boundary.startsWith("tool."));
+  expect(points).toEqual([
+    expect.objectContaining({ boundary: "tool.started", operationId: MINTED, requestId: A }),
+    expect.objectContaining({ boundary: "tool.finished", operationId: MINTED, requestId: A }),
+  ]);
   const paired = collectTraceEvidence([killed, recovered.snapshot()], {
     sessionId: "crash",
     pairId: null,
     requiredBoundaries: ["tool.started", "tool.finished"],
     pairAcrossProcesses: true,
   });
-  expect(
-    paired.derived[0]!.operations.find((operation) => operation.duration.reason === "wall-clock"),
-  ).toMatchObject({ outcome: "success" });
+  const operations = paired.derived[0]!.operations;
+  expect(operations.find((operation) => operation.attempt === 1)).toMatchObject({
+    outcome: "success",
+    duration: { reason: "wall-clock" },
+  });
+  expect(operations.every((operation) => !crashSpanUnmeasured(operation.duration.reason))).toBe(
+    true,
+  );
+  recovered.stop();
+  stopTrace = undefined;
+
+  await h.resume([{ name: "shell", args: { command: "echo next" }, executionId: FRESH }]);
+  expect(links(h.log)).toEqual([{ from: A, to: MINTED }]);
+  expect(executionIds(h.toolEvents(), "agent.tool.completed")).toEqual([MINTED, FRESH]);
+});
+
+it("leaves the killed start interrupted when the resumed call is a different call", async () => {
+  const h = harness("scripted");
+  const killed = await h.kill(
+    [{ name: "shell", args: ARGS_A, executionId: A }],
+    "interrupted-worker",
+    1_700_000_000_000,
+  );
+  const recovered = startScoreboardTrace({
+    processId: "recovered-worker",
+    timeOrigin: 1_700_000_002_000,
+    now: () => 1,
+  });
+  stopTrace = recovered.stop;
+  await h.resume([{ name: "shell", args: ARGS_B, executionId: MINTED }]);
+  expect(links(h.log)).toEqual([]);
+  const paired = collectTraceEvidence([killed, recovered.snapshot()], {
+    sessionId: "crash",
+    pairId: null,
+    requiredBoundaries: ["tool.started", "tool.finished"],
+    pairAcrossProcesses: true,
+  });
+  expect(paired.derived[0]!.operations.find((operation) => operation.attempt === 1)).toMatchObject({
+    outcome: "interrupted",
+    duration: { reason: "interrupted" },
+  });
+  // The unlinked card stays unknown, exactly as before links existed.
+  expect(projectedCommands(h.log).map((block) => [block.executionId, block.outcome])).toEqual([
+    [A, "unknown"],
+    [MINTED, "completed"],
+  ]);
   recovered.stop();
   stopTrace = undefined;
 });
 
-it("closes two open shell calls by arguments when the later call is recovered first", async () => {
-  const different = harness(false);
-  await different.kill(
+it("links open calls by arguments, each once, in call order", async () => {
+  const different = harness("concurrent");
+  await different.killAt(
     [
       { name: "shell", args: ARGS_A, executionId: A },
       { name: "shell", args: ARGS_B, executionId: B },
     ],
-    "interrupted-worker",
-    1_700_000_000_000,
-    true,
+    () => different.log.filter((event) => event.type === "command.started").length === 2,
   );
   await different.resume([
-    { name: "shell", args: ARGS_B, executionId: MINT_B },
-    { name: "shell", args: ARGS_A, executionId: MINT_A },
+    { name: "shell", args: ARGS_B, executionId: "run-resume:shell:mint-b" },
+    { name: "shell", args: ARGS_A, executionId: "run-resume:shell:mint-a" },
   ]);
-  const reversed = different.toolEvents();
-  expect(executionIds(reversed, "agent.tool.completed")).toEqual([B, A]);
-  expect(executionIds(reversed, "agent.tool.called")).toEqual([A, B]);
-  expect(openExecutionIds(reversed)).toEqual([]);
-});
+  expect(links(different.log)).toEqual([
+    { from: B, to: "run-resume:shell:mint-b" },
+    { from: A, to: "run-resume:shell:mint-a" },
+  ]);
 
-it("closes identical open shell calls in the order they were called", async () => {
-  const identical = harness(false);
+  const identical = harness("concurrent");
   const sameA = "run-resume:shell:same-a";
   const sameB = "run-resume:shell:same-b";
-  await identical.kill(
+  await identical.killAt(
     [
       { name: "shell", args: ARGS_SAME, executionId: sameA },
       { name: "shell", args: ARGS_SAME, executionId: sameB },
     ],
-    "interrupted-same",
-    1_700_000_000_000,
-    true,
+    () => identical.log.filter((event) => event.type === "command.started").length === 2,
   );
   await identical.resume([
-    { name: "shell", args: ARGS_SAME, executionId: "run-resume:shell:same-mint-b" },
-    { name: "shell", args: ARGS_SAME, executionId: "run-resume:shell:same-mint-a" },
+    { name: "shell", args: ARGS_SAME, executionId: "run-resume:shell:same-mint-1" },
+    { name: "shell", args: ARGS_SAME, executionId: "run-resume:shell:same-mint-2" },
+    { name: "shell", args: ARGS_SAME, executionId: "run-resume:shell:same-mint-3" },
   ]);
-  const ordered = identical.toolEvents();
-  expect(executionIds(ordered, "agent.tool.completed")).toEqual([sameA, sameB]);
-  expect(executionIds(ordered, "agent.tool.called")).toEqual([sameA, sameB]);
-  expect(openExecutionIds(ordered)).toEqual([]);
+  expect(links(identical.log)).toEqual([
+    { from: sameA, to: "run-resume:shell:same-mint-1" },
+    { from: sameB, to: "run-resume:shell:same-mint-2" },
+  ]);
 });
 
-function commandBlockOf(event: Logged | undefined): CommandBlock {
-  if (!event || typeof event.payload !== "object" || event.payload === null)
-    throw new Error("command block missing");
-  const block = (event.payload as { block?: CommandBlock }).block;
-  if (!block) throw new Error("command block missing");
-  return block;
-}
-
-function commandIdentity(events: readonly Logged[]) {
-  return events
-    .filter((event) => event.type.startsWith("command."))
-    .map((event) => {
-      const block = (event.payload as { block?: { executionId?: string; commandId?: string } })
-        .block;
-      return {
-        type: event.type,
-        executionId: block?.executionId,
-        commandId: block?.commandId,
-      };
-    });
-}
-
-function projectedCommands(events: readonly Logged[]) {
-  return projectCommandBlocks(
-    events.map((event) => ({
-      id: String(event.seq),
-      seq: event.seq,
-      type: event.type,
-      runId: event.runId ?? RUN,
-      threadId: "thread-1",
-      createdAt: new Date("2026-09-24T12:00:00Z"),
-      payload: event.payload,
-    })),
-  );
-}
-
-async function resumeKilledShell(cut: "command.intent" | "agent.tool.called") {
-  const h = harness(true);
-  await h.killAt([{ name: "shell", args: ARGS_A, executionId: A }], cut);
-  await h.resume([{ name: "shell", args: ARGS_A, executionId: MINTED }]);
-  const commands = commandIdentity(h.log);
-  const tools = h.toolEvents();
-  const blocks = projectedCommands(h.log);
-  return { commands, tools, blocks };
-}
-
-function expectOneCommand(
-  commands: ReturnType<typeof commandIdentity>,
-  tools: Logged[],
-  blocks: ReturnType<typeof projectedCommands>,
-) {
-  expect(commands.length).toBeGreaterThan(0);
-  expect(commands.every((event) => event.executionId === A)).toBe(true);
-  expect(commands.filter((event) => event.type === "command.intent")).toHaveLength(1);
-  expect(new Set(commands.map((event) => event.commandId)).size).toBe(1);
-  expect(executionIds(tools, "agent.tool.called")).toEqual([A]);
-  expect(executionIds(tools, "agent.tool.completed")).toEqual([A]);
-  expect(blocks).toHaveLength(1);
-  expect(blocks[0]).toMatchObject({
-    executionId: A,
-    commandId: commands[0]?.commandId,
-    outcome: "completed",
-    stdout: "ok",
-  });
+it("returns a finished deterministic id's result and runs the open one once, with no link", async () => {
+  const h = harness("scripted");
+  const first = `${RUN}:shell:0`;
+  const second = `${RUN}:shell:1`;
+  const script = [
+    { name: "shell", args: ARGS_SAME, executionId: first },
+    { name: "shell", args: ARGS_SAME, executionId: second },
+  ];
+  await h.killAt(script, at("command.intent", second), false);
+  expect(executionIds(h.toolEvents(), "agent.tool.completed")).toEqual([first]);
+  const ranBefore = h.executions.length;
+  await h.resume(script);
+  expect(links(h.log)).toEqual([]);
+  // Only the open call runs again. The finished one returns its recorded result.
+  expect(h.executions.length - ranBefore).toBe(1);
+  expect(executionIds(h.log, "command.started").filter((id) => id === first)).toHaveLength(1);
+  expect(executionIds(h.log, "command.started").filter((id) => id === second)).toHaveLength(1);
   expect(
-    blocks.some((block) => block.rerunDisabledReason === "The original command was not recorded."),
-  ).toBe(false);
-  expect(blocks.some((block) => block.commandId.startsWith("legacy:"))).toBe(false);
-}
-
-it("completes a command killed after intent on the original id", async () => {
-  const resumed = await resumeKilledShell("command.intent");
-  expectOneCommand(resumed.commands, resumed.tools, resumed.blocks);
-  expect(resumed.commands.map((event) => event.type)).toEqual([
-    "command.intent",
-    "command.started",
-    "command.finished",
+    executionIds(h.toolEvents(), "agent.tool.completed").filter((id) => id === second),
+  ).toEqual([second]);
+  const blocks = projectedCommands(h.log);
+  expect(blocks.map((block) => [block.executionId, block.outcome, block.stdout])).toEqual([
+    [first, "completed", "ok"],
+    [second, "completed", "ok"],
   ]);
 });
 
-it("records a command killed before intent on the original id", async () => {
-  const resumed = await resumeKilledShell("agent.tool.called");
-  expectOneCommand(resumed.commands, resumed.tools, resumed.blocks);
-  expect(resumed.commands.map((event) => event.type)).toEqual([
-    "command.intent",
-    "command.started",
-    "command.finished",
-  ]);
-});
-
-it("keeps a command killed after it started live on the recovering lease", async () => {
-  const h = harness(true);
-  await h.killAt([{ name: "shell", args: ARGS_A, executionId: A }], "command.started");
-  const killedBlock = commandBlockOf(
-    h.log.filter((event) => event.type === "command.started").at(-1),
-  );
-  const preCrashStart = killedBlock.startedAt;
-  expect(preCrashStart).toEqual(expect.any(String));
-  if (!preCrashStart) throw new Error("pre-crash start missing");
+it("finishes a card killed after it started on the same id under the recovering lease", async () => {
+  const h = harness("scripted");
+  await h.killAt([{ name: "shell", args: ARGS_A, executionId: A }], at("command.started"));
+  const killedBlock = commandBlockOf(h.log.filter(at("command.started")).at(-1));
+  const preCrashStart = killedBlock.startedAt!;
   expect(killedBlock.attemptId).toBe("attempt-1");
   await new Promise((resolve) => setTimeout(resolve, 40));
   const gapMs = Date.now() - Date.parse(preCrashStart);
-  expect(gapMs).toBeGreaterThanOrEqual(40);
-  await h.resume([{ name: "shell", args: ARGS_A, executionId: MINTED }]);
-  const running = commandBlockOf(h.log.filter((event) => event.type === "command.started").at(-1));
+  await h.resume([{ name: "shell", args: ARGS_A, executionId: A }]);
+  expect(links(h.log)).toEqual([]);
+  const running = commandBlockOf(h.log.filter(at("command.started")).at(-1));
   const fence = h.run.leaseFence;
-  expect(fence).toBe(2);
   expect(running).toMatchObject({
     outcome: "running",
     attemptId: `attempt-${fence}`,
@@ -696,15 +795,108 @@ it("keeps a command killed after it started live on the recovering lease", async
       { id: `attempt-${fence}`, fence },
     ],
   });
-  expect(live).toBe(true);
   expect(settleCommandBlock(running, live).outcome).toBe("running");
-  const finished = projectedCommands(h.log)[0];
-  expect(finished).toMatchObject({
-    outcome: "completed",
-    startedAt: preCrashStart,
-    executionId: A,
-    stdout: "ok",
-  });
+  const [finished, ...rest] = projectedCommands(h.log);
+  expect(rest).toEqual([]);
+  expect(finished).toMatchObject({ outcome: "completed", startedAt: preCrashStart, stdout: "ok" });
   expect(finished?.durationMs).toBeGreaterThanOrEqual(gapMs);
-  expect(h.log.filter((event) => event.type === "command.intent")).toHaveLength(1);
+  expect(h.log.filter(at("command.intent"))).toHaveLength(1);
+});
+
+it("stores a production call before its command card and resumes a killed card as one card", async () => {
+  const h = harness("beside");
+  h.slowProgress();
+  await h.killAt([{ name: "shell", args: ARGS_A, executionId: A }], at("command.intent"));
+  // No kill point can leave a card whose call was never stored.
+  expect(h.log.findIndex(at("agent.tool.called", A))).toBeGreaterThanOrEqual(0);
+  expect(h.log.findIndex(at("agent.tool.called", A))).toBeLessThan(
+    h.log.findIndex(at("command.intent", A)),
+  );
+  const killedCard = commandBlockOf(h.log.find(at("command.intent", A)));
+  await h.resume([{ name: "shell", args: ARGS_A, executionId: MINTED }]);
+  expect(links(h.log)).toEqual([{ from: A, to: MINTED }]);
+  const blocks = projectedCommands(h.log);
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    executionId: MINTED,
+    outcome: "completed",
+    stdout: "ok",
+    startedAt: killedCard.startedAt,
+  });
+  const resumedStart = commandBlockOf(h.log.find(at("command.started", MINTED))).startedAt!;
+  expect(blocks[0]!.durationMs).toBeGreaterThanOrEqual(
+    Date.parse(resumedStart) - Date.parse(killedCard.startedAt!),
+  );
+});
+
+it("stores the call before its card when the runtime reports the call only after running it", async () => {
+  const h = harness("after");
+  await h.resume([{ name: "shell", args: ARGS_A, executionId: A }]);
+  expect(h.log.findIndex(at("agent.tool.called", A))).toBeGreaterThanOrEqual(0);
+  expect(h.log.findIndex(at("agent.tool.called", A))).toBeLessThan(
+    h.log.findIndex(at("command.intent", A)),
+  );
+  expect(h.log.filter(at("agent.tool.called", A))).toHaveLength(1);
+  expect(projectedCommands(h.log).map((block) => [block.executionId, block.outcome])).toEqual([
+    [A, "completed"],
+  ]);
+});
+
+it("resumes a production call killed before its card as one card", async () => {
+  const h = harness("beside");
+  await h.killAt([{ name: "shell", args: ARGS_A, executionId: A }], at("agent.tool.called"));
+  expect(h.log.some(at("command.intent"))).toBe(false);
+  await h.resume([{ name: "shell", args: ARGS_A, executionId: MINTED }]);
+  expect(links(h.log)).toEqual([{ from: A, to: MINTED }]);
+  const blocks = projectedCommands(h.log);
+  expect(blocks.map((block) => [block.executionId, block.outcome])).toEqual([
+    [MINTED, "completed"],
+  ]);
+});
+
+it("keeps a resumed helper command in the helper workspace, checks and approval", async () => {
+  const helperCall = (executionId: string): ToolCall => ({
+    name: "shell",
+    args: { command: "make build" },
+    executionId,
+    helper: { parent: `${RUN}:run_subagent:0` },
+  });
+  const helperCwd = taskWorkspacePath(HELPER_WORKSPACE, ".");
+
+  const approval = harness("production");
+  await approval.kill([helperCall(A)], "interrupted-worker", 1_700_000_000_000);
+  expect(approval.executions.at(-1)?.cwd).toBe(helperCwd);
+  expect(approval.log.find(at("agent.tool.called", A))?.payload).toMatchObject({
+    delegationId: HELPER,
+  });
+  approval.requireApproval();
+  vi.mocked(checkDelegationExecution).mockClear();
+  const cwdsBefore = approval.resolvedCwds.length;
+  await approval.resume([helperCall(B)]);
+  expect(links(approval.log)).toEqual([{ from: A, to: B }]);
+  expect(approval.resolvedCwds.slice(cwdsBefore)).toEqual([{ cwd: helperCwd }]);
+  // The helper check runs for the resumed id; the run's own ceiling check has no helper.
+  expect(
+    vi
+      .mocked(checkDelegationExecution)
+      .mock.calls.filter((call) => call[2] === "shell")
+      .map((call) => call[4]),
+  ).toContain(HELPER);
+  expect(approval.pauses).toHaveLength(1);
+  const pause = approval.pauses[0] as {
+    helperDelegationId?: string;
+    blocks: { actions?: { id: string }[] }[];
+  };
+  expect(pause.helperDelegationId).toBe(HELPER);
+  expect(pause.blocks[0]!.actions?.map((action) => action.id)).not.toContain("always");
+
+  const ran = harness("production");
+  await ran.kill([helperCall(A)], "interrupted-worker", 1_700_000_000_000);
+  const executionsBefore = ran.executions.length;
+  await ran.resume([helperCall(B)]);
+  expect(links(ran.log)).toEqual([{ from: A, to: B }]);
+  expect(ran.executions.slice(executionsBefore)).toEqual([{ cwd: helperCwd }]);
+  expect(projectedCommands(ran.log).map((block) => [block.executionId, block.outcome])).toEqual([
+    [B, "completed"],
+  ]);
 });

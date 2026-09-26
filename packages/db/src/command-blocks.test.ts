@@ -3,6 +3,7 @@ import type {
   ProductEvent as FixtureProductEvent,
   ThreadMessage,
 } from "@ardurbot/contracts";
+import { resumedCommandMessageId } from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
 import type { Prisma, PrismaClient } from "./client.js";
 import { addHistoricalCommandBlocks, hydrateCommandMessages } from "./command-blocks.js";
@@ -44,6 +45,61 @@ describe("command event persistence", () => {
     expect(events).toHaveLength(2);
     expect(messages).toHaveLength(1);
     expect(messages[0]?.blocks).toEqual([{ kind: "command", command: commandBlock() }]);
+  });
+  it("lets a resumed call finish the card row its killed call published", async () => {
+    const store = eventStore();
+    const killed = { commandId: "card-a", executionId: "call-a", attemptId: "attempt-1" };
+    const resumed = { commandId: "card-b", executionId: "call-b", attemptId: "attempt-2" };
+    await store.append("command.intent", {
+      block: commandBlock({ ...killed, ...open("waiting", "2026-09-23T12:00:00.000Z") }),
+    });
+    await store.append("command.started", {
+      block: commandBlock({ ...killed, ...open("running", "2026-09-23T12:00:01.000Z") }),
+    });
+    await store.append("agent.tool.resumed", { from: "call-a", to: "call-b" });
+    await store.append("command.intent", {
+      block: commandBlock({ ...resumed, ...open("waiting", "2026-09-23T12:00:30.000Z") }),
+    });
+    await store.append("command.started", {
+      block: commandBlock({ ...resumed, ...open("running", "2026-09-23T12:00:31.000Z") }),
+    });
+    const finished = commandBlock({
+      ...resumed,
+      startedAt: "2026-09-23T12:00:31.000Z",
+      durationMs: 2_000,
+    });
+    await store.append("command.finished", { block: finished });
+    expect([...store.rows.keys()]).toEqual([resumedCommandMessageId("run-1", "call-b")]);
+    expect([...store.rows.values()][0]).toMatchObject({
+      seq: 1,
+      blocks: [
+        {
+          kind: "command",
+          command: { ...finished, startedAt: "2026-09-23T12:00:01.000Z", durationMs: 32_000 },
+        },
+      ],
+    });
+  });
+  it("records a recovering attempt's start for the same card once and keeps the first finish", async () => {
+    const store = eventStore();
+    const card = { commandId: "card-a", executionId: "call-a" };
+    const started = (attemptId: string) => ({
+      block: commandBlock({ ...card, attemptId, ...open("running", "2026-09-23T12:00:01.000Z") }),
+    });
+    await store.append("command.started", started("attempt-1"));
+    await store.append("command.started", started("attempt-2"));
+    await store.append("command.started", started("attempt-2"));
+    const finished = commandBlock({ ...card, attemptId: "attempt-2" });
+    await store.append("command.finished", { block: finished });
+    await store.append("command.finished", { block: { ...finished, stdout: "late" } });
+    expect(store.events.map((event) => event.type)).toEqual([
+      "command.started",
+      "command.started",
+      "command.finished",
+    ]);
+    expect([...store.rows.values()]).toEqual([
+      expect.objectContaining({ blocks: [{ kind: "command", command: finished }] }),
+    ]);
   });
   it("projects expired or superseded attempts as unknown on reload", async () => {
     const message: ThreadMessage = {
@@ -113,6 +169,76 @@ describe("command event persistence", () => {
     });
   });
 });
+
+function open(outcome: "waiting" | "running", startedAt: string): Partial<FixtureCommandBlock> {
+  return { outcome, startedAt, durationMs: null, exitCode: null, stdout: null, stderr: null };
+}
+
+/** Enough of a transaction to append events and materialize their command rows. */
+function eventStore() {
+  const events: { type: string; payload: unknown; seq: number }[] = [];
+  const rows = new Map<string, Record<string, unknown>>();
+  type PathFilter = { payload: { path: string[]; equals: unknown } };
+  const at = (value: unknown, path: string[]) =>
+    path.reduce<unknown>((item, key) => (item as Record<string, unknown> | null)?.[key], value);
+  const matches = (
+    event: { type: string; payload: unknown },
+    where: { type: string; AND?: PathFilter[]; payload?: PathFilter["payload"] },
+  ) =>
+    event.type === where.type &&
+    [...(where.AND ?? []), ...(where.payload ? [{ payload: where.payload }] : [])].every(
+      (filter) => at(event.payload, filter.payload.path) === filter.payload.equals,
+    );
+  let messageSeq = 0;
+  const tx = {
+    thread: {
+      update: vi.fn(async () => ({
+        nextEventSeq: events.length + 1,
+        nextMessageSeq: ++messageSeq,
+      })),
+    },
+    run: { findUnique: vi.fn(async () => ({ status: "running" })) },
+    event: {
+      findFirst: vi.fn(
+        async ({ where }: { where: Parameters<typeof matches>[1] }) =>
+          [...events].reverse().find((event) => matches(event, where)) ?? null,
+      ),
+      create: vi.fn(async ({ data }: { data: { type: string; payload: unknown } }) => {
+        const event = { ...data, id: `event-${events.length}`, seq: events.length };
+        events.push(event);
+        return event;
+      }),
+    },
+    message: {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => rows.get(where.id) ?? null),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        rows.set(data.id as string, data);
+        return data;
+      }),
+      update: vi.fn(
+        async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+          const row = { ...rows.get(where.id)!, ...data };
+          rows.delete(where.id);
+          rows.set(row.id as string, row);
+          return row;
+        },
+      ),
+    },
+  } as unknown as Prisma.TransactionClient;
+  return {
+    events,
+    rows,
+    append: (type: FixtureProductEvent["type"], payload: Record<string, unknown>) =>
+      appendEventInTransaction(tx, {
+        spaceId: "space-1",
+        threadId: "thread-1",
+        botId: "bot-1",
+        runId: "run-1",
+        type,
+        payload,
+      }),
+  };
+}
 
 function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureCommandBlock {
   return {

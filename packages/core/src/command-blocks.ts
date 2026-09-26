@@ -4,6 +4,7 @@ import {
   COMMAND_OUTPUT_LIMIT,
   COMMAND_TRUNCATED,
   CommandEventPayloadSchema,
+  ToolResumedPayloadSchema,
 } from "@ardurbot/contracts";
 
 export type { CommandBlock } from "@ardurbot/contracts";
@@ -22,6 +23,11 @@ export type CommandProjectionEvent = {
 
 export function isCommandEvent(type: string): boolean {
   return type === "command.intent" || type === "command.started" || type === "command.finished";
+}
+
+/** Events that change a command card, including a resumed call taking over an earlier card. */
+export function isCommandCardEvent(type: string): boolean {
+  return isCommandEvent(type) || type === "agent.tool.resumed";
 }
 
 export function settleCommandBlock(block: CommandBlock, live = false): CommandBlock {
@@ -55,6 +61,72 @@ export function commandRecordingIsLive(
   );
 }
 
+/** Row id of a card that a resumed call `executionId` continues. */
+export function resumedCommandMessageId(runId: string, executionId: string) {
+  return `command:resumed:${runId}:${executionId}`;
+}
+
+/**
+ * One card for a call that a resumed call repeated: the later card's output and outcome,
+ * timed from the earlier card's start.
+ */
+export function mergeResumedCommand(earlier: CommandBlock, later: CommandBlock): CommandBlock {
+  const from = earlier.startedAt ? Date.parse(earlier.startedAt) : Number.NaN;
+  const start = later.startedAt ? Date.parse(later.startedAt) : Number.NaN;
+  if (!Number.isFinite(from) || (Number.isFinite(start) && start <= from)) return later;
+  return {
+    ...later,
+    startedAt: earlier.startedAt,
+    durationMs:
+      later.durationMs === null || !Number.isFinite(start)
+        ? later.durationMs
+        : start + later.durationMs - from,
+  };
+}
+
+/**
+ * Cards joined by `agent.tool.resumed` become the latest recorded card, timed from the first.
+ * A call with no link keeps its own card.
+ */
+function joinResumedCommands(
+  cards: readonly CommandBlock[],
+  previous: ReadonlyMap<string, string>,
+): CommandBlock[] {
+  if (!previous.size) return [...cards];
+  const linked = new Set([...previous.keys(), ...previous.values()]);
+  const trace = (key: string) => {
+    const seen = new Set<string>();
+    let root = key;
+    while (previous.has(root) && !seen.has(root)) {
+      seen.add(root);
+      root = previous.get(root)!;
+    }
+    return { root, depth: seen.size };
+  };
+  const groups = new Map<string, { card: CommandBlock; depth: number }[]>();
+  for (const card of cards) {
+    const key = `${card.runId}:${card.executionId}`;
+    if (!linked.has(key)) continue;
+    const { root, depth } = trace(key);
+    groups.set(root, [...(groups.get(root) ?? []), { card, depth }]);
+  }
+  const replaced = new Map<CommandBlock, CommandBlock | null>();
+  for (const group of groups.values()) {
+    const recorded = group.filter(({ card }) => !card.commandId.startsWith("legacy:"));
+    const pool = recorded.length ? recorded : group;
+    const target = pool.reduce((latest, item) => (item.depth >= latest.depth ? item : latest));
+    let merged = target.card;
+    for (const { card } of recorded)
+      if (card !== target.card) merged = mergeResumedCommand(card, merged);
+    for (const { card } of group) replaced.set(card, card === target.card ? merged : null);
+  }
+  return cards.flatMap((card) => {
+    if (!replaced.has(card)) return [card];
+    const next = replaced.get(card);
+    return next ? [next] : [];
+  });
+}
+
 /** Ordered replacement events make redelivery idempotent, including output. */
 export function projectCommandBlocks(
   events: readonly CommandProjectionEvent[],
@@ -64,12 +136,20 @@ export function projectCommandBlocks(
   const legacy = new Map<string, CommandBlock>();
   const finishedRuns = new Set<string>();
   const recordedExecutions = new Set<string>();
+  /** Resumed call to the call it repeats, both as `runId:executionId`. */
+  const previous = new Map<string, string>();
   const seen = new Set<string>();
   for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
     if (seen.has(event.id)) continue;
     seen.add(event.id);
     if (/^run\.(completed|failed|cancelled)$/.test(event.type) && event.runId) {
       finishedRuns.add(event.runId);
+    }
+    if (event.type === "agent.tool.resumed") {
+      const link = ToolResumedPayloadSchema.safeParse(event.payload);
+      if (link.success && event.runId)
+        previous.set(`${event.runId}:${link.data.to}`, `${event.runId}:${link.data.from}`);
+      continue;
     }
     if (isCommandEvent(event.type)) {
       const parsed = CommandEventPayloadSchema.safeParse(event.payload);
@@ -106,10 +186,13 @@ export function projectCommandBlocks(
       rerunDisabledReason: "The original command was not recorded.",
     });
   }
-  return [
-    ...blocks.values(),
-    ...[...legacy].filter(([key]) => !recordedExecutions.has(key)).map(([, block]) => block),
-  ].map((block) =>
+  return joinResumedCommands(
+    [
+      ...blocks.values(),
+      ...[...legacy].filter(([key]) => !recordedExecutions.has(key)).map(([, block]) => block),
+    ],
+    previous,
+  ).map((block) =>
     settleCommandBlock(block, liveRunIds.has(block.runId) && !finishedRuns.has(block.runId)),
   );
 }
@@ -132,11 +215,35 @@ export function reduceCommandMessages<
           },
     );
   }
+  if (event.type === "agent.tool.resumed") {
+    const link = ToolResumedPayloadSchema.safeParse(event.payload);
+    if (!link.success || !event.runId) return messages;
+    const from = resumedCommandMessageId(event.runId, link.data.from);
+    const id = resumedCommandMessageId(event.runId, link.data.to);
+    // The card the killed call published becomes the card its resumed call finishes.
+    return messages.map((message) =>
+      message.id === from ||
+      message.blocks.some(
+        (block) =>
+          block.kind === "command" &&
+          block.command.runId === event.runId &&
+          block.command.executionId === link.data.from,
+      )
+        ? { ...message, id }
+        : message,
+    );
+  }
   if (!isCommandEvent(event.type)) return messages;
-  const [block] = projectCommandBlocks([event], new Set(event.runId ? [event.runId] : []));
-  if (!block) return messages;
-  const id = `command:${block.commandId}`;
-  const previous = messages.find((message) => message.id === id);
+  const [projected] = projectCommandBlocks([event], new Set(event.runId ? [event.runId] : []));
+  if (!projected) return messages;
+  const resumed = resumedCommandMessageId(projected.runId, projected.executionId);
+  const previous =
+    messages.find((message) => message.id === `command:${projected.commandId}`) ??
+    messages.find((message) => message.id === resumed);
+  const earlier = previous?.id === resumed ? previous.blocks[0] : undefined;
+  const block =
+    earlier?.kind === "command" ? mergeResumedCommand(earlier.command, projected) : projected;
+  const id = previous?.id ?? `command:${block.commandId}`;
   const next: ThreadMessage = {
     id,
     threadId: event.threadId,

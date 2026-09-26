@@ -1,4 +1,5 @@
 import type { TraceBatch, TracePoint } from "@ardurbot/contracts";
+import { DEFAULT_CLOCK_UNCERTAINTY_MS } from "@ardurbot/contracts";
 import { nextFence } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import { createTraceBuffer } from "../../../adapters/src/scoreboard-trace.js";
@@ -143,7 +144,7 @@ describe("trace evidence", () => {
   it("measures a cross-process crash span from wall time, never the process-local clocks", () => {
     const attempt = 7;
     const killedOrigin = 1_700_000_000_000;
-    const recoveredOrigin = 1_700_000_005_000;
+    const recoveredOrigin = 1_700_000_006_000;
     const startedAt = 4000;
     const finishedAt = 10;
     const wall = recoveredOrigin + finishedAt - (killedOrigin + startedAt);
@@ -196,8 +197,8 @@ describe("trace evidence", () => {
     expect(forward.complete).toBe(true);
     expect(forward.span).toEqual({
       value: wall,
-      lowerMs: wall - 1000,
-      upperMs: wall + 1000,
+      lowerMs: wall - 2000,
+      upperMs: wall + 2000,
       reason: "wall-clock",
     });
     expect(forward.span.reason).not.toBe("reversed-boundaries");
@@ -521,8 +522,8 @@ describe("trace evidence", () => {
     const forward = spanOf({ killed: killedOrigin, recovered: recoveredOrigin });
     expect(forward.reason).toBe("wall-clock");
     expect(forward.value).toBe(wall);
-    expect(forward.lowerMs).toBe(wall - 1000);
-    expect(forward.upperMs).toBe(wall + 1000);
+    expect(forward.lowerMs).toBe(wall - 2000);
+    expect(forward.upperMs).toBe(wall + 2000);
     const widened = spanOf(
       { killed: killedOrigin, recovered: recoveredOrigin },
       { killed: 40, recovered: 60 },
@@ -775,6 +776,88 @@ describe("trace evidence", () => {
       upperMs: 400 + 80,
       reason: "wall-clock",
     });
+  });
+
+  it("widens by each side's recorded uncertainty or the default, so less data never narrows it", () => {
+    const attempt = 4;
+    const origin = 1_700_000_000_000;
+    const span = (wallMs: number, killed?: number, recovered?: number) => {
+      const before = createTraceBuffer({ processId: "interrupted-worker", now: () => 1 });
+      const after = createTraceBuffer({ processId: "recovered-worker", now: () => 1 });
+      before.record("run-a", "tool.started", { operationId: "tool-1", attempt }, 0);
+      after.record(
+        "run-a",
+        "tool.finished",
+        { operationId: "tool-1", attempt: nextFence(attempt), outcome: "success" },
+        0,
+      );
+      const stamp = (batch: TraceBatch, timeOrigin: number, uncertainty?: number) => {
+        batch.timeOrigin = timeOrigin;
+        if (uncertainty === undefined) delete batch.clockUncertaintyMs;
+        else batch.clockUncertaintyMs = uncertainty;
+        return batch;
+      };
+      return collectTraceEvidence(
+        [
+          stamp(before.snapshot(), origin, killed),
+          stamp(after.snapshot(), origin + wallMs, recovered),
+        ],
+        {
+          sessionId: "crash",
+          pairId: null,
+          requiredBoundaries: ["tool.started", "tool.finished"],
+          pairAcrossProcesses: true,
+        },
+      ).derived[0]!.operations[0]!.duration;
+    };
+    const widening = (duration: ReturnType<typeof span>) =>
+      duration.value === null ? null : duration.value - duration.lowerMs!;
+    expect(widening(span(10_000))).toBe(DEFAULT_CLOCK_UNCERTAINTY_MS * 2);
+    expect(widening(span(10_000, 600))).toBe(600 + DEFAULT_CLOCK_UNCERTAINTY_MS);
+    expect(widening(span(10_000, undefined, 600))).toBe(600 + DEFAULT_CLOCK_UNCERTAINTY_MS);
+    expect(widening(span(10_000, 600, 600))).toBe(1_200);
+    // A 1.5 s span is measured only when both sides recorded enough certainty.
+    expect(span(1_500).reason).toBe("clock-uncertain");
+    expect(span(1_500, 600).reason).toBe("clock-uncertain");
+    expect(span(1_500, 100, 100).reason).toBe("wall-clock");
+  });
+
+  it("pairs a killed tool start with the finish of the call that resumed it on the next fence", () => {
+    const attempt = 2;
+    const origin = 1_700_000_000_000;
+    const pair = (finish: { operationId: string; requestId?: string; attempt: number }) => {
+      const before = createTraceBuffer({
+        processId: "interrupted-worker",
+        now: () => 1,
+        timeOrigin: origin,
+        clockUncertaintyMs: 5,
+      });
+      const after = createTraceBuffer({
+        processId: "recovered-worker",
+        now: () => 1,
+        timeOrigin: origin + 3_000,
+        clockUncertaintyMs: 5,
+      });
+      before.record("run-a", "tool.started", { operationId: "call-a", attempt }, 0);
+      after.record("run-a", "tool.started", { ...finish }, 0);
+      after.record("run-a", "tool.finished", { ...finish, outcome: "success" }, 10);
+      return collectTraceEvidence([before.snapshot(), after.snapshot()], {
+        sessionId: "crash",
+        pairId: null,
+        requiredBoundaries: ["tool.started", "tool.finished"],
+        pairAcrossProcesses: true,
+      }).derived[0]!.operations.find((operation) => operation.attempt === attempt)!;
+    };
+    expect(
+      pair({ operationId: "call-b", requestId: "call-a", attempt: nextFence(attempt) }),
+    ).toMatchObject({ outcome: "success", duration: { value: 3_010, reason: "wall-clock" } });
+    expect(pair({ operationId: "call-b", attempt: nextFence(attempt) })).toMatchObject({
+      outcome: "interrupted",
+      duration: { reason: "interrupted" },
+    });
+    expect(
+      pair({ operationId: "call-b", requestId: "call-a", attempt: nextFence(nextFence(attempt)) }),
+    ).toMatchObject({ outcome: "interrupted", duration: { reason: "interrupted" } });
   });
 });
 

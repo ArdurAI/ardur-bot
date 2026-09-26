@@ -142,15 +142,19 @@ stored for that trace. The fault worker stores the list its runtime can emit. A 
 never emits `provider.*` or `text.published`, so those boundaries are not required for a scripted
 crash; a Pi runtime fixture uses the full local list. An empty boundary list is never substituted.
 Crash collection pairs a `provider.started` or `tool.started` on the killed process with a finish
-on the recovering process that has the same operation id and the next lease fence. A finish on any
-other fence does not pair and does not make the crash complete. Each batch carries that process's
+on the recovering process that has the same operation id and the next lease fence. A tool call the
+runtime minted again under a new id pairs through its link: the executor records
+`agent.tool.resumed { from, to }` before it runs the new call, and that call's trace points carry the
+killed call's id as `requestId`. Runtime ids are never rewritten. A new call without a link does not
+pair, so the killed start stays `interrupted`. A finish on any other fence does not pair and does
+not make the crash complete. Each batch carries that process's
 `timeOrigin` and `clockUncertaintyMs`. The buffer measures the uncertainty once, from a wall-clock
 versus monotonic cross-check, or records the documented default of one second when that check
 cannot be made. A cross-process span is a wall-clock interval (`reason: "wall-clock"`) only when
 the widened lower bound stays at or above zero: the point estimate is the difference of wall times
-(`timeOrigin + at`), and the bounds widen by the sum of the two batches' recorded
-`clockUncertaintyMs`, or by one second when neither batch recorded a clock uncertainty. It is never
-an exact span. A lower bound below zero is `clock-uncertain`, not `wall-clock`. A batch without
+(`timeOrigin + at`), and the bounds widen by the sum of both sides: each side contributes its
+batch's recorded `clockUncertaintyMs`, or one second when its batch recorded none. Less recorded
+data therefore never narrows the interval. It is never an exact span. A lower bound below zero is `clock-uncertain`, not `wall-clock`. A batch without
 `timeOrigin` leaves the span `clock-not-calibrated`. Wall time that runs backwards is `clock-skew`.
 None of those cases subtract the process-local clocks, and none is `reversed-boundaries`. A start
 with no finish on the next fence is `interrupted`. An interrupted start, an uncalibrated clock,
@@ -167,7 +171,8 @@ experiment variants remain incomplete until their full acceptance closes.
 
 Trace collection reuses W0-4 and preserves unknown/unobserved boundaries. Cross-process timing
 is not combined without a shared clock. Crash spans use each batch's `timeOrigin` as that shared
-wall-clock origin and publish an interval, widened by recorded clock uncertainty or by one second.
+wall-clock origin and publish an interval, widened on each side by its recorded clock uncertainty
+or by one second.
 An interval whose lower bound is below zero is unmeasured.
 Fixture counters do not become provider usage, and hashes do not become
 live cache hits. No priced cost is emitted

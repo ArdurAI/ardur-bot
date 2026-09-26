@@ -42,6 +42,7 @@ import {
   RoutingRuleSchema,
   RuntimePinError,
   runtimePinProblem,
+  ToolResumedPayloadSchema,
 } from "@ardurbot/contracts";
 import { BoardError } from "@ardurbot/contracts/board";
 import {
@@ -393,124 +394,59 @@ import {
 import { createWebProvider } from "./web-provider-factory.js";
 import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
 
-export interface InFlightTool {
-  name: string;
-  executionId: string;
-  /** sha256 of the canonical arguments. Calls without a digest cannot be claimed. */
-  argumentDigest: string;
-}
-
 /** Stable identity of a tool's arguments. Key order does not change the digest. */
 export function toolArgumentDigest(args: Record<string, unknown>): string {
   return createHash("sha256").update(stableJsonValue(args)).digest("hex");
 }
 
-/**
- * Removes the earliest open call with this name and argument digest.
- * Identical calls are claimed in the order they were recorded.
- */
-export function takeUnfinishedTool(
-  unfinished: InFlightTool[],
-  name: string,
-  argumentDigest: string,
-): InFlightTool | undefined {
-  const index = unfinished.findIndex(
-    (tool) => tool.name === name && tool.argumentDigest === argumentDigest,
-  );
-  if (index < 0) return undefined;
-  return unfinished.splice(index, 1)[0];
-}
-
-/**
- * Records a tool the executor is about to run.
- * A tool still open from the killed attempt keeps that execution id and is not started again.
- * The finish is recorded later on the new lease fence.
- */
-export function beginRecordedTool(input: {
-  runId: string;
-  fence: number;
+export interface OpenToolCall {
   name: string;
   executionId: string;
-  argumentDigest: string;
-  unfinished: InFlightTool[];
-}): { operationId: string; resumed: boolean } {
-  const prior = takeUnfinishedTool(input.unfinished, input.name, input.argumentDigest);
-  const operationId = prior?.executionId ?? input.executionId;
-  if (!prior) {
-    tracePoint(input.runId, "tool.started", {
-      attempt: input.fence,
-      operationId,
-    });
-  }
-  return { operationId, resumed: prior !== undefined };
+  /** Calls recorded without a digest are never linked. */
+  argumentDigest: string | null;
+  /** The helper delegation that issued the call. */
+  delegationId: string | null;
 }
 
-function argumentDigestFromCalled(record: {
-  executionId: string;
-  argumentDigest?: unknown;
-  args?: unknown;
-  arguments?: unknown;
-}): string {
-  if (typeof record.argumentDigest === "string" && /^[a-f0-9]{64}$/.test(record.argumentDigest)) {
-    return record.argumentDigest;
-  }
-  const args = record.args ?? record.arguments;
-  if (args && typeof args === "object" && !Array.isArray(args)) {
-    try {
-      return toolArgumentDigest(args as Record<string, unknown>);
-    } catch {
-      return `unclaimable:${record.executionId}`;
-    }
-  }
-  return `unclaimable:${record.executionId}`;
-}
-
-/** Called events that never received a completion, in call order. */
-export function unfinishedToolCalls(
-  events: readonly { type: string; payload: unknown }[],
-): InFlightTool[] {
-  const open: InFlightTool[] = [];
+/**
+ * Tool calls earlier attempts of this run recorded, in call order. `open` calls have no
+ * completion and no later call linked to them. `finished` calls completed without pausing.
+ */
+export function priorToolCalls(events: readonly { type: string; payload: unknown }[]) {
+  const recorded = new Set<string>();
+  const finished = new Set<string>();
+  let open: OpenToolCall[] = [];
   for (const event of events) {
-    if (event.type !== "agent.tool.called" && event.type !== "agent.tool.completed") continue;
-    if (!event.payload || typeof event.payload !== "object") continue;
-    const record = event.payload as {
-      name?: unknown;
-      executionId?: unknown;
-      argumentDigest?: unknown;
-      args?: unknown;
-      arguments?: unknown;
-    };
-    if (typeof record.name !== "string" || typeof record.executionId !== "string") continue;
-    if (event.type === "agent.tool.called") {
-      open.push({
-        name: record.name,
-        executionId: record.executionId,
-        argumentDigest: argumentDigestFromCalled({
-          executionId: record.executionId,
-          argumentDigest: record.argumentDigest,
-          args: record.args,
-          arguments: record.arguments,
-        }),
-      });
+    if (event.type === "agent.tool.resumed") {
+      const link = ToolResumedPayloadSchema.safeParse(event.payload);
+      if (!link.success) continue;
+      recorded.add(link.data.to);
+      open = open.filter((call) => call.executionId !== link.data.from);
       continue;
     }
-    const finished = open.findIndex((tool) => tool.executionId === record.executionId);
-    if (finished >= 0) open.splice(finished, 1);
+    if (event.type !== "agent.tool.called" && event.type !== "agent.tool.completed") continue;
+    if (!event.payload || typeof event.payload !== "object") continue;
+    const record = event.payload as Record<string, unknown>;
+    if (typeof record.name !== "string" || typeof record.executionId !== "string") continue;
+    const executionId = record.executionId;
+    open = open.filter((call) => call.executionId !== executionId);
+    if (event.type === "agent.tool.completed") {
+      if (record.outcome === "paused") finished.delete(executionId);
+      else finished.add(executionId);
+      continue;
+    }
+    recorded.add(executionId);
+    open.push({
+      name: record.name,
+      executionId,
+      argumentDigest:
+        typeof record.argumentDigest === "string" && /^[a-f0-9]{64}$/.test(record.argumentDigest)
+          ? record.argumentDigest
+          : null,
+      delegationId: typeof record.delegationId === "string" ? record.delegationId : null,
+    });
   }
-  return open;
-}
-
-export function finishRecordedTool(input: {
-  runId: string;
-  fence: number;
-  operationId: string;
-  outcome: "success" | "failed" | "uncertain";
-}) {
-  tracePoint(input.runId, "tool.finished", {
-    attempt: input.fence,
-    operationId: input.operationId,
-    outcome: input.outcome,
-  });
+  return { open, recorded, finished };
 }
 
 const modelCredentialLocks = new Map<string, Promise<void>>();
@@ -1890,7 +1826,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           sandbox: deps.sandbox,
           context,
         });
+        // Filled from the event log before the runtime starts, for calls that resume on their own id.
         const openCommands = new Map<string, CommandBlock>();
+        const finishedCommands = new Set<string>();
         const commandRecording = createCommandRecording({
           events: deps.events,
           sandbox: deps.sandbox,
@@ -1903,6 +1841,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           replayOf: commandReplay?.commandId,
           resolveCwd: (requested, executionId) => shellCwd(requested, executionId),
           openCommands,
+          finishedCommands,
         });
         let currentTurnFiles: Awaited<ReturnType<typeof materializeCurrentTurnFiles>>;
         try {
@@ -4427,87 +4366,145 @@ export function createRunExecutor(deps: ExecutorDeps) {
             computer.kind === "desktop" && !commandReplay
               ? await deps.sandbox.environmentNote?.(computer, context)
               : undefined;
-          const eventLog = (
-            deps.prisma as {
-              event?: {
-                findMany?: (query: object) => Promise<{ type: string; payload: unknown }[]>;
-              };
-            }
-          ).event;
-          const priorToolEvents = eventLog?.findMany
-            ? await eventLog.findMany({
-                where: {
-                  runId,
-                  type: {
-                    in: [
-                      "agent.tool.called",
-                      "agent.tool.completed",
-                      "command.intent",
-                      "command.started",
-                      "command.finished",
-                    ],
+          // The first lease has no earlier tool calls. Finished command output is never loaded.
+          const priorToolEvents =
+            fence > 1
+              ? await deps.prisma.event.findMany({
+                  where: {
+                    runId,
+                    type: {
+                      in: [
+                        "agent.tool.called",
+                        "agent.tool.completed",
+                        "agent.tool.resumed",
+                        "command.intent",
+                        "command.started",
+                      ],
+                    },
                   },
-                },
-                orderBy: { seq: "asc" },
-                select: { type: true, payload: true },
-              })
-            : [];
-          const unfinishedTools = unfinishedToolCalls(priorToolEvents);
-          adoptOpenCommands(openCommands, priorToolEvents);
-          const resumedIds = new Map<string, string>();
-          const claims = new Map<
-            string,
-            { operationId: string; resumed: boolean; argumentDigest: string; traced: boolean }
-          >();
-          // The minted id is only the runtime's handle. A resumed call keeps the open id.
-          const claimRecordedTool = (
-            name: string,
-            args: Record<string, unknown>,
-            executionId: string,
-            trace: boolean,
-          ) => {
-            const existing = claims.get(executionId);
-            if (existing) {
-              if (trace && !existing.traced && !existing.resumed) {
-                tracePoint(runId, "tool.started", {
-                  attempt: fence,
-                  operationId: existing.operationId,
-                });
-                existing.traced = true;
-              }
-              return existing;
+                  orderBy: { seq: "asc" },
+                  select: { type: true, payload: true },
+                })
+              : [];
+          const priorCalls = priorToolCalls(priorToolEvents);
+          for (const executionId of priorCalls.finished) finishedCommands.add(executionId);
+          adoptOpenCommands(openCommands, priorToolEvents, priorCalls.finished);
+          let openCalls = priorCalls.open;
+          const recordedCalls = priorCalls.recorded;
+          /** Minted id of a call to the open call it repeats. */
+          const resumedCalls = new Map<string, string>();
+          const toolCalls = new Map<string, Promise<void>>();
+          const storeToolCall = async (call: {
+            name: string;
+            args: Record<string, unknown>;
+            executionId: string;
+            delegationId?: string;
+          }) => {
+            const argumentDigest = toolArgumentDigest(call.args);
+            const delegationId = call.delegationId ?? null;
+            // A known id is that call running again. A new id may repeat one open call.
+            const resumes = recordedCalls.has(call.executionId)
+              ? undefined
+              : openCalls.find(
+                  (open) =>
+                    open.name === call.name &&
+                    open.argumentDigest === argumentDigest &&
+                    open.delegationId === delegationId,
+                );
+            openCalls = openCalls.filter(
+              (open) => open !== resumes && open.executionId !== call.executionId,
+            );
+            recordedCalls.add(call.executionId);
+            await deps.events.append({
+              spaceId: run.spaceId,
+              threadId: thread.id,
+              botId: bot.id,
+              type: "agent.tool.called",
+              runId,
+              payload: {
+                name: call.name,
+                executionId: call.executionId,
+                argumentDigest,
+                ...(delegationId ? { delegationId } : {}),
+              },
+            });
+            if (!resumes) return;
+            await deps.events.append({
+              spaceId: run.spaceId,
+              threadId: thread.id,
+              botId: bot.id,
+              type: "agent.tool.resumed",
+              runId,
+              payload: { from: resumes.executionId, to: call.executionId },
+            });
+            resumedCalls.set(call.executionId, resumes.executionId);
+          };
+          const toolCallWaiters = new Set<() => void>();
+          let runtimeWaiting = false;
+          let runtimeTurn = 0;
+          const recordToolCall = (call: Parameters<typeof storeToolCall>[0]) => {
+            let stored = toolCalls.get(call.executionId);
+            if (!stored) {
+              stored = storeToolCall(call);
+              toolCalls.set(call.executionId, stored);
+              for (const wake of [...toolCallWaiters]) wake();
             }
-            const argumentDigest = toolArgumentDigest(args);
-            const prior = takeUnfinishedTool(unfinishedTools, name, argumentDigest);
-            const operationId = prior?.executionId ?? executionId;
-            const resumed = prior !== undefined;
-            const traced = trace && !resumed;
-            if (traced) {
-              tracePoint(runId, "tool.started", { attempt: fence, operationId });
-            }
-            const stored = { operationId, resumed, argumentDigest, traced };
-            claims.set(executionId, stored);
-            resumedIds.set(executionId, operationId);
             return stored;
           };
-          const recordedApplyTool = async (
+          const runtimeWaits = (value: boolean) => {
+            runtimeWaiting = value;
+            if (value) for (const wake of [...toolCallWaiters]) wake();
+            else runtimeTurn += 1;
+          };
+          /**
+           * A runtime may start a tool beside its event stream. The loop stores the call when it
+           * reaches the tool event, after the narration before it. A queued event arrives within
+           * microtasks, so a stream still idle after a macrotask has no event for this call yet.
+           */
+          const toolCallTurn = (executionId: string) =>
+            new Promise<void>((resolve, reject) => {
+              const done = () => {
+                toolCallWaiters.delete(check);
+                context.signal.removeEventListener("abort", stop);
+              };
+              const stop = () => {
+                done();
+                reject(context.signal.reason);
+              };
+              const check = () => {
+                if (toolCalls.has(executionId)) {
+                  done();
+                  resolve();
+                  return;
+                }
+                if (!runtimeWaiting) return;
+                const turn = runtimeTurn;
+                setImmediate(() => {
+                  if (!toolCallWaiters.has(check) || !runtimeWaiting || runtimeTurn !== turn)
+                    return;
+                  done();
+                  resolve();
+                });
+              };
+              if (context.signal.aborted) return stop();
+              context.signal.addEventListener("abort", stop, { once: true });
+              toolCallWaiters.add(check);
+              check();
+            });
+          const runRecordedTool = async (
             name: string,
             args: Record<string, unknown>,
             executionId: string,
           ) => {
-            const claim = claimRecordedTool(name, args, executionId, true);
+            // A resumed call keeps its own id; the id it repeats joins the two in the trace.
+            const resumes = resumedCalls.get(executionId);
+            const trace = { attempt: fence, operationId: executionId, requestId: resumes };
+            tracePoint(runId, "tool.started", trace);
             try {
-              const result = await commandRecording.invoke(
-                name,
-                args,
-                claim.operationId,
-                applyTool,
-              );
+              const result = await commandRecording.invoke(name, args, executionId, applyTool);
               briefToolResults = appendBriefToolResult(briefToolResults, name, result, runSecrets);
-              finishRecordedTool({
-                runId,
-                fence,
-                operationId: claim.operationId,
+              tracePoint(runId, "tool.finished", {
+                ...trace,
                 outcome: isToolPauseResult(result)
                   ? "uncertain"
                   : toolResultError(result) !== undefined
@@ -4517,17 +4514,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (isToolPauseResult(result)) tracePoint(runId, "wait.approval", { attempt: fence });
               return result;
             } catch (error) {
-              finishRecordedTool({
-                runId,
-                fence,
-                operationId: claim.operationId,
-                outcome: "failed",
-              });
+              tracePoint(runId, "tool.finished", { ...trace, outcome: "failed" });
               throw error;
             }
           };
+          const recordedApplyTool = async (
+            name: string,
+            args: Record<string, unknown>,
+            executionId: string,
+            delegationId?: string,
+          ) => {
+            await toolCallTurn(executionId);
+            await recordToolCall({ name, args, executionId, delegationId });
+            return runRecordedTool(name, args, executionId);
+          };
           const runRuntime: AgentRuntime["run"] = commandReplay
-            ? () => commandReplayEvents(commandReplay, runId, recordedApplyTool)
+            ? () => commandReplayEvents(commandReplay, runId, runRecordedTool)
             : runtime.run.bind(runtime);
           const stableInstructions = [
             botInstructionText(bot, accountContext),
@@ -4731,7 +4733,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               },
               executeHelperTool: async (id, name, args, executionId) => {
                 helperToolDelegations.set(executionId, id);
-                return recordedApplyTool(name, args, executionId);
+                return recordedApplyTool(name, args, executionId, id);
               },
               recordHelperUsage: async (id, usage) => {
                 await recordRunUsage(deps, { ...run, delegationId: id }, usage);
@@ -4744,7 +4746,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   redactSecrets(result, runSecrets),
                   deps.events,
                 ),
-              executeTool: scripted ? undefined : recordedApplyTool,
+              executeTool: scripted
+                ? undefined
+                : (name, args, executionId) => recordedApplyTool(name, args, executionId),
               resolveModel: scripted
                 ? undefined
                 : (provider, modelId) =>
@@ -4760,10 +4764,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     botId: bot.id,
                     runId,
                   },
-                  {
-                    ...completion,
-                    executionId: resumedIds.get(completion.executionId) ?? completion.executionId,
-                  },
+                  completion,
                   runSecrets,
                 ),
               claimSteering: scripted
@@ -4843,7 +4844,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     }
                   },
                 });
-          for await (const event of withRuntimeCleanup(accountedEvents, runAbortController)) {
+          for await (const event of withRuntimeCleanup(
+            accountedEvents,
+            runAbortController,
+            runtimeWaits,
+          )) {
             if (approvalPausePending) return;
             if (!leaseValid) return;
             const now = Date.now();
@@ -5033,22 +5038,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (event.name !== "message_user") {
                 await publishMidTurnNarration();
               }
-              const claim = claimRecordedTool(event.name, event.args, event.executionId, false);
-              // A resumed call already has agent.tool.called. Discard the minted id.
-              if (!claim.resumed) {
-                await deps.events.append({
-                  spaceId: run.spaceId,
-                  threadId: thread.id,
-                  botId: bot.id,
-                  type: "agent.tool.called",
-                  runId,
-                  payload: {
-                    name: event.name,
-                    executionId: claim.operationId,
-                    argumentDigest: claim.argumentDigest,
-                  },
-                });
-              }
+              // A tool already running waits for this record, so its card never lands first.
+              await recordToolCall(event);
               pendingToolNames.push(event.name);
               tryFlushPendingTools();
               const loopGuard = advanceToolCallLoopGuard(toolCallStreak, event.name, event.args);
@@ -5097,7 +5088,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (scripted) {
                 const startedAt = Date.now();
                 try {
-                  const result = await recordedApplyTool(event.name, event.args, event.executionId);
+                  const result = await runRecordedTool(event.name, event.args, event.executionId);
                   await appendToolCompletionAudit(
                     deps,
                     {
@@ -5109,7 +5100,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     toolCompletionFromResult(
                       {
                         name: event.name,
-                        executionId: resumedIds.get(event.executionId) ?? event.executionId,
+                        executionId: event.executionId,
                         durationMs: Date.now() - startedAt,
                       },
                       result,
@@ -5128,7 +5119,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     },
                     {
                       name: event.name,
-                      executionId: resumedIds.get(event.executionId) ?? event.executionId,
+                      executionId: event.executionId,
                       durationMs: Date.now() - startedAt,
                       error,
                     },

@@ -1395,12 +1395,20 @@ export async function appendEventInTransaction(
     const payload = CommandEventPayloadSchema.parse(input.payload);
     if (payload.block.runId !== input.runId)
       throw new Error("Command run does not match event run");
+    // Redelivery is idempotent and the first finish is final. A call resuming on its own id
+    // keeps its card, so the recovering attempt's intent or start is still recorded.
+    const attemptId = input.type === "command.finished" ? null : payload.block.attemptId;
     const existing = await tx.event.findFirst({
       where: {
         threadId: input.threadId,
         runId: input.runId,
         type: input.type,
-        payload: { path: ["block", "commandId"], equals: payload.block.commandId },
+        AND: [
+          { payload: { path: ["block", "commandId"], equals: payload.block.commandId } },
+          ...(attemptId === null
+            ? []
+            : [{ payload: { path: ["block", "attemptId"], equals: attemptId } }]),
+        ],
       },
     });
     if (existing) return existing;

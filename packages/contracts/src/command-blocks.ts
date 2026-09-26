@@ -56,6 +56,15 @@ export const CommandEventPayloadSchema = z.object({
 });
 export type CommandEventPayload = z.infer<typeof CommandEventPayloadSchema>;
 
+/**
+ * `agent.tool.resumed`: the call `to` repeats the call `from` that a killed attempt left open.
+ * Both ids stay as their runtimes minted them; readers join the two calls through this link.
+ */
+export const ToolResumedPayloadSchema = z
+  .object({ from: z.string().min(1), to: z.string().min(1) })
+  .strict();
+export type ToolResumedPayload = z.infer<typeof ToolResumedPayloadSchema>;
+
 export const CommandAuditPayloadSchema = z.object({
   actorUserId: z.string(),
   spaceId: z.string(),

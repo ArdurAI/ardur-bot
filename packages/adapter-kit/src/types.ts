@@ -498,6 +498,7 @@ export interface AgentRunRequest {
     | { id: string; tokens: number; deadlineAt: string; prompt?: string }
     | { error: string; problem?: DelegationProblem | RuntimeProblem }
   >;
+  /** Same ordering as `executeTool`; the helper's `tool` event names the delegation. */
   executeHelperTool?: (
     delegationId: string,
     name: string,
@@ -523,6 +524,10 @@ export interface AgentRunRequest {
   emptyResponseText?: string;
   /** Authorize runtime-owned control tools before they start, including nested helpers. */
   authorizeTool?: (name: string) => Promise<AgentToolExecutionResult | undefined>;
+  /**
+   * The executor stores the call before running it. Yield the call's `tool` event first so
+   * text streamed before the call is stored ahead of it.
+   */
   executeTool?: (
     name: string,
     args: Record<string, unknown>,
@@ -553,7 +558,14 @@ export type AgentRuntimeEvent =
       /** Provider-generated tool status rather than assistant-authored narration. */
       activity?: true;
     }
-  | { type: "tool"; name: string; args: Record<string, unknown>; executionId: string }
+  | {
+      type: "tool";
+      name: string;
+      args: Record<string, unknown>;
+      executionId: string;
+      /** The helper delegation that issued this call; absent for the run's own calls. */
+      delegationId?: string;
+    }
   | {
       type: "ask";
       text: string;
