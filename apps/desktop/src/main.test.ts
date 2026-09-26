@@ -527,3 +527,27 @@ describe("quitting while local mode runs", () => {
     expect(f.mainWindow).not.toBeNull();
   });
 });
+
+describe("cache limits wiring in the main process", () => {
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+
+  it("caps the disk cache before the app is ready", () => {
+    // Electron ignores `--disk-cache-size` once the app has already become ready.
+    const capIndex = source.indexOf("capDiskCacheSize(app.commandLine)");
+    const readyIndex = source.indexOf("app.whenReady()");
+    expect(capIndex).toBeGreaterThan(-1);
+    expect(readyIndex).toBeGreaterThan(-1);
+    expect(capIndex).toBeLessThan(readyIndex);
+  });
+
+  it("clears an oversized cache on every ordinary launch", () => {
+    expect(source).toContain("clearOversizedCache(value)");
+  });
+
+  it("wires the storage IPC handlers to the shared cache-clearing and usage helpers", () => {
+    expect(source).toContain('ipcMain.handle("desktop.storage.usage"');
+    expect(source).toContain('ipcMain.handle("desktop.storage.clearCaches"');
+    expect(source).toContain("clearAppCaches(win.webContents.session)");
+    expect(source).toContain("collectStorageUsage({");
+  });
+});

@@ -174,6 +174,10 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "{hours}시간 전"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "{location} · Docker not running"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes}분 전"
@@ -702,6 +706,10 @@ msgstr ""
 msgid "API key header"
 msgstr "API 키 헤더"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "App cache"
+msgstr ""
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "App token"
 msgstr ""
@@ -811,6 +819,7 @@ msgstr ""
 msgid "Arguments"
 msgstr "인자"
 
+#: src/pages/storage/StorageSettings.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Artifacts"
 msgstr ""
@@ -884,6 +893,10 @@ msgstr "{0}에"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "{timeSelect}에"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "at least {size}"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Attachment"
@@ -1068,6 +1081,7 @@ msgid "Board status"
 msgstr "보드 상태"
 
 #: src/pages/settings-sections.ts
+#: src/pages/storage/StorageSettings.tsx
 msgid "Boards"
 msgstr "보드"
 
@@ -1386,6 +1400,10 @@ msgstr "확인 중…"
 msgid "Checkout has local changes. Clean it before updating."
 msgstr "체크아웃에 로컬 변경 사항이 있습니다. 업데이트하기 전에 정리하세요."
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Checkpoints"
+msgstr ""
+
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
 msgstr ""
@@ -1471,6 +1489,10 @@ msgstr "비우기"
 #: src/pages/shell/dialogs.tsx
 msgid "Clear {0}’s conversation?"
 msgstr "{0}와의 대화 내용을 비울까요?"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Clear caches"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1683,6 +1705,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Computer failed to boot"
 msgstr "컴퓨터를 시작하지 못했습니다"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Computer homes"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
@@ -2072,6 +2098,10 @@ msgstr "가르치기 상태를 확인하지 못했습니다. 화면을 새로고
 msgid "Could not check this computer."
 msgstr ""
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Could not clear caches; try again."
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Could not clear conversation"
 msgstr "대화 내용을 비우지 못했습니다."
@@ -2406,6 +2436,10 @@ msgstr "모델 서버에 연결하지 못했습니다."
 
 #: src/pages/system/DispatchSetting.tsx
 msgid "Could not read or change Dispatch; reopen System settings."
+msgstr ""
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Could not read storage usage; try again."
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -2825,6 +2859,7 @@ msgid "Dashboard"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/storage/StorageSettings.tsx
 msgid "Database"
 msgstr ""
 
@@ -5670,6 +5705,10 @@ msgstr ""
 msgid "Previous"
 msgstr ""
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Previous Docker data"
+msgstr ""
+
 #: src/pages/board/ItemForm.tsx
 msgid "Priority"
 msgstr ""
@@ -5825,6 +5864,10 @@ msgstr "답변을 자동으로 읽기"
 #: src/pages/KnowledgeSection.tsx
 msgid "read-only"
 msgstr "읽기 전용"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Reading storage usage…"
+msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
@@ -6225,6 +6268,10 @@ msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Responsible human"
+msgstr ""
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Restart the desktop app to see storage usage."
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
@@ -6783,6 +6830,10 @@ msgstr ""
 msgid "Session ended — open a new terminal"
 msgstr ""
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Sessions"
+msgstr ""
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Set up"
 msgstr ""
@@ -7162,6 +7213,10 @@ msgstr ""
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
+msgstr ""
+
+#: src/pages/settings-sections.ts
+msgid "Storage"
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx

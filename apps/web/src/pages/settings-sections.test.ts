@@ -31,6 +31,7 @@ describe("settings registry", () => {
     );
     for (const id of [
       "system",
+      "storage",
       "extensions",
       "developer",
       "computer",
@@ -43,7 +44,7 @@ describe("settings registry", () => {
       .filter((item) => item.available({ desktop: true, isDeploymentOwner: true }))
       .map((item) => item.id);
     expect(desktop).toEqual(
-      expect.arrayContaining(["system", "extensions", "developer", "computer"]),
+      expect.arrayContaining(["system", "storage", "extensions", "developer", "computer"]),
     );
   });
   it("offers Updates only when an updater is available", () => {

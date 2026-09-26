@@ -10,6 +10,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "
 import type { ElectronAutoUpdater } from "./auto-update.js";
 import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
 import { openBrowserAuth } from "./browser-auth.js";
+import { capDiskCacheSize, clearAppCaches, clearOversizedCache } from "./cache-limits.js";
 import { cliVersion } from "./cli.js";
 import { applySqlMigrationsToDatabase, ensureApplicationDatabase } from "./db-migrate.js";
 import { installDevices } from "./devices-ipc.js";
@@ -71,6 +72,7 @@ import {
   sessionPartitionForServerUrl,
 } from "./setup-config.js";
 import { clearSetup, readSetup, writeSetup } from "./setup-store.js";
+import { collectStorageUsage } from "./storage-usage.js";
 import { readEnabledRoutines } from "./system/routines.js";
 import { installSystemRuntime } from "./system/runtime.js";
 import { systemTray } from "./system/tray.js";
@@ -158,6 +160,8 @@ if (PERFORMANCE_USER_DATA) {
   app.setPath("userData", PERFORMANCE_USER_DATA);
   app.setPath("sessionData", path.join(PERFORMANCE_USER_DATA, "session"));
 }
+// Chromium ignores this switch once ready; it must be appended before that.
+capDiskCacheSize(app.commandLine);
 if (!app.requestSingleInstanceLock()) process.exit(0);
 let pendingIntegrationReturn: string | null = null;
 function returnToIntegration(value: string) {
@@ -1400,15 +1404,19 @@ app.whenReady().then(async () => {
     saved: currentSetup,
     forceSetup: process.env.ARDURBOT_FORCE_SETUP === "1",
   });
+  const cacheSessions = new Set<Session>([session.defaultSession]);
+  if (target.kind === "app") {
+    cacheSessions.add((await resolveSessionForTarget(target.url)).value);
+  }
   if (process.env.ARDURBOT_PERFORMANCE_CLEAR_CACHE === "1") {
-    const cacheSessions = new Set<Session>([session.defaultSession]);
-    if (target.kind === "app") {
-      cacheSessions.add((await resolveSessionForTarget(target.url)).value);
-    }
     await Promise.all(
       [...cacheSessions].flatMap((value) => [value.clearCache(), value.clearCodeCaches({})]),
     );
     markOnce("rk:main:caches-cleared");
+  } else {
+    // The disk-cache-size switch caps the HTTP cache going forward; this catches a
+    // session that already grew past it (an upgrade, or the cap being lowered).
+    await Promise.all([...cacheSessions].map((value) => clearOversizedCache(value)));
   }
 
   const icon = developmentIcon();
@@ -1525,6 +1533,25 @@ app.whenReady().then(async () => {
     listener: remoteListener,
   });
   ipcMain.handle("desktop.platform", () => process.platform);
+  const storageUsage = () =>
+    collectStorageUsage({
+      userDataDir,
+      platform: process.platform,
+      env: process.env,
+      exists: existsSync,
+      run: runDocker,
+      cacheSession: mainWindow?.webContents.session ?? session.defaultSession,
+    });
+  ipcMain.handle("desktop.storage.usage", (event) => {
+    if (!fromMainWindow(event)) throw new Error("Storage usage is not available here.");
+    return storageUsage();
+  });
+  ipcMain.handle("desktop.storage.clearCaches", async (event) => {
+    const win = fromMainWindow(event) ? mainWindow : null;
+    if (win === null) throw new Error("Storage usage is not available here.");
+    await clearAppCaches(win.webContents.session);
+    return storageUsage();
+  });
   ipcMain.handle("desktop.memoryFolders.available", (event) =>
     memoryFolderBridgeAllowed({
       mainWindow: fromMainWindow(event),
