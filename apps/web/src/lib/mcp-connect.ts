@@ -67,7 +67,10 @@ export async function connectMcpOauth(
       // connectionState; a genuine completion always leaves live tokens behind.
       if (server.connectionState === "connected" && server.oauthStatus === "none")
         return "needs-sign-in";
-      return recordedOauthOutcome(server);
+      // Any other way this attempt's pending id ends up gone with nothing recorded to
+      // explain why — deleted, or a first-time sign-in (still "not-connected") that was
+      // disconnected before ever completing — lands here the same way.
+      return recordedOauthOutcome(server) ?? "needs-sign-in";
     },
     {
       onWaiting: options?.onWaiting,

@@ -380,6 +380,7 @@ export function McpApprovalCard({
     try {
       if (needsOAuth) {
         const { connectMcpOauth } = await import("../../lib/mcp-connect");
+        abort.current?.abort();
         const controller = new AbortController();
         abort.current = controller;
         const result = await connectMcpOauth(serverId, {

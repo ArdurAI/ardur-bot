@@ -366,6 +366,40 @@ describe("Settings integration catalog", () => {
       button("Connect", container.querySelector('[data-testid="integration-github"]')!),
     ).toBeDefined();
   });
+  it("stops polling a card's own Connect wait when the page unmounts", async () => {
+    vi.spyOn(window, "open").mockReturnValue({
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    vi.useFakeTimers();
+    try {
+      api.connect.mockResolvedValue({
+        connection: { ...connected, state: "awaiting-consent", manifest: null },
+        authorizationUrl: "https://auth.example.test/authorize",
+        sessionId: "session",
+      });
+      api.status.mockResolvedValue({ ...connected, state: "awaiting-consent", manifest: null });
+      await mount();
+      await click(
+        button("Connect", container.querySelector('[data-testid="integration-github"]')!),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      const polls = api.status.mock.calls.length;
+      expect(polls).toBeGreaterThan(0);
+      // Leaving Settings unmounts this page; the sign-in itself keeps running on the
+      // server, but this page must stop asking about it.
+      await act(async () => root.unmount());
+      root = createRoot(document.createElement("div"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(api.status.mock.calls.length).toBe(polls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("loads, changes, saves and reopens a per-connection read approval", async () => {
     connections = [{ ...connected, spaceToolPolicies: { synthetic_read: "allow" } }];
     api.grants.mockResolvedValue([
@@ -986,6 +1020,27 @@ describe("Settings integration catalog", () => {
     expect(api.tools).not.toHaveBeenCalled();
   });
 
+  it("clears the sign-in wait so Find apps is not stuck when a later failure throws", async () => {
+    createdServers();
+    api.oauth.mockImplementationOnce(
+      async (
+        _serverId: string,
+        options?: { onWaiting?: (waiting: { cancel: () => Promise<void> }) => void },
+      ) => {
+        options?.onWaiting?.({ cancel: async () => undefined });
+        throw new Error("fake-provider-response");
+      },
+    );
+    await mount();
+    await click(button("Find apps"));
+    await fill("Server URL", "https://typed.example.test/mcp");
+    const form = container.querySelector('[aria-label="Server URL"]')!.parentElement!;
+    await click(button("Connect", form));
+    expect(container.textContent).not.toContain("Waiting for sign-in in the other window.");
+    expect(container.textContent).toContain("Could not connect or load integrations.");
+    expect(button("Connect", form).disabled).toBe(false);
+  });
+
   it("opens the credential field for a Find apps result that offers no browser sign-in", async () => {
     const provider = "provider-denied-browser-sign-in";
     const servers = createdServers();
@@ -1238,6 +1293,83 @@ describe("Settings integration catalog", () => {
         await vi.advanceTimersByTimeAsync(30_000);
       });
       expect(api.status.mock.calls.length).toBe(polls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops the first app's wait when Connect starts on a second one, not just on unmount", async () => {
+    const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+    const linear = remoteApp("linear", "Linear", "https://mcp.linear.example.test/mcp");
+    api.list.mockImplementation(async () => ({ catalog: [notion, linear], connections: [] }));
+    vi.spyOn(window, "open").mockReturnValue({
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    vi.useFakeTimers();
+    try {
+      api.connect.mockImplementation(async ({ catalogId }: { catalogId: string }) => ({
+        connection: {
+          ...connected,
+          id: `${catalogId}-1`,
+          catalogId,
+          state: "awaiting-consent",
+          lastError: null,
+        },
+        authorizationUrl: "https://auth.example.test/authorize",
+        sessionId: `${catalogId}-session`,
+      }));
+      api.status.mockImplementation(async ({ connectionId }: { connectionId: string }) => ({
+        ...connected,
+        id: connectionId,
+        catalogId: connectionId.replace(/-1$/, ""),
+        state: "awaiting-consent",
+        lastError: null,
+      }));
+      await openResults([
+        listing("Notion", "https://mcp.notion.example.test/mcp", {
+          type: "oauth",
+          headerName: null,
+          note: null,
+        }),
+        listing("Linear", "https://mcp.linear.example.test/mcp", {
+          type: "oauth",
+          headerName: null,
+          note: null,
+        }),
+      ]);
+      await click(resultConnect("Notion")!);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      const notionPolls = api.status.mock.calls.filter(
+        (call) => (call[0] as { connectionId: string }).connectionId === "notion-1",
+      ).length;
+      expect(notionPolls).toBeGreaterThan(0);
+      // Starting a second wait on a different app must end the first one right away,
+      // not just when the page eventually unmounts.
+      await click(resultConnect("Linear")!);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(
+        api.status.mock.calls.filter(
+          (call) => (call[0] as { connectionId: string }).connectionId === "notion-1",
+        ).length,
+      ).toBe(notionPolls);
+      const linearPolls = api.status.mock.calls.filter(
+        (call) => (call[0] as { connectionId: string }).connectionId === "linear-1",
+      ).length;
+      expect(linearPolls).toBeGreaterThan(0);
+      await click(button("Find apps"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(
+        api.status.mock.calls.filter(
+          (call) => (call[0] as { connectionId: string }).connectionId === "linear-1",
+        ).length,
+      ).toBe(linearPolls);
     } finally {
       vi.useRealTimers();
     }

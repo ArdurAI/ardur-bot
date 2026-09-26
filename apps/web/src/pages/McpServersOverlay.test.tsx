@@ -531,6 +531,73 @@ it("keeps the header and drops the stale token with one click", async () => {
 });
 
 it.each([
+  ["Keep token", { id: "reports", headers: {} }],
+  ["Keep header", { id: "reports", secret: null }],
+])("shows its own failure next to %s when the update is rejected", async (label, call) => {
+  fake.list.mockResolvedValue([
+    {
+      id: "reports",
+      name: "Reports",
+      transport: "streamable_http",
+      oauthStatus: "none",
+      connectionState: "connected",
+      endpoint: "https://tools.example.test/mcp",
+      enabled: true,
+      catalogId: null,
+      hasSecret: true,
+      headerKeys: ["Authorization"],
+      credentialConflict: true,
+      lastError: null,
+    } as McpServer,
+  ]);
+  fake.update.mockRejectedValue(new Error("rejected"));
+  const container = await mount();
+  await click(label);
+  expect(fake.update).toHaveBeenCalledExactlyOnceWith(call);
+  expect(container.textContent).toContain(
+    "This server has two credentials. Keep one.Keep tokenKeep header" +
+      "Could not save this credential. Check it and try again.",
+  );
+});
+
+it("clears a stale save failure when Update credential is closed and reopened", async () => {
+  const server = {
+    id: "reports",
+    name: "Reports",
+    transport: "streamable_http",
+    oauthStatus: "none",
+    connectionState: "needs-sign-in",
+    endpoint: "https://tools.example.test/mcp",
+    enabled: true,
+    catalogId: null,
+    hasSecret: true,
+    headerKeys: [] as string[],
+    lastError: mcpSignInDiagnostic("credential_rejected"),
+  } as McpServer;
+  fake.list.mockResolvedValue([server]);
+  fake.update.mockRejectedValueOnce(new Error("rejected"));
+  const container = await mount();
+  await click("Update credential");
+  const field = document.querySelector('[aria-label="New access token"]') as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      field,
+      "bad-token",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await click("Save");
+  expect(container.textContent).toContain(
+    "Could not save this credential. Check it and try again.",
+  );
+  await click("Cancel");
+  await click("Update credential");
+  expect(container.textContent).not.toContain(
+    "Could not save this credential. Check it and try again.",
+  );
+});
+
+it.each([
   ["a managed server", { managedBy: "extension" as const }],
   ["a stdio server", { transport: "stdio" as const }],
   ["a host-cli server", { transport: "host-cli" as const }],

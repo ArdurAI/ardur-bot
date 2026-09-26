@@ -114,6 +114,9 @@ export function IntegrationCards({
   ): Promise<boolean> {
     setBusy(descriptor.id);
     setError(null);
+    oauthAbort.current?.abort();
+    const abort = new AbortController();
+    oauthAbort.current = abort;
     try {
       const current = await connectIntegration(descriptor, connection, {
         authKind,
@@ -130,6 +133,7 @@ export function IntegrationCards({
             ...current,
             connections: [value, ...current.connections.filter((row) => row.id !== value.id)],
           })),
+        signal: abort.signal,
       });
       await refresh();
       if (current.state === "connected") setSelected(current.id);

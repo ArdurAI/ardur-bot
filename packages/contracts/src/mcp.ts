@@ -46,19 +46,18 @@ export function mcpSignInDiagnostic(code?: string | null): string {
   return code ? `Needs sign-in (${code}).` : "Needs sign-in.";
 }
 
-const REAUTHORIZATION_DECLINED = /^Sign-in was declined(?: \(([a-z_]+)\))?\.$/;
+const REAUTHORIZATION_DECLINED = /^Sign-in was declined\.$/;
 
 /**
  * Recorded as lastError when a person declines a re-authorization of a server that stays
  * connected on its prior tokens. Never a `mcpSignInDiagnostic`: the server does not need
- * sign-in. Follows the same bracketed-code shape so a reader checks the code, not the
- * sentence, the way `mcpSignInDiagnostic`/`mcpSignIn` already do.
+ * sign-in.
  */
-export function mcpReauthorizationDeclinedDiagnostic(reason?: string | null): string {
-  return reason ? `Sign-in was declined (${reason}).` : "Sign-in was declined.";
+export function mcpReauthorizationDeclinedDiagnostic(): string {
+  return "Sign-in was declined.";
 }
 
-/** True when `recorded` is a declined-re-authorization diagnostic, any reason or none. */
+/** True when `recorded` is the declined-re-authorization diagnostic. */
 export function isReauthorizationDeclined(recorded: string | null | undefined): boolean {
   return REAUTHORIZATION_DECLINED.test(recorded?.trim() ?? "");
 }

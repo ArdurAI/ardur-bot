@@ -535,16 +535,27 @@ describe("integration RPC boundaries", () => {
     const secrets = new Map([[old.id, { id: old.id, ciphertext: old.ciphertext }]]);
     const prisma = {
       spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
-      mcpServer: { findFirst: vi.fn(async () => ({ ...row })) },
+      mcpServer: {
+        findFirst: vi.fn(async () => ({ ...row })),
+        update: vi.fn(),
+        updateMany: vi.fn(),
+      },
       secret: {
         findFirst: vi.fn(async ({ where }: { where: { id: string } }) => secrets.get(where.id)),
+        create: vi.fn(),
       },
       $executeRaw: vi.fn(async () => 1),
       $transaction: vi.fn(),
     };
     prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
+    const put = vi.spyOn(store, "put");
     const f = fixture({ prisma, secrets: store } as never);
     const response = await f.request("mcp/servers/update", { id: "server", secret: null });
     expect(response?.status).toBe(400);
+    expect(await response?.text()).toContain("This server would be left with no credential.");
+    expect(prisma.mcpServer.update).not.toHaveBeenCalled();
+    expect(prisma.mcpServer.updateMany).not.toHaveBeenCalled();
+    expect(prisma.secret.create).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
   });
 });

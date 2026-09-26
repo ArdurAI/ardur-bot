@@ -1,7 +1,7 @@
 import type { McpServer } from "@ardurbot/contracts";
 import { Button, Input, Tabs, TabsList, TabsTrigger } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { mcpSignIn } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
 
@@ -28,6 +28,13 @@ export function McpCredentialFix({
   const [headerValue, setHeaderValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [keepError, setKeepError] = useState<string | null>(null);
+
+  // The Update credential form starts each time it opens (and stops showing a stale
+  // failure once it closes) with no leftover error from a previous attempt.
+  useEffect(() => {
+    setError(false);
+  }, [open]);
 
   if (server.imported || server.managedBy) return null;
   if (server.transport === "stdio" || server.transport === "host-cli") return null;
@@ -36,6 +43,7 @@ export function McpCredentialFix({
   async function keepToken() {
     setBusy(true);
     setError(false);
+    setKeepError(null);
     try {
       // Headers use full-replace semantics: an empty set drops the stored header
       // without needing its value, and leaves the token untouched.
@@ -43,7 +51,7 @@ export function McpCredentialFix({
       onOpenChange(false);
       await onSaved();
     } catch {
-      setError(true);
+      setKeepError(t`Could not save this credential. Check it and try again.`);
     } finally {
       setBusy(false);
     }
@@ -52,6 +60,7 @@ export function McpCredentialFix({
   async function keepHeader() {
     setBusy(true);
     setError(false);
+    setKeepError(null);
     try {
       // `secret: null` drops the stored token without needing its value, and leaves
       // whichever header is already stored untouched.
@@ -59,7 +68,7 @@ export function McpCredentialFix({
       onOpenChange(false);
       await onSaved();
     } catch {
-      setError(true);
+      setKeepError(t`Could not save this credential. Check it and try again.`);
     } finally {
       setBusy(false);
     }
@@ -68,6 +77,7 @@ export function McpCredentialFix({
   async function save() {
     setBusy(true);
     setError(false);
+    setKeepError(null);
     try {
       if (mode === "token") await rpc.mcp.servers.update({ id: server.id, secret: token.trim() });
       else
@@ -115,6 +125,11 @@ export function McpCredentialFix({
           >
             <Trans>Keep header</Trans>
           </Button>
+          {keepError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {keepError}
+            </p>
+          ) : null}
         </div>
       ) : null}
       {!open ? (

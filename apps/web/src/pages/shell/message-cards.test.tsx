@@ -133,6 +133,32 @@ it("stops polling for this card's sign-in when the card unmounts", async () => {
   expect(capturedSignal?.aborted).toBe(true);
 });
 
+it("aborts the first wait's signal when Authorize is pressed again while waiting", async () => {
+  const signals: AbortSignal[] = [];
+  api.oauth.mockImplementation(
+    (
+      _serverId: string,
+      options: {
+        signal?: AbortSignal;
+        onWaiting?: (waiting: { cancel: () => Promise<void> }) => void;
+      },
+    ) => {
+      if (options.signal) signals.push(options.signal);
+      return new Promise(() => {
+        options.onWaiting?.({ cancel: async () => undefined });
+      });
+    },
+  );
+  const container = await mount();
+  await click("Authorize");
+  expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+  expect(signals).toHaveLength(1);
+  expect(signals[0]?.aborted).toBe(false);
+  await click("Authorize");
+  expect(signals).toHaveLength(2);
+  expect(signals[0]?.aborted).toBe(true);
+});
+
 it("does not offer Manage for a sign-in that just needs another try", async () => {
   api.oauth.mockResolvedValue("needs-sign-in");
   const onOpenMcp = vi.fn();

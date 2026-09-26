@@ -1179,7 +1179,22 @@ export class McpOAuthBroker {
     await this.prisma.mcpOAuthSession.deleteMany({
       where: { serverId: input.serverId, spaceId: input.spaceId, userId: input.userId },
     });
-    // An in-flight sign-in attempt for this server can no longer complete.
+    const server = await this.prisma.mcpServer.findFirst({
+      where: { id: input.serverId, spaceId: input.spaceId, userId: input.userId },
+    });
+    if (server?.secretId) {
+      const row = await this.prisma.secret.findFirst({
+        where: { id: server.secretId, spaceId: input.spaceId, userId: input.userId },
+      });
+      if (row) {
+        const material = this.read(row.ciphertext, row.id);
+        delete material.oauth;
+        await this.replaceMaterial(server.id, material, input, true);
+      }
+    }
+    // An in-flight sign-in attempt for this server can no longer complete. Cleared only
+    // after the credential material above is gone, so no poll in between sees a
+    // connected server with no pending id.
     await this.prisma.mcpServer.updateMany({
       where: {
         id: input.serverId,
@@ -1189,17 +1204,6 @@ export class McpOAuthBroker {
       },
       data: { pendingOauthSessionId: null },
     });
-    const server = await this.prisma.mcpServer.findFirst({
-      where: { id: input.serverId, spaceId: input.spaceId, userId: input.userId },
-    });
-    if (!server?.secretId) return;
-    const row = await this.prisma.secret.findFirst({
-      where: { id: server.secretId, spaceId: input.spaceId, userId: input.userId },
-    });
-    if (!row) return;
-    const material = this.read(row.ciphertext, row.id);
-    delete material.oauth;
-    await this.replaceMaterial(server.id, material, input, true);
   }
 
   private async loadMaterial(

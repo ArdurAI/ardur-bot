@@ -99,7 +99,12 @@ describe("MCP browser consent", () => {
       authorizationUrl: "https://auth.example.test/authorize",
       sessionId: "ours",
     });
-    const server = { id: "connection", oauthStatus: "connected", connectionState: "not-connected" };
+    const server = {
+      id: "connection",
+      oauthStatus: "connected",
+      connectionState: "not-connected",
+      pendingOauthSessionId: "ours" as string | null,
+    };
     list.mockImplementation(async () => [server]);
     const result = connectMcpOauth("connection");
     let settled = false;
@@ -108,7 +113,9 @@ describe("MCP browser consent", () => {
     });
     await vi.advanceTimersByTimeAsync(3000);
     expect(settled).toBe(false);
+    // A completion clears the pending id and records the outcome in the same write.
     server.connectionState = "connected";
+    server.pendingOauthSessionId = null;
     await vi.advanceTimersByTimeAsync(1000);
     expect(await result).toBe("connected");
   });
@@ -377,6 +384,27 @@ describe("MCP browser consent", () => {
     // otherwise changing connectionState or lastError.
     server.pendingOauthSessionId = null;
     server.oauthStatus = "none";
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await result).toBe("needs-sign-in");
+  });
+  it("ends the wait promptly when a first-time sign-in is disconnected mid-wait", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    const server = {
+      id: "connection",
+      // Never connected before, so Disconnect leaves it "not-connected", not "connected".
+      connectionState: "not-connected",
+      oauthStatus: "none",
+      pendingOauthSessionId: "ours" as string | null,
+      lastError: null as string | null,
+    };
+    list.mockImplementation(async () => [server]);
+    const result = connectMcpOauth("connection");
+    await vi.advanceTimersByTimeAsync(0);
+    server.pendingOauthSessionId = null;
     await vi.advanceTimersByTimeAsync(1000);
     expect(await result).toBe("needs-sign-in");
   });

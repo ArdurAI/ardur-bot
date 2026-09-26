@@ -158,6 +158,7 @@ export function DirectMcpSearch({
       setBusy(false);
       setWaiting(wait);
     };
+    abort.current?.abort();
     const controller = new AbortController();
     abort.current = controller;
     try {
@@ -169,7 +170,11 @@ export function DirectMcpSearch({
           { onWaiting, signal: controller.signal },
           reusable && REUSABLE_STATES.has(reusable.state) ? reusable : undefined,
         );
-        if (mine !== attempt.current || !connection) return;
+        if (mine !== attempt.current) return;
+        if (!connection) {
+          setWaiting(null);
+          return;
+        }
         // Popup-blocked sign-in continues in this tab and finishes there.
         if (connection.state === "awaiting-consent") return;
         setWaiting(null);
@@ -214,7 +219,10 @@ export function DirectMcpSearch({
         setNotice(mcpOutcomeSentence(outcome.result, userCancelled.current, outcome.recorded));
       }
     } catch {
-      if (mine === attempt.current) setError("connect");
+      if (mine === attempt.current) {
+        setError("connect");
+        setWaiting(null);
+      }
     } finally {
       if (mine === attempt.current) setBusy(false);
     }
