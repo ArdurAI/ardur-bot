@@ -19,7 +19,7 @@ import {
   ConnectedSandboxProvider,
   MissingComputerProviderError,
 } from "./computer-connections.js";
-import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { localDesktopSandbox } from "./desktop-sandbox.js";
 import {
   createHostClient,
   RemoteHostSandboxProvider,
@@ -46,7 +46,7 @@ export function createRunSandbox(
   const host = once(() =>
     usesHostBridge()
       ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
-      : new DesktopSandboxProvider({ root: opts.dataDir, hostRoots: [homedir()] }),
+      : localDesktopSandbox(opts.dataDir, [homedir()]),
   );
   const selected = kind === "desktop" ? host() : createSandboxProvider(kind, opts);
   // Connectionless computers keep the engine of their kind; a hosted one needs its key here.

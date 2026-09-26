@@ -39,8 +39,8 @@ export default function BoardsSettings() {
     const [result, bots, upkeepResult, learningResult] = await Promise.all([
       rpc<{ workspaces: BoardWorkspace[]; problem: BoardProblem | null }>("board/workspaces", {}),
       rpc<{ id: string; name: string }[]>("bots/list"),
-      rpc<{ enabled: boolean }>("board/upkeep", {}).catch(() => ({ enabled: true })),
-      loadLearningSettings().catch(() => null),
+      rpc<{ enabled: boolean }>("board/upkeep", {}),
+      loadLearningSettings(),
     ]);
     setBoards(result.workspaces);
     setBots(bots);
@@ -122,7 +122,7 @@ export default function BoardsSettings() {
       {loaded && !owner ? (
         <Text style={foreground}>{t("Sign in as the owner to configure boards.")}</Text>
       ) : null}
-      {owner ? (
+      {owner && loaded ? (
         <>
           <Text style={[styles.heading, foreground]}>
             {t("Bots keep the board and memory current")}

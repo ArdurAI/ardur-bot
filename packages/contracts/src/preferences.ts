@@ -14,7 +14,15 @@ export const NotificationActivitySchema = z.object({
   threadId: z.string(),
   category: NotificationPreferencesSchema.keyof(),
   status: z.enum(["completed", "failed", "waiting_input", "waiting_takeover", "board_changed"]),
-  board: z.object({ spaceId: z.string(), workspaceId: z.string(), itemId: z.string() }).optional(),
+  board: z
+    .object({
+      spaceId: z.string(),
+      workspaceId: z.string(),
+      itemId: z.string(),
+      // The notice for a board close that kept failing; screens word it in the reader's language.
+      closeFailed: z.boolean().optional(),
+    })
+    .optional(),
   updatedAt: z.string(),
   occurredAt: z.string().optional(),
   enabled: z.boolean(),

@@ -1,11 +1,12 @@
 import type {
+  LearningActionResult,
   LearningGrant,
   LearningGrantInput,
   LearningProposal,
   ProposalEvidence,
   SpaceLearningConfig,
 } from "@ardurbot/contracts";
-import { learningApprovalBlock } from "@ardurbot/contracts";
+import { boardClosingProposal, learningApprovalBlock } from "@ardurbot/contracts";
 import {
   Button,
   Switch,
@@ -17,6 +18,8 @@ import {
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { boardCloseFailedTitle, boardCloseTriedBody } from "../lib/board-close-copy";
+import { actionMessage } from "../lib/orpc-action-message";
 import { rpc } from "../lib/rpc";
 import { LearningCurator } from "./LearningCurator";
 import { LearningObservations, LearningObservationView } from "./LearningObservation";
@@ -67,7 +70,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
   const [settings, setSettings] = useState<SpaceLearningConfig | null>(null);
   const [grants, setGrants] = useState<LearningGrant[]>([]);
   const [offers, setOffers] = useState<Array<Pick<LearningGrantInput, "category" | "scope">>>([]);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
@@ -90,7 +93,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
   useEffect(() => {
     let active = true;
     void load().catch(() => {
-      if (active) setError(true);
+      if (active) setError(t`Could not update learning. Try again.`);
     });
     const timer = window.setInterval(() => {
       if (!document.hidden && !busyRef.current) void load().catch(() => undefined);
@@ -101,16 +104,30 @@ export function LearningInbox({ botId }: { botId?: string }) {
       window.clearInterval(timer);
     };
   }, [load]);
+  /** Shows a close that Reject or Undo left running at once; the reload that follows confirms it. */
+  const settle = useCallback((result: LearningActionResult) => {
+    const proposal = boardClosingProposal(result);
+    if (!proposal) return;
+    setInbox((current) =>
+      current
+        ? {
+            ...current,
+            proposals: current.proposals.map((row) => (row.id === proposal.id ? proposal : row)),
+          }
+        : current,
+    );
+    setSelected((current) => (current?.id === proposal.id ? proposal : current));
+  }, []);
   async function change(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       await action();
       await load();
       window.dispatchEvent(new Event("learning-changed"));
-    } catch {
-      setError(true);
+    } catch (error) {
+      setError(actionMessage(error, t`Could not update learning. Try again.`));
     } finally {
       setBusy(false);
     }
@@ -162,9 +179,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
       ) : null}
       {error ? (
         <div role="alert">
-          <p>
-            <Trans>Could not update learning. Try again.</Trans>
-          </p>
+          <p>{error}</p>
           <Button variant="ghost" onClick={() => void change(load)}>
             <Trans>Retry</Trans>
           </Button>
@@ -209,6 +224,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
               expanded={proposal.id === selectedId}
               busy={busy}
               change={change}
+              settle={settle}
             />
           ))}
         </TabsContent>
@@ -287,14 +303,16 @@ function LearningCard({
   expanded = false,
   busy,
   change,
+  settle,
 }: {
   proposal: LearningProposal;
   botName?: string;
   expanded?: boolean;
   busy: boolean;
   change: (action: () => Promise<unknown>) => Promise<void>;
+  settle: (result: LearningActionResult) => void;
 }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const [detailsOpen, setDetailsOpen] = useState(expanded);
   useEffect(() => {
     if (expanded) setDetailsOpen(true);
@@ -319,11 +337,13 @@ function LearningCard({
             ? t`Proposed consolidation`
             : proposal.type === "policy-suggestion"
               ? proposal.rationale
-              : (proposal.proposedContent
-                  ?.split("\n")
-                  .find((line) => line.trim() && line !== "---") ??
-                proposal.typedDelta?.key ??
-                proposal.type)}
+              : proposal.type === "board-item"
+                ? proposal.boardItem?.title
+                : (proposal.proposedContent
+                    ?.split("\n")
+                    .find((line) => line.trim() && line !== "---") ??
+                  proposal.typedDelta?.key ??
+                  proposal.type)}
       </p>
       <p className="text-xs text-muted-foreground">
         {proposal.scope.botId
@@ -344,14 +364,24 @@ function LearningCard({
             <Button
               variant="ghost"
               disabled={busy}
-              onClick={() => void change(() => rpc.learning.reject({ proposalId: proposal.id }))}
+              onClick={() =>
+                void change(async () => {
+                  const result = await rpc.learning.reject({ proposalId: proposal.id });
+                  settle(result);
+                  setConflict(result.conflict ?? null);
+                })
+              }
             >
               <Trans>Reject</Trans>
             </Button>
             <Button
               variant="ghost"
               disabled={
-                busy || !!blocked || !!proposal.operation || proposal.type === "policy-suggestion"
+                busy ||
+                !!blocked ||
+                !!proposal.operation ||
+                proposal.type === "policy-suggestion" ||
+                proposal.type === "board-item"
               }
               onClick={() => setEditing((value) => !value)}
             >
@@ -363,13 +393,14 @@ function LearningCard({
             <span className="text-sm">
               <Trans>Applied</Trans>
             </span>
-            {proposal.appliedRevisionId ? (
+            {proposal.appliedRevisionId || proposal.appliedBoardItem ? (
               <Button
                 variant="ghost"
                 disabled={busy}
                 onClick={() =>
                   void change(async () => {
                     const result = await rpc.learning.revert({ proposalId: proposal.id });
+                    settle(result);
                     setConflict(result.conflict ?? null);
                   })
                 }
@@ -380,16 +411,27 @@ function LearningCard({
           </>
         ) : (
           <span className="text-sm">
-            {proposal.status === "reverted"
-              ? t`Undone`
-              : proposal.status === "rejected"
-                ? t`Rejected`
-                : proposal.status === "superseded"
-                  ? t`Superseded`
-                  : t`Expired`}
+            {proposal.boardChanged ? (
+              <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
+            ) : proposal.boardCloseFailed ? (
+              i18n._(boardCloseFailedTitle)
+            ) : proposal.boardClosing ? (
+              <Trans>Closing on the Board.</Trans>
+            ) : proposal.status === "reverted" ? (
+              t`Undone`
+            ) : proposal.status === "rejected" ? (
+              t`Rejected`
+            ) : proposal.status === "superseded" ? (
+              t`Superseded`
+            ) : (
+              t`Expired`
+            )}
           </span>
         )}
       </div>
+      {proposal.boardCloseFailed && !proposal.boardChanged ? (
+        <p className="text-xs text-muted-foreground">{i18n._(boardCloseTriedBody)}</p>
+      ) : null}
       {blocked ? <p className="text-xs text-muted-foreground">{blocked}</p> : null}
       {editing ? (
         <div>
@@ -435,10 +477,49 @@ function LearningCard({
         <summary>
           <Trans>Details</Trans>
         </summary>
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap py-2">{proposal.diff}</pre>
+        {proposal.type === "board-item" && proposal.boardItem ? (
+          <div className="max-h-64 space-y-1 overflow-auto py-2">
+            <p>
+              <Trans>Title</Trans>: {proposal.boardItem.title}
+            </p>
+            <p>
+              <Trans>Description</Trans>: {proposal.boardItem.description}
+            </p>
+            <p>
+              <Trans>Acceptance criteria</Trans>: {proposal.boardItem.acceptanceCriteria}
+            </p>
+            {proposal.boardItem.labels?.length ? (
+              <p>
+                <Trans>Labels</Trans>: {proposal.boardItem.labels.join(", ")}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap py-2">{proposal.diff}</pre>
+        )}
         <p>{proposal.rationale}</p>
         {proposal.observation ? (
           <LearningObservationView observation={proposal.observation} />
+        ) : null}
+        {proposal.boardOutcome ? (
+          <p>
+            {proposal.boardOutcome.outcome === "completed" ? (
+              <Trans>This board item was completed.</Trans>
+            ) : proposal.boardOutcome.outcome === "closed-other" ? (
+              proposal.boardOutcome.closeReason ? (
+                <Trans>
+                  This board item was closed without being completed:{" "}
+                  {proposal.boardOutcome.closeReason}. Review it on the Board.
+                </Trans>
+              ) : (
+                <Trans>
+                  This board item was closed without being completed. Review it on the Board.
+                </Trans>
+              )
+            ) : (
+              <Trans>This board item is still open.</Trans>
+            )}
+          </p>
         ) : null}
         {proposal.confidence ? (
           <p>
@@ -510,21 +591,42 @@ function LearningCard({
       </details>
       {conflict ? (
         <div role="alert" className="mt-3 text-sm">
-          <p>
-            <Trans>Later edits overlap this change. Review both versions in History.</Trans>
-          </p>
-          <p>
-            <Trans>Before</Trans>
-          </p>
-          <pre className="whitespace-pre-wrap">{conflict.before}</pre>
-          <p>
-            <Trans>Applied</Trans>
-          </p>
-          <pre className="whitespace-pre-wrap">{conflict.applied}</pre>
-          <p>
-            <Trans>Current</Trans>
-          </p>
-          <pre className="whitespace-pre-wrap">{conflict.current}</pre>
+          {proposal.type === "board-item" ? (
+            <p>
+              {conflict.code === "board-left-open" ? (
+                <Trans>
+                  This board item changed after it was filed, so it was left open for review on the
+                  Board.
+                </Trans>
+              ) : conflict.code === "board-already-closed" ? (
+                <Trans>This board item was already closed on the Board.</Trans>
+              ) : conflict.code === "board-changed" || !conflict.current ? (
+                <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
+              ) : (
+                conflict.current
+              )}
+            </p>
+          ) : (
+            <p>
+              <Trans>Later edits overlap this change. Review both versions in History.</Trans>
+            </p>
+          )}
+          {proposal.type === "board-item" ? null : (
+            <>
+              <p>
+                <Trans>Before</Trans>
+              </p>
+              <pre className="whitespace-pre-wrap">{conflict.before}</pre>
+              <p>
+                <Trans>Applied</Trans>
+              </p>
+              <pre className="whitespace-pre-wrap">{conflict.applied}</pre>
+              <p>
+                <Trans>Current</Trans>
+              </p>
+              <pre className="whitespace-pre-wrap">{conflict.current}</pre>
+            </>
+          )}
         </div>
       ) : null}
     </article>

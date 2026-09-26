@@ -73,6 +73,7 @@ import { signupPolicyFromEnv } from "@ardurbot/core";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import {
   createDb,
+  createFilingLockPool,
   createPool,
   createThreadEvents,
   parsePositiveInteger,
@@ -95,6 +96,7 @@ import { cors } from "hono/cors";
 import { mountExportRoutes } from "./account-export.js";
 import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
+import { boardCloseRetry } from "./board.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { HostBridge } from "./host-bridge.js";
@@ -177,11 +179,14 @@ export async function createApp(
   installLogger(logger);
   warnAutoReviewConfiguration(logger);
   const created = prismaOverride
-    ? { prisma: prismaOverride, pool: undefined }
-    : createDb(env.databaseUrl, {
-        poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 4),
-        applicationName: "ardurbot-api",
-      });
+    ? { prisma: prismaOverride, pool: undefined, lockPool: undefined }
+    : {
+        ...createDb(env.databaseUrl, {
+          poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 4),
+          applicationName: "ardurbot-api",
+        }),
+        lockPool: createFilingLockPool(env.databaseUrl, { applicationName: "ardurbot-api" }),
+      };
   const { prisma } = created;
   const realtime =
     realtimeOverride ??
@@ -420,6 +425,7 @@ export async function createApp(
   const shutdown = new AbortController();
   const executor = createRunExecutor({
     prisma,
+    lockPool: created.lockPool,
     runtime,
     sandbox,
     memory,
@@ -468,6 +474,7 @@ export async function createApp(
 
   const jobHandlers = createBackgroundJobHandlers({
     dataDir: env.dataDir,
+    lockPool: created.lockPool,
     executor,
     prisma,
     sandbox,
@@ -499,7 +506,12 @@ export async function createApp(
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
-        reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir: env.dataDir }),
+        // No worker runs beside the in-memory queue, so this reconciler also sweeps board closes.
+        reconcileBoardOutcomes: (signal) =>
+          reconcileBoardOutcomes(
+            { prisma, dataDir: env.dataDir, lockPool: created.lockPool },
+            { signal, pendingCloses: true },
+          ),
         reconcileLocalImport: async () => {
           await jobs.enqueue({
             name: "local-import.refresh",
@@ -516,6 +528,13 @@ export async function createApp(
       })
     : undefined;
   reconciler?.start();
+  const boardCloses = boardCloseRetry({
+    prisma,
+    dataDir: env.dataDir,
+    lockPool: created.lockPool,
+    hostBridge,
+  });
+  boardCloses?.start();
 
   const terminals = createTerminalRoutes({
     prisma,
@@ -531,6 +550,7 @@ export async function createApp(
     localImportRequests,
     cloudAgent,
     prisma,
+    lockPool: created.lockPool,
     events,
     auth,
     jobs,
@@ -1089,12 +1109,14 @@ export async function createApp(
       await teamChatBridge?.stop();
       await email?.drain?.();
       await reconciler?.stop();
+      await boardCloses?.stop();
       await jobs.close();
       await realtime.close();
       await connector.stop();
       await mcp.close();
       await prisma.$disconnect().catch(() => undefined);
       await created.pool?.end().catch(() => undefined);
+      await created.lockPool?.end().catch(() => undefined);
       await ownedJobPool?.end().catch(() => undefined);
       await logger.flush({ timeoutMs: 2_000 });
     },

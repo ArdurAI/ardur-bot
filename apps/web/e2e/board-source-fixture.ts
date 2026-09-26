@@ -156,6 +156,8 @@ export async function sourceBoardFixture() {
     async rpc(procedure: string, input: { workspaceId?: string; itemId?: string } = {}) {
       if (procedure === "board/workspaces") return service.workspaces(actor);
       if (procedure === "board/start") return service.start(actor, input.workspaceId!);
+      // Settings reads the upkeep switch next to the boards; the source worker does not own it.
+      if (procedure === "board/upkeep") return { enabled: true };
       if (procedure === "board/view") {
         const workspaces = (await service.configured(actor)).filter(
           (row) => row.initialized && row.enabled,

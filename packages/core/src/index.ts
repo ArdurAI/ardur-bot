@@ -63,6 +63,7 @@ export * from "./model-providers.js";
 export * from "./notifications.js";
 export * from "./remote-policy.js";
 export * from "./response-bytes.js";
+export * from "./rpc-error-message.js";
 export * from "./run-state.js";
 export * from "./runtime-effort.js";
 export * from "./sandbox-command.js";

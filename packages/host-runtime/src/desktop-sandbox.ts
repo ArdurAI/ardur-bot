@@ -32,6 +32,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { HOST_FILE_BYTES, hostEnvironmentNote } from "@ardurbot/contracts/host-bridge";
+import { parseRegisteredFolders } from "@ardurbot/contracts/host-folders";
 import {
   boundedSandboxCommandTimeoutMs,
   createBoundedCommandOutput,
@@ -55,7 +56,7 @@ import {
 import { hostCapacity } from "./fleet/capacity.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
 import { verifyHostIntegration } from "./host-integrations.js";
-import { confinedHostCwd, hostCommand } from "./host-policy.js";
+import { confinedHostCwd, hostCommand, resolvedRoots } from "./host-policy.js";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 
@@ -73,7 +74,12 @@ export class DesktopSandboxProvider implements SandboxProvider {
   readonly boxes = new Map<string, DesktopBox>();
 
   constructor(
-    private readonly opts: { root?: string; hostRoots?: string[]; restricted?: boolean } = {},
+    private readonly opts: {
+      root?: string;
+      hostRoots?: string[];
+      restricted?: boolean;
+      registeredFoldersFile?: string;
+    } = {},
   ) {}
 
   capacity() {
@@ -166,7 +172,10 @@ export class DesktopSandboxProvider implements SandboxProvider {
     const missing: string[] = [];
     for (;;) {
       try {
-        return path.join(await confinedHostCwd(candidate, this.allowedRoots(box.home)), ...missing);
+        return path.join(
+          await confinedHostCwd(candidate, await this.allowedRoots(box.home)),
+          ...missing,
+        );
       } catch (error) {
         const parent = path.dirname(candidate);
         if (this.opts.restricted || !hasErrorCode(error, "ENOENT") || parent === candidate)
@@ -191,10 +200,8 @@ export class DesktopSandboxProvider implements SandboxProvider {
     }
     if (this.opts.restricted && request.cwd?.split(/[/\\]/u).includes(".."))
       throw new Error("Path escapes registered folders.");
-    const roots = this.allowedRoots(box.home);
-    const sourceRoots = this.opts.restricted
-      ? roots
-      : [...roots, ...(await Promise.all(roots.map((root) => realpath(root))))];
+    const roots = await this.allowedRoots(box.home);
+    const sourceRoots = this.opts.restricted ? roots : [...roots, ...(await resolvedRoots(roots))];
     let cwd = this.opts.restricted
       ? await confinedHostCwd(resolveExecuteCwd(request.cwd, box.home), roots)
       : resolveExecuteCwd(request.cwd, box.home);
@@ -438,9 +445,35 @@ export class DesktopSandboxProvider implements SandboxProvider {
     return box;
   }
 
-  private allowedRoots(home: string) {
-    return [home, ...(this.opts.hostRoots ?? [])];
+  private async allowedRoots(home: string) {
+    const registered = this.opts.registeredFoldersFile
+      ? await readRegisteredFolders(this.opts.registeredFoldersFile)
+      : (this.opts.hostRoots ?? []);
+    return [home, ...registered];
   }
+}
+
+/**
+ * Commands on this computer. Local mode supplies the folders a person added
+ * (`ARDURBOT_HOST_ROOTS_FILE`) and gets the restricted provider. A source checkout sets no
+ * list and keeps the unrestricted one, with `sourceRoots` beside each computer's own folder.
+ */
+export function localDesktopSandbox(
+  root?: string,
+  sourceRoots?: string[],
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const registeredFoldersFile = env.ARDURBOT_HOST_ROOTS_FILE;
+  return registeredFoldersFile
+    ? new DesktopSandboxProvider({ root, restricted: true, registeredFoldersFile })
+    : new DesktopSandboxProvider({ root, hostRoots: sourceRoots });
+}
+
+/** The folders the desktop app granted. Read on every call, so a change applies to the next command. */
+export async function readRegisteredFolders(file: string | undefined): Promise<string[]> {
+  if (!file) return [];
+  const text = await readFile(file, "utf8").catch(() => null);
+  return parseRegisteredFolders(text, path.isAbsolute);
 }
 
 async function boundedDirectoryEntries(target: string) {

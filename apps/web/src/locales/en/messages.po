@@ -66,6 +66,15 @@ msgstr "{0} default"
 msgid "{0} documents, {1} revisions"
 msgstr "{0} documents, {1} revisions"
 
+#. placeholder {0}: row.name
+#. placeholder {1}: row.filed
+#. placeholder {2}: row.done
+#. placeholder {3}: row.open
+#. placeholder {4}: row.other
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+msgstr "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
 #: src/pages/fleet/FleetSettings.tsx
 msgid "{0} GB free"
@@ -240,6 +249,10 @@ msgstr "7 days"
 msgid "A bit of everything"
 msgstr "A bit of everything"
 
+#: src/lib/board-close-copy.ts
+msgid "A board item filed by a bot could not be closed."
+msgstr "A board item filed by a bot could not be closed."
+
 #: src/components/DesktopUpdates.tsx
 msgid "A new version is available — download"
 msgstr "A new version is available — download"
@@ -266,6 +279,7 @@ msgstr "Acceptance"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Acceptance criteria"
 msgstr "Acceptance criteria"
 
@@ -786,6 +800,10 @@ msgstr "Ardur (built-in)"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+
+#: src/lib/board-close-copy.ts
+msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgstr "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1554,6 +1572,10 @@ msgstr "Close voice settings"
 #: src/pages/board/Board.tsx
 msgid "Close when the bot reports done"
 msgstr "Close when the bot reports done"
+
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
+msgstr "Closing on the Board."
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
@@ -2947,6 +2969,7 @@ msgid "Describe what this bot does"
 msgstr "Describe what this bot does"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "Description"
@@ -4109,6 +4132,7 @@ msgid "Label"
 msgstr "Label"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Labels"
 msgstr "Labels"
 
@@ -4336,6 +4360,10 @@ msgstr "Local"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "Local access lets bots run commands without asking. Avoid it on shared or public servers."
+
+#: src/pages/system/SystemPage.tsx
+msgid "Local data"
+msgstr "Local data"
 
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Local dev"
@@ -6174,6 +6202,10 @@ msgstr "Reset computer"
 msgid "Reset computer?"
 msgstr "Reset computer?"
 
+#: src/pages/system/SystemPage.tsx
+msgid "Reset local data"
+msgstr "Reset local data"
+
 #: src/pages/Auth.tsx
 msgid "Reset password"
 msgstr "Reset password"
@@ -7359,6 +7391,35 @@ msgstr "Thinking"
 msgid "This action could not finish; try again."
 msgstr "This action could not finish; try again."
 
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed, so it was left open for review on the Board."
+msgstr "This board item changed after it was filed, so it was left open for review on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr "This board item changed after it was filed. Review it on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item is still open."
+msgstr "This board item is still open."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was already closed on the Board."
+msgstr "This board item was already closed on the Board."
+
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed: {0}. Review it on the Board."
+msgstr "This board item was closed without being completed: {0}. Review it on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed. Review it on the Board."
+msgstr "This board item was closed without being completed. Review it on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was completed."
+msgstr "This board item was completed."
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
@@ -7414,6 +7475,10 @@ msgstr "This file is not valid UTF-8 Markdown."
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
 msgstr "This folder is managed by the server."
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This folder is not available."
+msgstr "This folder is not available."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
@@ -7522,6 +7587,7 @@ msgid "Timeline"
 msgstr "Timeline"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Title"

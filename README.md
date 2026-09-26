@@ -26,8 +26,8 @@ Inherited from Rakazo and working:
 - Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key), OpenAI,
   Google, Vercel AI Gateway, and any OpenAI-compatible server, which covers Kimi Code,
   Z.ai, and local Ollama, LM Studio or llama.cpp
-- Computers: Docker (default), E2B, Daytona, Box, or your own desktop, with a browser,
-  terminal, files and a graphical desktop
+- Computers: this computer from the installed desktop app, plus Docker, E2B, Daytona, or Box,
+  with a browser, terminal, files and a graphical desktop
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
@@ -39,7 +39,7 @@ Inherited from Rakazo and working:
   third-party apps to use it), Codex through OpenAI's documented integration, Kimi and Z.ai
   coding plans, Gemini with an API key, Ollama as a first-class choice
 - Computers on Podman and kind/Kubernetes
-- Download and Homebrew install, and a desktop mode that does not need Docker
+- Download and Homebrew install
 - A fast, smooth UI on Windows, macOS and Linux
 
 Roadmap and questions live in [Discussions](https://github.com/ArdurAI/ardur-bot/discussions).
@@ -81,9 +81,11 @@ Only approve a download you trust from the official release page.
   `sudo apt install ./ardur-bot-*.deb`; a standalone deb has no distribution-repository trust
   guarantee. Run `ardur-bot --version` after installing it.
 
-**“This computer” still requires Docker Desktop**, running and ready. Alternatively, connect the
-client to an existing server. Backend images must also be published for local setup to succeed.
-Unsigned previews use manual downloads for updates on every OS.
+**This computer** starts the app's own database and services. Docker is not required for that
+first launch. You can still connect the client to an existing server. See
+[what commands can do on this computer](docs/self-host.md#what-commands-can-do-on-this-computer).
+Docker remains available later as an added computer, and Compose remains the way
+to run a server. Unsigned previews use manual downloads for updates on every OS.
 
 After the owner publishes the [Homebrew tap](docs/desktop-release.md#homebrew-tap-handoff):
 

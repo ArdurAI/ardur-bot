@@ -726,9 +726,7 @@ describe("scoreboard index", () => {
     try {
       // Built through the real record builder (appendIndexRecords/normalizeRecord), not a
       // hand-made object, so a key added to or removed from the real record shape shows up here
-      // without a matching edit to this fixture. The pinned recordHash below is a tripwire for any
-      // change to that shape or its canonical serialization — whether or not it comes with an
-      // INDEX_SCHEMA_VERSION bump; it does not itself enforce that a bump happens.
+      // without a matching edit to this fixture.
       const record = await appendIndexRecord(root, {
         status: "measured",
         tier: "release",
@@ -758,7 +756,58 @@ describe("scoreboard index", () => {
       });
       const { recordHash, ...body } = record;
       expect(Object.keys(body).sort()).toEqual([...RECORD_KEYS].sort());
-      expect(recordHash).toBe("e50e198cfffa1d7d2d7d559a3262893159b93d2688c2859a4a1ac00edfbbf4f8");
+
+      // The pinned hash below is a tripwire for a change to the record's key set or its canonical
+      // serialization — whether or not it comes with an INDEX_SCHEMA_VERSION bump; it does not
+      // itself enforce that a bump happens. Every field here is a fixed literal, including the
+      // ones the real record above derives from the manifest (suiteHash, declaredSamples,
+      // samplePlan) or from the synthetic report fixture (reportDigest, objectDigest). So editing
+      // a metric definition or sample plan in packages/testkit/src/scoreboard/manifest.ts, or
+      // changing the syntheticReport fixture, cannot move this hash: only a change to the
+      // record's shape or contentDigest's serialization can.
+      const golden = {
+        schemaVersion: 7,
+        status: "measured",
+        tier: "release",
+        commit: A,
+        parentCommit: B,
+        fixedReleaseCommit: C,
+        suiteVersion: "golden-suite-version",
+        suiteHash: hash("golden-suite-hash"),
+        environment: "release-packaged",
+        environmentHash: hash("environment"),
+        attempt: 1,
+        role: "candidate",
+        indexedAt: "2026-09-25T00:00:00.000Z",
+        runnerCommit: A,
+        samplePlan: "golden-sample-plan",
+        declaredSamples: { pairs: 200, startupPerStratum: 100 },
+        observedSamples: 1,
+        reportDigest: hash("golden-report-digest"),
+        objectDigest: hash("golden-object-digest"),
+        verdictDigest: hash("verdict"),
+        artifactDigests: [
+          {
+            name: "synthetic.dmg",
+            sha256: hash("build"),
+            bytes: 1,
+            target: "desktop-darwin-arm64",
+          },
+        ],
+        pendingReason: null,
+        gateCodes: [],
+        supersedes: null,
+        chainOrigin: "first-run",
+        enumerationStart: null,
+        enumerationReason: null,
+        waiver: null,
+        metricIds: [],
+        previousHash: "0".repeat(64),
+      };
+      expect(Object.keys(golden).sort()).toEqual([...RECORD_KEYS].sort());
+      expect(contentDigest(golden)).toBe(
+        "0fa957e6c9a1d63e5dc77fb0c764d4e3969e7bdd96cd08da3bc6125256b5f811",
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -1701,12 +1750,83 @@ describe("release publication gate", () => {
       expect(detail).not.toContain("candidate.json");
       expect(detail).not.toContain("No measured evidence exists for this release.");
       expect(detail).not.toContain("evidence_waiver");
+      // The sentence ends with an action, names the files once, and doesn't restate the fact.
+      expect(detail).not.toContain("Every report is required");
+      expect(detail).toBe(
+        "This release run did not upload parent.json, fixed-release.json and policy.json. " +
+          "Upload them with the other reports and run the release again.",
+      );
       const records = await readIndex(result.indexRoot);
       expect(records.map((record) => [record.status, record.pendingReason])).toEqual([
         ["pending", "reports-missing"],
       ]);
     } finally {
       await rm(partial.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("names a single missing report once, with the singular action", async () => {
+    const partial = await stagePassing();
+    try {
+      await rm(path.join(partial.reportsRoot, "policy.json"));
+      const result = await gate(partial, "index-single-partial");
+      expect(result.code).toBe(2);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(codes(result.gate)).toEqual(["reports-missing"]);
+      const detail = result.gate.reasons[0]?.detail as string;
+      expect(detail).toBe(
+        "This release run did not upload policy.json. " +
+          "Upload it with the other reports and run the release again.",
+      );
+    } finally {
+      await rm(partial.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("names an unreadable report as unreadable rather than as not uploaded", async () => {
+    const malformed = await stagePassing();
+    try {
+      await writeFile(path.join(malformed.reportsRoot, "parent.json"), "{not json");
+      const result = await gate(malformed, "index-malformed-parent");
+      expect(result.code).toBe(2);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(codes(result.gate)).toEqual(["reports-missing"]);
+      const detail = result.gate.reasons[0]?.detail as string;
+      expect(detail).toContain("parent.json could not be read");
+      expect(detail).toContain("Fix or re-upload it and run the release again.");
+      expect(detail).not.toContain("did not upload");
+      expect(detail).not.toContain("No measured evidence exists for this release.");
+      expect(detail).not.toContain("evidence_waiver");
+      const records = await readIndex(result.indexRoot);
+      expect(records.map((record) => [record.status, record.pendingReason])).toEqual([
+        ["pending", "reports-missing"],
+      ]);
+    } finally {
+      await rm(malformed.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("never offers the waiver when all four reports are absent but the folder isn't empty", async () => {
+    const bare = await stageWithoutEvidence();
+    try {
+      await writeFile(path.join(bare.reportsRoot, "notes.txt"), "not a report");
+      const result = await gate(bare, "index-stray-file");
+      expect(result.code).toBe(2);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(codes(result.gate)).toEqual(["reports-missing"]);
+      const detail = result.gate.reasons[0]?.detail as string;
+      expect(detail).toBe(
+        "This release run did not upload parent.json, candidate.json, fixed-release.json and " +
+          "policy.json. Upload them with the other reports and run the release again.",
+      );
+      expect(detail).not.toContain("No measured evidence exists for this release.");
+      expect(detail).not.toContain("evidence_waiver");
+      const records = await readIndex(result.indexRoot);
+      expect(records.map((record) => [record.status, record.pendingReason])).toEqual([
+        ["pending", "reports-missing"],
+      ]);
+    } finally {
+      await rm(bare.root, { recursive: true, force: true });
     }
   }, 60_000);
 

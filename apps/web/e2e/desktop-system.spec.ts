@@ -1,6 +1,12 @@
+import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 import { bots, installPerformanceFixture } from "./performance-fixture";
+
+/** The app opens on the Dashboard; Settings sits in the top bar. */
+async function openSettings(page: Page) {
+  await page.getByRole("banner").getByRole("button", { name: "Settings", exact: true }).click();
+}
 
 test("desktop System controls use the native bridge and space Dispatch policy", async ({
   page,
@@ -29,6 +35,7 @@ test("desktop System controls use the native bridge and space Dispatch policy", 
       },
       awakeRoutines: 0,
       storage: { path: null, canMove: false, progress: null },
+      localData: true,
       permissions: { accessibility: "granted", screen: "not-determined" },
       shortcutError: false,
       shortcutOptions: {
@@ -59,15 +66,16 @@ test("desktop System controls use the native bridge and space Dispatch policy", 
           openPermission: async (permission: string) => {
             document.documentElement.dataset.permission = permission;
           },
+          resetLocalData: async () => {
+            document.documentElement.dataset.localReset = "requested";
+            return state;
+          },
         },
       },
     });
   });
   await page.goto("/app");
-  await page
-    .getByTestId("bots-sidebar")
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
+  await openSettings(page);
   await page.getByTestId("settings-nav-system").click();
   const settings = page.getByTestId("user-settings");
   await expect(settings.getByText("Desktop app", { exact: true })).toBeVisible();
@@ -88,15 +96,20 @@ test("desktop System controls use the native bridge and space Dispatch policy", 
   await settings.getByRole("button", { name: "Open Accessibility settings" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-permission", "accessibility");
   await captureScreenshot(page, testInfo, "desktop-system-browser-permissions");
+  // Local mode keeps its data on this computer; the reset asks to confirm in a native dialog.
+  const reset = settings.getByRole("button", { name: "Reset local data", exact: true });
+  await expect(settings.getByText("Local data", { exact: true })).toBeVisible();
+  await reset.scrollIntoViewIfNeeded();
+  await captureScreenshot(page, testInfo, "desktop-system-local-data");
+  await reset.click();
+  await expect(page.locator("html")).toHaveAttribute("data-local-reset", "requested");
 });
 
 test("System is absent from an ordinary web session", async ({ page }) => {
   await installPerformanceFixture(page);
   await page.goto("/app");
-  await page
-    .getByTestId("bots-sidebar")
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
+  await openSettings(page);
+  await expect(page.getByTestId("user-settings")).toBeVisible();
   await expect(page.getByTestId("settings-nav-system")).toHaveCount(0);
 });
 
