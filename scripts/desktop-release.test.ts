@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -14,8 +14,36 @@ describe("release metadata", () => {
     for (const tag of ["dev", "v0.2.0", "v0.1.0;echo", "v0.1.0/other"])
       expect(() => releaseVersion(tag, "0.1.0")).toThrow();
   });
-  it("groups conventional prefixes without publishing subjects, scopes, or identities", () => {
-    const notes = releaseNotes([
+  it("validates a tag with no installed dependencies, as the release workflow runs it", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "release-validate-"));
+    try {
+      await mkdir(path.join(dir, "scripts"));
+      for (const name of ["desktop-release.mjs", "scoreboard-index.mjs"])
+        await copyFile(
+          fileURLToPath(new URL(`./${name}`, import.meta.url)),
+          path.join(dir, "scripts", name),
+        );
+      await writeFile(path.join(dir, "package.json"), JSON.stringify({ version: "1.2.3-alpha.1" }));
+      const env = { ...process.env };
+      delete env.NODE_PATH;
+      delete env.NODE_OPTIONS;
+      const run = (tag: string) =>
+        spawnSync(process.execPath, ["scripts/desktop-release.mjs", "validate", tag], {
+          cwd: dir,
+          encoding: "utf8",
+          env,
+        });
+      const valid = run("v1.2.3-alpha.1");
+      expect(valid.stderr).toBe("");
+      expect(valid.status).toBe(0);
+      expect(valid.stdout).toBe("1.2.3-alpha.1\n");
+      expect(run("v9.9.9").status).not.toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  it("groups conventional prefixes without publishing subjects, scopes, or identities", async () => {
+    const notes = await releaseNotes([
       "feat(private/fixture): Fixture Person changed a secret",
       "fix: sensitive@example.invalid",
       "perf: /private/fixture",
@@ -95,7 +123,7 @@ describe("release metadata", () => {
         allowPublication: true,
         exitCode: 0,
         reasons: [],
-        waiver: { reason: "Physical runners are not provisioned", actor: "release-bot" },
+        waiver: { reason: "Physical runners are not provisioned" },
         distributedDigests: [],
       };
       const gatePath = path.join(root, "gate.json");
@@ -118,7 +146,11 @@ describe("release metadata", () => {
           },
         },
       );
+      expect(notes.stderr).toBe("");
       expect(notes.status).toBe(0);
+      expect(notes.stdout).toContain(
+        "This preview was published without measured performance evidence: Physical runners are not provisioned.\n",
+      );
       expect(notes.stdout).toContain("- Features: 1 change.");
       expect(notes.stdout).toContain("- Performance: 1 change.");
       expect(notes.stdout).toContain("- Fixes: 1 change.");

@@ -131,8 +131,6 @@ jobs:
       environment: release-packaged
       mode: release
       gate: required
-      common_runner_sha: ${{ needs.validate.outputs.sha }}
-      attempt: "1"
       release_version: ${{ needs.validate.outputs.version }}
       evidence_waiver: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}
 

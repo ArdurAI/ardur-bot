@@ -50,7 +50,8 @@ export interface AnalysisOptions {
 }
 const OUTCOMES: EvidenceOutcome[] = ["success", "failed", "cancelled", "timed-out", "uncertain"];
 const GATES = SCOREBOARD_MANIFEST.proposedGates;
-const SAFETY_METRICS = [
+/** The effect-safety counts judged when a caller does not pin its own list. */
+export const SAFETY_METRICS: readonly string[] = [
   "m13.wrong-pin",
   "m13.unauthorized-effects",
   "m13.duplicate-effects",
@@ -710,14 +711,17 @@ function validateCalibration(policy: BudgetPolicy) {
   );
   const first = envelopes[0]!.report;
   for (const { report } of envelopes) {
-    validateReport(report, policy.required, policy);
+    // One judge run validates the report and gives its verdict; incomplete evidence keeps its detail.
+    const failures = judgeReport(report, policy.required, { policy });
+    const incomplete = failures.find((item) => item.code === "incomplete-evidence");
+    requireCondition(!incomplete, incomplete?.detail ?? "incomplete-evidence");
     requireCondition(report.createdAt < calibration.frozenAt, "calibration-after-freeze");
     requireCondition(
       report.build.commit === first.build.commit &&
         report.build.artifactHash === first.build.artifactHash,
       "calibration-must-use-same-build",
     );
-    requireCondition(!judgeReport(report, policy.required).length, "calibration-verdict-failed");
+    requireCondition(!failures.length, "calibration-verdict-failed");
   }
   for (const { report } of envelopes.slice(1)) {
     const reasons: VerdictReason[] = [];

@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderScoreboardNotes } from "./scoreboard-index.mjs";
 
 export function releaseVersion(tag, version) {
   if (
@@ -17,7 +16,7 @@ export function releaseVersion(tag, version) {
 
 // Only fixed labels and counts leave this process. Subjects, scopes, author identities,
 // and file names cannot leak into public release notes.
-export function releaseNotes(subjects, gate) {
+export async function releaseNotes(subjects, gate) {
   const labels = {
     feat: "Features",
     fix: "Fixes",
@@ -48,6 +47,8 @@ export function releaseNotes(subjects, gate) {
     "",
   ].join("\n");
   if (gate === undefined) return summary;
+  // Loaded only here: the scoreboard needs installed dependencies, and `validate` runs without them.
+  const { renderScoreboardNotes } = await import("./scoreboard-index.mjs");
   return `${summary}${renderScoreboardNotes(gate)}`;
 }
 
@@ -108,7 +109,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         const subjects = git(["log", "--format=%s", previous ? `${previous}..${tag}` : tag])
           .split("\n")
           .filter(Boolean);
-        process.stdout.write(releaseNotes(subjects, gate));
+        process.stdout.write(await releaseNotes(subjects, gate));
       }
     }
   } else if (command === "cask") {

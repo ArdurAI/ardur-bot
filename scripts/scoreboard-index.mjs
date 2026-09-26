@@ -1,6 +1,17 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, cp, mkdir, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  cp,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tsImport } from "tsx/esm/api";
@@ -18,12 +29,33 @@ const RELEASE_POLICY_FILE = fileURLToPath(
   new URL("../docs/performance/release-policy.json", import.meta.url),
 );
 const INDEX_ARTIFACT = "scoreboard-index";
-const INDEX_SCRIPT = "scripts/scoreboard-index.mjs";
+const RELEASE_INDEX_ARTIFACT = "scoreboard-release-index";
+/**
+ * Each durable chain is restored from the newest live artifact its own workflow uploaded. A
+ * refused release still uploads its chain, so any completed release run counts.
+ */
+const INDEX_SCOPES = {
+  commit: {
+    workflow: "performance.yml",
+    artifact: INDEX_ARTIFACT,
+    events: ["push"],
+    status: "success",
+    marker: { file: "scripts/scoreboard-index.mjs", text: null },
+  },
+  release: {
+    workflow: "release-desktop.yml",
+    artifact: RELEASE_INDEX_ARTIFACT,
+    events: ["push", "workflow_dispatch"],
+    status: "completed",
+    marker: { file: ".github/workflows/performance.yml", text: RELEASE_INDEX_ARTIFACT },
+  },
+};
 const CHAIN_ORIGINS = [
   "first-run",
   "expired-after-90-days-inactivity",
   "prior-artifact-missing",
   "non-durable-check",
+  "history-rewritten",
 ];
 const ENUMERATION_REASONS = ["empty-chain-retention-window", "chain-without-ancestor"];
 /** The release evidence run must produce both reports for the same commit and build. */
@@ -39,14 +71,6 @@ const GUARDRAIL_REPORTS = {
   memory: { tier: "T2", label: "T2 startup strata report" },
   energy: { tier: "T2", label: "T2 startup strata report" },
 };
-const SAFETY_METRIC_IDS = [
-  "m13.wrong-pin",
-  "m13.unauthorized-effects",
-  "m13.duplicate-effects",
-  "m13.lost-accepted-work",
-  "m13.false-completion",
-  "m11.lazy-boundary-violations",
-];
 export const REQUIRED_RELEASE_TARGETS = Object.freeze([
   "desktop-darwin-arm64",
   "desktop-darwin-x64",
@@ -57,7 +81,6 @@ export const PENDING_REASONS = Object.freeze([
   "not-measured",
   "benchmark-runner-incompatible",
   "schema-3-evidence-not-produced",
-  "common-runner-undeclared",
   "release-runner-not-provisioned",
   "baseline-tree-unavailable",
   "reports-missing",
@@ -118,13 +141,6 @@ const RECORD_KEYS = [
   "metricIds",
   "previousHash",
 ];
-const V5_RECORD_KEYS = RECORD_KEYS.filter(
-  (key) => key !== "enumerationStart" && key !== "enumerationReason",
-);
-const V4_RECORD_KEYS = V5_RECORD_KEYS.filter((key) => key !== "metricIds");
-const V3_RECORD_KEYS = V4_RECORD_KEYS.filter((key) => key !== "waiver");
-const V2_RECORD_KEYS = V3_RECORD_KEYS.filter((key) => key !== "chainOrigin");
-const LEGACY_RECORD_KEYS = V2_RECORD_KEYS.filter((key) => key !== "gateCodes");
 const DIRECTORY_TARGETS = {
   "desktop-mac-arm64": "desktop-darwin-arm64",
   "desktop-mac-x64": "desktop-darwin-x64",
@@ -149,9 +165,13 @@ export const REFUSAL_CODES = new Set([
   "invalid-waiver",
   "waiver-with-evidence",
   "invalid-energy-entry",
+  "unjudged-report",
 ]);
-export const UNDECLARED_PUBLICATION_NOTE =
-  "retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared.";
+/** Plain names for budgets that need a reviewed declaration before they can be checked. */
+const BUDGET_NAMES = {
+  "m10.post-idle-retained": "retained session growth",
+  "m13.terminal-stop": "tool termination deadline",
+};
 const FAILURE_EXIT_CODES = new Set([
   ...REFUSAL_CODES,
   "artifact-digest-mismatch",
@@ -195,12 +215,14 @@ function loadScoreboard() {
     canonicalSerialize: manifest.canonicalSerialize,
     contentDigest: manifest.contentDigest,
     SCOREBOARD_MANIFEST: manifest.SCOREBOARD_MANIFEST,
+    suiteHash: manifest.contentDigest(manifest.SCOREBOARD_MANIFEST),
     createPerformanceEvidenceEnvelope: report.createPerformanceEvidenceEnvelope,
     parsePerformanceEvidenceEnvelope: report.parsePerformanceEvidenceEnvelope,
     assertRequiredEvidence: report.assertRequiredEvidence,
     comparePerformanceEvidence: statistics.comparePerformanceEvidence,
     judgeReport: statistics.judgeReport,
     reportRules: statistics.reportRules,
+    SAFETY_METRICS: statistics.SAFETY_METRICS,
     createBudgetPolicy: statistics.createBudgetPolicy,
     freezeBudgetPolicy: statistics.freezeBudgetPolicy,
     metricBudget: statistics.metricBudget,
@@ -246,7 +268,10 @@ function assertPublicValue(value) {
   if (typeof value === "string") {
     if (PRIVATE_MARKERS.some((marker) => value.includes(marker)) || /^[A-Za-z]:\\/.test(value))
       fail("private-data", "private-data");
-    if (/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(value))
+    if (
+      /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(value) ||
+      /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s/@]+@/.test(value)
+    )
       fail("private-data", "private-data");
     return;
   }
@@ -259,22 +284,37 @@ function assertPublicValue(value) {
   }
 }
 
-/** Waiver text lands in public release notes, so it stays one plain sentence without markup. */
-export function parseEvidenceWaiver(reason, actor) {
-  if (typeof reason !== "string" || typeof actor !== "string") return null;
+/**
+ * Waiver text lands in public release notes, so it stays one plain sentence without markup, and
+ * without a path, address or URL.
+ */
+function parseWaiverReason(reason) {
+  if (typeof reason !== "string") return null;
   const text = reason.trim().replace(/\.+$/, "").trim();
   if (
     !/^[A-Za-z0-9 .,;:'"()!?&%+/-]{1,200}$/.test(text) ||
     !/[A-Za-z]/.test(text) ||
     text.includes("://") ||
-    !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$/.test(actor)
+    /(^|[\s("'])([A-Za-z]:)?\.{0,2}\//.test(text)
   )
     return null;
   try {
-    assertPublicValue([text, actor]);
+    assertPublicValue(text);
   } catch {
     return null;
   }
+  return text;
+}
+
+/** The dispatching account is kept in the index record only, never in a public release asset. */
+function parseEvidenceWaiver(reason, actor) {
+  const text = parseWaiverReason(reason);
+  if (
+    text === null ||
+    typeof actor !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$/.test(actor)
+  )
+    return null;
   return { reason: text, actor };
 }
 
@@ -297,7 +337,7 @@ async function loadReleasePolicy(file, expectedSha256) {
     if (
       policy.schemaVersion !== 1 ||
       policy.suiteVersion !== scoreboard.SCOREBOARD_MANIFEST.suiteVersion ||
-      policy.manifestHash !== scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST) ||
+      policy.manifestHash !== scoreboard.suiteHash ||
       policy.budget.mode !== "release" ||
       policy.releaseTargets.join(",") !== REQUIRED_RELEASE_TARGETS.join(",") ||
       !Array.isArray(policy.guardrails) ||
@@ -364,25 +404,13 @@ async function exists(file) {
   }
 }
 
-export function selectCommitRange({ mode = "commit", before, base, head }) {
+/** A run that does not extend a durable chain indexes only its own commits: base to head, or head. */
+export function selectCommitRange({ mode = "commit", base, head }) {
   sha40(head);
-  const zero = "0".repeat(40);
-  if (mode === "release") {
-    if (base && base !== zero) {
-      sha40(base);
-      return { kind: "range", base, head };
-    }
-    return { kind: "single", head };
-  }
-  if (mode !== "commit") fail("invalid-mode", "invalid-mode");
-  if (base && base !== zero) {
+  if (mode !== "commit" && mode !== "release") fail("invalid-mode", "invalid-mode");
+  if (base && base !== "0".repeat(40)) {
     sha40(base);
     return { kind: "range", base, head };
-  }
-  if (before) {
-    if (before === zero) return { kind: "history", head };
-    sha40(before);
-    return { kind: "range", base: before, head };
   }
   return { kind: "single", head };
 }
@@ -403,8 +431,7 @@ export function parseRevListParents(text) {
   return commits;
 }
 
-export function baselineMeasurementPlan({ baseHarnessPresent, runnerSha, candidateSha, baseSha }) {
-  sha40(runnerSha);
+export function baselineMeasurementPlan({ baseHarnessPresent, candidateSha, baseSha }) {
   sha40(candidateSha);
   sha40(baseSha);
   if (typeof baseHarnessPresent !== "boolean") fail("invalid-harness", "invalid-harness");
@@ -566,19 +593,12 @@ async function readIndexUnlocked(root) {
     } catch {
       fail("corrupt-index", "corrupt-index");
     }
-    const keys =
-      record?.schemaVersion === 1
-        ? LEGACY_RECORD_KEYS
-        : record?.schemaVersion === 2
-          ? V2_RECORD_KEYS
-          : record?.schemaVersion === 3
-            ? V3_RECORD_KEYS
-            : record?.schemaVersion === 4
-              ? V4_RECORD_KEYS
-              : record?.schemaVersion === 5
-                ? V5_RECORD_KEYS
-                : RECORD_KEYS;
-    exactKeys(record, [...keys, "recordHash"]);
+    if (record?.schemaVersion !== INDEX_SCHEMA_VERSION)
+      fail(
+        "unsupported-index-schema",
+        `Index records must use schema version ${INDEX_SCHEMA_VERSION}.`,
+      );
+    exactKeys(record, [...RECORD_KEYS, "recordHash"]);
     const actual = hashRecord(record, contentDigest);
     if (record.recordHash !== actual || record.previousHash !== previous)
       fail("corrupt-index", "corrupt-index");
@@ -736,7 +756,7 @@ async function normalizeRecord(input, existing) {
   opaque(input.suiteVersion);
   if (input.suiteVersion !== scoreboard.SCOREBOARD_MANIFEST.suiteVersion)
     fail("unsupported-suite", "unsupported-suite");
-  const suiteHash = scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST);
+  const suiteHash = scoreboard.suiteHash;
   sha40(input.commit);
   if (input.parentCommit !== null) sha40(input.parentCommit);
   if (input.fixedReleaseCommit !== null) sha40(input.fixedReleaseCommit);
@@ -881,31 +901,51 @@ async function normalizeRecord(input, existing) {
   return { ...body, recordHash: hashRecord(body, scoreboard.contentDigest) };
 }
 
-async function appendLine(root, record, canonicalSerialize) {
+/** Appends in one write, or replaces the whole chain through a renamed temporary file. */
+async function writeLines(root, records, { replace = false } = {}) {
+  if (!records.length && !replace) return;
+  const { canonicalSerialize } = await loadScoreboard();
+  const text = records.map((record) => `${canonicalSerialize(record)}\n`).join("");
   const file = recordsPath(root);
-  const handle = await open(file, "a");
+  const target = replace ? `${file}.next` : file;
+  const handle = await open(target, replace ? "w" : "a");
   try {
-    await handle.write(`${canonicalSerialize(record)}\n`);
+    await handle.write(text);
     await handle.sync();
   } finally {
     await handle.close();
   }
+  if (replace) await rename(target, file);
 }
 
-export async function appendIndexRecord(root, input, options = {}) {
+/** Validates each input against the chain and the inputs before it. A new genesis names its origin. */
+async function normalizeRecords(root, inputs, existing) {
+  const origin = existing.length ? null : await chainOrigin(root);
+  const records = [...existing];
+  for (const input of inputs)
+    records.push(await normalizeRecord({ chainOrigin: origin, ...input, root }, records));
+  return records.slice(existing.length);
+}
+
+/** One read of the chain and one write, under one lock. `build` sees the chain it extends. */
+export async function appendIndexRecords(root, build, options = {}) {
   return withIndexLock(
     root,
     async (assertOwner) => {
       const existing = await readIndexUnlocked(root);
-      const { canonicalSerialize } = await loadScoreboard();
-      const record = await normalizeRecord({ ...input, root }, existing);
+      const appended = await normalizeRecords(root, await build(existing), existing);
       await options.beforeAppend?.();
       await assertOwner();
-      await appendLine(root, record, canonicalSerialize);
-      return record;
+      await writeLines(root, appended);
+      return { existing, appended };
     },
     options,
   );
+}
+
+export async function appendIndexRecord(root, input, options = {}) {
+  const { appended } = await appendIndexRecords(root, () => [input], options);
+  return appended[0];
 }
 
 const CHAIN_ORIGIN_FILE = ".chain-origin";
@@ -963,15 +1003,14 @@ export async function pruneCommitObjects(root, now, retentionDays = COMMIT_OBJEC
         .filter((record) => record.status === "expired")
         .map((record) => record.expiresRecord),
     );
-    const { canonicalSerialize } = await loadScoreboard();
-    let removed = 0;
-    let records = existing;
+    const records = [...existing];
+    const doomed = [];
     for (const record of existing) {
       if (record.tier !== "commit" || record.status !== "measured" || !record.objectDigest)
         continue;
       if (Date.parse(record.indexedAt) >= cutoff) continue;
       if (protectedDigests.has(record.objectDigest)) continue;
-      const file = objectPath(root, record.objectDigest);
+      doomed.push(objectPath(root, record.objectDigest));
       if (!tombstoned.has(record.recordHash)) {
         const tombstone = await normalizeRecord(
           {
@@ -996,11 +1035,15 @@ export async function pruneCommitObjects(root, now, retentionDays = COMMIT_OBJEC
           },
           records,
         );
-        await assertOwner();
-        await appendLine(root, tombstone, canonicalSerialize);
-        records = [...records, tombstone];
+        records.push(tombstone);
         tombstoned.add(record.recordHash);
       }
+    }
+    // Expiry records are written before any object bytes are removed.
+    await assertOwner();
+    await writeLines(root, records.slice(existing.length));
+    let removed = 0;
+    for (const file of doomed) {
       if (await exists(file)) {
         await rm(file);
         removed += 1;
@@ -1108,7 +1151,7 @@ function judgeEnergyEntry(entry, index, scoreboard) {
   }
 }
 
-async function validatedEnergy(file, _artifactRoot, installers) {
+async function validatedEnergy(file, installers) {
   if (!(await exists(file))) return { observed: new Set(), rejections: [] };
   const scoreboard = await loadScoreboard();
   let entries;
@@ -1211,8 +1254,8 @@ function metricSummary(report, prefix) {
     .join("; ");
 }
 
-function safetySummary(report) {
-  const safety = report.metrics.filter((metric) => SAFETY_METRIC_IDS.includes(metric.id));
+function safetySummary(report, effectMetricIds) {
+  const safety = report.metrics.filter((metric) => effectMetricIds.includes(metric.id));
   const measured = safety.filter((metric) =>
     metric.observations.some((item) => item.value !== null),
   );
@@ -1388,10 +1431,10 @@ const SUMMARY_FROM_GUARDRAIL = {
   bundleSummary: "bundle",
 };
 
-function summariesFor(report) {
+function summariesFor(report, effectMetricIds) {
   return {
     taskSummary: taskSummary(report),
-    safetySummary: safetySummary(report),
+    safetySummary: safetySummary(report, effectMetricIds),
     recoverySummary: recoverySummary(report),
     tokensSummary: report.usage.length ? `${report.usage.length} requests` : "unknown",
     cacheSummary: metricSummary(report, "m05."),
@@ -1399,6 +1442,17 @@ function summariesFor(report) {
     memorySummary: metricSummary(report, "m10."),
     bundleSummary: metricSummary(report, "m11."),
   };
+}
+
+function budgetName(scope) {
+  const id = String(scope ?? "")
+    .split(":")
+    .at(-1);
+  return BUDGET_NAMES[id] ?? id.split(".").at(-1).replaceAll("-", " ");
+}
+
+function undeclaredDetail(scope) {
+  return `The ${budgetName(scope)} budget is not declared.`;
 }
 
 export async function evaluatePublicationGate(input) {
@@ -1413,6 +1467,8 @@ export async function evaluatePublicationGate(input) {
   if (input.unmapped) push("unmapped-artifact", "artifacts");
   for (const name of input.energyRejections ?? [])
     push("invalid-energy-entry", name, `invalid energy entry ${name}`);
+  for (const name of input.unjudgedReports ?? [])
+    push("unjudged-report", name, `unjudged report ${name}`);
   const releasePolicy = input.releasePolicy ?? null;
   if (!releasePolicy) push("release-policy-unpinned", "release-policy");
   let verdict = null;
@@ -1457,17 +1513,19 @@ export async function evaluatePublicationGate(input) {
       push(
         reason.code,
         reason.scope,
-        reason.code === "undeclared-budget" ? UNDECLARED_PUBLICATION_NOTE : reason.detail,
+        reason.code === "undeclared-budget" ? undeclaredDetail(reason.scope) : reason.detail,
       );
     candidateReport = verdict?.evidence?.candidate.report ?? null;
     if (tiered)
       for (const id of undeclaredIds)
-        push("undeclared-budget", `candidate:${id}`, UNDECLARED_PUBLICATION_NOTE);
+        push("undeclared-budget", `candidate:${id}`, undeclaredDetail(id));
   }
   const candidateSet = candidateEvidenceSet(input.candidateEvidence, input.candidateReports);
   const satisfiedBy = new Map();
   const compared = new Set((verdict?.comparisons ?? []).map((item) => item.metricId));
   const effectMetricIds = effectSafetyMetricIds(releasePolicy);
+  // The summary names the counts the judge checks: the pinned list, else the judge's own default.
+  const summaryEffectIds = effectMetricIds ?? scoreboard.SAFETY_METRICS;
   if (candidateSet.length && releasePolicy)
     for (const { id, ...selection } of releasePolicy.policy.guardrails) {
       const requirement = guardrailRequirement(id, selection);
@@ -1668,14 +1726,15 @@ export async function evaluatePublicationGate(input) {
         `${right.metricId}:${right.baseline}:${right.outcome}:${right.statistic}`,
       ),
     );
-  const fallback = candidateReport ? summariesFor(candidateReport) : null;
+  const fallback = candidateReport ? summariesFor(candidateReport, summaryEffectIds) : null;
   const summaries = {};
   const summarySources = {};
   for (const [key, guardrailId] of Object.entries(SUMMARY_FROM_GUARDRAIL)) {
     const match = satisfiedBy.get(guardrailId);
-    const rendered = match ? summariesFor(match.report) : fallback;
+    const rendered = match ? summariesFor(match.report, summaryEffectIds) : fallback;
     summaries[key] = rendered ? rendered[key] : "unknown";
-    summarySources[key] = match?.source ?? null;
+    // The attached release asset, not the name in the reports artifact.
+    summarySources[key] = match ? `scoreboard-${match.source}` : null;
   }
   for (const summary of Object.values(summaries))
     if (summary === "unknown" || summary.includes("unknown")) unknowns.push(summary);
@@ -1692,7 +1751,7 @@ export async function evaluatePublicationGate(input) {
     humanAcceptance: "separate",
     releasePolicySha256: releasePolicy?.sha256 ?? null,
     suiteVersion: scoreboard.SCOREBOARD_MANIFEST.suiteVersion,
-    suiteHash: scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST),
+    suiteHash: scoreboard.suiteHash,
     environment: input.environment,
     samplePlan: plan.label,
     declaredSamples: plan.declaredSamples,
@@ -1735,7 +1794,7 @@ function cell(value) {
 }
 
 function undeclaredPublicationLines(gate) {
-  const ids = [
+  const names = [
     ...new Set(
       (Array.isArray(gate.reasons) ? gate.reasons : [])
         .filter((reason) => reason?.code === "undeclared-budget")
@@ -1744,11 +1803,19 @@ function undeclaredPublicationLines(gate) {
             .split(":")
             .at(-1),
         )
-        .filter((id) => typeof id === "string" && /^[a-z][a-z0-9.-]*$/.test(id)),
+        .filter((id) => /^[a-z][a-z0-9.-]*$/.test(id))
+        .map(budgetName),
     ),
   ].sort();
-  if (!ids.length) return [];
-  return ["", UNDECLARED_PUBLICATION_NOTE, ids.join(", ")];
+  if (!names.length) return [];
+  const one = names.length === 1;
+  const count = ["One", "Two", "Three"][names.length - 1] ?? String(names.length);
+  return [
+    "",
+    one
+      ? `One release budget is not declared yet, so it was not checked: ${names[0]}. It must be declared before a release can be measured against it.`
+      : `${count} release budgets are not declared yet, so they were not checked: ${names.join(", ")}. They must be declared before a release can be measured against them.`,
+  ];
 }
 
 export function renderScoreboardNotes(gate) {
@@ -1766,20 +1833,19 @@ export function renderScoreboardNotes(gate) {
       ],
       "invalid-gate",
     );
-    const waiver = parseEvidenceWaiver(gate.waiver?.reason, gate.waiver?.actor);
-    if (
-      gate.allowPublication !== true ||
-      gate.reasons.length ||
-      !waiver ||
-      waiver.reason !== gate.waiver.reason
-    )
+    const passed = gate.allowPublication === true && !gate.reasons.length;
+    if (passed) exactKeys(gate.waiver, ["reason"], "invalid-gate");
+    const reason = passed ? parseWaiverReason(gate.waiver.reason) : null;
+    if (reason === null || reason !== gate.waiver.reason)
       fail("notes-require-validated-gate", "Release notes require a publication gate that passed.");
-    return [
+    const notes = [
       "## Performance evidence",
       "",
-      `This preview was published without measured performance evidence: ${waiver.reason}. Waived by ${waiver.actor}.`,
+      `This preview was published without measured performance evidence: ${reason}.`,
       "",
     ].join("\n");
+    assertPublicValue(notes);
+    return notes;
   }
   exactKeys(
     gate,
@@ -1871,7 +1937,7 @@ export function renderScoreboardNotes(gate) {
     const source = gate.summarySources[key];
     if (
       source !== null &&
-      (typeof source !== "string" || !/^[a-z0-9][a-z0-9.-]*\.json$/.test(source))
+      (typeof source !== "string" || !/^scoreboard-[a-z0-9][a-z0-9.-]*\.json$/.test(source))
     )
       fail("invalid-gate", "invalid-gate");
     lines.push(`${label}: ${gate[key]}.`);
@@ -1884,7 +1950,6 @@ export function renderScoreboardNotes(gate) {
     "",
     `The attached evidence file SHA-256 is ${cell(gate.attachedEvidenceSha256)}.`,
     `The canonical evidence envelope SHA-256 is ${cell(gate.canonicalEnvelopeSha256)}.`,
-    `The budget decision is ${gate.verdictStatus}.`,
     "",
     "Human acceptance is separate and is not granted by this evidence.",
     "",
@@ -1902,41 +1967,42 @@ async function readJson(file) {
   }
 }
 
-async function readExtraCandidateReports(reportsRoot, primary) {
+/**
+ * The extra candidate reports the gate judges: a public, parseable envelope of the same build as
+ * `candidate.json`. Any other `candidate-*.json` is unjudged; the gate refuses it by name and
+ * staging publishes nothing, because an unjudged file must never become a release asset.
+ */
+async function judgeCandidateReports(reportsRoot, primary) {
   let names = [];
   try {
     names = (await readdir(reportsRoot)).filter((name) => /^candidate-.+\.json$/.test(name)).sort();
   } catch {
-    return [];
+    return { accepted: [], unjudged: [] };
   }
   const scoreboard = await loadScoreboard();
-  const primaryReport = primary?.report;
-  const reports = [];
-  for (const name of names) {
-    let raw;
+  const accepted = [];
+  const unjudged = [];
+  for (const [index, name] of names.entries()) {
     try {
-      raw = await readFile(path.join(reportsRoot, name));
-    } catch {
-      continue;
-    }
-    let parsed;
-    try {
-      parsed = JSON.parse(raw.toString("utf8"));
-    } catch {
-      continue;
-    }
-    try {
-      const envelope = scoreboard.parsePerformanceEvidenceEnvelope(parsed);
-      if (primaryReport && !sameCandidateBuild(envelope.report, primaryReport)) continue;
-      reports.push({
+      const raw = await readFile(path.join(reportsRoot, name));
+      const text = raw.toString("utf8");
+      assertPublicValue(text);
+      const envelope = scoreboard.parsePerformanceEvidenceEnvelope(JSON.parse(text));
+      if (!primary?.report || !sameCandidateBuild(envelope.report, primary.report))
+        fail("unjudged-report", "unjudged-report");
+      accepted.push({
         source: name,
         sha256: sha256(raw),
         bytes: raw.length,
         report: envelope.report,
       });
-    } catch {}
+    } catch {
+      const safe =
+        /^candidate-[A-Za-z0-9_-][A-Za-z0-9._-]*\.json$/.test(name) && !name.includes("..");
+      unjudged.push(safe ? name : `candidate-report-${index}`);
+    }
   }
-  return reports;
+  return { accepted, unjudged };
 }
 
 const PUBLICATION_REPORTS = [
@@ -1947,43 +2013,30 @@ const PUBLICATION_REPORTS = [
   "energy.json",
 ];
 
-/** Copy every report the release gate can cite into the flat publication directory. */
+/**
+ * Copy exactly the reports the release gate judges into the flat publication directory. An
+ * invalid energy entry or an unjudged candidate report stages nothing.
+ */
 export async function stagePublicationReports(reportsRoot, destination) {
   if (typeof reportsRoot !== "string" || typeof destination !== "string")
     fail("invalid-argument", "invalid-argument");
+  await mkdir(destination, { recursive: true });
   const energyFile = path.join(reportsRoot, "energy.json");
   if (await exists(energyFile)) {
-    const energy = await validatedEnergy(energyFile, null, []);
-    if (energy.rejections.length) {
-      await mkdir(destination, { recursive: true });
-      return;
-    }
+    const energy = await validatedEnergy(energyFile, []);
+    if (energy.rejections.length) return;
   }
-  await mkdir(destination, { recursive: true });
-  let extras = [];
-  try {
-    extras = (await readdir(reportsRoot))
-      .filter((name) => /^candidate-.+\.json$/.test(name))
-      .sort();
-  } catch {
-    extras = [];
-  }
-  for (const name of [...PUBLICATION_REPORTS, ...extras]) {
+  const extras = await judgeCandidateReports(
+    reportsRoot,
+    await readJson(path.join(reportsRoot, "candidate.json")),
+  );
+  if (extras.unjudged.length) return;
+  for (const name of [...PUBLICATION_REPORTS, ...extras.accepted.map((item) => item.source)]) {
     const from = path.join(reportsRoot, name);
     if (!(await exists(from))) continue;
     const published = `scoreboard-${name}`;
     artifactName(published);
     await cp(from, path.join(destination, published));
-  }
-}
-
-async function appendVisible(root, input) {
-  try {
-    return await appendIndexRecord(root, input);
-  } catch (error) {
-    if (error instanceof ScoreboardIndexError && error.code === "pending-hides-measurement")
-      return null;
-    throw error;
   }
 }
 
@@ -1997,7 +2050,16 @@ function releaseRecordBase(options, suiteVersion, environmentHash) {
     indexedAt: options.indexedAt ?? new Date().toISOString(),
     runnerCommit: options.runnerCommit,
     fixedReleaseCommit: options.fixedReleaseSha || null,
-    root: options.indexRoot,
+  };
+}
+
+/** Attempt and supersedes come from the chain the record extends, read under the same lock. */
+function nextFor(records, key) {
+  const prior = records.filter((record) => sameKey(record, key));
+  return {
+    prior,
+    attempt: nextAttempt(records, key),
+    supersedes: prior.at(-1)?.recordHash ?? null,
   };
 }
 
@@ -2017,24 +2079,29 @@ async function recordUnpublished(options, gate, common) {
   const refusal = gateCodes.some((code) => REFUSAL_CODES.has(code));
   const metricIds = metricIdsFromReasons(gate.reasons);
   if (options.candidateSha && /^[a-f0-9]{40}$/.test(options.candidateSha)) {
-    const records = await readIndex(options.indexRoot);
-    const key = candidateKey(options, scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST));
-    const prior = records.filter((record) => sameKey(record, key));
-    await appendVisible(options.indexRoot, {
-      ...common,
-      status: refusal
-        ? "refused"
-        : prior.some((record) => record.status === "measured")
-          ? "rejected"
-          : "pending",
-      commit: options.candidateSha,
-      parentCommit: /^[a-f0-9]{40}$/.test(options.baseSha ?? "") ? options.baseSha : null,
-      role: "candidate",
-      attempt: nextAttempt(records, key),
-      supersedes: prior.at(-1)?.recordHash ?? null,
-      pendingReason: refusal ? null : pendingReasonFor(gate.reasons),
-      gateCodes,
-      metricIds,
+    await appendIndexRecords(options.indexRoot, (records) => {
+      const { prior, attempt, supersedes } = nextFor(
+        records,
+        candidateKey(options, scoreboard.suiteHash),
+      );
+      return [
+        {
+          ...common,
+          status: refusal
+            ? "refused"
+            : prior.some((record) => record.status === "measured")
+              ? "rejected"
+              : "pending",
+          commit: options.candidateSha,
+          parentCommit: /^[a-f0-9]{40}$/.test(options.baseSha ?? "") ? options.baseSha : null,
+          role: "candidate",
+          attempt,
+          supersedes,
+          pendingReason: refusal ? null : pendingReasonFor(gate.reasons),
+          gateCodes,
+          metricIds,
+        },
+      ];
     });
   }
   return gate.exitCode;
@@ -2052,12 +2119,18 @@ async function runWaivedRelease(options, files, unmapped) {
   const supplied = await Promise.all(
     [...REPORT_FILES, "energy.json"].map((name) => exists(path.join(options.reportsRoot, name))),
   );
-  if (supplied.some(Boolean) || files.some((file) => file.name.startsWith("scoreboard-")))
+  const extras = await judgeCandidateReports(options.reportsRoot, null);
+  if (
+    supplied.some(Boolean) ||
+    extras.unjudged.length ||
+    files.some((file) => file.name.startsWith("scoreboard-"))
+  )
     push("waiver-with-evidence", "reports");
   const primaries = primaryInstallers(files);
   for (const target of REQUIRED_RELEASE_TARGETS)
     if (!primaries.some((file) => file.target === target)) push("missing-platform", target);
   const allowPublication = reasons.length === 0;
+  // gate.json is uploaded with the release, so it carries the reason and never the account.
   const gate = {
     schemaVersion: INDEX_SCHEMA_VERSION,
     path: "waiver",
@@ -2068,7 +2141,7 @@ async function runWaivedRelease(options, files, unmapped) {
         ? 1
         : 2,
     reasons,
-    waiver: allowPublication ? waiver : null,
+    waiver: allowPublication ? { reason: waiver.reason } : null,
     distributedDigests: files.map(({ target, name, sha256: digestValue, bytes }) => ({
       target,
       name,
@@ -2081,23 +2154,30 @@ async function runWaivedRelease(options, files, unmapped) {
   await writeFile(options.outputPath, `${scoreboard.canonicalSerialize(gate)}\n`);
   const common = releaseRecordBase(options, scoreboard.SCOREBOARD_MANIFEST.suiteVersion, null);
   if (!allowPublication) return recordUnpublished(options, gate, common);
-  const records = await readIndex(options.indexRoot);
-  const key = candidateKey(options, scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST));
-  const prior = records.filter((record) => sameKey(record, key));
-  const indexLine = await appendIndexRecord(options.indexRoot, {
-    ...common,
-    status: "waived",
-    commit: options.candidateSha,
-    parentCommit: /^[a-f0-9]{40}$/.test(options.baseSha ?? "") ? options.baseSha : null,
-    role: "candidate",
-    attempt: nextAttempt(records, key),
-    supersedes: prior.at(-1)?.recordHash ?? null,
-    pendingReason: null,
-    artifactDigests: gate.distributedDigests,
-    waiver,
+  const { existing, appended } = await appendIndexRecords(options.indexRoot, (records) => {
+    const { attempt, supersedes } = nextFor(records, candidateKey(options, scoreboard.suiteHash));
+    return [
+      {
+        ...common,
+        status: "waived",
+        commit: options.candidateSha,
+        parentCommit: /^[a-f0-9]{40}$/.test(options.baseSha ?? "") ? options.baseSha : null,
+        role: "candidate",
+        attempt,
+        supersedes,
+        pendingReason: null,
+        artifactDigests: gate.distributedDigests,
+        waiver,
+      },
+    ];
   });
-  const runId = Number.isSafeInteger(options.runId) ? options.runId : null;
-  const waiverRecord = { reason: waiver.reason, actor: waiver.actor, runId, indexLine };
+  // The public waiver record points at its index line; the account stays in that line.
+  const waiverRecord = {
+    reason: waiver.reason,
+    runId: Number.isSafeInteger(options.runId) ? options.runId : null,
+    indexLine: existing.length + 1,
+    recordHash: appended[0].recordHash,
+  };
   assertPublicValue(waiverRecord);
   await writeFile(
     path.join(path.dirname(options.outputPath), "waiver-record.json"),
@@ -2123,7 +2203,7 @@ export async function runReleaseGate(options) {
   let energyRejections = [];
   const energyFile = path.join(options.reportsRoot, "energy.json");
   if (await exists(energyFile)) {
-    const energy = await validatedEnergy(energyFile, options.artifactRoot, installers);
+    const energy = await validatedEnergy(energyFile, installers);
     energyTargets = energy.observed;
     energyRejections = energy.rejections;
   }
@@ -2155,11 +2235,13 @@ export async function runReleaseGate(options) {
       report: candidate.report,
     };
   }
+  const extras = await judgeCandidateReports(options.reportsRoot, candidate);
   const gate = await evaluatePublicationGate({
     parent,
     candidate,
     candidateEvidence,
-    candidateReports: await readExtraCandidateReports(options.reportsRoot, candidate),
+    candidateReports: extras.accepted,
+    unjudgedReports: extras.unjudged,
     fixedRelease,
     policy,
     files,
@@ -2200,31 +2282,30 @@ export async function runReleaseGate(options) {
     ["parent", parent, options.baseSha, []],
     ["fixed-release", fixedRelease, options.fixedReleaseSha, []],
   ];
-  let records = await readIndex(options.indexRoot);
-  for (const [role, envelope, commit, digests] of roles) {
-    const key = {
-      commit,
-      suiteHash: gate.suiteHash,
-      environment: options.environment,
-      role,
-      tier: "release",
-    };
-    const prior = records.filter((record) => sameKey(record, key));
-    const record = await appendIndexRecord(options.indexRoot, {
-      ...common,
-      status: "measured",
-      role,
-      commit,
-      parentCommit: envelope.report.build.parentCommit,
-      fixedReleaseCommit: envelope.report.build.fixedReleaseCommit,
-      attempt: nextAttempt(records, key),
-      supersedes: prior.at(-1)?.recordHash ?? null,
-      envelope,
-      artifactDigests: digests,
-      verdictDigest: gate.policyHash,
-    });
-    records = [...records, record];
-  }
+  await appendIndexRecords(options.indexRoot, (records) =>
+    roles.map(([role, envelope, commit, digests]) => {
+      const { attempt, supersedes } = nextFor(records, {
+        commit,
+        suiteHash: gate.suiteHash,
+        environment: options.environment,
+        role,
+        tier: "release",
+      });
+      return {
+        ...common,
+        status: "measured",
+        role,
+        commit,
+        parentCommit: envelope.report.build.parentCommit,
+        fixedReleaseCommit: envelope.report.build.fixedReleaseCommit,
+        attempt,
+        supersedes,
+        envelope,
+        artifactDigests: digests,
+        verdictDigest: gate.policyHash,
+      };
+    }),
+  );
   return 0;
 }
 
@@ -2243,148 +2324,183 @@ function retentionSince(now = new Date()) {
   ).toISOString();
 }
 
+function git(args) {
+  return execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).trim();
+}
+
 function newestCommit(shas) {
-  const listed = execFileSync("git", ["rev-list", "--max-count=1", ...shas], {
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-  }).trim();
+  const listed = git(["rev-list", "--max-count=1", ...shas]);
   sha40(listed);
   return listed;
 }
 
+/** The commits of `shas` that this clone still has, from one `git cat-file` call. */
+function presentCommits(shas) {
+  const listed = execFileSync("git", ["cat-file", "--batch-check=%(objectname) %(objecttype)"], {
+    input: shas.map((sha) => `${sha}\n`).join(""),
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  return listed
+    .split("\n")
+    .filter((line) => line.endsWith(" commit"))
+    .map((line) => line.split(" ")[0]);
+}
+
+function parentOf(head) {
+  try {
+    const parent = git(["rev-parse", `${head}^`]);
+    return /^[a-f0-9]{40}$/.test(parent) ? parent : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * `before` is only an optimisation hint and is never the lower bound.
- * An empty chain walks first-parent history back to the 90-day artifact window.
- * A chain with no ancestor of head walks back to the newest commit that is in the chain.
+ * A durable chain resumes after the nearest first-parent ancestor it contains. A chain with no
+ * such ancestor walks back to its newest commit, and an empty chain to the 90-day artifact window;
+ * both walks stop at that window. A chain whose commits are all gone from the clone was left
+ * behind by a history rewrite, so it is reset and enumeration starts as for an empty chain.
  */
 function enumerateBackfill(records, head) {
-  const indexed = [
-    ...new Set(
-      records
-        .filter((record) => record.tier === "commit" && record.role === "candidate")
-        .map((record) => record.commit),
-    ),
-  ];
-  if (!indexed.length) {
-    const commits = firstParentRevList(["--reverse", `--since=${retentionSince()}`, head]);
-    const enumerationStart = commits[0]?.commit ?? null;
-    return {
-      commits,
-      enumerationStart,
-      enumerationReason: enumerationStart ? "empty-chain-retention-window" : null,
-    };
+  const indexed = new Set(
+    records
+      .filter((record) => record.tier === "commit" && record.role === "candidate")
+      .map((record) => record.commit),
+  );
+  const since = `--since=${retentionSince()}`;
+  if (indexed.size) {
+    const history = firstParentRevList([head]);
+    const nearest = history.findIndex((item) => indexed.has(item.commit));
+    if (nearest >= 0)
+      return {
+        commits: history.slice(0, nearest).reverse(),
+        enumerationStart: null,
+        enumerationReason: null,
+        rewritten: false,
+      };
+    const present = presentCommits([...indexed]);
+    if (present.length) {
+      const enumerationStart = newestCommit(present);
+      return {
+        commits: firstParentRevList(["--reverse", since, `${enumerationStart}..${head}`]),
+        enumerationStart,
+        enumerationReason: "chain-without-ancestor",
+        rewritten: false,
+      };
+    }
   }
-  const history = firstParentRevList([head]);
-  const nearest = history.findIndex((item) => indexed.includes(item.commit));
-  if (nearest >= 0) {
-    return {
-      commits: history.slice(0, nearest).reverse(),
-      enumerationStart: null,
-      enumerationReason: null,
-    };
-  }
-  const enumerationStart = newestCommit(indexed);
+  const commits = firstParentRevList(["--reverse", since, head]);
+  const enumerationStart = commits[0]?.commit ?? null;
   return {
-    commits: firstParentRevList(["--reverse", `${enumerationStart}..${head}`]),
+    commits,
     enumerationStart,
-    enumerationReason: "chain-without-ancestor",
+    enumerationReason: enumerationStart ? "empty-chain-retention-window" : null,
+    rewritten: indexed.size > 0,
   };
 }
 
+/** Commits between the merge base and head, or head alone. Never the retention window. */
+function boundedCommits(range) {
+  if (range.kind === "single") return [{ commit: range.head, parentCommit: parentOf(range.head) }];
+  const mergeBase = git(["merge-base", range.base, range.head]);
+  sha40(mergeBase);
+  return firstParentRevList(["--reverse", `${mergeBase}..${range.head}`]);
+}
+
+/**
+ * Records every commit of this run as measured or pending with one read of the chain and one
+ * write. Only a durable push (`backfill`) walks history; other runs index their own commits.
+ */
 export async function runIndexPush(options) {
   const scoreboard = await loadScoreboard();
+  const mode = options.mode ?? "commit";
   let commits = options.commits ?? null;
   if (!commits && options.commitsFile) {
     const parsed = JSON.parse(await readFile(options.commitsFile, "utf8"));
     if (!Array.isArray(parsed)) fail("invalid-commits", "invalid-commits");
     commits = parsed;
   }
-  let enumerationStart = null;
-  let enumerationReason = null;
-  if (!commits) {
-    const range = selectCommitRange({
-      mode: options.mode ?? "commit",
-      before: options.before,
-      base: options.base,
-      head: options.head,
-    });
-    try {
-      if ((options.mode ?? "commit") === "commit") {
-        const resumed = enumerateBackfill(await readIndex(options.root), range.head);
-        commits = resumed.commits;
-        enumerationStart = resumed.enumerationStart;
-        enumerationReason = resumed.enumerationReason;
-      } else if (range.kind === "single") {
-        let parentCommit = null;
-        try {
-          const parent = execFileSync("git", ["rev-parse", `${range.head}^`], {
-            encoding: "utf8",
-          }).trim();
-          if (/^[a-f0-9]{40}$/.test(parent)) parentCommit = parent;
-        } catch {
-          parentCommit = null;
-        }
-        commits = [{ commit: range.head, parentCommit }];
-      } else if (range.kind === "history") {
-        commits = firstParentRevList(["--reverse", range.head]);
-      } else {
-        commits = firstParentRevList(["--reverse", `${range.base}..${range.head}`]);
+  const range = commits
+    ? null
+    : selectCommitRange({ mode, base: options.base, head: options.head });
+  const warn =
+    options.warn ??
+    ((message) => process.stdout.write(`::warning title=Scoreboard index::${message}\n`));
+  const tier = mode === "release" ? "release" : "commit";
+  return withIndexLock(options.root, async (assertOwner) => {
+    let existing = await readIndexUnlocked(options.root);
+    let enumerationStart = null;
+    let enumerationReason = null;
+    let reset = false;
+    if (!commits) {
+      try {
+        if (mode === "commit" && options.backfill) {
+          const resumed = enumerateBackfill(existing, range.head);
+          ({ commits, enumerationStart, enumerationReason } = resumed);
+          reset = resumed.rewritten;
+        } else commits = boundedCommits(range);
+      } catch (error) {
+        if (error instanceof ScoreboardIndexError) throw error;
+        fail("infrastructure-unavailable", "The commit range could not be read.");
       }
-    } catch (error) {
-      if (error instanceof ScoreboardIndexError) throw error;
-      fail("infrastructure-unavailable", "The commit range could not be read.");
     }
-  }
-  const planned = planEvidenceRecords({
-    commits,
-    measurements: options.measurements ?? [],
-    pendingReason: options.pendingReason ?? "schema-3-evidence-not-produced",
-  });
-  const indexedAt = options.indexedAt ?? new Date().toISOString();
-  let records = await readIndex(options.root);
-  const origin = records.length ? null : await chainOrigin(options.root);
-  for (const item of planned) {
-    const mode = options.mode ?? "commit";
-    const key = {
-      commit: item.commit,
-      suiteHash: scoreboard.contentDigest(scoreboard.SCOREBOARD_MANIFEST),
-      environment: options.environment,
-      role: "candidate",
-      tier: mode === "release" ? "release" : "commit",
-    };
-    const prior = records.filter((record) => sameKey(record, key));
-    const record = await appendIndexRecord(options.root, {
-      status: item.envelope
-        ? "measured"
-        : prior.some((entry) => entry.status === "measured")
-          ? "rejected"
-          : "pending",
-      tier: key.tier,
-      mode,
-      commit: item.commit,
-      parentCommit: item.parentCommit,
-      fixedReleaseCommit: options.fixedReleaseCommit ?? null,
-      suiteVersion: options.suiteVersion,
-      environment: options.environment,
-      environmentHash: null,
-      role: "candidate",
-      indexedAt,
-      runnerCommit: options.runnerCommit,
-      attempt: nextAttempt(records, key),
-      supersedes: prior.at(-1)?.recordHash ?? null,
-      chainOrigin: records.length ? null : origin,
-      enumerationStart,
-      enumerationReason,
-      pendingReason: item.pendingReason,
-      envelope: item.envelope,
+    if (reset) {
+      warn(
+        "The indexed commits are no longer in this repository's history, so the index starts a new chain.",
+      );
+      existing = [];
+      await rm(path.join(options.root, "objects"), { recursive: true, force: true });
+    }
+    const planned = planEvidenceRecords({
+      commits,
+      measurements: options.measurements ?? [],
+      pendingReason: options.pendingReason ?? "schema-3-evidence-not-produced",
     });
-    records = [...records, record];
-  }
-  const audit = auditCommits(
-    records,
-    planned.map((item) => ({ commit: item.commit })),
-  );
-  return audit.complete ? 0 : 1;
+    const indexedAt = options.indexedAt ?? new Date().toISOString();
+    const inputs = planned.map((item) => {
+      const { prior, attempt, supersedes } = nextFor(existing, {
+        commit: item.commit,
+        suiteHash: scoreboard.suiteHash,
+        environment: options.environment,
+        role: "candidate",
+        tier,
+      });
+      return {
+        status: item.envelope
+          ? "measured"
+          : prior.some((entry) => entry.status === "measured")
+            ? "rejected"
+            : "pending",
+        tier,
+        mode,
+        commit: item.commit,
+        parentCommit: item.parentCommit,
+        fixedReleaseCommit: options.fixedReleaseCommit ?? null,
+        suiteVersion: options.suiteVersion,
+        environment: options.environment,
+        environmentHash: null,
+        role: "candidate",
+        indexedAt,
+        runnerCommit: options.runnerCommit,
+        attempt,
+        supersedes,
+        ...(reset ? { chainOrigin: "history-rewritten" } : {}),
+        enumerationStart,
+        enumerationReason,
+        pendingReason: item.pendingReason,
+        envelope: item.envelope,
+      };
+    });
+    const appended = await normalizeRecords(options.root, inputs, existing);
+    await assertOwner();
+    await writeLines(options.root, appended, { replace: reset });
+    const audit = auditCommits(
+      [...existing, ...appended],
+      planned.map((item) => ({ commit: item.commit })),
+    );
+    return audit.complete ? 0 : 1;
+  });
 }
 
 export async function publicationFiles(root) {
@@ -2460,19 +2576,23 @@ function createdBound(date) {
   return date.toISOString().replace(/\.\d{3}Z$/, "+00:00");
 }
 
-async function listFilteredWorkflowRuns(request, repository, branch, created, pageSize) {
+async function listFilteredWorkflowRuns(request, repository, scope, branch, created, pageSize) {
   const runs = [];
   let totalCount = 0;
   for (let page = 1; runs.length < WORKFLOW_RUN_SEARCH_CAP; page += 1) {
-    const response = await request(`/repos/${repository}/actions/workflows/performance.yml/runs`, {
-      branch,
-      event: "push",
-      status: "success",
+    const query = {
+      status: scope.status,
       created,
       exclude_pull_requests: "true",
       per_page: pageSize,
       page,
-    });
+    };
+    if (branch !== null) query.branch = branch;
+    if (scope.events.length === 1) query.event = scope.events[0];
+    const response = await request(
+      `/repos/${repository}/actions/workflows/${scope.workflow}/runs`,
+      query,
+    );
     const reported = Number(response?.total_count);
     if (Number.isFinite(reported)) totalCount = reported;
     const listed = Array.isArray(response?.workflow_runs) ? response.workflow_runs : [];
@@ -2488,14 +2608,18 @@ async function listFilteredWorkflowRuns(request, repository, branch, created, pa
 }
 
 export async function findPriorIndexArtifact({
+  scope: scopeName = "commit",
   repository,
-  branch,
+  branch = null,
   request,
   now = new Date(),
   hasIndexJob,
   indexJobPredates,
   pageSize = 100,
 }) {
+  const scope = INDEX_SCOPES[scopeName];
+  if (!scope || (scopeName === "commit") !== (typeof branch === "string"))
+    fail("invalid-argument", "invalid-argument");
   const windowStart = new Date(
     now.getTime() - WORKFLOW_ARTIFACT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
   );
@@ -2506,10 +2630,10 @@ export async function findPriorIndexArtifact({
     const candidates = (Array.isArray(runs) ? runs : [])
       .filter(
         (run) =>
-          run?.event === "push" &&
-          run.head_branch === branch &&
+          scope.events.includes(run?.event) &&
+          (branch === null || run.head_branch === branch) &&
           run.head_repository?.full_name === repository &&
-          run.conclusion === "success" &&
+          (scope.status !== "success" || run.conclusion === "success") &&
           Number.isSafeInteger(run.id) &&
           !seen.has(run.id) &&
           hasIndexJob(run.head_sha),
@@ -2526,7 +2650,7 @@ export async function findPriorIndexArtifact({
       if (!Number.isFinite(createdAt) || createdAt < windowStart.getTime()) break;
       sawRun = true;
       const artifacts = (
-        await listRunArtifacts(request, repository, run.id, INDEX_ARTIFACT)
+        await listRunArtifacts(request, repository, run.id, scope.artifact)
       ).filter((artifact) => artifact.workflow_run?.id === run.id);
       if (artifacts.some((artifact) => artifact.expired === false))
         return { live: run.id, expired, sawRun };
@@ -2539,7 +2663,14 @@ export async function findPriorIndexArtifact({
     const created = root
       ? `>=${start.toISOString().slice(0, 10)}`
       : `${createdBound(start)}..${createdBound(end)}`;
-    const listed = await listFilteredWorkflowRuns(request, repository, branch, created, pageSize);
+    const listed = await listFilteredWorkflowRuns(
+      request,
+      repository,
+      scope,
+      branch,
+      created,
+      pageSize,
+    );
     if (listed.capped && end.getTime() - start.getTime() >= 2) {
       const mid = start.getTime() + Math.floor((end.getTime() - start.getTime()) / 2);
       const newer = await inspectRange(new Date(mid + 1), end, false);
@@ -2577,16 +2708,19 @@ export async function reportsArtifactPresent({
 }
 
 /** Git, not the run list, proves a first run: expired runs are deleted with their artifacts. */
-export function indexJobHistory(cwd = process.cwd()) {
-  const git = (args) => spawnSync("git", args, { cwd, encoding: "utf8" });
-  const hasIndexJob = (sha) =>
-    typeof sha === "string" &&
-    /^[a-f0-9]{40}$/.test(sha) &&
-    git(["cat-file", "-e", `${sha}:${INDEX_SCRIPT}`]).status === 0;
+export function indexJobHistory(cwd = process.cwd(), scopeName = "commit") {
+  const { marker } = INDEX_SCOPES[scopeName];
+  const gitIn = (args) =>
+    spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  const hasIndexJob = (sha) => {
+    if (typeof sha !== "string" || !/^[a-f0-9]{40}$/.test(sha)) return false;
+    const shown = gitIn(["cat-file", "-p", `${sha}:${marker.file}`]);
+    return shown.status === 0 && (marker.text === null || shown.stdout.includes(marker.text));
+  };
   return {
     hasIndexJob,
     indexJobPredates(date) {
-      const result = git([
+      const result = gitIn([
         "rev-list",
         "--first-parent",
         "-1",
@@ -2642,7 +2776,6 @@ export function assertWorkflowContracts(performanceText, releaseText) {
     "base_sha:",
     "suite_version:",
     "environment:",
-    "common_runner_sha:",
     "mode:",
     "gate:",
     "release_version:",
@@ -2685,6 +2818,11 @@ export function assertWorkflowContracts(performanceText, releaseText) {
     errors.push("unused performance runner worktree");
   const budgets = jobBlock(performanceText, "budgets");
   requireText(budgets, "if: inputs.gate != 'required'", "advisory budgets condition");
+  requireText(
+    budgets,
+    'cp apps/web/playwright.performance.config.ts "$base/apps/web/"',
+    "the baseline is measured with the candidate harness",
+  );
   const index = jobBlock(performanceText, "index");
   requireText(index, "inputs.gate != 'required'", "advisory index condition");
   requireText(index, "group: scoreboard-index-", "serialized index writers");
@@ -2749,6 +2887,23 @@ export function assertWorkflowContracts(performanceText, releaseText) {
     releaseGate.indexOf("node scripts/scoreboard-index.mjs release-gate")
   )
     errors.push("publication assets are assembled after the gate");
+  // Attempts, refusals and the chain origin only hold if every release extends one chain.
+  const gateAt = releaseGate.indexOf("node scripts/scoreboard-index.mjs release-gate");
+  const priorAt = releaseGate.indexOf(
+    "node scripts/scoreboard-index.mjs prior-index --scope release",
+  );
+  const restoreAt = releaseGate.indexOf("node scripts/scoreboard-index.mjs restore-index");
+  const uploadAt = releaseGate.lastIndexOf(`name: ${RELEASE_INDEX_ARTIFACT}`);
+  if (priorAt < 0 || restoreAt < priorAt || gateAt < restoreAt || !releaseGate.includes("run-id:"))
+    errors.push("the release chain is restored before the gate");
+  const uploadStep = releaseGate.slice(0, uploadAt).split("\n").slice(-5).join("\n");
+  if (uploadAt < gateAt || !uploadStep.includes("if: always()"))
+    errors.push("the release chain is uploaded after every gate run");
+  const validate = jobBlock(releaseText, "validate");
+  const validateAt = validate.indexOf("node scripts/desktop-release.mjs validate");
+  if (validateAt < 0) errors.push("validate job checks the tag");
+  if (/pnpm install|npm (ci|install)|setup-node/.test(validate.slice(0, Math.max(validateAt, 0))))
+    errors.push("validate needs installed dependencies");
   const evidence = jobBlock(releaseText, "evidence");
   requireText(evidence, "uses: ./.github/workflows/performance.yml", "release invokes performance");
   requireText(evidence, "gate: required", "release gate is required");
@@ -2823,7 +2978,6 @@ async function main(argv) {
       (await exists(path.join(base, "apps/web/src/lib/performance-proxy.test.tsx")));
     const plan = baselineMeasurementPlan({
       baseHarnessPresent: harness,
-      runnerSha: args["runner-sha"],
       candidateSha: args["candidate-sha"],
       baseSha: args["base-sha"],
     });
@@ -2835,7 +2989,8 @@ async function main(argv) {
     process.exitCode = await runIndexPush({
       root: args.root || env("SCOREBOARD_ROOT") || SCOREBOARD_INDEX_RELATIVE_PATH,
       commitsFile: args["commits-file"] ?? null,
-      before: env("SCOREBOARD_BEFORE"),
+      // Only a push to dev or main of this repository extends the durable chain and backfills.
+      backfill: durableIndexScope({ eventName: env("GITHUB_EVENT_NAME"), ref: env("GITHUB_REF") }),
       base: args.base || env("SCOREBOARD_BASE"),
       head: args.head || env("SCOREBOARD_HEAD"),
       runnerCommit: args["runner-sha"] || env("SCOREBOARD_RUNNER"),
@@ -2852,26 +3007,32 @@ async function main(argv) {
     return;
   }
   if (command === "prior-index") {
+    const scope = args.scope ?? "commit";
+    if (scope !== "commit" && scope !== "release") fail("invalid-argument", "invalid-argument");
     const ref = env("GITHUB_REF");
-    const durable = durableIndexScope({ eventName: env("GITHUB_EVENT_NAME"), ref });
+    // Every release run of this repository extends the one release chain.
+    const durable =
+      scope === "release" || durableIndexScope({ eventName: env("GITHUB_EVENT_NAME"), ref });
     let prior = { runId: null, missingReason: "non-durable-check" };
     if (durable) {
       const repository = env("GITHUB_REPOSITORY");
       if (!/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(repository))
         fail("invalid-repository", "The repository name is invalid.");
       prior = await findPriorIndexArtifact({
+        scope,
         repository,
-        branch: ref.slice("refs/heads/".length),
+        branch: scope === "commit" ? ref.slice("refs/heads/".length) : null,
         request: githubRequest(env("GITHUB_API_URL") || "https://api.github.com", env("GH_TOKEN")),
-        ...indexJobHistory(),
+        ...indexJobHistory(process.cwd(), scope),
       });
     }
+    const artifact = INDEX_SCOPES[scope].artifact;
     process.stdout.write(
       [
         `durable=${durable}`,
         `run_id=${prior.runId ?? ""}`,
         `missing_reason=${prior.missingReason ?? ""}`,
-        `artifact_name=${durable ? INDEX_ARTIFACT : `${INDEX_ARTIFACT}-check`}`,
+        `artifact_name=${durable ? artifact : `${artifact}-check`}`,
         "",
       ].join("\n"),
     );

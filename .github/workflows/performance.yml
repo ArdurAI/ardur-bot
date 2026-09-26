@@ -35,15 +35,6 @@ on:
         description: advisory or required
         required: true
         type: string
-      common_runner_sha:
-        description: Benchmark runner revision checked out as its own tree
-        required: true
-        type: string
-      attempt:
-        description: Evidence attempt number
-        required: false
-        type: string
-        default: "1"
       release_version:
         description: Desktop version used to assemble release assets
         required: false
@@ -89,13 +80,11 @@ jobs:
         id: baseline
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          RUNNER_SHA: ${{ inputs.common_runner_sha || github.sha }}
         shell: bash
         run: |
           set -euo pipefail
           if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then BASE_SHA="$(git rev-parse HEAD^)"; fi
           [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$RUNNER_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
           base="$RUNNER_TEMP/performance-base"
           echo "pending_reason=schema-3-evidence-not-produced" >> "$GITHUB_OUTPUT"
@@ -104,7 +93,7 @@ jobs:
             echo "Baseline and candidate trees must be independent." >&2
             exit 1
           fi
-          decision="$(node scripts/scoreboard-index.mjs baseline-decision --base "$base" --runner-sha "$RUNNER_SHA" --candidate-sha "$GITHUB_SHA" --base-sha "$BASE_SHA")"
+          decision="$(node scripts/scoreboard-index.mjs baseline-decision --base "$base" --candidate-sha "$GITHUB_SHA" --base-sha "$BASE_SHA")"
           case "$decision" in
             measure) ;;
             pending:*)
@@ -118,6 +107,10 @@ jobs:
               exit 1
               ;;
           esac
+          # Both revisions run the candidate's harness; each keeps its own production code.
+          cp apps/web/playwright.performance.config.ts "$base/apps/web/"
+          cp apps/web/e2e/{shell-performance.spec.ts,performance-fixture.ts} "$base/apps/web/e2e/"
+          cp apps/web/src/lib/performance-proxy.test.tsx "$base/apps/web/src/lib/"
           cd "$base"
           pnpm install --frozen-lockfile
       - name: Measure comparison revision
@@ -215,10 +208,9 @@ jobs:
           node scripts/scoreboard-index.mjs restore-index "${args[@]}"
       - name: Record every pushed commit as measured or pending
         env:
-          SCOREBOARD_BEFORE: ${{ github.event.before }}
           SCOREBOARD_BASE: ${{ github.event.pull_request.base.sha || inputs.base_sha }}
           SCOREBOARD_HEAD: ${{ inputs.candidate_sha || github.event.pull_request.head.sha || github.sha }}
-          SCOREBOARD_RUNNER: ${{ inputs.common_runner_sha || github.sha }}
+          SCOREBOARD_RUNNER: ${{ github.sha }}
           SCOREBOARD_PENDING: ${{ needs.budgets.outputs.pending_reason || 'schema-3-evidence-not-produced' }}
           SCOREBOARD_MODE: ${{ inputs.mode || 'commit' }}
           SCOREBOARD_ENVIRONMENT: ${{ inputs.environment || 'ubuntu-24.04-diagnostic' }}
@@ -259,6 +251,30 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
+      - name: Find the newest restorable release chain for this repository
+        id: prior
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/scoreboard-index.mjs prior-index --scope release >> "$GITHUB_OUTPUT"
+      - name: Download the previous release chain
+        if: steps.prior.outputs.run_id != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: scoreboard-release-index
+          path: ${{ runner.temp }}/scoreboard-release-index-restore
+          run-id: ${{ steps.prior.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and restore the previous release chain
+        env:
+          MISSING_REASON: ${{ steps.prior.outputs.missing_reason }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--source "$RUNNER_TEMP/scoreboard-release-index-restore" --root publication/scoreboard-publication/index)
+          if [[ -n "$MISSING_REASON" ]]; then
+            args+=(--missing-reason "$MISSING_REASON")
+          fi
+          node scripts/scoreboard-index.mjs restore-index "${args[@]}"
       - name: See whether this run uploaded measured reports
         id: reports
         env:
@@ -285,7 +301,7 @@ jobs:
           SCOREBOARD_CANDIDATE: ${{ inputs.candidate_sha }}
           SCOREBOARD_BASE: ${{ inputs.base_sha }}
           SCOREBOARD_FIXED: ${{ inputs.fixed_release_sha }}
-          SCOREBOARD_RUNNER: ${{ inputs.common_runner_sha }}
+          SCOREBOARD_RUNNER: ${{ inputs.candidate_sha }}
           SCOREBOARD_ENVIRONMENT: ${{ inputs.environment }}
           SCOREBOARD_ARTIFACTS: publication/release-ready
           SCOREBOARD_REPORTS: scoreboard-reports
@@ -299,5 +315,13 @@ jobs:
         with:
           name: scoreboard-publication
           path: publication
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Keep the release chain, refusals included, for the next release run
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scoreboard-release-index
+          path: publication/scoreboard-publication/index
           retention-days: 90
           if-no-files-found: warn

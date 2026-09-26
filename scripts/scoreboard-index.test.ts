@@ -45,6 +45,7 @@ import {
   durableIndexScope,
   evidenceFor,
   findPriorIndexArtifact,
+  INDEX_SCHEMA_VERSION,
   indexJobHistory,
   parseRevListParents,
   planEvidenceRecords,
@@ -61,7 +62,6 @@ import {
   samplePlanFor,
   selectCommitRange,
   stagePublicationReports,
-  UNDECLARED_PUBLICATION_NOTE,
   verifyPublicationBytes,
   WORKFLOW_ARTIFACT_RETENTION_DAYS,
 } from "./scoreboard-index.mjs";
@@ -90,7 +90,6 @@ on:
       base_sha:
       suite_version:
       environment:
-      common_runner_sha:
       mode:
       gate:
       release_version:
@@ -100,12 +99,21 @@ concurrency:
 jobs:
   budgets:
     if: inputs.gate != 'required'
+    steps:
+      - run: cp apps/web/playwright.performance.config.ts "$base/apps/web/"
   release-gate:
     if: inputs.gate == 'required'
     steps:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+      - id: prior
+        run: node scripts/scoreboard-index.mjs prior-index --scope release >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          name: scoreboard-release-index
+          run-id: prior-run
+      - run: node scripts/scoreboard-index.mjs restore-index --root publication/scoreboard-publication/index
       - run: node scripts/scoreboard-index.mjs report-artifact
       - if: steps.reports.outputs.present == 'true'
         uses: actions/download-artifact@v4
@@ -117,6 +125,11 @@ jobs:
           SCOREBOARD_ARTIFACTS: publication/release-ready
           SCOREBOARD_WAIVER: \${{ inputs.evidence_waiver }}
         run: node scripts/scoreboard-index.mjs release-gate
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scoreboard-release-index
+          path: publication/scoreboard-publication/index
   index:
     needs: budgets
     if: always() && inputs.gate != 'required'
@@ -152,6 +165,10 @@ on:
 concurrency:
   cancel-in-progress: false
 jobs:
+  validate:
+    steps:
+      - uses: actions/checkout@v5
+      - run: node scripts/desktop-release.mjs validate "$RELEASE_TAG"
   evidence:
     needs: [validate, build]
     uses: ./.github/workflows/performance.yml
@@ -808,32 +825,21 @@ describe("scoreboard index", () => {
       { commit: B, parentCommit: A },
       { commit: A, parentCommit: null },
     ]);
-    expect(selectCommitRange({ eventName: "push", before: B, head: A })).toEqual({
-      kind: "range",
-      base: B,
-      head: A,
-    });
-    expect(selectCommitRange({ eventName: "push", before: "0".repeat(40), head: A })).toEqual({
-      kind: "history",
-      head: A,
-    });
-    expect(selectCommitRange({ eventName: "pull_request", base: B, head: A }).kind).toBe("range");
-    expect(selectCommitRange({ eventName: "workflow_call", head: A })).toEqual({
+    expect(selectCommitRange({ base: B, head: A })).toEqual({ kind: "range", base: B, head: A });
+    expect(selectCommitRange({ base: "0".repeat(40), head: A })).toEqual({
       kind: "single",
       head: A,
     });
-    expect(selectCommitRange({ mode: "release", eventName: "push", before: B, head: A })).toEqual({
-      kind: "single",
-      head: A,
-    });
-    expect(() => selectCommitRange({ eventName: "push", before: "main", head: A })).toThrow();
+    expect(selectCommitRange({ head: A })).toEqual({ kind: "single", head: A });
+    expect(selectCommitRange({ mode: "release", base: B, head: A }).kind).toBe("range");
+    expect(() => selectCommitRange({ base: "main", head: A })).toThrow();
+    expect(() => selectCommitRange({ mode: "nightly", head: A })).toThrow();
   });
 
   it("never copies candidate production code into the baseline tree", () => {
     expect(
       baselineMeasurementPlan({
         baseHarnessPresent: false,
-        runnerSha: A,
         candidateSha: A,
         baseSha: B,
       }),
@@ -846,7 +852,6 @@ describe("scoreboard index", () => {
     expect(
       baselineMeasurementPlan({
         baseHarnessPresent: true,
-        runnerSha: A,
         candidateSha: C,
         baseSha: B,
       }).copyProductionIntoBaseline,
@@ -911,22 +916,23 @@ describe("scoreboard index", () => {
       markHolding = resolve;
     });
     try {
+      // The holder keeps its lock four stale periods; only its heartbeat keeps the lock fresh.
       const first = appendIndexRecord(root, pending(A), {
-        staleMs: 30,
-        timeoutMs: 2000,
+        staleMs: 300,
+        timeoutMs: 5000,
         beforeAppend: () => {
           markHolding();
-          return new Promise((resolve) => setTimeout(resolve, 180));
+          return new Promise((resolve) => setTimeout(resolve, 1200));
         },
       });
       const started = await Promise.race([
         holding.then(() => "held" as const),
-        new Promise<"not-held">((resolve) => setTimeout(() => resolve("not-held"), 500)),
+        new Promise<"not-held">((resolve) => setTimeout(() => resolve("not-held"), 2000)),
       ]);
-      if (started === "held") await new Promise((resolve) => setTimeout(resolve, 50));
+      if (started === "held") await new Promise((resolve) => setTimeout(resolve, 500));
       const second = appendIndexRecord(root, pending(B), {
-        staleMs: 30,
-        timeoutMs: 2000,
+        staleMs: 300,
+        timeoutMs: 5000,
       });
       const settled = await Promise.allSettled([first, second]);
       const records = await readIndex(root);
@@ -981,6 +987,32 @@ describe("scoreboard index", () => {
         }),
       ).rejects.toMatchObject({ code: "artifact-digest-mismatch" });
       expect(await readIndex(root)).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses an index record from any other schema version with a plain error", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-schema-"));
+    try {
+      const current: Record<string, unknown> = { ...(await appendIndexRecord(root, pending(A))) };
+      expect(current.schemaVersion).toBe(INDEX_SCHEMA_VERSION);
+      const resign = (record: Record<string, unknown>) => {
+        const unsigned = { ...record };
+        delete unsigned.recordHash;
+        return { ...unsigned, recordHash: contentDigest(unsigned) };
+      };
+      const older = { ...current, schemaVersion: INDEX_SCHEMA_VERSION - 1 };
+      delete older.enumerationStart;
+      delete older.enumerationReason;
+      const newer = { ...current, schemaVersion: INDEX_SCHEMA_VERSION + 1 };
+      for (const record of [resign(older), resign(newer)]) {
+        await writeFile(path.join(root, "records.jsonl"), `${JSON.stringify(record)}\n`);
+        await expect(readIndex(root)).rejects.toMatchObject({
+          code: "unsupported-index-schema",
+          message: `Index records must use schema version ${INDEX_SCHEMA_VERSION}.`,
+        });
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -1311,7 +1343,7 @@ describe("release publication gate", () => {
         .map((record) => record.role)
         .sort(),
     ).toEqual(["candidate", "fixed-release", "parent"]);
-    const notes = releaseNotes(
+    const notes = await releaseNotes(
       ["feat(private/fixture): Fixture Person changed a secret"],
       result.gate,
     );
@@ -1810,8 +1842,9 @@ describe("release publication gate", () => {
         path: "waiver",
         allowPublication: true,
         reasons: [],
-        waiver: { reason: WAIVER, actor: "release-operator" },
+        waiver: { reason: WAIVER },
       });
+      expect(JSON.stringify(result.gate)).not.toContain("release-operator");
       expect(result.gate).not.toHaveProperty("rows");
       expect(result.gate).not.toHaveProperty("observedSamples");
       const records = await readIndex(result.indexRoot);
@@ -1828,26 +1861,23 @@ describe("release publication gate", () => {
       });
       expect(records[0]?.artifactDigests).toHaveLength(result.gate.distributedDigests.length);
       await verifyPublicationBytes(bare.artifactRoot, result.gate);
-      const notes = releaseNotes(["feat: fixture"], result.gate);
+      const notes = await releaseNotes(["feat: fixture"], result.gate);
       const evidence = notes.split("## Performance evidence\n\n")[1] ?? "";
       expect(evidence.split("\n")[0]).toBe(
-        `This preview was published without measured performance evidence: ${WAIVER}. Waived by release-operator.`,
+        `This preview was published without measured performance evidence: ${WAIVER}.`,
       );
-      const waiverRecord = JSON.parse(
-        await readFile(path.join(bare.root, "waiver-record.json"), "utf8"),
-      ) as {
-        reason: string;
-        actor: string;
-        runId: number;
-        indexLine: { status: string; waiver: { actor: string } };
-      };
-      expect(waiverRecord).toMatchObject({
+      const waiverText = await readFile(path.join(bare.root, "waiver-record.json"), "utf8");
+      expect(JSON.parse(waiverText)).toEqual({
         reason: WAIVER,
-        actor: "release-operator",
         runId: 5150,
-        indexLine: { status: "waived", waiver: { actor: "release-operator", reason: WAIVER } },
+        indexLine: 1,
+        recordHash: records[0]?.recordHash,
       });
-      expect(notes).not.toMatch(/Measured evidence|\| Metric|Observed samples|within-budget/);
+      for (const text of [notes, waiverText, JSON.stringify(result.gate)])
+        expect(text).not.toContain("release-operator");
+      expect(notes).not.toMatch(
+        /Measured evidence|\| Metric|Observed samples|within-budget|Waived by/,
+      );
     } finally {
       await rm(bare.root, { recursive: true, force: true });
     }
@@ -1887,7 +1917,12 @@ describe("release publication gate", () => {
       const unsafe = [
         "   ",
         "Ask @maintainer",
+        "Ask ops@example.invalid",
         "See [notes](https://example.invalid)",
+        "Mirror at https://user:token@192.0.2.1/builds",
+        "Runner logs are in /opt/runner/logs",
+        "Output kept under ./build/cache",
+        "Notes at ~/lab",
         "first line\nsecond line",
         "x".repeat(201),
       ];
@@ -1897,8 +1932,18 @@ describe("release publication gate", () => {
           trigger: "workflow_dispatch",
           actor: "release-operator",
         });
-        expect(result.code).toBe(1);
-        expect(codes(result.gate)).toEqual(["invalid-waiver"]);
+        expect(result.code, waiver).toBe(1);
+        expect(codes(result.gate), waiver).toEqual(["invalid-waiver"]);
+        const edited = {
+          schemaVersion: INDEX_SCHEMA_VERSION,
+          path: "waiver",
+          allowPublication: true,
+          exitCode: 0,
+          reasons: [],
+          waiver: { reason: waiver },
+          distributedDigests: [],
+        };
+        expect(() => renderScoreboardNotes(edited), waiver).toThrow();
       }
       const actor = await gate(bare, "index-invalid-actor", {
         waiver: WAIVER,
@@ -2107,12 +2152,15 @@ describe("release publication gate", () => {
       expect(record?.pendingReason).not.toBe("reports-missing");
       expect(record?.metricIds).toEqual(undeclaredIds);
       expect(record?.gateCodes).toContain("undeclared-budget");
-      expect(result.gate.reasons).toContainEqual(
-        expect.objectContaining({
-          code: "undeclared-budget",
-          detail:
-            "retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared.",
-        }),
+      for (const detail of [
+        "The retained session growth budget is not declared.",
+        "The tool termination deadline budget is not declared.",
+      ])
+        expect(result.gate.reasons).toContainEqual(
+          expect.objectContaining({ code: "undeclared-budget", detail }),
+        );
+      expect(JSON.stringify(result.gate)).not.toMatch(
+        /retainedSessionGrowthBytes|toolTerminationDeadlineMs/,
       );
     } finally {
       await rm(probe.root, { recursive: true, force: true });
@@ -2275,17 +2323,17 @@ describe("release publication gate", () => {
       });
       const result = await gate(paired, "index-evidence-notes");
       expect(result.code).toBe(0);
-      const notes = releaseNotes(["fix: fixture"], result.gate);
+      const notes = await releaseNotes(["fix: fixture"], result.gate);
       const taskLine = notes.slice(notes.indexOf("Task success: ")).split("\n");
       const recoveryLine = notes.slice(notes.indexOf("Recovery: ")).split("\n");
       expect(taskLine[0]).not.toContain("unknown");
       expect(taskLine[0]).toContain("trials passed");
-      expect(taskLine[1]).toBe("Report: candidate-crash.json.");
+      expect(taskLine[1]).toBe("Report: scoreboard-candidate-crash.json.");
       expect(recoveryLine[0]).toContain(
         "crash-01 recovered by automatic recovery, safety passed, task completed",
       );
       expect(recoveryLine[0]).not.toContain("unknown");
-      expect(recoveryLine[1]).toBe("Report: candidate-crash.json.");
+      expect(recoveryLine[1]).toBe("Report: scoreboard-candidate-crash.json.");
       const candidateBytes = await readFile(
         path.join(paired.artifactRoot, "scoreboard-candidate.json"),
       );
@@ -2383,7 +2431,7 @@ ${script}`,
       });
       const result = await gate(crashed, "index-recovery");
       expect(result.code).toBe(0);
-      const notes = releaseNotes(["fix: fixture"], result.gate);
+      const notes = await releaseNotes(["fix: fixture"], result.gate);
       expect(notes).toContain(
         "Recovery: crash-01 recovered by automatic recovery, safety passed, task completed.",
       );
@@ -2473,7 +2521,7 @@ ${script}`,
       const published = await gate(probe, "index-effect-safety-zero");
       expect(published.code).toBe(0);
       expect(published.gate.allowPublication).toBe(true);
-      const notes = releaseNotes(["fix: fixture"], published.gate);
+      const notes = await releaseNotes(["fix: fixture"], published.gate);
       expect(notes).not.toMatch(/failed m1[13]\./);
       const measured = (await readIndex(published.indexRoot)).find(
         (item) => item.role === "candidate",
@@ -2497,7 +2545,9 @@ ${script}`,
         expect(result.gate.reasons, id).toContainEqual(
           expect.objectContaining({ code: "safety-failure", scope: id }),
         );
-        expect(() => releaseNotes(["fix: fixture"], result.gate), id).toThrow(/human acceptance/i);
+        await expect(releaseNotes(["fix: fixture"], result.gate), id).rejects.toThrow(
+          /human acceptance/i,
+        );
         const refused = (await readIndex(result.indexRoot)).find(
           (item) => item.role === "candidate",
         );
@@ -2545,7 +2595,9 @@ ${script}`,
           expect.objectContaining({ code: "required-task-failed", scope: id }),
         );
       expect(codes(result.gate)).not.toContain("safety-failure");
-      expect(() => releaseNotes(["fix: fixture"], result.gate)).toThrow(/human acceptance/i);
+      await expect(releaseNotes(["fix: fixture"], result.gate)).rejects.toThrow(
+        /human acceptance/i,
+      );
       const refused = (await readIndex(result.indexRoot)).find((item) => item.role === "candidate");
       expect(refused?.status).toBe("refused");
       expect(refused?.gateCodes).toContain("required-task-failed");
@@ -2724,6 +2776,114 @@ ${script}`,
     }
   }, 60_000);
 
+  it("publishes only the reports the gate judged and refuses a stray candidate report", async () => {
+    const probe = await stagePassing();
+    try {
+      const judged = path.join(probe.root, "judged-ready");
+      await stagePublicationReports(probe.reportsRoot, judged);
+      expect((await readdir(judged)).sort()).toEqual([
+        "scoreboard-candidate.json",
+        "scoreboard-energy.json",
+        "scoreboard-fixed-release.json",
+        "scoreboard-parent.json",
+        "scoreboard-policy.json",
+      ]);
+      const judgedGate = await gate(probe, "index-judged-only");
+      expect(judgedGate.code).toBe(0);
+
+      const otherBuild = JSON.parse(
+        await readFile(path.join(probe.reportsRoot, "candidate.json"), "utf8"),
+      ) as { report: ReturnType<typeof syntheticReport> };
+      otherBuild.report.id = "other-build";
+      otherBuild.report.build.artifactHash = hash("another-build");
+      await writeFile(
+        path.join(probe.reportsRoot, "candidate-other-build.json"),
+        JSON.stringify(createPerformanceEvidenceEnvelope(otherBuild.report)),
+      );
+      await writeFile(
+        path.join(probe.reportsRoot, "candidate-debug.json"),
+        JSON.stringify({ log: "/Users/someone/debug.log", owner: "someone@example.invalid" }),
+      );
+      const result = await gate(probe, "index-stray-report");
+      expect(result.code).toBe(1);
+      expect(result.gate.allowPublication).toBe(false);
+      for (const name of ["candidate-debug.json", "candidate-other-build.json"])
+        expect(result.gate.reasons).toContainEqual(
+          expect.objectContaining({ code: "unjudged-report", scope: name }),
+        );
+      expect(JSON.stringify(result.gate)).not.toMatch(/\/Users\/|someone@/);
+      const refused = (await readIndex(result.indexRoot)).find((item) => item.role === "candidate");
+      expect(refused?.status).toBe("refused");
+      expect(refused?.gateCodes).toContain("unjudged-report");
+
+      const ready = path.join(probe.root, "release-ready");
+      await stagePublicationReports(probe.reportsRoot, ready);
+      expect(await readdir(ready)).toEqual([]);
+      const listed = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "list-upload", "--directory", ready],
+        { encoding: "utf8" },
+      );
+      expect(listed.status).toBe(0);
+      expect(listed.stdout).toBe("");
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("carries release attempts and refusals across runs through the restored chain", async () => {
+    const probe = await stagePassing();
+    try {
+      const firstRun = path.join(probe.root, "first-run-index");
+      await expect(
+        restoreIndex(path.join(probe.root, "no-prior-chain"), firstRun, "prior-artifact-missing"),
+      ).resolves.toBe("prior-artifact-missing");
+      const candidatePath = path.join(probe.reportsRoot, "candidate.json");
+      const passingBytes = await readFile(candidatePath);
+      await rewriteCandidate(probe.reportsRoot, (report) => {
+        for (const observation of report.metrics.find((item) => item.id === "m13.wrong-pin")!
+          .observations)
+          observation.value = 1;
+      });
+      expect((await gate(probe, "first-run-index")).code).toBe(1);
+
+      const secondRun = path.join(probe.root, "second-run-index");
+      await expect(restoreIndex(firstRun, secondRun, null)).resolves.toBe("restored");
+      await writeFile(candidatePath, passingBytes);
+      await writeFile(path.join(probe.artifactRoot, "scoreboard-candidate.json"), passingBytes);
+      expect((await gate(probe, "second-run-index")).code).toBe(0);
+
+      const records = await readIndex(secondRun);
+      expect(records[0]).toMatchObject({
+        status: "refused",
+        role: "candidate",
+        attempt: 1,
+        chainOrigin: "prior-artifact-missing",
+      });
+      expect(
+        records.find((record) => record.role === "candidate" && record.status === "measured"),
+      ).toMatchObject({ attempt: 2, supersedes: records[0]?.recordHash, chainOrigin: null });
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("summarizes critical safety by the effect-safety ids the gate judges", async () => {
+    const probe = await stagePassing();
+    try {
+      await writeReleasePolicy(
+        probe.root,
+        fixtureReleasePolicy([{ id: "effect-safety", metricIds: ["m13.wrong-pin"] }]),
+      );
+      const result = await gate(probe, "index-safety-summary");
+      expect(result.code).toBe(0);
+      expect(result.gate.safetySummary).toBe("measured zero for m13.wrong-pin");
+      expect(result.gate.unknowns.join("\n")).not.toContain("safety");
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("prints undeclared budgets in the release notes and uploads the gate", async () => {
     const probe = await documentedPinnedRelease();
     try {
@@ -2739,10 +2899,25 @@ ${script}`,
           }),
         );
       }
-      const notes = releaseNotes(["fix: fixture"], result.gate);
+      const notes = await releaseNotes(["fix: fixture"], result.gate);
       const evidence = notes.split("## Measured evidence")[1] ?? "";
-      expect(evidence).toContain(UNDECLARED_PUBLICATION_NOTE);
-      for (const id of ids) expect(evidence).toContain(id);
+      expect(evidence).toContain(
+        "Two release budgets are not declared yet, so they were not checked: retained session growth, tool termination deadline. They must be declared before a release can be measured against them.",
+      );
+      expect(evidence).not.toMatch(
+        /retainedSessionGrowthBytes|toolTerminationDeadlineMs|publication needs|budget decision/,
+      );
+      expect(evidence.match(/verdict is pass\./g)).toHaveLength(1);
+      const reportLines = evidence.split("\n").filter((line) => line.startsWith("Report: "));
+      expect(reportLines.length).toBeGreaterThan(0);
+      const uploaded = new Set(
+        result.gate.distributedDigests.map((file: { name: string }) => file.name),
+      );
+      for (const line of reportLines) {
+        const name = line.slice("Report: ".length, -1);
+        expect(name).toMatch(/^scoreboard-candidate/);
+        expect(uploaded.has(name), name).toBe(true);
+      }
       const publication = path.join(probe.root, "publication");
       const ready = path.join(publication, "release-ready");
       const gateFile = path.join(publication, "scoreboard-publication", "gate.json");
@@ -2912,6 +3087,8 @@ async function fixtureCommit(cwd: string, file: string, date?: string) {
   return fixtureGit(cwd, ["rev-parse", "HEAD"]);
 }
 
+const DEV_PUSH = { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/dev" };
+
 describe("commit enumeration", () => {
   it("indexes a push whose queued run was cancelled, following first parents", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-enumerate-"));
@@ -2932,6 +3109,7 @@ describe("commit enumeration", () => {
             encoding: "utf8",
             env: {
               ...process.env,
+              ...DEV_PUSH,
               SCOREBOARD_BEFORE: before,
               SCOREBOARD_BASE: "",
               SCOREBOARD_HEAD: head,
@@ -2997,6 +3175,7 @@ describe("commit enumeration", () => {
           encoding: "utf8",
           env: {
             ...process.env,
+            ...DEV_PUSH,
             SCOREBOARD_BEFORE: middle,
             SCOREBOARD_BASE: "",
             SCOREBOARD_HEAD: head,
@@ -3037,6 +3216,7 @@ describe("commit enumeration", () => {
           encoding: "utf8",
           env: {
             ...process.env,
+            ...DEV_PUSH,
             SCOREBOARD_BEFORE: middle,
             SCOREBOARD_BASE: "",
             SCOREBOARD_HEAD: head,
@@ -3064,6 +3244,7 @@ describe("commit enumeration", () => {
     await mkdir(work);
     try {
       fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      const ancient = await fixtureCommit(work, "ancient", "2020-01-01T00:00:00Z");
       const oldest = await fixtureCommit(work, "c0");
       const middle = await fixtureCommit(work, "c1");
       const head = await fixtureCommit(work, "c2");
@@ -3080,6 +3261,7 @@ describe("commit enumeration", () => {
           encoding: "utf8",
           env: {
             ...process.env,
+            ...DEV_PUSH,
             SCOREBOARD_BEFORE: middle,
             SCOREBOARD_BASE: "",
             SCOREBOARD_HEAD: head,
@@ -3092,11 +3274,113 @@ describe("commit enumeration", () => {
       expect(pushed.status).toBe(0);
       const records = await readIndex(indexRoot);
       expect(records.map((record) => record.commit)).toEqual([chained, oldest, middle, head]);
+      expect(records.some((record) => record.commit === ancient)).toBe(false);
       const filled = records.filter((record) => record.commit !== chained);
       expect(filled.every((record) => record.enumerationStart === chained)).toBe(true);
       expect(filled.every((record) => record.enumerationReason === "chain-without-ancestor")).toBe(
         true,
       );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("bounded and reset enumeration", () => {
+  function indexPush(work: string, env: Record<string, string>) {
+    return spawnSync(
+      process.execPath,
+      [path.join(repo, "scripts/scoreboard-index.mjs"), "index-push"],
+      {
+        cwd: work,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          SCOREBOARD_BEFORE: "",
+          SCOREBOARD_BASE: "",
+          SCOREBOARD_MODE: "commit",
+          ...env,
+        },
+      },
+    );
+  }
+
+  it("indexes only a pull request's own commits, never the retention window", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-pull-request-"));
+    const work = path.join(root, "repo");
+    await mkdir(work);
+    try {
+      fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      for (const name of ["d0", "d1", "d2", "d3"]) await fixtureCommit(work, name);
+      const forkPoint = fixtureGit(work, ["rev-parse", "HEAD"]);
+      fixtureGit(work, ["checkout", "-q", "-b", "pr"]);
+      const first = await fixtureCommit(work, "pr-1");
+      const second = await fixtureCommit(work, "pr-2");
+      fixtureGit(work, ["checkout", "-q", "dev"]);
+      const base = await fixtureCommit(work, "d4");
+      const pulled = indexPush(work, {
+        GITHUB_EVENT_NAME: "pull_request",
+        GITHUB_REF: "refs/pull/7/merge",
+        SCOREBOARD_BEFORE: forkPoint,
+        SCOREBOARD_BASE: base,
+        SCOREBOARD_HEAD: second,
+        SCOREBOARD_RUNNER: second,
+        SCOREBOARD_ROOT: path.join(root, "pull-request"),
+      });
+      expect(pulled.status, pulled.stderr).toBe(0);
+      const records = await readIndex(path.join(root, "pull-request"));
+      expect(records.map((record) => record.commit)).toEqual([first, second]);
+      expect(records.every((record) => record.enumerationReason === null)).toBe(true);
+      expect(records[0]?.chainOrigin).toBe("first-run");
+
+      const dispatched = indexPush(work, {
+        GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_REF: "refs/heads/dev",
+        SCOREBOARD_HEAD: base,
+        SCOREBOARD_RUNNER: base,
+        SCOREBOARD_ROOT: path.join(root, "manual"),
+      });
+      expect(dispatched.status, dispatched.stderr).toBe(0);
+      expect((await readIndex(path.join(root, "manual"))).map((record) => record.commit)).toEqual([
+        base,
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("resets a chain whose commits are gone from the clone after a history rewrite", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-rewritten-"));
+    const work = path.join(root, "repo");
+    const indexRoot = path.join(root, "index");
+    await mkdir(work);
+    try {
+      fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      const ancient = await fixtureCommit(work, "ancient", "2020-01-01T00:00:00Z");
+      const oldest = await fixtureCommit(work, "c0");
+      const head = await fixtureCommit(work, "c1");
+      const gone = "e".repeat(40);
+      await appendIndexRecord(indexRoot, pending(gone));
+      const pushed = indexPush(work, {
+        ...DEV_PUSH,
+        SCOREBOARD_BEFORE: gone,
+        SCOREBOARD_HEAD: head,
+        SCOREBOARD_RUNNER: head,
+        SCOREBOARD_ROOT: indexRoot,
+      });
+      expect(pushed.status, pushed.stderr).toBe(0);
+      expect(pushed.stdout).toContain("::warning title=Scoreboard index::");
+      const records = await readIndex(indexRoot);
+      expect(records.map((record) => record.commit)).toEqual([oldest, head]);
+      expect(records.some((record) => record.commit === ancient || record.commit === gone)).toBe(
+        false,
+      );
+      expect(records[0]).toMatchObject({
+        chainOrigin: "history-rewritten",
+        previousHash: "0".repeat(64),
+        enumerationStart: oldest,
+        enumerationReason: "empty-chain-retention-window",
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -3386,6 +3670,55 @@ describe("prior index chain", () => {
     ]);
   });
 
+  it("restores the release chain from any completed release run of this repository", async () => {
+    const releaseArtifact = (runId: number) => ({
+      ...artifact(runId, false),
+      name: "scoreboard-release-index",
+    });
+    const github = fakeGitHub(
+      [
+        run(54, "2026-09-23T00:00:00Z", {
+          head_branch: "v0.1.0",
+          head_repository: { full_name: "someone/ardur-bot" },
+        }),
+        run(53, "2026-09-22T00:00:00Z", { event: "pull_request", head_branch: "v0.1.0" }),
+        run(52, "2026-09-21T00:00:00Z", { head_branch: "v0.1.0", conclusion: "success" }),
+        run(51, "2026-09-20T00:00:00Z", { head_branch: "v0.1.0", conclusion: "failure" }),
+        run(50, "2026-09-19T00:00:00Z", { event: "workflow_dispatch" }),
+      ],
+      {
+        54: [releaseArtifact(54)],
+        53: [releaseArtifact(53)],
+        52: [artifact(52, false)],
+        51: [releaseArtifact(51)],
+        50: [releaseArtifact(50)],
+      },
+    );
+    await expect(
+      findPriorIndexArtifact({
+        scope: "release",
+        repository: REPOSITORY,
+        request: github.request,
+        now: NOW,
+        hasIndexJob: () => true,
+        indexJobPredates: () => false,
+      }),
+    ).resolves.toEqual({ runId: 51, missingReason: null });
+    const listing = github.calls.find((call) => call.pathname.endsWith("/runs"));
+    expect(listing?.pathname).toBe(
+      `/repos/${REPOSITORY}/actions/workflows/release-desktop.yml/runs`,
+    );
+    expect(listing?.query).toMatchObject({ status: "completed" });
+    expect(listing?.query).not.toHaveProperty("branch");
+    expect(listing?.query).not.toHaveProperty("event");
+    const lookups = github.calls.filter((call) => call.pathname.endsWith("/artifacts"));
+    expect(lookups.map((call) => call.pathname)).toEqual([
+      `/repos/${REPOSITORY}/actions/runs/52/artifacts`,
+      `/repos/${REPOSITORY}/actions/runs/51/artifacts`,
+    ]);
+    expect(lookups[0]?.query).toMatchObject({ name: "scoreboard-release-index" });
+  });
+
   it("proves a first run from git history that predates the retention window", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-history-"));
     try {
@@ -3402,6 +3735,18 @@ describe("prior index chain", () => {
       expect(history.indexJobPredates(new Date("2026-06-26T00:00:00.000Z"))).toBe(false);
       expect(history.indexJobPredates(new Date("2026-09-02T00:00:00.000Z"))).toBe(true);
       expect(history.hasIndexJob("not-a-commit")).toBe(false);
+
+      const release = indexJobHistory(root, "release");
+      expect(release.hasIndexJob(added)).toBe(false);
+      const workflow = path.join(root, ".github/workflows/performance.yml");
+      await mkdir(path.dirname(workflow), { recursive: true });
+      await writeFile(workflow, "name: scoreboard-release-index\n");
+      fixtureGit(root, ["add", ".github/workflows/performance.yml"], "2026-09-10T00:00:00Z");
+      fixtureGit(root, ["commit", "-q", "-m", "release index"], "2026-09-10T00:00:00Z");
+      const restoring = fixtureGit(root, ["rev-parse", "HEAD"]);
+      expect(release.hasIndexJob(restoring)).toBe(true);
+      expect(release.indexJobPredates(new Date("2026-09-05T00:00:00.000Z"))).toBe(false);
+      expect(release.indexJobPredates(new Date("2026-09-11T00:00:00.000Z"))).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -3482,7 +3827,7 @@ describe("workflow contracts", () => {
     expect(performanceYaml).toContain("group: scoreboard-index-");
     expect(performanceYaml).toContain("node scripts/scoreboard-index.mjs restore-index");
     expect(docs).not.toContain("third worktree");
-    expect(docs).toContain("harness in the base worktree");
+    expect(docs).toContain("measures both revisions with the candidate's harness");
     expect(docs).toContain("budgets job's pending reason");
   });
 
@@ -3535,6 +3880,41 @@ describe("workflow contracts", () => {
     expect(() => assertWorkflowContracts(durable, goodRelease)).toThrow(/artifact name/);
   });
 
+  it("validates the preview tag before any dependency install", () => {
+    const validate = releaseYaml.split("\n  validate:\n")[1]?.split("\n  build:\n")[0] ?? "";
+    expect(validate).toContain("node scripts/desktop-release.mjs validate");
+    expect(validate).not.toMatch(/pnpm install|npm (ci|install)|setup-node/);
+    const installed = goodRelease.replace(
+      "      - run: node scripts/desktop-release.mjs validate",
+      "      - run: pnpm install --frozen-lockfile\n      - run: node scripts/desktop-release.mjs validate",
+    );
+    expect(installed).not.toBe(goodRelease);
+    expect(() => assertWorkflowContracts(goodPerformance, installed)).toThrow(
+      /validate needs installed dependencies/,
+    );
+  });
+
+  it("restores the release chain before the gate and keeps it after a refusal", () => {
+    const gateJob = performanceYaml.split("\n  release-gate:\n")[1] ?? "";
+    const prior = gateJob.indexOf("node scripts/scoreboard-index.mjs prior-index --scope release");
+    const restore = gateJob.indexOf("node scripts/scoreboard-index.mjs restore-index");
+    const judge = gateJob.indexOf("node scripts/scoreboard-index.mjs release-gate");
+    const upload = gateJob.lastIndexOf("name: scoreboard-release-index");
+    expect(prior).toBeGreaterThan(-1);
+    expect(restore).toBeGreaterThan(prior);
+    expect(judge).toBeGreaterThan(restore);
+    expect(upload).toBeGreaterThan(judge);
+    expect(gateJob.slice(judge, upload)).toContain("if: always()");
+    expect(performanceYaml).not.toMatch(/common_runner_sha|inputs\.attempt|\n {6}attempt:/);
+    expect(releaseYaml).not.toMatch(/common_runner_sha|\n {6}attempt:/);
+    const unrestored = goodPerformance.replace(
+      "      - run: node scripts/scoreboard-index.mjs restore-index --root publication/scoreboard-publication/index\n",
+      "",
+    );
+    expect(unrestored).not.toBe(goodPerformance);
+    expect(() => assertWorkflowContracts(unrestored, goodRelease)).toThrow(/release chain/);
+  });
+
   it("documents where the index lives and how long evidence is kept", () => {
     expect(docs).toContain(
       "The historical scoreboard is the local directory `.context/performance/scoreboard-index`.",
@@ -3547,10 +3927,13 @@ describe("workflow contracts", () => {
     expect(docs).toContain("A pending record is never deleted to hide an earlier measurement.");
     expect(docs).toContain("Building the physical evidence runner is out of scope");
     expect(docs).toContain(
-      "This preview was published without measured performance evidence: <reason>. Waived by <actor>.",
+      "This preview was published without measured performance evidence: <reason>.",
     );
+    expect(docs).not.toContain("Waived by");
     expect(docs).toContain(
-      "retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared.",
+      "Two release budgets are not declared yet, so they were not checked: retained session growth, tool termination deadline. They must be declared before a release can be measured against them.",
     );
+    expect(docs).not.toMatch(/publication needs them declared|release-policy\.json` is unchanged/);
+    expect(docs).not.toContain("common_runner_sha");
   });
 });

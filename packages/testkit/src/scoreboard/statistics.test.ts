@@ -479,6 +479,62 @@ describe("evidence and calibration", () => {
       freezeBudgetPolicy(fixture.policy, [envelope(a), envelope(b)], "2026-01-03T00:00:00.000Z"),
     ).toThrow("outside-budget");
   });
+  it("refuses calibration whose required task or crash fails the report verdict", () => {
+    const task = TASK_DEFINITIONS[0]!.id;
+    const crash = CRASH_BOUNDARIES[0]!;
+    const calibrate = (edit: (value: PerformanceEvidenceReport) => void) => {
+      const a = structuredClone(setup().parent);
+      a.id = "calibration-a";
+      a.createdAt = "2026-01-01T00:00:00.000Z";
+      Object.assign(a.tasks.find((item) => item.id === task)!, {
+        status: "complete",
+        missingReason: null,
+        fixtureHash: digest("task-fixture"),
+        graderHash: digest("task-grader"),
+        trials: [
+          {
+            id: "trial-01",
+            sessionId: "task-session",
+            pairId: "task-pair",
+            traceId: "trace-01",
+            outcome: "success",
+            passed: true,
+            criticalPassed: true,
+            withinDeadline: true,
+          },
+        ],
+      });
+      Object.assign(a.crashes.find((item) => item.id === crash.id)!, {
+        status: "complete",
+        missingReason: null,
+        recovery: crash.expected,
+        safetyPassed: true,
+        taskCompleted: crash.expected !== "explicit-uncertainty",
+        traceIds: ["trace-01"],
+      });
+      const b = structuredClone(a);
+      b.id = "calibration-b";
+      b.createdAt = "2026-01-02T00:00:00.000Z";
+      edit(b);
+      const proposed = createBudgetPolicy(
+        { ...selection(), taskIds: [task], crashBoundaryIds: [crash.id] },
+        { mode: "commit", environmentHash: a.environmentHash, scenario: a.scenario },
+      );
+      return () =>
+        freezeBudgetPolicy(proposed, [envelope(a), envelope(b)], "2026-01-03T00:00:00.000Z");
+    };
+    expect(calibrate(() => {})).not.toThrow();
+    expect(
+      calibrate((value) => {
+        value.tasks.find((item) => item.id === task)!.trials[0]!.passed = false;
+      }),
+    ).toThrow("calibration-verdict-failed");
+    expect(
+      calibrate((value) => {
+        value.crashes.find((item) => item.id === crash.id)!.safetyPassed = false;
+      }),
+    ).toThrow("calibration-verdict-failed");
+  });
   it("allocates confidence across predeclared family members, statistics, strata and both baselines", () => {
     const one = setup();
     const ordinary = compare(one).comparisons[0]!.estimate!.alpha;

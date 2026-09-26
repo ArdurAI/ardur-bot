@@ -244,27 +244,42 @@ When `total_count` is above 1,000, or a listing returns 1,000 runs, the walk hal
 range and lists every slice, newest first, until each slice is under that cap. A chain origin is
 chosen only after every slice back to the start of the window has been inspected. A live artifact restores
 that chain and does not write a chain origin. Pull-request, manual, and fork runs never restore or
-upload `scoreboard-index`; they build a throwaway `scoreboard-index-check` chain. A downloaded
-chain with a broken hash fails the job instead of silently starting over.
+upload `scoreboard-index`; they build a throwaway `scoreboard-index-check` chain and index only
+their own commits: the first-parent commits after the merge base of the pull request base and the
+head, or the head alone when a manual run has no base. They never walk the retention window. A
+downloaded chain with a broken hash fails the job instead of silently starting over.
 
 Index writers for one ref are serialized. GitHub keeps one pending index job per ref and cancels an
-older pending one, so a burst of pushes can skip a run. The push event's `before` commit is only an
-optimisation hint and is never the lower bound. When the restored chain contains a first-parent
-ancestor of the head, enumeration resumes after the nearest such ancestor. When the chain contains
-commits but none is an ancestor of the head, enumeration walks first-parent history from the head
-back to the newest commit that is in the chain, and each new index line records that commit as
-`enumerationStart` with reason `chain-without-ancestor`. When the chain is empty, enumeration walks
-first-parent history from the head back to the start of the 90-day workflow-artifact retention
-window, and each new index line records the oldest included commit as `enumerationStart` with
-reason `empty-chain-retention-window`. Commits reached only through a merged side branch are not
-indexed separately. The next upload contains the complete restored chain plus the new records.
+older pending one, so a burst of pushes can skip a run. The push event's `before` commit is not
+used. When the restored chain contains a first-parent ancestor of the head, enumeration resumes
+after the nearest such ancestor. When the chain contains commits but none is an ancestor of the
+head, enumeration walks first-parent history from the head back to the newest commit that is in the
+chain, stopping at the start of the 90-day workflow-artifact retention window, and each new index
+line records that commit as `enumerationStart` with reason `chain-without-ancestor`. When the chain
+is empty, enumeration walks first-parent history from the head back to the start of that window,
+and each new index line records the oldest included commit as `enumerationStart` with reason
+`empty-chain-retention-window`. When none of the chain's commits is in the clone any more, the
+branch history was rewritten: the job prints a warning, starts a new chain whose first record has
+chain origin `history-rewritten`, and enumerates as for an empty chain. The earlier chain stays in
+its workflow artifact until that expires. Commits reached only through a merged side branch are not
+indexed separately. The index job reads the chain once and appends every new record in one write
+under one lock, so a full-window backfill is one pass. The next upload contains the complete
+restored chain plus the new records.
 
 A new genesis names why no chain was restored. `first-run` means git history shows the index job did
 not exist on the branch before the retention window, so no older chain can exist.
 `expired-after-90-days-inactivity` means the walk saw an expired artifact, or an older chain existed
 and GitHub has since deleted the runs; an empty run list alone does not prove a first run.
 `prior-artifact-missing` means a successful run inside the window exists but none of them uploaded
-the artifact.
+the artifact. `history-rewritten` means a chain was restored but none of its commits remain in the
+branch history.
+
+The release gate keeps its own durable chain, `scoreboard-release-index`, restored the same way
+before it judges: the job lists this repository's completed push and manual runs of the release
+workflow, newest first and back to the 90-day window, and restores the newest live
+`scoreboard-release-index` artifact. A refused run still uploads its chain, so attempts count up,
+a refusal stays recorded, and a new release chain names its origin with the same values. Every
+release run extends that one chain; attempts are counted from it, not passed in.
 
 Release decisions use the committed `docs/performance/release-policy.json`. The gate verifies its
 SHA-256 against the digest pinned in `scripts/scoreboard-index.mjs`, refuses a supplied budget
@@ -319,16 +334,24 @@ that the candidate completed each pinned boundary. A set that contains only the 
 `missing T1 durable crash report: candidate-crash.json`.
 Live cache-hit ratios stay on an explicit T3 run. They are not required of the T1 crash report.
 Release notes render each guardrail summary from the report that satisfied that guardrail and
-name that report. Recovery and task lines come from the T1 crash report, not from the T2 startup
-report. The publication directory receives every report in the set, the gate hashes those bytes
-into `distributedDigests`, and the release upload includes them, so the bytes behind each
-guardrail remain after the 90-day workflow artifact expires.
-The pinned `docs/performance/release-policy.json` is unchanged.
+name the attached release asset, such as `scoreboard-candidate-crash.json`. Recovery and task
+lines come from the T1 crash report, not from the T2 startup report. The Critical safety line
+covers the effect-safety counts the gate judges: the pinned guardrail's list. The publication
+directory receives exactly the reports the gate judges, the gate hashes those bytes into
+`distributedDigests`, and the release upload includes them, so the bytes behind each guardrail
+remain after the 90-day workflow artifact expires. Any other `candidate-*.json` in the reports
+artifact, such as a file from another build or one that does not parse, is the refusal
+`unjudged-report`, and the reason names that file. The publication directory then receives
+nothing from the report set, the same as for an invalid energy entry.
 The five effect-safety counts are checked by their guardrail and the report judge rather than the
 budget selection, because seven reliability metrics in one family exceed the resample limit. Tool
-termination and retained-session growth have no reviewed declaration yet. retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared. That pending result is recorded as `undeclared-budget` with those metric ids. It is
-not a missing-report failure and it does not refuse the candidate. When publication proceeds with
-those reasons, the release notes evidence section prints that sentence with the metric ids, and
+termination and retained-session growth have no reviewed declaration yet. Each is recorded as
+`undeclared-budget` with its metric id. It is not a missing-report failure and it does not refuse
+the candidate. When publication proceeds with those reasons, the release notes evidence section
+says:
+
+Two release budgets are not declared yet, so they were not checked: retained session growth, tool termination deadline. They must be declared before a release can be measured against them.
+
 `gate.json` is uploaded as a release asset next to the reports so the reasons outlive the workflow
 artifact.
 
@@ -360,11 +383,14 @@ exists, a preview can be published only by a manual `workflow_dispatch` with a n
 `evidence_waiver` reason. The gate accepts a waiver only from a dispatch, and only when this run
 uploaded no `scoreboard-reports` artifact. If that artifact exists, its download must succeed and
 the waiver is refused as `waiver-with-evidence`. The gate also refuses a waiver beside any report
-or attached evidence file, and records a `waived` index entry with the reason and the account that
-triggered the run. A waived release carries no measurements; its evidence section starts with
-`This preview was published without measured performance evidence: <reason>. Waived by <actor>.`
-The same reason, actor, run id, and index line are uploaded as the `waiver-record.json` release
-asset, so the record outlives the 90-day workflow artifact.
+or attached evidence file, and records a `waived` entry in the durable release index with the
+reason and the account that triggered the run. That account stays in the index record and the
+gate's workflow artifact; no public release asset names it. A waived release carries no
+measurements; its evidence section starts with
+`This preview was published without measured performance evidence: <reason>.`
+The `waiver-record.json` release asset carries the reason, the run id, the index line number and
+that line's record hash, so the record outlives the 90-day workflow artifact. A reason that
+contains a path, an email address or a URL is refused as `invalid-waiver`.
 
 The commit sample plan is 20 paired observations. The release plan is 200 replay pairs and 100
 observations for every required startup stratum. Missing or short startup strata fail with
@@ -395,11 +421,12 @@ the slowest observed frame interval: target **60 fps**, warn below **50 fps** (o
 main-thread frame-scheduling proxy, not a claim about GPU presentation on every display. Missing
 samples or reports are visible warnings, not silently green measurements. Trace archives and
 screenshots are attached to the `shell-performance` artifact for review. The commit workflow is
-advisory. It builds the base revision in its own worktree and runs the harness in the base worktree
-against the base build; the candidate uses its own in-tree harness. It does not copy candidate
-production files into the baseline. A baseline without a compatible in-tree harness is recorded as
-pending, and the index uses the budgets job's pending reason rather than replacing it with a generic
-missing-evidence reason.
+advisory. It builds the base revision in its own worktree and copies the candidate's harness (the
+Playwright performance config, spec and fixture, and the proxy test) into it. It then
+measures both revisions with the candidate's harness, each against its own build. It does not copy
+candidate production files into the baseline. A baseline without a compatible in-tree harness is
+recorded as pending, and the index uses the budgets job's pending reason rather than replacing it
+with a generic missing-evidence reason.
 
 ## Motion audit
 
