@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRunSandbox } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { HOST_MOVE_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
+import {
+  ENGINE_MISSING_CODE,
+  HOST_MOVE_UNAVAILABLE_CODE,
+  HOST_MOVE_UNAVAILABLE_MESSAGE,
+} from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
@@ -63,8 +67,14 @@ it("returns the host refusal sentence through the RPC handler Settings calls", a
     { prefix: "/rpc", context: { actor } },
   );
   expect(response?.status).toBe(400);
-  const body = (await response?.json()) as { json?: { code?: string; message?: string } };
-  expect(body.json).toMatchObject({ code: "BAD_REQUEST", message: HOST_MOVE_UNAVAILABLE_MESSAGE });
+  const body = (await response?.json()) as {
+    json?: { code?: string; message?: string; data?: { code?: string } };
+  };
+  expect(body.json).toMatchObject({
+    code: "BAD_REQUEST",
+    message: HOST_MOVE_UNAVAILABLE_MESSAGE,
+    data: { code: HOST_MOVE_UNAVAILABLE_CODE },
+  });
   expect(body.json?.message).not.toBe("Internal server error");
 });
 
@@ -233,11 +243,14 @@ it("says which engine is missing when a computer is started", async () => {
       { prefix: "/rpc", context: { actor } },
     );
     expect(response?.status).toBe(400);
-    const body = (await response?.json()) as { json?: { code?: string; message?: string } };
+    const body = (await response?.json()) as {
+      json?: { code?: string; message?: string; data?: { code?: string } };
+    };
     expect(body.json).toMatchObject({
       code: "BAD_REQUEST",
       message:
         "This computer runs on E2B, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure E2B again.",
+      data: { code: ENGINE_MISSING_CODE },
     });
   } finally {
     await rm(dataDir, { recursive: true, force: true });
@@ -292,8 +305,14 @@ it("refuses computer.update synchronously on a lost-engine computer instead of q
     { prefix: "/rpc", context: { actor } },
   );
   expect(response?.status).toBe(400);
-  const body = (await response?.json()) as { json?: { code?: string; message?: string } };
-  expect(body.json).toMatchObject({ code: "BAD_REQUEST", message: missingEngineSentence });
+  const body = (await response?.json()) as {
+    json?: { code?: string; message?: string; data?: { code?: string } };
+  };
+  expect(body.json).toMatchObject({
+    code: "BAD_REQUEST",
+    message: missingEngineSentence,
+    data: { code: ENGINE_MISSING_CODE },
+  });
 });
 
 it("refuses a profile-only computer.configure synchronously on a lost-engine computer", async () => {
@@ -340,8 +359,14 @@ it("refuses a profile-only computer.configure synchronously on a lost-engine com
     { prefix: "/rpc", context: { actor } },
   );
   expect(response?.status).toBe(400);
-  const body = (await response?.json()) as { json?: { code?: string; message?: string } };
-  expect(body.json).toMatchObject({ code: "BAD_REQUEST", message: missingEngineSentence });
+  const body = (await response?.json()) as {
+    json?: { code?: string; message?: string; data?: { code?: string } };
+  };
+  expect(body.json).toMatchObject({
+    code: "BAD_REQUEST",
+    message: missingEngineSentence,
+    data: { code: ENGINE_MISSING_CODE },
+  });
 });
 
 it("refuses capabilities.network synchronously on a lost-engine Docker computer", async () => {
@@ -377,11 +402,14 @@ it("refuses capabilities.network synchronously on a lost-engine Docker computer"
     { prefix: "/rpc", context: { actor } },
   );
   expect(response?.status).toBe(400);
-  const body = (await response?.json()) as { json?: { code?: string; message?: string } };
+  const body = (await response?.json()) as {
+    json?: { code?: string; message?: string; data?: { code?: string } };
+  };
   expect(body.json).toMatchObject({
     code: "BAD_REQUEST",
     message:
       "This computer runs on Docker, which is not configured here. Reset it in Settings, " +
       "Computers to start it on this deployment's engine, or configure Docker again.",
+    data: { code: ENGINE_MISSING_CODE },
   });
 });

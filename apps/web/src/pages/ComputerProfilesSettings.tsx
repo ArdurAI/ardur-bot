@@ -4,14 +4,9 @@ import type {
   ComputerStatus,
   Me,
 } from "@ardurbot/contracts";
-import {
-  COMPUTER_PROFILES,
-  ENGINE_MISSING_CODE,
-  errorDataCode,
-  HOST_MOVE_UNAVAILABLE_CODE,
-} from "@ardurbot/contracts";
+import { COMPUTER_PROFILES } from "@ardurbot/contracts";
 import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
-import { sandboxKindForBot } from "@ardurbot/core";
+import { computerRefusalMessage, sandboxKindForBot } from "@ardurbot/core";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -190,12 +185,11 @@ export function ComputerProfile({
       setConfirm(false);
       await onChanged();
     } catch (caught: unknown) {
-      const code = errorDataCode(caught);
       setError(
-        (code === ENGINE_MISSING_CODE || code === HOST_MOVE_UNAVAILABLE_CODE) &&
-          caught instanceof Error
-          ? caught.message
-          : t`Could not change the computer; stop its bots and try again.`,
+        computerRefusalMessage(
+          caught,
+          t`Could not change the computer; stop its bots and try again.`,
+        ),
       );
     } finally {
       setPending(false);

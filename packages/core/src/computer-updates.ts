@@ -1,4 +1,10 @@
-import { COMPUTER_UPDATE_STAGES, type ComputerUpdate } from "@ardurbot/contracts";
+import {
+  COMPUTER_UPDATE_STAGES,
+  type ComputerUpdate,
+  ENGINE_MISSING_CODE,
+  errorDataCode,
+  HOST_MOVE_UNAVAILABLE_CODE,
+} from "@ardurbot/contracts";
 
 /** Shared polling and local presentation state; the server owns operation lifetime. */
 export function createComputerUpdates(client: {
@@ -118,4 +124,16 @@ export function computerUpdateAttentionMessage(
 ): string {
   if (update.status === "interrupted") return copy.interrupted;
   return update.failureReason ?? copy.generic;
+}
+
+/** The server's own refusal sentence, when its error names a missing engine or a refused host
+ * move — both already say what to do — or the caller's fallback for any other failure. Decided
+ * by the error's `data.code`, never by comparing English text. One source of truth for the
+ * Capabilities and Computer profile screens, on web and mobile alike. */
+export function computerRefusalMessage(caught: unknown, fallback: string): string {
+  const code = errorDataCode(caught);
+  return (code === ENGINE_MISSING_CODE || code === HOST_MOVE_UNAVAILABLE_CODE) &&
+    caught instanceof Error
+    ? caught.message
+    : fallback;
 }

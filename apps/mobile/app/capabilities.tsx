@@ -1,9 +1,5 @@
 import type { CapabilityPreferences } from "@ardurbot/contracts";
-import {
-  ENGINE_MISSING_CODE,
-  errorDataCode,
-  HOST_MOVE_UNAVAILABLE_CODE,
-} from "@ardurbot/contracts";
+import { computerRefusalMessage } from "@ardurbot/core";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -63,15 +59,8 @@ export default function Capabilities() {
       const value = await loadCapabilitySettings();
       if (ticket.current === current) setData(value);
     } catch (caught) {
-      if (ticket.current === current) {
-        const code = errorDataCode(caught);
-        setError(
-          (code === ENGINE_MISSING_CODE || code === HOST_MOVE_UNAVAILABLE_CODE) &&
-            caught instanceof Error
-            ? caught.message
-            : t("Could not save capabilities. Try again."),
-        );
-      }
+      if (ticket.current === current)
+        setError(computerRefusalMessage(caught, t("Could not save capabilities. Try again.")));
     } finally {
       locked.current = false;
       if (ticket.current === current) setBusy(false);

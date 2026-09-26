@@ -1,9 +1,5 @@
 import type { CapabilityPreferences, ComputerNetworkSetting } from "@ardurbot/contracts";
-import {
-  ENGINE_MISSING_CODE,
-  errorDataCode,
-  HOST_MOVE_UNAVAILABLE_CODE,
-} from "@ardurbot/contracts";
+import { computerRefusalMessage } from "@ardurbot/core";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,14 +64,13 @@ export function CapabilitiesPage({
       await work();
       if (network) setNetworkChange(null);
     } catch (caught: unknown) {
-      const code = errorDataCode(caught);
       setError(
-        (code === ENGINE_MISSING_CODE || code === HOST_MOVE_UNAVAILABLE_CODE) &&
-          caught instanceof Error
-          ? caught.message
-          : network
+        computerRefusalMessage(
+          caught,
+          network
             ? t`Could not change the computer. Stop its bots and try again.`
             : t`Could not save capabilities. Try again.`,
+        ),
       );
     } finally {
       locked.current = false;

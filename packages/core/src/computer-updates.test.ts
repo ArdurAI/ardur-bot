@@ -1,6 +1,7 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  computerRefusalMessage,
   computerUpdateAttentionMessage,
   computerUpdateOffersRecover,
   createComputerUpdates,
@@ -92,5 +93,42 @@ describe("computerUpdateAttentionMessage", () => {
     expect(
       computerUpdateAttentionMessage({ status: "interrupted", failureReason: "engine gone" }, copy),
     ).toBe("interrupted-copy");
+  });
+});
+describe("computerRefusalMessage", () => {
+  const fallback = "Could not change the computer; stop its bots and try again.";
+  it("shows the server's sentence for a missing-engine or host-move refusal", () => {
+    expect(
+      computerRefusalMessage(
+        Object.assign(new Error("Reset it in Settings, Computers…"), {
+          data: { code: "engine-missing" },
+        }),
+        fallback,
+      ),
+    ).toBe("Reset it in Settings, Computers…");
+    expect(
+      computerRefusalMessage(
+        Object.assign(new Error("Choose a saved connection or keep the current engine."), {
+          data: { code: "host-move-unavailable" },
+        }),
+        fallback,
+      ),
+    ).toBe("Choose a saved connection or keep the current engine.");
+  });
+  it("keeps the caller's fallback for any other failure, or a non-Error, or no error at all", () => {
+    expect(
+      computerRefusalMessage(
+        Object.assign(new Error("Computer is busy"), { data: { code: "conflict" } }),
+        fallback,
+      ),
+    ).toBe(fallback);
+    expect(computerRefusalMessage(new Error("boom"), fallback)).toBe(fallback);
+    expect(
+      computerRefusalMessage(
+        { message: "not an Error", data: { code: "engine-missing" } },
+        fallback,
+      ),
+    ).toBe(fallback);
+    expect(computerRefusalMessage(undefined, fallback)).toBe(fallback);
   });
 });
