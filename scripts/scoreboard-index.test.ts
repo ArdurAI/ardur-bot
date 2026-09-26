@@ -30,7 +30,9 @@ import { inventoryArtifact } from "../packages/testkit/src/scoreboard/resources/
 import {
   createBudgetPolicy,
   freezeBudgetPolicy,
+  judgeReport,
   metricBudget,
+  reportRules,
 } from "../packages/testkit/src/scoreboard/statistics.ts";
 import { releaseNotes } from "./desktop-release.mjs";
 import {
@@ -554,6 +556,19 @@ function pinnedReleasePolicy() {
       guardrails: { id: string; metricIds: string[] }[];
     },
   };
+}
+
+function pinnedGuardrails() {
+  return JSON.parse(
+    readFileSync(new URL("../docs/performance/release-policy.json", import.meta.url), "utf8"),
+  ).guardrails as {
+    id: string;
+    metricIds: string[];
+    taskIds: string[];
+    experimentIds: string[];
+    crashBoundaryIds: string[];
+    usage: boolean;
+  }[];
 }
 
 function guardrailMetricIds(
@@ -2493,6 +2508,175 @@ ${script}`,
       await rm(probe.root, { recursive: true, force: true });
     }
   }, 420_000);
+
+  it("refuses pinned tasks whose trials failed while their critical checks passed", async () => {
+    const taskIds = pinnedGuardrails().find(
+      (guardrail) => guardrail.id === "deterministic-tasks",
+    )?.taskIds;
+    if (!taskIds?.length) throw new Error("missing deterministic-tasks");
+    const probe = await documentedPinnedRelease();
+    const crashPath = path.join(probe.reportsRoot, "candidate-crash.json");
+    const artifactPath = path.join(probe.artifactRoot, "scoreboard-candidate-crash.json");
+    try {
+      const published = await gate(probe, "index-tasks-passed");
+      expect(published.code).toBe(0);
+      expect(published.gate.allowPublication).toBe(true);
+      expect(published.gate.taskSummary).toBe(
+        `${taskIds.length}/${taskIds.length} trials passed; ${taskIds.length}/${taskIds.length} critical checks passed`,
+      );
+
+      const envelope = JSON.parse(await readFile(crashPath, "utf8")) as {
+        report: ReturnType<typeof syntheticReport>;
+      };
+      for (const task of envelope.report.tasks)
+        for (const trial of task.trials) {
+          trial.passed = false;
+          expect(trial.criticalPassed).toBe(true);
+        }
+      const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report));
+      await writeFile(crashPath, bytes);
+      await writeFile(artifactPath, bytes);
+      const result = await gate(probe, "index-tasks-failed");
+      expect(result.code).toBe(1);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(result.gate.releaseEligible).toBe(false);
+      for (const id of taskIds)
+        expect(result.gate.reasons, id).toContainEqual(
+          expect.objectContaining({ code: "required-task-failed", scope: id }),
+        );
+      expect(codes(result.gate)).not.toContain("safety-failure");
+      expect(() => releaseNotes(["fix: fixture"], result.gate)).toThrow(/human acceptance/i);
+      const refused = (await readIndex(result.indexRoot)).find((item) => item.role === "candidate");
+      expect(refused?.status).toBe("refused");
+      expect(refused?.gateCodes).toContain("required-task-failed");
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("decides every item of each pinned T1 guardrail by a report-judge rule", async () => {
+    const guardrails = pinnedGuardrails();
+    for (const guardrail of guardrails)
+      expect(
+        TIER_GUARDRAILS.T1.has(guardrail.id) || TIER_GUARDRAILS.T2.has(guardrail.id),
+        `unclassified guardrail ${guardrail.id}`,
+      ).toBe(true);
+    const effectMetricIds = guardrails.find((item) => item.id === "effect-safety")?.metricIds;
+    const t1 = guardrails
+      .filter((guardrail) => TIER_GUARDRAILS.T1.has(guardrail.id))
+      .map(({ id, ...selection }) => ({
+        id,
+        selection: {
+          ...selection,
+          metricIds: selection.metricIds.filter(
+            (metricId) =>
+              metricId !== "m05.cache-token-hit" && metricId !== "m05.cache-request-hit",
+          ),
+        },
+      }));
+    expect(t1.map((guardrail) => guardrail.id).sort()).toEqual([...TIER_GUARDRAILS.T1].sort());
+    const probe = await documentedPinnedRelease();
+    const crashPath = path.join(probe.reportsRoot, "candidate-crash.json");
+    try {
+      const published = await gate(probe, "index-t1-rules");
+      expect(published.code).toBe(0);
+      expect(published.gate.allowPublication).toBe(true);
+      const original = await readFile(crashPath, "utf8");
+      const passing = () =>
+        (JSON.parse(original) as { report: ReturnType<typeof syntheticReport> }).report;
+      const breakItem: Record<
+        string,
+        (report: ReturnType<typeof syntheticReport>, id: string) => string
+      > = {
+        "effect-count": (report, id) => {
+          const metric = report.metrics.find((item) => item.id === id);
+          if (!metric?.observations.length) throw new Error(`unmeasured ${id}`);
+          for (const observation of metric.observations) observation.value = 1;
+          return "safety-failure";
+        },
+        "task-pass": (report, id) => {
+          for (const trial of report.tasks.find((item) => item.id === id)?.trials ?? [])
+            trial.passed = false;
+          return "required-task-failed";
+        },
+        "crash-safety": (report, id) => {
+          const crash = report.crashes.find((item) => item.id === id);
+          if (crash?.status !== "complete") throw new Error(`incomplete ${id}`);
+          crash.safetyPassed = false;
+          return "safety-failure";
+        },
+        "measured-usage": (report) => {
+          for (const request of report.usage)
+            Object.assign(request.categories.logicalInput.provenance, { kind: "estimated" });
+          report.usageCoverage.observed = 0;
+          return "incomplete-evidence";
+        },
+      };
+      for (const guardrail of t1) {
+        const rules = reportRules(guardrail.selection, effectMetricIds);
+        expect(rules.length, guardrail.id).toBeGreaterThan(0);
+        expect(
+          judgeReport(passing(), guardrail.selection, { effectMetricIds }),
+          guardrail.id,
+        ).toEqual([]);
+        for (const { id, rule } of rules) {
+          if (!rule) throw new Error(`${guardrail.id}: no judge rule for ${id}`);
+          if (rule === "baseline-budget") {
+            expect(published.gate.unknowns, `${guardrail.id}:${id}`).toContain(
+              `${id} budget: not-compared`,
+            );
+            continue;
+          }
+          const edit = breakItem[rule];
+          if (!edit) throw new Error(`${guardrail.id}: untested rule ${rule}`);
+          const report = passing();
+          const code = edit(report, id);
+          const reasons = judgeReport(report, guardrail.selection, { effectMetricIds });
+          expect(reasons, `${guardrail.id}:${id}`).toContainEqual(
+            expect.objectContaining(
+              code === "incomplete-evidence" ? { code } : { code, scope: id },
+            ),
+          );
+        }
+      }
+
+      // A complete experiment satisfies completeness, but no judge rule decides it.
+      const experimentId = EXPERIMENT_DEFINITIONS.find((item) => item.tiers.includes("T1"))!.id;
+      const withExperiment = passing();
+      for (const variant of withExperiment.experiments.find((item) => item.id === experimentId)!
+        .variants)
+        Object.assign(variant, { status: "complete", missingReason: null, traceIds: ["trace-01"] });
+      const experimentBytes = JSON.stringify(createPerformanceEvidenceEnvelope(withExperiment));
+      await writeFile(crashPath, experimentBytes);
+      await writeFile(
+        path.join(probe.artifactRoot, "scoreboard-candidate-crash.json"),
+        experimentBytes,
+      );
+      const future = JSON.parse(
+        readFileSync(new URL("../docs/performance/release-policy.json", import.meta.url), "utf8"),
+      );
+      future.guardrails.push({
+        id: "future-crash-experiment",
+        metricIds: [],
+        taskIds: [],
+        experimentIds: [experimentId],
+        crashBoundaryIds: ["crash-01"],
+        usage: false,
+      });
+      await writeReleasePolicy(probe.root, future);
+      const unjudged = await gate(probe, "index-t1-unjudged");
+      expect(unjudged.gate.allowPublication).toBe(false);
+      expect(unjudged.gate.reasons).toContainEqual(
+        expect.objectContaining({
+          code: "mandatory-evidence-unknown",
+          scope: "future-crash-experiment",
+          detail: `no judge rule for ${experimentId}`,
+        }),
+      );
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 180_000);
 
   it("refuses a private energy entry and stages nothing for upload", async () => {
     const probe = await stagePassing();

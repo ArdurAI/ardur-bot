@@ -199,7 +199,8 @@ function loadScoreboard() {
     parsePerformanceEvidenceEnvelope: report.parsePerformanceEvidenceEnvelope,
     assertRequiredEvidence: report.assertRequiredEvidence,
     comparePerformanceEvidence: statistics.comparePerformanceEvidence,
-    safetyFailures: statistics.safetyFailures,
+    judgeReport: statistics.judgeReport,
+    reportRules: statistics.reportRules,
     createBudgetPolicy: statistics.createBudgetPolicy,
     freezeBudgetPolicy: statistics.freezeBudgetPolicy,
     metricBudget: statistics.metricBudget,
@@ -1301,22 +1302,13 @@ function guardrailRequirement(id, selection) {
   return null;
 }
 
-function pinnedCrashIds(releasePolicy) {
-  const ids = [];
-  for (const guardrail of releasePolicy?.policy?.guardrails ?? []) {
-    if (GUARDRAIL_REPORTS[guardrail.id]?.tier !== "T1") continue;
-    for (const id of guardrail.crashBoundaryIds ?? []) if (!ids.includes(id)) ids.push(id);
-  }
-  return ids;
-}
-
+/** The pinned effect-safety counts, judged in full on every T1 report. */
 function effectSafetyMetricIds(releasePolicy) {
-  const ids = [];
-  for (const guardrail of releasePolicy?.policy?.guardrails ?? []) {
-    if (guardrail.id !== "effect-safety") continue;
-    for (const id of guardrail.metricIds ?? []) if (!ids.includes(id)) ids.push(id);
-  }
-  return ids;
+  const guardrails = (releasePolicy?.policy?.guardrails ?? []).filter(
+    (guardrail) => guardrail.id === "effect-safety",
+  );
+  if (!guardrails.length) return undefined;
+  return [...new Set(guardrails.flatMap((guardrail) => guardrail.metricIds ?? []))];
 }
 
 function candidateEvidenceSet(primary, extras) {
@@ -1474,6 +1466,8 @@ export async function evaluatePublicationGate(input) {
   }
   const candidateSet = candidateEvidenceSet(input.candidateEvidence, input.candidateReports);
   const satisfiedBy = new Map();
+  const compared = new Set((verdict?.comparisons ?? []).map((item) => item.metricId));
+  const effectMetricIds = effectSafetyMetricIds(releasePolicy);
   if (candidateSet.length && releasePolicy)
     for (const { id, ...selection } of releasePolicy.policy.guardrails) {
       const requirement = guardrailRequirement(id, selection);
@@ -1483,6 +1477,35 @@ export async function evaluatePublicationGate(input) {
       if (requirement && !pool.length) {
         const reportName = requirement.tier === "T1" ? "candidate-crash.json" : "candidate.json";
         push("mandatory-evidence-unknown", id, `missing ${requirement.label}: ${reportName}`);
+        continue;
+      }
+      if (requirement?.tier === "T1") {
+        // Each T1 report gets the comparison's whole report verdict; any refusal stands.
+        const required = selectionForTier(selection, "T1");
+        const rules = scoreboard.reportRules(required, effectMetricIds);
+        const unjudged = rules.filter((item) => !item.rule).map((item) => item.id);
+        if (unjudged.length) {
+          push("mandatory-evidence-unknown", id, `no judge rule for ${unjudged.join(", ")}`);
+          continue;
+        }
+        for (const item of rules)
+          if (item.rule === "baseline-budget" && !compared.has(item.id))
+            unknowns.push(`${item.id} budget: not-compared`);
+        let refused = false;
+        let detail;
+        for (const item of pool) {
+          const failures = scoreboard.judgeReport(item.report, required, { effectMetricIds });
+          for (const failure of failures) {
+            if (failure.code === "incomplete-evidence") detail = failure.detail;
+            else {
+              refused = true;
+              push(failure.code, failure.scope, failure.detail);
+            }
+          }
+          if (!failures.length && !satisfiedBy.has(id)) satisfiedBy.set(id, item);
+        }
+        if (refused) satisfiedBy.delete(id);
+        else if (!satisfiedBy.has(id)) push("mandatory-evidence-unknown", id, detail);
         continue;
       }
       let satisfied = false;
@@ -1501,15 +1524,6 @@ export async function evaluatePublicationGate(input) {
         }
       }
       if (!satisfied) push("mandatory-evidence-unknown", id, detail);
-    }
-  if (tiered)
-    for (const item of candidateSet) {
-      if (item.report?.scenario?.tier !== "T1") continue;
-      for (const failure of scoreboard.safetyFailures(item.report, {
-        metricIds: effectSafetyMetricIds(releasePolicy),
-        crashIds: pinnedCrashIds(releasePolicy),
-      }))
-        push(failure.code, failure.scope, failure.detail);
     }
   const files = input.files ?? [];
   assertPublicValue(

@@ -22,10 +22,11 @@ import {
   comparePerformanceEvidence,
   createBudgetPolicy,
   freezeBudgetPolicy,
+  judgeReport,
   metricBudget,
   pairedBootstrap,
   parseBudgetPolicy,
-  safetyFailures,
+  reportRules,
 } from "./statistics.js";
 
 const digest = (label: string) => contentDigest(label);
@@ -671,11 +672,14 @@ describe("evidence and calibration", () => {
   });
   it("judges a caller-supplied effect-safety list and completed pinned crashes", () => {
     const fixture = report();
+    const none = selection([]);
     const outside = metric(fixture, "m01.user-ttft");
     outside.observations = observations([1]);
     outside.missingReason = null;
-    expect(safetyFailures(fixture).some((item) => item.scope === "m01.user-ttft")).toBe(false);
-    expect(safetyFailures(fixture, { metricIds: ["m01.user-ttft", "m99.added-effect"] })).toEqual(
+    expect(judgeReport(fixture, none).some((item) => item.scope === "m01.user-ttft")).toBe(false);
+    expect(
+      judgeReport(fixture, none, { effectMetricIds: ["m01.user-ttft", "m99.added-effect"] }),
+    ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "safety-failure", scope: "m01.user-ttft" }),
         expect.objectContaining({ code: "safety-failure", scope: "m99.added-effect" }),
@@ -687,12 +691,56 @@ describe("evidence and calibration", () => {
     crash.missingReason = null;
     crash.recovery = expected;
     crash.safetyPassed = null;
-    expect(safetyFailures(fixture).some((item) => item.scope === crash.id)).toBe(false);
+    expect(judgeReport(fixture, none).some((item) => item.scope === crash.id)).toBe(false);
     expect(
-      safetyFailures(fixture, { crashIds: [crash.id] }).some(
+      judgeReport(fixture, { ...none, crashBoundaryIds: [crash.id] }).some(
         (item) => item.code === "safety-failure" && item.scope === crash.id,
       ),
     ).toBe(true);
+  });
+  it("fails a required task on its trial result even when its critical checks pass", () => {
+    const fixture = report();
+    Object.assign(fixture.tasks[0]!, {
+      status: "complete",
+      missingReason: null,
+      fixtureHash: digest("task-fixture"),
+      graderHash: digest("task-grader"),
+      trials: [
+        {
+          id: "trial-01",
+          sessionId: "task-session",
+          pairId: "task-pair",
+          traceId: "trace-01",
+          outcome: "success",
+          passed: false,
+          criticalPassed: true,
+          withinDeadline: true,
+        },
+      ],
+    });
+    const taskId = fixture.tasks[0]!.id;
+    expect(judgeReport(fixture, { ...selection([]), taskIds: [taskId] })).toEqual([
+      { code: "required-task-failed", scope: taskId, detail: "required-task-failed" },
+    ]);
+    expect(judgeReport(fixture, selection([]))).toEqual([]);
+  });
+  it("names the rule that decides each selected item", () => {
+    expect(
+      reportRules({
+        metricIds: ["m13.wrong-pin", "m04.logical-input"],
+        taskIds: ["task-01"],
+        experimentIds: ["O12"],
+        crashBoundaryIds: ["crash-01"],
+        usage: true,
+      }),
+    ).toEqual([
+      { id: "m13.wrong-pin", rule: "effect-count" },
+      { id: "m04.logical-input", rule: "baseline-budget" },
+      { id: "task-01", rule: "task-pass" },
+      { id: "crash-01", rule: "crash-safety" },
+      { id: "O12", rule: null },
+      { id: "usage", rule: "measured-usage" },
+    ]);
   });
   it("blocks critical compaction fact loss and failed required tasks even with improved timing", () => {
     const fixture = setup(1000, 900);

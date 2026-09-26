@@ -293,12 +293,28 @@ satisfies the guardrail:
 Startup sample floors are read from the T2 report. The statistical verdict compares
 `parent.json`, `candidate.json`, and `fixed-release.json` using only the T2 requirements: startup
 floors, latency, bundles, memory, and energy binding. Crash boundaries are not part of that
-comparison. They are required of `candidate-crash.json` alone. That T1 report is also judged:
-every `m13.unauthorized-effects` observation is zero, every trial has `criticalPassed` true, and
-every completed pinned crash has `safetyPassed` true. A miss is the refusal `safety-failure`. It
-is never waivable, it blocks publication, and release notes are not rendered. Recovery does not
-compare a parent or fixed-release crash report, because the guardrail checks that the candidate
-completed each pinned boundary. A set that contains only the T2 report records
+comparison. They are required of `candidate-crash.json` alone. Each T1 guardrail is decided by
+`judgeReport` in `packages/testkit/src/scoreboard/statistics.ts`, the verdict the comparison
+gives one report without a baseline. The comparison runs the same judge on its candidate. Every
+item a T1 guardrail selects has one rule (`reportRules`):
+
+| Rule | Items | A miss |
+| --- | --- | --- |
+| Effect count | effect-safety metrics: every observation is zero and each named metric is present | `safety-failure` |
+| Task pass | deterministic tasks: every trial has `passed` true | `required-task-failed` |
+| Crash safety | recovery boundaries: the expected recovery and `safetyPassed` true | `safety-failure` |
+| Measured usage | prompt-token usage: counted, never estimated or virtual | `mandatory-evidence-unknown` |
+| Baseline budget | `m04.logical-input`, `m06.recall`, `m06.task-success` | listed under Unknowns |
+
+Every trial must also have `criticalPassed` true, or the task is a `safety-failure`. A
+`safety-failure` or `required-task-failed` is never waivable, it blocks publication, and release
+notes are not rendered. A guardrail is satisfied only when the report passes the whole verdict.
+A baseline budget compares a parent and fixed-release crash report, which the release set does
+not carry, so the gate lists each such metric under Unknowns as `<metric> budget: not-compared`
+unless the comparison produced a row for it. A T1 guardrail that selects an item with no rule,
+such as an experiment, records `mandatory-evidence-unknown` with `no judge rule for <item>`.
+Recovery does not compare a parent or fixed-release crash report, because the guardrail checks
+that the candidate completed each pinned boundary. A set that contains only the T2 report records
 `mandatory-evidence-unknown` for recovery, with the detail
 `missing T1 durable crash report: candidate-crash.json`.
 Live cache-hit ratios stay on an explicit T3 run. They are not required of the T1 crash report.
@@ -308,7 +324,7 @@ report. The publication directory receives every report in the set, the gate has
 into `distributedDigests`, and the release upload includes them, so the bytes behind each
 guardrail remain after the 90-day workflow artifact expires.
 The pinned `docs/performance/release-policy.json` is unchanged.
-The five effect-safety counts are checked by their guardrail and the safety verdict rather than the
+The five effect-safety counts are checked by their guardrail and the report judge rather than the
 budget selection, because seven reliability metrics in one family exceed the resample limit. Tool
 termination and retained-session growth have no reviewed declaration yet. retainedSessionGrowthBytes and toolTerminationDeadlineMs are still undeclared; publication needs them declared. That pending result is recorded as `undeclared-budget` with those metric ids. It is
 not a missing-report failure and it does not refuse the candidate. When publication proceeds with
