@@ -211,7 +211,7 @@ export class LocalImportService {
       return { preview: await this.read(owner, manifest, action.itemId) };
     const result = counts();
     const failures: LocalImportFailure[] = [];
-    let stopped: unknown;
+    let stopped: LocalImportStop | undefined;
     for (const item of manifest.items.filter(
       (item) =>
         action.categories.includes(item.category) &&
@@ -245,8 +245,9 @@ export class LocalImportService {
           "import.category": item.category,
           "import.path": item.relativePath,
         });
-        if (localImportStop(error)) {
-          stopped = error;
+        const reason = localImportStop(error);
+        if (reason) {
+          stopped = reason;
           break;
         }
         result.failed++;
@@ -273,9 +274,13 @@ export class LocalImportService {
         ...(!automatic && !action.itemId ? { selection } : {}),
       },
     });
-    // Items written before the stop stay imported and recorded above.
-    if (stopped) throw stopped;
-    return { result, ...(failures.length ? { failures } : {}) };
+    // Items written before the stop stay imported and recorded above; the caller gets the
+    // partial result and the failures found so far along with why the run stopped.
+    return {
+      result,
+      ...(failures.length ? { failures } : {}),
+      ...(stopped ? { stopped } : {}),
+    };
   }
   private async importItem(
     owner: ImportOwner,
@@ -723,7 +728,11 @@ export function createImportTransport(
       }
     } catch (error) {
       // HostClient reports a lost, busy or failed host this way; other errors are ours.
-      throw error instanceof RuntimePinError ? new LocalImportHostError({ cause: error }) : error;
+      if (!(error instanceof RuntimePinError)) throw error;
+      if (error.problem.code === "local-import-rescan")
+        throw new LocalImportRescanError(error.problem.reason);
+      if (error.problem.code === "local-import-item") throw new Error(error.problem.reason);
+      throw new LocalImportHostError({ cause: error });
     }
     return JSON.parse(text) as unknown;
   };

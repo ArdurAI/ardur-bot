@@ -3745,6 +3745,10 @@ msgstr "无法完成导入。请确认此电脑已连接，然后重新扫描。
 msgid "Import from {name}"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import is not available right now. Try again in a moment."
+msgstr "导入现在不可用，请稍后再试。"
+
 #: src/pages/MemoryImportExport.tsx
 msgid "Import memory bundle"
 msgstr ""
@@ -3946,6 +3950,11 @@ msgstr "事项已更新"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Items edited after import were kept."
 msgstr ""
+
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "Items not scanned: {0}."
+msgstr "未扫描的项目数：{0}。"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
@@ -6842,11 +6851,6 @@ msgstr "软件更新"
 #: src/pages/ide/IdePage.tsx
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "部分条目的名称不受支持，已隐藏（{hiddenCount}）。"
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Some items exceeded the scan limits ({0} items were not scanned)."
-msgstr "部分项目超出了扫描限制（{0} 项未扫描）。"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Some items exceeded the scan limits."

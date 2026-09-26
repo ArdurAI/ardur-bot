@@ -3745,6 +3745,10 @@ msgstr ""
 msgid "Import from {name}"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import is not available right now. Try again in a moment."
+msgstr ""
+
 #: src/pages/MemoryImportExport.tsx
 msgid "Import memory bundle"
 msgstr ""
@@ -3945,6 +3949,11 @@ msgstr "Öğe güncellendi"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Items edited after import were kept."
+msgstr ""
+
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "Items not scanned: {0}."
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -6842,11 +6851,6 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Bazı öğelerin adları desteklenmediği için gizlendi ({hiddenCount})."
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Some items exceeded the scan limits ({0} items were not scanned)."
-msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Some items exceeded the scan limits."

@@ -930,8 +930,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Looks like it contains a credential. Remove it from the file, then re-scan.":
     "其中似乎包含凭据。请从文件中删除后重新扫描。",
   "Could not be saved.": "无法保存。",
-  "Some items exceeded the scan limits ({count} items were not scanned).":
-    "部分项目超出了扫描限制（{count} 项未扫描）。",
+  "Items not scanned: {count}.": "未扫描的项目数：{count}。",
+  "Import is not available right now. Try again in a moment.": "导入现在不可用，请稍后再试。",
   "Retry {path}": "重试 {path}",
   "Found on this Mac": "在这台 Mac 上发现的内容",
   "Found on this computer": "在此电脑上发现的内容",

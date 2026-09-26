@@ -214,7 +214,8 @@ export class LocalImportScanner {
           : safeText(raw);
       const size = Buffer.byteLength(content);
       if (size > LOCAL_IMPORT_BYTES || this.bytes + size > MAX_RETAINED_BYTES) {
-        this.limit(true);
+        // Still listed below with this reason, so it was scanned, not left out.
+        this.limit();
         candidate.reason = "This item exceeds the import size limit.";
       }
       const relative = path.relative(this.home, candidate.file).split(path.sep).join("/");

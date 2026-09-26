@@ -277,9 +277,7 @@ it("lists failed items with their reason, retries one, and says why a run stoppe
   const buttons = () => [...node.querySelectorAll("button")];
   try {
     await act(async () => root.render(createElement(LocalImport)));
-    expect(node.textContent).toContain(
-      "Some items exceeded the scan limits (4 items were not scanned).",
-    );
+    expect(node.textContent).toContain("Items not scanned: 4.");
     await act(async () =>
       buttons()
         .find((button) => button.textContent === "Import all")!
@@ -319,6 +317,22 @@ it("lists failed items with their reason, retries one, and says why a run stoppe
       );
       expect(node.textContent).toContain(sentence);
     }
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("gives a neutral message when the first scan fails, not a stopped-import sentence", async () => {
+  vi.clearAllMocks();
+  fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest: null });
+  fake.run.mockRejectedValue(new Error("private diagnostic"));
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () => root.render(createElement(LocalImport)));
+    // A failed first scan is not a run that stopped; it gets the neutral sentence.
+    expect(node.textContent).toContain("Import is not available right now. Try again in a moment.");
+    expect(node.textContent).not.toContain("private diagnostic");
+    expect(node.textContent).not.toContain("connected");
   } finally {
     await act(async () => root.unmount());
   }

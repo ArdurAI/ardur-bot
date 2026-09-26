@@ -176,12 +176,18 @@ describe("local import discovery", () => {
     expect(JSON.stringify(scan)).not.toContain("fixture-private-value");
   });
 
-  it("counts files the limits left out only when every limit could count them", async () => {
+  it("does not count an oversized file that is still listed with a reason", async () => {
     await file(".claude/CLAUDE.md", "x".repeat(LOCAL_IMPORT_BYTES + 1));
-    expect(await new LocalImportScanner({ home }).scan()).toMatchObject({
-      limited: true,
-      unscanned: 1,
-    });
+    const scan = await new LocalImportScanner({ home }).scan();
+    expect(scan.limited).toBe(true);
+    // The file was scanned and is listed below, so it must not count as unscanned.
+    expect(scan.unscanned).toBeUndefined();
+    expect(scan.items).toMatchObject([
+      { importable: false, reason: "This item exceeds the import size limit." },
+    ]);
+  });
+
+  it("does not know how many files a limit left out once it stops before it can count them", async () => {
     await file(".claude/projects/p/memory/a/b/c/d/e/deep.md", "Too deep to reach.");
     const uncounted = await new LocalImportScanner({ home }).scan();
     expect(uncounted.limited).toBe(true);

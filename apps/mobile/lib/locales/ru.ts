@@ -965,8 +965,9 @@ export const RU_MESSAGES: Record<string, string> = {
   "Looks like it contains a credential. Remove it from the file, then re-scan.":
     "Похоже, здесь есть учётные данные. Удалите их из файла и повторите сканирование.",
   "Could not be saved.": "Не удалось сохранить.",
-  "Some items exceeded the scan limits ({count} items were not scanned).":
-    "Некоторые элементы превысили ограничения сканирования (не просканировано элементов: {count}).",
+  "Items not scanned: {count}.": "Не просканировано элементов: {count}.",
+  "Import is not available right now. Try again in a moment.":
+    "Импорт сейчас недоступен. Повторите попытку через некоторое время.",
   "Retry {path}": "Повторить: {path}",
   "Found on this Mac": "Найдено на этом Mac",
   "Found on this computer": "Найдено на этом компьютере",

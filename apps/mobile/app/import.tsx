@@ -41,7 +41,7 @@ export default function LocalImport() {
   const styles = useThemedStyles(createStyles);
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<LocalImportStop | null>(null);
+  const [error, setError] = useState<LocalImportStop | "unavailable" | null>(null);
   const [selected, setSelected] = useState<Partial<Record<LocalImportTool, LocalImportCategory[]>>>(
     {},
   );
@@ -66,6 +66,7 @@ export default function LocalImport() {
     rescan: t("This scan is out of date. Re-scan, then try again."),
     failed: t("Import stopped because of an unexpected error. Re-scan, then try again."),
   };
+  const unavailable = t("Import is not available right now. Try again in a moment.");
   const reasons: Record<LocalImportFailure["reason"], string> = {
     credential: t("Looks like it contains a credential. Remove it from the file, then re-scan."),
     failed: t("Could not be saved."),
@@ -86,7 +87,7 @@ export default function LocalImport() {
         }
       })()
         .catch(() => {
-          if (active) setError("failed");
+          if (active) setError("unavailable");
         })
         .finally(() => {
           if (active) setBusy(false);
@@ -105,7 +106,7 @@ export default function LocalImport() {
       await action();
       setStatus(await localImport.status());
     } catch {
-      setError("failed");
+      setError("unavailable");
     } finally {
       setBusy(false);
     }
@@ -222,15 +223,13 @@ export default function LocalImport() {
         {busy ? <ActivityIndicator accessibilityLabel={t("Working…")} /> : null}
         {error ? (
           <Text accessibilityRole="alert" style={styles.error}>
-            {stops[error]}
+            {error === "unavailable" ? unavailable : stops[error]}
           </Text>
         ) : null}
         {manifest?.limited ? (
           <Text style={styles.muted}>
             {manifest.unscanned
-              ? t("Some items exceeded the scan limits ({count} items were not scanned).", {
-                  count: manifest.unscanned,
-                })
+              ? t("Items not scanned: {count}.", { count: manifest.unscanned })
               : t("Some items exceeded the scan limits.")}
           </Text>
         ) : null}

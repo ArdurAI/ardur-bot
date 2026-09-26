@@ -73,3 +73,18 @@ export function hostLostProblem(
     reason,
   );
 }
+/** A local-import operation failed on the host itself, distinct from a lost or busy host. */
+export function importProblem(code: "local-import-rescan" | "local-import-item", reason: string) {
+  return runtimePinProblem(
+    {
+      runtimeKind: "pi",
+      provider: null,
+      modelId: null,
+      effort: null,
+      credentialId: null,
+      revision: 0,
+    },
+    code,
+    reason,
+  );
+}

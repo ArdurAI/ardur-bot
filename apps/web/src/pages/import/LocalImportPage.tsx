@@ -29,7 +29,7 @@ export function LocalImportPage() {
   const [selected, setSelected] = useState<Selection>({});
   const [folders, setFolders] = useState<Partial<Record<LocalImportTool, string>>>({});
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<LocalImportStop | null>(null);
+  const [error, setError] = useState<LocalImportStop | "unavailable" | null>(null);
   const [preview, setPreview] = useState<LocalImportRead | null>(null);
   const [summary, setSummary] = useState<LocalImportSummary | null>(null);
   const [servers, setServers] = useState<McpServer[] | null>(null);
@@ -46,6 +46,7 @@ export function LocalImportPage() {
     rescan: t`This scan is out of date. Re-scan, then try again.`,
     failed: t`Import stopped because of an unexpected error. Re-scan, then try again.`,
   };
+  const unavailable = t`Import is not available right now. Try again in a moment.`;
   const reasons: Record<LocalImportFailure["reason"], string> = {
     credential: t`Looks like it contains a credential. Remove it from the file, then re-scan.`,
     failed: t`Could not be saved.`,
@@ -64,7 +65,7 @@ export function LocalImportPage() {
       }
     })()
       .catch(() => {
-        if (active) setError("failed");
+        if (active) setError("unavailable");
       })
       .finally(() => {
         if (active) setBusy(false);
@@ -81,7 +82,7 @@ export function LocalImportPage() {
       await action();
       setStatus(await rpc.localImport.status());
     } catch {
-      setError("failed");
+      setError("unavailable");
     } finally {
       setBusy(false);
     }
@@ -209,15 +210,13 @@ export function LocalImportPage() {
       ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
-          {stops[error]}
+          {error === "unavailable" ? unavailable : stops[error]}
         </p>
       ) : null}
       {manifest?.limited ? (
         <p role="status" className="text-sm text-muted-foreground">
           {manifest.unscanned ? (
-            <Trans>
-              Some items exceeded the scan limits ({manifest.unscanned} items were not scanned).
-            </Trans>
+            <Trans>Items not scanned: {manifest.unscanned}.</Trans>
           ) : (
             <Trans>Some items exceeded the scan limits.</Trans>
           )}

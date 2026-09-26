@@ -123,8 +123,9 @@ it("scans automatically on first open and gives a retry action on failure", asyn
   fake.run.mockRejectedValue(new Error("private diagnostic"));
   const node = await render();
   expect(fake.run).toHaveBeenCalledWith({ action: "scan" });
+  // A failed first scan is not a run that stopped; it gets the neutral sentence.
   expect(node.querySelector('[role="alert"]')?.textContent).toBe(
-    "Import stopped because of an unexpected error. Re-scan, then try again.",
+    "Import is not available right now. Try again in a moment.",
   );
   expect(node.textContent).not.toContain("private diagnostic");
   expect(node.textContent).not.toContain("connected");
@@ -163,9 +164,7 @@ it("lists failed items with their reason and retries one without re-importing th
         },
   );
   const node = await render();
-  expect(node.textContent).toContain(
-    "Some items exceeded the scan limits (4 items were not scanned).",
-  );
+  expect(node.textContent).toContain("Items not scanned: 4.");
   await act(async () => button(node, "Import all").click());
   expect(node.textContent).toContain(
     "714 imported, 0 updated, 0 unchanged, 0 removed, 0 skipped, 0 conflicts, 2 failed.",
