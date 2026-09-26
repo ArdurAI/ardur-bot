@@ -40,10 +40,13 @@ export function createTraceBuffer(
     /** Wall-clock milliseconds of this process time origin. Defaults to `performance.timeOrigin`. */
     timeOrigin?: number;
     /**
-     * Recorded uncertainty of this process clock, in milliseconds.
-     * Measured once from the wall clock and the monotonic clock when omitted.
+     * Recorded uncertainty of this process clock, in milliseconds. Sampled from the wall clock
+     * and the monotonic clock when omitted, and re-sampled at every `snapshot()` and `drain()`
+     * so a later clock step (an NTP correction, a suspend) still widens the published bound.
      */
     clockUncertaintyMs?: number;
+    /** Test seam for the re-sample at `snapshot()`/`drain()`; defaults to the real clock read. */
+    measureClockUncertaintyMs?: () => number;
   } = {},
 ) {
   const capacity = options.capacity ?? 8192;
@@ -60,7 +63,8 @@ export function createTraceBuffer(
   )
     throw new Error("Invalid trace buffer options");
   const timeOrigin = options.timeOrigin ?? performance.timeOrigin;
-  const clockUncertaintyMs = options.clockUncertaintyMs ?? measureClockUncertaintyMs();
+  const measure = options.measureClockUncertaintyMs ?? measureClockUncertaintyMs;
+  let clockUncertaintyMs = options.clockUncertaintyMs ?? measure();
   if (
     !Number.isFinite(timeOrigin) ||
     timeOrigin < 0 ||
@@ -68,6 +72,12 @@ export function createTraceBuffer(
     clockUncertaintyMs < 0
   )
     throw new Error("Invalid trace buffer options");
+  // A step in the wall clock after the buffer started (an NTP correction, a suspend) can widen
+  // the true uncertainty; a fresh sample never narrows the published bound.
+  const widenClockUncertainty = () => {
+    const sample = measure();
+    if (Number.isFinite(sample) && sample > clockUncertaintyMs) clockUncertaintyMs = sample;
+  };
   const now = options.now ?? (() => performance.now());
   let points: TracePoint[] = [];
   let sequence = 0;
@@ -127,6 +137,7 @@ export function createTraceBuffer(
       }
     },
     snapshot(): TraceBatch {
+      widenClockUncertainty();
       return {
         version: 1,
         processId,
@@ -137,6 +148,7 @@ export function createTraceBuffer(
       };
     },
     drain(): TraceBatch {
+      widenClockUncertainty();
       const batch = {
         version: 1 as const,
         processId,

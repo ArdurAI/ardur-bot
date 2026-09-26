@@ -555,13 +555,11 @@ export function collectTraceEvidence(
     const missingBoundaries = options.requiredBoundaries.filter(
       (b) => !subset.some((p) => p.boundary === b),
     );
-    const operationsObserved = pairAcrossProcesses
-      ? derived.operations.every(
-          (operation) =>
-            operation.duration.reason !== "boundary-not-observed" &&
-            !crashSpanUnmeasured(operation.duration.reason),
-        )
-      : derived.operations.every((operation) => operation.duration.value !== null);
+    // An allowlist of measured durations (`exact` or `wall-clock`, i.e. a non-null value) fails
+    // closed: every other reason, crash-specific or not, leaves the operation unobserved.
+    const operationsObserved = derived.operations.every(
+      (operation) => operation.duration.value !== null,
+    );
     return {
       ...derived,
       missingBoundaries,

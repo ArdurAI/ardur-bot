@@ -118,9 +118,11 @@ same revision as the image label and `/opt/hermes/.hermes_build_sha`, and no mis
 This Hermes build refuses to initialize unless `model.context_length` is at least 64,000. The
 scripted proof therefore declares 64,000 to the product; it serves no model. The canary planner
 requires a declared context between 64,000 and the model's architecture maximum, attested by
-`/api/ps` at planning and again before each trial and model request. `/api/ps` lists only loaded
-models, so load the model with the declared context first, for example by running one request with
-that context, before running the planner. The observed qwen3:8b
+`/api/ps` at planning, again before each trial and model request, and again after each response.
+`/api/ps` lists only loaded models, so load the model with the declared context first by setting
+the server's default context (Ollama's `OLLAMA_CONTEXT_LENGTH`) to that value and issuing one
+request, before running the planner; preloading with a request instead risks the transport
+reloading the model back to the server default before the planner reads it. The observed qwen3:8b
 architecture maximum is below 64,000. The proposed route, llama3.1:8b with 65,536 tokens, is
 pending owner approval. The planner also requires this report's `product-qualified` status, the
 inspected image digest and revision, and every containment and resource check passed. Rendering

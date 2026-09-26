@@ -47,6 +47,21 @@ describe("bounded production trace", () => {
     expect(first.snapshot().counters.sampledOut).toBeGreaterThan(0);
   });
 
+  it("widens the published clock uncertainty from a later re-sample, and never narrows it", () => {
+    let sample = 5;
+    const buffer = createTraceBuffer({
+      clockUncertaintyMs: 5,
+      measureClockUncertaintyMs: () => sample,
+    });
+    expect(buffer.snapshot().clockUncertaintyMs).toBe(5);
+    // A wall-clock step after the buffer started (an NTP correction, a suspend) widens the bound.
+    sample = 400;
+    expect(buffer.snapshot().clockUncertaintyMs).toBe(400);
+    // A later, smaller sample never narrows what has already been published.
+    sample = 10;
+    expect(buffer.drain().clockUncertaintyMs).toBe(400);
+  });
+
   it("keeps telemetry clock failures and invalid values off the product failure path", () => {
     const buffer = createTraceBuffer({
       now: () => {

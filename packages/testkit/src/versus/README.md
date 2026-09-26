@@ -44,17 +44,21 @@ Redirects, paid origins, absent tokenizer metadata, digest/quantization drift, a
 responses fail closed.
 
 `/api/ps` lists only loaded models, and Ollama unloads idle ones. Load the declared model with the
-declared context first, for example by running one request with that context, then run
-qualification. An unloaded model fails with that instruction.
+declared context first by setting the server's default context (Ollama's `OLLAMA_CONTEXT_LENGTH`)
+to that value and issuing one request, then run qualification. Preloading with a request instead
+risks the OpenAI-compatible transport reloading the model back to the server default, since that
+transport cannot pin `num_ctx`. An unloaded model fails with that instruction.
 
 The generated canary budget selects task-01 and task-04 with the frozen analysis seed. Its global
 ceiling is four times the per-run ceiling. The declared context includes output; the request
 output cap remains 2,048. These are declared ceilings, not measured consumption. The W0 fixture's
 stricter deadline still applies. The `/api/ps` context read at planning is a plan, not a lease: a
-live gateway reads `/api/ps` again immediately before admitting each trial and before each model
-request. If the loaded model, digest or context differs from the declared route, it records the
-refusal and sends nothing upstream. A metadata match still cannot prove that Ollama's OpenAI
-transport honored the active context: its [documented context configuration](https://docs.ollama.com/api/openai-compatibility)
+live gateway reads `/api/ps` again immediately before admitting each trial, before each model
+request, and again after each response, since the request itself may have reloaded the model. If
+the loaded model, digest or context differs from the declared route, it records the refusal, fails
+that request's authoritativeness, and (for a post-response mismatch) fails the trial's remaining
+requests too; a pre-forward mismatch sends nothing upstream. A metadata match still cannot prove
+that Ollama's OpenAI transport honored the active context: its [documented context configuration](https://docs.ollama.com/api/openai-compatibility)
 is separate from architectural maximum context. Product tool round trips remain required.
 
 The native diagnosis bisects two startup requirements: literal read access to `/` (without

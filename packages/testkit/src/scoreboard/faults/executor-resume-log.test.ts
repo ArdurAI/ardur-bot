@@ -121,17 +121,14 @@ function links(events: readonly Logged[]) {
     .map((event) => event.payload);
 }
 
-/** The event store refuses a second intent or start for one card in one attempt, and a second finish. */
+/** The event store refuses a second intent, start, or finish for one card in one attempt. */
 function duplicateCommandEvent(log: readonly Logged[], event: Logged) {
   if (!event.type.startsWith("command.")) return false;
   const block = (event.payload as { block: CommandBlock }).block;
   return log.some((prior) => {
     if (prior.type !== event.type) return false;
     const other = (prior.payload as { block: CommandBlock }).block;
-    return (
-      other.commandId === block.commandId &&
-      (event.type === "command.finished" || other.attemptId === block.attemptId)
-    );
+    return other.commandId === block.commandId && other.attemptId === block.attemptId;
   });
 }
 

@@ -269,6 +269,7 @@ describe("non-generating live prerequisites", () => {
       { models: [{ ...tag, context_length: 32768 }] },
       { models: [{ ...tag, context_length: 64000 }] },
       { models: [{ ...tag, context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 64000 }] },
       { models: [] },
     ];
     const metadata: string[] = [];
@@ -335,9 +336,73 @@ describe("non-generating live prerequisites", () => {
         ["trial-admission", false],
         ["trial-admission", true],
         ["model-request", true],
+        ["model-response", true],
         ["model-request", false],
       ]);
-      expect(metadata).toEqual(["/api/ps", "/api/ps", "/api/ps", "/api/ps"]);
+      expect(metadata).toEqual(["/api/ps", "/api/ps", "/api/ps", "/api/ps", "/api/ps"]);
+    } finally {
+      await gateway.close();
+    }
+  });
+  it("re-attests after forwarding and fails the trial, not just the request, on a reload", async () => {
+    const f = fixture();
+    const route = await inspectLocalRoute(expected, f.transport);
+    const tag = { name: expected.model, digest: expected.digest };
+    // The response is forwarded on a matching pre-request reading; the server reloads the
+    // model to a different context before the post-response re-attestation reads `/api/ps`.
+    const ps = [
+      { models: [{ ...tag, context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 32768 }] },
+    ];
+    const metadata: string[] = [];
+    const serving = new ServingWitness(route.budget, (async (url: string | URL | Request) => {
+      metadata.push(new URL(String(url)).pathname);
+      return Response.json(ps.shift());
+    }) as typeof fetch);
+    const upstream = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            model: expected.model,
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 1 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const ledger = new BudgetLedger(route.budget);
+    const gateway = await startGateway({
+      budget: route.budget,
+      ledger,
+      transport: upstream,
+      evidenceKind: "provider-live",
+      serving,
+    });
+    const send = (url: string) =>
+      fetch(`${url}/chat/completions`, {
+        method: "POST",
+        body: JSON.stringify({
+          model: expected.model,
+          messages: [{ role: "user", content: "synthetic" }],
+        }),
+      });
+    try {
+      await gateway.admit("trial-a");
+      const url = gateway.capability("trial-a", "main", () => undefined);
+      // The response is already forwarded to the client before the reload is detected, so the
+      // client still sees it: this failure is internal bookkeeping, not a dropped response.
+      expect((await send(url)).status).toBe(200);
+      expect(gateway.requests).toMatchObject([{ outcome: "failed", authoritative: false }]);
+      expect(serving.observations.map(({ stage, admitted }) => [stage, admitted])).toEqual([
+        ["trial-admission", true],
+        ["model-request", true],
+        ["model-response", false],
+      ]);
+      // The trial itself is failed: a second request is refused before any new attestation.
+      expect((await send(url)).status).toBe(403);
+      expect(upstream).toHaveBeenCalledTimes(1);
+      expect(metadata).toHaveLength(3);
     } finally {
       await gateway.close();
     }
@@ -443,7 +508,7 @@ describe("non-generating live prerequisites", () => {
     const f = fixture();
     f.responses[3] = { models: [] };
     const sentence =
-      "Load qwen3:8b with a context of 64000 tokens first, for example by running one request with that context, then run qualification again.";
+      "Load qwen3:8b with a context of 64000 tokens first, for example by setting the server's default context (Ollama's OLLAMA_CONTEXT_LENGTH) to that value and issuing one request, then run qualification again. Preloading with a request whose transport cannot pin the context risks a later reload back to the server default.";
     const failure = await inspectLocalRoute(expected, f.transport).then(
       () => undefined,
       (error: unknown) => error,

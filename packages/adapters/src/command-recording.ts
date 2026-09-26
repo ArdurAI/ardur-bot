@@ -55,21 +55,17 @@ type StoredComputer = {
 /**
  * Cards an earlier attempt left waiting or running, by execution id, so a call that resumes
  * on the same id finishes its own card. `finished` names calls that already completed by
- * `agent.tool.completed`. A card whose commandId already has a `command.finished` is skipped
- * too, even when that completion never reached `agent.tool.completed`: a rerun on that id
- * gets its own card and its own result instead of reopening a card already settled.
+ * `agent.tool.completed`. `finishedCommandIds` names a card whose commandId already has a
+ * `command.finished`, even when that completion never reached `agent.tool.completed`: a rerun
+ * on that id gets its own card and its own result instead of reopening a card already settled.
+ * The caller loads `finishedCommandIds` without any finished command's stdout/stderr payload.
  */
 export function adoptOpenCommands(
   target: Map<string, CommandBlock>,
   events: readonly { type: string; payload: unknown }[],
   finished: ReadonlySet<string>,
+  finishedCommandIds: ReadonlySet<string> = new Set(),
 ) {
-  const finishedCommandIds = new Set<string>();
-  for (const event of events) {
-    if (event.type !== "command.finished") continue;
-    const parsed = CommandEventPayloadSchema.safeParse(event.payload);
-    if (parsed.success) finishedCommandIds.add(parsed.data.block.commandId);
-  }
   for (const event of events) {
     if (event.type !== "command.intent" && event.type !== "command.started") continue;
     const parsed = CommandEventPayloadSchema.safeParse(event.payload);

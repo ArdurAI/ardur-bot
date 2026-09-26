@@ -997,6 +997,7 @@ export async function subscribeThread(
 
 export function isMobileThreadSnapshotEvent(event: ThreadEvent): boolean {
   return (
+    isCommandCardEvent(event.type) ||
     event.type === "run.context" ||
     event.type === "thread.progress" ||
     event.type === "agent.tool.called" ||

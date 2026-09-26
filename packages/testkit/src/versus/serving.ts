@@ -47,7 +47,7 @@ export async function readMetadata(
 export class ModelNotLoadedError extends Error {
   constructor(model: string, contextSize: number) {
     super(
-      `Load ${model} with a context of ${contextSize} tokens first, for example by running one request with that context, then run qualification again.`,
+      `Load ${model} with a context of ${contextSize} tokens first, for example by setting the server's default context (Ollama's OLLAMA_CONTEXT_LENGTH) to that value and issuing one request, then run qualification again. Preloading with a request whose transport cannot pin the context risks a later reload back to the server default.`,
     );
   }
 }
@@ -70,7 +70,7 @@ export function parseServingContext(value: unknown, expected: RouteExpectation):
 }
 
 export interface ServingObservation {
-  stage: "trial-admission" | "model-request";
+  stage: "trial-admission" | "model-request" | "model-response";
   trialId: string;
   declaredContext: number;
   observedContext: number | null;

@@ -261,13 +261,12 @@ describe("a call resuming after a killed attempt", () => {
     const open = new Map<string, CommandBlock>();
     adoptOpenCommands(
       open,
-      [
-        { type: "command.intent", payload: { block: earlier({ outcome: "waiting" }) } },
-        { type: "command.finished", payload: { block: earlier({ outcome: "unknown" }) } },
-      ],
+      [{ type: "command.intent", payload: { block: earlier({ outcome: "waiting" }) } }],
       // The completion never reached agent.tool.completed: the worker died, or the audit
       // append failed, right after this attempt wrote its own command.finished.
       new Set(),
+      // Loaded on its own, without any finished command's stdout/stderr payload.
+      new Set(["card-earlier"]),
     );
     expect([...open.keys()]).toEqual([]);
   });

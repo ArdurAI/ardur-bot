@@ -148,7 +148,10 @@ export async function startGateway(options: {
   transport?: (url: string, init: RequestInit) => Promise<Response>;
   credential?: () => string | undefined;
   evidenceKind: "virtual" | "provider-live";
-  /** Re-attests the loaded model and context before each trial admission and model request. */
+  /**
+   * Re-attests the loaded model and context before each trial admission and model request,
+   * and again after each response, since the request itself may have reloaded the model.
+   */
   serving?: ServingWitness;
 }) {
   const budget = options.ledger.budget;
@@ -164,10 +167,16 @@ export async function startGateway(options: {
   assertServingWitness(budget, options.serving);
   const capabilities = new Map<string, Capability>();
   const admitted = new Set<string>();
+  // A post-response re-attestation mismatch cannot un-send that response, but it fails the
+  // trial: no further request is admitted on the stale pre-forward reading.
+  const failedTrials = new Set<string>();
   const requests: GatewayRequest[] = [];
   const transport = options.transport ?? fetch;
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
+      // A failure discovered after the response was already forwarded cannot be reported to
+      // this request's client; only the trial's next request sees the refusal.
+      if (response.writableEnded) return;
       if (!response.headersSent) response.writeHead(403, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
@@ -185,7 +194,10 @@ export async function startGateway(options: {
       request.url ?? "",
     );
     const cap = route ? capabilities.get(route[1]!) : undefined;
-    requireValue(cap && !cap.controller.signal.aborted, "Unknown or revoked trial capability");
+    requireValue(
+      cap && !cap.controller.signal.aborted && !failedTrials.has(cap.trialId),
+      "Unknown or revoked trial capability",
+    );
     options.ledger.remainingMs(cap.trialId);
     if (request.method === "GET" && route![2] === "models") {
       response.setHeader("content-type", "application/json");
@@ -348,6 +360,16 @@ export async function startGateway(options: {
         requireValue(done && !pending.trim(), "Malformed or incomplete provider stream");
         response.end();
       }
+      // The transport cannot pin the loaded context, so this request may have just reloaded
+      // the model at the server's default. A mismatch here cannot un-send the response already
+      // forwarded, but it fails this request's authoritativeness and this trial's remaining
+      // requests instead of admitting them on the stale pre-forward reading.
+      try {
+        await options.serving?.attest("model-response", cap.trialId);
+      } catch (error) {
+        failedTrials.add(cap.trialId);
+        throw error;
+      }
       observation.outcome = "success";
       observation.missingReason = receivedUsage ? null : "provider-omitted";
     } catch (error) {
@@ -412,6 +434,7 @@ export async function startGateway(options: {
           cap.controller.abort();
           capabilities.delete(token);
         }
+      failedTrials.delete(trialId);
       options.ledger.close(trialId);
     },
     async close() {

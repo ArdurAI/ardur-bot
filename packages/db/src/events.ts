@@ -1395,9 +1395,10 @@ export async function appendEventInTransaction(
     const payload = CommandEventPayloadSchema.parse(input.payload);
     if (payload.block.runId !== input.runId)
       throw new Error("Command run does not match event run");
-    // Redelivery is idempotent and the first finish is final. A call resuming on its own id
-    // keeps its card, so the recovering attempt's intent or start is still recorded.
-    const attemptId = input.type === "command.finished" ? null : payload.block.attemptId;
+    // Redelivery is idempotent and an attempt's own first finish is final. Dedupe is scoped to
+    // the attempt that wrote it: a lease-lost attempt's late finish is not the recovering
+    // attempt's redelivery, so it is still stored as evidence rather than dropped or merged.
+    const attemptId = payload.block.attemptId;
     const existing = await tx.event.findFirst({
       where: {
         threadId: input.threadId,

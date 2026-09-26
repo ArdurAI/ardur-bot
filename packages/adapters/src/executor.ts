@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type {
   AdapterContext,
   AgentHomeStore,
@@ -92,6 +92,7 @@ import {
   isToolEffectIdempotencyKey,
   legacyScopedToolEffectIdempotencyKey,
   stableJsonValue,
+  stableValueDigest,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
 import {
@@ -102,6 +103,7 @@ import {
   createThreadMessageInTransaction,
   effectiveMemoryScope,
   findModelCredential,
+  finishedCommandIds,
   getUserPreferences,
   InvalidSpaceNameError,
   isTooManyDatabaseConnections,
@@ -395,9 +397,9 @@ import {
 import { createWebProvider } from "./web-provider-factory.js";
 import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
 
-/** Stable identity of a tool's arguments. Key order does not change the digest. */
+/** Stable identity of a tool's arguments, the same digest `approvalEffectKey` inlines. */
 export function toolArgumentDigest(args: Record<string, unknown>): string {
-  return createHash("sha256").update(stableJsonValue(args)).digest("hex");
+  return stableValueDigest(args);
 }
 
 export interface OpenToolCall {
@@ -4369,31 +4371,39 @@ export function createRunExecutor(deps: ExecutorDeps) {
             computer.kind === "desktop" && !commandReplay
               ? await deps.sandbox.environmentNote?.(computer, context)
               : undefined;
-          // The first lease has no earlier tool calls. `command.finished` is loaded only to
-          // let adoption skip a card that already settled, never to feed the model.
-          const priorToolEvents =
+          // The first lease has no earlier tool calls. A settled card's commandId is loaded on
+          // its own, never its stdout/stderr, only to let adoption skip a card that already
+          // finished, never to feed the model.
+          const [priorToolEvents, priorFinishedCommandIds] =
             fence > 1
-              ? await deps.prisma.event.findMany({
-                  where: {
-                    runId,
-                    type: {
-                      in: [
-                        "agent.tool.called",
-                        "agent.tool.completed",
-                        "agent.tool.resumed",
-                        "command.intent",
-                        "command.started",
-                        "command.finished",
-                      ],
+              ? await Promise.all([
+                  deps.prisma.event.findMany({
+                    where: {
+                      runId,
+                      type: {
+                        in: [
+                          "agent.tool.called",
+                          "agent.tool.completed",
+                          "agent.tool.resumed",
+                          "command.intent",
+                          "command.started",
+                        ],
+                      },
                     },
-                  },
-                  orderBy: { seq: "asc" },
-                  select: { type: true, payload: true },
-                })
-              : [];
+                    orderBy: { seq: "asc" },
+                    select: { type: true, payload: true },
+                  }),
+                  finishedCommandIds(deps.prisma, runId),
+                ])
+              : [[], new Set<string>()];
           const priorCalls = priorToolCalls(priorToolEvents);
           for (const executionId of priorCalls.finished) finishedCommands.add(executionId);
-          adoptOpenCommands(openCommands, priorToolEvents, priorCalls.finished);
+          adoptOpenCommands(
+            openCommands,
+            priorToolEvents,
+            priorCalls.finished,
+            priorFinishedCommandIds,
+          );
           let openCalls = priorCalls.open;
           const recordedCalls = priorCalls.recorded;
           /** Minted id of a call to the open call it repeats. */

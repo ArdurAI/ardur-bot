@@ -210,7 +210,7 @@ function fixture({
       })),
     },
     user: { findUniqueOrThrow: vi.fn(async () => ({ displayName: "", workType: "" })) },
-
+    $queryRaw: vi.fn(async () => []),
     computer: {
       findFirstOrThrow: vi.fn(async () => ({
         id: "computer-1",

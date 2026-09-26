@@ -4,7 +4,7 @@ import type {
 } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { MobileSnapshot } from "./api.js";
-import { applyMobileThreadEvent } from "./api.js";
+import { applyMobileThreadEvent, isMobileThreadSnapshotEvent } from "./api.js";
 
 vi.mock("expo-secure-store", () => ({
   getItemAsync: vi.fn(),
@@ -52,6 +52,31 @@ describe("native command projection", () => {
     });
     expect(ended?.messages[0]?.blocks[0]).toMatchObject({ command: { outcome: "unknown" } });
   });
+  it("passes command and resumed events through the live snapshot filter, as web does", () => {
+    expect(isMobileThreadSnapshotEvent(commandEvent("command.intent"))).toBe(true);
+    expect(isMobileThreadSnapshotEvent(commandEvent("command.started"))).toBe(true);
+    expect(isMobileThreadSnapshotEvent(commandEvent("command.finished"))).toBe(true);
+    expect(isMobileThreadSnapshotEvent(resumedEvent("execution-1", "execution-2"))).toBe(true);
+  });
+  it("joins a resumed call into the killed call's card while the stream is live", () => {
+    const initial: MobileSnapshot = {
+      threadId: "thread-1",
+      cursor: 0,
+      messages: [],
+      olderCursor: null,
+      run: null,
+    };
+    const started = applyMobileThreadEvent(
+      initial,
+      commandEvent("command.started", { outcome: "running", exitCode: null, durationMs: null }),
+    );
+    const event = resumedEvent("execution-1", "execution-2");
+    // The live stream, like `thread.tsx`, only applies events the snapshot filter admits.
+    const next = isMobileThreadSnapshotEvent(event)
+      ? applyMobileThreadEvent(started, event)
+      : started;
+    expect(next?.messages[0]?.id).toBe("command:resumed:run-1:execution-2");
+  });
 });
 
 function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureCommandBlock {
@@ -93,5 +118,19 @@ function commandEvent(
     createdAt: "2026-09-23T12:00:00.000Z",
     type,
     payload: { block: commandBlock(overrides) },
+  };
+}
+
+function resumedEvent(from: string, to: string, seq = 4): FixtureProductEvent {
+  return {
+    id: "resumed",
+    seq,
+    spaceId: "space-1",
+    threadId: "thread-1",
+    botId: "bot-1",
+    runId: "run-1",
+    createdAt: "2026-09-23T12:00:00.000Z",
+    type: "agent.tool.resumed",
+    payload: { from, to },
   };
 }

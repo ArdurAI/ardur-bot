@@ -689,17 +689,68 @@ describe("trace evidence", () => {
     expect(span).toEqual({ value: 400, lowerMs: 300, upperMs: 500, reason: "wall-clock" });
   });
 
-  it("records clock uncertainty on every trace batch", () => {
+  it("marks a crash trace incomplete when a same-process operation has reversed boundaries", () => {
+    const attempt = 4;
+    const killed = createTraceBuffer({
+      processId: "interrupted-worker",
+      now: () => 1,
+      timeOrigin: 1_700_000_000_000,
+    });
+    const recovered = createTraceBuffer({
+      processId: "recovered-worker",
+      now: () => 1,
+      timeOrigin: 1_700_000_000_400,
+    });
+    killed.record("run-a", "tool.started", { operationId: "tool-1", attempt }, 0);
+    recovered.record(
+      "run-a",
+      "tool.finished",
+      { operationId: "tool-1", attempt: nextFence(attempt), outcome: "success" },
+      0,
+    );
+    // A local operation on the recovering process whose recorded finish precedes its start.
+    recovered.record("run-a", "provider.started", { operationId: "provider-1" }, 100);
+    recovered.record(
+      "run-a",
+      "provider.finished",
+      { operationId: "provider-1", outcome: "success" },
+      50,
+    );
+    recovered.record("run-a", "terminal.committed", { outcome: "success" }, 200);
+    const evidence = collectTraceEvidence([killed.snapshot(), recovered.snapshot()], {
+      sessionId: "crash",
+      pairId: null,
+      requiredBoundaries: [
+        "tool.started",
+        "tool.finished",
+        "provider.started",
+        "provider.finished",
+      ],
+      pairAcrossProcesses: true,
+    });
+    const trace = evidence.derived[0]!;
+    const reversed = trace.operations.find(
+      (operation) => operation.duration.reason === "reversed-boundaries",
+    );
+    expect(reversed).toBeDefined();
+    // A measured allowlist fails closed: a reason outside `exact`/`wall-clock` is never complete,
+    // crash-specific reason or not.
+    expect(trace.complete).toBe(false);
+  });
+
+  it("records clock uncertainty on every trace batch, re-sampled and never narrowed", () => {
     const buffer = createTraceBuffer({ processId: "worker-a", now: () => 1 });
     const first = buffer.snapshot();
     const second = buffer.drain();
     expect(first.clockUncertaintyMs).toEqual(expect.any(Number));
     expect(first.clockUncertaintyMs).toBeGreaterThanOrEqual(0);
-    expect(second.clockUncertaintyMs).toBe(first.clockUncertaintyMs);
+    // A wall-clock step between calls (an NTP correction, a suspend) can only widen this bound.
+    expect(second.clockUncertaintyMs).toBeGreaterThanOrEqual(first.clockUncertaintyMs);
     const explicit = createTraceBuffer({
       processId: "worker-b",
       now: () => 1,
       clockUncertaintyMs: 1000,
+      measureClockUncertaintyMs: () => 0,
     });
     expect(explicit.snapshot().clockUncertaintyMs).toBe(1000);
   });

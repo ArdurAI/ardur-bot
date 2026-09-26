@@ -206,4 +206,162 @@ describePostgres("resumed command materialization (PostgreSQL)", () => {
       beforeCount,
     );
   });
+
+  it("keeps a lease-lost attempt's late finish as evidence, never letting it override the recovering attempt's card (same id)", async () => {
+    const attempt1 = await prisma.attempt.create({ data: { runId, fence: 10, status: "running" } });
+    const attempt2 = await prisma.attempt.create({ data: { runId, fence: 11, status: "running" } });
+    await prisma.run.update({ where: { id: runId }, data: { leaseFence: 10 } });
+    const sameId = `cb-cmd-same-${suffix}`;
+    const executionSame = "cb-exec-same";
+    const ownRowId = `command:${sameId}`;
+    const byAttempt1 = block({
+      commandId: sameId,
+      executionId: executionSame,
+      attemptId: attempt1.id,
+      outcome: "running",
+      startedAt: startedAtEarlier,
+    });
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "command.intent",
+      payload: { block: { ...byAttempt1, outcome: "waiting" } },
+    });
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "command.started",
+      payload: { block: byAttempt1 },
+    });
+
+    // Attempt 2 reclaims the run's lease and resumes the same command id.
+    await prisma.run.update({ where: { id: runId }, data: { leaseFence: 11 } });
+    const byAttempt2 = { ...byAttempt1, attemptId: attempt2.id };
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "command.started",
+      payload: { block: byAttempt2 },
+    });
+
+    // Attempt 1 wakes past its lost lease and records its own, now stale, finish.
+    const finishCountBefore = await prisma.event.count({
+      where: { runId, type: "command.finished" },
+    });
+    const staleFinish = { ...byAttempt1, outcome: "cancelled" as const };
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "command.finished",
+      payload: { block: staleFinish },
+    });
+    // Stored as evidence...
+    expect(await prisma.event.count({ where: { runId, type: "command.finished" } })).toBe(
+      finishCountBefore + 1,
+    );
+    // ...but never applied to the card the recovering attempt owns.
+    const afterStaleFinish = await prisma.message.findUniqueOrThrow({ where: { id: ownRowId } });
+    expect(
+      (afterStaleFinish.blocks as unknown as { command: CommandBlock }[])[0]!.command,
+    ).toMatchObject({ attemptId: attempt2.id, outcome: "running" });
+
+    // The recovering attempt's own finish always wins on the card people see.
+    const realFinish = { ...byAttempt2, outcome: "completed" as const, exitCode: 0, stdout: "ok" };
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "command.finished",
+      payload: { block: realFinish },
+    });
+    const finalRow = await prisma.message.findUniqueOrThrow({ where: { id: ownRowId } });
+    expect((finalRow.blocks as unknown as { command: CommandBlock }[])[0]!.command).toMatchObject({
+      attemptId: attempt2.id,
+      outcome: "completed",
+      stdout: "ok",
+    });
+  });
+
+  it("skips a lease-lost attempt's late finish once its card has been resumed under a new id", async () => {
+    const attempt1 = await prisma.attempt.create({ data: { runId, fence: 20, status: "running" } });
+    await prisma.attempt.create({ data: { runId, fence: 21, status: "running" } });
+    await prisma.run.update({ where: { id: runId }, data: { leaseFence: 20 } });
+    const newIdCommand = `cb-cmd-newid-${suffix}`;
+    const executionOld = "cb-exec-newid-old";
+    const executionNew = "cb-exec-newid-new";
+    const ownRowId = `command:${newIdCommand}`;
+    const byAttempt1 = block({
+      commandId: newIdCommand,
+      executionId: executionOld,
+      attemptId: attempt1.id,
+      outcome: "running",
+      startedAt: startedAtEarlier,
+    });
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "command.intent",
+      payload: { block: { ...byAttempt1, outcome: "waiting" } },
+    });
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "command.started",
+      payload: { block: byAttempt1 },
+    });
+    await expect(
+      prisma.message.findUniqueOrThrow({ where: { id: ownRowId } }),
+    ).resolves.toMatchObject({ id: ownRowId });
+
+    // Attempt 2 reclaims the lease and resumes under a fresh execution id: the card is renamed.
+    await prisma.run.update({ where: { id: runId }, data: { leaseFence: 21 } });
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "agent.tool.resumed",
+      payload: { from: executionOld, to: executionNew },
+    });
+    const resumedRowId = resumedCommandMessageId(runId, executionNew);
+    expect(await prisma.message.findUnique({ where: { id: ownRowId } })).toBeNull();
+    await expect(
+      prisma.message.findUniqueOrThrow({ where: { id: resumedRowId } }),
+    ).resolves.toMatchObject({ id: resumedRowId });
+
+    // Attempt 1 wakes past its lost lease and records a finish for its now-superseded card.
+    const messageCountBefore = await prisma.message.count({
+      where: { threadId, id: { startsWith: "command" } },
+    });
+    const staleFinish = { ...byAttempt1, outcome: "cancelled" as const };
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "command.finished",
+      payload: { block: staleFinish },
+    });
+    // No second card resurrected for the superseded commandId, and the renamed row is untouched.
+    expect(await prisma.message.count({ where: { threadId, id: { startsWith: "command" } } })).toBe(
+      messageCountBefore,
+    );
+    expect(await prisma.message.findUnique({ where: { id: ownRowId } })).toBeNull();
+    await expect(
+      prisma.message.findUniqueOrThrow({ where: { id: resumedRowId } }),
+    ).resolves.toMatchObject({ id: resumedRowId });
+  });
 });

@@ -26,6 +26,13 @@ export async function materializeCommandEvent(
   if (event.type === "agent.tool.resumed") return materializeResumedCall(tx, event);
   if (!isCommandEvent(event.type)) return;
   const { block } = CommandEventPayloadSchema.parse(event.payload);
+  // A late finish from an attempt that lost the lease is kept as an event for evidence, but
+  // never overrides or duplicates the card the recovering attempt now owns.
+  if (
+    event.type === "command.finished" &&
+    (await isSupersededAttempt(tx, event.runId, block.attemptId))
+  )
+    return;
   const own = `command:${block.commandId}`;
   const existing = await tx.message.findUnique({ where: { id: own }, select: { id: true } });
   if (existing) {
@@ -70,6 +77,21 @@ export async function materializeCommandEvent(
 
 type MessageBlocks = ThreadMessage["blocks"];
 
+/** A finish from an attempt whose fence no longer matches the run has lost the lease. */
+async function isSupersededAttempt(
+  tx: Prisma.TransactionClient,
+  runId: string | null,
+  attemptId: string | null,
+): Promise<boolean> {
+  if (!runId || !attemptId) return false;
+  const [run, attempt] = await Promise.all([
+    tx.run.findUnique({ where: { id: runId }, select: { leaseFence: true } }),
+    tx.attempt.findUnique({ where: { id: attemptId }, select: { fence: true } }),
+  ]);
+  if (!run || !attempt) return false;
+  return attempt.fence !== run.leaseFence;
+}
+
 /** The killed call's card row is renamed for the call that resumes it; nothing else changes. */
 async function materializeResumedCall(
   tx: Prisma.TransactionClient,
@@ -106,6 +128,18 @@ async function materializeResumedCall(
   }
   if (!id || (await tx.message.findUnique({ where: { id: target }, select: { id: true } }))) return;
   await tx.message.update({ where: { id }, data: { id: target } });
+}
+
+/**
+ * Every commandId a run's `command.finished` events name, so re-leasing can skip an already
+ * settled card without loading any finished command's stdout/stderr payload.
+ */
+export async function finishedCommandIds(db: Db, runId: string): Promise<Set<string>> {
+  const rows = await db.$queryRaw<{ commandId: string | null }[]>`
+    SELECT payload->'block'->>'commandId' AS "commandId"
+    FROM events
+    WHERE "runId" = ${runId} AND type = 'command.finished'`;
+  return new Set(rows.flatMap((row) => (row.commandId ? [row.commandId] : [])));
 }
 
 /** A stale lease or a later attempt must never present an interrupted command as live. */

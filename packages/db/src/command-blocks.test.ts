@@ -15,7 +15,8 @@ describe("command event persistence", () => {
     const messages: Record<string, unknown>[] = [];
     const tx = {
       thread: { update: vi.fn(async () => ({ nextEventSeq: 2, nextMessageSeq: 2 })) },
-      run: { findUnique: vi.fn(async () => ({ status: "running" })) },
+      run: { findUnique: vi.fn(async () => ({ status: "running", leaseFence: 1 })) },
+      attempt: { findUnique: vi.fn(async () => ({ fence: 1 })) },
       event: {
         findFirst: vi.fn(
           async ({ where }: { where: { type: string } }) =>
@@ -101,6 +102,67 @@ describe("command event persistence", () => {
       expect.objectContaining({ blocks: [{ kind: "command", command: finished }] }),
     ]);
   });
+  it("keeps a lease-lost attempt's late finish as evidence, never letting it override the recovering attempt's card", async () => {
+    const store = eventStore({ leaseFence: 2, attemptFences: { "attempt-1": 1, "attempt-2": 2 } });
+    const card = { commandId: "card-a", executionId: "call-a" };
+    await store.append("command.started", {
+      block: commandBlock({
+        ...card,
+        attemptId: "attempt-1",
+        ...open("running", "2026-09-23T12:00:01.000Z"),
+      }),
+    });
+    // Attempt 2 reclaims the run's lease and resumes the same command id.
+    await store.append("command.started", {
+      block: commandBlock({
+        ...card,
+        attemptId: "attempt-2",
+        ...open("running", "2026-09-23T12:00:01.000Z"),
+      }),
+    });
+    // Attempt 1 wakes past its lost lease and records its own, now stale, finish.
+    const staleFinish = commandBlock({ ...card, attemptId: "attempt-1", outcome: "cancelled" });
+    await store.append("command.finished", { block: staleFinish });
+    // Stored as evidence...
+    expect(store.events.map((event) => event.type)).toEqual([
+      "command.started",
+      "command.started",
+      "command.finished",
+    ]);
+    // ...but never applied to the card the recovering attempt owns.
+    expect([...store.rows.values()]).toEqual([
+      expect.objectContaining({
+        blocks: [
+          {
+            kind: "command",
+            command: expect.objectContaining({ attemptId: "attempt-2", outcome: "running" }),
+          },
+        ],
+      }),
+    ]);
+    // The recovering attempt's own finish always wins on the card people see.
+    const realFinish = commandBlock({
+      ...card,
+      attemptId: "attempt-2",
+      outcome: "completed",
+      stdout: "ok",
+    });
+    await store.append("command.finished", { block: realFinish });
+    expect([...store.rows.values()]).toEqual([
+      expect.objectContaining({
+        blocks: [
+          {
+            kind: "command",
+            command: expect.objectContaining({
+              attemptId: "attempt-2",
+              outcome: "completed",
+              stdout: "ok",
+            }),
+          },
+        ],
+      }),
+    ]);
+  });
   it("projects expired or superseded attempts as unknown on reload", async () => {
     const message: ThreadMessage = {
       id: "command:command-1",
@@ -175,7 +237,9 @@ function open(outcome: "waiting" | "running", startedAt: string): Partial<Fixtur
 }
 
 /** Enough of a transaction to append events and materialize their command rows. */
-function eventStore() {
+function eventStore(options: { leaseFence?: number; attemptFences?: Record<string, number> } = {}) {
+  const leaseFence = options.leaseFence ?? 1;
+  const attemptFences = options.attemptFences ?? {};
   const events: { type: string; payload: unknown; seq: number }[] = [];
   const rows = new Map<string, Record<string, unknown>>();
   type PathFilter = { payload: { path: string[]; equals: unknown } };
@@ -197,7 +261,12 @@ function eventStore() {
         nextMessageSeq: ++messageSeq,
       })),
     },
-    run: { findUnique: vi.fn(async () => ({ status: "running" })) },
+    run: { findUnique: vi.fn(async () => ({ status: "running", leaseFence })) },
+    attempt: {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({
+        fence: attemptFences[where.id] ?? leaseFence,
+      })),
+    },
     event: {
       findFirst: vi.fn(
         async ({ where }: { where: Parameters<typeof matches>[1] }) =>
