@@ -2,11 +2,17 @@ import type { McpServer } from "@ardurbot/contracts";
 import type {
   LocalImportAction,
   LocalImportCategory,
+  LocalImportFailure,
   LocalImportRead,
-  LocalImportResult,
+  LocalImportStop,
+  LocalImportSummary,
   LocalImportTool,
 } from "@ardurbot/contracts/local-import";
-import { LOCAL_IMPORT_CATEGORIES, LOCAL_IMPORT_TOOL_NAMES } from "@ardurbot/contracts/local-import";
+import {
+  addLocalImportResult,
+  LOCAL_IMPORT_CATEGORIES,
+  LOCAL_IMPORT_TOOL_NAMES,
+} from "@ardurbot/contracts/local-import";
 import { Button, Checkbox, Input, Switch } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
@@ -23,9 +29,9 @@ export function LocalImportPage() {
   const [selected, setSelected] = useState<Selection>({});
   const [folders, setFolders] = useState<Partial<Record<LocalImportTool, string>>>({});
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<LocalImportStop | null>(null);
   const [preview, setPreview] = useState<LocalImportRead | null>(null);
-  const [result, setResult] = useState<LocalImportResult | null>(null);
+  const [summary, setSummary] = useState<LocalImportSummary | null>(null);
   const [servers, setServers] = useState<McpServer[] | null>(null);
   const labels: Record<LocalImportCategory, string> = {
     instructions: t`Instructions`,
@@ -34,6 +40,15 @@ export function LocalImportPage() {
     servers: t`MCP servers`,
     plugins: t`Plugins and extensions`,
     other: t`Other files`,
+  };
+  const stops: Record<LocalImportStop, string> = {
+    host: t`Import could not finish. Check this computer is connected, then re-scan.`,
+    rescan: t`This scan is out of date. Re-scan, then try again.`,
+    failed: t`Import stopped because of an unexpected error. Re-scan, then try again.`,
+  };
+  const reasons: Record<LocalImportFailure["reason"], string> = {
+    credential: t`Looks like it contains a credential. Remove it from the file, then re-scan.`,
+    failed: t`Could not be saved.`,
   };
   useEffect(() => {
     let active = true;
@@ -49,7 +64,7 @@ export function LocalImportPage() {
       }
     })()
       .catch(() => {
-        if (active) setError(true);
+        if (active) setError("failed");
       })
       .finally(() => {
         if (active) setBusy(false);
@@ -61,12 +76,12 @@ export function LocalImportPage() {
 
   async function work(action: () => Promise<void>) {
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       await action();
       setStatus(await rpc.localImport.status());
     } catch {
-      setError(true);
+      setError("failed");
     } finally {
       setBusy(false);
     }
@@ -95,11 +110,12 @@ export function LocalImportPage() {
     await work(async () => {
       setServers(null);
       const response = await rpc.localImport.run(action);
+      if (response.stopped) setError(response.stopped);
       if (response.preview) setPreview(response.preview);
-      if (response.result) setResult(response.result);
+      if (response.result) setSummary(addLocalImportResult(null, response));
       if (response.manifest) {
         setPreview(null);
-        setResult(null);
+        setSummary(null);
       }
     });
   }
@@ -107,14 +123,7 @@ export function LocalImportPage() {
     const manifest = status?.manifest;
     if (!manifest) return;
     await work(async () => {
-      const total: LocalImportResult = {
-        created: 0,
-        updated: 0,
-        unchanged: 0,
-        removed: 0,
-        skipped: 0,
-        conflicts: 0,
-      };
+      let total: LocalImportSummary | null = null;
       for (const source of manifest.sources.filter((source) => !tool || source.tool === tool)) {
         const categories = selected[source.tool] ?? defaults;
         if (
@@ -131,14 +140,32 @@ export function LocalImportPage() {
           tool: source.tool,
           categories,
         });
-        if (response.result)
-          for (const key of Object.keys(total) as (keyof LocalImportResult)[])
-            total[key] += response.result[key];
+        total = addLocalImportResult(total, response);
+        setSummary(total);
+        if (response.stopped) {
+          setError(response.stopped);
+          return;
+        }
       }
-      setResult(total);
+    });
+  }
+  async function retry(failure: LocalImportFailure) {
+    const manifest = status?.manifest;
+    if (!manifest) return;
+    await work(async () => {
+      const response = await rpc.localImport.run({
+        action: "import",
+        scanId: manifest.scanId,
+        tool: failure.tool,
+        categories: [failure.category],
+        itemId: failure.itemId,
+      });
+      if (response.stopped) setError(response.stopped);
+      else setSummary((current) => addLocalImportResult(current, response, failure));
     });
   }
   const manifest = status?.manifest;
+  const result = summary?.result;
   const anySelected = manifest?.items.some(
     (item) => item.importable && (selected[item.tool] ?? defaults).includes(item.category),
   );
@@ -182,21 +209,50 @@ export function LocalImportPage() {
       ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
-          <Trans>Import could not finish. Check this computer is connected, then re-scan.</Trans>
+          {stops[error]}
         </p>
       ) : null}
       {manifest?.limited ? (
         <p role="status" className="text-sm text-muted-foreground">
-          <Trans>Some items exceeded the scan limits.</Trans>
+          {manifest.unscanned ? (
+            <Trans>
+              Some items exceeded the scan limits ({manifest.unscanned} items were not scanned).
+            </Trans>
+          ) : (
+            <Trans>Some items exceeded the scan limits.</Trans>
+          )}
         </p>
       ) : null}
       {result ? (
         <p role="status" className="text-sm">
           <Trans>
             {result.created} imported, {result.updated} updated, {result.unchanged} unchanged,{" "}
-            {result.removed} removed, {result.skipped} skipped, {result.conflicts} conflicts.
+            {result.removed} removed, {result.skipped} skipped, {result.conflicts} conflicts,{" "}
+            {result.failed} failed.
           </Trans>
         </p>
+      ) : null}
+      {summary?.failures.length ? (
+        <ul className="space-y-2 text-sm" aria-label={t`Failed items`}>
+          {summary.failures.map((failure) => (
+            <li key={failure.itemId} className="flex items-start justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block break-all">{failure.relativePath}</span>
+                <span className="block text-muted-foreground">{reasons[failure.reason]}</span>
+              </span>
+              {failure.reason === "failed" ? (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void retry(failure)}
+                  aria-label={t`Retry ${failure.relativePath}`}
+                >
+                  <Trans>Retry</Trans>
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       ) : null}
       {result && result.conflicts > 0 ? (
         <p className="text-sm text-muted-foreground">

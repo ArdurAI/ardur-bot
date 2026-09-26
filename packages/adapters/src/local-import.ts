@@ -5,13 +5,16 @@ import type {
   ImportedProvenance,
   LocalImportAction,
   LocalImportCategory,
+  LocalImportFailure,
   LocalImportManifest,
   LocalImportRead,
   LocalImportResponse,
   LocalImportResult,
+  LocalImportStop,
   LocalImportTool,
 } from "@ardurbot/contracts/local-import";
 import {
+  LOCAL_IMPORT_FAILURES,
   LOCAL_IMPORT_TOOL_NAMES,
   LocalImportManifestSchema,
   LocalImportReadSchema,
@@ -19,16 +22,36 @@ import {
   LocalImportSelectionSchema,
   LocalImportStatusSchema,
 } from "@ardurbot/contracts/local-import";
+import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
 import { buildSkillMd, parseSkillMd } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError, Prisma, withTransactionRetry } from "@ardurbot/db";
 import { HostClient } from "@ardurbot/host-runtime/host-client";
 import type { LocalImportScanner } from "@ardurbot/host-runtime/import/scanner";
-import { createLocalImportScanner } from "@ardurbot/host-runtime/import/scanner";
+import {
+  createLocalImportScanner,
+  LocalImportRescanError,
+} from "@ardurbot/host-runtime/import/scanner";
+import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
+import { MemoryRedactionError } from "@ardurbot/memory";
 import { BUILTIN_AGENT_SKILLS } from "./builtin-skills.js";
 
 export type ImportOwner = Pick<Actor, "spaceId" | "userId">;
+/** The paired host could not be reached or stopped answering. */
+export class LocalImportHostError extends Error {
+  constructor(options?: ErrorOptions) {
+    super("The paired host did not answer the import request.", options);
+    this.name = "LocalImportHostError";
+  }
+}
+/** Only these stop a whole run; any other failure belongs to the item that caused it. */
+export function localImportStop(error: unknown): LocalImportStop | undefined {
+  if (error instanceof LocalImportHostError) return "host";
+  if (error instanceof LocalImportRescanError) return "rescan";
+  if (error instanceof IsolationError) return "failed";
+  return undefined;
+}
 export interface LocalImportTransport {
   scan(
     owner: ImportOwner,
@@ -44,6 +67,7 @@ const counts = (): LocalImportResult => ({
   removed: 0,
   skipped: 0,
   conflicts: 0,
+  failed: 0,
 });
 const contextFor = (
   owner: ImportOwner,
@@ -143,7 +167,8 @@ export class LocalImportService {
   }
   private manifest(config: { manifest: unknown }, scanId: string) {
     const manifest = LocalImportManifestSchema.parse(config.manifest);
-    if (manifest.scanId !== scanId) throw new Error("Re-scan this computer before importing.");
+    if (manifest.scanId !== scanId)
+      throw new LocalImportRescanError("Re-scan this computer before importing.");
     return manifest;
   }
   private async read(owner: ImportOwner, manifest: LocalImportManifest, itemId: string) {
@@ -157,7 +182,7 @@ export class LocalImportService {
       JSON.stringify(value.item) !== JSON.stringify(expected) ||
       hash(value.content) !== expected.contentHash
     )
-      throw new Error("The source changed. Re-scan this computer.");
+      throw new LocalImportRescanError("The source changed. Re-scan this computer.");
     if (value.server && value.content !== JSON.stringify(value.server, null, 2))
       throw new Error("Server preview does not match its definition.");
     return value;
@@ -185,9 +210,13 @@ export class LocalImportService {
     if (action.action === "preview")
       return { preview: await this.read(owner, manifest, action.itemId) };
     const result = counts();
+    const failures: LocalImportFailure[] = [];
+    let stopped: unknown;
     for (const item of manifest.items.filter(
       (item) =>
-        action.categories.includes(item.category) && (!action.tool || item.tool === action.tool),
+        action.categories.includes(item.category) &&
+        (!action.tool || item.tool === action.tool) &&
+        (!action.itemId || item.id === action.itemId),
     )) {
       if (!item.importable) {
         result.skipped++;
@@ -206,12 +235,33 @@ export class LocalImportService {
         result.unchanged++;
         continue;
       }
-      const value = await this.read(owner, manifest, item.id);
-      const outcome = await this.importItem(owner, config.id, value, automatic);
-      result[outcome]++;
+      try {
+        const value = await this.read(owner, manifest, item.id);
+        result[await this.importItem(owner, config.id, value, automatic)]++;
+      } catch (error) {
+        // Never log the item body; the path and error say which source to fix.
+        getLogger().error("local-import item failed", error, {
+          "import.tool": item.tool,
+          "import.category": item.category,
+          "import.path": item.relativePath,
+        });
+        if (localImportStop(error)) {
+          stopped = error;
+          break;
+        }
+        result.failed++;
+        if (failures.length < LOCAL_IMPORT_FAILURES)
+          failures.push({
+            itemId: item.id,
+            tool: item.tool,
+            category: item.category,
+            relativePath: item.relativePath,
+            reason: error instanceof MemoryRedactionError ? "credential" : "failed",
+          });
+      }
     }
     const selection = LocalImportSelectionSchema.parse(config.selection);
-    if (!automatic)
+    if (!automatic && !action.itemId)
       for (const source of manifest.sources.filter(
         (source) => !action.tool || source.tool === action.tool,
       ))
@@ -220,10 +270,12 @@ export class LocalImportService {
       where: { id: config.id },
       data: {
         ...(result.created + result.updated > 0 ? { importedAt: new Date() } : {}),
-        ...(!automatic ? { selection } : {}),
+        ...(!automatic && !action.itemId ? { selection } : {}),
       },
     });
-    return { result };
+    // Items written before the stop stay imported and recorded above.
+    if (stopped) throw stopped;
+    return { result, ...(failures.length ? { failures } : {}) };
   }
   private async importItem(
     owner: ImportOwner,
@@ -656,17 +708,22 @@ export function createImportTransport(
   };
   const remote = async (owner: ImportOwner, operation: Parameters<HostClient["request"]>[0]) => {
     let text = "";
-    for await (const frame of host.request(operation, {
-      ...owner,
-      botId: "owner-import",
-      runId: `import-${randomUUID()}`,
-      signal: AbortSignal.timeout(120_000),
-    })) {
-      if (frame.channel !== "result" || typeof frame.data !== "string")
-        throw new Error("Invalid host import response.");
-      text += frame.data;
-      if (Buffer.byteLength(text) > 8 * 1024 * 1024)
-        throw new Error("Import manifest is too large.");
+    try {
+      for await (const frame of host.request(operation, {
+        ...owner,
+        botId: "owner-import",
+        runId: `import-${randomUUID()}`,
+        signal: AbortSignal.timeout(120_000),
+      })) {
+        if (frame.channel !== "result" || typeof frame.data !== "string")
+          throw new Error("Invalid host import response.");
+        text += frame.data;
+        if (Buffer.byteLength(text) > 8 * 1024 * 1024)
+          throw new Error("Import manifest is too large.");
+      }
+    } catch (error) {
+      // HostClient reports a lost, busy or failed host this way; other errors are ours.
+      throw error instanceof RuntimePinError ? new LocalImportHostError({ cause: error }) : error;
     }
     return JSON.parse(text) as unknown;
   };

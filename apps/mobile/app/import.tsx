@@ -2,11 +2,14 @@ import type { McpServer } from "@ardurbot/contracts";
 import type {
   LocalImportAction,
   LocalImportCategory,
+  LocalImportFailure,
   LocalImportRead,
-  LocalImportResult,
+  LocalImportStop,
+  LocalImportSummary,
   LocalImportTool,
 } from "@ardurbot/contracts/local-import";
 import {
+  addLocalImportResult,
   LOCAL_IMPORT_CATEGORIES,
   LOCAL_IMPORT_EXCLUSIONS,
   LOCAL_IMPORT_PRIVACY,
@@ -38,14 +41,14 @@ export default function LocalImport() {
   const styles = useThemedStyles(createStyles);
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<LocalImportStop | null>(null);
   const [selected, setSelected] = useState<Partial<Record<LocalImportTool, LocalImportCategory[]>>>(
     {},
   );
   const [folders, setFolders] = useState<Partial<Record<LocalImportTool, string>>>({});
   const [open, setOpen] = useState<string | null>(null);
   const [preview, setPreview] = useState<LocalImportRead | null>(null);
-  const [result, setResult] = useState<LocalImportResult | null>(null);
+  const [summary, setSummary] = useState<LocalImportSummary | null>(null);
   const [exclusions, setExclusions] = useState(false);
   const [servers, setServers] = useState<McpServer[] | null>(null);
   const [credentialServer, setCredentialServer] = useState<string | null>(null);
@@ -58,11 +61,20 @@ export default function LocalImport() {
     plugins: t("Plugins and extensions"),
     other: t("Other files"),
   };
+  const stops: Record<LocalImportStop, string> = {
+    host: t("Import could not finish. Check this computer is connected, then re-scan."),
+    rescan: t("This scan is out of date. Re-scan, then try again."),
+    failed: t("Import stopped because of an unexpected error. Re-scan, then try again."),
+  };
+  const reasons: Record<LocalImportFailure["reason"], string> = {
+    credential: t("Looks like it contains a credential. Remove it from the file, then re-scan."),
+    failed: t("Could not be saved."),
+  };
   useFocusEffect(
     useCallback(() => {
       let active = true;
       setBusy(true);
-      setError(false);
+      setError(null);
       void (async () => {
         const initial = await localImport.status();
         if (!active) return;
@@ -74,7 +86,7 @@ export default function LocalImport() {
         }
       })()
         .catch(() => {
-          if (active) setError(true);
+          if (active) setError("failed");
         })
         .finally(() => {
           if (active) setBusy(false);
@@ -88,12 +100,12 @@ export default function LocalImport() {
   );
   async function work(action: () => Promise<void>) {
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       await action();
       setStatus(await localImport.status());
     } catch {
-      setError(true);
+      setError("failed");
     } finally {
       setBusy(false);
     }
@@ -124,11 +136,12 @@ export default function LocalImport() {
       setCredentialServer(null);
       setCredentialValues({});
       const response = await localImport.run(action);
+      if (response.stopped) setError(response.stopped);
       if (response.preview) setPreview(response.preview);
-      if (response.result) setResult(response.result);
+      if (response.result) setSummary(addLocalImportResult(null, response));
       if (response.manifest) {
         setPreview(null);
-        setResult(null);
+        setSummary(null);
       }
     });
   }
@@ -136,14 +149,7 @@ export default function LocalImport() {
     const manifest = status?.manifest;
     if (!manifest) return;
     await work(async () => {
-      const total: LocalImportResult = {
-        created: 0,
-        updated: 0,
-        unchanged: 0,
-        removed: 0,
-        skipped: 0,
-        conflicts: 0,
-      };
+      let total: LocalImportSummary | null = null;
       for (const source of manifest.sources) {
         const categories = selected[source.tool] ?? defaults;
         if (
@@ -160,14 +166,32 @@ export default function LocalImport() {
           tool: source.tool,
           categories,
         });
-        if (response.result)
-          for (const key of Object.keys(total) as (keyof LocalImportResult)[])
-            total[key] += response.result[key];
+        total = addLocalImportResult(total, response);
+        setSummary(total);
+        if (response.stopped) {
+          setError(response.stopped);
+          return;
+        }
       }
-      setResult(total);
+    });
+  }
+  async function retry(failure: LocalImportFailure) {
+    const manifest = status?.manifest;
+    if (!manifest) return;
+    await work(async () => {
+      const response = await localImport.run({
+        action: "import",
+        scanId: manifest.scanId,
+        tool: failure.tool,
+        categories: [failure.category],
+        itemId: failure.itemId,
+      });
+      if (response.stopped) setError(response.stopped);
+      else setSummary((current) => addLocalImportResult(current, response, failure));
     });
   }
   const manifest = status?.manifest;
+  const result = summary?.result;
   return (
     <SafeAreaView style={styles.screen} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -198,20 +222,42 @@ export default function LocalImport() {
         {busy ? <ActivityIndicator accessibilityLabel={t("Working…")} /> : null}
         {error ? (
           <Text accessibilityRole="alert" style={styles.error}>
-            {t("Import could not finish. Check this computer is connected, then re-scan.")}
+            {stops[error]}
           </Text>
         ) : null}
         {manifest?.limited ? (
-          <Text style={styles.muted}>{t("Some items exceeded the scan limits.")}</Text>
+          <Text style={styles.muted}>
+            {manifest.unscanned
+              ? t("Some items exceeded the scan limits ({count} items were not scanned).", {
+                  count: manifest.unscanned,
+                })
+              : t("Some items exceeded the scan limits.")}
+          </Text>
         ) : null}
         {result ? (
           <Text style={styles.text}>
             {t(
-              "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.",
+              "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts, {failed} failed.",
               result,
             )}
           </Text>
         ) : null}
+        {summary?.failures.map((failure) => (
+          <View key={failure.itemId} style={styles.group}>
+            <Text selectable style={styles.text}>
+              {failure.relativePath}
+            </Text>
+            <Text style={styles.muted}>{reasons[failure.reason]}</Text>
+            {failure.reason === "failed" ? (
+              <Button
+                title={t("Retry")}
+                accessibilityLabel={t("Retry {path}", { path: failure.relativePath })}
+                disabled={busy}
+                onPress={() => void retry(failure)}
+              />
+            ) : null}
+          </View>
+        ))}
         {result && result.conflicts > 0 ? (
           <Text style={styles.muted}>{t("Items edited after import were kept.")}</Text>
         ) : null}

@@ -82,8 +82,9 @@ msgstr ""
 #. placeholder {3}: result.removed
 #. placeholder {4}: result.skipped
 #. placeholder {5}: result.conflicts
+#. placeholder {6}: result.failed
 #: src/pages/import/LocalImportPage.tsx
-msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts."
+msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr ""
 
 #. placeholder {0}: format(size / 1024)
@@ -1984,6 +1985,10 @@ msgstr ""
 msgid "Could not authorize this app"
 msgstr "Bu uygulama yetkilendirilemedi"
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Could not be saved."
+msgstr ""
+
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Could not change memory generation. Try again."
 msgstr ""
@@ -3405,6 +3410,10 @@ msgstr "Başarısız"
 msgid "Failed — {0}"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Failed items"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Failed to send message"
 msgstr "Mesaj gönderilemedi"
@@ -3780,6 +3789,10 @@ msgstr "OpenAPI JSON içe aktar"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Import prompt"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import stopped because of an unexpected error. Re-scan, then try again."
 msgstr ""
 
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
@@ -4294,6 +4307,10 @@ msgstr "Çıkış yap"
 
 #: src/pages/account/AccountSettings.tsx
 msgid "Log out of all devices"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Looks like it contains a credential. Remove it from the file, then re-scan."
 msgstr ""
 
 #: src/lib/thinking-level-options.ts
@@ -6153,6 +6170,7 @@ msgstr ""
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/GitMemorySettings.tsx
+#: src/pages/import/LocalImportPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
@@ -6163,6 +6181,11 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Retry"
+msgstr ""
+
+#. placeholder {0}: failure.relativePath
+#: src/pages/import/LocalImportPage.tsx
+msgid "Retry {0}"
 msgstr ""
 
 #: src/App.tsx
@@ -6874,6 +6897,11 @@ msgstr ""
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Bazı öğelerin adları desteklenmediği için gizlendi ({hiddenCount})."
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "Some items exceeded the scan limits ({0} items were not scanned)."
+msgstr ""
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Some items exceeded the scan limits."
 msgstr ""
@@ -7353,6 +7381,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Bu sıfırlama bağlantısı geçersiz veya süresi dolmuş"
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "This scan is out of date. Re-scan, then try again."
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."

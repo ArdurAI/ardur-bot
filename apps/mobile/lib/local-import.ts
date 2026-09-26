@@ -26,6 +26,9 @@ export const localImport = {
     roots?: Partial<Record<LocalImportTool, string>>;
     selection?: Partial<Record<LocalImportTool, LocalImportCategory[]>>;
   }) => LocalImportStatusSchema.parse(await rpc("localImport/configure", input)),
+  // The server answers within ten minutes; a full import can take about a minute.
   run: async (action: LocalImportAction) =>
-    LocalImportResponseSchema.parse(await rpc("localImport/run", action)),
+    LocalImportResponseSchema.parse(
+      await rpc("localImport/run", action, { timeoutMs: 11 * 60_000 }),
+    ),
 };
