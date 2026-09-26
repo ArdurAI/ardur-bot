@@ -60,6 +60,8 @@ export interface ArdurBotDesktop {
       /** Local mode: `roots` are the folders this app granted to its own bots. */
       local?: boolean;
       roots: string[];
+      /** Folders in `roots` that are not there now (a removed drive, a renamed folder). */
+      unavailable?: string[];
       registrationId?: string;
       keepRunning?: boolean;
     }>;
@@ -176,6 +178,8 @@ export interface DesktopLocalStackState {
   layerBytes: Record<string, number>;
   /** Image tag this app launches (`v<app version>` for installed builds, `edge` otherwise). */
   imageTag: string;
+  /** Local mode: only resetting local data clears this failure, so the window offers it. */
+  offerReset?: boolean;
 }
 
 export type DesktopSetupLink = "docker-desktop" | "orbstack" | "docker-engine";
@@ -198,6 +202,8 @@ export interface ArdurBotSetup {
     state: () => Promise<DesktopLocalStackState>;
     /** Starts (or retries) the stack; a no-op while a start is already in flight. */
     start: () => Promise<DesktopLocalStackState>;
+    /** Asks to confirm, then moves local data aside; true once it has. Local mode only. */
+    reset?: () => Promise<boolean>;
     /** Fires on every state change so progress never depends on a renderer timer. */
     onChange: (listener: (state: DesktopLocalStackState) => void) => void;
   };

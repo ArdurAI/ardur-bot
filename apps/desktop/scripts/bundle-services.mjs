@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { cp, mkdir, readFile, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { builtinModules, createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +37,7 @@ export function serviceBundlePlan() {
   return {
     entries: ["api.mjs", "worker.mjs"],
     loader: "services-loader.mjs",
+    resolutions: "resolutions.json",
     prismaRuntime: PRISMA_RUNTIME_FILES,
     extraResource: { from: "build/services", to: "services" },
     format: "esm",
@@ -118,8 +119,8 @@ function resolveFrom(origin, name) {
   return null;
 }
 
-function resolvePackageRoot(name, origin) {
-  const origins = origin ? [origin, ...requireFrom] : requireFrom;
+function resolvePackageRoot(name, origin, roots = requireFrom) {
+  const origins = origin ? [origin, ...roots] : roots;
   for (const candidate of origins) {
     const root = resolveFrom(candidate, name);
     if (root) return root;
@@ -127,8 +128,8 @@ function resolvePackageRoot(name, origin) {
   return null;
 }
 
-async function copyPackageContents(name, source, destinationRoot) {
-  const destination = path.join(destinationRoot, name);
+async function copyPackageContents(name, directory, source, destinationRoot) {
+  const destination = path.join(destinationRoot, directory);
   if (name === "@prisma/client") {
     for (const relative of PRISMA_CLIENT_FILES) {
       const target = path.join(destination, relative);
@@ -150,31 +151,62 @@ async function copyPackageContents(name, source, destinationRoot) {
 
 const REQUIRED_EXTERNALS = new Set(["@prisma/client", "@prisma/client-runtime-utils", "koffi"]);
 
-async function copyExternal(name, destinationRoot, seen, origin) {
-  if (seen.has(name)) return;
-  seen.add(name);
-  const source = resolvePackageRoot(name, origin);
-  if (!source) {
-    if (REQUIRED_EXTERNALS.has(name)) {
-      throw new Error(`Cannot find the package to ship beside the service bundles: ${name}`);
+/**
+ * Copies the externals and everything they depend on, each as its importer resolves it.
+ * electron-builder drops nested `node_modules`, so the layout is flat: the first version of
+ * a package found (breadth-first, so the bundles' own imports come first) goes to
+ * `<name>`, and another version goes to `<name>__<version>`. `resolutions` maps each
+ * importer that needs such a copy to it, and the services loader follows that map, so every
+ * package loads the version it declared.
+ */
+export async function copyExternals(names, destinationRoot, roots = requireFrom) {
+  const placed = new Map();
+  const taken = new Set();
+  const resolutions = {};
+  const queue = names.map((name) => ({ name, origin: undefined, importer: undefined }));
+  while (queue.length) {
+    const { name, origin, importer } = queue.shift();
+    const found = resolvePackageRoot(name, origin, roots);
+    if (!found) {
+      if (REQUIRED_EXTERNALS.has(name)) {
+        throw new Error(`Cannot find the package to ship beside the service bundles: ${name}`);
+      }
+      if (!origin) {
+        process.stdout.write(
+          `Service bundles: skipped optional package ${name}; it is not installed.\n`,
+        );
+      }
+      continue;
     }
-    if (!origin) {
-      process.stdout.write(
-        `Service bundles: skipped optional package ${name}; it is not installed.\n`,
-      );
+    const source = realpathSync(found);
+    let directory = placed.get(source);
+    if (directory === undefined) {
+      const manifest = JSON.parse(await readFile(path.join(source, "package.json"), "utf8"));
+      directory = name;
+      for (let copy = 1; taken.has(directory); copy += 1) {
+        directory = `${name}__${manifest.version}${copy > 1 ? `__${copy}` : ""}`;
+      }
+      placed.set(source, directory);
+      taken.add(directory);
+      await copyPackageContents(name, directory, source, destinationRoot);
+      const dependencies = {
+        ...(manifest.dependencies ?? {}),
+        ...(manifest.optionalDependencies ?? {}),
+      };
+      for (const dependency of Object.keys(dependencies)) {
+        queue.push({
+          name: dependency,
+          origin: path.join(source, "package.json"),
+          importer: directory,
+        });
+      }
     }
-    return;
+    // The bundles' own imports come first in the queue, so they always hold `<name>`.
+    if (importer && directory !== name) {
+      resolutions[importer] = { ...resolutions[importer], [name]: directory };
+    }
   }
-  await copyPackageContents(name, realpathSync(source), destinationRoot);
-  const manifest = JSON.parse(await readFile(path.join(source, "package.json"), "utf8"));
-  const dependencies = {
-    ...(manifest.dependencies ?? {}),
-    ...(manifest.optionalDependencies ?? {}),
-  };
-  const nextOrigin = path.join(source, "package.json");
-  for (const dependency of Object.keys(dependencies)) {
-    await copyExternal(dependency, destinationRoot, seen, nextOrigin);
-  }
+  return resolutions;
 }
 
 export async function bundleServices() {
@@ -238,10 +270,11 @@ export async function bundleServices() {
   }
   const modulesDir = path.join(servicesDir, "modules");
   await mkdir(modulesDir, { recursive: true });
-  const seen = new Set();
-  for (const name of externals) {
-    await copyExternal(name, modulesDir, seen);
-  }
+  const resolutions = await copyExternals([...externals], modulesDir);
+  await writeFile(
+    path.join(servicesDir, plan.resolutions),
+    `${JSON.stringify(resolutions, null, 2)}\n`,
+  );
   for (const relative of PRISMA_RUNTIME_FILES) {
     await stat(path.join(servicesDir, relative));
   }

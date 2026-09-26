@@ -1115,10 +1115,6 @@ msgstr "默认情况下 Bot 会直接执行。只有当你想先审核某类操�
 msgid "Bots are working"
 msgstr "Bot 正在工作"
 
-#: src/pages/HostComputerSettings.tsx
-msgid "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers."
-msgstr ""
-
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Bots keep the board and memory current"
@@ -4286,6 +4282,10 @@ msgstr "本地"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "本地访问权限允许 Bot 无需询问就执行命令。请勿在共享或公开服务器上启用。"
 
+#: src/pages/system/SystemPage.tsx
+msgid "Local data"
+msgstr ""
+
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Local dev"
 msgstr ""
@@ -5203,16 +5203,8 @@ msgstr "按计划"
 msgid "on the 1st at {0}"
 msgstr "每月 1 日 {0}"
 
-#: src/pages/HostComputerSettings.tsx
-msgid "On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
-msgstr ""
-
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "On this device"
-msgstr ""
-
-#: src/pages/HostComputerSettings.tsx
-msgid "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6121,6 +6113,10 @@ msgstr "重置电脑"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Reset computer?"
 msgstr "重置电脑？"
+
+#: src/pages/system/SystemPage.tsx
+msgid "Reset local data"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Reset password"
@@ -7363,6 +7359,10 @@ msgstr "此文件不是有效的 UTF-8 Markdown。"
 
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This folder is not available."
 msgstr ""
 
 #: src/pages/HostComputerPrompt.tsx

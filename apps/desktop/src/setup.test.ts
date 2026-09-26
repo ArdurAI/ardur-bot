@@ -13,6 +13,7 @@ type Stack = {
   output: string[];
   layerBytes: Record<string, number>;
   imageTag: string;
+  offerReset?: boolean;
 };
 
 /** Each controller's state shape, and a phase it reports while it is still starting. */
@@ -62,6 +63,7 @@ function openSetup(input: { stack: Stack; resume?: boolean }) {
     stack: {
       state: vi.fn(async () => current),
       start: vi.fn(async () => current),
+      reset: vi.fn(async () => true),
       onChange: (listener: (state: Stack) => void) => {
         listeners.push(listener);
       },
@@ -134,6 +136,40 @@ describe.each(Object.entries(modes))("setup window with %s", (_name, { starting,
     await settle();
     expect(setup.bridge.save).not.toHaveBeenCalled();
   });
+});
+
+it("offers Reset local data only for a failure that needs it, then starts fresh", async () => {
+  const failed = (offerReset: boolean): Stack => ({
+    ...modes["local mode"].stack("failed"),
+    message: offerReset ? "The app's database settings are missing." : "The API stopped.",
+    ...(offerReset ? { offerReset } : {}),
+  });
+  const setup = openSetup({ stack: failed(false) });
+  const reset = () => document.getElementById("reset") as HTMLButtonElement;
+  await vi.waitFor(() => expect(setup.text("#stack-phase")).toBe("The API stopped."));
+  expect(reset().hidden).toBe(true);
+
+  setup.push(failed(true));
+  await vi.waitFor(() => expect(reset().hidden).toBe(false));
+  expect(reset().textContent?.trim()).toBe("Reset local data");
+  expect(setup.continueButton().textContent).toBe("Retry");
+  for (const [id, hidden] of [
+    ["mode-existing", true],
+    ["mode-new", false],
+  ] as const) {
+    (document.getElementById(id) as HTMLInputElement).click();
+    expect(reset().hidden).toBe(hidden);
+  }
+  setup.bridge.stack.reset.mockResolvedValueOnce(false);
+  reset().click();
+  await vi.waitFor(() => expect(setup.bridge.stack.reset).toHaveBeenCalledOnce());
+  await settle();
+  expect(setup.bridge.stack.start).not.toHaveBeenCalled();
+
+  reset().click();
+  await vi.waitFor(() => expect(setup.bridge.stack.start).toHaveBeenCalledOnce());
+  setup.push(modes["local mode"].stack("database"));
+  await vi.waitFor(() => expect(reset().hidden).toBe(true));
 });
 
 it("keeps This computer free of standing explanation; a start says what it is doing", async () => {

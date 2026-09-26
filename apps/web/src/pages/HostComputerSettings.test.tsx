@@ -98,7 +98,7 @@ it("shows versions and registered folders, and revokes before clearing desktop s
   );
 });
 
-it("in local mode lists the folders this app granted, with Add folder, Remove, and when to add one", async () => {
+it("in local mode lists the folders this app granted, with Add folder and Remove, and no standing explainer", async () => {
   fake.status.mockResolvedValue({
     configured: false,
     connected: true,
@@ -129,12 +129,9 @@ it("in local mode lists the folders this app granted, with Add folder, Remove, a
   expect(button("Set up")).toBeUndefined();
   expect(button("Disconnect this computer")).toBeUndefined();
   expect(container.querySelector("li")).toBeNull();
-  expect(container.textContent).toContain(
-    "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers.",
-  );
-  expect(container.textContent).toContain(
-    "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes.",
-  );
+  // The folder sentence belongs to the Add folder dialog; nothing explains standing here.
+  expect(container.querySelectorAll("p")).toHaveLength(1);
+  expect(container.textContent).not.toMatch(/Bots can read|approvals|advisory/);
 
   await act(async () => button("Add folder")!.click());
   expect(addRoot).toHaveBeenCalledOnce();
@@ -144,6 +141,39 @@ it("in local mode lists the folders this app granted, with Add folder, Remove, a
   await act(async () => button("Remove")!.click());
   expect(removeRoot).toHaveBeenCalledExactlyOnceWith("/fixture/projects");
   expect(container.querySelector("li")).toBeNull();
+});
+
+it("marks a folder that is gone as not available, and still offers Remove", async () => {
+  fake.status.mockResolvedValue({
+    configured: false,
+    connected: true,
+    roots: [],
+    health: { platform: "darwin", roots: [], claude: {}, codex: {} },
+  });
+  const removeRoot = vi.fn(async () => undefined);
+  window.ardurbotDesktop = {
+    platform: "darwin",
+    host: {
+      state: async () => ({
+        configured: false,
+        local: true,
+        roots: ["/fixture/drive", "/fixture/projects"],
+        unavailable: ["/fixture/drive"],
+      }),
+      setup: vi.fn(),
+      addRoot: vi.fn(),
+      removeRoot,
+      clear: vi.fn(),
+    },
+  } as unknown as NonNullable<Window["ardurbotDesktop"]>;
+  const container = await render();
+  expect([...container.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
+    "/fixture/driveThis folder is not available.Remove",
+    "/fixture/projectsRemove",
+  ]);
+  const remove = container.querySelector("li button") as HTMLButtonElement;
+  await act(async () => remove.click());
+  expect(removeRoot).toHaveBeenCalledExactlyOnceWith("/fixture/drive");
 });
 
 it("says nothing about local folders when paired with a server", async () => {

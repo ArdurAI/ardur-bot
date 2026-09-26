@@ -1,11 +1,11 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { MigrationApplyError } from "@ardurbot/db/migrate";
+import { MigrationApplyError, MigrationHistoryError } from "@ardurbot/db/migrate";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localFoldersFile } from "./local-folders.js";
 import { appendCappedLog, LOG_CAP_BYTES } from "./local-logs.js";
@@ -225,6 +225,288 @@ describe("local mode persistence and supervision", () => {
   });
 });
 
+describe("database credentials", () => {
+  it("writes initdb's password file only to a private folder inside the app data folder", async () => {
+    const root = await userData();
+    const before = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
+    let during = "";
+    let mode = 0;
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => ({
+          ...runningPostgres(),
+          initialise: async () => {
+            // What the library resolves its password file against.
+            during = tmpdir();
+            mode = (await stat(during)).mode & 0o777;
+          },
+        }),
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    expect(path.dirname(during)).toBe(root);
+    expect(mode).toBe(0o700);
+    await expect(stat(during)).rejects.toThrow();
+    expect({ TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP }).toEqual(
+      before,
+    );
+    await controller.stop();
+  });
+
+  it("gives migrations and the services the application role, never the superuser", async () => {
+    const root = await userData();
+    const migrations: { adminUrl: string; databaseUrl: string }[] = [];
+    const envs: NodeJS.ProcessEnv[] = [];
+    let secret = 0;
+    const controller = new LocalModeController(
+      harness(root, {
+        randomHex: (bytes) => (++secret).toString(16).padStart(bytes * 2, "0"),
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+        migrate: async ({ adminUrl, databaseUrl }) => {
+          migrations.push({ adminUrl, databaseUrl });
+        },
+        spawn: (_command, _args, options) => {
+          envs.push(options.env ?? {});
+          return fakeChild();
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    const saved = await readFile(path.join(root, "secrets.env"), "utf8");
+    const superuser = /^POSTGRES_PASSWORD=(.+)$/m.exec(saved)?.[1];
+    const role = /^APP_DATABASE_PASSWORD=(.+)$/m.exec(saved)?.[1];
+    expect(role).toMatch(/^[0-9a-f]{32}$/);
+    expect(new URL(migrations[0]!.adminUrl)).toMatchObject({
+      username: "ardurbot",
+      password: superuser,
+    });
+    expect(new URL(migrations[0]!.databaseUrl)).toMatchObject({
+      username: "ardurbot_app",
+      password: role,
+      pathname: "/ardurbot",
+    });
+    for (const env of envs) {
+      expect(env.DATABASE_URL).toBe(migrations[0]!.databaseUrl);
+      expect(env.DATABASE_URL).not.toContain(superuser);
+    }
+    await controller.stop();
+  });
+});
+
+describe("stopping during a start", () => {
+  it("cancels the migrations and waits for them before stopping the database", async () => {
+    const root = await userData();
+    const order: string[] = [];
+    let migrating: () => void = () => undefined;
+    const reachedMigrations = new Promise<void>((resolve) => {
+      migrating = resolve;
+    });
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => ({
+          ...runningPostgres(),
+          stop: async () => {
+            order.push("database stopped");
+          },
+        }),
+        migrate: ({ signal }) =>
+          new Promise((_, reject) => {
+            migrating();
+            signal.addEventListener("abort", () => {
+              // The migrator cancels its statement; the connection settles a moment later.
+              setTimeout(() => {
+                order.push("migrations settled");
+                reject(new Error("canceling statement due to user request"));
+              }, 50);
+            });
+          }),
+      }),
+    );
+    const started = controller.start();
+    await reachedMigrations;
+    await within(2_000, controller.stop());
+    expect(order).toEqual(["migrations settled", "database stopped"]);
+    await started;
+    expect(controller.state().phase).toBe("idle");
+    expect(controller.running()).toBe(false);
+  });
+
+  it("starts fresh when start() follows stop() while the old run winds down", async () => {
+    const root = await userData();
+    let migrations = 0;
+    let migrating: () => void = () => undefined;
+    const reachedMigrations = new Promise<void>((resolve) => {
+      migrating = resolve;
+    });
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+        migrate: ({ signal }) => {
+          migrations += 1;
+          if (migrations > 1) return Promise.resolve();
+          migrating();
+          return new Promise((_, reject) => {
+            signal.addEventListener("abort", () => {
+              setTimeout(() => reject(new Error("canceled")), 50);
+            });
+          });
+        },
+      }),
+    );
+    const first = controller.start();
+    await reachedMigrations;
+    const stopping = controller.stop();
+    const second = controller.start();
+    expect(second).not.toBe(first);
+    expect(await within(2_000, second)).toMatchObject({ phase: "ready" });
+    await stopping;
+    expect(migrations).toBe(2);
+    expect(controller.running()).toBe(true);
+    await controller.stop();
+  });
+
+  it("does not start after a later stop, even when a start was waiting", async () => {
+    const root = await userData();
+    let migrations = 0;
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+        migrate: async () => {
+          migrations += 1;
+        },
+      }),
+    );
+    await controller.start();
+    const stopping = controller.stop();
+    const waiting = controller.start();
+    await controller.stop();
+    await stopping;
+    expect(await waiting).toMatchObject({ phase: "idle" });
+    expect(migrations).toBe(1);
+    expect(controller.running()).toBe(false);
+  });
+
+  it("ends a database start that is under way, so the stop settles", async () => {
+    const root = await userData();
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      signalCode: null,
+      kill: vi.fn(() => true),
+    });
+    let starting: () => void = () => undefined;
+    const reachedStart = new Promise<void>((resolve) => {
+      starting = resolve;
+    });
+    let rejectStart: (error: Error) => void = () => undefined;
+    const postgres = {
+      initialise: async () => undefined,
+      process: child,
+      // Like the library: the start settles only when the server is ready or has exited.
+      start: () =>
+        new Promise<void>((_, reject) => {
+          rejectStart = reject;
+          starting();
+        }),
+      stop: vi.fn(async () => {
+        child.exitCode = 0;
+        rejectStart(new Error("exited"));
+      }),
+    };
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => postgres,
+      }),
+    );
+    const started = controller.start();
+    await reachedStart;
+    await within(2_000, controller.stop());
+    expect(postgres.stop).toHaveBeenCalledOnce();
+    await started;
+    expect(controller.state().phase).toBe("idle");
+  });
+});
+
+describe("database watch", () => {
+  it("says the database stopped, with Retry, when its process exits after ready", async () => {
+    const root = await userData();
+    const failed: string[] = [];
+    const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+    let starts = 0;
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () =>
+          Object.assign(runningPostgres(), {
+            process: child,
+            start: async () => {
+              starts += 1;
+            },
+          }),
+        onFailed: (message) => {
+          failed.push(message);
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    Object.assign(child, { exitCode: 1 });
+    child.emit("exit", 1, null);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(controller.state()).toMatchObject({ phase: "failed", message: "The database stopped." });
+    expect(failed).toEqual(["The database stopped."]);
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    expect(starts).toBe(2);
+    await controller.stop();
+  });
+});
+
+describe("reset", () => {
+  it("moves the database, files and settings aside, and the next start is fresh", async () => {
+    const root = await userData();
+    await mkdir(path.join(root, "postgres"), { recursive: true });
+    await writeFile(path.join(root, "postgres", "PG_VERSION"), "16\n");
+    await mkdir(path.join(root, "data"), { recursive: true });
+    await writeFile(path.join(root, "data", "note.txt"), "kept aside");
+    const initialised: number[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        now: () => Date.UTC(2026, 8, 25, 10, 30),
+        postgresFactory: () => ({
+          ...runningPostgres(),
+          initialise: async () => {
+            initialised.push(1);
+          },
+        }),
+      }),
+    );
+    // No secrets.env over an existing database: only a reset clears it.
+    expect(await controller.start()).toMatchObject({ phase: "failed", offerReset: true });
+    const backup = await controller.resetData();
+    expect(backup).toBe(path.join(root, "backups", "local-data-2026-09-25T10-30-00-000Z"));
+    expect((await readdir(backup)).sort()).toEqual(["data", "postgres"]);
+    expect(await readFile(path.join(backup, "data", "note.txt"), "utf8")).toBe("kept aside");
+    expect(controller.state().phase).toBe("idle");
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    expect(initialised).toHaveLength(1);
+    expect(await readFile(path.join(root, "secrets.env"), "utf8")).toMatch(/^POSTGRES_PASSWORD=/m);
+    await controller.stop();
+  });
+});
+
 describe("packaged and unpackaged service launch", () => {
   it("starts packaged services from api.mjs and worker.mjs with the loader and NODE_PATH", async () => {
     const root = await userData();
@@ -375,12 +657,13 @@ describe("database lifecycle", () => {
     const root = await userData();
     let starts = 0;
     let stops = 0;
+    let stopping: Promise<void> | undefined;
     const controller = new LocalModeController(
       harness(root, {
         allocatePort: async () => 23456,
         portAvailable: async () => true,
         postgresFactory: () => {
-          void controller.stop();
+          stopping = controller.stop();
           return {
             initialise: async () => undefined,
             start: async () => {
@@ -394,6 +677,7 @@ describe("database lifecycle", () => {
       }),
     );
     await controller.start();
+    await stopping;
     expect(starts).toBe(0);
     expect(stops).toBeGreaterThanOrEqual(1);
     expect(controller.running()).toBe(false);
@@ -436,7 +720,7 @@ describe("database lifecycle", () => {
       }),
     );
     const sentence =
-      'Preparing the database failed at 20260101000000_init: relation "widgets" does not exist.';
+      'Preparing the database failed at 20260101000000_init: relation "widgets" does not exist. Retry, or install the latest version if it happens again.';
     expect(await controller.start()).toMatchObject({ phase: "failed", message: sentence });
     expect(failed).toEqual([sentence]);
     expect(stops).toBe(1);
@@ -447,6 +731,47 @@ describe("database lifecycle", () => {
     expect(migrations).toHaveLength(2);
     await controller.stop();
   });
+
+  it.each([
+    [
+      "newer",
+      "This data was last opened by a newer version of Ardur Bot. Install the latest version of Ardur Bot, then Retry.",
+      undefined,
+    ],
+    [
+      "modified",
+      "This version of Ardur Bot does not match its database. Install the latest version of Ardur Bot, then Retry.",
+      undefined,
+    ],
+    [
+      "unfinished",
+      "An earlier database update did not finish. Reset local data in Settings, System, or restore the app data folder from a backup.",
+      true,
+    ],
+  ] as const)(
+    "says what to do about a %s migration history, and logs the details",
+    async (reason, sentence, offerReset) => {
+      const root = await userData();
+      const controller = new LocalModeController(
+        harness(root, {
+          allocatePort: async () => 23456,
+          portAvailable: async () => true,
+          postgresServes: async () => true,
+          postgresFactory: () => runningPostgres(),
+          migrate: async () => {
+            throw new MigrationHistoryError(`Migration "20260101000000_init" (${reason})`, reason);
+          },
+        }),
+      );
+      const state = await controller.start();
+      expect(state).toMatchObject({ phase: "failed", message: sentence });
+      expect(state.offerReset).toBe(offerReset);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(await readFile(path.join(root, "logs", "local-mode.log"), "utf8")).toContain(
+        `Migration "20260101000000_init" (${reason})`,
+      );
+    },
+  );
 
   it("says the database stopped when the server is gone after a migration error", async () => {
     const root = await userData();
@@ -619,8 +944,8 @@ describe("saved database settings", () => {
     );
     expect(await controller.start()).toMatchObject({
       phase: "failed",
-      message:
-        "The app could not read its saved database settings (it is not a regular file). Check the permissions of the app data folder, then Retry.",
+      message: SETTINGS_MISSING,
+      offerReset: true,
     });
     expect(randomHex).not.toHaveBeenCalled();
     expect(factoryCalls).toBe(0);
@@ -639,11 +964,36 @@ describe("saved database settings", () => {
     );
     expect(await controller.start()).toMatchObject({
       phase: "failed",
-      message:
-        "The app could not read its saved database settings (ENOENT: no such file or directory). Check the permissions of the app data folder, then Retry.",
+      message: SETTINGS_MISSING,
+      offerReset: true,
     });
     await expect(stat(path.join(root, "secrets.env"))).rejects.toThrow();
   });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "names unreadable settings without a raw code, and says to check permissions",
+    async () => {
+      const root = await userData();
+      await cluster(root);
+      await writeFile(path.join(root, "secrets.env"), "POSTGRES_PASSWORD=x\n", { mode: 0o600 });
+      await chmod(path.join(root, "secrets.env"), 0o000);
+      const controller = new LocalModeController(
+        harness(root, {
+          allocatePort: async () => 23456,
+          portAvailable: async () => true,
+          postgresFactory: () => runningPostgres(),
+        }),
+      );
+      const state = await controller.start();
+      await chmod(path.join(root, "secrets.env"), 0o600);
+      expect(state).toMatchObject({
+        phase: "failed",
+        message:
+          "The app could not read its database settings. Check the permissions of the app data folder, then Retry.",
+      });
+      expect(state.offerReset).toBeUndefined();
+    },
+  );
 
   it("keeps a saved password and adds only a missing newer secret", async () => {
     const root = await userData();
@@ -702,7 +1052,7 @@ describe("failure sentences", () => {
     expect(await controller.start()).toMatchObject({
       phase: "failed",
       message:
-        "The app data folder could not be written (EEXIST: file already exists). Check its permissions and free disk space, then Retry.",
+        "The app data folder could not be written. Check its permissions and free disk space, then Retry.",
     });
   });
 
@@ -718,8 +1068,8 @@ describe("failure sentences", () => {
     );
     const state = await controller.start();
     expect(state.phase).toBe("failed");
-    expect(state.message).toMatch(
-      /^The app could not save its database settings \(E[A-Z]+: [^)]+\)\. Check free disk space, then Retry\.$/,
+    expect(state.message).toBe(
+      "The app could not save its database settings. Check free disk space, then Retry.",
     );
   });
 
@@ -882,6 +1232,9 @@ describe("service logs", () => {
     await expect(readFile(`${file}.2`, "utf8")).rejects.toThrow();
   });
 });
+
+const SETTINGS_MISSING =
+  "The app's database settings are missing. Reset local data in Settings, System, or restore the file from a backup.";
 
 const WORKER_READY_LINE = '{"level":"info","message":"worker ready","service.name":"worker"}';
 

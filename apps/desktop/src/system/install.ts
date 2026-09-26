@@ -28,7 +28,7 @@ export function systemSenderAllowed(
 export async function installDesktopSystem(
   options: Pick<
     SystemDependencies,
-    "mode" | "dataFolder" | "routines" | "shortcut" | "menuBar" | "storage"
+    "mode" | "dataFolder" | "routines" | "shortcut" | "menuBar" | "storage" | "localData"
   > & {
     window(): BrowserWindow | null;
     target(): string | null;
@@ -63,6 +63,7 @@ export async function installDesktopSystem(
   register("state", () => controller.state());
   register("set", (key, value) => controller.set(key, value));
   register("moveStorage", (recommended) => controller.moveStorage(recommended));
+  register("resetLocalData", () => controller.resetLocalData());
   register("openPermission", (permission) => {
     if (permission !== "screen" && permission !== "accessibility")
       throw new Error("Choose an available permission.");

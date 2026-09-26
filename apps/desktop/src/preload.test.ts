@@ -183,7 +183,7 @@ describe("setup preload bridge", () => {
       "state",
       "test",
     ]);
-    expect(Object.keys(bridge.stack).sort()).toEqual(["onChange", "start", "state"]);
+    expect(Object.keys(bridge.stack).sort()).toEqual(["onChange", "reset", "start", "state"]);
 
     await bridge.state();
     await bridge.test("http://127.0.0.1:5173");

@@ -59,8 +59,8 @@ function databasePort(databaseUrl) {
   return port;
 }
 
-async function runNode(args, env) {
-  const child = spawn(process.execPath, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+async function runNode(args, env, cwd) {
+  const child = spawn(process.execPath, args, { env, cwd, stdio: ["ignore", "pipe", "pipe"] });
   let output = "";
   child.stdout.on("data", (chunk) => {
     output += chunk.toString();
@@ -77,7 +77,50 @@ async function runNode(args, env) {
   return output;
 }
 
-async function migrate(databaseUrl) {
+/**
+ * Imports jsdom through the shipped loader and parses a URL with it, after checking that
+ * jsdom resolves the whatwg-url version it declares (another package ships a different one).
+ */
+const JSDOM_PROBE = `
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+const modules = path.join(process.cwd(), "modules");
+const read = (dir) => JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
+const jsdom = read(path.join(modules, "jsdom"));
+let dir = path.dirname(createRequire(path.join(modules, "jsdom", "package.json")).resolve("whatwg-url"));
+while (!existsSync(path.join(dir, "package.json")) || read(dir).name !== "whatwg-url") dir = path.dirname(dir);
+const shipped = read(dir).version.split(".").map(Number);
+const wanted = jsdom.dependencies["whatwg-url"];
+const floor = /^\\^\\d+\\.\\d+\\.\\d+$/.test(wanted) ? wanted.slice(1).split(".").map(Number) : null;
+const fits = floor !== null && shipped[0] === floor[0] &&
+  (shipped[1] > floor[1] || (shipped[1] === floor[1] && shipped[2] >= floor[2]));
+const { JSDOM } = await import("jsdom");
+const { window } = new JSDOM("", { url: "https://example.test/a" });
+const href = new window.URL("b?c=1", window.location.href).href;
+if (!fits || href !== "https://example.test/b?c=1") {
+  console.error("jsdom " + jsdom.version + " wants whatwg-url " + wanted + " but loads " + shipped.join(".") + "; parsed " + href);
+  process.exit(1);
+}
+process.stdout.write("jsdom URL ok with whatwg-url " + shipped.join(".") + "\\n");
+`;
+
+async function probeJsdom(servicesDir, env) {
+  const output = await runNode(
+    [
+      "--import",
+      path.join(servicesDir, "services-loader.mjs"),
+      "--input-type=module",
+      "-e",
+      JSDOM_PROBE,
+    ],
+    { PATH: env.PATH ?? "", NODE_PATH: path.join(servicesDir, "modules") },
+    servicesDir,
+  );
+  process.stdout.write(output);
+}
+
+async function migrate(adminUrl, databaseUrl) {
   const tsxLoader = createRequire(path.join(repoRoot, "package.json")).resolve("tsx");
   const migrateModule = pathToFileURL(path.join(repoRoot, "packages/db/src/migrate-sql.ts")).href;
   const output = await runNode(
@@ -87,7 +130,10 @@ async function migrate(databaseUrl) {
       "--input-type=module",
       "-e",
       `import { ensureApplicationDatabase, applySqlMigrationsToDatabase } from ${JSON.stringify(migrateModule)};
-       await ensureApplicationDatabase(process.env.SMOKE_DATABASE_URL);
+       await ensureApplicationDatabase({
+         adminUrl: process.env.SMOKE_ADMIN_URL,
+         databaseUrl: process.env.SMOKE_DATABASE_URL,
+       });
        const result = await applySqlMigrationsToDatabase({
          connectionString: process.env.SMOKE_DATABASE_URL,
          migrationsDir: process.env.SMOKE_MIGRATIONS_DIR,
@@ -96,6 +142,7 @@ async function migrate(databaseUrl) {
     ],
     {
       ...process.env,
+      SMOKE_ADMIN_URL: adminUrl,
       SMOKE_DATABASE_URL: databaseUrl,
       SMOKE_MIGRATIONS_DIR: path.join(repoRoot, "packages/db/prisma/migrations"),
     },
@@ -170,9 +217,11 @@ export async function runSmoke(env = process.env) {
     await rm(copyDir, { recursive: true, force: true });
     await cp(staged.servicesDir, copyDir, { recursive: true, verbatimSymlinks: false });
     assertOutsideRepo(copyDir);
+    await probeJsdom(copyDir, env);
     const dataDir = path.join(copyDir, "data");
     await mkdir(dataDir, { recursive: true });
     let databaseUrl = env.ARDURBOT_SMOKE_DATABASE_URL?.trim();
+    let adminUrl = databaseUrl;
     if (!databaseUrl) {
       databaseDir =
         env.ARDURBOT_SMOKE_DATA_DIR ?? (await mkdtemp(path.join(tmpdir(), "ardurbot-pg-")));
@@ -193,10 +242,13 @@ export async function runSmoke(env = process.env) {
       });
       await postgres.initialise();
       await postgres.start();
-      databaseUrl = `postgres://ardurbot:${password}@127.0.0.1:${port}/ardurbot`;
+      // As in local mode: the superuser creates the database for its own role, which the
+      // migrations and the services use.
+      adminUrl = `postgres://ardurbot:${password}@127.0.0.1:${port}/ardurbot`;
+      databaseUrl = `postgres://ardurbot_app:${randomBytes(16).toString("hex")}@127.0.0.1:${port}/ardurbot`;
     }
     databasePort(databaseUrl);
-    await migrate(databaseUrl);
+    await migrate(adminUrl, databaseUrl);
     const apiPort = await allocatePort();
     const origin = `http://127.0.0.1:${apiPort}`;
     const serviceEnv = {

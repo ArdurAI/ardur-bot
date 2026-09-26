@@ -1,6 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import type { Server } from "node:net";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -15,6 +15,7 @@ import {
   loadEmbeddedPostgres,
   MissingDatabaseBinariesError,
   POSTGRES_USER,
+  postgresProcess,
   postgresServesFolder,
   stopOwnedPostgres,
   stopWithPgCtl,
@@ -63,7 +64,7 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
     timeout: 180_000,
   }, async () => {
     const { url } = await cluster();
-    await ensureApplicationDatabase(url);
+    await ensureApplicationDatabase({ adminUrl: url, databaseUrl: url });
     const all = (await readdir(repoMigrations, { withFileTypes: true })).filter((entry) =>
       entry.isDirectory(),
     );
@@ -101,7 +102,7 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
       await mkdir(path.join(migrations, name));
       await writeFile(path.join(migrations, name, "migration.sql"), sql);
     }
-    await ensureApplicationDatabase(url);
+    await ensureApplicationDatabase({ adminUrl: url, databaseUrl: url });
     expect(
       (await applySqlMigrationsToDatabase({ connectionString: url, migrationsDir: migrations }))
         .applied,
@@ -170,6 +171,280 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
     await expect(stat(path.join(databaseDir, "postmaster.pid"))).rejects.toThrow();
   });
 
+  it("runs as its own application role, and keeps initdb's password out of the system temp folder", {
+    timeout: 180_000,
+  }, async () => {
+    const userData = await temporary("local-mode-");
+    // A system temp folder nobody may write: the old library path wrote the password here.
+    const systemTemp = await temporary("system-temp-");
+    await chmod(systemTemp, 0o500);
+    const saved = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
+    const envs: NodeJS.ProcessEnv[] = [];
+    const controller = new LocalModeController(
+      dependencies(userData, {
+        allocatePort: freePort,
+        portAvailable: async () => true,
+        migrate: migrateWith(repoMigrations),
+        spawn: recordingSpawn(envs),
+      }),
+    );
+    let state: Awaited<ReturnType<LocalModeController["start"]>>;
+    try {
+      Object.assign(process.env, { TMPDIR: systemTemp, TEMP: systemTemp, TMP: systemTemp });
+      state = await within(150_000, controller.start());
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await chmod(systemTemp, 0o700);
+    }
+    expect(state).toMatchObject({ phase: "ready" });
+    expect(await readdir(systemTemp)).toEqual([]);
+    expect((await readdir(userData)).filter((name) => name.startsWith("initdb-"))).toEqual([]);
+
+    const databaseUrl = envs[0]?.DATABASE_URL ?? "";
+    expect(new URL(databaseUrl).username).toBe("ardurbot_app");
+    expect(await query(databaseUrl, "SELECT current_user AS who")).toEqual([
+      { who: "ardurbot_app" },
+    ]);
+    const admin = new URL(databaseUrl);
+    admin.username = "ardurbot";
+    admin.password = /^POSTGRES_PASSWORD=(.+)$/m.exec(
+      await (await import("node:fs/promises")).readFile(path.join(userData, "secrets.env"), "utf8"),
+    )![1]!;
+    expect(
+      await query(
+        admin.href,
+        `SELECT r.rolsuper, r.rolcreaterole, r.rolcreatedb, r.rolreplication, r.rolbypassrls,
+                (SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'ardurbot') AS owner,
+                (SELECT count(*)::int FROM pg_class WHERE relnamespace = 'public'::regnamespace
+                    AND pg_get_userbyid(relowner) <> 'ardurbot_app') AS foreign_objects
+           FROM pg_roles r WHERE r.rolname = 'ardurbot_app'`,
+      ),
+    ).toEqual([
+      {
+        rolsuper: false,
+        rolcreaterole: false,
+        rolcreatedb: false,
+        rolreplication: false,
+        rolbypassrls: false,
+        owner: "ardurbot_app",
+        foreign_objects: 0,
+      },
+    ]);
+    await within(30_000, controller.stop());
+  });
+
+  it("hands a database an earlier build made as the superuser to the application role", {
+    timeout: 180_000,
+  }, async () => {
+    const { url, port } = await cluster();
+    const all = (await readdir(repoMigrations, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    const earlier = await temporary("migrations-");
+    for (const name of all.slice(0, 60)) {
+      await cp(path.join(repoMigrations, name), path.join(earlier, name), { recursive: true });
+    }
+    await ensureApplicationDatabase({ adminUrl: url, databaseUrl: url });
+    await applySqlMigrationsToDatabase({ connectionString: url, migrationsDir: earlier });
+
+    const role = `postgres://ardurbot_app:${"e".repeat(32)}@127.0.0.1:${port}/ardurbot`;
+    await ensureApplicationDatabase({ adminUrl: url, databaseUrl: role });
+    const rest = await applySqlMigrationsToDatabase({
+      connectionString: role,
+      migrationsDir: repoMigrations,
+    });
+    expect(rest.applied).toHaveLength(all.length - 60);
+    expect(
+      await query(
+        url,
+        `SELECT (SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = current_database()) AS owner,
+                (SELECT count(*)::int FROM pg_class WHERE relnamespace = 'public'::regnamespace
+                    AND pg_get_userbyid(relowner) <> 'ardurbot_app') AS relations,
+                (SELECT count(*)::int FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+                    AND pg_get_userbyid(proowner) <> 'ardurbot_app') AS routines`,
+      ),
+    ).toEqual([{ owner: "ardurbot_app", relations: 0, routines: 0 }]);
+  });
+
+  it("stops during migrations without crashing, once the migration in flight is cancelled", {
+    timeout: 120_000,
+  }, async () => {
+    const userData = await temporary("local-mode-");
+    const migrations = await temporary("migrations-");
+    await mkdir(path.join(migrations, "20260101000000_slow"));
+    await writeFile(
+      path.join(migrations, "20260101000000_slow", "migration.sql"),
+      "SELECT pg_sleep(60);\n",
+    );
+    let postgres: EmbeddedPostgresLike | undefined;
+    const controller = new LocalModeController(
+      dependencies(userData, {
+        allocatePort: freePort,
+        portAvailable: async () => true,
+        migrate: migrateWith(migrations),
+        postgresFactory: (options) => {
+          postgres = new real.EmbeddedPostgres({ ...options, onLog: () => undefined });
+          clusters.push(postgres);
+          return postgres;
+        },
+      }),
+    );
+    const started = controller.start();
+    await until(90_000, async () => {
+      if (controller.state().phase !== "migrations") return false;
+      const port = Number(
+        (
+          await (
+            await import("node:fs/promises")
+          ).readFile(path.join(userData, "postgres.port"), "utf8")
+        ).trim(),
+      );
+      const password = "d".repeat(32);
+      const rows = await query(
+        `postgres://ardurbot:${password}@127.0.0.1:${port}/ardurbot`,
+        "SELECT 1 FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep(60)%'",
+      ).catch(() => []);
+      return rows.length > 0;
+    });
+    const began = Date.now();
+    expect(await uncaughtDuring(() => within(20_000, controller.stop()))).toEqual([]);
+    expect(Date.now() - began).toBeLessThan(20_000);
+    await started;
+    expect(controller.state().phase).toBe("idle");
+    expect(postgresProcessExited(postgres)).toBe(true);
+  });
+
+  it("rejects instead of crashing when the server stops under a migration", {
+    timeout: 120_000,
+  }, async () => {
+    const { url, postgres } = await cluster();
+    await ensureApplicationDatabase({ adminUrl: url, databaseUrl: url });
+    const migrations = await temporary("migrations-");
+    await mkdir(path.join(migrations, "20260101000000_slow"));
+    await writeFile(
+      path.join(migrations, "20260101000000_slow", "migration.sql"),
+      "SELECT pg_sleep(60);\n",
+    );
+    // Settles to the error at once, so the rejection is observed when it happens.
+    const running = applySqlMigrationsToDatabase({
+      connectionString: url,
+      migrationsDir: migrations,
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await until(
+      30_000,
+      async () =>
+        (await query(url, "SELECT 1 FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep(60)%'"))
+          .length > 0,
+    );
+    expect(await uncaughtDuring(() => postgres.stop())).toEqual([]);
+    expect(await within(10_000, running)).toBeInstanceOf(Error);
+  });
+
+  it.each(["cancelled", "stopped by the server"] as const)(
+    "applies a CONCURRENTLY migration again after it was %s mid-build",
+    { timeout: 120_000 },
+    async (how) => {
+      const { url, postgres } = await cluster();
+      await ensureApplicationDatabase({ adminUrl: url, databaseUrl: url });
+      await query(url, "CREATE TABLE widgets AS SELECT g AS val FROM generate_series(1, 1000) g");
+      const migrations = await temporary("migrations-");
+      await mkdir(path.join(migrations, "20260101000000_widgets_idx_concurrent"));
+      await writeFile(
+        path.join(migrations, "20260101000000_widgets_idx_concurrent", "migration.sql"),
+        'CREATE INDEX CONCURRENTLY "widgets_val_idx" ON widgets (val);\n',
+      );
+      // An open writer makes the build wait after its INVALID index is committed.
+      const writer = new Client({ connectionString: url });
+      writer.on("error", () => undefined);
+      await writer.connect();
+      await writer.query("BEGIN; LOCK TABLE widgets IN ROW EXCLUSIVE MODE");
+      const first = applySqlMigrationsToDatabase({
+        connectionString: url,
+        migrationsDir: migrations,
+      }).then(
+        () => "applied",
+        () => "failed",
+      );
+      const building = async () =>
+        query<{ pid: number }>(
+          url,
+          "SELECT pid FROM pg_stat_activity WHERE query LIKE 'CREATE INDEX CONCURRENTLY%' AND wait_event_type = 'Lock'",
+        );
+      await until(30_000, async () => (await building()).length > 0);
+      if (how === "cancelled") {
+        await query(url, `SELECT pg_cancel_backend(${(await building())[0]!.pid})`);
+      } else {
+        await postgres.stop();
+      }
+      expect(await within(10_000, first)).toBe("failed");
+      await writer.end().catch(() => undefined);
+      if (how !== "cancelled") await postgres.start();
+      expect(await indexValidity(url)).toEqual([{ indisvalid: false }]);
+
+      const retry = await applySqlMigrationsToDatabase({
+        connectionString: url,
+        migrationsDir: migrations,
+      });
+      expect(retry.applied).toEqual(["20260101000000_widgets_idx_concurrent"]);
+      expect(await indexValidity(url)).toEqual([{ indisvalid: true }]);
+      expect(
+        await query(
+          url,
+          `SELECT finished_at IS NOT NULL AS finished, rolled_back_at IS NOT NULL AS rolled_back
+             FROM _prisma_migrations ORDER BY started_at`,
+        ),
+      ).toEqual([
+        { finished: false, rolled_back: true },
+        { finished: true, rolled_back: false },
+      ]);
+    },
+  );
+
+  it("says the database stopped when its process exits after ready, and Retry starts it again", {
+    timeout: 120_000,
+  }, async () => {
+    const userData = await temporary("local-mode-");
+    const failed: string[] = [];
+    let postgres: EmbeddedPostgresLike | undefined;
+    const controller = new LocalModeController(
+      dependencies(userData, {
+        allocatePort: freePort,
+        portAvailable: async () => true,
+        onFailed: (message) => {
+          failed.push(message);
+        },
+        postgresFactory: (options) => {
+          postgres = new real.EmbeddedPostgres({ ...options, onLog: () => undefined });
+          clusters.push(postgres);
+          return postgres;
+        },
+      }),
+    );
+    expect(await within(60_000, controller.start())).toMatchObject({ phase: "ready" });
+    const first = postgres;
+    postgresProcess(first!)!.kill("SIGINT");
+    await until(30_000, async () => controller.state().phase === "failed");
+    expect(controller.state()).toMatchObject({ message: "The database stopped." });
+    expect(failed).toEqual(["The database stopped."]);
+    expect(await within(60_000, controller.start())).toMatchObject({ phase: "ready" });
+    expect(postgres).not.toBe(first);
+    await within(30_000, controller.stop());
+  });
+
+  function migrateWith(migrationsDir: string): LocalModeDependencies["migrate"] {
+    return async ({ adminUrl, databaseUrl, signal }) => {
+      await ensureApplicationDatabase({ adminUrl, databaseUrl, signal });
+      await applySqlMigrationsToDatabase({ connectionString: databaseUrl, migrationsDir, signal });
+    };
+  }
+
   async function cluster(input: { databaseDir?: string; password?: string } = {}) {
     const databaseDir = input.databaseDir ?? path.join(await temporary("pg-"), "data");
     const password = input.password ?? "c".repeat(32);
@@ -190,6 +465,7 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
     await postgres.start();
     return {
       port,
+      postgres,
       url: `postgres://${POSTGRES_USER}:${password}@127.0.0.1:${port}/ardurbot`,
     };
   }
@@ -207,27 +483,11 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
       execPath: process.execPath,
       platform: process.platform,
       env: { PATH: process.env.PATH ?? "" },
-      spawn: (_command, args) => {
-        const child = Object.assign(new EventEmitter(), {
-          stdout: new EventEmitter(),
-          stderr: new EventEmitter(),
-          exitCode: null,
-          signalCode: null,
-          kill: () => {
-            queueMicrotask(() => child.emit("exit", 0));
-            return true;
-          },
-        });
-        if (args.some((arg) => arg.includes("worker"))) {
-          queueMicrotask(() =>
-            child.stdout.emit("data", Buffer.from('{"message":"worker ready"}\n')),
-          );
-        }
-        return child as unknown as ChildProcess;
-      },
+      spawn: recordingSpawn([]),
       fetch: async () =>
         new Response(JSON.stringify({ json: { ok: true, version: "0.1.0" } }), { status: 200 }),
-      migrate: ensureApplicationDatabase,
+      migrate: ({ adminUrl, databaseUrl, signal }) =>
+        ensureApplicationDatabase({ adminUrl, databaseUrl, signal }),
       postgresFactory: (options) => {
         const postgres = new real.EmbeddedPostgres({ ...options, onLog: () => undefined });
         clusters.push(postgres);
@@ -241,6 +501,65 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
   }
 });
 
+/** Services that report ready at once; each spawn's environment is kept. */
+function recordingSpawn(envs: NodeJS.ProcessEnv[]): LocalModeDependencies["spawn"] {
+  return (_command, args, options) => {
+    envs.push(options.env ?? {});
+    const child = Object.assign(new EventEmitter(), {
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+      exitCode: null,
+      signalCode: null,
+      kill: () => {
+        queueMicrotask(() => child.emit("exit", 0));
+        return true;
+      },
+    });
+    if (args.some((arg) => arg.includes("worker"))) {
+      queueMicrotask(() => child.stdout.emit("data", Buffer.from('{"message":"worker ready"}\n')));
+    }
+    return child as unknown as ChildProcess;
+  };
+}
+
+function postgresProcessExited(postgres: EmbeddedPostgresLike | undefined): boolean {
+  const child = postgres ? postgresProcess(postgres) : undefined;
+  return child === undefined || child.exitCode !== null || child.signalCode !== null;
+}
+
+async function indexValidity(url: string) {
+  return query<{ indisvalid: boolean }>(
+    url,
+    `SELECT i.indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid
+      WHERE c.relname = 'widgets_val_idx'`,
+  );
+}
+
+/** Errors nothing handled while `work` ran; in Electron's main process each one is fatal. */
+async function uncaughtDuring(work: () => Promise<unknown>): Promise<string[]> {
+  const seen: string[] = [];
+  const record = (error: Error) => {
+    seen.push(error.message);
+  };
+  process.on("uncaughtException", record);
+  try {
+    await work();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  } finally {
+    process.off("uncaughtException", record);
+  }
+  return seen;
+}
+
+/** Polls until `check` holds, so a slow CI machine waits instead of failing. */
+async function until(ms: number, check: () => Promise<boolean>): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error(`still waiting after ${ms} ms`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 async function temporary(prefix: string): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), prefix));
   directories.push(dir);
@@ -249,6 +568,7 @@ async function temporary(prefix: string): Promise<string> {
 
 async function query<T = unknown>(url: string, text: string): Promise<T[]> {
   const client = new Client({ connectionString: url });
+  client.on("error", () => undefined);
   await client.connect();
   try {
     return (await client.query(text)).rows as T[];

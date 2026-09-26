@@ -746,6 +746,22 @@ function showServiceFailure(message: string) {
     });
 }
 
+/** Moves local mode's database, files and settings aside once the person confirms. */
+async function confirmLocalReset(parent: BrowserWindow): Promise<boolean> {
+  const { response } = await dialog.showMessageBox(parent, {
+    type: "warning",
+    message: "Reset local data?",
+    detail:
+      "Bots, conversations and files on this computer move to a backup folder, and Ardur Bot starts fresh.",
+    buttons: ["Cancel", "Reset"],
+    defaultId: 0,
+    cancelId: 0,
+  });
+  if (response !== 1) return false;
+  await localMode.resetData();
+  return true;
+}
+
 function restoreAppWindowAfterSetup() {
   if (quitting) return;
   if (setupWindow !== null && !setupWindow.isDestroyed()) return;
@@ -1301,10 +1317,11 @@ app.whenReady().then(async () => {
     env: process.env,
     spawn,
     fetch: (url, init) => net.fetch(url, init),
-    migrate: async (databaseUrl) => {
-      await ensureApplicationDatabase(databaseUrl);
+    migrate: async ({ adminUrl, databaseUrl, signal }) => {
+      await ensureApplicationDatabase({ adminUrl, databaseUrl, signal });
       await applySqlMigrationsToDatabase({
         connectionString: databaseUrl,
+        signal,
         migrationsDir: migrationsDir({
           packaged: app.isPackaged,
           resourcesPath: process.resourcesPath,
@@ -1588,6 +1605,10 @@ app.whenReady().then(async () => {
     if (!fromSetupWindow(event)) return null;
     return legacyCompose ? localStack.state() : localMode.state();
   });
+  ipcMain.handle("desktop.setup.stack.reset", async (event) => {
+    if (!fromSetupWindow(event) || legacyCompose || setupWindow === null) return false;
+    return confirmLocalReset(setupWindow);
+  });
   ipcMain.handle("desktop.setup.stack.start", (event) => {
     if (!fromSetupWindow(event)) return null;
     // Respond right away; the setup window polls `stack.state` until a terminal phase.
@@ -1629,7 +1650,18 @@ app.whenReady().then(async () => {
     window: () => mainWindow,
     target: () => currentTargetUrl,
     mode: () => currentSetup?.mode ?? "existing",
-    dataFolder: () => null,
+    // Local mode keeps its database and files in the app data folder; Compose, in volumes.
+    dataFolder: () => (!legacyCompose && currentSetup?.mode === "new" ? userDataDir : null),
+    localData: {
+      available: () => currentTargetUrl !== null && localModeOwns(currentTargetUrl),
+      reset: async () => {
+        if (mainWindow === null || mainWindow.isDestroyed()) return false;
+        if (!(await confirmLocalReset(mainWindow))) return false;
+        showSetupWindow(null, { resume: true });
+        void localMode.start();
+        return true;
+      },
+    },
     preload: path.join(import.meta.dirname, "preload.cjs"),
     menuBar: setMenuBar,
     routines: async () => {

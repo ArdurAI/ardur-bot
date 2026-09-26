@@ -6,11 +6,36 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
 
 Same as the README quick start: `.env` from `.env.example`, Postgres via Compose, `pnpm sandbox:build`, `pnpm dev`, then [http://127.0.0.1:5173](http://127.0.0.1:5173) (or `http://localhost:5173` — both loopback hosts are trusted). Electron during source development: `pnpm --filter @ardurbot/desktop dev` while that stack is up, choosing **Existing instance** with that address.
 
-The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
+The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. On this computer, bots wait for the approvals you require, work only in their own folders and the folders you add, and known secrets are hidden from their output. Disk and CPU use are not capped; a command stops after five minutes. See [Local mode data](#local-mode-data) for what it keeps and how to reset it. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
 
 For source development in WSL, keep the checkout and `data` directory in the Linux filesystem (for example, `~/ardurbot`), and run `pnpm dev` as your normal user. The host-run supervisor matches bot container UID/GID to that user. If Docker Desktop container IPs are unreachable, set `SANDBOX_CONTROL_VIA_LOOPBACK=true` in `.env`; this publishes the token-protected control service on a random loopback port. Leave this unset for the Compose-hosted supervisor.
 
 Compose bot homes mount only their own subdirectory of the application volume using Docker volume semantics. Docker's internal volume paths are never used as host bind mounts.
+
+### Local mode data
+
+**This computer** keeps everything in the app's data folder:
+
+- `postgres/`: the database cluster, listening on 127.0.0.1 only, on the port in `postgres.port`.
+- `data/`: files bots create. `logs/`: `postgres.log`, `api.log`, `worker.log`, and
+  `local-mode.log`, which holds the details a setup message leaves out.
+- `secrets.env` (readable only by you): `POSTGRES_PASSWORD` for the cluster's superuser,
+  `APP_DATABASE_PASSWORD` for the application role, and the services' keys.
+
+The superuser `ardurbot` is only used to create the application database and its role at each
+start, and for your own maintenance. The database `ardurbot` belongs to the login role
+`ardurbot_app`, which cannot create roles or databases, replicate, or bypass row security;
+migrations, the API and the worker connect as it. Its password is set on the role at every start,
+so removing `APP_DATABASE_PASSWORD` from `secrets.env` replaces it. Removing `POSTGRES_PASSWORD` or
+`ENCRYPTION_KEY` does not: without them the database cannot be opened. On the first start, the
+password file that initdb reads is written to a private folder inside the data folder, never the
+shared temp folder, and removed afterwards. For maintenance while the app runs, connect as the
+superuser, for example `psql "postgres://ardurbot:<POSTGRES_PASSWORD>@127.0.0.1:<port>/ardurbot"`.
+
+**Reset local data** (Settings, System, or the button the setup window shows when the database
+settings are missing) stops the database and services and moves `postgres/`, `data/` and
+`secrets.env` into `backups/local-data-<time>/` before starting fresh. To undo it, quit the app and
+move them back.
 
 ## Published images (no checkout)
 
@@ -316,9 +341,11 @@ The Electron desktop app is a client of the same API. Docker and E2B still apply
   desktop runtime and protected port routes for concurrent bot desktops. Each bot has its own
   persistent Chrome profile; logins are not shared between bots.
 - **Desktop provider** / **This computer** is what the installed app uses for **This computer**.
-  The API and worker run on that machine. On this computer, approvals, folder allowlists and secret
-  redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes. Do not point a public or
-  shared service at this provider. macOS does not show its own permission dialog for these commands.
+  The API and worker run on that machine. On this computer, bots wait for the approvals you
+  require, work only in their own folders and the folders you add, and known secrets are hidden
+  from their output. Disk and CPU use are not capped; a command stops after five minutes. A folder
+  you added that is missing (an unplugged drive, a renamed folder) is skipped until it returns,
+  and Settings marks it. Do not point a public or shared service at this provider. macOS does not show its own permission dialog for these commands.
   On Windows, stopping the embedded database uses the library's forced process-tree kill; the next
   start uses Postgres crash recovery. Docker stays the default for Compose and for a setup that
   already has a Compose environment file.

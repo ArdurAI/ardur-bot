@@ -28,6 +28,8 @@ class MemoryMigrations {
   readonly scripts: string[] = [];
   /** A statement containing this text fails the way Postgres would. */
   failOn: string | null = null;
+  /** Index names an interrupted CONCURRENTLY build left INVALID, as `schema.name`. */
+  readonly invalid: string[] = [];
   private beforeTransaction: RecordedMigration[] | null = null;
   async query(text: string, values: readonly unknown[] = []): Promise<{ rows: unknown[] }> {
     if (text === "BEGIN") this.beforeTransaction = this.rows.map((row) => ({ ...row }));
@@ -38,6 +40,18 @@ class MemoryMigrations {
     }
     if (this.failOn !== null && text.includes(this.failOn) && !text.includes("_prisma_migrations"))
       throw new Error('relation "widgets" does not exist');
+    if (text.includes("indisvalid")) {
+      const [name] = values;
+      return {
+        rows: this.invalid
+          .filter((index) => index === `public.${String(name)}`)
+          .map((index) => ({ index })),
+      };
+    }
+    if (text.startsWith("DROP INDEX CONCURRENTLY IF EXISTS ")) {
+      const index = text.slice("DROP INDEX CONCURRENTLY IF EXISTS ".length);
+      this.invalid.splice(this.invalid.indexOf(index), 1);
+    }
     if (text.includes("INSERT INTO") && text.includes("_prisma_migrations")) {
       const [id, checksum, migrationName] = values;
       this.rows.push({
@@ -207,6 +221,102 @@ describe("sql migration runner", () => {
     const retried = await applySqlMigrations({ client, migrationsDir: migrations });
     expect(retried.applied).toEqual(["20260101000000_idx_concurrent"]);
     expect(client.rows.at(-1)).toMatchObject({ finishedAt: "finished", rolledBackAt: null });
+  });
+
+  it("drops an INVALID index an interrupted build left, then builds it again", async () => {
+    const migrations = await fixtureMigrations({
+      "20260101000000_idx_concurrent":
+        '-- builds "not_this_idx" in a comment only\nCREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "Widgets_Id_idx" ON widgets (id);\n',
+      "20260102000000_unnamed_idx_concurrent": "CREATE INDEX CONCURRENTLY ON widgets (name);\n",
+    });
+    const client = new MemoryMigrations();
+    client.invalid.push("public.Widgets_Id_idx", "public.other_idx");
+    const result = await applySqlMigrations({ client, migrationsDir: migrations });
+    expect(result.applied).toHaveLength(2);
+    expect(client.invalid).toEqual(["public.other_idx"]);
+    const drop = client.scripts.indexOf("DROP INDEX CONCURRENTLY IF EXISTS public.Widgets_Id_idx");
+    const build = client.scripts.findIndex((script) => script.includes("CREATE UNIQUE INDEX"));
+    expect(drop).toBeGreaterThanOrEqual(0);
+    expect(drop).toBeLessThan(build);
+    expect(client.scripts.some((script) => script.includes("not_this_idx"))).toBe(true);
+    expect(client.scripts.filter((script) => script.startsWith("DROP INDEX"))).toHaveLength(1);
+  });
+
+  it("applies again a CONCURRENTLY migration whose run was cut off before it finished", async () => {
+    const migrations = await fixtureMigrations({
+      "20260101000000_idx_concurrent":
+        "CREATE INDEX CONCURRENTLY widgets_id_idx ON widgets (id);\n",
+    });
+    const client = new MemoryMigrations();
+    const [migration] = await listSqlMigrations(migrations);
+    // The server stopped mid-build: neither finished nor rolled back.
+    client.rows.push({
+      id: "cut-off",
+      checksum: migration!.checksum,
+      migrationName: migration!.name,
+      finishedAt: null,
+      rolledBackAt: null,
+      logs: null,
+      appliedStepsCount: 0,
+    });
+    const result = await applySqlMigrations({ client, migrationsDir: migrations });
+    expect(result.applied).toEqual(["20260101000000_idx_concurrent"]);
+    expect(client.rows).toMatchObject([
+      { id: "cut-off", finishedAt: null, rolledBackAt: "rolled back" },
+      { finishedAt: "finished", rolledBackAt: null },
+    ]);
+  });
+
+  it("still refuses an unfinished transactional migration another tool left", async () => {
+    const migrations = await fixtureMigrations({ "20260101000000_init": "SELECT 1;\n" });
+    const client = new MemoryMigrations();
+    const [migration] = await listSqlMigrations(migrations);
+    client.rows.push({
+      id: "external",
+      checksum: migration!.checksum,
+      migrationName: migration!.name,
+      finishedAt: null,
+      rolledBackAt: null,
+      logs: null,
+      appliedStepsCount: 0,
+    });
+    await expect(applySqlMigrations({ client, migrationsDir: migrations })).rejects.toMatchObject({
+      name: "MigrationHistoryError",
+      reason: "unfinished",
+    });
+    expect(client.scripts).toEqual([]);
+  });
+
+  it("stops between migrations once aborted, and names why the history is refused", async () => {
+    const migrations = await fixtureMigrations({
+      "20260101000000_one": "SELECT 1;\n",
+      "20260102000000_two": "SELECT 2;\n",
+    });
+    const client = new MemoryMigrations();
+    const abort = new AbortController();
+    const query = client.query.bind(client);
+    client.query = async (text, values) => {
+      const result = await query(text, values);
+      if (text === "COMMIT") abort.abort(new Error("stopping"));
+      return result;
+    };
+    await expect(
+      applySqlMigrations({ client, migrationsDir: migrations, signal: abort.signal }),
+    ).rejects.toThrow("stopping");
+    expect(client.rows.map((row) => row.migrationName)).toEqual(["20260101000000_one"]);
+
+    client.rows.push({
+      id: "future",
+      checksum: "0".repeat(64),
+      migrationName: "20990101000000_future",
+      finishedAt: "finished",
+      rolledBackAt: null,
+      logs: null,
+      appliedStepsCount: 1,
+    });
+    await expect(applySqlMigrations({ client, migrationsDir: migrations })).rejects.toMatchObject({
+      reason: "newer",
+    });
   });
 
   async function fixtureMigrations(files: Record<string, string>): Promise<string> {

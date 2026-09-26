@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
@@ -53,6 +53,8 @@ vi.mock("./tray.js", () => ({ updateHostTray: vi.fn() }));
 import { installHostService } from "./host-service-ipc.js";
 
 const LOCAL_ORIGIN = "http://127.0.0.1:40123";
+const FOLDER_NOTICE =
+  "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers.";
 const directories: string[] = [];
 
 beforeEach(() => {
@@ -86,8 +88,11 @@ describe("host folder selection", () => {
     const f = fixture();
     fake.picker.mockResolvedValue({ canceled: false, filePaths: ["/fixture/approved"] });
     expect(await f.add(f.event, "/fixture/dropped")).toBe("/fixture/approved");
+    // The one place the folder sentence is said: macOS shows `message`, others `title`.
     expect(fake.picker.mock.calls[0]?.[1]).toEqual({
       properties: ["openDirectory"],
+      title: FOLDER_NOTICE,
+      message: FOLDER_NOTICE,
       defaultPath: "/fixture/dropped",
     });
     expect(fake.write).toHaveBeenCalledWith({
@@ -120,6 +125,7 @@ describe("host folder selection", () => {
     expect(await fake.handlers.get("desktop.host.state")!(event)).toEqual({
       configured: true,
       roots: [],
+      unavailable: [],
       registrationId: "fixture-registration",
       keepRunning: false,
     });
@@ -160,8 +166,22 @@ describe("local mode folders", () => {
       configured: false,
       local: true,
       roots: [],
+      unavailable: [],
       keepRunning: true,
     });
+  });
+
+  it("keeps listing a folder that is gone, marked unavailable, so it can be removed", async () => {
+    const f = await localFixture();
+    const project = path.join(path.dirname(f.file), "project");
+    await mkdir(project);
+    fake.picker.mockResolvedValue({ canceled: false, filePaths: [project] });
+    await f.add(f.event);
+    expect(await f.state()).toMatchObject({ roots: [project], unavailable: [] });
+    await rm(project, { recursive: true });
+    expect(await f.state()).toMatchObject({ roots: [project], unavailable: [project] });
+    await f.handler("removeRoot")(f.event, project);
+    expect(await f.state()).toMatchObject({ roots: [], unavailable: [] });
   });
 
   it("adds the chosen folder to its own private file, and removes it again", async () => {

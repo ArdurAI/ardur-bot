@@ -262,6 +262,16 @@ export function SystemPage({ bridge = systemBridge() }: { bridge?: SystemBridge 
             {state.storage.progress}
           </p>
         ) : null}
+        {state.localData && bridge.resetLocalData ? (
+          <Row id="system-local-data" label={t`Local data`}>
+            <Button
+              id="system-local-data"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void act(() => bridge.resetLocalData!())}
+            >{t`Reset local data`}</Button>
+          </Row>
+        ) : null}
       </section>
       <DispatchSetting />
       <section aria-labelledby="system-browser-heading">

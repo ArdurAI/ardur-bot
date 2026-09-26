@@ -1,16 +1,19 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { constants } from "node:fs";
-import { access, lstat, mkdir, stat } from "node:fs/promises";
+import { access, lstat, mkdir, rename, stat } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopLocalStackState } from "@ardurbot/contracts";
 import { localFoldersFile } from "./local-folders.js";
 import { writeServiceLog } from "./local-logs.js";
 import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-postgres.js";
 import {
+  APP_DATABASE_USER,
   DATABASE_NAME,
   FORBIDDEN_PORTS,
+  initialisePrivately,
   MissingDatabaseBinariesError,
   POSTGRES_USER,
+  postgresProcess,
   postgresServesFolder,
   readPersistedPort,
   recordedPostmasterPort,
@@ -29,7 +32,10 @@ const RESTART_WINDOW_MS = 5 * 60_000;
 /** The worker's structured log line once its job host is running. */
 const WORKER_READY = '"message":"worker ready"';
 const SECRET_KEYS = {
+  /** The superuser's, for maintenance and for proving a server serves this folder. */
   POSTGRES_PASSWORD: 16,
+  /** The application role's. Not a cluster secret: a new one is set on the role at start. */
+  APP_DATABASE_PASSWORD: 16,
   BETTER_AUTH_SECRET: 32,
   ENCRYPTION_KEY: 32,
   SCREEN_PROXY_SECRET: 32,
@@ -41,12 +47,33 @@ const DATABASE_STOPPED = "The database stopped.";
 const DATABASE_NOT_STARTED =
   "The database could not start. Retry, or restart the computer if it happens again.";
 const NO_FREE_PORT = "No free local port was found. Close other apps, then Retry.";
+const DATA_FOLDER_UNWRITABLE =
+  "The app data folder could not be written. Check its permissions and free disk space, then Retry.";
+const SETTINGS_UNSAVED =
+  "The app could not save its database settings. Check free disk space, then Retry.";
+const SETTINGS_UNREADABLE =
+  "The app could not read its database settings. Check the permissions of the app data folder, then Retry.";
+const SETTINGS_MISSING =
+  "The app's database settings are missing. Reset local data in Settings, System, or restore the file from a backup.";
+/** What a reset moves aside; ports and granted folders are kept. */
+const LOCAL_DATA = ["postgres", "data", "secrets.env"] as const;
 
 type SecretKey = keyof typeof SECRET_KEYS;
 type ServiceName = "api" | "worker";
 
-/** A step before the services start failed; the message is the sentence the window shows. */
-class LocalModeFailure extends Error {}
+/**
+ * A step before the services start failed. The message is the sentence the window shows;
+ * `detail` goes to the local-mode log only. `offerReset` means only a reset clears it.
+ */
+class LocalModeFailure extends Error {
+  constructor(
+    message: string,
+    readonly detail = "",
+    readonly offerReset = false,
+  ) {
+    super(message);
+  }
+}
 
 export interface LocalModeDependencies {
   userDataDir: string;
@@ -58,7 +85,11 @@ export interface LocalModeDependencies {
   env: NodeJS.ProcessEnv;
   spawn: (command: string, args: string[], options: SpawnOptions) => ChildProcess;
   fetch: (url: string, init: RequestInit) => Promise<Response>;
-  migrate: (databaseUrl: string) => Promise<void>;
+  /**
+   * Creates the application database and its role as the superuser (`adminUrl`), then
+   * applies migrations as that role (`databaseUrl`). An abort cancels the running statement.
+   */
+  migrate: (input: { adminUrl: string; databaseUrl: string; signal: AbortSignal }) => Promise<void>;
   /** May load the embedded binaries first; a missing package rejects with its name. */
   postgresFactory: (
     options: EmbeddedPostgresOptions,
@@ -133,8 +164,12 @@ export class LocalModeController {
   private postgresPort = 0;
   private apiPort = 0;
   private originUrl = "";
+  private adminUrl = "";
   private databaseUrl = "";
   private secrets: Record<SecretKey, string> | null = null;
+  private runAbort: AbortController | null = null;
+  private stopping: Promise<void> | null = null;
+  private stopRequests = 0;
   private readonly children = new Map<ServiceName, ChildProcess>();
   private readonly restartMarks = new Map<ServiceName, number[]>();
   private readonly restartTimers = new Map<ServiceName, ReturnType<typeof setTimeout>>();
@@ -157,7 +192,17 @@ export class LocalModeController {
     return this.postgres !== undefined || (this.inflight !== null && !this.stopped);
   }
 
+  /**
+   * A start while a stop winds down waits for it, then starts fresh, unless another stop
+   * was asked for in the meantime.
+   */
   start(): Promise<DesktopLocalStackState> {
+    if (this.stopping) {
+      const requests = this.stopRequests;
+      return this.stopping.then(() =>
+        this.stopRequests === requests ? this.start() : this.current,
+      );
+    }
     if (this.current.phase === "ready" && this.running()) return Promise.resolve(this.current);
     if (this.inflight) return this.inflight;
     this.stopped = false;
@@ -165,7 +210,9 @@ export class LocalModeController {
     // Retry gives every service a fresh restart budget; run() starts whatever is not running.
     this.restartMarks.clear();
     this.clearRestartTimers();
-    const run = this.run().finally(() => {
+    const abort = new AbortController();
+    this.runAbort = abort;
+    const run = this.run(abort.signal).finally(() => {
       if (this.inflight === run) this.inflight = null;
     });
     this.inflight = run;
@@ -197,37 +244,82 @@ export class LocalModeController {
     }
   }
 
-  /** Stops the worker, the API, and the database, then reports the stack idle. */
-  async stop(): Promise<void> {
+  /**
+   * Cancels the run in flight and waits for it to settle, so no migration still holds a
+   * connection, then stops the worker, the API, and the database and reports the stack idle.
+   */
+  stop(): Promise<void> {
+    this.stopRequests += 1;
+    if (this.stopping) return this.stopping;
     this.stopped = true;
+    this.runAbort?.abort();
     this.clearRestartTimers();
+    const stopping = this.stopNow().finally(() => {
+      if (this.stopping === stopping) this.stopping = null;
+    });
+    this.stopping = stopping;
+    return stopping;
+  }
+
+  /**
+   * Stops everything, then moves the database, the files and the settings into
+   * `backups/local-data-<time>` in the app data folder, so the next start begins fresh.
+   */
+  async resetData(): Promise<string> {
+    await this.stop();
+    const stamp = new Date(this.deps.now()).toISOString().replace(/[:.]/g, "-");
+    const backup = path.join(this.deps.userDataDir, "backups", `local-data-${stamp}`);
+    await mkdir(backup, { recursive: true, mode: 0o700 });
+    for (const name of LOCAL_DATA) {
+      try {
+        await rename(path.join(this.deps.userDataDir, name), path.join(backup, name));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+    return backup;
+  }
+
+  private async stopNow(): Promise<void> {
+    const run = this.inflight;
+    if (run) await run.catch(() => undefined);
+    if (this.inflight === run) this.inflight = null;
     await this.stopChild("worker");
     await this.stopChild("api");
     await this.releaseDatabase();
     this.publish("idle", null);
   }
 
-  private async run(): Promise<DesktopLocalStackState> {
+  private async run(signal: AbortSignal): Promise<DesktopLocalStackState> {
     try {
       this.publish("database", null);
-      await this.ensurePostgres();
+      await this.ensurePostgres(signal);
       if (this.stopped) return this.current;
       this.publish("migrations", null);
-      await this.deps.migrate(this.databaseUrl);
+      await this.deps.migrate({
+        adminUrl: this.adminUrl,
+        databaseUrl: this.databaseUrl,
+        signal,
+      });
       if (this.stopped) return this.current;
       this.publish("services", null);
       if (!this.children.has("api")) this.spawn("api");
       if (!this.children.has("worker")) this.spawn("worker");
-      if (!(await this.waitForServices())) return this.current;
+      if (!(await this.waitForServices(signal))) return this.current;
       this.publish("ready", null);
       return this.current;
     } catch (error) {
       if (this.stopped || this.databaseReported) return this.current;
-      if (error instanceof LocalModeFailure || error instanceof MissingDatabaseBinariesError) {
+      if (error instanceof LocalModeFailure) {
+        this.log(error.detail);
+        this.fail(error.message, error.offerReset);
+      } else if (error instanceof MissingDatabaseBinariesError) {
         this.fail(error.message);
       } else if (this.current.phase === "migrations" && (await this.databaseAlive())) {
         await this.releaseDatabase();
-        if (!this.stopped) this.fail(migrationFailureSentence(error));
+        this.log(error instanceof Error ? error.message : String(error));
+        const failure = migrationFailure(error);
+        if (!this.stopped) this.fail(failure.message, failure.offerReset);
       } else {
         await this.reportDatabaseDown();
       }
@@ -235,11 +327,18 @@ export class LocalModeController {
     }
   }
 
+  /** Details a sentence leaves out, for the person who opens the logs folder. */
+  private log(detail: string): void {
+    if (!detail) return;
+    const file = path.join(this.deps.userDataDir, "logs", "local-mode.log");
+    void writeServiceLog(file, `${new Date(this.deps.now()).toISOString()} ${detail}\n`);
+  }
+
   private databaseDir(): string {
     return path.join(this.deps.userDataDir, "postgres");
   }
 
-  private async ensurePostgres(): Promise<void> {
+  private async ensurePostgres(signal: AbortSignal): Promise<void> {
     const databaseDir = this.databaseDir();
     await this.prepareFolders();
     const secrets = await this.loadSecrets();
@@ -250,7 +349,7 @@ export class LocalModeController {
       this.apiPort = await this.choosePort(path.join(this.deps.userDataDir, "api.port"));
     }
     this.originUrl = `http://127.0.0.1:${this.apiPort}`;
-    this.databaseUrl = databaseUrl(secrets.POSTGRES_PASSWORD, this.postgresPort);
+    this.useDatabasePort(this.postgresPort);
     // A server left running by an earlier run is used only if it proves it serves this
     // folder. Anything else in postmaster.pid is left to Postgres's own lock-file check.
     const recorded = await recordedPostmasterPort(databaseDir);
@@ -263,9 +362,8 @@ export class LocalModeController {
         this.postgresPort = recorded;
         await this.persistPort(path.join(this.deps.userDataDir, "postgres.port"), recorded);
       }
-      this.databaseUrl = databaseUrl(secrets.POSTGRES_PASSWORD, recorded);
+      this.useDatabasePort(recorded);
       this.postgres = this.adopted(recorded, secrets.POSTGRES_PASSWORD);
-      if (this.stopped) await this.releaseDatabase();
       return;
     }
     const postgres = await this.deps.postgresFactory({
@@ -284,23 +382,39 @@ export class LocalModeController {
         void writeServiceLog(path.join(this.deps.userDataDir, "logs", "postgres.log"), message);
       },
     });
+    // From here stop() owns releasing it, once this run settles.
     this.postgres = postgres;
-    if (this.stopped) {
-      await this.releaseDatabase();
-      return;
-    }
+    if (this.stopped) return;
+    // A stop during a start ends the server the library is starting, so the start settles.
+    const onAbort = () => void stopOwnedPostgres(postgres);
     try {
-      if (!(await exists(path.join(databaseDir, "PG_VERSION")))) await postgres.initialise();
-      if (this.stopped) {
-        await this.releaseDatabase();
-        return;
+      if (!(await exists(path.join(databaseDir, "PG_VERSION")))) {
+        await initialisePrivately(postgres, this.deps.userDataDir);
       }
+      if (this.stopped) return;
+      signal.addEventListener("abort", onAbort, { once: true });
       await postgres.start();
     } catch {
+      if (this.stopped) return;
       await this.releaseDatabase();
       throw new LocalModeFailure(DATABASE_NOT_STARTED);
+    } finally {
+      signal.removeEventListener("abort", onAbort);
     }
-    if (this.stopped) await this.releaseDatabase();
+    this.watchDatabase(postgres);
+  }
+
+  private useDatabasePort(port: number): void {
+    const secrets = this.secrets!;
+    this.adminUrl = databaseUrl(POSTGRES_USER, secrets.POSTGRES_PASSWORD, port);
+    this.databaseUrl = databaseUrl(APP_DATABASE_USER, secrets.APP_DATABASE_PASSWORD, port);
+  }
+
+  /** A server that exits once started is reported once; Retry starts it again. */
+  private watchDatabase(postgres: EmbeddedPostgresLike): void {
+    postgresProcess(postgres)?.once("exit", () => {
+      if (this.postgres === postgres) void this.reportDatabaseDown();
+    });
   }
 
   /** A server this run did not start. It is stopped only after proving, again, that it is ours. */
@@ -327,9 +441,7 @@ export class LocalModeController {
         await mkdir(folder, { recursive: true, mode: 0o700 });
         await access(folder, constants.W_OK);
       } catch (error) {
-        throw new LocalModeFailure(
-          `The app data folder could not be written (${errorSummary(error)}). Check its permissions and free disk space, then Retry.`,
-        );
+        throw new LocalModeFailure(DATA_FOLDER_UNWRITABLE, errorSummary(error));
       }
     }
   }
@@ -428,8 +540,8 @@ export class LocalModeController {
     this.fail(service === "api" ? "The API stopped." : "The worker stopped.");
   }
 
-  private fail(message: string): void {
-    this.publish("failed", message);
+  private fail(message: string, offerReset = false): void {
+    this.publish("failed", message, offerReset);
     this.deps.onFailed?.(message);
   }
 
@@ -443,12 +555,12 @@ export class LocalModeController {
    * gives up restarting during the wait ends it. One that is still not ready at the
    * deadline is stopped, so the sentence that names it is true and Retry starts it fresh.
    */
-  private async waitForServices(): Promise<boolean> {
+  private async waitForServices(signal: AbortSignal): Promise<boolean> {
     const deadline =
       this.deps.now() + (this.deps.packaged ? READY_BUDGET_MS : SOURCE_READY_BUDGET_MS);
     let apiAnswered = false;
     while (!this.stopped && !this.failed() && this.deps.now() <= deadline) {
-      apiAnswered = await this.probe();
+      apiAnswered = await this.probe(signal);
       if (apiAnswered && this.workerReady && !this.failed()) return true;
       await delay(200);
     }
@@ -459,9 +571,11 @@ export class LocalModeController {
     return false;
   }
 
-  private async probe(): Promise<boolean> {
+  private async probe(signal: AbortSignal): Promise<boolean> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+    const abort = () => controller.abort();
+    signal.addEventListener("abort", abort, { once: true });
     try {
       const response = await this.deps.fetch(`${this.originUrl}/rpc/health`, {
         method: "POST",
@@ -475,6 +589,7 @@ export class LocalModeController {
       return false;
     } finally {
       clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
     }
   }
 
@@ -507,11 +622,15 @@ export class LocalModeController {
     const file = path.join(this.deps.userDataDir, "secrets.env");
     const saved = await readSecrets(file);
     if (await exists(path.join(this.databaseDir(), "PG_VERSION"))) {
+      if (saved.problem === "unreadable") {
+        throw new LocalModeFailure(SETTINGS_UNREADABLE, saved.detail);
+      }
       const missing = CLUSTER_SECRETS.find((key) => !saved.values[key]);
-      const problem = saved.problem ?? (missing ? `${missing} is missing` : null);
-      if (problem !== null) {
+      if (saved.problem === "missing" || missing) {
         throw new LocalModeFailure(
-          `The app could not read its saved database settings (${problem}). Check the permissions of the app data folder, then Retry.`,
+          SETTINGS_MISSING,
+          saved.detail || `secrets.env has no ${missing}`,
+          true,
         );
       }
     }
@@ -546,22 +665,25 @@ export class LocalModeController {
     await signalChild(child, "SIGINT", STOP_TIMEOUT_MS);
   }
 
-  private publish(phase: DesktopLocalStackState["phase"], message: string | null): void {
+  private publish(
+    phase: DesktopLocalStackState["phase"],
+    message: string | null,
+    offerReset = false,
+  ): void {
     this.current = {
       phase,
       message,
       output: [],
       layerBytes: {},
       imageTag: "",
+      ...(offerReset ? { offerReset } : {}),
     };
     this.deps.onState?.(this.current);
   }
 }
 
 function settingsWriteFailure(error: unknown): LocalModeFailure {
-  return new LocalModeFailure(
-    `The app could not save its database settings (${errorSummary(error)}). Check free disk space, then Retry.`,
-  );
+  return new LocalModeFailure(SETTINGS_UNSAVED, errorSummary(error));
 }
 
 /** `EACCES: permission denied`, without the path Node appends. */
@@ -579,29 +701,63 @@ async function exists(file: string): Promise<boolean> {
   }
 }
 
-/** A missing file reads as empty; anything else that stops the read is named. */
-async function readSecrets(
-  file: string,
-): Promise<{ values: Partial<Record<SecretKey, string>>; problem: string | null }> {
+/**
+ * `missing` covers no file and something other than a file in its place; `unreadable`, a
+ * file that cannot be read. `detail` is Node's code and text, for the log only.
+ */
+async function readSecrets(file: string): Promise<{
+  values: Partial<Record<SecretKey, string>>;
+  problem: "missing" | "unreadable" | null;
+  detail: string;
+}> {
   try {
     const info = await lstat(file);
-    if (!info.isFile()) return { values: {}, problem: "it is not a regular file" };
+    if (!info.isFile()) {
+      return { values: {}, problem: "missing", detail: "secrets.env is not a regular file" };
+    }
     await access(file, constants.R_OK);
   } catch (error) {
-    return { values: {}, problem: errorSummary(error) };
+    const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
+    return { values: {}, problem: missing ? "missing" : "unreadable", detail: errorSummary(error) };
   }
   const text = await readPrivateFile(file, 4096);
-  if (text === null) return { values: {}, problem: "it could not be read" };
-  return { values: parseSecrets(text), problem: null };
+  if (text === null)
+    return { values: {}, problem: "unreadable", detail: "secrets.env is unreadable" };
+  return { values: parseSecrets(text), problem: null, detail: "" };
 }
 
-/** The migration and the database's first line, while the server itself is still up. */
-function migrationFailureSentence(error: unknown): string {
+const INSTALL_LATEST = "Install the latest version of Ardur Bot, then Retry.";
+
+/**
+ * The sentence for a failed migration while the server itself is still up. The migration's
+ * own error keeps its name and first line; the full text is in the local-mode log.
+ */
+function migrationFailure(error: unknown): { message: string; offerReset: boolean } {
   const failure = (typeof error === "object" && error !== null ? error : {}) as {
+    reason?: unknown;
     migrationName?: unknown;
     databaseError?: unknown;
     message?: unknown;
   };
+  if (failure.reason === "newer") {
+    return {
+      message: `This data was last opened by a newer version of Ardur Bot. ${INSTALL_LATEST}`,
+      offerReset: false,
+    };
+  }
+  if (failure.reason === "modified") {
+    return {
+      message: `This version of Ardur Bot does not match its database. ${INSTALL_LATEST}`,
+      offerReset: false,
+    };
+  }
+  if (failure.reason === "unfinished") {
+    return {
+      message:
+        "An earlier database update did not finish. Reset local data in Settings, System, or restore the app data folder from a backup.",
+      offerReset: true,
+    };
+  }
   const raw =
     typeof failure.databaseError === "string"
       ? failure.databaseError
@@ -613,17 +769,21 @@ function migrationFailureSentence(error: unknown): string {
     .replace(/\.+$/u, "")
     .slice(0, 200);
   const at = typeof failure.migrationName === "string" ? ` at ${failure.migrationName}` : "";
-  return detail
-    ? `Preparing the database failed${at}: ${detail}.`
-    : `Preparing the database failed${at}.`;
+  const action = "Retry, or install the latest version if it happens again.";
+  return {
+    message: detail
+      ? `Preparing the database failed${at}: ${detail}. ${action}`
+      : `Preparing the database failed${at}. ${action}`,
+    offerReset: false,
+  };
 }
 
 function idleState(): DesktopLocalStackState {
   return { phase: "idle", message: null, output: [], layerBytes: {}, imageTag: "" };
 }
 
-function databaseUrl(password: string, port: number): string {
-  return `postgres://${POSTGRES_USER}:${encodeURIComponent(password)}@127.0.0.1:${port}/${DATABASE_NAME}`;
+function databaseUrl(user: string, password: string, port: number): string {
+  return `postgres://${user}:${encodeURIComponent(password)}@127.0.0.1:${port}/${DATABASE_NAME}`;
 }
 
 function parseSecrets(raw: string): Partial<Record<SecretKey, string>> {

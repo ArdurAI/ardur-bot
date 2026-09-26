@@ -183,6 +183,20 @@ describe("desktop system rows", () => {
   });
 });
 
+it("offers Reset local data only when this app keeps the data", async () => {
+  const f = fixture();
+  f.bridge.resetLocalData = vi.fn(async () => f.state);
+  const resetButton = (c: HTMLElement) =>
+    [...c.querySelectorAll("button")].find((b) => b.textContent === "Reset local data");
+  const paired = await render(<SystemPage bridge={f.bridge} />);
+  expect(resetButton(paired)).toBeUndefined();
+  f.state.localData = true;
+  const local = await render(<SystemPage bridge={f.bridge} />);
+  expect(local.querySelector("label[for='system-local-data']")?.textContent).toBe("Local data");
+  await act(async () => resetButton(local)!.click());
+  expect(f.bridge.resetLocalData).toHaveBeenCalledOnce();
+});
+
 it("hides local routine power controls when connected to an existing server", async () => {
   const f = fixture("darwin", "existing");
   const c = await render(<SystemPage bridge={f.bridge} />);

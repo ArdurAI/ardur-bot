@@ -17,6 +17,7 @@
   const status = document.getElementById("status");
   const checkButton = document.getElementById("check");
   const continueButton = document.getElementById("continue");
+  const resetButton = document.getElementById("reset");
   const quitButton = document.getElementById("quit");
 
   const STACK_POLL_MS = 1000;
@@ -83,6 +84,7 @@
   function setBusy(busy) {
     checkButton.disabled = busy;
     continueButton.disabled = busy;
+    resetButton.disabled = busy;
   }
 
   /** A save in flight cannot be cancelled, so the choice it commits must not change under it. */
@@ -96,7 +98,13 @@
     panelExisting.hidden = mode === "new";
     checkButton.hidden = mode === "new";
     if (mode !== "new") continueButton.textContent = "Continue";
+    resetButton.hidden = mode !== "new" || !offersReset(lastStack);
     setStatus("");
+  }
+
+  /** Only a failure that nothing but a reset clears offers one. */
+  function offersReset(stack) {
+    return stack !== null && stack.phase === "failed" && stack.offerReset === true;
   }
 
   function isDockerPhase(phase) {
@@ -166,6 +174,7 @@
     lastStack = stack;
     const { phase } = stack;
     stackSection.hidden = phase === "idle";
+    resetButton.hidden = !offersReset(stack);
     if (phase === "idle") {
       continueButton.textContent = "Continue";
       return;
@@ -304,6 +313,27 @@
   checkButton.addEventListener("click", () => {
     void check();
   });
+
+  resetButton.addEventListener("click", () => {
+    void resetLocalData();
+  });
+
+  /** Main asks to confirm; once the data has moved aside, this starts fresh like Continue. */
+  async function resetLocalData() {
+    setBusy(true);
+    setStatus("");
+    try {
+      if (!(await bridge.stack.reset())) {
+        setBusy(false);
+        return;
+      }
+    } catch {
+      setStatus("Could not reset local data. Try again.", "error");
+      setBusy(false);
+      return;
+    }
+    await runStack();
+  }
 
   stackDetails.addEventListener("click", () => {
     detailsOpen = !detailsOpen;

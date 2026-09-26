@@ -1,6 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { createRequire, registerHooks } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
@@ -26,7 +26,10 @@ export interface EmbeddedPostgresLike {
   stop(): Promise<void>;
 }
 
+/** The cluster's superuser, kept for maintenance; the app never runs as it. */
 export const POSTGRES_USER = "ardurbot";
+/** Owns the application database. Migrations, the API and the worker connect as it. */
+export const APP_DATABASE_USER = "ardurbot_app";
 export const DATABASE_NAME = "ardurbot";
 /** 5432 is the library default. 5433 is a common host Postgres and must not be reused. */
 export const FORBIDDEN_PORTS = new Set([5432, 5433]);
@@ -168,17 +171,44 @@ export async function legacyStackEnvExists(userDataDir: string): Promise<boolean
 }
 
 /**
+ * The library writes the superuser password to a file in `os.tmpdir()` for initdb. On Linux
+ * that is the shared /tmp. For the duration of initialise() the temp folder is a new 0700
+ * folder inside `parent` (the app data folder), removed afterwards. `os.tmpdir()` reads
+ * TMPDIR (TEMP or TMP on Windows) on every call, and initdb inherits the same folder.
+ */
+export async function initialisePrivately(
+  postgres: EmbeddedPostgresLike,
+  parent: string,
+): Promise<void> {
+  const folder = await mkdtemp(path.join(parent, "initdb-"));
+  const saved = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
+  for (const key of Object.keys(saved)) process.env[key] = folder;
+  try {
+    await postgres.initialise();
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+
+/** The server process the library spawned (pinned version, see package.json), if any. */
+export function postgresProcess(postgres: EmbeddedPostgresLike): ChildProcess | undefined {
+  return (postgres as EmbeddedPostgresLike & { process?: ChildProcess }).process;
+}
+
+/**
  * Stops a server this app started. After a failed start the library still holds the
  * exited child and would wait for an `exit` event that already fired, so a child that is
  * gone is released at once. One that is still running gets the library's own stop, and is
  * killed if it has not exited within the wait. Only that child process is ever signalled.
  */
 export async function stopOwnedPostgres(postgres: EmbeddedPostgresLike): Promise<void> {
-  // embedded-postgres keeps the spawned server on `process` (pinned version, see package.json).
-  const owned = postgres as EmbeddedPostgresLike & { process?: ChildProcess };
-  const child = owned.process;
+  const child = postgresProcess(postgres);
   if (child && exited(child)) {
-    owned.process = undefined;
+    (postgres as EmbeddedPostgresLike & { process?: ChildProcess }).process = undefined;
     return;
   }
   let timer: ReturnType<typeof setTimeout> | undefined;

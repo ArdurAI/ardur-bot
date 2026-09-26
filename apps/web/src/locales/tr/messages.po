@@ -1115,10 +1115,6 @@ msgstr "Botlar varsayılan olarak sormadan hareket eder. Yalnızca belirli bir i
 msgid "Bots are working"
 msgstr "Botlar çalışıyor"
 
-#: src/pages/HostComputerSettings.tsx
-msgid "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers."
-msgstr ""
-
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Bots keep the board and memory current"
@@ -4286,6 +4282,10 @@ msgstr "Yerel"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "Yerel erişim, botların sormadan komut çalıştırmasına izin verir. Paylaşılan veya herkese açık sunucularda bunu kullanma."
 
+#: src/pages/system/SystemPage.tsx
+msgid "Local data"
+msgstr ""
+
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Local dev"
 msgstr ""
@@ -5203,16 +5203,8 @@ msgstr ""
 msgid "on the 1st at {0}"
 msgstr "her ayın 1'inde saat {0}"
 
-#: src/pages/HostComputerSettings.tsx
-msgid "On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
-msgstr ""
-
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "On this device"
-msgstr ""
-
-#: src/pages/HostComputerSettings.tsx
-msgid "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6120,6 +6112,10 @@ msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Reset computer?"
+msgstr ""
+
+#: src/pages/system/SystemPage.tsx
+msgid "Reset local data"
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -7363,6 +7359,10 @@ msgstr "Bu dosya geçerli bir UTF-8 Markdown değil."
 
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This folder is not available."
 msgstr ""
 
 #: src/pages/HostComputerPrompt.tsx

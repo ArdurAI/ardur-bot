@@ -13,9 +13,9 @@ export function HostComputerSettings() {
     roots: [],
   });
   const [roots, setRoots] = useState<string[]>([]);
+  const [unavailable, setUnavailable] = useState<string[]>([]);
   /** This app keeps the folder list: a pairing it holds, or local mode. */
   const [local, setLocal] = useState(false);
-  const [localMode, setLocalMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const desktop = window.ardurbotDesktop;
@@ -24,8 +24,8 @@ export function HostComputerSettings() {
     const owned = !!host?.configured || !!host?.local;
     setStatus(remote);
     setRoots(owned && host ? host.roots : remote.roots);
+    setUnavailable(owned && host ? (host.unavailable ?? []) : []);
     setLocal(owned);
-    setLocalMode(!!host?.local);
   }
   useEffect(() => {
     let active = true;
@@ -86,7 +86,14 @@ export function HostComputerSettings() {
         <ul className="space-y-2">
           {roots.map((root) => (
             <li key={root} className="flex items-center justify-between gap-3 text-sm">
-              <span className="break-all">{root}</span>
+              <span className="break-all">
+                {root}
+                {unavailable.includes(root) ? (
+                  <span className="block text-muted-foreground">
+                    <Trans>This folder is not available.</Trans>
+                  </span>
+                ) : null}
+              </span>
               {local && desktop?.host ? (
                 <Button
                   variant="ghost"
@@ -135,17 +142,6 @@ export function HostComputerSettings() {
           </Button>
         ) : null}
       </div>
-      {desktop?.host && localMode ? (
-        <p className="text-sm text-muted-foreground">
-          <Trans>
-            Bots can read and change files in the folders you add here. Avoid adding folders on
-            shared computers.
-          </Trans>{" "}
-          {mac
-            ? t`On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes.`
-            : t`On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes.`}
-        </p>
-      ) : null}
     </section>
   );
 }

@@ -56,7 +56,7 @@ import {
 import { hostCapacity } from "./fleet/capacity.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
 import { verifyHostIntegration } from "./host-integrations.js";
-import { confinedHostCwd, hostCommand } from "./host-policy.js";
+import { confinedHostCwd, hostCommand, resolvedRoots } from "./host-policy.js";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 
@@ -200,9 +200,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
     if (this.opts.restricted && request.cwd?.split(/[/\\]/u).includes(".."))
       throw new Error("Path escapes registered folders.");
     const roots = await this.allowedRoots(box.home);
-    const sourceRoots = this.opts.restricted
-      ? roots
-      : [...roots, ...(await Promise.all(roots.map((root) => realpath(root))))];
+    const sourceRoots = this.opts.restricted ? roots : [...roots, ...(await resolvedRoots(roots))];
     let cwd = this.opts.restricted
       ? await confinedHostCwd(resolveExecuteCwd(request.cwd, box.home), roots)
       : resolveExecuteCwd(request.cwd, box.home);

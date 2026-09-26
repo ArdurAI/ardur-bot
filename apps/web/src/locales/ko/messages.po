@@ -1115,10 +1115,6 @@ msgstr "Bot은 기본적으로 묻지 않고 작업합니다. 먼저 확인하�
 msgid "Bots are working"
 msgstr "봇 작업 중"
 
-#: src/pages/HostComputerSettings.tsx
-msgid "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers."
-msgstr ""
-
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Bots keep the board and memory current"
@@ -4286,6 +4282,10 @@ msgstr "로컬"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "로컬 접근을 허용하면 Bot이 묻지 않고 명령을 실행할 수 있습니다. 공유 서버나 공개 서버에서는 허용하지 마세요."
 
+#: src/pages/system/SystemPage.tsx
+msgid "Local data"
+msgstr ""
+
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Local dev"
 msgstr ""
@@ -5203,16 +5203,8 @@ msgstr "일정에 따라"
 msgid "on the 1st at {0}"
 msgstr "매월 1일 {0}에"
 
-#: src/pages/HostComputerSettings.tsx
-msgid "On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
-msgstr ""
-
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "On this device"
-msgstr ""
-
-#: src/pages/HostComputerSettings.tsx
-msgid "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6121,6 +6113,10 @@ msgstr "컴퓨터 재설정"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Reset computer?"
 msgstr "컴퓨터를 재설정할까요?"
+
+#: src/pages/system/SystemPage.tsx
+msgid "Reset local data"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Reset password"
@@ -7363,6 +7359,10 @@ msgstr "이 파일은 올바른 UTF-8 Markdown 형식이 아닙니다."
 
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This folder is not available."
 msgstr ""
 
 #: src/pages/HostComputerPrompt.tsx

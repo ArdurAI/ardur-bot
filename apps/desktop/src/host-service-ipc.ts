@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { DESKTOP_FOLDER_ERRORS } from "@ardurbot/contracts/desktop-errors";
 import type { BrowserWindow, IpcMainInvokeEvent, Tray } from "electron";
@@ -13,6 +14,23 @@ import {
 } from "./host-service.js";
 import type { LocalFolders } from "./local-folders.js";
 import { updateHostTray } from "./tray.js";
+
+/** Said once, where a folder is chosen, instead of standing in Settings. */
+const FOLDER_NOTICE =
+  "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers.";
+
+/** Registered folders that are not a folder right now; commands skip them until they return. */
+export async function unavailableFolders(roots: string[]): Promise<string[]> {
+  const present = await Promise.all(
+    roots.map((root) =>
+      stat(root).then(
+        (info) => info.isDirectory(),
+        () => false,
+      ),
+    ),
+  );
+  return roots.filter((_, index) => !present[index]);
+}
 
 export function installHostService(options: {
   window(): BrowserWindow | null;
@@ -76,18 +94,22 @@ export function installHostService(options: {
   register("state", async (event) => {
     const { target } = trusted(event);
     if (options.local.owns(target)) {
+      const roots = await options.local.folders.list();
       return {
         configured: false,
         local: true,
-        roots: await options.local.folders.list(),
+        roots,
+        unavailable: await unavailableFolders(roots),
         keepRunning: lifecycle.keepRunning,
       };
     }
     const config = await store.read();
+    const roots = config?.apiUrl === target ? config.hostRoots : [];
     return {
       configured: config?.apiUrl === target,
       registrationId: config?.apiUrl === target ? hostServiceIdentity(config) : undefined,
-      roots: config?.apiUrl === target ? config.hostRoots : [],
+      roots,
+      unavailable: await unavailableFolders(roots),
       keepRunning: lifecycle.keepRunning,
     };
   });
@@ -137,6 +159,9 @@ export function installHostService(options: {
   async function pickFolder(window: BrowserWindow, value: unknown) {
     const selected = await dialog.showOpenDialog(window, {
       properties: ["openDirectory"],
+      // macOS shows `message` in the panel; Windows and Linux show `title`.
+      title: FOLDER_NOTICE,
+      message: FOLDER_NOTICE,
       ...(typeof value === "string" && path.isAbsolute(value) ? { defaultPath: value } : {}),
     });
     if (selected.canceled || !selected.filePaths[0]) return null;
