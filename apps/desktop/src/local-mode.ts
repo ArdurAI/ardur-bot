@@ -32,6 +32,8 @@ const SOURCE_READY_BUDGET_MS = 5 * 60_000;
 const RESTART_WINDOW_MS = 5 * 60_000;
 /** How often a server an earlier run left is asked whether it still serves this folder. */
 const ADOPTED_CHECK_MS = 10_000;
+/** The timeout of the third check, after two failed ones, before an adopted server is reported down. */
+const ADOPTED_FINAL_CHECK_MS = 15_000;
 /** The worker's structured log line once its job host is running. */
 const WORKER_READY = '"message":"worker ready"';
 const SECRET_KEYS = {
@@ -63,6 +65,8 @@ const SETTINGS_MISSING =
 const LOCAL_DATA = ["postgres", "data", "secrets.env"] as const;
 const RESET_FAILED = "Could not reset local data. Try again.";
 const DATA_IN_USE = "A local data file is in use; close whatever is using it and try again.";
+const DATA_UNWRITABLE =
+  "Ardur Bot cannot move its local data. Check the permissions of its data folder, then try Reset local data again.";
 
 type SecretKey = keyof typeof SECRET_KEYS;
 type ServiceName = "api" | "worker";
@@ -107,6 +111,7 @@ export interface LocalModeDependencies {
     port: number;
     password: string;
     databaseDir: string;
+    timeoutMs?: number;
   }) => Promise<boolean>;
   allocatePort: () => Promise<number>;
   portAvailable: (port: number) => Promise<boolean>;
@@ -241,7 +246,9 @@ export class LocalModeController {
     this.databaseReported = true;
     this.publish("failed", DATABASE_STOPPED);
     this.deps.onFailed?.(DATABASE_STOPPED, false);
-    return this.releaseDatabase();
+    // Never pg_ctl stop a server this run did not start: the watch that led here can be
+    // wrong about a merely slow one, and killing it would drop live connections for nothing.
+    return this.releaseDatabase({ stopAdopted: false });
   }
 
   /**
@@ -291,6 +298,9 @@ export class LocalModeController {
    * begins fresh. All or nothing: if one cannot move, those already moved go back.
    */
   async resetData(): Promise<string> {
+    // Stopping publishes idle; a failure below restores this so the window never shows
+    // idle in place of the failure the person is trying to clear with this reset.
+    const priorFailure = this.failed() ? this.current : null;
     this.stopTrees = true;
     try {
       await this.stop();
@@ -303,6 +313,7 @@ export class LocalModeController {
       await mkdir(backup, { recursive: true, mode: 0o700 });
     } catch (error) {
       this.log(`Reset local data: ${errorSummary(error)}`);
+      this.restoreFailure(priorFailure);
       throw new LocalResetError(RESET_FAILED);
     }
     const moved: string[] = [];
@@ -320,10 +331,18 @@ export class LocalModeController {
           );
         }
         await rmdir(backup).catch(() => undefined);
-        throw new LocalResetError(DATA_IN_USE);
+        this.restoreFailure(priorFailure);
+        throw new LocalResetError(resetMoveFailure(error, this.deps.platform));
       }
     }
     return backup;
+  }
+
+  /** A reset that moved nothing leaves the failure it was meant to clear back on screen. */
+  private restoreFailure(failure: DesktopLocalStackState | null): void {
+    if (!failure) return;
+    this.current = failure;
+    this.deps.onState?.(this.current);
   }
 
   private async stopNow(): Promise<void> {
@@ -475,7 +494,9 @@ export class LocalModeController {
 
   /**
    * An adopted server's exit cannot be watched, so after ready it is asked every ten seconds
-   * whether it still serves this folder. Two failed checks in a row are reported like an exit.
+   * whether it still serves this folder. Two failed checks in a row are not reported yet: a
+   * heavy workload on the server can make it miss the normal timeout, so one more check,
+   * with a longer timeout, decides for certain before the stack is reported down.
    */
   private watchAdopted(): void {
     const postgres = this.postgres;
@@ -485,11 +506,20 @@ export class LocalModeController {
     this.adoptedCheck = setInterval(() => {
       if (checking) return;
       checking = true;
-      void this.databaseAlive().then((alive) => {
+      void this.databaseAlive().then(async (alive) => {
+        if (alive) {
+          checking = false;
+          if (this.postgres === postgres) failures = 0;
+          return;
+        }
+        failures += 1;
+        // Two failed checks in a row are not trusted alone: a heavy workload can make a
+        // healthy server miss the normal timeout, so a third gets a longer one.
+        const confirmed = failures >= 2 && !(await this.databaseAlive(ADOPTED_FINAL_CHECK_MS));
         checking = false;
         if (this.postgres !== postgres) return;
-        failures = alive ? 0 : failures + 1;
-        if (failures >= 2) void this.reportDatabaseDown();
+        if (confirmed) void this.reportDatabaseDown();
+        else if (failures >= 2) failures = 0;
       });
     }, this.deps.adoptedCheckMs ?? ADOPTED_CHECK_MS);
     this.adoptedCheck.unref?.();
@@ -519,9 +549,9 @@ export class LocalModeController {
     };
   }
 
-  private serves(port: number, password: string): Promise<boolean> {
+  private serves(port: number, password: string, timeoutMs?: number): Promise<boolean> {
     const serves = this.deps.postgresServes ?? postgresServesFolder;
-    return serves({ port, password, databaseDir: this.databaseDir() });
+    return serves({ port, password, databaseDir: this.databaseDir(), timeoutMs });
   }
 
   private async prepareFolders(): Promise<void> {
@@ -536,19 +566,24 @@ export class LocalModeController {
     }
   }
 
-  private async releaseDatabase(): Promise<void> {
+  /**
+   * `stopAdopted: false` drops an adopted server without a `pg_ctl stop`: it is not this
+   * run's to stop, and a watch that concluded it is down can be wrong about a busy one.
+   */
+  private async releaseDatabase(options: { stopAdopted?: boolean } = {}): Promise<void> {
     const postgres = this.postgres;
+    const adopted = postgres !== undefined && postgres === this.adoptedPostgres;
     this.postgres = undefined;
     this.adoptedPostgres = undefined;
     clearInterval(this.adoptedCheck);
     this.adoptedCheck = undefined;
-    if (postgres) await stopOwnedPostgres(postgres);
+    if (postgres && (!adopted || options.stopAdopted !== false)) await stopOwnedPostgres(postgres);
   }
 
   /** Whether the server that owns this data folder still answers for it. */
-  private async databaseAlive(): Promise<boolean> {
+  private async databaseAlive(timeoutMs?: number): Promise<boolean> {
     if (!this.secrets) return false;
-    return this.serves(this.postgresPort, this.secrets.POSTGRES_PASSWORD);
+    return this.serves(this.postgresPort, this.secrets.POSTGRES_PASSWORD, timeoutMs);
   }
 
   private spawn(service: ServiceName): void {
@@ -820,6 +855,17 @@ class LocalResetError extends Error {}
 /** The sentence for a reset that did not happen. */
 export function localResetFailure(error: unknown): string {
   return error instanceof LocalResetError ? error.message : RESET_FAILED;
+}
+
+/**
+ * A rename fails with EBUSY, and on Windows with EPERM, when another program still has the
+ * file open: closing it and trying again helps. Elsewhere EPERM, like EACCES, means the app
+ * itself cannot write to the file or its folder, which closing other programs never fixes.
+ */
+export function resetMoveFailure(error: unknown, platform: NodeJS.Platform): string {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "EACCES" || (code === "EPERM" && platform !== "win32")) return DATA_UNWRITABLE;
+  return DATA_IN_USE;
 }
 
 /** Signals a process's group and the process itself; either may be gone already. */

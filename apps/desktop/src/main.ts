@@ -766,6 +766,31 @@ async function confirmLocalReset(parent: BrowserWindow): Promise<boolean> {
 }
 
 /**
+ * A failed reset moved nothing, so the old data is untouched, but starting it back up is
+ * not what "Retry" should mean here: only Reset local data (with its own confirmation)
+ * clears this sentence.
+ */
+function showResetFailure(message: string, parent: BrowserWindow) {
+  if (setupWindow !== null && !setupWindow.isDestroyed()) return;
+  if (parent.isDestroyed() || serviceFailurePrompt) return;
+  serviceFailurePrompt = true;
+  void dialog
+    .showMessageBox(parent, {
+      type: "warning",
+      message,
+      buttons: ["Reset local data", "Close"],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    .finally(() => {
+      serviceFailurePrompt = false;
+    })
+    .then(({ response }) => {
+      if (response === 0) void resetLocalDataAndStart(parent);
+    });
+}
+
+/**
  * Once the person confirms, moves local data aside and starts fresh behind the setup window.
  * A reset that failed moved nothing; the sheet says why and offers it again.
  */
@@ -773,7 +798,7 @@ async function resetLocalDataAndStart(parent: BrowserWindow): Promise<boolean> {
   try {
     if (!(await confirmLocalReset(parent))) return false;
   } catch (error) {
-    showServiceFailure(localResetFailure(error), true);
+    showResetFailure(localResetFailure(error), parent);
     return false;
   }
   showSetupWindow(null, { resume: true });
@@ -1782,6 +1807,14 @@ app.on("before-quit", (event) => {
     }
     unsavedFiles.set(mainWindow, false);
   }
+});
+
+/**
+ * Every window is closed and the quit is certain by the time this fires: a quit a window's
+ * own close cancelled never reaches it, so local mode is never stopped behind a window that
+ * is still open and usable.
+ */
+app.on("will-quit", (event) => {
   if (!legacyCompose && (localShutdown !== null || localMode?.running())) {
     event.preventDefault();
     quitting = false;
