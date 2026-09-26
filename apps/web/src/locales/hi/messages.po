@@ -2832,7 +2832,6 @@ msgid "Default board"
 msgstr "डिफ़ॉल्ट बोर्ड"
 
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/fleet/PlacementNotice.tsx
 msgid "Default computer"
 msgstr ""
 
@@ -3096,14 +3095,10 @@ msgid "Docker limits access to your computer for added security. Using {hostLabe
 msgstr "Docker अतिरिक्त सुरक्षा के लिए आपके कंप्यूटर तक पहुँच सीमित करता है। {hostLabel} चुनने पर बॉट्स आपकी स्थानीय फ़ाइलों और टूल्स के साथ काम कर सकते हैं।"
 
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/fleet/PlacementNotice.tsx
-#: src/pages/TeamBoard.tsx
 msgid "Docker on this computer"
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/fleet/PlacementNotice.tsx
-#: src/pages/TeamBoard.tsx
 msgid "Docker on this Mac"
 msgstr ""
 
@@ -7381,10 +7376,8 @@ msgstr "यह कंप्यूटर"
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/TeamBoard.tsx
 msgid "This computer"
 msgstr ""
 
@@ -7406,9 +7399,7 @@ msgstr "यह Mac"
 
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/HostComputerSettings.tsx
-#: src/pages/TeamBoard.tsx
 msgid "This Mac"
 msgstr ""
 
