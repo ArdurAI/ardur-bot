@@ -4466,13 +4466,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
               },
             });
             if (!resumes) return;
+            // The card the killed call left open, if any, is the one the resumed call's card joins.
+            const card = openCommands.get(resumes.executionId);
+            openCommands.delete(resumes.executionId);
             await deps.events.append({
               spaceId: run.spaceId,
               threadId: thread.id,
               botId: bot.id,
               type: "agent.tool.resumed",
               runId,
-              payload: { from: resumes.executionId, to: call.executionId },
+              payload: {
+                from: resumes.executionId,
+                to: call.executionId,
+                ...(card
+                  ? {
+                      fromCommandId: card.commandId,
+                      toCommandId: commandRecording.commandIdFor(call.executionId),
+                    }
+                  : {}),
+              },
             });
             resumedCalls.set(call.executionId, resumes.executionId);
           };

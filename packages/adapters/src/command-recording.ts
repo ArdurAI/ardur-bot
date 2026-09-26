@@ -8,6 +8,8 @@ import {
   CommandRequestSchema,
 } from "@ardurbot/contracts";
 import {
+  commandCardId,
+  commandJoins,
   createBoundedCommandOutput,
   createStreamingRedactor,
   sandboxCommandTimeoutMs,
@@ -55,7 +57,8 @@ type StoredComputer = {
 /**
  * Cards an earlier attempt left waiting or running, by execution id, so a call that resumes
  * on the same id finishes its own card. A card belongs to the latest call recorded on its id:
- * an `agent.tool.called` with a different name or argument digest on that id drops it.
+ * an `agent.tool.called` with a different name or argument digest on that id drops it. A card a
+ * resumed call took over by `agent.tool.resumed` is that call's, never adopted again.
  * `finished` names calls that already completed by `agent.tool.completed`.
  * `finishedCommandIds` names a card whose commandId already has a `command.finished`, even when
  * that completion never reached `agent.tool.completed`: a rerun on that id gets its own card and
@@ -69,7 +72,15 @@ export function adoptOpenCommands(
   finishedCommandIds: ReadonlySet<string> = new Set(),
 ) {
   const calls = new Map<string, string>();
+  const links: unknown[] = [];
   for (const event of events) {
+    if (event.type === "agent.tool.resumed") {
+      links.push(event.payload);
+      for (const [executionId, block] of target)
+        if (!commandCardId(block.commandId, commandJoins(links, block.commandId)))
+          target.delete(executionId);
+      continue;
+    }
     if (event.type === "agent.tool.called") {
       const call = (event.payload ?? {}) as Record<string, unknown>;
       if (typeof call.executionId !== "string") continue;
@@ -85,6 +96,7 @@ export function adoptOpenCommands(
     const block = parsed.data.block;
     if (finished.has(block.executionId)) continue;
     if (finishedCommandIds.has(block.commandId)) continue;
+    if (!commandCardId(block.commandId, commandJoins(links, block.commandId))) continue;
     if (block.outcome === "waiting" || block.outcome === "running")
       target.set(block.executionId, block);
   }
@@ -122,6 +134,12 @@ export function createCommandRecording(input: {
   >();
   const deliveries = new Map<string, Promise<unknown>>();
   const safe = (text: string) => redactCommandText(text, input.secrets);
+  /** The card a call on `executionId` records: the open card it resumes on that id, or its own. */
+  const commandIdFor = (executionId: string) =>
+    input.openCommands?.get(executionId)?.commandId ??
+    createHash("sha256")
+      .update(JSON.stringify([input.context.runId, input.attemptId, executionId]))
+      .digest("hex");
   const append = (
     type: "command.intent" | "command.started" | "command.finished",
     payload: CommandEventPayload,
@@ -182,11 +200,7 @@ export function createCommandRecording(input: {
     const suppress = sensitiveShellCommand(request?.command ?? "") || !unchanged;
     // The same call resuming on its own id finishes the card the killed attempt published.
     const resumeCard = input.openCommands?.get(executionId);
-    const commandId = resumeCard
-      ? resumeCard.commandId
-      : createHash("sha256")
-          .update(JSON.stringify([input.context.runId, input.attemptId, executionId]))
-          .digest("hex");
+    const commandId = commandIdFor(executionId);
     const preservedStartMs =
       resumeCard?.outcome === "running" && resumeCard.startedAt
         ? Date.parse(resumeCard.startedAt)
@@ -370,5 +384,5 @@ export function createCommandRecording(input: {
         request.cwd === parsed.data.cwd,
     );
   }
-  return { invoke, execute, matchesRequest };
+  return { invoke, execute, matchesRequest, commandIdFor };
 }

@@ -1,53 +1,52 @@
 import type { CommandBlock, ThreadMessage } from "@ardurbot/contracts";
 import { CommandEventPayloadSchema, ToolResumedPayloadSchema } from "@ardurbot/contracts";
 import {
+  commandCardId,
+  commandJoins,
   commandRecordingIsLive,
   isCommandEvent,
-  mergeResumedCommand,
+  nextCommandCard,
   projectCommandBlocks,
-  replacesCommandBlock,
-  resumedCommandMessageId,
+  resumeCommandCard,
+  resumedCardIds,
   settleCommandBlock,
 } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "./client.js";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
+type StoredEvent = {
+  id: string;
+  type: string;
+  payload: unknown;
+  threadId: string;
+  botId: string;
+  runId: string | null;
+};
+
 /** Materialized thread row; ordered command events remain the source of truth. */
-export async function materializeCommandEvent(
-  tx: Prisma.TransactionClient,
-  event: {
-    type: string;
-    payload: unknown;
-    threadId: string;
-    botId: string;
-    runId: string | null;
-  },
-) {
+export async function materializeCommandEvent(tx: Prisma.TransactionClient, event: StoredEvent) {
   if (event.type === "agent.tool.resumed") return materializeResumedCall(tx, event);
   if (!isCommandEvent(event.type)) return;
   const { block } = CommandEventPayloadSchema.parse(event.payload);
-  const own = `command:${block.commandId}`;
-  // A resumed call finishes the card its killed call published, keeping that card's start.
-  const resumed = resumedCommandMessageId(block.runId, block.executionId);
-  const row =
-    (await tx.message.findUnique({ where: { id: own }, select: { id: true, blocks: true } })) ??
-    (await tx.message.findUnique({ where: { id: resumed }, select: { id: true, blocks: true } }));
+  const id = commandCardId(
+    block.commandId,
+    commandJoins(await resumeLinks(tx, event, block.commandId), block.commandId),
+  );
+  // A command id a resumed call took over stays stored as evidence only.
+  if (!id) return;
+  const row = await tx.message.findUnique({ where: { id }, select: { id: true, blocks: true } });
+  const [card] = (row?.blocks ?? []) as MessageBlocks;
+  const command = nextCommandCard(id, card?.kind === "command" ? card.command : undefined, block);
+  // A late event from an attempt that lost the lease stays stored as evidence only.
+  if (!command) return;
   if (row) {
-    const [card] = row.blocks as MessageBlocks;
-    const shown = card?.kind === "command" ? card.command : undefined;
-    // A late event from an attempt that lost the lease stays stored as evidence only.
-    if (!replacesCommandBlock(shown, block)) return;
-    const command = row.id === resumed && shown ? mergeResumedCommand(shown, block) : block;
     await tx.message.update({
-      where: { id: row.id },
+      where: { id },
       data: { blocks: [{ kind: "command", command }] as Prisma.InputJsonValue },
     });
     return;
   }
-  // A card a resumed call took over lives on under that call's id and shows that call, from a
-  // later attempt. A late event from the earlier call never recreates the earlier card's row.
-  if (event.type !== "command.intent" && (await resumedAway(tx, event, block.executionId))) return;
   const thread = await tx.thread.update({
     where: { id: event.threadId },
     data: { nextMessageSeq: { increment: 1 } },
@@ -55,73 +54,65 @@ export async function materializeCommandEvent(
   });
   await tx.message.create({
     data: {
-      id: own,
+      id,
       threadId: event.threadId,
       botId: event.botId,
       runId: event.runId,
       role: "bot",
       seq: thread.nextMessageSeq - 1,
-      blocks: [{ kind: "command", command: block }] as Prisma.InputJsonValue,
+      blocks: [{ kind: "command", command }] as Prisma.InputJsonValue,
     },
   });
 }
 
 type MessageBlocks = ThreadMessage["blocks"];
 
-async function resumedAway(
+/** The run's resume links, other than `except`, that name `commandId` on either side. */
+async function resumeLinks(
   tx: Prisma.TransactionClient,
-  event: { threadId: string; runId: string | null },
-  executionId: string,
+  event: Pick<StoredEvent, "threadId" | "runId">,
+  commandId: string,
+  except?: string,
 ) {
-  if (!event.runId) return false;
-  const link = await tx.event.findFirst({
+  if (!event.runId) return [];
+  const links = await tx.event.findMany({
     where: {
       threadId: event.threadId,
       runId: event.runId,
       type: "agent.tool.resumed",
-      payload: { path: ["from"], equals: executionId },
+      ...(except ? { id: { not: except } } : {}),
+      OR: [
+        { payload: { path: ["fromCommandId"], equals: commandId } },
+        { payload: { path: ["toCommandId"], equals: commandId } },
+      ],
     },
-    select: { id: true },
+    select: { payload: true },
   });
-  return link !== null;
+  return links.map((link) => link.payload);
 }
 
-/** The killed call's card row is renamed for the call that resumes it; nothing else changes. */
-async function materializeResumedCall(
-  tx: Prisma.TransactionClient,
-  event: { payload: unknown; threadId: string; runId: string | null },
-) {
+/** The killed call's card row is renamed for the call that resumes it; no other row changes. */
+async function materializeResumedCall(tx: Prisma.TransactionClient, event: StoredEvent) {
   const link = ToolResumedPayloadSchema.safeParse(event.payload);
-  if (!link.success || !event.runId) return;
-  const target = resumedCommandMessageId(event.runId, link.data.to);
-  let id: string | undefined = (
-    await tx.message.findUnique({
-      where: { id: resumedCommandMessageId(event.runId, link.data.from) },
-      select: { id: true },
-    })
-  )?.id;
-  if (!id) {
-    const intent = await tx.event.findFirst({
-      where: {
-        threadId: event.threadId,
-        runId: event.runId,
-        type: "command.intent",
-        payload: { path: ["block", "executionId"], equals: link.data.from },
-      },
-      orderBy: { seq: "desc" },
-      select: { payload: true },
-    });
-    const parsed = CommandEventPayloadSchema.safeParse(intent?.payload);
-    if (!parsed.success) return;
-    id = (
-      await tx.message.findUnique({
-        where: { id: `command:${parsed.data.block.commandId}` },
-        select: { id: true },
-      })
-    )?.id;
-  }
-  if (!id || (await tx.message.findUnique({ where: { id: target }, select: { id: true } }))) return;
-  await tx.message.update({ where: { id }, data: { id: target } });
+  if (!link.success || !link.data.fromCommandId) return;
+  const prior = await resumeLinks(tx, event, link.data.fromCommandId, event.id);
+  const ids = resumedCardIds(link.data, (commandId) => commandJoins(prior, commandId));
+  if (!ids || (await tx.message.findUnique({ where: { id: ids.to }, select: { id: true } })))
+    return;
+  const row = await tx.message.findUnique({
+    where: { id: ids.from },
+    select: { id: true, blocks: true },
+  });
+  if (!row) return;
+  const blocks = (row.blocks as MessageBlocks).map((block) =>
+    block.kind === "command"
+      ? { kind: "command" as const, command: resumeCommandCard(block.command, ids.fromCommandId) }
+      : block,
+  );
+  await tx.message.update({
+    where: { id: ids.from },
+    data: { id: ids.to, blocks: blocks as Prisma.InputJsonValue },
+  });
 }
 
 /**

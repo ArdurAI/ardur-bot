@@ -120,10 +120,31 @@ function executionIds(events: readonly Logged[], type: string) {
   return events.filter((event) => event.type === type).map(executionIdOf);
 }
 
+/** The calls each link joins, by execution id. */
 function links(events: readonly Logged[]) {
   return events
     .filter((event) => event.type === "agent.tool.resumed")
-    .map((event) => event.payload);
+    .map((event) => {
+      const { from, to } = event.payload as { from: string; to: string };
+      return { from, to };
+    });
+}
+
+/** The cards each link joins, by command id. */
+function linkedCards(events: readonly Logged[]) {
+  return events
+    .filter((event) => event.type === "agent.tool.resumed")
+    .map((event) => {
+      const { fromCommandId, toCommandId } = event.payload as Record<string, string | undefined>;
+      return [fromCommandId, toCommandId];
+    });
+}
+
+/** The command id of every card recorded on `executionId`, in order. */
+function cardsOn(events: readonly Logged[], executionId: string) {
+  return events
+    .filter(at("command.intent", executionId))
+    .map((event) => commandBlockOf(event).commandId);
 }
 
 /** The event store refuses a second intent, start, or finish for one card in one attempt. */
@@ -703,6 +724,8 @@ it("links a resumed call and pairs the killed start with the resumed finish", as
   expect(executionIds(resumed, "agent.tool.called")).toEqual([A, MINTED]);
   expect(executionIds(resumed, "agent.tool.completed")).toEqual([MINTED]);
   expect(links(h.log)).toEqual([{ from: A, to: MINTED }]);
+  // The link names the killed call's card and the card the resumed call records.
+  expect(linkedCards(h.log)).toEqual([[cardsOn(h.log, A)[0], cardsOn(h.log, MINTED)[0]]]);
   expect(h.log.findIndex(at("agent.tool.resumed"))).toBeLessThan(
     h.log.findIndex(at("command.intent", MINTED)),
   );
@@ -913,6 +936,8 @@ it("resumes a production call killed before its card as one card", async () => {
   expect(h.log.some(at("command.intent"))).toBe(false);
   await h.resume([{ name: "shell", args: ARGS_A, executionId: MINTED }]);
   expect(links(h.log)).toEqual([{ from: A, to: MINTED }]);
+  // The killed call left no card, so the link joins none.
+  expect(linkedCards(h.log)).toEqual([[undefined, undefined]]);
   const blocks = projectedCommands(h.log);
   expect(blocks.map((block) => [block.executionId, block.outcome])).toEqual([
     [MINTED, "completed"],
@@ -1128,6 +1153,66 @@ it("keeps an earlier call's card when a later call on its id was killed before i
     ["echo alpha", "echo alpha"],
     ["echo beta", "echo beta"],
   ]);
+});
+
+it("gives a later call that reuses a resumed call's id its own card", async () => {
+  const h = harness("production");
+  const build = { command: "pnpm build" };
+  await h.killAt([{ name: "shell", args: build, executionId: FIRST }], at("command.started"));
+  h.askAfter();
+  await h.resume([{ name: "shell", args: build, executionId: SECOND }]);
+  expect(h.pauses).toHaveLength(1);
+  expect(links(h.log)).toEqual([{ from: FIRST, to: SECOND }]);
+  expect(linkedCards(h.log)).toEqual([[cardsOn(h.log, FIRST)[0], cardsOn(h.log, SECOND)[0]]]);
+  // After the pause the runtime numbers its calls from zero again: `pnpm test` reuses the id.
+  await h.resume([{ name: "shell", args: { command: "pnpm test" }, executionId: SECOND }]);
+  const cards = projectedCommands(h.log);
+  expect(cards.map((card) => [card.command, card.outcome, card.stdout])).toEqual([
+    ["pnpm build", "completed", "ok"],
+    ["pnpm test", "completed", "ok"],
+  ]);
+  expect(rerunCommands(h.log, cards)).toEqual([
+    ["pnpm build", "pnpm build"],
+    ["pnpm test", "pnpm test"],
+  ]);
+});
+
+it("links the card the killed call left open, never an earlier card its id had", async () => {
+  const h = harness("production");
+  h.askAfter();
+  await h.resume([{ name: "shell", args: { command: "ls" }, executionId: FIRST }]);
+  expect(h.pauses).toHaveLength(1);
+  await h.killAt(
+    [{ name: "shell", args: { command: "pwd" }, executionId: FIRST }],
+    at("command.started"),
+  );
+  await h.resume([{ name: "shell", args: { command: "pwd" }, executionId: SECOND }]);
+  expect(links(h.log)).toEqual([{ from: FIRST, to: SECOND }]);
+  const [, killed] = cardsOn(h.log, FIRST);
+  expect(linkedCards(h.log)).toEqual([[killed, cardsOn(h.log, SECOND)[0]]]);
+  const cards = projectedCommands(h.log);
+  expect(cards.map((card) => [card.command, card.outcome])).toEqual([
+    ["ls", "completed"],
+    ["pwd", "completed"],
+  ]);
+});
+
+it("runs a call again under its own card once a link took its earlier card", async () => {
+  const h = harness("production");
+  const build = { command: "pnpm build" };
+  await h.killAt([{ name: "shell", args: build, executionId: FIRST }], at("command.started"));
+  await h.killAt([{ name: "shell", args: build, executionId: SECOND }], at("command.started"));
+  expect(links(h.log)).toEqual([{ from: FIRST, to: SECOND }]);
+  // A runtime that numbers its calls from zero again repeats the first call on its own id.
+  await h.resume([{ name: "shell", args: build, executionId: FIRST }]);
+  // The killed attempts left the effect executing, so this attempt's outcome is unknown too, but
+  // it shows on a card of its own rather than under the id the link took over.
+  const cards = projectedCommands(h.log);
+  expect(cards.map((card) => [card.executionId, card.attemptId])).toEqual([
+    [SECOND, "attempt-2"],
+    [FIRST, `attempt-${h.run.leaseFence}`],
+  ]);
+  expect(new Set(cards.map((card) => card.commandId)).size).toBe(2);
 });
 
 it("keys the stored argument digest to the deployment", async () => {

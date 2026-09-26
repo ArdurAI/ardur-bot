@@ -118,16 +118,16 @@ describePostgres("resumed command materialization (PostgreSQL)", () => {
       prisma.message.findUniqueOrThrow({ where: { id: ownRowId } }),
     ).resolves.toMatchObject({ id: ownRowId });
 
-    // The resumed call links to the killed call's execution id.
+    // The resumed call links to the killed call and names both cards.
     await appendEvent(prisma, {
       spaceId,
       threadId,
       botId,
       runId,
       type: "agent.tool.resumed",
-      payload: { from: executionA, to: executionB },
+      payload: { from: executionA, to: executionB, fromCommandId: commandA, toCommandId: commandB },
     });
-    const resumedRowId = resumedCommandMessageId(runId, executionB);
+    const resumedRowId = resumedCommandMessageId(commandB);
     // The renamed primary key: the killed call's row no longer exists at its own id.
     expect(await prisma.message.findUnique({ where: { id: ownRowId } })).toBeNull();
     await expect(
@@ -186,6 +186,7 @@ describePostgres("resumed command materialization (PostgreSQL)", () => {
       commandId: commandB,
       outcome: "completed",
       stdout: "ok",
+      resumedFrom: [commandA],
       startedAt: startedAtEarlier,
       durationMs:
         Date.parse(startedAtLater) - Date.parse(startedAtEarlier) + blockBFinished.durationMs,
@@ -292,6 +293,115 @@ describePostgres("resumed command materialization (PostgreSQL)", () => {
     });
   });
 
+  /** Appends one command event for card `commandId` recorded by the attempt with `fence`. */
+  async function record(
+    type: "command.intent" | "command.started" | "command.finished",
+    commandId: string,
+    fence: number,
+    overrides: Partial<CommandBlock> & Pick<CommandBlock, "executionId" | "command">,
+  ) {
+    const outcome =
+      type === "command.intent" ? "waiting" : type === "command.started" ? "running" : "completed";
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type,
+      payload: {
+        block: block({ commandId, attemptId: `attempt-${fence}`, fence, outcome, ...overrides }),
+      },
+    });
+  }
+
+  async function shownCard(id: string) {
+    const row = await prisma.message.findUniqueOrThrow({ where: { id } });
+    return (row.blocks as unknown as { command: CommandBlock }[])[0]!.command;
+  }
+
+  it("gives a later call that reuses a resumed call's id its own card row", async () => {
+    const [killed, resumed, reused] = ["build-a", "build-b", "test-c"].map(
+      (name) => `cb-cmd-${name}-${suffix}`,
+    ) as [string, string, string];
+    const build = { command: "pnpm build" };
+    await record("command.intent", killed, 30, { ...build, executionId: "cb-shell:0" });
+    await record("command.started", killed, 30, { ...build, executionId: "cb-shell:0" });
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "agent.tool.resumed",
+      payload: {
+        from: "cb-shell:0",
+        to: "cb-shell:1",
+        fromCommandId: killed,
+        toCommandId: resumed,
+      },
+    });
+    await record("command.intent", resumed, 31, { ...build, executionId: "cb-shell:1" });
+    await record("command.finished", resumed, 31, {
+      ...build,
+      executionId: "cb-shell:1",
+      startedAt: startedAtLater,
+      stdout: "built",
+    });
+    // After a pause the runtime numbers its calls from zero again: `pnpm test` reuses the id.
+    const test = { command: "pnpm test", executionId: "cb-shell:1", startedAt: startedAtLater };
+    await record("command.intent", reused, 32, test);
+    await record("command.finished", reused, 32, { ...test, stdout: "tested" });
+    await expect(shownCard(resumedCommandMessageId(resumed))).resolves.toMatchObject({
+      commandId: resumed,
+      command: "pnpm build",
+      stdout: "built",
+      startedAt: startedAtEarlier,
+    });
+    await expect(shownCard(`command:${reused}`)).resolves.toMatchObject({
+      command: "pnpm test",
+      stdout: "tested",
+      startedAt: startedAtLater,
+    });
+  });
+
+  it("renames only the card row the link names, never another card its id once had", async () => {
+    const [listed, killed, resumed] = ["ls-x", "pwd-y", "pwd-z"].map(
+      (name) => `cb-cmd-${name}-${suffix}`,
+    ) as [string, string, string];
+    await record("command.intent", listed, 40, { command: "ls", executionId: "cb-sweep:0" });
+    await record("command.finished", listed, 40, {
+      command: "ls",
+      executionId: "cb-sweep:0",
+      stdout: "src",
+    });
+    await record("command.intent", killed, 41, { command: "pwd", executionId: "cb-sweep:0" });
+    await record("command.started", killed, 41, { command: "pwd", executionId: "cb-sweep:0" });
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId,
+      type: "agent.tool.resumed",
+      payload: {
+        from: "cb-sweep:0",
+        to: "cb-sweep:1",
+        fromCommandId: killed,
+        toCommandId: resumed,
+      },
+    });
+    await record("command.intent", resumed, 42, { command: "pwd", executionId: "cb-sweep:1" });
+    await expect(shownCard(`command:${listed}`)).resolves.toMatchObject({
+      command: "ls",
+      outcome: "completed",
+      stdout: "src",
+    });
+    expect(await prisma.message.findUnique({ where: { id: `command:${killed}` } })).toBeNull();
+    await expect(shownCard(resumedCommandMessageId(resumed))).resolves.toMatchObject({
+      commandId: resumed,
+      command: "pwd",
+      resumedFrom: [killed],
+    });
+  });
+
   it("skips a lease-lost attempt's late finish once its card has been resumed under a new id", async () => {
     const attempt1 = await prisma.attempt.create({ data: { runId, fence: 20, status: "running" } });
     await prisma.attempt.create({ data: { runId, fence: 21, status: "running" } });
@@ -330,15 +440,21 @@ describePostgres("resumed command materialization (PostgreSQL)", () => {
 
     // Attempt 2 reclaims the lease and resumes under a fresh execution id: the card is renamed.
     await prisma.run.update({ where: { id: runId }, data: { leaseFence: 21 } });
+    const resumedCommand = `cb-cmd-newid-resumed-${suffix}`;
     await appendEvent(prisma, {
       spaceId,
       threadId,
       botId,
       runId,
       type: "agent.tool.resumed",
-      payload: { from: executionOld, to: executionNew },
+      payload: {
+        from: executionOld,
+        to: executionNew,
+        fromCommandId: newIdCommand,
+        toCommandId: resumedCommand,
+      },
     });
-    const resumedRowId = resumedCommandMessageId(runId, executionNew);
+    const resumedRowId = resumedCommandMessageId(resumedCommand);
     expect(await prisma.message.findUnique({ where: { id: ownRowId } })).toBeNull();
     await expect(
       prisma.message.findUniqueOrThrow({ where: { id: resumedRowId } }),

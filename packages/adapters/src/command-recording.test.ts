@@ -271,6 +271,40 @@ describe("a call resuming after a killed attempt", () => {
     );
     expect([...open.keys()]).toEqual([]);
   });
+  it("never adopts a card a resumed call took over, even after a late event from its attempt", () => {
+    const open = new Map<string, CommandBlock>();
+    adoptOpenCommands(
+      open,
+      [
+        { type: "command.intent", payload: { block: earlier({ outcome: "waiting" }) } },
+        {
+          type: "agent.tool.resumed",
+          payload: {
+            from: "execution-1",
+            to: "execution-2",
+            fromCommandId: "card-earlier",
+            toCommandId: "card-resumed",
+          },
+        },
+        {
+          type: "command.intent",
+          payload: {
+            block: earlier({
+              commandId: "card-resumed",
+              executionId: "execution-2",
+              outcome: "waiting",
+            }),
+          },
+        },
+        // The attempt that lost its lease records one more event for the card it no longer has.
+        { type: "command.started", payload: { block: earlier({}) } },
+      ],
+      new Set(),
+    );
+    expect([...open]).toEqual([
+      ["execution-2", expect.objectContaining({ commandId: "card-resumed" })],
+    ]);
+  });
   it("finishes the same call's card under this attempt and keeps its start", async () => {
     const f = fixture([{ type: "exit", code: 0 }], [], undefined, {
       openCommands: new Map([["execution-1", earlier({})]]),
