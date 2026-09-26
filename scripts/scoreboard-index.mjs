@@ -21,15 +21,16 @@ export const SCOREBOARD_INDEX_RELATIVE_PATH = ".context/performance/scoreboard-i
 export const INDEX_SCHEMA_VERSION = 6;
 export const COMMIT_OBJECT_RETENTION_DAYS = 180;
 export const WORKFLOW_ARTIFACT_RETENTION_DAYS = 90;
-export const RELEASE_EVIDENCE_RETENTION = "github-release-lifetime";
 /** Changing the committed release policy is a reviewed change to this digest. */
 export const RELEASE_POLICY_SHA256 =
   "dbc81d2cd48aae6ddd5ec7c5fde042f6219cf89fd9610a59e5ed1df4c2e55a0e";
 const RELEASE_POLICY_FILE = fileURLToPath(
   new URL("../docs/performance/release-policy.json", import.meta.url),
 );
-const INDEX_ARTIFACT = "scoreboard-index";
-const RELEASE_INDEX_ARTIFACT = "scoreboard-release-index";
+/** The record schema version is part of the artifact name, so a schema bump never restores
+ * records the current code cannot read; it starts a fresh chain instead. */
+const INDEX_ARTIFACT = `scoreboard-index-schema-${INDEX_SCHEMA_VERSION}`;
+const RELEASE_INDEX_ARTIFACT = `scoreboard-release-index-schema-${INDEX_SCHEMA_VERSION}`;
 /**
  * Each durable chain is restored from the newest live artifact its own workflow uploaded. A
  * refused release still uploads its chain, so any completed release run counts.
@@ -47,7 +48,9 @@ const INDEX_SCOPES = {
     artifact: RELEASE_INDEX_ARTIFACT,
     events: ["push", "workflow_dispatch"],
     status: "completed",
-    marker: { file: ".github/workflows/performance.yml", text: RELEASE_INDEX_ARTIFACT },
+    // A schema-versioned artifact name never appears literally in the workflow text, so this
+    // marker names a stable step instead of the artifact.
+    marker: { file: ".github/workflows/performance.yml", text: "prior-index --scope release" },
   },
 };
 const CHAIN_ORIGINS = [
@@ -56,6 +59,7 @@ const CHAIN_ORIGINS = [
   "prior-artifact-missing",
   "non-durable-check",
   "history-rewritten",
+  "schema-upgrade",
 ];
 const ENUMERATION_REASONS = ["empty-chain-retention-window", "chain-without-ancestor"];
 /** The release evidence run must produce both reports for the same commit and build. */
@@ -81,8 +85,6 @@ export const PENDING_REASONS = Object.freeze([
   "not-measured",
   "benchmark-runner-incompatible",
   "schema-3-evidence-not-produced",
-  "release-runner-not-provisioned",
-  "baseline-tree-unavailable",
   "reports-missing",
   "infrastructure-unavailable",
   "artifact-digest-mismatch",
@@ -286,7 +288,8 @@ function assertPublicValue(value) {
 
 /**
  * Waiver text lands in public release notes, so it stays one plain sentence without markup, and
- * without a path, address or URL.
+ * without a path, host or URL: any token with a slash is a path or a schemeless URL, and any
+ * `www.` token is a host, even without a scheme or a slash.
  */
 function parseWaiverReason(reason) {
   if (typeof reason !== "string") return null;
@@ -295,7 +298,7 @@ function parseWaiverReason(reason) {
     !/^[A-Za-z0-9 .,;:'"()!?&%+/-]{1,200}$/.test(text) ||
     !/[A-Za-z]/.test(text) ||
     text.includes("://") ||
-    /(^|[\s("'])([A-Za-z]:)?\.{0,2}\//.test(text)
+    text.split(/\s+/).some((token) => token.includes("/") || /^www\./i.test(token))
   )
     return null;
   try {
@@ -405,9 +408,8 @@ async function exists(file) {
 }
 
 /** A run that does not extend a durable chain indexes only its own commits: base to head, or head. */
-export function selectCommitRange({ mode = "commit", base, head }) {
+export function selectCommitRange({ base, head }) {
   sha40(head);
-  if (mode !== "commit" && mode !== "release") fail("invalid-mode", "invalid-mode");
   if (base && base !== "0".repeat(40)) {
     sha40(base);
     return { kind: "range", base, head };
@@ -438,13 +440,23 @@ export function baselineMeasurementPlan({ baseHarnessPresent, candidateSha, base
   const pendingReason = baseHarnessPresent ? null : "benchmark-runner-incompatible";
   return {
     copyProductionIntoBaseline: false,
-    independentTrees: ["candidate", "base"],
     measureBaseline: pendingReason === null,
     pendingReason,
   };
 }
 
-export function planEvidenceRecords({ commits, measurements = [], pendingReason }) {
+/**
+ * `pendingReason` is the budgets job's verdict for `headCommit` alone. A commit reached only by
+ * backfill or by a multi-commit push was never individually attempted, so it is `not-measured`
+ * unless a measurement supplies its own reason. With no `headCommit`, every commit uses
+ * `pendingReason`, for callers that plan a single attempted commit.
+ */
+export function planEvidenceRecords({
+  commits,
+  measurements = [],
+  pendingReason,
+  headCommit = null,
+}) {
   if (!Array.isArray(commits)) fail("invalid-commits", "invalid-commits");
   if (!PENDING_REASONS.includes(pendingReason)) fail("invalid-reason", "invalid-reason");
   const seen = new Set();
@@ -463,10 +475,11 @@ export function planEvidenceRecords({ commits, measurements = [], pendingReason 
     seen.add(commit.commit);
     const measurement = supplied.get(commit.commit);
     supplied.delete(commit.commit);
+    const attempted = headCommit === null || commit.commit === headCommit;
     return {
       commit: commit.commit,
       parentCommit: commit.parentCommit,
-      pendingReason: measurement?.pendingReason ?? pendingReason,
+      pendingReason: measurement?.pendingReason ?? (attempted ? pendingReason : "not-measured"),
       envelope: measurement?.envelope ?? null,
     };
   });
@@ -619,18 +632,6 @@ export function nextAttempt(records, key) {
       .filter((record) => sameKey(record, key))
       .reduce((max, record) => Math.max(max, record.attempt), 0) + 1
   );
-}
-
-export function evidenceFor(records, selector) {
-  const history = records.filter((record) => sameKey(record, selector));
-  const measured = history.filter((record) => record.status === "measured");
-  const pending = history.filter((record) => record.status === "pending");
-  return {
-    history,
-    current: measured.at(-1) ?? pending.at(-1) ?? null,
-    expired: history.some((record) => record.status === "expired"),
-    rejections: history.filter((record) => record.status === "rejected").length,
-  };
 }
 
 export function auditCommits(records, commits) {
@@ -871,16 +872,7 @@ async function normalizeRecord(input, existing) {
       (artifact) => artifact.kind === "build",
     );
     if (input.tier === "release" && input.role === "candidate") {
-      const left = stored
-        .filter((artifact) => installerRank(artifact.name) < 5)
-        .map((artifact) => `${artifact.sha256}:${artifact.bytes}`)
-        .sort()
-        .join(",");
-      const right = buildArtifacts
-        .map((artifact) => `${artifact.sha256}:${artifact.bytes}`)
-        .sort()
-        .join(",");
-      if (!stored.length || left !== right)
+      if (!installersMatchBuildArtifacts(stored, buildArtifacts))
         fail("artifact-digest-mismatch", "artifact-digest-mismatch");
     } else if (
       stored.some(
@@ -943,17 +935,27 @@ export async function appendIndexRecords(root, build, options = {}) {
   );
 }
 
-export async function appendIndexRecord(root, input, options = {}) {
-  const { appended } = await appendIndexRecords(root, () => [input], options);
-  return appended[0];
-}
-
 const CHAIN_ORIGIN_FILE = ".chain-origin";
+
+/** Starts a fresh chain in `root` naming why the prior chain was not restored. */
+async function startNewChain(root, origin) {
+  await mkdir(root, { recursive: true });
+  await writeFile(path.join(root, CHAIN_ORIGIN_FILE), `${origin}\n`, { flag: "wx" });
+  return origin;
+}
 
 export async function restoreIndex(source, root, missingReason) {
   const foundChain = missingReason == null || missingReason === "";
   if (await exists(recordsPath(source))) {
-    await readIndex(source);
+    try {
+      await readIndex(source);
+    } catch (error) {
+      if (!(error instanceof ScoreboardIndexError) || error.code !== "unsupported-index-schema")
+        throw error;
+      // The artifact name carries the schema version, so this should not happen in production;
+      // it is a safety net that never blocks a release on evidence the current code cannot read.
+      return startNewChain(root, "schema-upgrade");
+    }
     if (await exists(root)) {
       const entries = await readdir(root);
       if (entries.length) fail("restore-target-not-empty", "restore-target-not-empty");
@@ -963,9 +965,7 @@ export async function restoreIndex(source, root, missingReason) {
   }
   if (foundChain) fail("missing-restored-chain", "A live index artifact did not restore.");
   if (!CHAIN_ORIGINS.includes(missingReason)) fail("invalid-chain-origin", "invalid-chain-origin");
-  await mkdir(root, { recursive: true });
-  await writeFile(path.join(root, CHAIN_ORIGIN_FILE), `${missingReason}\n`, { flag: "wx" });
-  return missingReason;
+  return startNewChain(root, missingReason);
 }
 
 async function chainOrigin(root) {
@@ -1057,6 +1057,31 @@ function installerRank(name) {
   const extensions = [".dmg", ".exe", ".AppImage", ".deb", ".zip"];
   const index = extensions.findIndex((extension) => name.endsWith(extension));
   return index === -1 ? extensions.length : index;
+}
+
+/** The public `{target, name, sha256, bytes}` shape shared by every distributed-digest list. */
+function digestProjection(files) {
+  return files.map((file) => ({
+    target: file.target,
+    name: file.name,
+    sha256: file.sha256,
+    bytes: file.bytes,
+  }));
+}
+
+function installerDigestKey(item) {
+  return `${item.sha256}:${item.bytes}`;
+}
+
+/** True when the installer set and the report's build artifacts name exactly the same bytes. */
+function installersMatchBuildArtifacts(files, buildArtifacts) {
+  const left = files
+    .filter((file) => installerRank(file.name) < 5)
+    .map(installerDigestKey)
+    .sort()
+    .join(",");
+  const right = buildArtifacts.map(installerDigestKey).sort().join(",");
+  return files.length > 0 && left === right;
 }
 
 function targetForPath(relative) {
@@ -1584,14 +1609,7 @@ export async function evaluatePublicationGate(input) {
       if (!satisfied) push("mandatory-evidence-unknown", id, detail);
     }
   const files = input.files ?? [];
-  assertPublicValue(
-    files.map(({ target, name, sha256: digestValue, bytes }) => ({
-      target,
-      name,
-      sha256: digestValue,
-      bytes,
-    })),
-  );
+  assertPublicValue(digestProjection(files));
   const primaries = primaryInstallers(files);
   let coverage = [];
   try {
@@ -1684,16 +1702,8 @@ export async function evaluatePublicationGate(input) {
     const buildArtifacts = candidateReport.artifacts.filter(
       (artifact) => artifact.kind === "build",
     );
-    const left = files
-      .filter((file) => installerRank(file.name) < 5)
-      .map((file) => `${file.sha256}:${file.bytes}`)
-      .sort()
-      .join(",");
-    const right = buildArtifacts
-      .map((artifact) => `${artifact.sha256}:${artifact.bytes}`)
-      .sort()
-      .join(",");
-    if (!files.length || left !== right) push("artifact-digest-mismatch", "artifacts");
+    if (!installersMatchBuildArtifacts(files, buildArtifacts))
+      push("artifact-digest-mismatch", "artifacts");
   }
   if (input.attachedEvidenceValid !== true)
     push("artifact-digest-mismatch", "scoreboard-candidate.json");
@@ -1771,12 +1781,7 @@ export async function evaluatePublicationGate(input) {
     canonicalEnvelopeSha256: input.candidate
       ? sha256(Buffer.from(scoreboard.canonicalSerialize(input.candidate)))
       : null,
-    distributedDigests: files.map(({ target, name, sha256: digestValue, bytes }) => ({
-      target,
-      name,
-      sha256: digestValue,
-      bytes,
-    })),
+    distributedDigests: digestProjection(files),
     coverage,
     releaseEligible,
   };
@@ -2142,12 +2147,7 @@ async function runWaivedRelease(options, files, unmapped) {
         : 2,
     reasons,
     waiver: allowPublication ? { reason: waiver.reason } : null,
-    distributedDigests: files.map(({ target, name, sha256: digestValue, bytes }) => ({
-      target,
-      name,
-      sha256: digestValue,
-      bytes,
-    })),
+    distributedDigests: digestProjection(files),
   };
   assertPublicValue(gate);
   await mkdir(path.dirname(options.outputPath), { recursive: true });
@@ -2268,17 +2268,7 @@ export async function runReleaseGate(options) {
   );
   if (!gate.allowPublication) return recordUnpublished(options, gate, common);
   const roles = [
-    [
-      "candidate",
-      candidate,
-      options.candidateSha,
-      files.map(({ target, name, sha256: digestValue, bytes }) => ({
-        target,
-        name,
-        sha256: digestValue,
-        bytes,
-      })),
-    ],
+    ["candidate", candidate, options.candidateSha, digestProjection(files)],
     ["parent", parent, options.baseSha, []],
     ["fixed-release", fixedRelease, options.fixedReleaseSha, []],
   ];
@@ -2356,19 +2346,26 @@ function parentOf(head) {
   }
 }
 
+/** A durable push always records the commit it pushed, even one older than the retention window. */
+function ensureHead(commits, head) {
+  if (commits.some((item) => item.commit === head)) return commits;
+  return [...commits, { commit: head, parentCommit: parentOf(head) }];
+}
+
 /**
  * A durable chain resumes after the nearest first-parent ancestor it contains. A chain with no
  * such ancestor walks back to its newest commit, and an empty chain to the 90-day artifact window;
  * both walks stop at that window. A chain whose commits are all gone from the clone was left
- * behind by a history rewrite, so it is reset and enumeration starts as for an empty chain.
+ * behind by a history rewrite, so it is reset and enumeration starts as for an empty chain. `now`
+ * is the retention window's clock, so it never depends on the wall clock at test or run time.
  */
-function enumerateBackfill(records, head) {
+function enumerateBackfill(records, head, now = new Date()) {
   const indexed = new Set(
     records
       .filter((record) => record.tier === "commit" && record.role === "candidate")
       .map((record) => record.commit),
   );
-  const since = `--since=${retentionSince()}`;
+  const since = `--since=${retentionSince(now)}`;
   if (indexed.size) {
     const history = firstParentRevList([head]);
     const nearest = history.findIndex((item) => indexed.has(item.commit));
@@ -2383,14 +2380,17 @@ function enumerateBackfill(records, head) {
     if (present.length) {
       const enumerationStart = newestCommit(present);
       return {
-        commits: firstParentRevList(["--reverse", since, `${enumerationStart}..${head}`]),
+        commits: ensureHead(
+          firstParentRevList(["--reverse", since, `${enumerationStart}..${head}`]),
+          head,
+        ),
         enumerationStart,
         enumerationReason: "chain-without-ancestor",
         rewritten: false,
       };
     }
   }
-  const commits = firstParentRevList(["--reverse", since, head]);
+  const commits = ensureHead(firstParentRevList(["--reverse", since, head]), head);
   const enumerationStart = commits[0]?.commit ?? null;
   return {
     commits,
@@ -2411,19 +2411,21 @@ function boundedCommits(range) {
 /**
  * Records every commit of this run as measured or pending with one read of the chain and one
  * write. Only a durable push (`backfill`) walks history; other runs index their own commits.
+ * `now` is the retention window's clock: it defaults to the real clock but a caller, including
+ * the CLI's `SCOREBOARD_NOW`, can fix it so the window never depends on wall-clock time.
  */
 export async function runIndexPush(options) {
   const scoreboard = await loadScoreboard();
   const mode = options.mode ?? "commit";
+  const now = options.now ?? new Date();
   let commits = options.commits ?? null;
   if (!commits && options.commitsFile) {
     const parsed = JSON.parse(await readFile(options.commitsFile, "utf8"));
     if (!Array.isArray(parsed)) fail("invalid-commits", "invalid-commits");
     commits = parsed;
   }
-  const range = commits
-    ? null
-    : selectCommitRange({ mode, base: options.base, head: options.head });
+  const range = commits ? null : selectCommitRange({ base: options.base, head: options.head });
+  const headCommit = options.head || null;
   const warn =
     options.warn ??
     ((message) => process.stdout.write(`::warning title=Scoreboard index::${message}\n`));
@@ -2436,7 +2438,7 @@ export async function runIndexPush(options) {
     if (!commits) {
       try {
         if (mode === "commit" && options.backfill) {
-          const resumed = enumerateBackfill(existing, range.head);
+          const resumed = enumerateBackfill(existing, range.head, now);
           ({ commits, enumerationStart, enumerationReason } = resumed);
           reset = resumed.rewritten;
         } else commits = boundedCommits(range);
@@ -2456,8 +2458,9 @@ export async function runIndexPush(options) {
       commits,
       measurements: options.measurements ?? [],
       pendingReason: options.pendingReason ?? "schema-3-evidence-not-produced",
+      headCommit,
     });
-    const indexedAt = options.indexedAt ?? new Date().toISOString();
+    const indexedAt = options.indexedAt ?? now.toISOString();
     const inputs = planned.map((item) => {
       const { prior, attempt, supersedes } = nextFor(existing, {
         commit: item.commit,
@@ -2754,201 +2757,23 @@ function githubRequest(apiUrl, token) {
   };
 }
 
-function jobBlock(yaml, name) {
-  const marker = `\n  ${name}:\n`;
-  const start = yaml.indexOf(marker);
-  if (start < 0) fail("invalid-workflow", `missing job ${name}`);
-  const rest = yaml.slice(start + marker.length);
-  const next = rest.search(/\n {2}[a-z0-9-]+:\n/);
-  return next < 0 ? rest : rest.slice(0, next);
-}
+/** Allowed characters for a public waiver reason, quoted for the gate's own error line. */
+const WAIVER_ALLOWED_CHARACTERS = "letters, numbers, spaces, and . , ; : ' \" ( ) ! ? & % + -";
 
-export function assertWorkflowContracts(performanceText, releaseText) {
-  const errors = [];
-  const requireText = (value, needle, label) => {
-    if (!value.includes(needle)) errors.push(label);
-  };
-  requireText(performanceText, "workflow_call:", "performance workflow_call");
-  if (/github\.event_name\s*[!=]=\s*['"]workflow_call['"]/.test(performanceText))
-    errors.push("workflow_call decisions must use declared inputs");
-  for (const input of [
-    "candidate_sha:",
-    "base_sha:",
-    "suite_version:",
-    "environment:",
-    "mode:",
-    "gate:",
-    "release_version:",
-  ])
-    requireText(performanceText, input, `performance input ${input}`);
-  requireText(performanceText, "cancel-in-progress: false", "performance must not cancel evidence");
-  if (performanceText.includes("cancel-in-progress: true")) errors.push("performance cancels runs");
-  if (performanceText.includes("ShellSkeleton.tsx"))
-    errors.push("performance copies candidate code into the baseline");
-  if (performanceText.includes("secrets.")) errors.push("performance workflow uses secrets");
-  requireText(performanceText, "node scripts/scoreboard-index.mjs index-push", "index-push");
-  requireText(performanceText, "node scripts/scoreboard-index.mjs restore-index", "index restore");
-  requireText(performanceText, "run-id:", "prior index run");
-  requireText(performanceText, "github-token:", "artifact read token");
-  requireText(
-    performanceText,
-    "node scripts/scoreboard-index.mjs baseline-decision",
-    "baseline-decision",
-  );
-  requireText(performanceText, "node scripts/scoreboard-index.mjs release-gate", "release-gate");
-  requireText(performanceText, "retention-days: 90", "artifact retention");
-  requireText(
-    performanceText,
-    "Measure current revision and retain traces",
-    "advisory measurement",
-  );
-  requireText(performanceText, "persist-credentials: false", "credential-free checkout");
-  requireText(performanceText, ".context/performance/scoreboard-index", "index path");
-  requireText(
-    performanceText,
-    "github.event.pull_request.head.sha",
-    "pull requests must index their head commit",
-  );
-  requireText(
-    performanceText,
-    "needs.budgets.outputs.pending_reason",
-    "index must use the budgets pending reason",
-  );
-  if (performanceText.includes("performance-runner"))
-    errors.push("unused performance runner worktree");
-  const budgets = jobBlock(performanceText, "budgets");
-  requireText(budgets, "if: inputs.gate != 'required'", "advisory budgets condition");
-  requireText(
-    budgets,
-    'cp apps/web/playwright.performance.config.ts "$base/apps/web/"',
-    "the baseline is measured with the candidate harness",
-  );
-  const index = jobBlock(performanceText, "index");
-  requireText(index, "inputs.gate != 'required'", "advisory index condition");
-  requireText(index, "group: scoreboard-index-", "serialized index writers");
-  requireText(index, "cancel-in-progress: false", "index writers must wait");
-  requireText(
-    index,
-    "node scripts/scoreboard-index.mjs prior-index",
-    "index restores via prior-index",
-  );
-  requireText(
-    index,
-    "node scripts/scoreboard-index.mjs prune",
-    "index prunes expired commit objects",
-  );
-  if (
-    index.indexOf("node scripts/scoreboard-index.mjs prune") <
-    index.indexOf("node scripts/scoreboard-index.mjs index-push")
-  )
-    errors.push("prune runs before append");
-  if (index.indexOf("node scripts/scoreboard-index.mjs prune") > index.indexOf("upload-artifact"))
-    errors.push("prune runs after upload");
-  if (index.includes("workflow_runs[0]")) errors.push("index trusts the newest run");
-  if (index.includes("github.head_ref")) errors.push("index restores a pull request branch");
-  requireText(
-    index,
-    `name: \${{ steps.prior.outputs.artifact_name }}`,
-    "index upload must use the scoped artifact name",
-  );
-  requireText(performanceText, "evidence_waiver:", "performance waiver input");
-  const releaseGate = jobBlock(performanceText, "release-gate");
-  requireText(releaseGate, "if: inputs.gate == 'required'", "required gate condition");
-  requireText(
-    releaseGate,
-    `SCOREBOARD_WAIVER: \${{ inputs.evidence_waiver }}`,
-    "the gate must see the waiver",
-  );
-  const gateCommand = releaseGate.split("node scripts/scoreboard-index.mjs release-gate")[0] ?? "";
-  if (gateCommand.split("\n").slice(-8).join("\n").includes("continue-on-error"))
-    errors.push("release gate continues on error");
-  requireText(
-    releaseGate,
-    "node scripts/desktop-release-assets.mjs",
-    "publication assets must be assembled before the gate",
-  );
-  requireText(
-    releaseGate,
-    "node scripts/scoreboard-index.mjs stage-reports",
-    "publication copies every candidate report",
-  );
-  if (
-    releaseGate.indexOf("node scripts/scoreboard-index.mjs stage-reports") >
-    releaseGate.indexOf("node scripts/scoreboard-index.mjs release-gate")
-  )
-    errors.push("candidate reports are copied after the gate");
-  requireText(
-    releaseGate,
-    "SCOREBOARD_ARTIFACTS: publication/release-ready",
-    "gate must inspect publication files",
-  );
-  if (
-    releaseGate.indexOf("node scripts/desktop-release-assets.mjs") >
-    releaseGate.indexOf("node scripts/scoreboard-index.mjs release-gate")
-  )
-    errors.push("publication assets are assembled after the gate");
-  // Attempts, refusals and the chain origin only hold if every release extends one chain.
-  const gateAt = releaseGate.indexOf("node scripts/scoreboard-index.mjs release-gate");
-  const priorAt = releaseGate.indexOf(
-    "node scripts/scoreboard-index.mjs prior-index --scope release",
-  );
-  const restoreAt = releaseGate.indexOf("node scripts/scoreboard-index.mjs restore-index");
-  const uploadAt = releaseGate.lastIndexOf(`name: ${RELEASE_INDEX_ARTIFACT}`);
-  if (priorAt < 0 || restoreAt < priorAt || gateAt < restoreAt || !releaseGate.includes("run-id:"))
-    errors.push("the release chain is restored before the gate");
-  const uploadStep = releaseGate.slice(0, uploadAt).split("\n").slice(-5).join("\n");
-  if (uploadAt < gateAt || !uploadStep.includes("if: always()"))
-    errors.push("the release chain is uploaded after every gate run");
-  const validate = jobBlock(releaseText, "validate");
-  const validateAt = validate.indexOf("node scripts/desktop-release.mjs validate");
-  if (validateAt < 0) errors.push("validate job checks the tag");
-  if (/pnpm install|npm (ci|install)|setup-node/.test(validate.slice(0, Math.max(validateAt, 0))))
-    errors.push("validate needs installed dependencies");
-  const evidence = jobBlock(releaseText, "evidence");
-  requireText(evidence, "uses: ./.github/workflows/performance.yml", "release invokes performance");
-  requireText(evidence, "gate: required", "release gate is required");
-  requireText(evidence, "needs: [validate, build]", "evidence follows packaging");
-  if (evidence.includes("continue-on-error") || evidence.includes("gh release create"))
-    errors.push("evidence job bypasses the gate");
-  requireText(releaseText, "evidence_waiver:", "release waiver input");
-  requireText(evidence, "evidence_waiver:", "evidence receives the waiver");
-  if (
-    releaseText
-      .split("\n")
-      .some(
-        (line) =>
-          line.includes("inputs.evidence_waiver") &&
-          !line.includes("github.event_name == 'workflow_dispatch' && inputs.evidence_waiver"),
-      )
-  )
-    errors.push("a waiver may only come from a manual dispatch");
-  const publish = jobBlock(releaseText, "publish");
-  requireText(publish, "needs: [validate, build, evidence]", "publish needs evidence");
-  requireText(publish, "scoreboard-publication/gate.json", "notes bind the gate");
-  requireText(publish, "verify-publication", "publication bytes are reverified");
-  requireText(publish, "list-upload", "publication uploads an explicit file list");
-  requireText(publish, "node scripts/release-publish.mjs", "publish script");
-  requireText(publish, "--waiver-record", "waiver record is uploaded with the release");
-  requireText(publish, "waiver-record.json", "waiver record asset");
-  if (publish.includes("gh release create") || publish.includes("gh release view"))
-    errors.push("publish inlines release commands");
-  if (publish.includes("desktop-release-assets.mjs"))
-    errors.push("publish rewrites gated publication files");
-  if (publish.includes("release-ready/*")) errors.push("publication uploads a directory glob");
-  const reportsDownload = releaseGate.split("pattern: scoreboard-reports")[0] ?? "";
-  const reportsStep = reportsDownload.split("\n").slice(-12).join("\n");
-  if (!releaseGate.includes("node scripts/scoreboard-index.mjs report-artifact"))
-    errors.push("report artifact existence check");
-  if (
-    releaseGate.indexOf("report-artifact") < 0 ||
-    releaseGate.indexOf("report-artifact") > releaseGate.indexOf("pattern: scoreboard-reports")
-  )
-    errors.push("list reports before download");
-  if (!reportsStep.includes("steps.reports.outputs.present == 'true'"))
-    errors.push("report download must be skipped when the artifact is absent");
-  if (reportsStep.includes("continue-on-error")) errors.push("report download continues on error");
-  requireText(releaseText, "cancel-in-progress: false", "release must not cancel publication");
-  if (errors.length) fail("invalid-workflow", errors.join("; "));
+/** One plain sentence per refused reason: what happened, and what to do about it. */
+function gateErrorLine(reason) {
+  if (reason.code === "invalid-waiver")
+    return (
+      "The evidence waiver was refused because it is not a valid reason: it must be a single " +
+      `sentence using only ${WAIVER_ALLOWED_CHARACTERS}, with no slash, "www." host, ` +
+      "://scheme, or email address. Rewrite the waiver reason and dispatch again."
+    );
+  const what =
+    typeof reason.detail === "string" && reason.detail !== reason.code
+      ? reason.detail
+      : reason.code.replaceAll("-", " ");
+  const scope = reason.scope ? ` (${reason.scope})` : "";
+  return `The release gate refused this run: ${what}${scope}. Fix the evidence and run the release again.`;
 }
 
 function blank(value) {
@@ -2986,6 +2811,9 @@ async function main(argv) {
     return;
   }
   if (command === "index-push") {
+    const nowValue = args.now || env("SCOREBOARD_NOW");
+    const now = nowValue ? new Date(nowValue) : undefined;
+    if (now && Number.isNaN(now.getTime())) fail("invalid-timestamp", "invalid-timestamp");
     process.exitCode = await runIndexPush({
       root: args.root || env("SCOREBOARD_ROOT") || SCOREBOARD_INDEX_RELATIVE_PATH,
       commitsFile: args["commits-file"] ?? null,
@@ -2999,6 +2827,7 @@ async function main(argv) {
       suiteVersion: args["suite-version"] || env("SCOREBOARD_SUITE") || "scoreboard-1",
       fixedReleaseCommit: blank(args["fixed-release-sha"] || env("SCOREBOARD_FIXED")),
       pendingReason: args["pending-reason"] || env("SCOREBOARD_PENDING") || undefined,
+      now,
     });
     return;
   }
@@ -3043,10 +2872,11 @@ async function main(argv) {
     return;
   }
   if (command === "release-gate") {
+    const outputPath = env("SCOREBOARD_OUTPUT") || "scoreboard-publication/gate.json";
     process.exitCode = await runReleaseGate({
       artifactRoot: env("SCOREBOARD_ARTIFACTS") || "release-artifacts",
       reportsRoot: env("SCOREBOARD_REPORTS") || "scoreboard-reports",
-      outputPath: env("SCOREBOARD_OUTPUT") || "scoreboard-publication/gate.json",
+      outputPath,
       indexRoot: env("SCOREBOARD_INDEX") || path.join("scoreboard-publication", "index"),
       candidateSha: env("SCOREBOARD_CANDIDATE"),
       baseSha: env("SCOREBOARD_BASE"),
@@ -3058,6 +2888,11 @@ async function main(argv) {
       actor: env("GITHUB_TRIGGERING_ACTOR"),
       runId: /^\d+$/.test(env("GITHUB_RUN_ID")) ? Number(env("GITHUB_RUN_ID")) : null,
     });
+    if (process.exitCode) {
+      const gate = await readJson(outputPath);
+      for (const reason of gate?.reasons ?? [])
+        process.stdout.write(`::error title=Scoreboard release gate::${gateErrorLine(reason)}\n`);
+    }
     return;
   }
   if (command === "verify-publication") {
@@ -3097,16 +2932,9 @@ async function main(argv) {
     process.stdout.write(`${JSON.stringify({ removed: result.removed })}\n`);
     return;
   }
-  if (command === "check-workflows") {
-    assertWorkflowContracts(
-      await readFile(".github/workflows/performance.yml", "utf8"),
-      await readFile(".github/workflows/release-desktop.yml", "utf8"),
-    );
-    return;
-  }
   fail(
     "invalid-argument",
-    "Expected baseline-decision, restore-index, prior-index, index-push, prune, stage-reports, release-gate, report-artifact, verify-publication, list-upload, or check-workflows.",
+    "Expected baseline-decision, restore-index, prior-index, index-push, prune, stage-reports, release-gate, report-artifact, verify-publication, or list-upload.",
   );
 }
 

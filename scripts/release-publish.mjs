@@ -40,7 +40,6 @@ if (!tag || !/^[a-f0-9]{40}$/.test(target ?? "") || !notes || files.length === 0
   fail("invalid-argument");
 
 const view = gh(["release", "view", tag, "--json", "isDraft"]);
-let createdDraft = false;
 if (view.status === 0) {
   let parsed;
   try {
@@ -74,37 +73,34 @@ const created = gh([
   notes,
 ]);
 if (created.status !== 0) propagate(created);
-createdDraft = true;
 
 const uploadArgs = ["release", "upload", tag, ...files];
 if (typeof waiver === "string" && waiver !== "" && existsSync(waiver)) uploadArgs.push(waiver);
 const uploaded = gh(uploadArgs);
 if (uploaded.status !== 0) {
-  if (createdDraft) gh(["release", "delete", tag, "--yes", "--cleanup-tag=false"]);
+  gh(["release", "delete", tag, "--yes", "--cleanup-tag=false"]);
   propagate(uploaded);
 }
 
 const edited = gh(["release", "edit", tag, "--draft=false", "--prerelease", "--latest=false"]);
 if (edited.status !== 0) {
-  if (createdDraft) {
-    const again = gh(["release", "view", tag, "--json", "isDraft"]);
-    let published = false;
-    let draft = false;
-    if (again.status === 0) {
-      try {
-        const parsed = JSON.parse(again.stdout);
-        published = parsed.isDraft === false;
-        draft = parsed.isDraft === true;
-      } catch {
-        published = false;
-        draft = false;
-      }
+  const again = gh(["release", "view", tag, "--json", "isDraft"]);
+  let published = false;
+  let draft = false;
+  if (again.status === 0) {
+    try {
+      const parsed = JSON.parse(again.stdout);
+      published = parsed.isDraft === false;
+      draft = parsed.isDraft === true;
+    } catch {
+      published = false;
+      draft = false;
     }
-    if (draft) gh(["release", "delete", tag, "--yes", "--cleanup-tag=false"]);
-    if (published) {
-      process.stderr.write("warning: the edit reported an error after publishing\n");
-      process.exit(0);
-    }
+  }
+  if (draft) gh(["release", "delete", tag, "--yes", "--cleanup-tag=false"]);
+  if (published) {
+    process.stderr.write("warning: the edit reported an error after publishing\n");
+    process.exit(0);
   }
   propagate(edited);
 }

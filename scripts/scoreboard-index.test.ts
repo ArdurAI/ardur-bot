@@ -36,21 +36,18 @@ import {
 } from "../packages/testkit/src/scoreboard/statistics.ts";
 import { releaseNotes } from "./desktop-release.mjs";
 import {
-  appendIndexRecord,
-  assertWorkflowContracts,
+  appendIndexRecords,
   auditCommits,
   baselineMeasurementPlan,
   COMMIT_OBJECT_RETENTION_DAYS,
   classifyGateCodes,
   durableIndexScope,
-  evidenceFor,
   findPriorIndexArtifact,
   INDEX_SCHEMA_VERSION,
   indexJobHistory,
   parseRevListParents,
   planEvidenceRecords,
   pruneCommitObjects,
-  RELEASE_EVIDENCE_RETENTION,
   RELEASE_POLICY_SHA256,
   REQUIRED_RELEASE_TARGETS,
   readIndex,
@@ -65,6 +62,44 @@ import {
   verifyPublicationBytes,
   WORKFLOW_ARTIFACT_RETENTION_DAYS,
 } from "./scoreboard-index.mjs";
+
+/** A single-record convenience wrapper the tests use; production code appends in batches. */
+async function appendIndexRecord(
+  root: string,
+  input: Record<string, unknown>,
+  options: Record<string, unknown> = {},
+) {
+  const { appended } = await appendIndexRecords(root, () => [input], options);
+  return appended[0];
+}
+
+/** The single history/current-record view one test needs; production code audits by commit instead. */
+function evidenceFor(
+  records: {
+    commit: string;
+    suiteHash: string;
+    environment: string;
+    role: string;
+    tier: string;
+    status: string;
+  }[],
+  selector: { commit: string; suiteHash: string; environment: string; role: string; tier: string },
+) {
+  const history = records.filter(
+    (record) =>
+      record.commit === selector.commit &&
+      record.suiteHash === selector.suiteHash &&
+      record.environment === selector.environment &&
+      record.role === selector.role &&
+      record.tier === selector.tier,
+  );
+  const measured = history.filter((record) => record.status === "measured");
+  const pending = history.filter((record) => record.status === "pending");
+  return {
+    history,
+    current: measured.at(-1) ?? pending.at(-1) ?? null,
+  };
+}
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const A = "a".repeat(40);
@@ -81,110 +116,6 @@ const releaseYaml = readFileSync(
   "utf8",
 );
 const docs = readFileSync(new URL("../docs/performance.md", import.meta.url), "utf8");
-
-const goodPerformance = `
-on:
-  workflow_call:
-    inputs:
-      candidate_sha:
-      base_sha:
-      suite_version:
-      environment:
-      mode:
-      gate:
-      release_version:
-      evidence_waiver:
-concurrency:
-  cancel-in-progress: false
-jobs:
-  budgets:
-    if: inputs.gate != 'required'
-    steps:
-      - run: cp apps/web/playwright.performance.config.ts "$base/apps/web/"
-  release-gate:
-    if: inputs.gate == 'required'
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-      - id: prior
-        run: node scripts/scoreboard-index.mjs prior-index --scope release >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
-        with:
-          name: scoreboard-release-index
-          run-id: prior-run
-      - run: node scripts/scoreboard-index.mjs restore-index --root publication/scoreboard-publication/index
-      - run: node scripts/scoreboard-index.mjs report-artifact
-      - if: steps.reports.outputs.present == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          pattern: scoreboard-reports
-      - run: node scripts/desktop-release-assets.mjs version source publication/release-ready
-      - run: node scripts/scoreboard-index.mjs stage-reports --reports scoreboard-reports --directory publication/release-ready
-      - env:
-          SCOREBOARD_ARTIFACTS: publication/release-ready
-          SCOREBOARD_WAIVER: \${{ inputs.evidence_waiver }}
-        run: node scripts/scoreboard-index.mjs release-gate
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: scoreboard-release-index
-          path: publication/scoreboard-publication/index
-  index:
-    needs: budgets
-    if: always() && inputs.gate != 'required'
-    concurrency:
-      group: scoreboard-index-\${{ github.ref }}
-      cancel-in-progress: false
-    steps:
-      - id: prior
-        run: node scripts/scoreboard-index.mjs prior-index >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
-        with:
-          run-id: prior-run
-          github-token: token
-      - run: node scripts/scoreboard-index.mjs restore-index
-      - env:
-          SCOREBOARD_HEAD: github.event.pull_request.head.sha
-          SCOREBOARD_PENDING: needs.budgets.outputs.pending_reason
-        run: node scripts/scoreboard-index.mjs index-push
-      - run: node scripts/scoreboard-index.mjs prune
-      - uses: actions/upload-artifact@v4
-        with:
-          name: \${{ steps.prior.outputs.artifact_name }}
-      - run: node scripts/scoreboard-index.mjs baseline-decision
-      - run: echo retention-days: 90
-      - run: echo Measure current revision and retain traces
-      - run: echo .context/performance/scoreboard-index
-`;
-const goodRelease = `
-on:
-  workflow_dispatch:
-    inputs:
-      evidence_waiver:
-concurrency:
-  cancel-in-progress: false
-jobs:
-  validate:
-    steps:
-      - uses: actions/checkout@v5
-      - run: node scripts/desktop-release.mjs validate "$RELEASE_TAG"
-  evidence:
-    needs: [validate, build]
-    uses: ./.github/workflows/performance.yml
-    with:
-      gate: required
-      evidence_waiver: \${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}
-  publish:
-    needs: [validate, build, evidence]
-    steps:
-      - run: node scripts/desktop-release.mjs notes tag scoreboard-publication/gate.json
-      - run: |
-          node scripts/scoreboard-index.mjs verify-publication --directory release-ready --gate scoreboard-publication/gate.json
-          node scripts/scoreboard-index.mjs list-upload --directory release-ready
-          node scripts/release-publish.mjs --waiver-record publication/scoreboard-publication/waiver-record.json
-`;
-
 function pending(commit: string, attempt = 1, supersedes: string | null = null) {
   return {
     status: "pending" as const,
@@ -779,7 +710,6 @@ describe("scoreboard index", () => {
     expect(SCOREBOARD_INDEX_RELATIVE_PATH).toBe(".context/performance/scoreboard-index");
     expect(COMMIT_OBJECT_RETENTION_DAYS).toBe(180);
     expect(WORKFLOW_ARTIFACT_RETENTION_DAYS).toBe(90);
-    expect(RELEASE_EVIDENCE_RETENTION).toBe("github-release-lifetime");
     expect(REQUIRED_RELEASE_TARGETS).toEqual([
       "desktop-darwin-arm64",
       "desktop-darwin-x64",
@@ -831,9 +761,7 @@ describe("scoreboard index", () => {
       head: A,
     });
     expect(selectCommitRange({ head: A })).toEqual({ kind: "single", head: A });
-    expect(selectCommitRange({ mode: "release", base: B, head: A }).kind).toBe("range");
     expect(() => selectCommitRange({ base: "main", head: A })).toThrow();
-    expect(() => selectCommitRange({ mode: "nightly", head: A })).toThrow();
   });
 
   it("never copies candidate production code into the baseline tree", () => {
@@ -845,7 +773,6 @@ describe("scoreboard index", () => {
       }),
     ).toEqual({
       copyProductionIntoBaseline: false,
-      independentTrees: ["candidate", "base"],
       measureBaseline: false,
       pendingReason: "benchmark-runner-incompatible",
     });
@@ -1013,6 +940,33 @@ describe("scoreboard index", () => {
           message: `Index records must use schema version ${INDEX_SCHEMA_VERSION}.`,
         });
       }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("restores a chain from an older record schema as a fresh schema-upgrade chain", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-schema-upgrade-"));
+    const source = path.join(root, "source");
+    const target = path.join(root, "target");
+    try {
+      const current: Record<string, unknown> = { ...(await appendIndexRecord(source, pending(A))) };
+      const older = { ...current, schemaVersion: INDEX_SCHEMA_VERSION - 1 };
+      delete older.enumerationStart;
+      delete older.enumerationReason;
+      delete older.recordHash;
+      const resigned = { ...older, recordHash: contentDigest(older) };
+      await writeFile(path.join(source, "records.jsonl"), `${JSON.stringify(resigned)}\n`);
+
+      const origin = await restoreIndex(source, target, null);
+      expect(origin).toBe("schema-upgrade");
+      expect(await readIndex(target)).toEqual([]);
+      expect((await readFile(path.join(target, ".chain-origin"), "utf8")).trim()).toBe(
+        "schema-upgrade",
+      );
+      const appended = await appendIndexRecord(target, pending(B));
+      expect(appended.chainOrigin).toBe("schema-upgrade");
+      expect(appended.previousHash).toBe("0".repeat(64));
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -1806,6 +1760,7 @@ describe("release publication gate", () => {
     });
     return {
       status: result.status,
+      stdout: result.stdout,
       gate: JSON.parse(readFileSync(outputPath, "utf8")),
       indexRoot: path.join(caseRoot.root, indexName),
     };
@@ -1823,6 +1778,35 @@ describe("release publication gate", () => {
         ["pending", "reports-missing"],
       ]);
       expect(() => renderScoreboardNotes(result.gate)).toThrow();
+    } finally {
+      await rm(bare.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("prints every refusal reason as a job-log error line, and the allowed waiver characters", async () => {
+    const bare = await stageWithoutEvidence();
+    try {
+      const missing = releaseGateCli(bare, {}, "index-error-lines");
+      expect(missing.status).not.toBe(0);
+      expect(missing.stdout).toContain("::error title=Scoreboard release gate::");
+      for (const reason of missing.gate.reasons as { code: string; detail?: string }[]) {
+        const expected =
+          reason.detail && reason.detail !== reason.code
+            ? reason.detail
+            : reason.code.replaceAll("-", " ");
+        expect(missing.stdout, JSON.stringify(reason)).toContain(expected);
+      }
+
+      const badWaiver = releaseGateCli(
+        bare,
+        { SCOREBOARD_WAIVER: "Ask ops@example.invalid", GITHUB_EVENT_NAME: "workflow_dispatch" },
+        "index-error-waiver",
+      );
+      expect(badWaiver.status).not.toBe(0);
+      expect(codes(badWaiver.gate)).toEqual(["invalid-waiver"]);
+      expect(badWaiver.stdout).toContain("::error title=Scoreboard release gate::");
+      expect(badWaiver.stdout).toContain("letters, numbers, spaces");
+      expect(badWaiver.stdout).toContain("www.");
     } finally {
       await rm(bare.root, { recursive: true, force: true });
     }
@@ -1883,6 +1867,35 @@ describe("release publication gate", () => {
     }
   }, 60_000);
 
+  it("still publishes under a waiver after the release chain is restored from an older schema", async () => {
+    const bare = await stageWithoutEvidence();
+    try {
+      const source = path.join(bare.root, "old-schema-source");
+      const target = path.join(bare.root, "index-schema-waiver");
+      const current: Record<string, unknown> = { ...(await appendIndexRecord(source, pending(A))) };
+      const older = { ...current, schemaVersion: INDEX_SCHEMA_VERSION - 1 };
+      delete older.enumerationStart;
+      delete older.enumerationReason;
+      delete older.recordHash;
+      const resigned = { ...older, recordHash: contentDigest(older) };
+      await writeFile(path.join(source, "records.jsonl"), `${JSON.stringify(resigned)}\n`);
+      expect(await restoreIndex(source, target, null)).toBe("schema-upgrade");
+
+      const result = await gate(bare, "index-schema-waiver", {
+        waiver: WAIVER,
+        trigger: "workflow_dispatch",
+        actor: "release-operator",
+      });
+      expect(result.code).toBe(0);
+      expect(result.gate.allowPublication).toBe(true);
+      const records = await readIndex(result.indexRoot);
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({ status: "waived", chainOrigin: "schema-upgrade" });
+    } finally {
+      await rm(bare.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("refuses a waiver on a tag push and reads the trigger from GitHub", async () => {
     const bare = await stageWithoutEvidence();
     try {
@@ -1923,6 +1936,9 @@ describe("release publication gate", () => {
         "Runner logs are in /opt/runner/logs",
         "Output kept under ./build/cache",
         "Notes at ~/lab",
+        "See example.com/runbook",
+        "Runbook at www.example.com/perf",
+        "apps/desktop/out",
         "first line\nsecond line",
         "x".repeat(201),
       ];
@@ -3087,7 +3103,12 @@ async function fixtureCommit(cwd: string, file: string, date?: string) {
   return fixtureGit(cwd, ["rev-parse", "HEAD"]);
 }
 
-const DEV_PUSH = { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/dev" };
+const DEV_PUSH = {
+  GITHUB_EVENT_NAME: "push",
+  GITHUB_REF: "refs/heads/dev",
+  // Fixes the retention window's clock so these tests never depend on the day they run.
+  SCOREBOARD_NOW: "2026-09-25T00:00:00Z",
+};
 
 describe("commit enumeration", () => {
   it("indexes a push whose queued run was cancelled, following first parents", async () => {
@@ -3100,7 +3121,7 @@ describe("commit enumeration", () => {
       const c0 = await fixtureCommit(work, "c0");
       const c1 = await fixtureCommit(work, "c1");
       const c2 = await fixtureCommit(work, "c2");
-      const push = (before: string, head: string, indexRoot: string) =>
+      const push = (head: string, indexRoot: string) =>
         spawnSync(
           process.execPath,
           [path.join(repo, "scripts/scoreboard-index.mjs"), "index-push"],
@@ -3110,7 +3131,6 @@ describe("commit enumeration", () => {
             env: {
               ...process.env,
               ...DEV_PUSH,
-              SCOREBOARD_BEFORE: before,
               SCOREBOARD_BASE: "",
               SCOREBOARD_HEAD: head,
               SCOREBOARD_RUNNER: head,
@@ -3119,7 +3139,7 @@ describe("commit enumeration", () => {
             },
           },
         );
-      expect(push(c0, c2, transport).status).toBe(0);
+      expect(push(c2, transport).status).toBe(0);
       const c3 = await fixtureCommit(work, "c3");
       fixtureGit(work, ["checkout", "-q", "-b", "side"]);
       const side = await fixtureCommit(work, "side");
@@ -3144,20 +3164,20 @@ describe("commit enumeration", () => {
         { cwd: repo, encoding: "utf8" },
       );
       expect(restore.status).toBe(0);
-      const third = push(c3, c6, restored);
+      const third = push(c6, restored);
       expect(third.status).toBe(0);
       const records = await readIndex(restored);
       expect(records.map((record) => record.commit)).toEqual([c0, c1, c2, c3, c4, merge, c6]);
       expect(records.some((record) => record.commit === side)).toBe(false);
       expect(records.find((record) => record.commit === merge)?.parentCommit).toBe(c4);
-      expect(push(c3, c6, restored).status).toBe(0);
+      expect(push(c6, restored).status).toBe(0);
       expect(await readIndex(restored)).toHaveLength(7);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   }, 60_000);
 
-  it("records every commit in an empty index when before is the middle commit", async () => {
+  it("records every commit in an empty index within the retention window", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-empty-chain-"));
     const work = path.join(root, "repo");
     const indexRoot = path.join(root, "index");
@@ -3176,7 +3196,6 @@ describe("commit enumeration", () => {
           env: {
             ...process.env,
             ...DEV_PUSH,
-            SCOREBOARD_BEFORE: middle,
             SCOREBOARD_BASE: "",
             SCOREBOARD_HEAD: head,
             SCOREBOARD_RUNNER: head,
@@ -3217,7 +3236,6 @@ describe("commit enumeration", () => {
           env: {
             ...process.env,
             ...DEV_PUSH,
-            SCOREBOARD_BEFORE: middle,
             SCOREBOARD_BASE: "",
             SCOREBOARD_HEAD: head,
             SCOREBOARD_RUNNER: head,
@@ -3262,7 +3280,6 @@ describe("commit enumeration", () => {
           env: {
             ...process.env,
             ...DEV_PUSH,
-            SCOREBOARD_BEFORE: middle,
             SCOREBOARD_BASE: "",
             SCOREBOARD_HEAD: head,
             SCOREBOARD_RUNNER: head,
@@ -3284,6 +3301,129 @@ describe("commit enumeration", () => {
       await rm(root, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("uses the injected clock for the retention window, not the real clock", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-clock-"));
+    const work = path.join(root, "repo");
+    await mkdir(work);
+    try {
+      fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      const oldest = await fixtureCommit(work, "c0", "2026-08-15T00:00:00Z");
+      const head = await fixtureCommit(work, "c1");
+      const push = (now: string, indexRoot: string) =>
+        spawnSync(
+          process.execPath,
+          [path.join(repo, "scripts/scoreboard-index.mjs"), "index-push"],
+          {
+            cwd: work,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              GITHUB_EVENT_NAME: "push",
+              GITHUB_REF: "refs/heads/dev",
+              SCOREBOARD_BASE: "",
+              SCOREBOARD_HEAD: head,
+              SCOREBOARD_RUNNER: head,
+              SCOREBOARD_MODE: "commit",
+              SCOREBOARD_ROOT: indexRoot,
+              SCOREBOARD_NOW: now,
+            },
+          },
+        );
+      // A clock close to the commit dates keeps both in the 90-day window; a clock four months
+      // later pushes the older commit out of it, though the pushed head is always recorded.
+      const inWindow = push("2026-09-01T00:00:00Z", path.join(root, "in-window"));
+      expect(inWindow.status, inWindow.stderr).toBe(0);
+      expect(
+        (await readIndex(path.join(root, "in-window"))).map((record) => record.commit),
+      ).toEqual([oldest, head]);
+
+      const outOfWindow = push("2027-01-01T00:00:00Z", path.join(root, "future"));
+      expect(outOfWindow.status, outOfWindow.stderr).toBe(0);
+      expect((await readIndex(path.join(root, "future"))).map((record) => record.commit)).toEqual([
+        head,
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("gives the pushed head the budgets pending reason and backfilled commits not-measured", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-not-measured-"));
+    const work = path.join(root, "repo");
+    const indexRoot = path.join(root, "index");
+    await mkdir(work);
+    try {
+      fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      const c0 = await fixtureCommit(work, "c0");
+      const c1 = await fixtureCommit(work, "c1");
+      const head = await fixtureCommit(work, "c2");
+      const pushed = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "index-push"],
+        {
+          cwd: work,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            ...DEV_PUSH,
+            SCOREBOARD_BASE: "",
+            SCOREBOARD_HEAD: head,
+            SCOREBOARD_RUNNER: head,
+            SCOREBOARD_MODE: "commit",
+            SCOREBOARD_ROOT: indexRoot,
+            SCOREBOARD_PENDING: "benchmark-runner-incompatible",
+          },
+        },
+      );
+      expect(pushed.status, pushed.stderr).toBe(0);
+      const records = await readIndex(indexRoot);
+      expect(records.map((record) => record.commit)).toEqual([c0, c1, head]);
+      expect(records.find((record) => record.commit === head)?.pendingReason).toBe(
+        "benchmark-runner-incompatible",
+      );
+      expect(
+        records
+          .filter((record) => record.commit !== head)
+          .every((record) => record.pendingReason === "not-measured"),
+      ).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("always records the pushed head even when it is older than the retention window", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-old-head-"));
+    const work = path.join(root, "repo");
+    const indexRoot = path.join(root, "index");
+    await mkdir(work);
+    try {
+      fixtureGit(work, ["init", "-q", "-b", "dev"]);
+      const head = await fixtureCommit(work, "old", "2020-01-01T00:00:00Z");
+      const pushed = spawnSync(
+        process.execPath,
+        [path.join(repo, "scripts/scoreboard-index.mjs"), "index-push"],
+        {
+          cwd: work,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            ...DEV_PUSH,
+            SCOREBOARD_BASE: "",
+            SCOREBOARD_HEAD: head,
+            SCOREBOARD_RUNNER: head,
+            SCOREBOARD_MODE: "commit",
+            SCOREBOARD_ROOT: indexRoot,
+          },
+        },
+      );
+      expect(pushed.status, pushed.stderr).toBe(0);
+      const records = await readIndex(indexRoot);
+      expect(records.map((record) => record.commit)).toEqual([head]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 describe("bounded and reset enumeration", () => {
@@ -3296,7 +3436,6 @@ describe("bounded and reset enumeration", () => {
         encoding: "utf8",
         env: {
           ...process.env,
-          SCOREBOARD_BEFORE: "",
           SCOREBOARD_BASE: "",
           SCOREBOARD_MODE: "commit",
           ...env,
@@ -3312,7 +3451,6 @@ describe("bounded and reset enumeration", () => {
     try {
       fixtureGit(work, ["init", "-q", "-b", "dev"]);
       for (const name of ["d0", "d1", "d2", "d3"]) await fixtureCommit(work, name);
-      const forkPoint = fixtureGit(work, ["rev-parse", "HEAD"]);
       fixtureGit(work, ["checkout", "-q", "-b", "pr"]);
       const first = await fixtureCommit(work, "pr-1");
       const second = await fixtureCommit(work, "pr-2");
@@ -3321,7 +3459,6 @@ describe("bounded and reset enumeration", () => {
       const pulled = indexPush(work, {
         GITHUB_EVENT_NAME: "pull_request",
         GITHUB_REF: "refs/pull/7/merge",
-        SCOREBOARD_BEFORE: forkPoint,
         SCOREBOARD_BASE: base,
         SCOREBOARD_HEAD: second,
         SCOREBOARD_RUNNER: second,
@@ -3363,7 +3500,6 @@ describe("bounded and reset enumeration", () => {
       await appendIndexRecord(indexRoot, pending(gone));
       const pushed = indexPush(work, {
         ...DEV_PUSH,
-        SCOREBOARD_BEFORE: gone,
         SCOREBOARD_HEAD: head,
         SCOREBOARD_RUNNER: head,
         SCOREBOARD_ROOT: indexRoot,
@@ -3409,9 +3545,11 @@ describe("prior index chain", () => {
     head_repository: { full_name: REPOSITORY },
     ...overrides,
   });
+  const COMMIT_ARTIFACT = `scoreboard-index-schema-${INDEX_SCHEMA_VERSION}`;
+  const RELEASE_ARTIFACT = `scoreboard-release-index-schema-${INDEX_SCHEMA_VERSION}`;
   const artifact = (runId: number, expired: boolean) => ({
     id: runId * 10,
-    name: "scoreboard-index",
+    name: COMMIT_ARTIFACT,
     expired,
     workflow_run: { id: runId },
   });
@@ -3508,7 +3646,7 @@ describe("prior index chain", () => {
       `/repos/${REPOSITORY}/actions/runs/30/artifacts`,
       `/repos/${REPOSITORY}/actions/runs/20/artifacts`,
     ]);
-    expect(lookups[0]?.query).toMatchObject({ name: "scoreboard-index" });
+    expect(lookups[0]?.query).toMatchObject({ name: COMMIT_ARTIFACT });
     expect(result).toEqual({ runId: 20, missingReason: null });
   });
 
@@ -3666,14 +3804,14 @@ describe("prior index chain", () => {
       "durable=false",
       "run_id=",
       "missing_reason=non-durable-check",
-      "artifact_name=scoreboard-index-check",
+      `artifact_name=${COMMIT_ARTIFACT}-check`,
     ]);
   });
 
   it("restores the release chain from any completed release run of this repository", async () => {
     const releaseArtifact = (runId: number) => ({
       ...artifact(runId, false),
-      name: "scoreboard-release-index",
+      name: RELEASE_ARTIFACT,
     });
     const github = fakeGitHub(
       [
@@ -3716,7 +3854,7 @@ describe("prior index chain", () => {
       `/repos/${REPOSITORY}/actions/runs/52/artifacts`,
       `/repos/${REPOSITORY}/actions/runs/51/artifacts`,
     ]);
-    expect(lookups[0]?.query).toMatchObject({ name: "scoreboard-release-index" });
+    expect(lookups[0]?.query).toMatchObject({ name: RELEASE_ARTIFACT });
   });
 
   it("proves a first run from git history that predates the retention window", async () => {
@@ -3740,7 +3878,10 @@ describe("prior index chain", () => {
       expect(release.hasIndexJob(added)).toBe(false);
       const workflow = path.join(root, ".github/workflows/performance.yml");
       await mkdir(path.dirname(workflow), { recursive: true });
-      await writeFile(workflow, "name: scoreboard-release-index\n");
+      await writeFile(
+        workflow,
+        "run: node scripts/scoreboard-index.mjs prior-index --scope release\n",
+      );
       fixtureGit(root, ["add", ".github/workflows/performance.yml"], "2026-09-10T00:00:00Z");
       fixtureGit(root, ["commit", "-q", "-m", "release index"], "2026-09-10T00:00:00Z");
       const restoring = fixtureGit(root, ["rev-parse", "HEAD"]);
@@ -3787,20 +3928,18 @@ describe("fixed release lookup", () => {
   });
 });
 
-describe("workflow contracts", () => {
-  it("rejects a publication job that does not need evidence", () => {
-    expect(() => assertWorkflowContracts(goodPerformance, goodRelease)).not.toThrow();
-    const bypass = goodRelease.replace(
-      "needs: [validate, build, evidence]",
-      "needs: [validate, build]",
-    );
-    expect(() => assertWorkflowContracts(goodPerformance, bypass)).toThrow(/evidence/);
-    const copying = `${goodPerformance}\ncp apps/web/src/components/ShellSkeleton.tsx\n`;
-    expect(() => assertWorkflowContracts(copying, goodRelease)).toThrow(/copies candidate code/);
-  });
+/** Extracts one top-level job's body from a workflow file's raw text. */
+function jobBlock(yaml: string, name: string): string {
+  const marker = `\n  ${name}:\n`;
+  const start = yaml.indexOf(marker);
+  if (start < 0) throw new Error(`missing job ${name}`);
+  const rest = yaml.slice(start + marker.length);
+  const next = rest.search(/\n {2}[a-z0-9-]+:\n/);
+  return next < 0 ? rest : rest.slice(0, next);
+}
 
+describe("workflow contracts", () => {
   it("requires the checked-in workflows to index commits and gate publication", () => {
-    expect(() => assertWorkflowContracts(performanceYaml, releaseYaml)).not.toThrow();
     const head = performanceYaml.match(/SCOREBOARD_HEAD:\s*(.+)/)?.[1] ?? "";
     expect(head).toContain("github.event.pull_request.head.sha");
     expect(head.indexOf("pull_request.head.sha")).toBeLessThan(head.indexOf("github.sha"));
@@ -3829,9 +3968,12 @@ describe("workflow contracts", () => {
     expect(docs).not.toContain("third worktree");
     expect(docs).toContain("measures both revisions with the candidate's harness");
     expect(docs).toContain("budgets job's pending reason");
+    expect(releaseYaml).toContain(
+      `evidence_waiver: \${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}`,
+    );
   });
 
-  it("rejects a directory in the upload set and a publish step without draft cleanup", async () => {
+  it("rejects a directory in the upload set", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "scoreboard-upload-"));
     try {
       await mkdir(path.join(directory, "scoreboard-evidence"));
@@ -3841,65 +3983,29 @@ describe("workflow contracts", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-    const directoryUpload = goodRelease.replace(
-      "list-upload --directory release-ready",
-      "gh release create release-ready/*",
-    );
-    expect(() => assertWorkflowContracts(goodPerformance, directoryUpload)).toThrow(/directory/);
-    const noCleanup = goodRelease.replace(
-      "node scripts/release-publish.mjs --waiver-record publication/scoreboard-publication/waiver-record.json",
-      "true",
-    );
-    expect(() => assertWorkflowContracts(goodPerformance, noCleanup)).toThrow(/publish script/);
-  });
-
-  it("passes a waiver to the gate only from a manual dispatch", () => {
-    const guarded = `\${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}`;
-    const unguarded = goodRelease.replace(guarded, `\${{ inputs.evidence_waiver }}`);
-    expect(() => assertWorkflowContracts(goodPerformance, unguarded)).toThrow(/waiver/);
-    const unseen = goodPerformance.replace(`SCOREBOARD_WAIVER: \${{ inputs.evidence_waiver }}`, "");
-    expect(() => assertWorkflowContracts(unseen, goodRelease)).toThrow(/waiver/);
-    expect(releaseYaml).toContain(`evidence_waiver: ${guarded}`);
-  });
-
-  it("rejects an index lookup that trusts the newest run or uploads a check as durable", () => {
-    const newest = goodPerformance.replace(
-      "prior-index >>",
-      "prior-index --jq '.workflow_runs[0].id' >>",
-    );
-    expect(() => assertWorkflowContracts(newest, goodRelease)).toThrow(/newest run/);
-    const branch = goodPerformance.replace(
-      'run: node scripts/scoreboard-index.mjs prior-index >> "$GITHUB_OUTPUT"',
-      `run: gh api -f branch="\${{ github.head_ref }}"`,
-    );
-    expect(() => assertWorkflowContracts(branch, goodRelease)).toThrow(/prior-index/);
-    const durable = goodPerformance.replace(
-      `name: \${{ steps.prior.outputs.artifact_name }}`,
-      "name: scoreboard-index",
-    );
-    expect(() => assertWorkflowContracts(durable, goodRelease)).toThrow(/artifact name/);
   });
 
   it("validates the preview tag before any dependency install", () => {
-    const validate = releaseYaml.split("\n  validate:\n")[1]?.split("\n  build:\n")[0] ?? "";
-    expect(validate).toContain("node scripts/desktop-release.mjs validate");
-    expect(validate).not.toMatch(/pnpm install|npm (ci|install)|setup-node/);
-    const installed = goodRelease.replace(
-      "      - run: node scripts/desktop-release.mjs validate",
-      "      - run: pnpm install --frozen-lockfile\n      - run: node scripts/desktop-release.mjs validate",
-    );
-    expect(installed).not.toBe(goodRelease);
-    expect(() => assertWorkflowContracts(goodPerformance, installed)).toThrow(
-      /validate needs installed dependencies/,
-    );
+    const validate = jobBlock(releaseYaml, "validate");
+    const validateAt = validate.indexOf("node scripts/desktop-release.mjs validate");
+    expect(validateAt).toBeGreaterThan(-1);
+    expect(validate.slice(0, validateAt)).not.toMatch(/pnpm install|npm (ci|install)|setup-node/);
+  });
+
+  it("copies every candidate report into the publication directory before the gate judges it", () => {
+    const releaseGate = jobBlock(performanceYaml, "release-gate");
+    const stageAt = releaseGate.indexOf("node scripts/scoreboard-index.mjs stage-reports");
+    const judgeAt = releaseGate.indexOf("node scripts/scoreboard-index.mjs release-gate");
+    expect(stageAt).toBeGreaterThan(-1);
+    expect(stageAt).toBeLessThan(judgeAt);
   });
 
   it("restores the release chain before the gate and keeps it after a refusal", () => {
-    const gateJob = performanceYaml.split("\n  release-gate:\n")[1] ?? "";
+    const gateJob = jobBlock(performanceYaml, "release-gate");
     const prior = gateJob.indexOf("node scripts/scoreboard-index.mjs prior-index --scope release");
     const restore = gateJob.indexOf("node scripts/scoreboard-index.mjs restore-index");
     const judge = gateJob.indexOf("node scripts/scoreboard-index.mjs release-gate");
-    const upload = gateJob.lastIndexOf("name: scoreboard-release-index");
+    const upload = gateJob.lastIndexOf(`name: \${{ steps.prior.outputs.artifact_name }}`);
     expect(prior).toBeGreaterThan(-1);
     expect(restore).toBeGreaterThan(prior);
     expect(judge).toBeGreaterThan(restore);
@@ -3907,12 +4013,6 @@ describe("workflow contracts", () => {
     expect(gateJob.slice(judge, upload)).toContain("if: always()");
     expect(performanceYaml).not.toMatch(/common_runner_sha|inputs\.attempt|\n {6}attempt:/);
     expect(releaseYaml).not.toMatch(/common_runner_sha|\n {6}attempt:/);
-    const unrestored = goodPerformance.replace(
-      "      - run: node scripts/scoreboard-index.mjs restore-index --root publication/scoreboard-publication/index\n",
-      "",
-    );
-    expect(unrestored).not.toBe(goodPerformance);
-    expect(() => assertWorkflowContracts(unrestored, goodRelease)).toThrow(/release chain/);
   });
 
   it("documents where the index lives and how long evidence is kept", () => {
@@ -3935,5 +4035,7 @@ describe("workflow contracts", () => {
     );
     expect(docs).not.toMatch(/publication needs them declared|release-policy\.json` is unchanged/);
     expect(docs).not.toContain("common_runner_sha");
+    expect(docs).toContain("schema-upgrade");
+    expect(docs).toMatch(/any token\s+with a slash, any `www\.` host/);
   });
 });

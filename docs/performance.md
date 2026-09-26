@@ -264,7 +264,10 @@ chain origin `history-rewritten`, and enumerates as for an empty chain. The earl
 its workflow artifact until that expires. Commits reached only through a merged side branch are not
 indexed separately. The index job reads the chain once and appends every new record in one write
 under one lock, so a full-window backfill is one pass. The next upload contains the complete
-restored chain plus the new records.
+restored chain plus the new records. A durable push always records its pushed head, even when the
+head's own committer date is older than the retention window. Only the pushed head carries the
+budgets job's verdict for this run; every other commit enumerated by backfill or by a multi-commit
+push was never individually attempted and is recorded `not-measured`.
 
 A new genesis names why no chain was restored. `first-run` means git history shows the index job did
 not exist on the branch before the retention window, so no older chain can exist.
@@ -272,7 +275,14 @@ not exist on the branch before the retention window, so no older chain can exist
 and GitHub has since deleted the runs; an empty run list alone does not prove a first run.
 `prior-artifact-missing` means a successful run inside the window exists but none of them uploaded
 the artifact. `history-rewritten` means a chain was restored but none of its commits remain in the
-branch history.
+branch history. `schema-upgrade` means a restored chain's records use a record schema version the
+current code does not read.
+
+The workflow artifact name carries the record schema version (`scoreboard-index-schema-6`,
+`scoreboard-release-index-schema-6`), so a schema version bump changes the name the job searches
+for and never finds an older-schema artifact to restore; the index and the release gate simply
+start a fresh chain instead of failing. A schema change is never a reason a release is blocked: the
+waiver path appends to whatever chain it is given, empty or not.
 
 The release gate keeps its own durable chain, `scoreboard-release-index`, restored the same way
 before it judges: the job lists this repository's completed push and manual runs of the release
@@ -389,8 +399,11 @@ gate's workflow artifact; no public release asset names it. A waived release car
 measurements; its evidence section starts with
 `This preview was published without measured performance evidence: <reason>.`
 The `waiver-record.json` release asset carries the reason, the run id, the index line number and
-that line's record hash, so the record outlives the 90-day workflow artifact. A reason that
-contains a path, an email address or a URL is refused as `invalid-waiver`.
+that line's record hash, so the record outlives the 90-day workflow artifact. A waiver reason is
+one plain sentence of letters, numbers, spaces, and `. , ; : ' " ( ) ! ? & % + -` only; any token
+with a slash, any `www.` host, a `://` scheme, or an email address is refused as `invalid-waiver`.
+When the gate refuses a run, it prints every reason as a job-log `::error::` line: one sentence
+saying what happened and, for `invalid-waiver`, which characters are allowed.
 
 The commit sample plan is 20 paired observations. The release plan is 200 replay pairs and 100
 observations for every required startup stratum. Missing or short startup strata fail with

@@ -10,7 +10,10 @@ on:
         required: true
         type: string
       evidence_waiver:
-        description: Reason to publish this preview without measured performance evidence
+        description: >-
+          Reason to publish this preview without measured performance evidence. One plain
+          sentence: letters, numbers, spaces, and . , ; : ' " ( ) ! ? & % + - only. No slash,
+          "www." host, ://scheme, or email address.
         required: false
         type: string
         default: ""
