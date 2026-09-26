@@ -44,17 +44,13 @@ export function stableJsonValue(value: unknown): string {
   return serialize(value);
 }
 
-/** Stable identity of a JSON-only value. Key order does not change the digest. */
-export function stableValueDigest(value: unknown): string {
-  return createHash("sha256").update(stableJsonValue(value)).digest("hex");
-}
-
 export function approvalEffectKey(
   runId: string,
   toolName: string,
   args: Record<string, unknown>,
 ): string {
-  return `${runId}:${toolName}:${stableValueDigest(args)}`;
+  const digest = createHash("sha256").update(stableJsonValue(args)).digest("hex");
+  return `${runId}:${toolName}:${digest}`;
 }
 
 /**

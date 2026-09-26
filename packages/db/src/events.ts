@@ -1512,8 +1512,16 @@ function mapProductEvent(event: {
     type: event.type as ProductEvent["type"],
     runId: event.runId ?? undefined,
     createdAt: event.createdAt.toISOString(),
-    payload: event.payload as Record<string, unknown>,
+    payload: clientPayload(event.type, event.payload as Record<string, unknown>),
   };
+}
+
+/** Only the server compares a tool call's argument digest; no reader of the thread receives it. */
+function clientPayload(type: string, payload: Record<string, unknown>) {
+  if (type !== "agent.tool.called" || typeof payload !== "object" || payload === null)
+    return payload;
+  const { argumentDigest: _digest, ...rest } = payload;
+  return rest;
 }
 
 class ChangeLatch {

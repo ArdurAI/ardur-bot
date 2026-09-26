@@ -17,6 +17,7 @@ vi.mock("../../../../adapters/src/delegation-helpers.js", () => ({
   })),
 }));
 
+import { createHash } from "node:crypto";
 import type {
   AgentRunRequest,
   AgentRuntimeEvent,
@@ -30,7 +31,7 @@ import {
   projectCommandBlocks,
   settleCommandBlock,
 } from "@ardurbot/core";
-import { approvalEffectKey } from "@ardurbot/core/node/approval-effect-key";
+import { approvalEffectKey, stableJsonValue } from "@ardurbot/core/node/approval-effect-key";
 import { afterEach, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "../../../../adapters/src/auto-review.js";
 import type * as ComputerLifecycleModule from "../../../../adapters/src/computer-lifecycle.js";
@@ -39,6 +40,7 @@ import { taskWorkspacePath } from "../../../../adapters/src/delegation-workspace
 import { createRunExecutor } from "../../../../adapters/src/executor.js";
 import { recordRunUsage } from "../../../../adapters/src/run-usage.js";
 import { startScoreboardTrace } from "../../../../adapters/src/scoreboard-trace.js";
+import { EncryptedSecretStore } from "../../../../adapters/src/secrets.js";
 import { collectTraceEvidence, crashSpanUnmeasured } from "../trace-collector.js";
 
 vi.mock("../../../../adapters/src/computer-lifecycle.js", async (importOriginal) => ({
@@ -180,8 +182,9 @@ function survivorsOf(effects: readonly Effect[]) {
     .map((effect) => ({ ...effect }));
 }
 
-function harness(mode: Mode) {
+function harness(mode: Mode, encryptionKey = "resume-log-encryption-key") {
   const scripted = mode === "scripted";
+  const secretStore = new EncryptedSecretStore(encryptionKey);
   const log: Logged[] = [];
   let seq = 0;
   let persist = true;
@@ -503,7 +506,10 @@ function harness(mode: Mode) {
   });
   const executor = createRunExecutor({
     prisma,
-    secretStore: { load: () => "test-key" },
+    secretStore: {
+      load: () => "test-key",
+      digest: (purpose: string, value: string) => secretStore.digest(purpose, value),
+    },
     runtime: { describe: () => ({ capabilities: { scripted } }), run: runtimeRun },
     connector: {
       discoverTools: async () => [],
@@ -1122,6 +1128,20 @@ it("keeps an earlier call's card when a later call on its id was killed before i
     ["echo alpha", "echo alpha"],
     ["echo beta", "echo beta"],
   ]);
+});
+
+it("keys the stored argument digest to the deployment", async () => {
+  const digests: unknown[] = [];
+  for (const key of ["deployment-one-encryption-key", "deployment-two-encryption-key"]) {
+    const h = harness("production", key);
+    await h.resume([{ name: "shell", args: ARGS_A, executionId: A }]);
+    const called = h.log.find(at("agent.tool.called", A))?.payload as Record<string, unknown>;
+    digests.push(called.argumentDigest);
+  }
+  expect(digests[0]).toMatch(/^[a-f0-9]{64}$/);
+  expect(digests[1]).toMatch(/^[a-f0-9]{64}$/);
+  expect(digests[1]).not.toBe(digests[0]);
+  expect(digests).not.toContain(createHash("sha256").update(stableJsonValue(ARGS_A)).digest("hex"));
 });
 
 it("stores narration before the call it introduces, however long the usage save takes", async () => {

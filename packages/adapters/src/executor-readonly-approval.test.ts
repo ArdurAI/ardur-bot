@@ -28,8 +28,12 @@ import { catalogEntries, resolveCatalogCall } from "./lazy-tool-catalog.js";
 import { approvalRequestRoute } from "./remote-execution.js";
 import { recordRunUsage } from "./run-usage.js";
 import { startScoreboardTrace } from "./scoreboard-trace.js";
+import { EncryptedSecretStore } from "./secrets.js";
 
 vi.mock("./runtimes/native-host.js", () => ({ nativeHostOwner: async () => true }));
+
+const digests = new EncryptedSecretStore("test-encryption-key");
+const testDigest = digests.digest.bind(digests);
 
 const fleetComputer = vi.hoisted(() => ({ kind: "desktop" }));
 
@@ -312,7 +316,7 @@ function fixture({
   });
   const executor = createRunExecutor({
     prisma,
-    secretStore: { load: () => "test-key" },
+    secretStore: { load: () => "test-key", digest: testDigest },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
     connector: {
       discoverTools: async () =>

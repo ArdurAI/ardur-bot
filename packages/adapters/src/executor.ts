@@ -92,7 +92,6 @@ import {
   isToolEffectIdempotencyKey,
   legacyScopedToolEffectIdempotencyKey,
   stableJsonValue,
-  stableValueDigest,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
 import {
@@ -4428,7 +4427,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
             executionId: string;
             delegationId?: string;
           }) => {
-            const argumentDigest = stableValueDigest(call.args);
+            const argumentDigest = deps.secretStore.digest(
+              "tool-call-arguments",
+              stableJsonValue(call.args),
+            );
             const delegationId = call.delegationId ?? null;
             const recorded = recordedCalls.get(call.executionId);
             // A known id with the same name and arguments is that call running again. A

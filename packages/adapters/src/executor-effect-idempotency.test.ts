@@ -26,6 +26,10 @@ import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
 import { createRunExecutor } from "./executor.js";
 import { ProviderError } from "./provider-error.js";
 import { recordRunUsage } from "./run-usage.js";
+import { EncryptedSecretStore } from "./secrets.js";
+
+const digests = new EncryptedSecretStore("test-encryption-key");
+const testDigest = digests.digest.bind(digests);
 
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
@@ -324,7 +328,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
   const memorySearch = vi.fn(async () => []);
   const executor = createRunExecutor({
     prisma,
-    secretStore: { load: () => "test-key" },
+    secretStore: { load: () => "test-key", digest: testDigest },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
     connector: {
       discoverTools: async () => [],
