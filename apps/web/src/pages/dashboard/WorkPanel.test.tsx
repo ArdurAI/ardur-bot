@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
 import type { WorkItem } from "@ardurbot/contracts/board";
 import type { ReactNode } from "react";
 import { act } from "react";
@@ -135,4 +136,20 @@ it("shows ready work and a quiet line when outcomes are unavailable", async () =
   expect(node.textContent).toContain("Board outcomes are unavailable right now.");
   expect(node.textContent).not.toContain("Could not load");
   expect(node.textContent).not.toContain("closed without being completed");
+});
+
+it("catalogs the unavailable-outcomes line in every web locale", () => {
+  const msgid = "Board outcomes are unavailable right now.";
+  const translation = (locale: string) => {
+    const catalog = readFileSync(`apps/web/src/locales/${locale}/messages.po`, "utf8");
+    const key = `msgid ${JSON.stringify(msgid)}\nmsgstr "`;
+    const at = catalog.indexOf(key);
+    if (at < 0) return null;
+    return catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+  };
+  for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])
+    expect(translation(locale), locale).not.toBeNull();
+  expect(translation("en")).toBe(msgid);
+  expect(translation("ru")).toBe("Результаты доски сейчас недоступны.");
+  expect(translation("zh-CN")).toBe("看板结果暂时无法获取。");
 });

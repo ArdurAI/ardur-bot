@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@ardurbot/db";
+import { lockedProposalBody } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 
 export const BOARD_CLOSE_SOON = "The board item will be closed shortly.";
@@ -16,6 +17,7 @@ export type PendingCloseRow = {
   closePending: string | null;
   closeUpdatedAt?: string | null;
   closeAttempts?: number | null;
+  closeNoticeAt?: Date | null;
 };
 
 /** Close only while the item is still the one Reject or Undo decided to close. */
@@ -35,26 +37,18 @@ export function pendingCloseAction(
 
 /** Drops a close the person has since changed, and records that on the proposal. */
 export async function releaseChangedBoardClose(prisma: PrismaClient, filing: PendingCloseRow) {
-  if (filing.learningProposalId) {
-    const row = await prisma.learningProposal.findUnique({
-      where: { id: filing.learningProposalId },
-      select: { body: true },
-    });
-    const body = row?.body;
-    if (body && typeof body === "object" && !Array.isArray(body))
-      await prisma.learningProposal.update({
-        where: { id: filing.learningProposalId },
-        data: {
-          body: {
-            ...(body as Record<string, unknown>),
-            boardChanged: true,
-          } as Prisma.InputJsonValue,
-        },
+  await prisma.$transaction(async (tx) => {
+    const proposalId = filing.learningProposalId;
+    const body = proposalId ? await lockedProposalBody(tx, proposalId) : null;
+    if (proposalId && body)
+      await tx.learningProposal.update({
+        where: { id: proposalId },
+        data: { body: { ...body, boardChanged: true } as Prisma.InputJsonValue },
       });
-  }
-  await prisma.botBoardFiling.updateMany({
-    where: { id: filing.id, closePending: filing.closePending },
-    data: { closePending: null, closeNextAt: null },
+    await tx.botBoardFiling.updateMany({
+      where: { id: filing.id, closePending: filing.closePending },
+      data: { closePending: null, closeNextAt: null },
+    });
   });
   await prisma.botBoardFiling.deleteMany({
     where: { id: filing.id, spaceId: filing.spaceId },
@@ -92,6 +86,12 @@ async function insertCloseNotice(prisma: PrismaClient, filing: PendingCloseRow, 
   const workspaceId = filing.workspaceId;
   const itemId = filing.itemId;
   await prisma.$transaction(async (tx) => {
+    // Claims the filing's one notice. A failed insert rolls the claim back for the next failure.
+    const claimed = await tx.botBoardFiling.updateMany({
+      where: { id: filing.id, closeNoticeAt: null },
+      data: { closeNoticeAt: new Date() },
+    });
+    if (claimed.count !== 1) return;
     const follow = await tx.boardFollow.upsert({
       where: {
         workspaceId_itemId_userId: { workspaceId, itemId, userId },
@@ -105,10 +105,6 @@ async function insertCloseNotice(prisma: PrismaClient, filing: PendingCloseRow, 
       },
       update: {},
     });
-    const already = await tx.boardNotification.findFirst({
-      where: { followId: follow.id, title: BOARD_CLOSE_FAILED_TITLE },
-    });
-    if (already) return;
     const version = follow.version + 1;
     const advanced = await tx.boardFollow.updateMany({
       where: { id: follow.id, version: follow.version },
@@ -139,7 +135,10 @@ async function notifyUnclosedBoardItem(prisma: PrismaClient, filing: PendingClos
   }
 }
 
-/** Counts one failed close. The fifth failure is the one that notifies the owner. */
+/**
+ * Counts one failed close. From the fifth failure on, each failure sends the owner's notice
+ * until one is stored, and none after that.
+ */
 export async function recordPendingCloseFailure(prisma: PrismaClient, filing: PendingCloseRow) {
   if (!filing.closePending) return;
   const previous = filing.closeAttempts ?? 0;
@@ -155,7 +154,7 @@ export async function recordPendingCloseFailure(prisma: PrismaClient, filing: Pe
       closeNextAt: pendingCloseRetryAt(attempts),
     },
   });
-  if (claimed.count !== 1 || attempts !== CLOSE_NOTIFY_ATTEMPT) return;
+  if (claimed.count !== 1 || attempts < CLOSE_NOTIFY_ATTEMPT || filing.closeNoticeAt) return;
   await notifyUnclosedBoardItem(prisma, filing).catch((error) => {
     getLogger().error("pending board close notification", error);
   });

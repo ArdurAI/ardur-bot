@@ -2068,8 +2068,10 @@ function notificationPool() {
   } as unknown as Pick<Pool, "connect">;
 }
 
+/** One tick: delivery commits, then the sweep runs as its own step; stop only after it ends. */
 async function runBoardTick(board: BoardService, prisma: PrismaClient) {
   vi.useFakeTimers();
+  const sweep = vi.spyOn(board, "sweepPendingCloses");
   const delivery = createBoardNotificationDelivery({
     prisma,
     notifications: { send: async () => undefined } as never,
@@ -2078,9 +2080,11 @@ async function runBoardTick(board: BoardService, prisma: PrismaClient) {
   } as never);
   try {
     delivery.start();
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.waitFor(() => expect(sweep).toHaveBeenCalled());
+    await sweep.mock.results[0]?.value;
   } finally {
     await delivery.stop();
+    sweep.mockRestore();
     vi.useRealTimers();
   }
 }

@@ -170,6 +170,8 @@ at a time under a Postgres session advisory lock held on a separate two-connecti
 pool, so the lock never borrows from the shared database pool. The reservation is its
 own short transaction and no Beads command runs inside a database transaction. A filing
 that waits 15 seconds for the lock returns `Another write is in progress. Try again in a few seconds.`
+A full lock pool, or a Postgres server at its connection limit, counts as waiting; the lock pool
+does not retry a refused connection on its own.
 Once create returns an item id, that id stays on the reservation. A failed create that left no item
 removes its reservation. A reservation with no item id stops counting toward either cap
 after 15 minutes. A retry claims an open item only when that item has no filer, no filing
@@ -184,6 +186,10 @@ change under that lock before they close the item. If that close fails, the fili
 the close reason in `closePending` and the item's `updatedAt` in `closeUpdatedAt`. The worker's board notification tick and the next
 board read of that space finish the close only while the item is still open at that
 `updatedAt`, or already closed with the pending reason. They then delete the filing and free the hourly slot.
+The tick sweeps after its delivery transaction commits, with no transaction open, and delivery
+never waits for a sweep. Each close holds its space's filing lock around the Beads show and close,
+leaves a space another write holds for the next sweep, and stops at the tick's 15-second deadline.
+A close that deadline interrupts counts as a failed try.
 If someone else has edited the item or closed it for another reason, the tick clears the
 marker, deletes the filing, leaves the item as that person left it, and Learning shows
 "This board item changed after it was filed. Review it on the Board." Retries stop there.
@@ -191,8 +197,11 @@ Reject and Undo answer "The board item will be closed shortly." The inbox shows
 "Closing on the Board." until that marker clears. A close that keeps failing waits
 longer between tries and, after five failures, appears in board notifications as
 "A board item could not be closed." That notice advances the follow's version in the same
-write, so the next comment or status change notifies at a later version. A later failure
-does not send the notice again. An item
+write, so the next comment or status change notifies at a later version. If the notice cannot
+be stored, each later failure tries again. The filing records when it was stored in
+`closeNoticeAt`, and no failure after that sends it again. Every write to a learning proposal's
+body locks that proposal's row and reads the body again first, so the close reason a board read
+records and the changed marker a released close records both stay. An item
 already closed with "Undone from Learning" counts as undone. A learning proposal's
 labels are written on the new item together with `bot-filed`, the same labels the
 diff showed before approval. Beads lists `created_at` as a
@@ -276,11 +285,11 @@ for management and Files access. New mobile strings have Russian and Chinese tra
   queue. Very large boards can exceed these limits and return a structured error.
 - The UI and provider add no runtime dependencies or required hosted service.
   Ordinary model costs still apply when work is sent to a bot.
-- Apply the application migrations through `20260925230000_board_filing_close_updated_at`,
+- Apply the application migrations through `20260925233000_board_filing_close_notice`,
   which follows `20260925170000_bot_upkeep`, `20260925180000_board_filing_outcomes`,
   `20260925190000_board_filing_reuse`, `20260925200000_board_filing_title_key`,
-  `20260925210000_board_filing_close_pending`, and `20260925220000_board_filing_close_retry`,
-  before opening Board. Generation and offline tests do not prove a live
+  `20260925210000_board_filing_close_pending`, `20260925220000_board_filing_close_retry`,
+  and `20260925230000_board_filing_close_updated_at`, before opening Board. Generation and offline tests do not prove a live
   deployment has applied the schema.
 
 See [verification evidence](board-verification.md) for the tested commands,

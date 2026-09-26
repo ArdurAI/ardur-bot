@@ -980,6 +980,41 @@ it("tells the bot to retry when a filing lock stays busy", async () => {
   }
 });
 
+it("treats a full Postgres server as busy and says so only at the deadline", async () => {
+  vi.useFakeTimers();
+  try {
+    const lock = advisoryPool();
+    lock.pool.connect.mockImplementation(async () => {
+      throw Object.assign(new Error("sorry, too many clients already"), { code: "53300" });
+    });
+    const { board } = service({ lockPool: lock.pool });
+    let settled = false;
+    const outcome = board
+      .withFilingLock(scope, async () => "filed")
+      .then(
+        (value) => value,
+        (error: unknown) => error,
+      );
+    void outcome.finally(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(14_000);
+    expect(settled).toBe(false);
+    expect(lock.pool.connect.mock.calls.length).toBeGreaterThan(1);
+    await vi.advanceTimersByTimeAsync(2_000);
+    const error = await outcome;
+    expect(error).toBeInstanceOf(BoardError);
+    expect(error).toMatchObject({
+      problem: {
+        code: "busy",
+        message: "Another write is in progress. Try again in a few seconds.",
+      },
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("waits a bounded time for another filing in the same space, then reports it busy", async () => {
   vi.useFakeTimers();
   try {

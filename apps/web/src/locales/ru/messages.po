@@ -1045,6 +1045,10 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "Файлы доски будут сохранены."
 
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "Board outcomes are unavailable right now."
+msgstr "Результаты доски сейчас недоступны."
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "Состояние доски"
@@ -1534,6 +1538,10 @@ msgstr "Закрыть настройки голоса"
 #: src/pages/board/Board.tsx
 msgid "Close when the bot reports done"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
+msgstr "Закрывается на доске."
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
@@ -5839,10 +5847,6 @@ msgstr ""
 msgid "Rejected"
 msgstr ""
 
-#: src/pages/LearningInbox.tsx
-msgid "Closing on the Board."
-msgstr "Закрывается на доске."
-
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
 msgid "Release"
@@ -7218,12 +7222,12 @@ msgid "This action could not finish; try again."
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
-msgid "This board item changed after it was filed. Review it on the Board."
-msgstr "Эта задача на доске изменилась после создания. Проверьте её на доске."
-
-#: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
 msgstr "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr "Эта задача на доске изменилась после создания. Проверьте её на доске."
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item is still open."

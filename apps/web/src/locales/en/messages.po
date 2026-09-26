@@ -1045,6 +1045,10 @@ msgstr "Board"
 msgid "Board files will be kept."
 msgstr "Board files will be kept."
 
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "Board outcomes are unavailable right now."
+msgstr "Board outcomes are unavailable right now."
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "Board status"
@@ -1534,6 +1538,10 @@ msgstr "Close voice settings"
 #: src/pages/board/Board.tsx
 msgid "Close when the bot reports done"
 msgstr "Close when the bot reports done"
+
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
+msgstr "Closing on the Board."
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
@@ -7214,12 +7222,12 @@ msgid "This action could not finish; try again."
 msgstr "This action could not finish; try again."
 
 #: src/pages/LearningInbox.tsx
-msgid "This board item changed after it was filed. Review it on the Board."
-msgstr "This board item changed after it was filed. Review it on the Board."
-
-#: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
 msgstr "This board item changed after it was filed, so it was left open for review on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr "This board item changed after it was filed. Review it on the Board."
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item is still open."

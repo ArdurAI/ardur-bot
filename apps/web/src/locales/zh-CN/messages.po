@@ -1045,6 +1045,10 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "看板文件将保留。"
 
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "Board outcomes are unavailable right now."
+msgstr "看板结果暂时无法获取。"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "看板状态"
@@ -1534,6 +1538,10 @@ msgstr "关闭语音设置"
 #: src/pages/board/Board.tsx
 msgid "Close when the bot reports done"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
+msgstr "正在看板上关闭。"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
@@ -5839,10 +5847,6 @@ msgstr ""
 msgid "Rejected"
 msgstr ""
 
-#: src/pages/LearningInbox.tsx
-msgid "Closing on the Board."
-msgstr "正在看板上关闭。"
-
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
 msgid "Release"
@@ -7218,12 +7222,12 @@ msgid "This action could not finish; try again."
 msgstr ""
 
 #: src/pages/LearningInbox.tsx
-msgid "This board item changed after it was filed. Review it on the Board."
-msgstr "此看板事项在创建后已有变更。请在看板上查看。"
-
-#: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
 msgstr "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr "此看板事项在创建后已有变更。请在看板上查看。"
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item is still open."

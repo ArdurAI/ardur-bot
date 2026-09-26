@@ -1,7 +1,7 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
 import { observeBoardItems } from "@ardurbot/db";
-import { expect, it } from "vitest";
-import { recordPendingCloseFailure } from "./pending-close.js";
+import { expect, it, vi } from "vitest";
+import { recordPendingCloseFailure, releaseChangedBoardClose } from "./pending-close.js";
 import { BoardService } from "./service.js";
 
 const beadsItem = {
@@ -57,6 +57,8 @@ it("finishes a pending close on the next board read of that space", async () => 
     },
     botBoardFiling: {
       findMany: async () => filings.filter((row) => row.closePending),
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        filings.find((row) => row.id === where.id) ?? null,
       deleteMany: async ({ where }: { where: { id: string } }) => {
         const before = filings.length;
         const kept = filings.filter((row) => row.id !== where.id);
@@ -111,9 +113,12 @@ function noticeStore() {
   const notices: Array<{ followId: string; version: number; title: string; changes: string[] }> =
     [];
   let failCreates = 0;
+  let failWith: Error | undefined;
   let creates = 0;
   let storedAttempts: number | null = null;
+  let noticeAt: Date | null = null;
   const snapshot = () => ({
+    noticeAt,
     version: follow.version,
     status: follow.status,
     assignee: follow.assignee,
@@ -121,6 +126,7 @@ function noticeStore() {
     notices: notices.map((row) => ({ ...row, changes: [...row.changes] })),
   });
   const restore = (saved: ReturnType<typeof snapshot>) => {
+    noticeAt = saved.noticeAt;
     follow.version = saved.version;
     follow.status = saved.status;
     follow.assignee = saved.assignee;
@@ -167,7 +173,7 @@ function noticeStore() {
       creates += 1;
       if (failCreates > 0) {
         failCreates -= 1;
-        throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+        throw failWith ?? Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
       }
       if (notices.some((row) => row.followId === data.followId && row.version === data.version))
         throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
@@ -186,20 +192,23 @@ function noticeStore() {
         where,
         data,
       }: {
-        where: { closeAttempts?: number | null };
-        data: { closeAttempts: number };
+        where: { closeAttempts?: number | null; closeNoticeAt?: null };
+        data: { closeAttempts?: number; closeNoticeAt?: Date };
       }) => {
+        if ("closeNoticeAt" in where) {
+          if (noticeAt) return { count: 0 };
+          noticeAt = data.closeNoticeAt ?? null;
+          return { count: 1 };
+        }
         if (where.closeAttempts !== storedAttempts) return { count: 0 };
-        storedAttempts = data.closeAttempts;
+        storedAttempts = data.closeAttempts ?? null;
         return { count: 1 };
       },
     },
   };
   const prisma = {
     ...handlers,
-    $transaction: async (
-      work: (tx: Pick<typeof handlers, "boardFollow" | "boardNotification">) => Promise<unknown>,
-    ) => {
+    $transaction: async (work: (tx: typeof handlers) => Promise<unknown>) => {
       const saved = snapshot();
       try {
         return await work(handlers);
@@ -214,8 +223,10 @@ function noticeStore() {
     follow,
     notices,
     creates: () => creates,
-    failNextCreates(count: number) {
+    noticeAt: () => noticeAt,
+    failNextCreates(count: number, error?: Error) {
       failCreates = count;
+      failWith = error;
     },
     setAttempts(value: number | null) {
       storedAttempts = value;
@@ -281,3 +292,175 @@ it("retries one unique conflict and sends the fifth-failure notice once", async 
   expect(store.notices).toHaveLength(1);
   expect(store.follow.version).toBe(1);
 });
+
+it("sends the close notice on attempt six when attempt five could not store it, then never again", async () => {
+  const store = noticeStore();
+  store.setAttempts(4);
+  store.failNextCreates(1, new Error("Connection terminated unexpectedly"));
+  await recordPendingCloseFailure(store.prisma as never, closeFiling(4));
+  expect(store.notices).toEqual([]);
+  expect(store.noticeAt()).toBeNull();
+  await recordPendingCloseFailure(store.prisma as never, closeFiling(5));
+  expect(store.notices).toEqual([
+    expect.objectContaining({
+      version: 1,
+      title: "A board item could not be closed.",
+      changes: ["close"],
+    }),
+  ]);
+  expect(store.noticeAt()).toBeInstanceOf(Date);
+  await recordPendingCloseFailure(store.prisma as never, closeFiling(6));
+  await recordPendingCloseFailure(store.prisma as never, closeFiling(7));
+  expect(store.notices).toHaveLength(1);
+  expect(store.follow.version).toBe(1);
+});
+
+/** One learning proposal row shared by two writers, with Postgres row locks and a pausable read. */
+function proposalRace() {
+  let body: Record<string, unknown> = {
+    id: "proposal",
+    appliedBoardItem: {
+      workspaceId: "workspace",
+      itemId: "board-a",
+      updatedAt: "2026-09-25T12:00:00Z",
+      duplicate: false,
+    },
+  };
+  const filings = [
+    {
+      id: "filing",
+      spaceId: "space",
+      learningProposalId: "proposal",
+      closePending: "Undone from Learning" as string | null,
+      closedAt: null as Date | null,
+      outcome: null as string | null,
+    },
+  ];
+  const rowLocks = new Map<string, Promise<void>>();
+  const paused: Array<() => void> = [];
+  let pauseNext = false;
+  let reads = 0;
+  const client = (held: Array<() => void>) => ({
+    $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      if (!strings.join("").includes("FOR UPDATE")) return 1;
+      const id = String(values[0]);
+      while (rowLocks.has(id)) await rowLocks.get(id);
+      let unlock = () => {};
+      rowLocks.set(
+        id,
+        new Promise<void>((resolve) => {
+          unlock = resolve;
+        }),
+      );
+      held.push(() => {
+        rowLocks.delete(id);
+        unlock();
+      });
+      return 1;
+    },
+    learningProposal: {
+      findUnique: async () => {
+        const copy = structuredClone(body);
+        reads += 1;
+        if (pauseNext) {
+          pauseNext = false;
+          await new Promise<void>((resolve) => paused.push(resolve));
+        }
+        return { body: copy, userId: "owner" };
+      },
+      update: async ({ data }: { data: { body: Record<string, unknown> } }) => {
+        body = structuredClone(data.body);
+        return { body };
+      },
+    },
+    botBoardFiling: {
+      findMany: async () =>
+        filings
+          .filter((row) => !row.closedAt && !row.outcome)
+          .map((row) => ({ id: row.id, learningProposalId: row.learningProposalId })),
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown> & { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        const row = filings.find(
+          (filing) =>
+            filing.id === where.id &&
+            Object.entries(where).every(
+              ([key, value]) => (filing as Record<string, unknown>)[key] === value,
+            ),
+        );
+        if (!row) return { count: 0 };
+        Object.assign(row, data);
+        return { count: 1 };
+      },
+      deleteMany: async ({ where }: { where: { id: string } }) => {
+        const index = filings.findIndex((row) => row.id === where.id);
+        if (index >= 0) filings.splice(index, 1);
+        return { count: index >= 0 ? 1 : 0 };
+      },
+    },
+    boardFollow: { findMany: async () => [] },
+  });
+  const prisma = {
+    ...client([]),
+    $transaction: async (work: (tx: ReturnType<typeof client>) => Promise<unknown>) => {
+      const held: Array<() => void> = [];
+      try {
+        return await work(client(held));
+      } finally {
+        for (const unlock of held) unlock();
+      }
+    },
+  };
+  return {
+    prisma,
+    body: () => body,
+    reads: () => reads,
+    pauseNextRead() {
+      pauseNext = true;
+    },
+    resume() {
+      paused.shift()?.();
+    },
+  };
+}
+
+it.each(["outcome", "changed"] as const)(
+  "keeps boardChanged and closeReason when the %s write reads first and commits last",
+  async (first) => {
+    const race = proposalRace();
+    const personClosed = {
+      id: "board-a",
+      title: "Finish the import follow-up",
+      status: "closed",
+      closeReason: "Kept for the shop",
+      closedAt: "2026-09-25T12:05:00Z",
+      assignee: null,
+      commentCount: 0,
+    } as WorkItem;
+    const changedFiling = {
+      id: "filing",
+      spaceId: "space",
+      workspaceId: "workspace",
+      itemId: "board-a",
+      learningProposalId: "proposal",
+      closePending: "Undone from Learning",
+    };
+    const outcome = () => observeBoardItems(race.prisma as never, "workspace", [personClosed]);
+    const changed = () => releaseChangedBoardClose(race.prisma as never, changedFiling);
+    race.pauseNextRead();
+    const firstWrite = first === "outcome" ? outcome() : changed();
+    await vi.waitFor(() => expect(race.reads()).toBe(1));
+    const secondWrite = first === "outcome" ? changed() : outcome();
+    for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    race.resume();
+    await Promise.all([firstWrite, secondWrite]);
+    expect(race.body()).toMatchObject({
+      boardChanged: true,
+      appliedBoardItem: expect.objectContaining({ closeReason: "Kept for the shop" }),
+    });
+  },
+);

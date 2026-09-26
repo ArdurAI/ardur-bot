@@ -1,6 +1,6 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
 import { getLogger } from "@ardurbot/logging";
-import type { PrismaClient } from "./client.js";
+import type { Prisma, PrismaClient } from "./client.js";
 
 const COMPLETION_WORD = "done|complete|completed|fixed|resolved";
 const COMPLETION = new RegExp(`\\b(?:${COMPLETION_WORD})\\b`, "iu");
@@ -28,6 +28,26 @@ export function boardFilingOutcome(reason = ""): "completed" | "closed-other" {
     : "closed-other";
 }
 
+/**
+ * Every writer of a learning proposal body locks the row first, then reads the body it writes
+ * back, so one writer's fields survive another's. Returns null when the body is not an object.
+ */
+export async function lockedProposalBody(
+  tx: Prisma.TransactionClient,
+  id: string,
+): Promise<Record<string, unknown> | null> {
+  await lockLearningProposal(tx, id);
+  const row = await tx.learningProposal.findUnique({ where: { id }, select: { body: true } });
+  const body = row?.body;
+  return body && typeof body === "object" && !Array.isArray(body)
+    ? (body as Record<string, unknown>)
+    : null;
+}
+
+export async function lockLearningProposal(tx: Prisma.TransactionClient, id: string) {
+  await tx.$executeRaw`SELECT 1 FROM learning_proposals WHERE id = ${id} FOR UPDATE`;
+}
+
 /** Beads owns item state. A follower's observed version makes notifications retry-safe. */
 export async function observeBoardItems(
   prisma: PrismaClient,
@@ -48,24 +68,24 @@ export async function observeBoardItems(
     for (const row of pending) {
       try {
         await prisma.$transaction(async (tx) => {
-          const updated = await tx.botBoardFiling.updateMany({
+          // The proposal row lock comes before the filing row, the same order as Reject and Undo.
+          const proposalId = closeReason ? row.learningProposalId : null;
+          const body = proposalId ? await lockedProposalBody(tx, proposalId) : null;
+          await tx.botBoardFiling.updateMany({
             where: { id: row.id, closedAt: null, outcome: null },
             data: { closedAt, outcome },
           });
-          if (!updated.count || !row.learningProposalId || !closeReason) return;
-          const proposal = await tx.learningProposal.findUnique({
-            where: { id: row.learningProposalId },
-            select: { body: true },
-          });
-          const body = proposal?.body;
-          if (!body || typeof body !== "object" || Array.isArray(body)) return;
-          const applied = "appliedBoardItem" in body ? body.appliedBoardItem : undefined;
-          if (!applied || typeof applied !== "object" || Array.isArray(applied)) return;
+          const applied = body?.appliedBoardItem;
+          if (!proposalId || !applied || typeof applied !== "object" || Array.isArray(applied))
+            return;
           if ("closeReason" in applied && applied.closeReason === closeReason) return;
           await tx.learningProposal.update({
-            where: { id: row.learningProposalId },
+            where: { id: proposalId },
             data: {
-              body: { ...body, appliedBoardItem: { ...applied, closeReason } },
+              body: {
+                ...body,
+                appliedBoardItem: { ...applied, closeReason },
+              } as Prisma.InputJsonValue,
             },
           });
         });

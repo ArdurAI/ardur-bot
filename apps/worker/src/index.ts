@@ -291,14 +291,14 @@ async function main() {
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
     reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
-    reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir }),
+    reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir, lockPool }),
   });
   reconciler.start();
   const boardNotifications = createBoardNotificationDelivery({
     prisma,
     notifications: new ExpoPushProvider(dataDir),
     pool,
-    board: new BoardService({ prisma, dataDir }),
+    board: new BoardService({ prisma, dataDir, lockPool }),
   });
   boardNotifications.start();
   const chatReceivers = createMessagingReceivers({

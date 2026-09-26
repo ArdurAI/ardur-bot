@@ -1,12 +1,16 @@
-import type { PrismaClient } from "@ardurbot/db";
+import type { Pool, PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { botRunOutcomeText } from "../job-reconciler.js";
 import { BoardService } from "./service.js";
 import { finishBoardRun } from "./tools.js";
 
 /** Recover an interrupted delivery after a terminal run or a disconnected host. */
-export async function reconcileBoardOutcomes(deps: { prisma: PrismaClient; dataDir: string }) {
-  await new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir })
+export async function reconcileBoardOutcomes(deps: {
+  prisma: PrismaClient;
+  dataDir: string;
+  lockPool?: Pick<Pool, "connect">;
+}) {
+  await new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir, lockPool: deps.lockPool })
     .sweepPendingCloses()
     .catch((error) => {
       getLogger().error("pending board close", error);

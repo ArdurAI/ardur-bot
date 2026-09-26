@@ -10,7 +10,12 @@ import type {
 } from "@ardurbot/contracts/board";
 import { BoardDeniedError, BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
 import type { Pool } from "@ardurbot/db";
-import { observeBoardItems, Prisma, type PrismaClient } from "@ardurbot/db";
+import {
+  isTooManyDatabaseConnections,
+  observeBoardItems,
+  Prisma,
+  type PrismaClient,
+} from "@ardurbot/db";
 import { BoardRunner } from "@ardurbot/host-runtime/board/runner";
 import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
@@ -63,6 +68,8 @@ const FILING_RECORD_ATTEMPTS = 3;
 const FILING_RECORD_BACKOFF_MS = 25;
 const HOLLOW_RESERVATION_MS = 15 * 60 * 1000;
 const localFilingLocks = new Map<string, Promise<void>>();
+/** Spaces whose pooled filing lock this process holds, so a nested try never waits on itself. */
+const heldFilingLocks = new Set<string>();
 
 async function withLocalFilingLock<T>(spaceId: string, work: () => Promise<T>): Promise<T> {
   const previous = localFilingLocks.get(spaceId) ?? Promise.resolve();
@@ -337,35 +344,64 @@ export class BoardService {
           // A notification failure cannot turn a successful Beads write into a failed item edit.
           getLogger().error("board follow observation", error);
         });
-        await this.sweepPendingCloses(workspace.id).catch((error) => {
-          getLogger().error("pending board close", error);
-        });
+        await this.sweepPendingCloses({ workspaceId: workspace.id, signal: scope.signal }).catch(
+          (error) => {
+            getLogger().error("pending board close", error);
+          },
+        );
       },
     });
   }
-  /** Closes filings whose Reject or Undo already committed. A nested board read does not start another sweep. */
-  async sweepPendingCloses(workspaceId?: string) {
+  /**
+   * Closes filings whose Reject or Undo already committed. No database transaction is open
+   * here: each item holds its space's filing lock around the host show and close, a space
+   * another write holds is left for the next sweep, and the signal stops the sweep.
+   * A nested board read does not start another sweep.
+   */
+  async sweepPendingCloses(options: { workspaceId?: string; signal?: AbortSignal } = {}) {
     if (this.sweeping) return;
     this.sweeping = true;
     try {
       const now = new Date();
       const filings = await this.options.prisma.botBoardFiling.findMany({
         where: {
-          ...(workspaceId ? { workspaceId } : {}),
+          ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
           closePending: { not: null },
           itemId: { not: null },
           OR: [{ closeNextAt: null }, { closeNextAt: { lte: now } }],
         },
       });
-      for (const filing of filings) {
-        if (!filing.closePending || !filing.itemId || !filing.workspaceId) continue;
+      for (const listed of filings) {
+        if (options.signal?.aborted) return;
+        if (!listed.closePending || !listed.itemId || !listed.workspaceId) continue;
+        const attempt: { filing?: PendingCloseRow } = {};
         try {
-          await this.finishPendingClose(filing);
+          await this.withFilingLock(
+            { spaceId: listed.spaceId, signal: options.signal },
+            async () => {
+              // Another sweep may have finished or counted this close since the list was read.
+              const filing = await this.options.prisma.botBoardFiling.findUnique({
+                where: { id: listed.id },
+              });
+              if (filing?.closePending !== listed.closePending) return;
+              if (filing.closeNextAt && filing.closeNextAt > now) return;
+              attempt.filing = filing;
+              await this.finishPendingClose(filing, options.signal);
+            },
+            { waitMs: 0 },
+          );
         } catch (error) {
+          if (!attempt.filing) {
+            if (!isFilingBusy(error) && !options.signal?.aborted)
+              getLogger().error("pending board close", error);
+            continue;
+          }
           getLogger().error("pending board close", error);
-          await recordPendingCloseFailure(this.options.prisma, filing).catch((recordError) => {
-            getLogger().error("pending board close retry", recordError);
-          });
+          await recordPendingCloseFailure(this.options.prisma, attempt.filing).catch(
+            (recordError) => {
+              getLogger().error("pending board close retry", recordError);
+            },
+          );
         }
       }
     } finally {
@@ -379,7 +415,7 @@ export class BoardService {
     if (!filing?.closePending || !filing.itemId) return;
     await recordPendingCloseFailure(this.options.prisma, filing);
   }
-  private async finishPendingClose(filing: PendingCloseRow) {
+  private async finishPendingClose(filing: PendingCloseRow, signal?: AbortSignal) {
     if (!filing.closePending || !filing.itemId || !filing.workspaceId) return;
     const workspace = this.options.prisma.boardWorkspace
       ? await this.options.prisma.boardWorkspace.findUnique({
@@ -396,7 +432,10 @@ export class BoardService {
       userId = proposal?.userId ?? null;
     }
     if (!userId) throw new Error("This board close has no owner.");
-    const provider = await this.provider({ userId, spaceId: filing.spaceId }, filing.workspaceId);
+    const provider = await this.provider(
+      { userId, spaceId: filing.spaceId, signal },
+      filing.workspaceId,
+    );
     const item = await provider.show(filing.itemId);
     const action = pendingCloseAction(item, {
       closePending: filing.closePending,
@@ -506,55 +545,63 @@ export class BoardService {
   /**
    * Serializes a space's title check, reservation, host create and metadata. Host commands
    * can outlast any database transaction, so the lock is a session advisory lock on one
-   * pooled connection. Waiters poll without holding a connection and give up after a bound.
+   * pooled connection. Waiters poll without holding a connection and give up after a bound;
+   * `waitMs: 0` tries once.
    */
-  async withFilingLock<T>(scope: BoardScope, work: () => Promise<T>): Promise<T> {
+  async withFilingLock<T>(
+    scope: Pick<BoardScope, "spaceId" | "signal">,
+    work: () => Promise<T>,
+    { waitMs = FILING_LOCK_WAIT_MS }: { waitMs?: number } = {},
+  ): Promise<T> {
+    const busy = () => new BoardError({ code: "busy", message: FILING_BUSY });
     const pool = this.options.lockPool ?? this.options.pool;
-    if (!pool) return withLocalFilingLock(scope.spaceId, work);
+    if (!pool) {
+      if (waitMs === 0 && localFilingLocks.has(scope.spaceId)) throw busy();
+      return withLocalFilingLock(scope.spaceId, work);
+    }
+    if (waitMs === 0 && heldFilingLocks.has(scope.spaceId)) throw busy();
     const key = [FILING_LOCK_NAMESPACE, scope.spaceId, FILING_LOCK_ID];
-    const deadline = Date.now() + FILING_LOCK_WAIT_MS;
+    const deadline = Date.now() + waitMs;
     for (;;) {
       scope.signal?.throwIfAborted();
-      if (Date.now() >= deadline) throw new BoardError({ code: "busy", message: FILING_BUSY });
       const connected = await pool.connect().then(
         (client) => ({ ok: true as const, client }),
         (error: unknown) => ({ ok: false as const, error }),
       );
-      if (!connected.ok) {
-        // Waiting does not need a free connection. A full pool rejects the checkout;
-        // that is still "busy" until the deadline.
-        if (!isFilingPoolTimeout(connected.error)) throw connected.error;
-        const remaining = deadline - Date.now();
-        if (remaining <= 0) throw new BoardError({ code: "busy", message: FILING_BUSY });
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.min(FILING_LOCK_POLL_MS, remaining)),
-        );
-        continue;
-      }
-      const client = connected.client;
-      let locked = false;
-      let lost = false;
-      try {
-        locked =
-          (
-            await client.query<{ acquired: boolean }>(
-              `SELECT pg_try_advisory_lock($1::integer, ${FILING_LOCK_KEY}) AS acquired`,
-              key,
-            )
-          ).rows[0]?.acquired === true;
-        if (locked) return await work();
-      } finally {
-        if (locked)
-          await client
-            .query(`SELECT pg_advisory_unlock($1::integer, ${FILING_LOCK_KEY})`, key)
-            .catch(() => {
-              lost = true;
-            });
-        // A connection that could not unlock still holds the lock until it closes.
-        client.release(lost);
-      }
-      if (Date.now() >= deadline) throw new BoardError({ code: "busy", message: FILING_BUSY });
-      await new Promise((resolve) => setTimeout(resolve, FILING_LOCK_POLL_MS));
+      if (connected.ok) {
+        const client = connected.client;
+        let locked = false;
+        let lost = false;
+        try {
+          locked =
+            (
+              await client.query<{ acquired: boolean }>(
+                `SELECT pg_try_advisory_lock($1::integer, ${FILING_LOCK_KEY}) AS acquired`,
+                key,
+              )
+            ).rows[0]?.acquired === true;
+          if (locked) {
+            heldFilingLocks.add(scope.spaceId);
+            return await work();
+          }
+        } finally {
+          if (locked) {
+            heldFilingLocks.delete(scope.spaceId);
+            await client
+              .query(`SELECT pg_advisory_unlock($1::integer, ${FILING_LOCK_KEY})`, key)
+              .catch(() => {
+                lost = true;
+              });
+          }
+          // A connection that could not unlock still holds the lock until it closes.
+          client.release(lost);
+        }
+      } else if (!isFilingPoolBusy(connected.error)) throw connected.error;
+      // Waiting does not need a free connection. A full lock pool or a full Postgres server
+      // refuses the checkout; that is still "busy" until the deadline.
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw busy();
+      await new Promise((resolve) => setTimeout(resolve, Math.min(FILING_LOCK_POLL_MS, remaining)));
     }
   }
   /** Checks the caps and inserts the reservation in one short transaction. */
@@ -797,9 +844,16 @@ export class BoardService {
   }
 }
 
-function isFilingPoolTimeout(error: unknown): boolean {
+function isFilingPoolBusy(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return message.includes("timeout exceeded when trying to connect");
+  return (
+    message.includes("timeout exceeded when trying to connect") ||
+    isTooManyDatabaseConnections(error)
+  );
+}
+
+function isFilingBusy(error: unknown): boolean {
+  return error instanceof BoardError && error.problem.code === "busy";
 }
 
 /**

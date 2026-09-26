@@ -8,6 +8,8 @@ export type Db = PrismaClient;
 export interface DbClientOptions {
   poolMax?: number;
   applicationName?: string;
+  /** Retries a checkout that Postgres refuses with 53300. On unless set to false. */
+  connectRetry?: boolean;
 }
 
 const DEFAULT_POOL_MAX = 4;
@@ -33,7 +35,7 @@ export function createPool(connectionString: string, options: DbClientOptions = 
   pool.on("connect", (client) => {
     client.on("error", () => undefined);
   });
-  installConnectRetry(pool);
+  if (options.connectRetry !== false) installConnectRetry(pool);
   return pool;
 }
 
@@ -47,14 +49,21 @@ export function createDb(
   return { prisma, pool };
 }
 
-/** Filing locks only. Same connection settings as the shared pool, with two connections. */
+/**
+ * Filing locks only. Same connection settings as the shared pool, with two connections and
+ * no 53300 retry: a refused checkout returns at once and the filing wait polls again.
+ */
 export const FILING_LOCK_POOL_MAX = 2;
 
 export function createFilingLockPool(
   connectionString: string,
   options: DbClientOptions = {},
 ): Pool {
-  return createPool(connectionString, { ...options, poolMax: FILING_LOCK_POOL_MAX });
+  return createPool(connectionString, {
+    ...options,
+    poolMax: FILING_LOCK_POOL_MAX,
+    connectRetry: false,
+  });
 }
 
 export function isTooManyDatabaseConnections(error: unknown): boolean {

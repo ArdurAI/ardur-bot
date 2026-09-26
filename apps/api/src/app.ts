@@ -505,7 +505,8 @@ export async function createApp(
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
-        reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir: env.dataDir }),
+        reconcileBoardOutcomes: () =>
+          reconcileBoardOutcomes({ prisma, dataDir: env.dataDir, lockPool: created.lockPool }),
         reconcileLocalImport: async () => {
           await jobs.enqueue({
             name: "local-import.refresh",

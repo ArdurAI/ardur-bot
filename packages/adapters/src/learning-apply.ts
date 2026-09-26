@@ -13,7 +13,7 @@ import {
 } from "@ardurbot/contracts";
 import { isReadPolicyTool, parseSkillMd, redactLearningText } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
-import { IsolationError } from "@ardurbot/db";
+import { IsolationError, lockLearningProposal } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
 import {
@@ -113,6 +113,8 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     return deps.prisma.$transaction(
       async (tx) => {
         await lockMemorySpace(tx, actor.spaceId);
+        // A board read writing the close reason waits here, so this save keeps its fields.
+        await lockLearningProposal(tx, id);
         const row = await tx.learningProposal.findFirst({ where: { id, ...actor } });
         if (!row) throw new IsolationError();
         await learningMember(tx, actor, row.botId);

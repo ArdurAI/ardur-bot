@@ -166,6 +166,7 @@ it("leaves the filing outcome null when the proposal close reason write fails, a
       }),
     },
     boardFollow: { findMany: vi.fn(async () => []) },
+    $executeRaw: vi.fn(async () => 1),
     $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>) => {
       const savedOutcome = filing.outcome;
       const savedClosedAt = filing.closedAt;
