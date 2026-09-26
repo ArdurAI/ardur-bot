@@ -2,11 +2,11 @@ import type { LearningInsight, SpaceLearningConfig } from "@ardurbot/contracts";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Button, Text, View } from "react-native";
-import { rpc } from "./api";
 import { useI18n } from "./i18n";
 import { enableLearningReview } from "./learning";
 import {
   actOnLearningInsight,
+  allowLearningInsightTool,
   dismissLearningInsight,
   insightDetails,
   insightSentence,
@@ -52,16 +52,7 @@ export function LearningInsights({
           { text: t("Cancel"), style: "cancel" },
           {
             text: t("Allow"),
-            onPress: () =>
-              void change(async () => {
-                await rpc("approvalRules/set", {
-                  effect: "always_allow",
-                  matchKind: "tool",
-                  matchValue: action.tool,
-                  botId: action.botId,
-                });
-                await actOnLearningInsight(insight.id);
-              }),
+            onPress: () => void change(() => allowLearningInsightTool(insight.id)),
           },
         ],
       );

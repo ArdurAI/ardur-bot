@@ -103,6 +103,7 @@ function facts(overrides: Partial<InsightFacts> = {}): InsightFacts {
     feedbackReasons: 0,
     approvals: [],
     allowRules: [],
+    policyProposals: [],
     prompts: [],
     routines: [],
     ...overrides,
@@ -401,55 +402,88 @@ describe("setup that is holding work back", () => {
 });
 
 describe("approvals you always give", () => {
-  const approvals = (count: number, tool = "notion_update_page", at = hoursAgo(2)) =>
+  const approvals = (count: number, tool = "notion_search_pages", at = hoursAgo(2)) =>
     Array.from({ length: count }, () => ({ botId: "coder", tool, decision: "allow" as const, at }));
   it(`needs ${APPROVAL_MIN_COUNT} approvals in ${APPROVAL_WINDOW_DAYS} days and no denials`, () => {
     expect(kinds(facts({ approvals: approvals(APPROVAL_MIN_COUNT - 1) }))).toEqual([]);
     const [insight] = computeInsights(facts({ approvals: approvals(12) }));
     expect(insight).toMatchObject({
       kind: "approval",
-      evidence: { botName: "Coder", tool: "notion_update_page", approvals: 12, days: 7 },
-      action: { kind: "approval-rule", botId: "coder", tool: "notion_update_page" },
+      evidence: { botName: "Coder", tool: "notion_search_pages", approvals: 12, days: 7 },
+      action: { kind: "approval-rule", botId: "coder", tool: "notion_search_pages" },
     });
     expect(
       kinds(
         facts({
           approvals: [
             ...approvals(6),
-            { botId: "coder", tool: "notion_update_page", decision: "deny", at: hoursAgo(1) },
+            { botId: "coder", tool: "notion_search_pages", decision: "deny", at: hoursAgo(1) },
           ],
         }),
       ),
     ).toEqual([]);
-    expect(kinds(facts({ approvals: approvals(6, "notion_update_page", daysAgo(8)) }))).toEqual([]);
+    expect(kinds(facts({ approvals: approvals(6, "notion_search_pages", daysAgo(8)) }))).toEqual(
+      [],
+    );
   });
   it("skips actions that already have a rule", () => {
     expect(
       kinds(
         facts({
           approvals: approvals(6),
-          allowRules: [{ botId: null, tool: "notion_update_page" }],
+          allowRules: [{ botId: null, tool: "notion_search_pages" }],
         }),
       ),
     ).toEqual([]);
   });
-  it("never suggests secrets, payments, messages or commands", () => {
+  it("skips a read tool the curator already proposed for that bot", () => {
+    expect(
+      kinds(
+        facts({
+          approvals: approvals(6),
+          policyProposals: [{ botId: "coder", tool: "notion_search_pages" }],
+        }),
+      ),
+    ).toEqual([]);
+    expect(
+      kinds(
+        facts({
+          approvals: approvals(6),
+          policyProposals: [{ botId: "other", tool: "notion_search_pages" }],
+        }),
+      ),
+    ).toEqual(["approval"]);
+  });
+  it("suggests only read tools: never writes, deletes, launches, messages, payments or secrets", () => {
     for (const tool of [
+      "delete_bot",
+      "archive_bot",
+      "forget_memory",
+      "cloud_agent_launch",
+      "github_delete_repo",
+      "github_merge_pull_request",
+      "notion_update_page",
+      "notion_delete_page",
+      "jira_update_issue",
+      "linear_create_issue",
+      "shell",
+      "write_file",
+      "destination.write",
       "secret_request",
+      "forget_secret",
+      "cloud_agent_reply",
+      "cloud_agent_cancel",
+      "create_space",
       "stripe_create_refund",
-      "shopify_list_orders",
       "gmail_send_email",
       "slack_chat_post_message",
-      "destination.write",
-      "shell",
-      "host_run_command",
-      "create_space",
+      "github_search_and_delete_issues",
     ]) {
       expect(approvalInsightAllowed(tool), tool).toBe(false);
       expect(kinds(facts({ approvals: approvals(9, tool) })), tool).toEqual([]);
     }
-    expect(approvalInsightAllowed("notion_update_page")).toBe(true);
-    expect(approvalInsightAllowed("cloud_agent_launch")).toBe(true);
+    expect(approvalInsightAllowed("notion_search_pages")).toBe(true);
+    expect(kinds(facts({ approvals: approvals(9, "notion_search_pages") }))).toEqual(["approval"]);
   });
 });
 
@@ -499,7 +533,7 @@ describe("ordering and dismissal", () => {
       memory: { documents: 400, bytes: 1, semantic: false },
       approvals: Array.from({ length: 5 }, () => ({
         botId: "coder",
-        tool: "notion_update_page",
+        tool: "notion_search_pages",
         decision: "allow" as const,
         at: hoursAgo(1),
       })),
@@ -520,7 +554,7 @@ describe("ordering and dismissal", () => {
     );
   });
 
-  const computed = (approvals: number, tool = "notion_update_page") =>
+  const computed = (approvals: number, tool = "notion_search_pages") =>
     computeInsights(
       facts({
         approvals: Array.from({ length: approvals }, () => ({
@@ -565,7 +599,7 @@ describe("ordering and dismissal", () => {
   });
   it("treats a different suggestion as a new insight", () => {
     const dismissed = stored("dismissed", 6);
-    const other = computed(6, "linear_update_issue");
+    const other = computed(6, "linear_list_issues");
     expect(reconcileInsights([dismissed], other, now)).toMatchObject([{ op: "create" }]);
   });
 });

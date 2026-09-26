@@ -24,3 +24,6 @@ CREATE INDEX "learning_insights_spaceId_userId_status_expiresAt_idx" ON "learnin
 CREATE UNIQUE INDEX "learning_insights_spaceId_userId_fingerprint_key" ON "learning_insights"("spaceId", "userId", "fingerprint");
 
 ALTER TABLE "learning_insights" ADD CONSTRAINT "learning_insights_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "spaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Removing a member removes their insights with them.
+ALTER TABLE "learning_insights" ADD CONSTRAINT "learning_insights_spaceId_userId_fkey" FOREIGN KEY ("spaceId", "userId") REFERENCES "space_members"("spaceId", "userId") ON DELETE CASCADE ON UPDATE CASCADE;

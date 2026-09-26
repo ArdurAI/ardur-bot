@@ -14,6 +14,10 @@ export async function dismissLearningInsight(insightId: string) {
 export async function actOnLearningInsight(insightId: string) {
   await rpc("learning/actOnInsight", { insightId });
 }
+/** The server re-checks that the insight's tool only reads before it saves the rule. */
+export async function allowLearningInsightTool(insightId: string) {
+  await rpc("learning/allowInsightTool", { insightId });
+}
 
 function taskLabel(task: InsightTaskKind, t: T) {
   if (task === "coding") return t("coding");

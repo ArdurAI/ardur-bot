@@ -50,11 +50,11 @@ test("learning shows insights with their evidence, and Dismiss hides one", async
       {
         kind: "approval",
         botName: "Reviewer",
-        tool: "notion_update_page",
+        tool: "notion_search_pages",
         approvals: 12,
         days: 7,
       },
-      { kind: "approval-rule", botId: "bot", tool: "notion_update_page" },
+      { kind: "approval-rule", botId: "bot", tool: "notion_search_pages" },
     ),
     insight(
       "routine",
@@ -125,7 +125,7 @@ test("learning shows insights with their evidence, and Dismiss hides one", async
     ),
   ).toBeVisible();
   await expect(
-    section.getByText("You approved notion_update_page for Reviewer 12 times this week.", {
+    section.getByText("You approved notion_search_pages for Reviewer 12 times this week.", {
       exact: true,
     }),
   ).toBeVisible();

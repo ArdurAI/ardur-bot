@@ -10,9 +10,9 @@ const api = vi.hoisted(() => ({
   insights: vi.fn(),
   dismissInsight: vi.fn(async () => ({ ok: true })),
   actOnInsight: vi.fn(async () => ({ ok: true })),
+  allowInsightTool: vi.fn(async () => ({ ok: true })),
 }));
-const rules = vi.hoisted(() => ({ set: vi.fn(async () => ({})) }));
-vi.mock("../lib/rpc", () => ({ rpc: { learning: api, approvalRules: rules } }));
+vi.mock("../lib/rpc", () => ({ rpc: { learning: api } }));
 const interpolate = (parts: TemplateStringsArray, ...values: unknown[]) =>
   parts.reduce((message, part, i) => message + part + (values[i] ?? ""), "");
 vi.mock("@lingui/core/macro", () => ({
@@ -124,10 +124,10 @@ it("says each kind in one plain sentence about the person's own runs", () => {
   );
   expect(
     insightSentence(
-      { kind: "approval", botName: "Coder", tool: "notion_update_page", approvals: 12, days: 7 },
+      { kind: "approval", botName: "Coder", tool: "notion_search_pages", approvals: 12, days: 7 },
       t,
     ),
-  ).toBe("You approved notion_update_page for Coder 12 times this week.");
+  ).toBe("You approved notion_search_pages for Coder 12 times this week.");
   expect(
     insightSentence(
       { kind: "connection", problem: "rejected", connection: "OpenAI", runs: 3, days: 14 },
@@ -167,26 +167,21 @@ it("reveals the numbers in Details, dismisses, and opens the exact place to act"
   expect(container.innerHTML).toBe("");
 });
 
-it("creates an approval rule only after the person confirms it", async () => {
+it("asks the server to allow a read tool only after the person confirms it", async () => {
   api.insights.mockResolvedValue({
     insights: [
       insight(
         "approval",
-        { kind: "approval", botName: "Coder", tool: "notion_update_page", approvals: 6, days: 7 },
-        { kind: "approval-rule", botId: "coder", tool: "notion_update_page" },
+        { kind: "approval", botName: "Coder", tool: "notion_search_pages", approvals: 6, days: 7 },
+        { kind: "approval-rule", botId: "coder", tool: "notion_search_pages" },
       ),
     ],
   });
   await act(async () => root.render(<LearningInsights />));
   await act(async () => button("Always allow").click());
-  expect(rules.set).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Allow notion_update_page for Coder without asking?");
+  expect(api.allowInsightTool).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Allow notion_search_pages for Coder without asking?");
   await act(async () => button("Allow").click());
-  expect(rules.set).toHaveBeenCalledWith({
-    effect: "always_allow",
-    matchKind: "tool",
-    matchValue: "notion_update_page",
-    botId: "coder",
-  });
-  expect(api.actOnInsight).toHaveBeenCalledWith({ insightId: "approval" });
+  expect(api.allowInsightTool).toHaveBeenCalledWith({ insightId: "approval" });
+  expect(api.actOnInsight).not.toHaveBeenCalled();
 });

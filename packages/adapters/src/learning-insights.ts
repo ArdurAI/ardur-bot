@@ -1,4 +1,3 @@
-import type { JobPublisher } from "@ardurbot/adapter-kit";
 import type { LearningInsight } from "@ardurbot/contracts";
 import {
   InsightActionSchema,
@@ -11,6 +10,7 @@ import {
 import {
   APPROVAL_WINDOW_DAYS,
   allowsModelDestination,
+  approvalInsightAllowed,
   computeInsights,
   INSIGHT_RUN_WINDOW_DAYS,
   INSIGHT_SUPPRESSION_DAYS,
@@ -35,8 +35,6 @@ import { listPiCatalog, piModelContextWindow } from "./pi-models.js";
 
 type Identity = { spaceId: string; userId: string };
 const DAY_MS = 86_400_000;
-/** A run completion or feedback schedules one pass this far ahead; later triggers join it. */
-export const INSIGHTS_DEBOUNCE_MS = 15 * 60_000;
 const LOCAL_PROVIDERS = new Set(["ollama", LOCAL_PROVIDER_ID]);
 
 function isOwner(role: string | undefined) {
@@ -80,90 +78,110 @@ export async function loadInsightFacts(
 ): Promise<InsightFacts> {
   const { spaceId, userId } = identity;
   const since = (days: number) => new Date(now.getTime() - days * DAY_MS);
-  const [bots, space, runs, preferences, feedbackReasons, approvals, allowRules, tasks, routines] =
-    await Promise.all([
-      prisma.bot.findMany({
-        where: { spaceId, userId, archivedAt: null },
-        select: {
-          id: true,
-          name: true,
-          runtimeKind: true,
-          modelProvider: true,
-          modelId: true,
-          thinkingLevel: true,
-          modelCredentialId: true,
-          allowedModelDestinations: true,
-        },
-      }),
-      prisma.space.findUnique({
-        where: { id: spaceId },
-        select: { allowedModelDestinations: true },
-      }),
-      prisma.run.findMany({
-        where: {
-          spaceId,
-          userId,
-          createdAt: { gte: since(INSIGHT_RUN_WINDOW_DAYS) },
-          status: { in: ["completed", "failed"] },
-        },
-        select: {
-          id: true,
-          botId: true,
-          trigger: true,
-          boardItemId: true,
-          status: true,
-          error: true,
-          runtimePin: true,
-          runtimeDestination: true,
-          startedAt: true,
-          completedAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-      prisma.spaceModelPreference.findMany({
-        where: { spaceId, userId },
-        select: { credential: { select: { id: true, provider: true, label: true } } },
-      }),
-      prisma.feedback.count({
-        where: {
-          spaceId,
-          actorId: userId,
-          retractedAt: null,
-          reason: { not: null },
-          NOT: { reason: "" },
-          updatedAt: { gte: since(LEARNING_OFF_WINDOW_DAYS) },
-        },
-      }),
-      prisma.externalEffect.findMany({
-        where: {
-          spaceId,
-          decisionByUserId: userId,
-          decision: { in: ["allow", "deny"] },
-          decisionAt: { gte: since(APPROVAL_WINDOW_DAYS), lte: now },
-          run: { spaceId, userId },
-        },
-        select: { kind: true, decision: true, decisionAt: true, run: { select: { botId: true } } },
-      }),
-      prisma.actionApprovalRule.findMany({
-        where: { spaceId, createdByUserId: userId, effect: "always_allow", matchKind: "tool" },
-        select: { botId: true, matchValue: true },
-      }),
-      prisma.task.findMany({
-        where: {
-          spaceId,
-          userId,
-          createdAt: { gte: since(ROUTINE_WINDOW_DAYS) },
-          // A cleared thread deletes its messages; its requests stop counting here too.
-          runs: { some: { trigger: "user", userId, sourceMessageId: { not: null } } },
-        },
-        select: { botId: true, prompt: true, createdAt: true },
-      }),
-      prisma.routine.findMany({
-        where: { spaceId, userId },
-        select: { botId: true, prompt: true },
-      }),
-    ]);
+  const [
+    bots,
+    space,
+    runs,
+    preferences,
+    feedbackReasons,
+    approvals,
+    allowRules,
+    tasks,
+    routines,
+    proposals,
+  ] = await Promise.all([
+    prisma.bot.findMany({
+      where: { spaceId, userId, archivedAt: null },
+      select: {
+        id: true,
+        name: true,
+        runtimeKind: true,
+        modelProvider: true,
+        modelId: true,
+        thinkingLevel: true,
+        modelCredentialId: true,
+        allowedModelDestinations: true,
+      },
+    }),
+    prisma.space.findUnique({
+      where: { id: spaceId },
+      select: { allowedModelDestinations: true },
+    }),
+    prisma.run.findMany({
+      where: {
+        spaceId,
+        userId,
+        createdAt: { gte: since(INSIGHT_RUN_WINDOW_DAYS) },
+        status: { in: ["completed", "failed"] },
+      },
+      select: {
+        id: true,
+        botId: true,
+        trigger: true,
+        boardItemId: true,
+        status: true,
+        error: true,
+        runtimePin: true,
+        runtimeDestination: true,
+        startedAt: true,
+        completedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.spaceModelPreference.findMany({
+      where: { spaceId, userId },
+      select: { credential: { select: { id: true, provider: true, label: true } } },
+    }),
+    prisma.feedback.count({
+      where: {
+        spaceId,
+        actorId: userId,
+        retractedAt: null,
+        reason: { not: null },
+        NOT: { reason: "" },
+        updatedAt: { gte: since(LEARNING_OFF_WINDOW_DAYS) },
+      },
+    }),
+    prisma.externalEffect.findMany({
+      where: {
+        spaceId,
+        decisionByUserId: userId,
+        decision: { in: ["allow", "deny"] },
+        decisionAt: { gte: since(APPROVAL_WINDOW_DAYS), lte: now },
+        run: { spaceId, userId },
+      },
+      select: { kind: true, decision: true, decisionAt: true, run: { select: { botId: true } } },
+    }),
+    prisma.actionApprovalRule.findMany({
+      where: { spaceId, createdByUserId: userId, effect: "always_allow", matchKind: "tool" },
+      select: { botId: true, matchValue: true },
+    }),
+    prisma.task.findMany({
+      where: {
+        spaceId,
+        userId,
+        createdAt: { gte: since(ROUTINE_WINDOW_DAYS) },
+        // A cleared thread deletes its messages; its requests stop counting here too.
+        runs: { some: { trigger: "user", userId, sourceMessageId: { not: null } } },
+      },
+      select: { botId: true, prompt: true, createdAt: true },
+    }),
+    prisma.routine.findMany({
+      where: { spaceId, userId },
+      select: { botId: true, prompt: true },
+    }),
+    // The curator's read-policy proposals, so an insight never repeats one.
+    prisma.learningProposal.findMany({
+      where: {
+        spaceId,
+        userId,
+        OR: [{ status: "applied" }, { status: "pending", expiresAt: { gt: now } }],
+        body: { path: ["type"], equals: "policy-suggestion" },
+      },
+      select: { botId: true, body: true },
+    }),
+  ]);
   const runIds = runs.map((run) => run.id);
   const failedIds = runs.filter((run) => run.status === "failed").map((run) => run.id);
   const tools = new Map<string, string[]>();
@@ -375,6 +393,12 @@ export async function loadInsightFacts(
         : [],
     ),
     allowRules: allowRules.map((rule) => ({ botId: rule.botId, tool: rule.matchValue })),
+    policyProposals: proposals.flatMap((proposal) => {
+      const body = proposal.body as { type?: unknown; policyTool?: unknown } | null;
+      return body?.type === "policy-suggestion" && typeof body.policyTool === "string"
+        ? [{ botId: proposal.botId, tool: body.policyTool }]
+        : [];
+    }),
     prompts: tasks.map((task) => ({
       botId: task.botId,
       text: redactLearningText(task.prompt),
@@ -413,10 +437,19 @@ export async function refreshLearningInsights(
       : [];
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`learning-insights:${identity.spaceId}:${identity.userId}`}, 0))`;
+    // Someone who left the space keeps nothing here.
+    if (!member) {
+      await tx.learningInsight.deleteMany({ where: identity });
+      return;
+    }
     // Rows about deleted bots go, including any request text they carried.
     const bots = await tx.bot.findMany({ where: identity, select: { id: true } });
     await tx.learningInsight.deleteMany({
       where: { ...identity, botId: { not: null, notIn: bots.map((bot) => bot.id) } },
+    });
+    // Once suppression lapses there is nothing left to suppress, so the row goes.
+    await tx.learningInsight.deleteMany({
+      where: { ...identity, status: { not: "active" }, expiresAt: { lte: now } },
     });
     const stored = await tx.learningInsight.findMany({
       where: identity,
@@ -426,6 +459,7 @@ export async function refreshLearningInsights(
         fingerprint: true,
         status: true,
         evidence: true,
+        action: true,
         expiresAt: true,
       },
     });
@@ -446,14 +480,10 @@ export async function refreshLearningInsights(
     });
     for (const change of reconcileInsights(rows, computed, now)) {
       if (change.op === "expire") {
-        // An expired routine insight has nothing to suppress, so its request text is not kept.
-        if (rows.find((row) => row.id === change.id)?.kind === "routine")
-          await tx.learningInsight.deleteMany({ where: { id: change.id, status: "active" } });
-        else
-          await tx.learningInsight.updateMany({
-            where: { id: change.id, status: "active" },
-            data: { status: "expired" },
-          });
+        await tx.learningInsight.updateMany({
+          where: { id: change.id, status: "active" },
+          data: { status: "expired" },
+        });
         continue;
       }
       const data = {
@@ -477,6 +507,19 @@ export async function refreshLearningInsights(
         });
       }
     }
+    // Request text never outlives what it came from: whatever the status, a routine insight whose
+    // requests no longer count keeps only its fingerprint and counts.
+    const current = new Set(computed.map((insight) => insight.fingerprint));
+    for (const row of stored) {
+      if (row.kind !== "routine" || current.has(row.fingerprint)) continue;
+      const evidence = (row.evidence ?? {}) as Record<string, unknown>;
+      const action = (row.action ?? {}) as Record<string, unknown>;
+      if (!evidence.prompt && !action.prompt) continue;
+      await tx.learningInsight.update({
+        where: { id: row.id },
+        data: { evidence: { ...evidence, prompt: "" }, action: { ...action, prompt: "" } },
+      });
+    }
   });
 }
 
@@ -494,6 +537,14 @@ export async function learningInsightsJob(
     );
     return;
   }
+  // Rows of people who are no longer members. The member foreign key already cascades; this also
+  // covers rows written while a removal committed.
+  if (payload.spaceId)
+    await prisma.$executeRaw`DELETE FROM learning_insights li WHERE li."spaceId" = ${payload.spaceId}
+      AND NOT EXISTS (SELECT 1 FROM space_members m WHERE m."spaceId" = li."spaceId" AND m."userId" = li."userId")`;
+  else
+    await prisma.$executeRaw`DELETE FROM learning_insights li
+      WHERE NOT EXISTS (SELECT 1 FROM space_members m WHERE m."spaceId" = li."spaceId" AND m."userId" = li."userId")`;
   let cursor: { spaceId: string; userId: string } | undefined;
   for (;;) {
     const members = await prisma.spaceMember.findMany({
@@ -513,17 +564,6 @@ export async function learningInsightsJob(
     if (members.length < 200) return;
     cursor = members.at(-1);
   }
-}
-
-/** Debounced: the first trigger schedules a pass; triggers before it runs join that pass. */
-export async function enqueueLearningInsights(deps: { jobs: JobPublisher }, identity: Identity) {
-  await deps.jobs.enqueue({
-    name: "learning.insights",
-    payload: identity,
-    replaceKey: `learning.insights:${identity.spaceId}:${identity.userId}`,
-    preserveRunAt: true,
-    availableAt: new Date(Date.now() + INSIGHTS_DEBOUNCE_MS),
-  });
 }
 
 function insightView(row: {
@@ -620,4 +660,61 @@ export async function settleLearningInsight(
     data: { status, expiresAt: new Date(now.getTime() + INSIGHT_SUPPRESSION_DAYS * DAY_MS) },
   });
   if (updated.count !== 1) throw new IsolationError();
+}
+
+/** "Always allow" from an insight was asked for a tool that is not a read tool. */
+export class InsightRuleRefusedError extends Error {
+  constructor() {
+    super("Only a read action can be always allowed from an insight.");
+    this.name = "InsightRuleRefusedError";
+  }
+}
+
+/**
+ * The confirmed "Always allow" of an approval insight. The server checks the stored action again
+ * with the read classifier, so a stale or forged action can never allow a tool that writes.
+ */
+export async function allowInsightTool(
+  prisma: PrismaClient,
+  identity: Identity,
+  insightId: string,
+  now = new Date(),
+): Promise<void> {
+  const member = await prisma.spaceMember.findUnique({
+    where: { spaceId_userId: identity },
+    select: { role: true },
+  });
+  if (!member) throw new IsolationError();
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.learningInsight.findFirst({
+      where: { id: insightId, ...identity, kind: "approval", status: "active" },
+      select: { action: true },
+    });
+    const action = InsightActionSchema.safeParse(row?.action);
+    if (!action.success || action.data.kind !== "approval-rule") throw new IsolationError();
+    const { botId, tool } = action.data;
+    if (!approvalInsightAllowed(tool)) throw new InsightRuleRefusedError();
+    if (!(await tx.bot.findFirst({ where: { id: botId, ...identity }, select: { id: true } })))
+      throw new IsolationError();
+    const rule = {
+      spaceId: identity.spaceId,
+      createdByUserId: identity.userId,
+      effect: "always_allow",
+      matchKind: "tool",
+      matchValue: tool,
+      scopeKey: `bot:${botId}`,
+    };
+    await tx.actionApprovalRule.upsert({
+      where: { spaceId_createdByUserId_effect_matchKind_matchValue_scopeKey: rule },
+      create: { ...rule, botId },
+      update: {},
+    });
+    await tx.learningInsight.update({
+      where: { id: insightId },
+      data: {
+        status: "acted",
+        expiresAt: new Date(now.getTime() + INSIGHT_SUPPRESSION_DAYS * DAY_MS),
+      },
+    });
+  });
 }

@@ -23,7 +23,7 @@ runs in the last 30 days.").
 | Which model for which work | A task kind (coding, research, board and routine work, conversation) where the person used at least two models or efforts with five or more finished runs each in 30 days, and an available one finished at least 25 points more often while the other failed three or more runs, or matched it with at least 40% fewer median tokens or less time. A local model that did as well as a hosted one is named as such. | Change model on the bot that used the weaker choice most |
 | A model that keeps failing the same way | A bot's last five finished runs on its current pin all failed with the same class: tool calling unsupported, context too long, rate limited, or credential rejected. A suggestion names only an available model: one that used tools in the person's runs, one with a larger context in the bundled capability data, or one on another provider. | Change model, or Reconnect |
 | Setup that is holding work back | A model connection that rejected its sign-in on two or more runs in 14 days since it last worked, or a provider two or more runs needed that is not connected. For the owner only: more than 50 personal memory documents or more than 32 KB of them without memory search, and three or more thumbs with reasons in 14 days while Learning is off. | Reconnect or Connect, Set up memory search, Enable |
-| Approvals you always give | The same action approved for the same bot five or more times in seven days with no denials and no existing allow rule. Secret access, payments, messages sent on the person's behalf and commands or writes outside a bot's folders are never suggested. | Always allow, confirmed before the bot-scoped rule is saved |
+| Approvals you always give | The same read tool approved for the same bot five or more times in seven days, with no denials, no existing allow rule and no pending or applied curator policy proposal for that bot and tool. Only tools the curator's read classifier (`isReadPolicyTool`) accepts qualify; anything that writes, sends, pays, deletes, launches or reaches a secret never does. | Always allow, confirmed; the server checks the stored tool again before saving the bot-scoped rule |
 | Repeated work that could be a routine | The same request (trimmed, case-folded, numbers and dates masked, at least 12 other characters) sent to the same bot three or more times in 14 days, with no routine already using it. | New routine, prefilled with the request and bot |
 
 Comparisons say "in your runs"; they are never general claims about a model. Tokens and time are
@@ -39,8 +39,11 @@ member of every space. Results live in `learning_insights`, one row per person a
 An active insight lapses after two days unless a pass confirms it, and one whose evidence no
 longer holds expires at the next pass. Dismiss hides an insight for 90 days unless its count at
 least doubles; a different suggested model is a different insight. Using the action records it
-the same way. Requests from a cleared thread stop counting, an expired routine insight keeps no
-request text, and insights about a deleted bot are removed.
+the same way. Request text never outlives what it came from. Clearing a thread or deleting a bot
+runs a pass at once; requests from a cleared thread stop counting, and a routine insight whose
+requests no longer count keeps only its fingerprint and counts, whatever its status. Insights
+about a deleted bot are removed with it. A dismissed or used row is deleted once its suppression
+lapses, and a member's rows are removed when they leave the space.
 
 The Learning page lists at most five active insights, highest impact first: failing work, then
 connections, model choice, approvals, routines and setup. A bot's Learning panel lists that bot's

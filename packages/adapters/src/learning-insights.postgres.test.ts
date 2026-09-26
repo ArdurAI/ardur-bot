@@ -1,6 +1,9 @@
 import { createDb, IsolationError, type PrismaClient } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  allowInsightTool,
+  InsightRuleRefusedError,
+  learningInsightsJob,
   listLearningInsights,
   loadInsightFacts,
   refreshLearningInsights,
@@ -147,7 +150,7 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
       });
     return created;
   }
-  async function approve(runId: string, count: number, tool = "notion_update_page") {
+  async function approve(runId: string, count: number, tool = "notion_search_pages") {
     for (let i = 0; i < count; i += 1)
       await prisma.externalEffect.create({
         data: {
@@ -373,6 +376,64 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
     await prisma.spaceMember.update({ where: { spaceId_userId: owner }, data: { role: "owner" } });
   });
 
+  it("never repeats a curator proposal, and allows only a read tool, checked on the server", async () => {
+    const approval = (await listLearningInsights(prisma, owner)).find(
+      (insight) => insight.evidence.kind === "approval",
+    )!;
+    const proposal = await prisma.learningProposal.create({
+      data: {
+        ...owner,
+        botId: coderId,
+        runId: "curator-run",
+        threadId: `thread-${coderId}`,
+        historyGeneration: 0,
+        fingerprint: `policy-${suffix}`,
+        status: "pending",
+        body: { type: "policy-suggestion", policyTool: "notion_search_pages" },
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    await refreshLearningInsights(prisma, owner);
+    expect((await listLearningInsights(prisma, owner)).map((i) => i.id)).not.toContain(approval.id);
+    await prisma.learningProposal.delete({ where: { id: proposal.id } });
+    await refreshLearningInsights(prisma, owner);
+    expect((await listLearningInsights(prisma, owner)).map((i) => i.id)).toContain(approval.id);
+
+    // A stale or forged action naming a tool that writes never becomes a rule.
+    await prisma.learningInsight.update({
+      where: { id: approval.id },
+      data: { action: { kind: "approval-rule", botId: coderId, tool: "github_delete_repo" } },
+    });
+    await expect(allowInsightTool(prisma, owner, approval.id)).rejects.toBeInstanceOf(
+      InsightRuleRefusedError,
+    );
+    await expect(allowInsightTool(prisma, member, approval.id)).rejects.toBeInstanceOf(
+      IsolationError,
+    );
+    expect(await prisma.actionApprovalRule.count({ where: { spaceId } })).toBe(0);
+
+    await refreshLearningInsights(prisma, owner);
+    await allowInsightTool(prisma, owner, approval.id);
+    const rules = await prisma.actionApprovalRule.findMany({ where: { spaceId } });
+    expect(rules).toEqual([
+      expect.objectContaining({
+        effect: "always_allow",
+        matchKind: "tool",
+        matchValue: "notion_search_pages",
+        botId: coderId,
+        scopeKey: `bot:${coderId}`,
+        createdByUserId: ownerId,
+      }),
+    ]);
+    expect(
+      await prisma.learningInsight.findUniqueOrThrow({ where: { id: approval.id } }),
+    ).toMatchObject({ status: "acted" });
+    // Put the fixture back for the dismissal case below.
+    await prisma.actionApprovalRule.deleteMany({ where: { spaceId } });
+    await prisma.learningInsight.update({ where: { id: approval.id }, data: { status: "active" } });
+    await refreshLearningInsights(prisma, owner);
+  });
+
   it("keeps a dismissal until the count doubles, and expires what no longer holds", async () => {
     const approval = (await listLearningInsights(prisma, owner)).find(
       (insight) => insight.evidence.kind === "approval",
@@ -389,7 +450,7 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
     const reopened = (await listLearningInsights(prisma, owner)).find((i) => i.id === approval.id);
     expect(reopened?.evidence).toMatchObject({ kind: "approval", approvals: 10 });
 
-    await prisma.externalEffect.deleteMany({ where: { spaceId, kind: "notion_update_page" } });
+    await prisma.externalEffect.deleteMany({ where: { spaceId, kind: "notion_search_pages" } });
     await refreshLearningInsights(prisma, owner);
     expect(
       await prisma.learningInsight.findUniqueOrThrow({ where: { id: approval.id } }),
@@ -431,9 +492,25 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
     await refreshLearningInsights(prisma, owner);
     expect(await prisma.learningInsight.count({ where: { botId: temporary.id } })).toBe(0);
 
-    // Clearing the thread deletes its messages; those requests no longer count, and the
-    // expired routine insight does not keep their text.
+    // A dismissed routine insight, then its thread is cleared: after the next pass the row keeps
+    // its fingerprint and counts for suppression, but no request text.
+    await settleLearningInsight(prisma, owner, routine.id, "dismissed");
     await prisma.message.deleteMany({ where: { threadId: `thread-${coderId}` } });
+    await refreshLearningInsights(prisma, owner);
+    const cleared = await prisma.learningInsight.findMany({ where: { ...owner, fingerprint } });
+    expect(cleared).toHaveLength(1);
+    expect(cleared[0]).toMatchObject({
+      status: "dismissed",
+      evidence: { kind: "routine", prompt: "", count: 3 },
+      action: { kind: "routine", prompt: "" },
+    });
+    expect(JSON.stringify(cleared[0])).not.toContain("Summarize open PRs");
+
+    // When its suppression lapses there is nothing left to suppress.
+    await prisma.learningInsight.update({
+      where: { id: routine.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
     await refreshLearningInsights(prisma, owner);
     expect(await prisma.learningInsight.count({ where: { ...owner, fingerprint } })).toBe(0);
   });
@@ -445,5 +522,13 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
     expect(await listLearningInsights(prisma, owner)).toEqual([]);
     await refreshLearningInsights(prisma, owner);
     expect(await prisma.learningInsight.count({ where: { ...owner, status: "active" } })).toBe(0);
+  });
+
+  it("removes a member's insights when they leave the space", async () => {
+    expect(await prisma.learningInsight.count({ where: member })).toBeGreaterThan(0);
+    await prisma.spaceMember.delete({ where: { spaceId_userId: member } });
+    expect(await prisma.learningInsight.count({ where: member })).toBe(0);
+    await learningInsightsJob(prisma, { spaceId });
+    expect(await prisma.learningInsight.count({ where: member })).toBe(0);
   });
 });

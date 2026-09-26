@@ -209,6 +209,7 @@ describe("destroyBot", () => {
   it("moves bot memories into shared memory before the cascading delete", async () => {
     const createDeletion = vi.fn().mockResolvedValue({});
     const deleteBot = vi.fn().mockResolvedValue({});
+    const deleteInsights = vi.fn().mockResolvedValue({ count: 0 });
     const executeRaw = vi.fn().mockResolvedValue(1);
     const releaseComputers = vi.fn().mockResolvedValue({ count: 1 });
     const removeArtifact = vi.fn().mockResolvedValue(undefined);
@@ -227,6 +228,7 @@ describe("destroyBot", () => {
         $executeRaw: executeRaw,
         botDeletion: { create: createDeletion },
         bot: { delete: deleteBot },
+        learningInsight: { deleteMany: deleteInsights },
       }),
     );
     const prisma = {
@@ -256,6 +258,9 @@ describe("destroyBot", () => {
     );
 
     expect(transaction).toHaveBeenCalledOnce();
+    expect(deleteInsights).toHaveBeenCalledWith({
+      where: { spaceId: "workspace-1", botId: "bot-1" },
+    });
     expect(releaseComputers).toHaveBeenCalledWith({
       where: {
         OR: [{ controlBotId: "bot-1" }, { executionBotId: "bot-1" }],
@@ -369,6 +374,7 @@ describe("destroyBot", () => {
         $executeRaw: vi.fn(),
         botDeletion: { create: vi.fn() },
         bot: { delete: vi.fn() },
+        learningInsight: { deleteMany: vi.fn() },
       }),
     );
     const prisma = {

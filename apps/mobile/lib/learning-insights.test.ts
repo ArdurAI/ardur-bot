@@ -16,6 +16,7 @@ vi.mock("./i18n", async () => {
 });
 
 import {
+  allowLearningInsightTool,
   insightDetails,
   insightSentence,
   loadLearningInsights,
@@ -73,6 +74,12 @@ it("loads the person's insights for one bot", async () => {
   request.mockResolvedValueOnce({ insights: [] });
   await expect(loadLearningInsights("coder")).resolves.toEqual([]);
   expect(request).toHaveBeenCalledWith("learning/insights", { botId: "coder" });
+});
+
+it("asks the server to save Always allow, which re-checks the tool", async () => {
+  request.mockResolvedValueOnce({ ok: true });
+  await allowLearningInsightTool("insight");
+  expect(request).toHaveBeenCalledWith("learning/allowInsightTool", { insightId: "insight" });
 });
 
 it("says the same sentence as web and reveals the numbers in Details", () => {

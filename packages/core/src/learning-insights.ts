@@ -5,7 +5,7 @@ import type {
   InsightModelRow,
   InsightTaskKind,
 } from "@ardurbot/contracts";
-import { connectorKindFromToolName } from "./action-approval.js";
+import { isReadPolicyTool } from "./action-approval.js";
 
 const DAY_MS = 86_400_000;
 
@@ -113,6 +113,8 @@ export interface InsightFacts {
   approvals: Array<{ botId: string; tool: string; decision: "allow" | "deny"; at: Date }>;
   /** Existing always-allow tool rules; null botId applies to every bot. */
   allowRules: Array<{ botId: string | null; tool: string }>;
+  /** The curator's pending or applied read-policy proposals; an insight never duplicates one. */
+  policyProposals: Array<{ botId: string; tool: string }>;
   prompts: Array<{ botId: string; text: string; at: Date }>;
   routines: Array<{ botId: string; prompt: string }>;
 }
@@ -649,43 +651,12 @@ function setup(facts: InsightFacts): ComputedInsight[] {
   return out;
 }
 
-const PAYMENT_CONNECTORS = new Set(["stripe", "shopify", "paypal", "square"]);
-const MESSAGE_CONNECTORS = new Set([
-  "gmail",
-  "outlook",
-  "microsoft_outlook",
-  "slack",
-  "discord",
-  "telegram",
-  "whatsapp",
-  "twilio",
-  "teams",
-  "microsoft_teams",
-  "sms",
-  "linkedin",
-  "twitter",
-  "x",
-]);
-
 /**
- * Never suggested: secret access, payments, messages sent on the person's behalf, and commands
- * or writes outside a bot's own folders. Conservative by name, so unknown shapes stay excluded.
+ * Only read tools, by the same conservative classifier the curator's policy suggestions use.
+ * Anything that writes, sends, pays, deletes, launches or reaches a secret never qualifies.
  */
 export function approvalInsightAllowed(tool: string): boolean {
-  const name = tool.toLowerCase();
-  const connector = connectorKindFromToolName(name);
-  if (/secret|credential|password|passwd|token|oauth|api_?key/.test(name)) return false;
-  if (PAYMENT_CONNECTORS.has(connector)) return false;
-  if (/purchase|pay(?:ment)?|charge|checkout|buy|invoice|refund|payout|transfer|subscri/.test(name))
-    return false;
-  if (MESSAGE_CONNECTORS.has(connector)) return false;
-  if (
-    /send|reply|post|forward|message|mail|publish|invite|share|tweet|comment|notify|dm\b/.test(name)
-  )
-    return false;
-  if (/shell|command|exec|terminal|host|script|ssh|run_code|destination|create_space/.test(name))
-    return false;
-  return true;
+  return isReadPolicyTool(tool);
 }
 
 function approvals(facts: InsightFacts): ComputedInsight[] {
@@ -714,6 +685,14 @@ function approvals(facts: InsightFacts): ComputedInsight[] {
         (rule) =>
           rule.tool.toLowerCase() === group.tool.toLowerCase() &&
           (rule.botId === null || rule.botId === group.botId),
+      )
+    )
+      continue;
+    if (
+      facts.policyProposals.some(
+        (proposal) =>
+          proposal.botId === group.botId &&
+          proposal.tool.toLowerCase() === group.tool.toLowerCase(),
       )
     )
       continue;

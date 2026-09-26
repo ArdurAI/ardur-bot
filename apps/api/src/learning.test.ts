@@ -449,11 +449,11 @@ const insightRow = (id: string, kind: string, userId = "user", botId: string | n
   evidence:
     kind === "memory-search"
       ? { kind, documents: 450, bytes: 90_000 }
-      : { kind: "approval", botName: "Mine", tool: "notion_update_page", approvals: 6, days: 7 },
+      : { kind: "approval", botName: "Mine", tool: "notion_search_pages", approvals: 6, days: 7 },
   action:
     kind === "memory-search"
       ? { kind: "memory-settings" }
-      : { kind: "approval-rule", botId: "mine", tool: "notion_update_page" },
+      : { kind: "approval-rule", botId: "mine", tool: "notion_search_pages" },
   createdAt: new Date(),
   expiresAt: new Date(Date.now() + 86_400_000),
 });
@@ -522,4 +522,54 @@ it("keeps the insight switch unless it is sent, and lets only the owner change i
     code: "FORBIDDEN",
   });
   expect(row).toMatchObject({ insightsEnabled: true });
+});
+
+it("saves Always allow only for a read tool, re-checked on the server", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  let action: Record<string, unknown> = {
+    kind: "approval-rule",
+    botId: "mine",
+    tool: "github_delete_repo",
+  };
+  const upsert = vi.fn(async () => ({}));
+  const update = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "member" })) },
+    learningInsight: {
+      findFirst: vi.fn(async ({ where }: { where: { userId: string } }) =>
+        where.userId === "user" ? { action } : null,
+      ),
+      update,
+    },
+    bot: { findFirst: vi.fn(async () => ({ id: "mine" })) },
+    actionApprovalRule: { upsert },
+  };
+  const client = {
+    ...prisma,
+    $transaction: async (fn: (tx: typeof prisma) => Promise<unknown>) => fn(prisma),
+  };
+  const service = createLearningService({
+    prisma: client as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  await expect(service.allowInsightTool(actor, "insight")).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  expect(upsert).not.toHaveBeenCalled();
+  action = { kind: "approval-rule", botId: "mine", tool: "notion_search_pages" };
+  await expect(service.allowInsightTool(actor, "insight")).resolves.toEqual({ ok: true });
+  expect(upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      create: expect.objectContaining({
+        effect: "always_allow",
+        matchKind: "tool",
+        matchValue: "notion_search_pages",
+        botId: "mine",
+        scopeKey: "bot:mine",
+      }),
+    }),
+  );
+  expect(update).toHaveBeenCalledWith(
+    expect.objectContaining({ data: expect.objectContaining({ status: "acted" }) }),
+  );
 });

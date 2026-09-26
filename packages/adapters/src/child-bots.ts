@@ -26,6 +26,7 @@ import { toComputerRef } from "./computer-support.js";
 import { checkpointAndRecordComputerWorkspace } from "./computer-workspace.js";
 import { delegationFailure, prepareDelegation } from "./delegation.js";
 import { resolveAgentHomePath } from "./home.js";
+import { enqueueLearningInsights } from "./learning-queue.js";
 import { removePiBotSessions } from "./pi-session.js";
 
 export function confirmSpawnedBotName(confirmName: string, botName: string) {
@@ -410,6 +411,8 @@ export async function destroyBot(
         },
       });
       await tx.bot.delete({ where: { id: bot.id } });
+      // Insights about this bot, and any request text they quote, go with it.
+      await tx.learningInsight.deleteMany({ where: { spaceId: bot.spaceId, botId: bot.id } });
       if (webhookSecretId) {
         await tx.secret.deleteMany({
           where: { id: webhookSecretId, kind: "webhook", spaceId: bot.spaceId },
@@ -428,6 +431,13 @@ export async function destroyBot(
   await Promise.allSettled(
     deletion.cancelledGroupRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
   );
+  // Bots belong to one person; insights are that person's. A bot without a recorded owner falls
+  // back to whoever deleted it.
+  await enqueueLearningInsights(
+    deps,
+    { spaceId: bot.spaceId, userId: bot.userId ?? context.userId },
+    { immediate: true },
+  ).catch((error) => getLogger().error("learning.insights enqueue error", error));
   const stoppedGroupBots = [
     ...new Map(
       deletion.cancelledGroupRuns.map((run) => [

@@ -279,21 +279,9 @@ function InsightCard({
           <span>{allowQuestion(evidence.tool, evidence.botName, i18n)}</span>
           <Button
             disabled={busy}
-            onClick={() => {
-              const { botId, tool } = insight.action as Extract<
-                InsightAction,
-                { kind: "approval-rule" }
-              >;
-              void change(async () => {
-                await rpc.approvalRules.set({
-                  effect: "always_allow",
-                  matchKind: "tool",
-                  matchValue: tool,
-                  botId,
-                });
-                await rpc.learning.actOnInsight({ insightId: insight.id });
-              });
-            }}
+            onClick={() =>
+              void change(() => rpc.learning.allowInsightTool({ insightId: insight.id }))
+            }
           >
             <Trans>Allow</Trans>
           </Button>

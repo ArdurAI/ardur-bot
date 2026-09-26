@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
 import type { BoardService, EncryptedSecretStore } from "@ardurbot/adapters";
 import {
+  allowInsightTool,
   createLearningApplyService,
   createLearningGrants,
   enqueueLearningReview,
+  InsightRuleRefusedError,
   learningMember,
   listLearningInsights,
   observeLearningRevision,
@@ -24,6 +26,7 @@ import { learningJourney } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 import type { MemoryService } from "@ardurbot/memory";
+import { ORPCError } from "@orpc/server";
 import { requireSpaceOwner } from "./memory-provider-config.js";
 
 export function createLearningService(deps: {
@@ -367,6 +370,16 @@ export function createLearningService(deps: {
     },
     async actOnInsight(actor: Actor, insightId: string) {
       await settleLearningInsight(deps.prisma, identity(actor), insightId, "acted");
+      return { ok: true as const };
+    },
+    /** The confirmed "Always allow": the server re-checks that the stored tool only reads. */
+    async allowInsightTool(actor: Actor, insightId: string) {
+      try {
+        await allowInsightTool(deps.prisma, identity(actor), insightId);
+      } catch (error) {
+        if (error instanceof InsightRuleRefusedError) throw new ORPCError("FORBIDDEN");
+        throw error;
+      }
       return { ok: true as const };
     },
     async review(actor: Actor, runId: string) {

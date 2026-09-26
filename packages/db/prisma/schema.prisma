@@ -275,6 +275,7 @@ model SpaceMember {
   modelPreferences SpaceModelPreference[]
   voicePreferences SpaceVoicePreference[]
   aiDataConsents AiDataConsent[]
+  learningInsights LearningInsight[]
 
   @@unique([spaceId, userId])
   @@index([organizationId, userId])
@@ -1618,6 +1619,8 @@ model LearningInsight {
   spaceId String
   space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   userId String
+  /// Removing a member removes their insights with them.
+  spaceMember SpaceMember @relation(fields: [spaceId, userId], references: [spaceId, userId], onDelete: Cascade)
   botId String?
   kind String
   fingerprint String

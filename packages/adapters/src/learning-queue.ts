@@ -26,3 +26,25 @@ export async function enqueueLearningReview(
     availableAt: new Date(Date.now() + 1500),
   });
 }
+
+/** A run completion or feedback schedules one pass this far ahead; later triggers join it. */
+export const INSIGHTS_DEBOUNCE_MS = 15 * 60_000;
+
+/**
+ * Debounced: the first trigger schedules a pass; triggers before it runs join that pass. After a
+ * clear or a bot deletion the pass runs now instead, so removed requests stop being quoted.
+ */
+export async function enqueueLearningInsights(
+  deps: { jobs: JobPublisher },
+  identity: { spaceId: string; userId: string },
+  options: { immediate?: boolean } = {},
+) {
+  await deps.jobs.enqueue({
+    name: "learning.insights",
+    payload: identity,
+    replaceKey: `learning.insights:${identity.spaceId}:${identity.userId}`,
+    ...(options.immediate
+      ? {}
+      : { preserveRunAt: true, availableAt: new Date(Date.now() + INSIGHTS_DEBOUNCE_MS) }),
+  });
+}

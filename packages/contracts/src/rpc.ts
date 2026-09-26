@@ -997,6 +997,10 @@ export const appContract = {
     dismissInsight: oc.input(z.object({ insightId: Id })).output(z.object({ ok: z.literal(true) })),
     /** Records that the insight's action was used; the person makes the change there. */
     actOnInsight: oc.input(z.object({ insightId: Id })).output(z.object({ ok: z.literal(true) })),
+    /** Saves the bot-scoped always-allow rule an approval insight suggested, after confirmation. */
+    allowInsightTool: oc
+      .input(z.object({ insightId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
   },
   /** Claude Agent Skills (SKILL.md recipes) shared across assistants (not taught/demo skills). Pi already understands this format; we persist and inject them. */
   agentSkills: {
