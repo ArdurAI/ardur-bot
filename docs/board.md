@@ -314,6 +314,11 @@ for management and Files access. New mobile strings have Russian and Chinese tra
   follows `20260925170000_bot_upkeep`, before opening Board. It holds every filing column this
   work adds and lets a failed-close notice exist without a follow. Generation and offline tests
   do not prove a live deployment has applied the schema.
+- `packages/adapters/src/board/filing.postgres.test.ts` and `delivery.postgres.test.ts` skip
+  themselves without a real Postgres, and run in CI: the `test-integration` job starts a real
+  `postgres:16-alpine` container (through `@testcontainers/postgresql`, on the runner's own
+  Docker daemon), migrates it, and gives each listed suite in
+  `packages/testkit/src/cli/harness.ts` its own database cloned from that schema.
 
 See [verification evidence](board-verification.md) for the tested commands,
 recorded real-command JSON, UI walkthrough and remaining acceptance checks.

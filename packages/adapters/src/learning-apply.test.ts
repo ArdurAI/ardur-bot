@@ -4,6 +4,7 @@ import { MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import { memoryDatabaseFake, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
 import { describe, expect, it, vi } from "vitest";
 import { createBoardNotificationDelivery } from "./board/notifications.js";
+import { pendingCloseAction, releaseChangedBoardClose } from "./board/pending-close.js";
 import { BoardService } from "./board/service.js";
 import { createLearningApplyService } from "./learning-apply.js";
 import { applyGrantedLearning } from "./learning-auto-apply.js";
@@ -130,6 +131,7 @@ function fixture() {
     learningSuppression: table(suppressions),
     agentSkill: table(skills),
     botBoardFiling: table(filings),
+    boardWorkspace: table([{ id: "workspace", ownerUserId: actor.userId }]),
     actionApprovalRule: {
       upsert: vi.fn(async ({ create }: { create: Row }) => ({ id: "rule", ...create })),
     },
@@ -901,7 +903,7 @@ function boardFixture(filed: { duplicate: boolean; updatedAt?: string }) {
   };
   const hostCalls: Array<{ call: string; transactions: number }> = [];
   const host = (call: string) => hostCalls.push({ call, transactions: f.transactions.open });
-  const close = vi.fn(async () => {
+  const close = vi.fn(async (..._args: unknown[]) => {
     host("close");
     return [{ ...item, status: "closed" }];
   });
@@ -936,6 +938,37 @@ function boardFixture(filed: { duplicate: boolean; updatedAt?: string }) {
       row.closeAttempts = previous + 1;
       row.closeNextAt = new Date();
     }),
+    finishClose: vi.fn(
+      async (
+        _scope: unknown,
+        filing: {
+          id: string;
+          spaceId: string;
+          closePending?: string | null;
+          itemId?: string | null;
+          workspaceId?: string | null;
+          closeUpdatedAt?: string | null;
+          closeCommentCount?: number | null;
+        },
+      ) => {
+        if (!filing.closePending || !filing.itemId || !filing.workspaceId) return "done";
+        const current = await show();
+        const action = pendingCloseAction(current, {
+          closePending: filing.closePending,
+          closeUpdatedAt: filing.closeUpdatedAt,
+          closeCommentCount: filing.closeCommentCount,
+        });
+        if (action === "changed") {
+          await releaseChangedBoardClose(f.deps.prisma, filing as never);
+          return action;
+        }
+        if (action === "close") await close([current.id], filing.closePending);
+        await f.deps.prisma.botBoardFiling.deleteMany({
+          where: { id: filing.id, spaceId: filing.spaceId },
+        });
+        return action;
+      },
+    ),
   };
   const apply = createLearningApplyService({ ...f.deps, boardService: boardService as never });
   const proposal = () =>
@@ -2258,7 +2291,7 @@ it("the board notification tick closes a pending filing and frees its hourly slo
   expect(f.filings).toEqual([]);
 });
 
-it("leaves a person's close in place when the pending close runs after they edited the item", async () => {
+it("ends a pending close quietly when the person closes it with a different reason, even after editing it", async () => {
   const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
   const proposal = await create();
   f.filings.push({
@@ -2296,10 +2329,10 @@ it("leaves a person's close in place when the pending close runs after they edit
   expect(close).not.toHaveBeenCalled();
   expect(item.closeReason).toBe("Kept for the shop");
   expect(f.filings).toEqual([]);
-  expect(f.proposals[0]?.body).toMatchObject({ boardChanged: true });
+  expect(f.proposals[0]?.body).not.toHaveProperty("boardChanged");
 });
 
-it("a later Reject leaves an item someone else closed and shows that it changed", async () => {
+it("ends a pending close quietly on a later Reject when someone else already closed the item", async () => {
   const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
   const proposal = await create();
   f.filings.push({
@@ -2332,7 +2365,7 @@ it("a later Reject leaves an item someone else closed and shows that it changed"
   expect(f.filings).toEqual([]);
   expect(again.code).toBeUndefined();
   expect(again.proposal.boardClosing).toBeUndefined();
-  expect(again.proposal.boardChanged).toBe(true);
+  expect(again.proposal.boardChanged).toBeUndefined();
 });
 
 it("surfaces a board notification after five failed closes", async () => {

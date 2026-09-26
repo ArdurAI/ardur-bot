@@ -3170,7 +3170,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         learning.summary(context.actor, input.botId),
       ),
       approve: authed.learning.approve.handler(({ context, input }) =>
-        learning.approve(input.proposalId, context.actor, input.edits),
+        boardCall(() => learning.approve(input.proposalId, context.actor, input.edits)),
       ),
       reject: authed.learning.reject.handler(({ context, input }) =>
         learning.reject(input.proposalId, context.actor, input.reason),

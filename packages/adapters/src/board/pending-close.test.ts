@@ -1,8 +1,49 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
 import { observeBoardItems } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
-import { recordPendingCloseFailure, releaseChangedBoardClose } from "./pending-close.js";
+import {
+  pendingCloseAction,
+  recordPendingCloseFailure,
+  releaseChangedBoardClose,
+} from "./pending-close.js";
 import { BoardService } from "./service.js";
+
+it("ends a pending close quietly when a person closed the item with a different reason", () => {
+  const filing = {
+    closePending: "Rejected from Learning",
+    closeUpdatedAt: "2026-09-25T12:00:00.000Z",
+    closeCommentCount: 0,
+  };
+  expect(
+    pendingCloseAction(
+      {
+        status: "closed",
+        closeReason: "Kept for the shop",
+        updatedAt: "2026-09-25T13:00:00.000Z",
+        commentCount: 1,
+      },
+      filing,
+    ),
+  ).toBe("done");
+  expect(
+    pendingCloseAction(
+      { status: "closed", closeReason: "Rejected from Learning", updatedAt: filing.closeUpdatedAt },
+      filing,
+    ),
+  ).toBe("done");
+  expect(
+    pendingCloseAction(
+      { status: "open", updatedAt: filing.closeUpdatedAt, commentCount: 0 },
+      filing,
+    ),
+  ).toBe("close");
+  expect(
+    pendingCloseAction(
+      { status: "open", updatedAt: "2026-09-25T13:00:00.000Z", commentCount: 0 },
+      filing,
+    ),
+  ).toBe("changed");
+});
 
 const beadsItem = {
   id: "board-a",

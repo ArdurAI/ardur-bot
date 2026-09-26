@@ -39,7 +39,12 @@ export function boardItemUnchanged(
   );
 }
 
-/** Close only while the item is still the one Reject or Undo decided to close. */
+/**
+ * Close only while the item is still the one Reject or Undo decided to close. A person may
+ * close it themselves, with any reason, before that finishes; that ends the pending close
+ * quietly (a person's close is never "changed") and the real outcome comes from their reason,
+ * not this filing's own.
+ */
 export function pendingCloseAction(
   item: {
     status: string;
@@ -53,9 +58,8 @@ export function pendingCloseAction(
     closeCommentCount?: number | null;
   },
 ): "close" | "done" | "changed" {
-  if (item.status === "closed" && item.closeReason === filing.closePending) return "done";
+  if (item.status === "closed") return "done";
   if (
-    item.status !== "closed" &&
     boardItemUnchanged(item, {
       updatedAt: filing.closeUpdatedAt,
       commentCount: filing.closeCommentCount,
@@ -96,7 +100,8 @@ function isUniqueConflict(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
 }
 
-async function closeNoticeOwner(prisma: PrismaClient, filing: PendingCloseRow) {
+/** The board's owner, or the proposal's user when the board itself cannot be looked up. */
+export async function closeNoticeOwner(prisma: PrismaClient, filing: PendingCloseRow) {
   if (!filing.workspaceId) return null;
   const workspace = await prisma.boardWorkspace.findUnique({
     where: { id: filing.workspaceId },

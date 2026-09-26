@@ -279,6 +279,7 @@ msgstr ""
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Acceptance criteria"
 msgstr ""
 
@@ -2930,6 +2931,7 @@ msgid "Describe what this bot does"
 msgstr "Describe qué hace este bot"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "Descripción"
@@ -7279,6 +7281,10 @@ msgstr ""
 msgid "This board item is still open."
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "This board item was already closed on the Board."
+msgstr ""
+
 #. placeholder {0}: proposal.boardOutcome.closeReason
 #: src/pages/LearningInbox.tsx
 msgid "This board item was closed without being completed: {0}. Review it on the Board."
@@ -7433,6 +7439,7 @@ msgid "Timeline"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Título"

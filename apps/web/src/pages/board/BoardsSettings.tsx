@@ -10,18 +10,11 @@ import {
   Switch,
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { fallbackORPCErrorMessage, ORPCError } from "@orpc/client";
 import { useEffect, useState } from "react";
 import { SettingsRow } from "../../components/SettingsRow";
+import { actionMessage } from "../../lib/orpc-action-message";
 import { rpc, selectedSpaceId } from "../../lib/rpc";
 import type { SettingsPageProps } from "../settings-types";
-
-function actionMessage(error: unknown, fallback: string) {
-  if (!(error instanceof ORPCError) || !error.message) return fallback;
-  if (!error.defined && error.message === fallbackORPCErrorMessage(error.code, undefined))
-    return fallback;
-  return error.message;
-}
 
 export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageProps) {
   const { t } = useLingui();

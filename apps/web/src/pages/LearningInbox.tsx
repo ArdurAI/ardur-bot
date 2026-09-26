@@ -18,6 +18,7 @@ import {
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { actionMessage } from "../lib/orpc-action-message";
 import { rpc } from "../lib/rpc";
 import { LearningCurator } from "./LearningCurator";
 import { LearningObservations, LearningObservationView } from "./LearningObservation";
@@ -68,7 +69,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
   const [settings, setSettings] = useState<SpaceLearningConfig | null>(null);
   const [grants, setGrants] = useState<LearningGrant[]>([]);
   const [offers, setOffers] = useState<Array<Pick<LearningGrantInput, "category" | "scope">>>([]);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
@@ -91,7 +92,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
   useEffect(() => {
     let active = true;
     void load().catch(() => {
-      if (active) setError(true);
+      if (active) setError(t`Could not update learning. Try again.`);
     });
     const timer = window.setInterval(() => {
       if (!document.hidden && !busyRef.current) void load().catch(() => undefined);
@@ -119,13 +120,13 @@ export function LearningInbox({ botId }: { botId?: string }) {
   async function change(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       await action();
       await load();
       window.dispatchEvent(new Event("learning-changed"));
-    } catch {
-      setError(true);
+    } catch (error) {
+      setError(actionMessage(error, t`Could not update learning. Try again.`));
     } finally {
       setBusy(false);
     }
@@ -177,9 +178,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
       ) : null}
       {error ? (
         <div role="alert">
-          <p>
-            <Trans>Could not update learning. Try again.</Trans>
-          </p>
+          <p>{error}</p>
           <Button variant="ghost" onClick={() => void change(load)}>
             <Trans>Retry</Trans>
           </Button>
@@ -482,7 +481,21 @@ function LearningCard({
         <summary>
           <Trans>Details</Trans>
         </summary>
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap py-2">{proposal.diff}</pre>
+        {proposal.type === "board-item" && proposal.boardItem ? (
+          <div className="max-h-64 space-y-1 overflow-auto py-2">
+            <p>
+              <Trans>Title</Trans>: {proposal.boardItem.title}
+            </p>
+            <p>
+              <Trans>Description</Trans>: {proposal.boardItem.description}
+            </p>
+            <p>
+              <Trans>Acceptance criteria</Trans>: {proposal.boardItem.acceptanceCriteria}
+            </p>
+          </div>
+        ) : (
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap py-2">{proposal.diff}</pre>
+        )}
         <p>{proposal.rationale}</p>
         {proposal.observation ? (
           <LearningObservationView observation={proposal.observation} />
@@ -584,6 +597,8 @@ function LearningCard({
                   This board item changed after it was filed, so it was left open for review on the
                   Board.
                 </Trans>
+              ) : conflict.code === "board-already-closed" ? (
+                <Trans>This board item was already closed on the Board.</Trans>
               ) : conflict.code === "board-changed" || !conflict.current ? (
                 <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
               ) : (

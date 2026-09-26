@@ -215,6 +215,40 @@ it("renders the native list, approves, shows applied copy and supports Undo with
   }
 });
 
+it("shows the board service's own sentence when Approve cannot file the item, not the generic retry text", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  };
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    if (path === "learning/approve")
+      throw new Error("This bot cannot reach this board's computer.");
+    return { reviews: [], proposals: [board], pendingCount: 1, appliedThisWeek: 0 };
+  });
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    const approve = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Approve",
+    );
+    await act(async () => approve!.click());
+    expect(container.textContent).toContain("This bot cannot reach this board's computer.");
+    expect(container.textContent).not.toContain("Could not update learning. Try again.");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it("shows Closing on the Board until the pending close clears", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const board = {

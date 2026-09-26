@@ -12,6 +12,7 @@ import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { deliverMemory, maintainBriefs } from "@ardurbot/memory";
+import { BoardService } from "./board/service.js";
 import { executeBoardCommand } from "./board/worker.js";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
@@ -92,6 +93,11 @@ export function createBackgroundJobHandlers(deps: {
           secretStore: deps.secretStore,
           memoryDocuments: deps.memoryDocuments,
           recordUsage,
+          boardService: new BoardService({
+            prisma: deps.prisma,
+            dataDir: deps.dataDir ?? "./data",
+            lockPool: deps.lockPool,
+          }),
         },
         payload,
       ),

@@ -22,6 +22,7 @@ import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
 import type { PendingCloseRow } from "./pending-close.js";
 import {
+  closeNoticeOwner,
   pendingCloseAction,
   recordPendingCloseFailure,
   releaseChangedBoardClose,
@@ -435,20 +436,7 @@ export class BoardService {
   /** The filing's bot, as a run's outcome delivery uses the run's bot, for its owner. */
   private async pendingCloseScope(filing: PendingCloseRow, signal?: AbortSignal) {
     if (!filing.workspaceId) throw new Error("This board close has no board.");
-    const workspace = this.options.prisma.boardWorkspace
-      ? await this.options.prisma.boardWorkspace.findUnique({
-          where: { id: filing.workspaceId },
-          select: { ownerUserId: true },
-        })
-      : null;
-    let userId = workspace?.ownerUserId ?? null;
-    if (!userId && filing.learningProposalId) {
-      const proposal = await this.options.prisma.learningProposal.findUnique({
-        where: { id: filing.learningProposalId },
-        select: { userId: true },
-      });
-      userId = proposal?.userId ?? null;
-    }
+    const userId = await closeNoticeOwner(this.options.prisma, filing);
     if (!userId) throw new Error("This board close has no owner.");
     return {
       scope: {
@@ -471,6 +459,20 @@ export class BoardService {
   private async finishPendingClose(filing: PendingCloseRow, signal?: AbortSignal) {
     if (!filing.closePending || !filing.itemId || !filing.workspaceId) return;
     const { scope, workspaceId } = await this.pendingCloseScope(filing, signal);
+    await this.finishClose(scope, filing, workspaceId);
+  }
+  /**
+   * Shows the item, decides whether it can close, and closes or releases it, then deletes the
+   * filing row. Shared by the sweep, and by Reject and Undo retrying a close that already
+   * committed. The caller resolves the scope: the sweep opens the board as the owner, through
+   * the filing's bot; a retry opens it as the clicking user, through the proposal's bot.
+   */
+  async finishClose(
+    scope: BoardScope,
+    filing: PendingCloseRow,
+    workspaceId = filing.workspaceId ?? undefined,
+  ): Promise<"close" | "done" | "changed"> {
+    if (!filing.closePending || !filing.itemId || !workspaceId) return "done";
     const provider = await this.provider(scope, workspaceId);
     const item = await provider.show(filing.itemId);
     const action = pendingCloseAction(item, {
@@ -480,12 +482,13 @@ export class BoardService {
     });
     if (action === "changed") {
       await releaseChangedBoardClose(this.options.prisma, filing);
-      return;
+      return action;
     }
     if (action === "close") await provider.close([item.id], filing.closePending);
     await this.options.prisma.botBoardFiling.deleteMany({
       where: { id: filing.id, spaceId: filing.spaceId },
     });
+    return action;
   }
   async workspaces(scope: BoardScope) {
     const actor = await this.actor(scope);

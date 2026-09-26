@@ -181,6 +181,44 @@ it("records a closed filing outcome once, and a reopened item clears it so the n
   expect(boardFilingOutcome("")).toBe("completed");
 });
 
+it("truncates a close reason longer than the stored limit so the inbox never breaks", async () => {
+  const filing = {
+    id: "filing",
+    workspaceId: "board",
+    itemId: "item",
+    learningProposalId: "proposal",
+    closedAt: null as Date | null,
+    outcome: null as string | null,
+  };
+  const botBoardFiling = filingTable([filing]);
+  const proposal = proposalRow({
+    appliedBoardItem: {
+      workspaceId: "board",
+      itemId: "item",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      duplicate: false,
+    },
+  });
+  const client = {
+    botBoardFiling,
+    learningProposal: proposal.learningProposal,
+    boardFollow: { findMany: vi.fn(async () => []) },
+    $executeRaw: vi.fn(async () => 1),
+  };
+  const prisma = {
+    ...client,
+    $transaction: vi.fn(async (work: (tx: typeof client) => Promise<unknown>) => work(client)),
+  } as unknown as PrismaClient;
+  const longReason = "x".repeat(32_100);
+  await observeBoardItems(prisma, "board", [
+    item({ status: "closed", closedAt: "2026-09-25T12:00:00.000Z", closeReason: longReason }),
+  ]);
+  const stored = (proposal.row.body as { appliedBoardItem: { closeReason: string } })
+    .appliedBoardItem.closeReason;
+  expect(stored.length).toBe(32_000);
+  expect(stored.endsWith("…")).toBe(true);
+});
+
 it("reads the filings for 200 closed items with one query", async () => {
   const rows = Array.from({ length: 200 }, (_, index) => ({
     id: `filing-${index}`,

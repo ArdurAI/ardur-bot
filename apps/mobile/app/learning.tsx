@@ -30,6 +30,7 @@ import { useI18n } from "../lib/i18n";
 import { LearningCurator } from "../lib/LearningCurator";
 import { LearningObservations, LearningObservationView } from "../lib/LearningObservations";
 import {
+  actionMessage,
   learningAction,
   learningBeforeAfter,
   loadLearning,
@@ -54,7 +55,7 @@ export default function Learning() {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<ProposalEvidence | null>(null);
   const [conflict, setConflict] =
@@ -73,7 +74,7 @@ export default function Learning() {
   }, [botId, selectedId]);
   useFocusEffect(
     useCallback(() => {
-      void load().catch(() => setError(true));
+      void load().catch(() => setError(t("Could not update learning. Try again.")));
       const timer = setInterval(() => {
         if (!busyRef.current) void load().catch(() => undefined);
       }, 15000);
@@ -90,12 +91,12 @@ export default function Learning() {
   async function change(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       await action();
       await load();
-    } catch {
-      setError(true);
+    } catch (caught) {
+      setError(actionMessage(caught, t("Could not update learning. Try again.")));
     } finally {
       setBusy(false);
     }
@@ -146,7 +147,7 @@ export default function Learning() {
         {error ? (
           <View>
             <Text accessibilityRole="alert" style={styles.error}>
-              {t("Could not update learning. Try again.")}
+              {error}
             </Text>
             <Button title={t("Retry")} onPress={() => void change(load)} />
           </View>
@@ -306,14 +307,33 @@ export default function Learning() {
                   />
                   {open === proposal.id ? (
                     <View>
-                      <Text style={styles.title}>{t("Before")}</Text>
-                      <Text selectable style={styles.body}>
-                        {diff.before}
-                      </Text>
-                      <Text style={styles.title}>{t("After")}</Text>
-                      <Text selectable style={styles.body}>
-                        {diff.after}
-                      </Text>
+                      {proposal.type === "board-item" && proposal.boardItem ? (
+                        <>
+                          <Text style={styles.title}>{t("Title")}</Text>
+                          <Text selectable style={styles.body}>
+                            {proposal.boardItem.title}
+                          </Text>
+                          <Text style={styles.title}>{t("Description")}</Text>
+                          <Text selectable style={styles.body}>
+                            {proposal.boardItem.description}
+                          </Text>
+                          <Text style={styles.title}>{t("Acceptance criteria")}</Text>
+                          <Text selectable style={styles.body}>
+                            {proposal.boardItem.acceptanceCriteria}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.title}>{t("Before")}</Text>
+                          <Text selectable style={styles.body}>
+                            {diff.before}
+                          </Text>
+                          <Text style={styles.title}>{t("After")}</Text>
+                          <Text selectable style={styles.body}>
+                            {diff.after}
+                          </Text>
+                        </>
+                      )}
                       <Text style={styles.body}>{proposal.rationale}</Text>
                       {proposal.observation ? (
                         <LearningObservationView observation={proposal.observation} />
@@ -385,11 +405,13 @@ export default function Learning() {
                                 ? t(
                                     "This board item changed after it was filed, so it was left open for review on the Board.",
                                   )
-                                : conflict.code === "board-changed" || !conflict.current
-                                  ? t(
-                                      "This board item changed after it was filed. Review it on the Board.",
-                                    )
-                                  : conflict.current
+                                : conflict.code === "board-already-closed"
+                                  ? t("This board item was already closed on the Board.")
+                                  : conflict.code === "board-changed" || !conflict.current
+                                    ? t(
+                                        "This board item changed after it was filed. Review it on the Board.",
+                                      )
+                                    : conflict.current
                               : t(
                                   "Later edits overlap this change. Review both versions in History.",
                                 )}

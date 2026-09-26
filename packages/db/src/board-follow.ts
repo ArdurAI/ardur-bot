@@ -125,10 +125,20 @@ async function observeFilingOutcomes(prisma: PrismaClient, workspaceId: string, 
 
 type ObservedFiling = { id: string; learningProposalId: string | null };
 
+// The stored proposal caps a close reason at this length; Beads itself has no limit.
+const CLOSE_REASON_STORAGE_LIMIT = 32_000;
+
+/** Truncates a close reason typed outside the app, such as from the `bd` command line. */
+function truncatedCloseReason(reason: string): string {
+  return reason.length > CLOSE_REASON_STORAGE_LIMIT
+    ? `${reason.slice(0, CLOSE_REASON_STORAGE_LIMIT - 1)}…`
+    : reason;
+}
+
 async function recordFilingClose(prisma: PrismaClient, filing: ObservedFiling, item: WorkItem) {
   const closedAt = item.closedAt ? new Date(item.closedAt) : new Date();
   const outcome = boardFilingOutcome(item.closeReason ?? "");
-  const closeReason = item.closeReason?.trim() ?? "";
+  const closeReason = truncatedCloseReason(item.closeReason?.trim() ?? "");
   await prisma.$transaction(async (tx) => {
     const proposalId = closeReason ? filing.learningProposalId : null;
     const body = proposalId ? await lockedProposalBody(tx, proposalId) : null;

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
+import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -221,6 +222,33 @@ it("separates pending copy from applied copy, approves without removing the card
   await click("Undo");
   expect(api.revert).toHaveBeenCalledWith({ proposalId: "proposal" });
   expect(container.textContent).toContain("Undone");
+});
+it("shows the board service's own sentence when Approve cannot file the item, not the generic retry text", async () => {
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  };
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [board],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  api.approve.mockRejectedValue(
+    new ORPCError("FORBIDDEN", { message: "This bot cannot reach this board's computer." }),
+  );
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  await click("Approve");
+  expect(container.querySelector("[role=alert]")?.textContent).toContain(
+    "This bot cannot reach this board's computer.",
+  );
+  expect(container.textContent).not.toContain("Could not update learning. Try again.");
 });
 it("shows Closing on the Board until the pending close clears", async () => {
   const board = {
