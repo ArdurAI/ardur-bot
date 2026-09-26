@@ -68,24 +68,181 @@ it("records status, assignment and comment changes once per observed version", a
   expect(create).toHaveBeenCalledTimes(1);
 });
 
-it("records a closed filing outcome once and never overwrites it", async () => {
-  const { prisma, filing } = fixture();
-  vi.mocked(prisma.botBoardFiling.findMany).mockResolvedValueOnce([
-    { id: "filing", learningProposalId: null },
-  ] as never);
-  await observeBoardItems(prisma, "board", [
-    item({ status: "closed", closedAt: "2026-09-25T12:00:00.000Z", closeReason: "Done" }),
-  ]);
-  expect(filing).toHaveBeenCalledWith({
-    where: { id: "filing", closedAt: null, outcome: null },
-    data: { closedAt: new Date("2026-09-25T12:00:00.000Z"), outcome: "completed" },
+/** Filing rows filtered by the where clauses observeBoardItems writes. */
+function filingTable(rows: Array<Record<string, unknown>>) {
+  const matches = (row: Record<string, unknown>, where: Record<string, unknown>): boolean =>
+    Object.entries(where).every(([key, expected]) => {
+      if (key === "OR")
+        return (expected as Array<Record<string, unknown>>).some((part) => matches(row, part));
+      if (key === "NOT") return !matches(row, expected as Record<string, unknown>);
+      if (key === "select") return true;
+      const value = row[key] ?? null;
+      if (expected === null) return value === null;
+      if (expected && typeof expected === "object" && !(expected instanceof Date)) {
+        if ("in" in expected) return (expected.in as unknown[]).includes(value);
+        if ("not" in expected) return value !== expected.not;
+      }
+      return value === expected;
+    });
+  return {
+    findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+      rows.filter((row) => matches(row, where)).map((row) => ({ ...row })),
+    ),
+    updateMany: vi.fn(
+      async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: Record<string, unknown>;
+      }) => {
+        const found = rows.filter((row) => matches(row, where));
+        for (const row of found) Object.assign(row, data);
+        return { count: found.length };
+      },
+    ),
+  };
+}
+function proposalRow(body: Record<string, unknown>) {
+  const row = { id: "proposal", body };
+  return {
+    row,
+    learningProposal: {
+      findUnique: vi.fn(async () => ({ ...row, body: structuredClone(row.body) })),
+      update: vi.fn(async ({ data }: { data: { body: Record<string, unknown> } }) => {
+        row.body = structuredClone(data.body);
+        return row;
+      }),
+    },
+  };
+}
+it("records a closed filing outcome once, and a reopened item clears it so the next close records afresh", async () => {
+  const filing = {
+    id: "filing",
+    workspaceId: "board",
+    itemId: "item",
+    learningProposalId: "proposal",
+    closedAt: null as Date | null,
+    outcome: null as string | null,
+  };
+  const botBoardFiling = filingTable([filing]);
+  const proposal = proposalRow({
+    appliedBoardItem: {
+      workspaceId: "board",
+      itemId: "item",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      duplicate: false,
+    },
   });
+  const client = {
+    botBoardFiling,
+    learningProposal: proposal.learningProposal,
+    boardFollow: { findMany: vi.fn(async () => []) },
+    $executeRaw: vi.fn(async () => 1),
+  };
+  const prisma = {
+    ...client,
+    $transaction: vi.fn(async (work: (tx: typeof client) => Promise<unknown>) => work(client)),
+  } as unknown as PrismaClient;
+  const done = item({
+    status: "closed",
+    closedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: "Done",
+  });
+  await observeBoardItems(prisma, "board", [done]);
+  await observeBoardItems(prisma, "board", [done]);
+  expect(filing).toMatchObject({
+    closedAt: new Date("2026-09-25T12:00:00.000Z"),
+    outcome: "completed",
+  });
+  expect(proposal.row.body).toMatchObject({ appliedBoardItem: { closeReason: "Done" } });
+  const writes = botBoardFiling.updateMany.mock.calls.length;
+
+  await observeBoardItems(prisma, "board", [item({ status: "open" })]);
+  expect(filing).toMatchObject({ closedAt: null, outcome: null });
+  expect(proposal.row.body.appliedBoardItem).not.toHaveProperty("closeReason");
+  expect(botBoardFiling.updateMany.mock.calls.length).toBe(writes + 1);
+
   await observeBoardItems(prisma, "board", [
-    item({ status: "closed", closedAt: "2026-09-25T12:00:00.000Z", closeReason: "Done" }),
+    item({
+      status: "closed",
+      closedAt: "2026-09-26T09:00:00.000Z",
+      closeReason: "No longer needed",
+    }),
   ]);
-  expect(filing).toHaveBeenCalledTimes(1);
+  expect(filing).toMatchObject({
+    closedAt: new Date("2026-09-26T09:00:00.000Z"),
+    outcome: "closed-other",
+  });
+  expect(proposal.row.body).toMatchObject({
+    appliedBoardItem: { closeReason: "No longer needed" },
+  });
   expect(boardFilingOutcome("No longer needed")).toBe("closed-other");
   expect(boardFilingOutcome("")).toBe("completed");
+});
+
+it("reads the filings for 200 closed items with one query", async () => {
+  const rows = Array.from({ length: 200 }, (_, index) => ({
+    id: `filing-${index}`,
+    workspaceId: "board",
+    itemId: `item-${index}`,
+    learningProposalId: null,
+    closedAt: null as Date | null,
+    outcome: null as string | null,
+  }));
+  const botBoardFiling = filingTable(rows);
+  const client = {
+    botBoardFiling,
+    learningProposal: { findUnique: vi.fn(), update: vi.fn() },
+    boardFollow: { findMany: vi.fn(async () => []) },
+    $executeRaw: vi.fn(async () => 1),
+  };
+  const prisma = {
+    ...client,
+    $transaction: vi.fn(async (work: (tx: typeof client) => Promise<unknown>) => work(client)),
+  } as unknown as PrismaClient;
+  const closed = rows.map((row, index) =>
+    item({
+      id: row.itemId,
+      status: "closed",
+      closedAt: "2026-09-25T12:00:00.000Z",
+      closeReason: index % 2 ? "Done" : "Duplicate",
+    }),
+  );
+  await observeBoardItems(prisma, "board", closed);
+  expect(botBoardFiling.findMany).toHaveBeenCalledTimes(1);
+  expect(rows.filter((row) => row.outcome === "completed")).toHaveLength(100);
+  expect(rows.filter((row) => row.outcome === "closed-other")).toHaveLength(100);
+  botBoardFiling.findMany.mockClear();
+  await observeBoardItems(prisma, "board", closed);
+  expect(botBoardFiling.findMany).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  "Closed",
+  " closed ",
+  "Implemented",
+  "Shipped",
+  "Merged",
+  "Finished",
+  "Delivered",
+  "Landed",
+  "Shipped in 2.4",
+  "Merged the fix",
+])("classifies the close reason %j that Beads or a builder writes as completed", (reason) => {
+  expect(boardFilingOutcome(reason)).toBe("completed");
+});
+it.each([
+  "not merged",
+  "never shipped",
+  "wasn't delivered",
+  "unfinished",
+  "unmerged",
+  "Closed as duplicate",
+  "Not implemented",
+  "Couldn't get it landed",
+])("classifies the close reason %j as closed otherwise", (reason) => {
+  expect(boardFilingOutcome(reason)).toBe("closed-other");
 });
 it.each([
   "Not done",
@@ -132,6 +289,7 @@ it("keeps a numbered label from turning a real negation into a completion", () =
 it("leaves the filing outcome null when the proposal close reason write fails, and the next read sets both", async () => {
   const filing = {
     id: "filing",
+    itemId: "item",
     learningProposalId: "proposal",
     outcome: null as string | null,
     closedAt: null as Date | null,

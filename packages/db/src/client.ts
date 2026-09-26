@@ -50,10 +50,13 @@ export function createDb(
 }
 
 /**
- * Filing locks only. Same connection settings as the shared pool, with two connections and
- * no 53300 retry: a refused checkout returns at once and the filing wait polls again.
+ * Filing locks only. Same connection settings as the shared pool, with no 53300 retry: a refused
+ * checkout returns at once and the filing wait polls again. A filing holds its connection through
+ * its host list, create and show, so with two a third space waited on unrelated work. Six lets
+ * six spaces in one process file at once. Idle connections stay open, so the api and the worker
+ * hold at most twelve between them.
  */
-export const FILING_LOCK_POOL_MAX = 2;
+export const FILING_LOCK_POOL_MAX = 6;
 
 export function createFilingLockPool(
   connectionString: string,

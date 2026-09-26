@@ -185,6 +185,37 @@ it("marks a rejected proposal as closing while the filing close is still pending
   });
 });
 
+it("says a pending close could not be finished once its notice was sent", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const row = boardProposalRow(actor, "proposal", "applied");
+  row.status = "rejected";
+  row.body.status = "rejected";
+  const filing = {
+    learningProposalId: "proposal",
+    closedAt: null,
+    outcome: null,
+    closePending: "Rejected from Learning",
+    closeNoticeAt: null as Date | null,
+  };
+  const service = createLearningService({
+    prisma: {
+      spaceMember: { findUnique: async () => ({ role: "member" }) },
+      bot: { findFirst: async () => ({ id: "bot" }) },
+      learningProposal: { findFirst: async () => row },
+      botBoardFiling: { findMany: async () => [filing] },
+    } as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  const closing = await service.proposal(actor, "proposal");
+  expect(closing).toMatchObject({ boardClosing: true });
+  expect(closing).not.toHaveProperty("boardCloseFailed");
+  filing.closeNoticeAt = new Date("2026-09-25T13:00:00.000Z");
+  await expect(service.proposal(actor, "proposal")).resolves.toMatchObject({
+    boardClosing: true,
+    boardCloseFailed: true,
+  });
+});
+
 it("reports the recorded outcome for an applied board-item proposal", async () => {
   const actor = { spaceId: "space", userId: "user" } as Actor;
   const findMany = vi.fn(async () => [
@@ -208,7 +239,13 @@ it("reports the recorded outcome for an applied board-item proposal", async () =
   });
   expect(findMany).toHaveBeenCalledWith({
     where: { spaceId: "space", learningProposalId: { in: ["proposal"] } },
-    select: { learningProposalId: true, closedAt: true, outcome: true, closePending: true },
+    select: {
+      learningProposalId: true,
+      closedAt: true,
+      outcome: true,
+      closePending: true,
+      closeNoticeAt: true,
+    },
   });
 });
 
@@ -246,7 +283,13 @@ it("loads board outcomes for every listed proposal in one query", async () => {
   expect(findMany).toHaveBeenCalledOnce();
   expect(findMany).toHaveBeenCalledWith({
     where: { spaceId: "space", learningProposalId: { in: ["created", "reused", "undone"] } },
-    select: { learningProposalId: true, closedAt: true, outcome: true, closePending: true },
+    select: {
+      learningProposalId: true,
+      closedAt: true,
+      outcome: true,
+      closePending: true,
+      closeNoticeAt: true,
+    },
   });
   expect(list.proposals.map((proposal) => [proposal.id, proposal.boardOutcome])).toEqual([
     ["created", { closedAt: null, outcome: null, closeReason: null }],

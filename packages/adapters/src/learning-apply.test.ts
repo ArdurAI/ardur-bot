@@ -925,7 +925,7 @@ function boardFixture(filed: { duplicate: boolean; updatedAt?: string }) {
       return {
         workspaceId: "workspace",
         duplicate: filed.duplicate,
-        item: { ...item, updatedAt: "2026-09-25T12:00:00.000Z" },
+        item: { ...item, updatedAt: "2026-09-25T12:00:00.000Z", commentCount: 0 },
       };
     }),
     provider: vi.fn(async () => ({ show, close })),
@@ -1933,7 +1933,8 @@ it("leaves Undo reverted with a close marker when the board close fails, and a r
   show.mockImplementation(async () => item);
   close.mockRejectedValueOnce(new Error("beads down"));
   const pending = await apply.revert(proposal.id, actor);
-  expect(pending.sentence).toBe("The board item will be closed shortly.");
+  expect(pending).toMatchObject({ code: "board-closing" });
+  expect(pending).not.toHaveProperty("sentence");
   expect(f.proposals[0]?.status).toBe("reverted");
   expect(f.filings).toEqual([
     expect.objectContaining({ itemId: "board-a", closePending: "Undone from Learning" }),
@@ -1963,7 +1964,8 @@ it("treats a board item already closed as Undone from Learning as a finished Und
   show.mockImplementation(async () => ({ ...item }));
   close.mockRejectedValueOnce(new Error("beads down"));
   const pending = await apply.revert(proposal.id, actor);
-  expect(pending.sentence).toBe("The board item will be closed shortly.");
+  expect(pending).toMatchObject({ code: "board-closing" });
+  expect(pending).not.toHaveProperty("sentence");
   expect(f.proposals[0]?.status).toBe("reverted");
   expect(f.filings[0]).toMatchObject({ closePending: "Undone from Learning" });
   item.status = "closed";
@@ -2024,7 +2026,8 @@ it("leaves Reject rejected with a close marker when the board close fails, and a
   show.mockImplementation(async () => item);
   close.mockRejectedValueOnce(new Error("beads down"));
   const pending = await apply.reject(proposal.id, actor);
-  expect(pending.sentence).toBe("The board item will be closed shortly.");
+  expect(pending).toMatchObject({ code: "board-closing" });
+  expect(pending).not.toHaveProperty("sentence");
   expect(f.proposals[0]?.status).toBe("rejected");
   expect(f.filings).toEqual([
     expect.objectContaining({ itemId: "board-a", closePending: "Rejected from Learning" }),
@@ -2054,7 +2057,63 @@ it("names an Undo board conflict board-changed", async () => {
   });
 });
 
-const BOARD_CLOSE_SOON = "The board item will be closed shortly.";
+it("treats a comment as a change: Undo, Reject and the retry leave a discussed item open", async () => {
+  // In Beads a comment raises the comment count and leaves updatedAt as it was.
+  const discussed = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    commentCount: 1,
+    closeReason: null as string | null,
+  };
+  const undo = boardFixture({ duplicate: false });
+  const applied = await undo.proposal();
+  await undo.apply.approve(applied.id, actor);
+  expect(undo.f.proposals[0]?.body).toMatchObject({
+    appliedBoardItem: { itemId: "board-a", commentCount: 0 },
+  });
+  undo.show.mockResolvedValue({ ...discussed });
+  const undone = await undo.apply.revert(applied.id, actor);
+  expect(undo.close).not.toHaveBeenCalled();
+  expect(undone.conflict).toMatchObject({ code: "board-changed" });
+  expect(undo.f.proposals[0]?.status).toBe("applied");
+
+  const reject = boardFixture({ duplicate: false });
+  const pending = await reject.proposal();
+  reject.f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: pending.id,
+    reused: false,
+  });
+  reject.show.mockResolvedValue({ ...discussed });
+  const left = await reject.apply.reject(pending.id, actor);
+  expect(reject.close).not.toHaveBeenCalled();
+  expect(left.conflict).toMatchObject({ code: "board-left-open" });
+
+  const retry = boardFixture({ duplicate: false });
+  const again = await retry.proposal();
+  await retry.apply.approve(again.id, actor);
+  const quiet = { ...discussed, commentCount: 0 };
+  retry.show.mockImplementation(async () => ({ ...quiet }));
+  retry.close.mockRejectedValueOnce(new Error("beads down"));
+  const closing = await retry.apply.revert(again.id, actor);
+  expect(closing.code).toBe("board-closing");
+  expect(retry.f.filings[0]).toMatchObject({
+    closePending: "Undone from Learning",
+    closeCommentCount: 0,
+  });
+  quiet.commentCount = 1;
+  retry.close.mockClear();
+  const released = await retry.apply.revert(again.id, actor);
+  expect(retry.close).not.toHaveBeenCalled();
+  expect(released.proposal.boardChanged).toBe(true);
+  expect(retry.f.filings).toEqual([]);
+});
 
 function notificationPool() {
   return {
@@ -2104,7 +2163,7 @@ function ownedFiling(proposalId: string, reason: string) {
   };
 }
 
-it("returns a short sentence when Reject's close fails, and the tick closes it without another click", async () => {
+it("returns the closing code when Reject's close fails, and the tick closes it without another click", async () => {
   const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
   const proposal = await create();
   f.filings.push({
@@ -2127,10 +2186,8 @@ it("returns a short sentence when Reject's close fails, and the tick closes it w
   show.mockImplementation(async () => item);
   close.mockRejectedValueOnce(new Error("beads down"));
   const result = await apply.reject(proposal.id, actor).catch(() => null);
-  expect(result).toMatchObject({
-    sentence: BOARD_CLOSE_SOON,
-    proposal: { status: "rejected", boardClosing: true },
-  });
+  expect(result).toMatchObject({ code: "board-closing", proposal: { status: "rejected" } });
+  expect(result).not.toHaveProperty("sentence");
   expect(f.filings).toEqual([
     expect.objectContaining({ itemId: "board-a", closePending: "Rejected from Learning" }),
   ]);
@@ -2146,7 +2203,7 @@ it("returns a short sentence when Reject's close fails, and the tick closes it w
   expect(f.filings).toEqual([]);
 });
 
-it("returns a short sentence when Undo's close fails, and the tick closes it without another click", async () => {
+it("returns the closing code when Undo's close fails, and the tick closes it without another click", async () => {
   const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
   const proposal = await create();
   await apply.approve(proposal.id, actor);
@@ -2160,10 +2217,8 @@ it("returns a short sentence when Undo's close fails, and the tick closes it wit
   show.mockImplementation(async () => item);
   close.mockRejectedValueOnce(new Error("beads down"));
   const result = await apply.revert(proposal.id, actor).catch(() => null);
-  expect(result).toMatchObject({
-    sentence: BOARD_CLOSE_SOON,
-    proposal: { status: "reverted", boardClosing: true },
-  });
+  expect(result).toMatchObject({ code: "board-closing", proposal: { status: "reverted" } });
+  expect(result).not.toHaveProperty("sentence");
   expect(f.filings).toEqual([
     expect.objectContaining({ itemId: "board-a", closePending: "Undone from Learning" }),
   ]);
@@ -2226,7 +2281,7 @@ it("leaves a person's close in place when the pending close runs after they edit
   show.mockImplementation(async () => item);
   close.mockRejectedValueOnce(new Error("beads down"));
   const pending = await apply.reject(proposal.id, actor);
-  expect(pending.sentence).toBe(BOARD_CLOSE_SOON);
+  expect(pending.code).toBe("board-closing");
   item.updatedAt = "2026-09-25T13:00:00.000Z";
   item.status = "closed";
   item.closeReason = "Kept for the shop";
@@ -2275,7 +2330,7 @@ it("a later Reject leaves an item someone else closed and shows that it changed"
   expect(close).not.toHaveBeenCalled();
   expect(item.closeReason).toBe("Kept for the shop");
   expect(f.filings).toEqual([]);
-  expect(again.sentence).toBeUndefined();
+  expect(again.code).toBeUndefined();
   expect(again.proposal.boardClosing).toBeUndefined();
   expect(again.proposal.boardChanged).toBe(true);
 });
@@ -2307,7 +2362,8 @@ it("surfaces a board notification after five failed closes", async () => {
   await apply.reject(proposal.id, actor).catch(() => undefined);
   Object.assign(f.deps.prisma, {
     boardFollow: {
-      upsert: async ({ create: data }: { create: Record<string, unknown> }) => ({
+      findUnique: async () => null,
+      create: async ({ data }: { data: Record<string, unknown> }) => ({
         id: "follow",
         version: 0,
         ...data,
@@ -2354,7 +2410,8 @@ it("surfaces a board notification after five failed closes", async () => {
   }
   expect(notices).toEqual([
     expect.objectContaining({
-      title: "A board item could not be closed.",
+      followId: "follow",
+      title: "A board item filed by a bot could not be closed.",
       changes: ["close"],
     }),
   ]);

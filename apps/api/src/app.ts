@@ -96,6 +96,7 @@ import { cors } from "hono/cors";
 import { mountExportRoutes } from "./account-export.js";
 import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
+import { boardOwnerRun } from "./board.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { HostBridge } from "./host-bridge.js";
@@ -424,7 +425,6 @@ export async function createApp(
   const shutdown = new AbortController();
   const executor = createRunExecutor({
     prisma,
-    pool: created.pool,
     lockPool: created.lockPool,
     runtime,
     sandbox,
@@ -474,6 +474,7 @@ export async function createApp(
 
   const jobHandlers = createBackgroundJobHandlers({
     dataDir: env.dataDir,
+    lockPool: created.lockPool,
     executor,
     prisma,
     sandbox,
@@ -506,7 +507,12 @@ export async function createApp(
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
         reconcileBoardOutcomes: () =>
-          reconcileBoardOutcomes({ prisma, dataDir: env.dataDir, lockPool: created.lockPool }),
+          reconcileBoardOutcomes({
+            prisma,
+            dataDir: env.dataDir,
+            lockPool: created.lockPool,
+            ownerRun: boardOwnerRun(hostBridge),
+          }),
         reconcileLocalImport: async () => {
           await jobs.enqueue({
             name: "local-import.refresh",
@@ -538,7 +544,6 @@ export async function createApp(
     localImportRequests,
     cloudAgent,
     prisma,
-    pool: created.pool,
     lockPool: created.lockPool,
     events,
     auth,

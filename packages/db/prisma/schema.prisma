@@ -52,6 +52,7 @@ model User {
   customizationMarketplaces  CustomizationMarketplace[]
   pluginInstalls             PluginInstall[]
   boardFollows               BoardFollow[]
+  boardNotices               BoardNotification[]
 
   @@unique([email])
   @@map("user")
@@ -2163,6 +2164,7 @@ model BoardWorkspace {
   updatedAt DateTime @updatedAt
   runs Run[]
   follows BoardFollow[]
+  notices BoardNotification[]
 
   @@unique([spaceId, path])
   @@index([spaceId, enabled])
@@ -2190,8 +2192,15 @@ model BoardFollow {
 
 model BoardNotification {
   id String @id @default(cuid())
-  followId String
-  follow BoardFollow @relation(fields: [followId], references: [id], onDelete: Cascade)
+  // A failed-close notice for an item the owner does not follow, and that could not be shown,
+  // has no follow. It names its owner, board and item instead.
+  followId String?
+  follow BoardFollow? @relation(fields: [followId], references: [id], onDelete: Cascade)
+  userId String?
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  workspace BoardWorkspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  itemId String?
   version Int
   title String
   changes String[]
@@ -2200,6 +2209,7 @@ model BoardNotification {
 
   @@unique([followId, version])
   @@index([deliveredAt, createdAt])
+  @@index([userId])
   @@map("board_notifications")
 }
 
@@ -2236,8 +2246,10 @@ model BotBoardFiling {
   outcome String?
   // The close reason after Undo or Reject has committed and the board close has not finished.
   closePending String?
-  // The item's updatedAt when that close was requested. A later retry closes only while it still matches.
+  // The item's updatedAt and comment count when that close was requested. A later retry closes
+  // only while both still match: a Beads comment leaves updatedAt alone.
   closeUpdatedAt String?
+  closeCommentCount Int?
   // How many times that close has failed, and when the next retry is allowed.
   closeAttempts Int?
   closeNextAt DateTime?

@@ -8,7 +8,7 @@ import { advertisedHostTools } from "../remote-host-runtime.js";
 import { createArdurToolBridge } from "../runtimes/claude-mcp-bridge.js";
 import { parseBeadsItem } from "./beads.js";
 import { BoardService } from "./service.js";
-import { executeBoardTool } from "./tools.js";
+import { executeBoardTool, finishBoardRun } from "./tools.js";
 import {
   applyBoardToolAccess,
   BOARD_UPKEEP_SECTION,
@@ -134,7 +134,6 @@ function service(options?: {
   open?: WorkItem[];
   filings?: number;
   hourFilings?: number;
-  pool?: unknown;
   lockPool?: unknown;
 }) {
   const filings: Filing[] = Array.from({ length: options?.filings ?? 0 }, (_, index) =>
@@ -243,7 +242,6 @@ function service(options?: {
   const board = new BoardService({
     prisma: prisma as never,
     dataDir: "/fixture",
-    pool: options?.pool as never,
     lockPool: options?.lockPool as never,
   });
   vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
@@ -532,7 +530,7 @@ it("keeps the filing when create reports the item already exists", async () => {
 
 it("serializes same-title filings so only one item is created", async () => {
   const lock = advisoryPool();
-  const { board, provider, prisma } = service({ pool: lock.pool });
+  const { board, provider, prisma } = service({ lockPool: lock.pool });
   const open: WorkItem[] = [];
   let releaseFirst: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => {
@@ -913,7 +911,7 @@ it("holds a space session lock, not a transaction, across a create slower than 1
   vi.useFakeTimers();
   try {
     const lock = advisoryPool();
-    const { board, provider, filings, transactions } = service({ pool: lock.pool });
+    const { board, provider, filings, transactions } = service({ lockPool: lock.pool });
     const openAt: number[] = [];
     provider.list.mockImplementation(async () => {
       openAt.push(transactions.open);
@@ -959,7 +957,7 @@ it("tells the bot to retry when a filing lock stays busy", async () => {
   try {
     const lock = advisoryPool();
     lock.held.set("space", 0);
-    const { board } = service({ pool: lock.pool });
+    const { board } = service({ lockPool: lock.pool });
     const outcome = board
       .withFilingLock(scope, async () => "filed")
       .then(
@@ -1020,7 +1018,7 @@ it("waits a bounded time for another filing in the same space, then reports it b
   try {
     const lock = advisoryPool();
     lock.held.set("space", 0);
-    const { board, provider, filings } = service({ pool: lock.pool });
+    const { board, provider, filings } = service({ lockPool: lock.pool });
     const outcome = executeBoardTool(
       board,
       scope,
@@ -1059,7 +1057,7 @@ it("waits a bounded time for another filing in the same space, then reports it b
 
 it("deletes the reservation when create fails before any item exists", async () => {
   const lock = advisoryPool();
-  const { board, provider, filings } = service({ pool: lock.pool });
+  const { board, provider, filings } = service({ lockPool: lock.pool });
   provider.create.mockRejectedValueOnce(
     new BoardError({ code: "command_failed", message: "Beads could not finish this change." }),
   );
@@ -1168,18 +1166,6 @@ it("records a proposal's reuse of an open item and returns its own filing on ret
   expect(filed.provider.show).toHaveBeenCalledWith("board-a");
   expect(retry).toEqual({ ...first, item: shown });
   expect(filed.filings).toHaveLength(1);
-});
-
-it("acquires the filing lock from its own pool when the shared pool is exhausted", async () => {
-  const shared = advisoryPool();
-  shared.pool.connect.mockImplementation(async () => {
-    throw new Error("timeout exceeded when trying to connect");
-  });
-  const locks = advisoryPool();
-  const { board } = service({ pool: shared.pool, lockPool: locks.pool });
-  await expect(board.withFilingLock(scope, async () => "filed")).resolves.toBe("filed");
-  expect(locks.pool.connect).toHaveBeenCalled();
-  expect(shared.pool.connect).not.toHaveBeenCalled();
 });
 
 it("keeps a created item on its reservation when recording the id fails, then the same run attaches it", async () => {
@@ -1577,4 +1563,104 @@ it("returns the open item when a hollow reservation is older than 15 minutes", a
     message: "An open item already has this title: board-later.",
   });
   expect(filings.some((row) => row.itemId === "board-later")).toBe(false);
+});
+
+it("skips a busy lock pool at once when a board read's sweep tries a space", async () => {
+  vi.useFakeTimers();
+  const late = { query: vi.fn(), release: vi.fn() };
+  let hand: (client: typeof late) => void = () => {};
+  const pool = {
+    // Every connection is held by filings in other spaces; this checkout waits in the queue.
+    connect: vi.fn(
+      () =>
+        new Promise<typeof late>((resolve) => {
+          hand = resolve;
+        }),
+    ),
+  };
+  const { board } = service({ lockPool: pool });
+  try {
+    const outcome = board
+      .withFilingLock(scope, async () => "filed", { waitMs: 0 })
+      .then(
+        () => "filed",
+        (error: BoardError) => error.problem?.code ?? String(error),
+      );
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await Promise.race([outcome, Promise.resolve("still waiting")])).toBe("busy");
+    // A connection that arrives after the item was skipped goes straight back to the pool.
+    hand(late);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(late.release).toHaveBeenCalledTimes(1);
+    expect(late.query).not.toHaveBeenCalled();
+  } finally {
+    hand(late);
+    vi.useRealTimers();
+  }
+});
+
+it("refuses the in-process filing lock in production", async () => {
+  vi.stubEnv("NODE_ENV", "production");
+  try {
+    const { board } = service();
+    await expect(board.withFilingLock(scope, async () => "filed")).rejects.toThrow(
+      "Board filings need the filing lock pool.",
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("gives a run's outcome delivery the filing lock pool", async () => {
+  const locks = advisoryPool();
+  const provider = vi.spyOn(BoardService.prototype, "provider").mockImplementation(async function (
+    this: BoardService,
+  ) {
+    // The delivery's board read sweeps pending closes under the filing lock.
+    await this.withFilingLock({ spaceId: "space" }, async () => undefined, { waitMs: 0 });
+    return {
+      show: async () => ({ ...item("Task"), comments: [] }),
+      comment: async () => undefined,
+      close: async () => [],
+    } as never;
+  });
+  const run = {
+    id: "run",
+    spaceId: "space",
+    userId: "owner",
+    botId: "builder",
+    status: "failed",
+    boardItemId: "board-a",
+    boardWorkspaceId: "workspace",
+    boardCommentedAt: null,
+    boardCloseWhenDone: false,
+  };
+  const prisma = {
+    run: {
+      findUnique: vi.fn(async () => run),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
+  };
+  try {
+    await finishBoardRun(
+      { prisma: prisma as never, dataDir: "/fixture", lockPool: locks.pool } as never,
+      { userId: "owner", spaceId: "space", botId: "builder", runId: "run" },
+      "Outcome",
+    );
+    expect(locks.pool.connect).toHaveBeenCalled();
+  } finally {
+    provider.mockRestore();
+  }
+});
+
+it("takes filing locks only from lockPool", async () => {
+  const shared = advisoryPool();
+  const board = new BoardService({
+    prisma: {} as never,
+    dataDir: "/fixture",
+    // @ts-expect-error The shared pool is not a board option; filing locks use lockPool.
+    pool: shared.pool,
+  });
+  await expect(board.withFilingLock(scope, async () => "filed")).resolves.toBe("filed");
+  expect(shared.pool.connect).not.toHaveBeenCalled();
 });

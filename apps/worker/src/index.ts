@@ -79,7 +79,7 @@ async function main() {
   // reconciler and messaging receivers each hold an advisory-lock client for the
   // process lifetime (namespace 1380019075, ids 1 and 2). Board notifications
   // take a transaction lock (id 3) for one tick and return that client. Board
-  // filings use lockPool (max 2, id 4) so a held filing lock cannot starve the
+  // filings use lockPool (max 6, id 4) so a held filing lock cannot starve the
   // writes it protects. A larger shared max just competes for Postgres
   // max_connections (53300).
   const { prisma, pool } = createDb(databaseUrl, {
@@ -195,7 +195,6 @@ async function main() {
   const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
   const executor = createRunExecutor({
     prisma,
-    pool,
     lockPool,
     runtime,
     sandbox,
@@ -244,6 +243,7 @@ async function main() {
   // Includes the proposal-only learning.review handler; all mutations stay in the regular executor.
   const jobHandlers = createBackgroundJobHandlers({
     dataDir,
+    lockPool,
     executor,
     prisma,
     sandbox,

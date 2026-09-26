@@ -41,12 +41,12 @@ describe("createDb", () => {
 });
 
 describe("createFilingLockPool", () => {
-  it("uses two connections and the same checkout settings as the shared pool", () => {
+  it("uses six connections and the same checkout settings as the shared pool", () => {
     const pool = createFilingLockPool("postgres://ardurbot:ardurbot@127.0.0.1:9/ardurbot", {
       applicationName: "ardurbot-filing-lock",
     });
     pools.push(pool);
-    expect(pool.options.max).toBe(2);
+    expect(pool.options.max).toBe(6);
     expect(pool.options.connectionTimeoutMillis).toBe(10_000);
     expect(pool.options.idleTimeoutMillis).toBe(0);
     expect(pool.options.application_name).toBe("ardurbot-filing-lock");

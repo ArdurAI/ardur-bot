@@ -135,6 +135,7 @@ function noticeStore() {
   };
   const boardFollow = {
     upsert: async () => ({ ...follow }),
+    findUnique: async () => ({ ...follow }),
     updateMany: async ({
       where,
       data,
@@ -252,7 +253,7 @@ it("notifies a fifth close failure at the next follow version, then a comment us
   expect(notices).toEqual([
     expect.objectContaining({
       version: 1,
-      title: "A board item could not be closed.",
+      title: "A board item filed by a bot could not be closed.",
       changes: ["close"],
     }),
   ]);
@@ -284,7 +285,7 @@ it("retries one unique conflict and sends the fifth-failure notice once", async 
   expect(store.notices).toEqual([
     expect.objectContaining({
       version: 1,
-      title: "A board item could not be closed.",
+      title: "A board item filed by a bot could not be closed.",
       changes: ["close"],
     }),
   ]);
@@ -304,7 +305,7 @@ it("sends the close notice on attempt six when attempt five could not store it, 
   expect(store.notices).toEqual([
     expect.objectContaining({
       version: 1,
-      title: "A board item could not be closed.",
+      title: "A board item filed by a bot could not be closed.",
       changes: ["close"],
     }),
   ]);
@@ -330,6 +331,7 @@ function proposalRace() {
     {
       id: "filing",
       spaceId: "space",
+      itemId: "board-a",
       learningProposalId: "proposal",
       closePending: "Undone from Learning" as string | null,
       closedAt: null as Date | null,
@@ -377,7 +379,11 @@ function proposalRace() {
       findMany: async () =>
         filings
           .filter((row) => !row.closedAt && !row.outcome)
-          .map((row) => ({ id: row.id, learningProposalId: row.learningProposalId })),
+          .map((row) => ({
+            id: row.id,
+            itemId: row.itemId,
+            learningProposalId: row.learningProposalId,
+          })),
       updateMany: async ({
         where,
         data,
@@ -464,3 +470,244 @@ it.each(["outcome", "changed"] as const)(
     });
   },
 );
+
+it("releases a pending close when someone commented, even though the comment left updatedAt alone", async () => {
+  const previous = process.env.ARDURBOT_HOST_BRIDGE;
+  delete process.env.ARDURBOT_HOST_BRIDGE;
+  const filings = [
+    {
+      id: "filing",
+      spaceId: "space",
+      workspaceId: "workspace",
+      itemId: "board-a",
+      botId: null,
+      learningProposalId: null,
+      closePending: "Undone from Learning",
+      closeUpdatedAt: "2026-09-25T12:00:00Z",
+      closeCommentCount: 0,
+      reused: false,
+      createdAt: new Date(),
+    },
+  ];
+  const workspace = {
+    id: "workspace",
+    spaceId: "space",
+    ownerUserId: "owner",
+    kind: "space",
+    path: "",
+    prefix: "work",
+    name: "Board",
+    enabled: true,
+    initialized: true,
+    isDefault: true,
+    allowAllBots: true,
+    allowedBotIds: [] as string[],
+  };
+  const commands: string[] = [];
+  const client = {
+    deploymentSettings: { findUnique: async () => ({ ownerUserId: "owner" }) },
+    spaceMember: { findUnique: async () => ({ userId: "owner" }) },
+    user: { findUniqueOrThrow: async () => ({ name: "Owner" }) },
+    boardWorkspace: { findFirst: async () => workspace, findUnique: async () => workspace },
+    learningProposal: { findUnique: async () => null },
+    boardFollow: { findMany: async () => [] },
+    botBoardFiling: {
+      findMany: async () => filings.filter((row) => row.closePending),
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        filings.find((row) => row.id === where.id) ?? null,
+      deleteMany: async ({ where }: { where: { id: string } }) => {
+        const before = filings.length;
+        filings.splice(0, filings.length, ...filings.filter((row) => row.id !== where.id));
+        return { count: before - filings.length };
+      },
+      updateMany: async ({ where, data }: { where: { id: string }; data: object }) => {
+        const row = filings.find((filing) => filing.id === where.id);
+        if (row) Object.assign(row, data);
+        return { count: row ? 1 : 0 };
+      },
+    },
+    hostRegistration: { findUnique: async () => null },
+  };
+  const prisma = {
+    ...client,
+    $transaction: async (work: (tx: typeof client) => Promise<unknown>) => work(client),
+  };
+  const board = new BoardService({
+    prisma: prisma as never,
+    dataDir: "/fixture",
+    localRun: async (request) => {
+      commands.push(request.argv[0] ?? "");
+      if (request.argv[0] === "show")
+        return {
+          ok: true as const,
+          stdout: JSON.stringify([
+            { ...beadsItem, comment_count: 1, comments: [{ id: 1, text: "I'm taking this" }] },
+          ]),
+        };
+      return { ok: true as const, stdout: "[]" };
+    },
+  });
+  try {
+    await board.sweepPendingCloses();
+    expect(commands).not.toContain("close");
+    expect(filings).toEqual([]);
+  } finally {
+    if (previous === undefined) delete process.env.ARDURBOT_HOST_BRIDGE;
+    else process.env.ARDURBOT_HOST_BRIDGE = previous;
+  }
+});
+
+type FollowRow = {
+  id: string;
+  workspaceId: string;
+  itemId: string;
+  userId: string;
+  status: string;
+  assignee: string | null;
+  commentCount: number;
+  version: number;
+};
+/** A follow table that may start empty, and notices that may have no follow. */
+function followStore(existing: Partial<FollowRow> | null) {
+  let follow: FollowRow | null = existing
+    ? {
+        id: "follow",
+        workspaceId: "workspace",
+        itemId: "board-a",
+        userId: "owner",
+        status: "open",
+        assignee: null,
+        commentCount: 0,
+        version: 0,
+        ...existing,
+      }
+    : null;
+  const notices: Array<Record<string, unknown>> = [];
+  let noticeAt: Date | null = null;
+  let attempts: number | null = 4;
+  const created = (data: Omit<FollowRow, "id" | "version"> & { version?: number }) => {
+    follow = { id: "follow", version: 0, ...data };
+    return { ...follow };
+  };
+  const client = {
+    boardWorkspace: { findUnique: async () => ({ ownerUserId: "owner" }) },
+    learningProposal: { findUnique: async () => null },
+    boardFollow: {
+      upsert: async ({ create }: { create: Omit<FollowRow, "id" | "version"> }) =>
+        follow ? { ...follow } : created(create),
+      findUnique: async () => (follow ? { ...follow } : null),
+      create: async ({ data }: { data: Omit<FollowRow, "id" | "version"> }) => {
+        if (follow) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+        return created(data);
+      },
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { version?: number };
+        data: { version?: number | { increment: number } };
+      }) => {
+        if (!follow || (where.version !== undefined && where.version !== follow.version))
+          return { count: 0 };
+        follow.version =
+          typeof data.version === "number"
+            ? data.version
+            : follow.version + (data.version?.increment ?? 0);
+        return { count: 1 };
+      },
+    },
+    boardNotification: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        notices.push({ ...data });
+        return data;
+      },
+    },
+    botBoardFiling: {
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { closeAttempts?: number | null; closeNoticeAt?: null };
+        data: { closeAttempts?: number; closeNoticeAt?: Date };
+      }) => {
+        if ("closeNoticeAt" in where) {
+          if (noticeAt) return { count: 0 };
+          noticeAt = data.closeNoticeAt ?? null;
+          return { count: 1 };
+        }
+        if (where.closeAttempts !== attempts) return { count: 0 };
+        attempts = data.closeAttempts ?? null;
+        return { count: 1 };
+      },
+    },
+  };
+  const prisma = {
+    ...client,
+    $transaction: async (work: (tx: typeof client) => Promise<unknown>) => work(client),
+  };
+  return { prisma, notices, follow: () => follow };
+}
+
+it("adds the fifth-failure notice to the owner's existing follow without changing what they follow", async () => {
+  const store = followStore({ status: "in_progress", assignee: "Owner", commentCount: 2 });
+  const show = vi.fn();
+  await recordPendingCloseFailure(store.prisma as never, closeFiling(4), show);
+  expect(show).not.toHaveBeenCalled();
+  expect(store.follow()).toMatchObject({
+    status: "in_progress",
+    assignee: "Owner",
+    commentCount: 2,
+    version: 1,
+  });
+  expect(store.notices).toEqual([
+    {
+      followId: "follow",
+      version: 1,
+      title: "A board item filed by a bot could not be closed.",
+      changes: ["close"],
+    },
+  ]);
+});
+
+it("follows the item from its real state when the owner did not follow it", async () => {
+  const store = followStore(null);
+  const show = vi.fn(async () => ({
+    id: "board-a",
+    status: "in_progress",
+    assignee: "bot:Builder",
+    commentCount: 3,
+  }));
+  await recordPendingCloseFailure(store.prisma as never, closeFiling(4), show as never);
+  expect(show).toHaveBeenCalledWith("board-a");
+  expect(store.follow()).toMatchObject({
+    workspaceId: "workspace",
+    itemId: "board-a",
+    userId: "owner",
+    status: "in_progress",
+    assignee: "bot:Builder",
+    commentCount: 3,
+    version: 1,
+  });
+  expect(store.notices).toEqual([
+    expect.objectContaining({ followId: "follow", version: 1, changes: ["close"] }),
+  ]);
+});
+
+it("stores the notice without a follow when the item cannot be shown", async () => {
+  const store = followStore(null);
+  const show = vi.fn(async () => {
+    throw new Error("Open the desktop app to use this board.");
+  });
+  await recordPendingCloseFailure(store.prisma as never, closeFiling(4), show as never);
+  expect(store.follow()).toBeNull();
+  expect(store.notices).toEqual([
+    {
+      userId: "owner",
+      workspaceId: "workspace",
+      itemId: "board-a",
+      version: 0,
+      title: "A board item filed by a bot could not be closed.",
+      changes: ["close"],
+    },
+  ]);
+});

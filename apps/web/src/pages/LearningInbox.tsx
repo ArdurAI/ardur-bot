@@ -1,11 +1,12 @@
 import type {
+  LearningActionResult,
   LearningGrant,
   LearningGrantInput,
   LearningProposal,
   ProposalEvidence,
   SpaceLearningConfig,
 } from "@ardurbot/contracts";
-import { learningApprovalBlock } from "@ardurbot/contracts";
+import { boardClosingProposal, learningApprovalBlock } from "@ardurbot/contracts";
 import {
   Button,
   Switch,
@@ -101,6 +102,20 @@ export function LearningInbox({ botId }: { botId?: string }) {
       window.clearInterval(timer);
     };
   }, [load]);
+  /** Shows a close that Reject or Undo left running at once; the reload that follows confirms it. */
+  const settle = useCallback((result: LearningActionResult) => {
+    const proposal = boardClosingProposal(result);
+    if (!proposal) return;
+    setInbox((current) =>
+      current
+        ? {
+            ...current,
+            proposals: current.proposals.map((row) => (row.id === proposal.id ? proposal : row)),
+          }
+        : current,
+    );
+    setSelected((current) => (current?.id === proposal.id ? proposal : current));
+  }, []);
   async function change(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
@@ -209,6 +224,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
               expanded={proposal.id === selectedId}
               busy={busy}
               change={change}
+              settle={settle}
             />
           ))}
         </TabsContent>
@@ -287,12 +303,14 @@ function LearningCard({
   expanded = false,
   busy,
   change,
+  settle,
 }: {
   proposal: LearningProposal;
   botName?: string;
   expanded?: boolean;
   busy: boolean;
   change: (action: () => Promise<unknown>) => Promise<void>;
+  settle: (result: LearningActionResult) => void;
 }) {
   const { t } = useLingui();
   const [detailsOpen, setDetailsOpen] = useState(expanded);
@@ -349,6 +367,7 @@ function LearningCard({
               onClick={() =>
                 void change(async () => {
                   const result = await rpc.learning.reject({ proposalId: proposal.id });
+                  settle(result);
                   setConflict(result.conflict ?? null);
                 })
               }
@@ -381,6 +400,7 @@ function LearningCard({
                 onClick={() =>
                   void change(async () => {
                     const result = await rpc.learning.revert({ proposalId: proposal.id });
+                    settle(result);
                     setConflict(result.conflict ?? null);
                   })
                 }
@@ -393,6 +413,8 @@ function LearningCard({
           <span className="text-sm">
             {proposal.boardChanged ? (
               <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
+            ) : proposal.boardCloseFailed ? (
+              <Trans>A board item filed by a bot could not be closed.</Trans>
             ) : proposal.boardClosing ? (
               <Trans>Closing on the Board.</Trans>
             ) : proposal.status === "reverted" ? (
@@ -407,6 +429,14 @@ function LearningCard({
           </span>
         )}
       </div>
+      {proposal.boardCloseFailed && !proposal.boardChanged ? (
+        <p className="text-xs text-muted-foreground">
+          <Trans>
+            Ardur Bot tried five times. Close it on the Board, or check that this computer is
+            connected.
+          </Trans>
+        </p>
+      ) : null}
       {blocked ? <p className="text-xs text-muted-foreground">{blocked}</p> : null}
       {editing ? (
         <div>

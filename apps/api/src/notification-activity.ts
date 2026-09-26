@@ -55,40 +55,51 @@ export async function notificationActivity(prisma: PrismaClient, actor: Actor) {
     };
   });
   const deployment = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
+  const ownedBoard = {
+    enabled: true,
+    ownerUserId: actor.userId,
+    space: { memberships: { some: { userId: actor.userId } } },
+  };
   const boardRows =
     deployment?.ownerUserId === actor.userId
       ? await prisma.boardNotification.findMany({
           where: {
-            follow: {
-              userId: actor.userId,
-              workspace: {
-                enabled: true,
-                ownerUserId: actor.userId,
-                space: { memberships: { some: { userId: actor.userId } } },
-              },
-            },
+            // A failed-close notice may name its owner and board instead of a follow.
+            OR: [
+              { follow: { userId: actor.userId, workspace: ownedBoard } },
+              { followId: null, userId: actor.userId, workspace: ownedBoard },
+            ],
           },
-          include: { follow: { include: { workspace: { select: { spaceId: true } } } } },
+          include: {
+            follow: { include: { workspace: { select: { spaceId: true } } } },
+            workspace: { select: { spaceId: true } },
+          },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 100,
         })
       : [];
-  for (const row of boardRows)
+  for (const row of boardRows) {
+    const workspaceId = row.follow?.workspaceId ?? row.workspaceId;
+    const itemId = row.follow?.itemId ?? row.itemId;
+    const spaceId = row.follow?.workspace.spaceId ?? row.workspace?.spaceId;
+    if (!workspaceId || !itemId || !spaceId) continue;
     activities.push({
       id: row.id,
       name: row.title,
-      threadId: `board:${row.follow.workspaceId}:${row.follow.itemId}`,
+      threadId: `board:${workspaceId}:${itemId}`,
       category: "responseCompletions",
       status: "board_changed",
       updatedAt: row.createdAt.toISOString(),
       occurredAt: row.createdAt.toISOString(),
       enabled: preferences.notifications.responseCompletions,
       board: {
-        spaceId: row.follow.workspace.spaceId,
-        workspaceId: row.follow.workspaceId,
-        itemId: row.follow.itemId,
+        spaceId,
+        workspaceId,
+        itemId,
+        ...(row.changes.includes("close") ? { closeFailed: true } : {}),
       },
     });
+  }
   activities.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return { userId: actor.userId, preferences, activities };
 }

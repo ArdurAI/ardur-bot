@@ -632,7 +632,6 @@ export interface ExecutorDeps {
   secretStore: EncryptedSecretStore;
   deploymentModelKey?: string;
   dataDir?: string;
-  pool?: Pick<Pool, "connect">;
   /** Filing locks only. Never the shared Prisma pool. */
   lockPool?: Pick<Pool, "connect">;
   notifications?: NotificationProvider;

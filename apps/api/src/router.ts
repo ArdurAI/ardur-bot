@@ -452,7 +452,6 @@ export interface RouterDeps {
   terminals?: ReturnType<typeof createTerminalRoutes>;
   cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
-  pool?: Pick<Pool, "connect">;
   /** Filing locks only. Never the shared Prisma pool. */
   lockPool?: Pick<Pool, "connect">;
   events: ThreadEvents;

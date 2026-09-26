@@ -2,6 +2,7 @@ import type { NotificationProvider } from "@ardurbot/adapter-kit";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { getUserPreferences } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import { BOARD_CLOSE_FAILED_BODY } from "./pending-close.js";
 
 const BOARD_NOTIFICATION_LOCK_NAMESPACE = 1_380_019_075;
 const BOARD_NOTIFICATION_LOCK_ID = 3;
@@ -15,27 +16,30 @@ export async function deliverBoardNotifications(
   if (signal.aborted) return;
   const rows = await prisma.boardNotification.findMany({
     where: { deliveredAt: null },
-    include: { follow: { include: { workspace: true } } },
+    include: { follow: { include: { workspace: true } }, workspace: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: 50,
   });
   for (const row of rows) {
     if (signal.aborted) return;
-    const { follow } = row;
-    const { workspace } = follow;
+    // A failed-close notice may have no follow; it then names its owner, board and item.
+    const workspace = row.follow?.workspace ?? row.workspace;
+    const userId = row.follow?.userId ?? row.userId;
+    const itemId = row.follow?.itemId ?? row.itemId;
     try {
+      if (!workspace || !userId || !itemId) throw new Error("This board notice has no target.");
       const [member, deployment, preferences] = await Promise.all([
         prisma.spaceMember.findUnique({
-          where: { spaceId_userId: { spaceId: workspace.spaceId, userId: follow.userId } },
+          where: { spaceId_userId: { spaceId: workspace.spaceId, userId } },
         }),
         prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
-        getUserPreferences(prisma, follow.userId),
+        getUserPreferences(prisma, userId),
       ]);
       if (
         member &&
         workspace.enabled &&
-        workspace.ownerUserId === follow.userId &&
-        deployment?.ownerUserId === follow.userId &&
+        workspace.ownerUserId === userId &&
+        deployment?.ownerUserId === userId &&
         preferences.notifications.responseCompletions
       ) {
         await notifications.send(
@@ -49,19 +53,19 @@ export async function deliverBoardNotifications(
                   : change === "assignee"
                     ? "Assignee changed"
                     : change === "close"
-                      ? "Could not close this board item."
+                      ? BOARD_CLOSE_FAILED_BODY
                       : "Status changed",
               )
               .join(" · "),
             botId: "",
-            threadId: `board:${workspace.id}:${follow.itemId}`,
-            board: { spaceId: workspace.spaceId, workspaceId: workspace.id, itemId: follow.itemId },
+            threadId: `board:${workspace.id}:${itemId}`,
+            board: { spaceId: workspace.spaceId, workspaceId: workspace.id, itemId },
           },
           {
             operationId: row.id,
             traceId: row.id,
             spaceId: workspace.spaceId,
-            userId: follow.userId,
+            userId,
             botId: "",
             signal,
           },

@@ -2,25 +2,29 @@ import type { WorkItem } from "@ardurbot/contracts/board";
 import { getLogger } from "@ardurbot/logging";
 import type { Prisma, PrismaClient } from "./client.js";
 
-const COMPLETION_WORD = "done|complete|completed|fixed|resolved";
+const COMPLETION_WORD =
+  "done|complete|completed|fixed|resolved|implemented|shipped|merged|finished|delivered|landed";
 const COMPLETION = new RegExp(`\\b(?:${COMPLETION_WORD})\\b`, "iu");
-const UN_COMPLETION = /\bun(?:completed|complete|resolved|fixed|done)\b/iu;
+const UN_COMPLETION = new RegExp(`\\bun(?:${COMPLETION_WORD})\\b`, "iu");
 const NEGATED_COMPLETION = new RegExp(
   `\\b(?:nothing|nobody|nowhere|none|never|not|no(?!\\s+\\d)|cannot|unable to|(?:can|couldn|won|didn|isn|wasn|hasn|haven)['’]?t)(?:\\s+[\\w'’]+){0,3}?\\s+(?:${COMPLETION_WORD})\\b`,
   "iu",
 );
 
 /**
- * An empty reason or a completion word means done, unless a negation comes up to three
- * words before any completion word. Negations are not, never, no, nothing, nobody, none,
- * nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't, and
- * unable to ("not done", "can't get it fixed", "nothing was resolved"). "no" followed by
- * a number is a label, not a negation ("ticket no 12 resolved"). A completion word with
- * an un- prefix (unresolved, unfixed, undone, uncompleted) is negated. Every other reason,
- * including "won't fix" and "no fix was possible", is closed otherwise.
+ * An empty reason, Beads' default "Closed" (from `bd close` with no reason or an empty one),
+ * or a completion word means done, unless a negation comes up to three words before any
+ * completion word. Completion words are done, complete, completed, fixed, resolved,
+ * implemented, shipped, merged, finished, delivered and landed. Negations are not, never,
+ * no, nothing, nobody, none, nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't,
+ * hasn't, haven't, and unable to ("not done", "can't get it fixed", "never shipped"). "no"
+ * followed by a number is a label, not a negation ("ticket no 12 resolved"). A completion
+ * word with an un- prefix (unresolved, unfinished, undone) is negated. Every other reason,
+ * including "won't fix" and "Closed as duplicate", is closed otherwise.
  */
 export function boardFilingOutcome(reason = ""): "completed" | "closed-other" {
-  if (!reason.trim()) return "completed";
+  const trimmed = reason.trim();
+  if (!trimmed || trimmed.toLowerCase() === "closed") return "completed";
   const withoutUn = reason.replace(UN_COMPLETION, " ");
   if (UN_COMPLETION.test(reason) && !COMPLETION.test(withoutUn)) return "closed-other";
   return COMPLETION.test(withoutUn) && !NEGATED_COMPLETION.test(reason)
@@ -56,45 +60,7 @@ export async function observeBoardItems(
 ) {
   if (!items.length) return;
   const byId = new Map(items.map((item) => [item.id, item]));
-  const closed = items.filter((item) => item.status === "closed");
-  for (const item of closed) {
-    const pending = await prisma.botBoardFiling.findMany({
-      where: { workspaceId, itemId: item.id, closedAt: null, outcome: null },
-      select: { id: true, learningProposalId: true },
-    });
-    const closedAt = item.closedAt ? new Date(item.closedAt) : new Date();
-    const outcome = boardFilingOutcome(item.closeReason ?? "");
-    const closeReason = item.closeReason?.trim() ?? "";
-    for (const row of pending) {
-      try {
-        await prisma.$transaction(async (tx) => {
-          // The proposal row lock comes before the filing row, the same order as Reject and Undo.
-          const proposalId = closeReason ? row.learningProposalId : null;
-          const body = proposalId ? await lockedProposalBody(tx, proposalId) : null;
-          await tx.botBoardFiling.updateMany({
-            where: { id: row.id, closedAt: null, outcome: null },
-            data: { closedAt, outcome },
-          });
-          const applied = body?.appliedBoardItem;
-          if (!proposalId || !applied || typeof applied !== "object" || Array.isArray(applied))
-            return;
-          if ("closeReason" in applied && applied.closeReason === closeReason) return;
-          await tx.learningProposal.update({
-            where: { id: proposalId },
-            data: {
-              body: {
-                ...body,
-                appliedBoardItem: { ...applied, closeReason },
-              } as Prisma.InputJsonValue,
-            },
-          });
-        });
-      } catch (error) {
-        // Leave the outcome empty so the next board read retries the outcome and the close reason together.
-        getLogger().error("board filing outcome", error);
-      }
-    }
-  }
+  await observeFilingOutcomes(prisma, workspaceId, items);
   const follows = await prisma.boardFollow.findMany({
     where: { workspaceId, itemId: { in: [...byId.keys()] }, workspace: { enabled: true } },
   });
@@ -122,4 +88,86 @@ export async function observeBoardItems(
         });
     });
   }
+}
+
+/**
+ * One query per board read finds the closed items' unrecorded filings and the open items'
+ * recorded ones. A close records the outcome and the proposal's close reason; a reopen clears
+ * both so the next close records afresh. Each write locks the proposal row before the filing
+ * row, the same order as Reject and Undo.
+ */
+async function observeFilingOutcomes(prisma: PrismaClient, workspaceId: string, items: WorkItem[]) {
+  const closedIds = items.filter((item) => item.status === "closed").map((item) => item.id);
+  const openIds = items.filter((item) => item.status !== "closed").map((item) => item.id);
+  const filings = await prisma.botBoardFiling.findMany({
+    where: {
+      workspaceId,
+      OR: [
+        { itemId: { in: closedIds }, closedAt: null, outcome: null },
+        { itemId: { in: openIds }, NOT: { closedAt: null, outcome: null } },
+      ],
+    },
+    select: { id: true, itemId: true, learningProposalId: true },
+  });
+  const byId = new Map(items.map((item) => [item.id, item]));
+  for (const filing of filings) {
+    const item = filing.itemId ? byId.get(filing.itemId) : undefined;
+    if (!item) continue;
+    try {
+      if (item.status === "closed") await recordFilingClose(prisma, filing, item);
+      else await clearFilingClose(prisma, filing);
+    } catch (error) {
+      // Leave the filing as it was so the next board read retries the outcome and the reason together.
+      getLogger().error("board filing outcome", error);
+    }
+  }
+}
+
+type ObservedFiling = { id: string; learningProposalId: string | null };
+
+async function recordFilingClose(prisma: PrismaClient, filing: ObservedFiling, item: WorkItem) {
+  const closedAt = item.closedAt ? new Date(item.closedAt) : new Date();
+  const outcome = boardFilingOutcome(item.closeReason ?? "");
+  const closeReason = item.closeReason?.trim() ?? "";
+  await prisma.$transaction(async (tx) => {
+    const proposalId = closeReason ? filing.learningProposalId : null;
+    const body = proposalId ? await lockedProposalBody(tx, proposalId) : null;
+    await tx.botBoardFiling.updateMany({
+      where: { id: filing.id, closedAt: null, outcome: null },
+      data: { closedAt, outcome },
+    });
+    const applied = appliedBoardItem(body);
+    if (!proposalId || !applied || applied.closeReason === closeReason) return;
+    await tx.learningProposal.update({
+      where: { id: proposalId },
+      data: {
+        body: { ...body, appliedBoardItem: { ...applied, closeReason } } as Prisma.InputJsonValue,
+      },
+    });
+  });
+}
+
+async function clearFilingClose(prisma: PrismaClient, filing: ObservedFiling) {
+  await prisma.$transaction(async (tx) => {
+    const proposalId = filing.learningProposalId;
+    const body = proposalId ? await lockedProposalBody(tx, proposalId) : null;
+    await tx.botBoardFiling.updateMany({
+      where: { id: filing.id, NOT: { closedAt: null, outcome: null } },
+      data: { closedAt: null, outcome: null },
+    });
+    const applied = appliedBoardItem(body);
+    if (!proposalId || !applied || !("closeReason" in applied)) return;
+    const { closeReason: _cleared, ...reopened } = applied;
+    await tx.learningProposal.update({
+      where: { id: proposalId },
+      data: { body: { ...body, appliedBoardItem: reopened } as Prisma.InputJsonValue },
+    });
+  });
+}
+
+function appliedBoardItem(body: Record<string, unknown> | null) {
+  const applied = body?.appliedBoardItem;
+  return applied && typeof applied === "object" && !Array.isArray(applied)
+    ? (applied as Record<string, unknown>)
+    : null;
 }

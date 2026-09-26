@@ -262,6 +262,57 @@ it("shows Closing on the Board until the pending close clears", async () => {
     vi.useRealTimers();
   }
 });
+const pendingBoard = {
+  ...proposal,
+  type: "board-item",
+  proposedContent: undefined,
+  boardItem: {
+    title: "Finish the import follow-up",
+    description: "The run stopped before the import finished.",
+    acceptanceCriteria: "The import completes.",
+  },
+};
+it("shows Closing on the Board as soon as Reject answers with the closing code", async () => {
+  api.list.mockResolvedValueOnce({
+    reviews: [],
+    proposals: [pendingBoard],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  // The reload after Reject has not answered yet.
+  api.list.mockReturnValue(new Promise(() => undefined));
+  api.reject.mockResolvedValue({
+    proposal: { ...pendingBoard, status: "rejected" },
+    code: "board-closing",
+  });
+  await click("Reject");
+  expect(container.textContent).toContain("Closing on the Board.");
+  expect(container.textContent).not.toContain("Approve");
+});
+it("says a board close that keeps failing could not be closed, and what to do", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [
+      { ...pendingBoard, status: "rejected", boardClosing: true, boardCloseFailed: true },
+    ],
+    pendingCount: 0,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  expect(container.textContent).toContain("A board item filed by a bot could not be closed.");
+  expect(container.textContent).toContain(
+    "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+  );
+  expect(container.textContent).not.toContain("Closing on the Board.");
+  expect(catalogTranslation("ru", "A board item filed by a bot could not be closed.")).not.toBe("");
+  expect(
+    catalogTranslation(
+      "zh-CN",
+      "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+    ),
+  ).not.toBe("");
+});
 it("shows the changed sentence after a pending close was left with the person", async () => {
   const board = {
     ...proposal,

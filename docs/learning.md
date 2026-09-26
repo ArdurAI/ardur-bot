@@ -131,8 +131,8 @@ proposal cannot be edited here. Board-item proposals never use a learning grant.
 known secrets, deduplicates an open title, enforces the board's hourly filing cap, adds `bot-filed`,
 and records the selected item. Once create returns an item id, that id stays on the reservation.
 Approval, Reject and Undo take the space's filing lock, so a proposal rejected while approval waited
-is never filed. Reject closes an unchanged new item with `Rejected from Learning` and frees the cap
-slot. If the item changed, Reject leaves it open and says “This board item changed after it was filed,
+is never filed. Unchanged means no edit and no new comment. Reject closes an unchanged new item with
+`Rejected from Learning` and frees the cap slot. If the item changed, Reject leaves it open and says “This board item changed after it was filed,
 so it was left open for review on the Board.” Undo closes a new item with `Undone from Learning` only
 while it is still open and unchanged; otherwise it says “This board item changed after it was filed.
 Review it on the Board.” When approval matched an existing open item, the proposal links to it without

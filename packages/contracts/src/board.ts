@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
+import { BoardLabelSchema } from "./board-label.js";
 
 export const BOARD_TYPES = [
   "task",
@@ -43,11 +44,7 @@ const text = z
   .string()
   .max(32_000)
   .refine((s) => !s.includes("\0"));
-const label = z
-  .string()
-  .min(1)
-  .max(100)
-  .regex(/^[^,\r\n\0]+$/);
+const label = BoardLabelSchema;
 export const BoardDependencySchema = z.object({
   id: z.string(),
   type: z.string(),

@@ -49,22 +49,44 @@ function fixture() {
     );
   return { prisma, row, notifications, deliver };
 }
-it("says when a board item could not be closed", async () => {
+it("says a board item filed by a bot could not be closed and what to do, with or without a follow", async () => {
   const { prisma, notifications, row } = fixture();
+  const title = "A board item filed by a bot could not be closed.";
   prisma.boardNotification.findMany.mockResolvedValue([
-    { ...row, title: "A board item could not be closed.", changes: ["close"] },
-  ]);
+    { ...row, title, changes: ["close"] },
+    {
+      id: "unfollowed",
+      title,
+      changes: ["close"],
+      follow: null,
+      userId: "owner",
+      itemId: "other",
+      workspace: row.follow.workspace,
+    },
+  ] as never);
   await deliverBoardNotifications(
     prisma as unknown as PrismaClient,
     notifications as unknown as NotificationProvider,
   );
-  expect(notifications.send).toHaveBeenCalledWith(
-    expect.objectContaining({
-      title: "A board item could not be closed.",
-      body: "Could not close this board item.",
-    }),
-    expect.anything(),
+  const body =
+    "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.";
+  expect(notifications.send).toHaveBeenCalledTimes(2);
+  expect(notifications.send).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({ title, body }),
+    expect.objectContaining({ userId: "owner" }),
   );
+  expect(notifications.send).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({
+      title,
+      body,
+      threadId: "board:board:other",
+      board: { spaceId: "space", workspaceId: "board", itemId: "other" },
+    }),
+    expect.objectContaining({ userId: "owner", spaceId: "space" }),
+  );
+  expect(prisma.boardNotification.update).toHaveBeenCalledTimes(2);
 });
 it("delivers follower changes through the existing provider with the Board deep-link target", async () => {
   const { prisma, notifications, deliver } = fixture();

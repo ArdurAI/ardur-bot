@@ -1,10 +1,12 @@
 import type {
+  LearningActionResult,
   LearningJourneyEntry,
   LearningProposal,
   ProposalEvidence,
   SpaceLearningConfig,
 } from "@ardurbot/contracts";
 import {
+  boardClosingProposal,
   LearningJourneyEntrySchema,
   learningApprovalBlock,
   learningJourneyLabel,
@@ -78,6 +80,13 @@ export default function Learning() {
       return () => clearInterval(timer);
     }, [load]),
   );
+  /** Shows a close that Reject or Undo left running at once; the reload that follows confirms it. */
+  function settle(result: LearningActionResult) {
+    const proposal = boardClosingProposal(result);
+    if (!proposal) return;
+    setItems((current) => current.map((row) => (row.id === proposal.id ? proposal : row)));
+    setSelected((current) => (current?.id === proposal.id ? proposal : current));
+  }
   async function change(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
@@ -240,6 +249,7 @@ export default function Learning() {
                           onPress={() =>
                             void change(async () => {
                               const result = await learningAction("reject", proposal.id);
+                              settle(result);
                               setConflict(result.conflict);
                               setOpen(proposal.id);
                             })
@@ -256,6 +266,7 @@ export default function Learning() {
                             onPress={() =>
                               void change(async () => {
                                 const result = await learningAction("revert", proposal.id);
+                                settle(result);
                                 setConflict(result.conflict);
                                 setOpen(proposal.id);
                               })
@@ -267,14 +278,23 @@ export default function Learning() {
                       <Text style={styles.secondary}>
                         {proposal.boardChanged
                           ? t("This board item changed after it was filed. Review it on the Board.")
-                          : proposal.boardClosing
-                            ? t("Closing on the Board.")
-                            : proposal.status === "reverted"
-                              ? t("Undone")
-                              : proposal.status}
+                          : proposal.boardCloseFailed
+                            ? t("A board item filed by a bot could not be closed.")
+                            : proposal.boardClosing
+                              ? t("Closing on the Board.")
+                              : proposal.status === "reverted"
+                                ? t("Undone")
+                                : proposal.status}
                       </Text>
                     )}
                   </View>
+                  {proposal.boardCloseFailed && !proposal.boardChanged ? (
+                    <Text style={styles.secondary}>
+                      {t(
+                        "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+                      )}
+                    </Text>
+                  ) : null}
                   {blocked ? <Text style={styles.secondary}>{t(blocked)}</Text> : null}
                   <Button
                     title={t("Details")}

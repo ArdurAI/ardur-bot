@@ -11,7 +11,7 @@ import {
   BoardItemIdSchema,
   BoardPatchSchema,
 } from "@ardurbot/contracts/board";
-import type { PrismaClient } from "@ardurbot/db";
+import type { Pool, PrismaClient } from "@ardurbot/db";
 import { z } from "zod";
 import type { BoardScope } from "./service.js";
 import { BoardService } from "./service.js";
@@ -254,7 +254,7 @@ export async function executeBoardTool(
 }
 /** Deliver only persisted terminal outcomes, through the scoped host outcome authorization. */
 export async function finishBoardRun(
-  deps: { prisma: PrismaClient; dataDir?: string },
+  deps: { prisma: PrismaClient; dataDir?: string; lockPool?: Pick<Pool, "connect"> },
   scope: BoardScope & { runId: string },
   outcome: string,
 ) {
@@ -297,7 +297,11 @@ export async function finishBoardRun(
     };
     checkDeadline();
     const completed = run.status === "completed";
-    const service = new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" });
+    const service = new BoardService({
+      prisma: deps.prisma,
+      dataDir: deps.dataDir ?? "./data",
+      lockPool: deps.lockPool,
+    });
     const provider = await service.provider({ ...scope, signal }, run.boardWorkspaceId);
     checkDeadline();
     const item = await provider.show(run.boardItemId);

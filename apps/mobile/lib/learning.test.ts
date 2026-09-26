@@ -271,6 +271,80 @@ it("shows Closing on the Board until the pending close clears", async () => {
     await act(async () => root.unmount());
   }
 });
+const pendingBoard = {
+  ...proposal,
+  type: "board-item",
+  proposedContent: undefined,
+  boardItem: {
+    title: "Finish the import follow-up",
+    description: "The run stopped before the import finished.",
+    acceptanceCriteria: "The import completes.",
+  },
+  diff: "+Finish the import follow-up",
+};
+it("shows Closing on the Board as soon as Reject answers with the closing code", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let reloads = 0;
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/journey") return [];
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    if (path === "learning/reject")
+      return { proposal: { ...pendingBoard, status: "rejected" }, code: "board-closing" };
+    // The reload after Reject has not answered yet.
+    if (reloads++ > 0) return new Promise(() => undefined);
+    return { reviews: [], proposals: [pendingBoard], pendingCount: 1, appliedThisWeek: 0 };
+  });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    const reject = [...container.querySelectorAll("button")].find(
+      (node) => node.textContent === "Reject",
+    );
+    await act(async () => reject?.click());
+    expect(container.textContent).toContain("Closing on the Board.");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("says a board close that keeps failing could not be closed, and what to do", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const failed = {
+    ...pendingBoard,
+    status: "rejected",
+    boardClosing: true,
+    boardCloseFailed: true,
+  };
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/journey") return [];
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    return { reviews: [], proposals: [failed], pendingCount: 0, appliedThisWeek: 0 };
+  });
+  const title = "A board item filed by a bot could not be closed.";
+  const body =
+    "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.";
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    expect(container.textContent).toContain(title);
+    expect(container.textContent).toContain(body);
+    expect(container.textContent).not.toContain("Closing on the Board.");
+    for (const messages of [RU_MESSAGES, ZH_MESSAGES]) {
+      expect(messages[title]).toBeTruthy();
+      expect(messages[body]).toBeTruthy();
+      i18n.locale = "translated";
+      i18n.messages = messages;
+      await act(async () => root.render(createElement(Learning)));
+      expect(container.textContent).toContain(messages[title]);
+      expect(container.textContent).toContain(messages[body]);
+    }
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 it("shows the changed sentence after a pending close was left with the person", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const board = {

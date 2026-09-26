@@ -59,6 +59,7 @@ it("includes only the acting owner's followed Board events with current space me
     {
       id: "notice",
       title: "Plan work",
+      changes: ["status"],
       createdAt: new Date("2026-09-25T00:00:00Z"),
       follow: { workspaceId: "board", itemId: "item", workspace: { spaceId: "space" } },
     },
@@ -82,18 +83,76 @@ it("includes only the acting owner's followed Board events with current space me
   expect(findMany).toHaveBeenCalledWith(
     expect.objectContaining({
       where: {
-        follow: {
-          userId: "owner",
-          workspace: {
-            enabled: true,
-            ownerUserId: "owner",
-            space: { memberships: { some: { userId: "owner" } } },
+        OR: [
+          {
+            follow: {
+              userId: "owner",
+              workspace: {
+                enabled: true,
+                ownerUserId: "owner",
+                space: { memberships: { some: { userId: "owner" } } },
+              },
+            },
           },
-        },
+          {
+            followId: null,
+            userId: "owner",
+            workspace: {
+              enabled: true,
+              ownerUserId: "owner",
+              space: { memberships: { some: { userId: "owner" } } },
+            },
+          },
+        ],
       },
     }),
   );
   deployment.mockResolvedValue({ ownerUserId: "new-owner" });
   expect((await notificationActivity(prisma, { userId: "owner" } as Actor)).activities).toEqual([]);
   expect(findMany).toHaveBeenCalledOnce();
+});
+
+it("includes a failed-close notice the owner did not follow and marks both notices as failed closes", async () => {
+  const findMany = vi.fn(async () => [
+    {
+      id: "unfollowed",
+      title: "A board item filed by a bot could not be closed.",
+      changes: ["close"],
+      createdAt: new Date("2026-09-25T01:00:00Z"),
+      follow: null,
+      workspaceId: "board",
+      itemId: "item",
+      workspace: { spaceId: "space" },
+    },
+    {
+      id: "followed",
+      title: "A board item filed by a bot could not be closed.",
+      changes: ["close"],
+      createdAt: new Date("2026-09-25T00:00:00Z"),
+      follow: { workspaceId: "board", itemId: "other", workspace: { spaceId: "space" } },
+      workspaceId: null,
+      itemId: null,
+      workspace: null,
+    },
+  ]);
+  const prisma = {
+    run: { findMany: vi.fn(async () => []) },
+    userPreferences: { findUnique: vi.fn(async () => null) },
+    deploymentSettings: { findUnique: vi.fn(async () => ({ ownerUserId: "owner" })) },
+    boardNotification: { findMany },
+  } as unknown as PrismaClient;
+  const result = await notificationActivity(prisma, { userId: "owner", spaceId: "space" } as Actor);
+  expect(result.activities).toMatchObject([
+    {
+      id: "unfollowed",
+      status: "board_changed",
+      threadId: "board:board:item",
+      board: { spaceId: "space", workspaceId: "board", itemId: "item", closeFailed: true },
+    },
+    {
+      id: "followed",
+      threadId: "board:board:other",
+      board: { spaceId: "space", workspaceId: "board", itemId: "other", closeFailed: true },
+    },
+  ]);
 });

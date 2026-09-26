@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
 import type { NotificationActivity } from "@ardurbot/contracts";
 import { DEFAULT_USER_PREFERENCES } from "@ardurbot/contracts";
 import { act } from "react";
@@ -13,8 +14,8 @@ vi.mock("../components/PreferencesProvider", () => ({
 }));
 vi.mock("./i18n", () => ({
   i18n: {
-    _: ({ message, values }: { message: string; values: { name: string } }) =>
-      message.replace("{name}", values.name),
+    _: ({ message, values }: { message: string; values?: { name: string } }) =>
+      values ? message.replace("{name}", values.name) : message,
   },
 }));
 
@@ -140,4 +141,40 @@ it("delivers followed Board changes through the shared preference gate", async (
   });
   await poll();
   expect(fake.show).toHaveBeenCalledOnce();
+});
+
+it("says a board close that keeps failing could not be closed, and what to do, in the reader's language", async () => {
+  fake.activity.mockResolvedValueOnce(snapshot([])).mockResolvedValue(
+    snapshot([
+      {
+        ...row,
+        id: "close-notice",
+        name: "A board item filed by a bot could not be closed.",
+        status: "board_changed",
+        threadId: "board:workspace:item",
+        board: { spaceId: "space", workspaceId: "workspace", itemId: "item", closeFailed: true },
+      },
+    ]),
+  );
+  await renderSettings(<Harness />);
+  await poll();
+  expect(fake.show).toHaveBeenCalledExactlyOnceWith(
+    "A board item filed by a bot could not be closed.",
+    {
+      tag: "board:workspace:item",
+      body: "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+    },
+  );
+  for (const locale of ["ru", "zh-CN"])
+    for (const msgid of [
+      "A board item filed by a bot could not be closed.",
+      "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+    ]) {
+      const catalog = readFileSync(`apps/web/src/locales/${locale}/messages.po`, "utf8");
+      const key = `msgid ${JSON.stringify(msgid)}\nmsgstr "`;
+      const at = catalog.indexOf(key);
+      const translated =
+        at < 0 ? "" : catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+      expect(translated, `${locale}: ${msgid}`).toBeTruthy();
+    }
 });

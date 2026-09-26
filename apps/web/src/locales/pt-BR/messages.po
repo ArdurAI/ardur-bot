@@ -243,6 +243,15 @@ msgstr "7 dias"
 msgid "A bit of everything"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "A board item filed by a bot could not be closed."
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/use-notifications.ts
+msgid "A board item filed by a bot could not be closed."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "A new version is available — download"
 msgstr ""
@@ -786,6 +795,15 @@ msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/use-notifications.ts
+msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx

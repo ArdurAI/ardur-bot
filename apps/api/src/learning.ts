@@ -87,7 +87,10 @@ export function createLearningService(deps: {
     return { pendingCount, appliedThisWeek };
   }
   const identity = (actor: Actor) => ({ spaceId: actor.spaceId, userId: actor.userId });
-  /** Board items carry a filing outcome, and a pending close stays visible until the worker finishes it. */
+  /**
+   * Board items carry a filing outcome. A pending close stays visible until it finishes, and says
+   * it could not be closed once its notice was sent.
+   */
   async function withBoardOutcomes(spaceId: string, proposals: ReturnType<typeof proposalView>[]) {
     const ids = proposals
       .filter((proposal) => proposal.type === "board-item")
@@ -95,14 +98,23 @@ export function createLearningService(deps: {
     if (!ids.length) return proposals;
     const filings = await deps.prisma.botBoardFiling.findMany({
       where: { spaceId, learningProposalId: { in: ids } },
-      select: { learningProposalId: true, closedAt: true, outcome: true, closePending: true },
+      select: {
+        learningProposalId: true,
+        closedAt: true,
+        outcome: true,
+        closePending: true,
+        closeNoticeAt: true,
+      },
     });
     const byProposal = new Map(filings.map((filing) => [filing.learningProposalId, filing]));
     return proposals.map((proposal) => {
       const filing = byProposal.get(proposal.id);
       const boardClosing = Boolean(filing?.closePending);
+      const closing = boardClosing
+        ? { boardClosing: true, ...(filing?.closeNoticeAt ? { boardCloseFailed: true } : {}) }
+        : {};
       if (!(proposal.status === "applied" && proposal.appliedBoardItem))
-        return boardClosing ? { ...proposal, boardClosing: true } : proposal;
+        return boardClosing ? { ...proposal, ...closing } : proposal;
       const outcome: "completed" | "closed-other" | null =
         filing?.outcome === "completed" || filing?.outcome === "closed-other"
           ? filing.outcome
@@ -110,7 +122,7 @@ export function createLearningService(deps: {
       const closeReason = proposal.appliedBoardItem?.closeReason?.trim() || null;
       return {
         ...proposal,
-        ...(boardClosing ? { boardClosing: true } : {}),
+        ...closing,
         boardOutcome: {
           closedAt: filing?.closedAt?.toISOString() ?? null,
           outcome,

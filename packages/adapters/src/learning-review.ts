@@ -444,8 +444,9 @@ export async function reviewLearning(
       if (timer) clearTimeout(timer);
       controller.abort();
     }
+    // Each proposal is checked on its own, so one the board would refuse does not sink the rest.
     const parsed = z
-      .object({ proposals: z.array(LearningCandidateSchema).max(config.maxProposals) })
+      .object({ proposals: z.array(z.unknown()).max(config.maxProposals) })
       .strict()
       .parse(JSON.parse(output));
     const freshSource = await loadLearningRecords(deps.prisma, run.id);
@@ -487,7 +488,9 @@ export async function reviewLearning(
     ]);
     const proposals: LearningProposal[] = [];
     for (const raw of parsed.proposals) {
-      const candidate = LearningCandidateSchema.parse(redactValue(raw, knownSecrets));
+      const checked = LearningCandidateSchema.safeParse(redactValue(raw, knownSecrets));
+      if (!checked.success) continue;
+      const candidate = checked.data;
       const status = validateLearningCandidate(candidate, {
         ...scope,
         runId: run.id,

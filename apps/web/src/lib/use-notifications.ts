@@ -30,8 +30,13 @@ export function useNotifications() {
             (document.visibilityState === "visible" && document.hasFocus())
           )
             continue;
-          const title =
-            row.status === "board_changed"
+          const closeFailed = row.status === "board_changed" && row.board?.closeFailed === true;
+          const title = closeFailed
+            ? i18n._({
+                id: "A board item filed by a bot could not be closed.",
+                message: "A board item filed by a bot could not be closed.",
+              })
+            : row.status === "board_changed"
               ? row.name.slice(0, 200)
               : row.status === "completed"
                 ? i18n._({
@@ -50,12 +55,23 @@ export function useNotifications() {
                       message: "{name} needs your input",
                       values: { name: row.name },
                     });
+          const body = closeFailed
+            ? i18n._({
+                id: "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+                message:
+                  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+              })
+            : "";
           await notify(
-            { id: row.id, category: row.category, title, body: "", threadId: row.threadId },
+            { id: row.id, category: row.category, title, body, threadId: row.threadId },
             snapshot.preferences.notifications,
             async (event) => {
               if (desktop) await desktop.show(event);
-              else new Notification(event.title, { tag: event.threadId });
+              else
+                new Notification(event.title, {
+                  tag: event.threadId,
+                  ...(event.body ? { body: event.body } : {}),
+                });
             },
           );
         }

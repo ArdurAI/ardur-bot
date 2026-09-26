@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { LearningCandidateSchema } from "./learning.js";
+import { boardClosingProposal, LearningCandidateSchema } from "./learning.js";
 
 const candidate = {
   type: "board-item",
@@ -29,4 +29,36 @@ it("accepts a bounded board-item payload and rejects empty or oversized titles",
       boardItem: { ...candidate.boardItem, title: "x".repeat(201) },
     }).success,
   ).toBe(false);
+});
+
+it("accepts only labels the board accepts", () => {
+  const labelled = (labels: string[]) =>
+    LearningCandidateSchema.safeParse({
+      ...candidate,
+      boardItem: { ...candidate.boardItem, labels },
+    }).success;
+  expect(labelled(["follow-up", "import"])).toBe(true);
+  for (const label of ["bug, flaky", "two\nlines", "carriage\rreturn", "null\0byte", ""])
+    expect(labelled([label]), JSON.stringify(label)).toBe(false);
+});
+
+it("marks the proposal an action returned as closing when the action says the board close is still running", () => {
+  const proposal = {
+    ...candidate,
+    id: "proposal",
+    status: "rejected",
+    diff: "",
+    expiresAt: "2026-10-25T12:00:00.000Z",
+    provenance: {
+      runId: "run",
+      originatingPin: null,
+      reviewerPin: null,
+      policyVersion: 1,
+    },
+  } as never;
+  expect(boardClosingProposal({ proposal, code: "board-closing" })).toMatchObject({
+    id: "proposal",
+    boardClosing: true,
+  });
+  expect(boardClosingProposal({ proposal })).toBeNull();
 });

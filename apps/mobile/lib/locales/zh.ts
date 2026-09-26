@@ -1022,4 +1022,7 @@ export const ZH_MESSAGES: Record<string, string> = {
     "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。",
   "Board outcomes are unavailable right now.": "看板结果暂时无法获取。",
   "Closing on the Board.": "正在看板上关闭。",
+  "A board item filed by a bot could not be closed.": "由机器人创建的看板事项无法关闭。",
+  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.":
+    "Ardur Bot 已尝试五次。请在看板上关闭它，或检查此电脑是否已连接。",
 };

@@ -17,7 +17,7 @@ import { IsolationError, lockLearningProposal } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
 import {
-  BOARD_CLOSE_SOON,
+  boardItemUnchanged,
   pendingCloseAction,
   releaseChangedBoardClose,
 } from "./board/pending-close.js";
@@ -43,11 +43,9 @@ const BOARD_REJECT_LEFT =
   "This board item changed after it was filed, so it was left open for review on the Board.";
 const BOARD_LEFT_OPEN = "board-left-open";
 const BOARD_CHANGED = "board-changed";
+/** The learning status committed and the board close is still running; screens word it. */
 function closingSoon(proposal: LearningProposal): LearningActionResult {
-  return {
-    sentence: BOARD_CLOSE_SOON,
-    proposal: { ...proposal, boardClosing: true },
-  };
+  return { proposal, code: "board-closing" };
 }
 async function rememberCloseFailure(service: BoardService, filingId: string | undefined) {
   if (!filingId || typeof service.notePendingCloseFailure !== "function") return;
@@ -59,7 +57,7 @@ async function rememberCloseFailure(service: BoardService, filingId: string | un
 }
 type LearningActionResult = {
   proposal: LearningProposal;
-  sentence?: string;
+  code?: "board-closing";
   conflict?: {
     before: string;
     applied: string;
@@ -461,6 +459,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
           workspaceId: filed.workspaceId,
           itemId: filed.item.id,
           updatedAt: filed.item.updatedAt,
+          commentCount: filed.item.commentCount,
           duplicate: filed.duplicate,
         };
         current.status = "applied";
@@ -500,6 +499,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       const action = pendingCloseAction(item, {
         closePending: reason,
         closeUpdatedAt: filing.closeUpdatedAt,
+        closeCommentCount: filing.closeCommentCount,
       });
       if (action === "changed") {
         await releaseChangedBoardClose(deps.prisma, filing);
@@ -536,7 +536,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       );
       const item = await provider.show(applied.itemId);
       const undone = item.status === "closed" && item.closeReason === BOARD_UNDO_REASON;
-      const changed = !undone && (item.status === "closed" || item.updatedAt !== applied.updatedAt);
+      const changed = !undone && (item.status === "closed" || !boardItemUnchanged(item, applied));
       const saved = await operation(id, actor, async (tx, current, _context, audit) => {
         if (current.status !== "applied")
           throw new Error("This suggestion has no applied board item to undo.");
@@ -558,7 +558,11 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         if (filing && !undone)
           await tx.botBoardFiling.update({
             where: { id: filing.id },
-            data: { closePending: BOARD_UNDO_REASON, closeUpdatedAt: item.updatedAt },
+            data: {
+              closePending: BOARD_UNDO_REASON,
+              closeUpdatedAt: item.updatedAt,
+              closeCommentCount: item.commentCount,
+            },
           });
         if (filing && undone)
           await tx.botBoardFiling.deleteMany({
@@ -865,6 +869,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         let willClose = false;
         let alreadyClosed = false;
         let closeUpdatedAt: string | undefined;
+        let closeCommentCount: number | undefined;
         const hollow = Boolean(filing && !filing.itemId);
         let provider: Awaited<ReturnType<BoardService["provider"]>> | undefined;
         if (filing?.itemId && filing.workspaceId && !filing.reused) {
@@ -879,9 +884,13 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
           );
           const item = await provider.show(filing.itemId);
           closeUpdatedAt = item.updatedAt;
+          closeCommentCount = item.commentCount;
           const rejected = item.status === "closed" && item.closeReason === BOARD_REJECT_REASON;
+          // Unchanged since it was filed: no edit and no comment.
           const changed =
-            !rejected && (item.status === "closed" || item.updatedAt !== item.createdAt);
+            !rejected &&
+            (item.status === "closed" ||
+              !boardItemUnchanged(item, { updatedAt: item.createdAt, commentCount: 0 }));
           if (changed) leftOpen = { itemId: filing.itemId, sentence: BOARD_REJECT_LEFT };
           else if (rejected) alreadyClosed = true;
           else willClose = true;
@@ -901,7 +910,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
           if (willClose && filing)
             await tx.botBoardFiling.update({
               where: { id: filing.id },
-              data: { closePending: BOARD_REJECT_REASON, closeUpdatedAt },
+              data: { closePending: BOARD_REJECT_REASON, closeUpdatedAt, closeCommentCount },
             });
           if ((hollow || alreadyClosed) && filing)
             await tx.botBoardFiling.deleteMany({

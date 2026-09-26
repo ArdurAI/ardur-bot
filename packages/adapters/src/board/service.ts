@@ -47,12 +47,11 @@ export type BoardServiceOptions = {
   prisma: PrismaClient;
   dataDir: string;
   /**
-   * Filing locks only. Production passes the two-connection pool from createFilingLockPool
-   * so a held lock never borrows from the shared Prisma pool.
+   * Filing locks only. Production passes the pool from createFilingLockPool so a held lock never
+   * borrows from the shared Prisma pool. Without it, tests use an in-process lock.
    */
   lockPool?: Pick<Pool, "connect">;
-  /** @deprecated Use lockPool. Kept so a caller with one dedicated pool still serializes. */
-  pool?: Pick<Pool, "connect">;
+  /** The owner's connection to the host. Only the API has one. */
   ownerRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
   localRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
 };
@@ -63,6 +62,8 @@ const FILING_LOCK_ID = 4;
 const FILING_LOCK_KEY = "(hashtext($2::text) & -8) | $3::integer";
 const FILING_LOCK_WAIT_MS = 15_000;
 const FILING_LOCK_POLL_MS = 250;
+/** Long enough to open a connection, short enough that a full lock pool skips an item at once. */
+const FILING_TRY_CHECKOUT_MS = 100;
 const FILING_BUSY = "Another write is in progress. Try again in a few seconds.";
 const FILING_RECORD_ATTEMPTS = 3;
 const FILING_RECORD_BACKOFF_MS = 25;
@@ -136,10 +137,16 @@ export class BoardService {
     const actor = await this.actor(scope);
     request = { ...request, actor };
     if (usesHostBridge()) {
-      if (!scope.botId) {
+      // The host admits a bot only inside one of its runs. Board work outside a run, such as a
+      // learning proposal's item or its pending close, goes through the owner's connection.
+      if (!scope.botId || !scope.runId) {
         if (!this.options.ownerRun)
           throw new BoardError({ code: "forbidden", message: "Open Board from the app." });
-        return this.options.ownerRun(request, scope);
+        const owner = { ...scope, botId: undefined };
+        return this.options.ownerRun(
+          scope.botId ? { ...request, actor: await this.actor(owner) } : request,
+          owner,
+        );
       }
       let stdout = "";
       let result: BoardRunResult | undefined;
@@ -356,10 +363,17 @@ export class BoardService {
    * Closes filings whose Reject or Undo already committed. No database transaction is open
    * here: each item holds its space's filing lock around the host show and close, a space
    * another write holds is left for the next sweep, and the signal stops the sweep.
-   * A nested board read does not start another sweep.
+   * A nested board read does not start another sweep. With the host bridge on, only the API
+   * can reach the host outside a run; elsewhere the sweep leaves every close for it.
    */
   async sweepPendingCloses(options: { workspaceId?: string; signal?: AbortSignal } = {}) {
     if (this.sweeping) return;
+    if (usesHostBridge() && !this.options.ownerRun) {
+      getLogger().debug("pending board close", {
+        reason: "This process has no owner connection to the host. The app finishes the close.",
+      });
+      return;
+    }
     this.sweeping = true;
     try {
       const now = new Date();
@@ -397,11 +411,12 @@ export class BoardService {
             continue;
           }
           getLogger().error("pending board close", error);
-          await recordPendingCloseFailure(this.options.prisma, attempt.filing).catch(
-            (recordError) => {
-              getLogger().error("pending board close retry", recordError);
-            },
-          );
+          const failed = attempt.filing;
+          await recordPendingCloseFailure(this.options.prisma, failed, (itemId) =>
+            this.showPendingCloseItem(failed, itemId, options.signal),
+          ).catch((recordError) => {
+            getLogger().error("pending board close retry", recordError);
+          });
         }
       }
     } finally {
@@ -413,10 +428,13 @@ export class BoardService {
       where: { id: filingId },
     });
     if (!filing?.closePending || !filing.itemId) return;
-    await recordPendingCloseFailure(this.options.prisma, filing);
+    await recordPendingCloseFailure(this.options.prisma, filing, (itemId) =>
+      this.showPendingCloseItem(filing, itemId),
+    );
   }
-  private async finishPendingClose(filing: PendingCloseRow, signal?: AbortSignal) {
-    if (!filing.closePending || !filing.itemId || !filing.workspaceId) return;
+  /** The filing's bot, as a run's outcome delivery uses the run's bot, for its owner. */
+  private async pendingCloseScope(filing: PendingCloseRow, signal?: AbortSignal) {
+    if (!filing.workspaceId) throw new Error("This board close has no board.");
     const workspace = this.options.prisma.boardWorkspace
       ? await this.options.prisma.boardWorkspace.findUnique({
           where: { id: filing.workspaceId },
@@ -432,14 +450,33 @@ export class BoardService {
       userId = proposal?.userId ?? null;
     }
     if (!userId) throw new Error("This board close has no owner.");
-    const provider = await this.provider(
-      { userId, spaceId: filing.spaceId, signal },
-      filing.workspaceId,
-    );
+    return {
+      scope: {
+        userId,
+        spaceId: filing.spaceId,
+        ...(filing.botId ? { botId: filing.botId } : {}),
+        signal,
+      },
+      workspaceId: filing.workspaceId,
+    };
+  }
+  private async showPendingCloseItem(
+    filing: PendingCloseRow,
+    itemId: string,
+    signal?: AbortSignal,
+  ) {
+    const { scope, workspaceId } = await this.pendingCloseScope(filing, signal);
+    return (await this.provider(scope, workspaceId)).show(itemId);
+  }
+  private async finishPendingClose(filing: PendingCloseRow, signal?: AbortSignal) {
+    if (!filing.closePending || !filing.itemId || !filing.workspaceId) return;
+    const { scope, workspaceId } = await this.pendingCloseScope(filing, signal);
+    const provider = await this.provider(scope, workspaceId);
     const item = await provider.show(filing.itemId);
     const action = pendingCloseAction(item, {
       closePending: filing.closePending,
       closeUpdatedAt: filing.closeUpdatedAt,
+      closeCommentCount: filing.closeCommentCount,
     });
     if (action === "changed") {
       await releaseChangedBoardClose(this.options.prisma, filing);
@@ -554,8 +591,11 @@ export class BoardService {
     { waitMs = FILING_LOCK_WAIT_MS }: { waitMs?: number } = {},
   ): Promise<T> {
     const busy = () => new BoardError({ code: "busy", message: FILING_BUSY });
-    const pool = this.options.lockPool ?? this.options.pool;
+    const pool = this.options.lockPool;
     if (!pool) {
+      // The in-process lock does not exclude another process, so it is for tests only.
+      if (process.env.NODE_ENV === "production")
+        throw new Error("Board filings need the filing lock pool.");
       if (waitMs === 0 && localFilingLocks.has(scope.spaceId)) throw busy();
       return withLocalFilingLock(scope.spaceId, work);
     }
@@ -564,8 +604,13 @@ export class BoardService {
     const deadline = Date.now() + waitMs;
     for (;;) {
       scope.signal?.throwIfAborted();
-      const connected = await pool.connect().then(
-        (client) => ({ ok: true as const, client }),
+      // A try, such as a board read's sweep, waits almost no time for a connection.
+      const connected = await checkout(
+        pool,
+        Math.max(FILING_TRY_CHECKOUT_MS, deadline - Date.now()),
+      ).then(
+        (client) =>
+          client ? { ok: true as const, client } : { ok: false as const, error: undefined },
         (error: unknown) => ({ ok: false as const, error }),
       );
       if (connected.ok) {
@@ -596,7 +641,8 @@ export class BoardService {
           // A connection that could not unlock still holds the lock until it closes.
           client.release(lost);
         }
-      } else if (!isFilingPoolBusy(connected.error)) throw connected.error;
+      } else if (connected.error !== undefined && !isFilingPoolBusy(connected.error))
+        throw connected.error;
       // Waiting does not need a free connection. A full lock pool or a full Postgres server
       // refuses the checkout; that is still "busy" until the deadline.
       const remaining = deadline - Date.now();
@@ -841,6 +887,26 @@ export class BoardService {
         other: Number(row.other),
       })),
     };
+  }
+}
+
+/** Resolves null when no connection arrives in time. A late one goes straight back to the pool. */
+async function checkout(pool: Pick<Pool, "connect">, timeoutMs: number) {
+  const pending = pool.connect();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+  });
+  try {
+    const client = await Promise.race([pending, late]);
+    if (!client)
+      void pending.then(
+        (arrived) => arrived.release(),
+        () => undefined,
+      );
+    return client;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

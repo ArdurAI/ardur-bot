@@ -1,8 +1,10 @@
+import type { BoardScope } from "@ardurbot/adapters";
 import { BoardService, requestBoardCommand } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import type {
   BoardFilter,
   BoardProblem,
+  BoardRun,
   BoardSnapshot,
   BoardView,
   BoardWork,
@@ -11,6 +13,7 @@ import type {
 import { BoardError, BoardPatchSchema, boardColumn } from "@ardurbot/contracts/board";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import { ORPCError } from "@orpc/server";
+import type { HostBridge } from "./host-bridge.js";
 import type { RouterDeps } from "./router.js";
 import { assertTeachingSendAllowed } from "./taught-skills.js";
 import { resolveThreadTarget, sendThreadMessage } from "./thread-target.js";
@@ -27,6 +30,17 @@ export async function boardCall<T>(work: () => Promise<T>): Promise<T> {
     throw error;
   }
 }
+/** The owner's connection to the host, for board work outside a bot's run. */
+export function boardOwnerRun(hostBridge: HostBridge | undefined) {
+  return (request: BoardRun, scope: BoardScope) => {
+    if (!hostBridge)
+      throw new BoardError({
+        code: "command_failed",
+        message: "Open the desktop app to use this board.",
+      });
+    return hostBridge.runBoard(request, scope);
+  };
+}
 export function createBoard(deps: RouterDeps) {
   const pendingSends = new Set<string>();
   const service = new BoardService({
@@ -34,14 +48,7 @@ export function createBoard(deps: RouterDeps) {
     dataDir: deps.dataDir,
     lockPool: deps.lockPool,
     localRun: (request, scope) => requestBoardCommand(deps, request, scope),
-    ownerRun: (request, scope) => {
-      if (!deps.hostBridge)
-        throw new BoardError({
-          code: "command_failed",
-          message: "Open the desktop app to use this board.",
-        });
-      return deps.hostBridge.runBoard(request, scope);
-    },
+    ownerRun: boardOwnerRun(deps.hostBridge),
   });
   const board = {
     service,

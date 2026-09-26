@@ -1,9 +1,11 @@
+import type { WorkItem } from "@ardurbot/contracts/board";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { lockedProposalBody } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 
-export const BOARD_CLOSE_SOON = "The board item will be closed shortly.";
-export const BOARD_CLOSE_FAILED_TITLE = "A board item could not be closed.";
+export const BOARD_CLOSE_FAILED_TITLE = "A board item filed by a bot could not be closed.";
+export const BOARD_CLOSE_FAILED_BODY =
+  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.";
 const CLOSE_NOTIFY_ATTEMPT = 5;
 const CLOSE_BACKOFF_MS = 30_000;
 const CLOSE_BACKOFF_CAP_MS = 15 * 60_000;
@@ -13,23 +15,51 @@ export type PendingCloseRow = {
   spaceId: string;
   workspaceId: string | null;
   itemId: string | null;
+  botId?: string | null;
   learningProposalId: string | null;
   closePending: string | null;
   closeUpdatedAt?: string | null;
+  closeCommentCount?: number | null;
   closeAttempts?: number | null;
   closeNoticeAt?: Date | null;
 };
 
+/**
+ * Unchanged means the same updatedAt and the same number of comments. Beads leaves updatedAt
+ * alone when someone comments, so the count is compared too.
+ */
+export function boardItemUnchanged(
+  item: { updatedAt?: string | null; commentCount?: number | null },
+  recorded: { updatedAt?: string | null; commentCount?: number | null },
+): boolean {
+  return (
+    typeof recorded.updatedAt === "string" &&
+    item.updatedAt === recorded.updatedAt &&
+    (item.commentCount ?? 0) === (recorded.commentCount ?? 0)
+  );
+}
+
 /** Close only while the item is still the one Reject or Undo decided to close. */
 export function pendingCloseAction(
-  item: { status: string; updatedAt?: string | null; closeReason?: string | null },
-  filing: { closePending: string; closeUpdatedAt?: string | null },
+  item: {
+    status: string;
+    updatedAt?: string | null;
+    commentCount?: number | null;
+    closeReason?: string | null;
+  },
+  filing: {
+    closePending: string;
+    closeUpdatedAt?: string | null;
+    closeCommentCount?: number | null;
+  },
 ): "close" | "done" | "changed" {
   if (item.status === "closed" && item.closeReason === filing.closePending) return "done";
   if (
     item.status !== "closed" &&
-    typeof filing.closeUpdatedAt === "string" &&
-    item.updatedAt === filing.closeUpdatedAt
+    boardItemUnchanged(item, {
+      updatedAt: filing.closeUpdatedAt,
+      commentCount: filing.closeCommentCount,
+    })
   )
     return "close";
   return "changed";
@@ -81,10 +111,19 @@ async function closeNoticeOwner(prisma: PrismaClient, filing: PendingCloseRow) {
   return proposal?.userId ?? null;
 }
 
-async function insertCloseNotice(prisma: PrismaClient, filing: PendingCloseRow, userId: string) {
-  if (!filing.workspaceId || !filing.itemId) return;
-  const workspaceId = filing.workspaceId;
-  const itemId = filing.itemId;
+type NoticeTarget = { workspaceId: string; itemId: string; userId: string };
+
+/**
+ * Stores the filing's one notice. It goes on the owner's follow when they follow the item.
+ * Otherwise it follows the item from the state `show` returned, or, when the item could not be
+ * shown, it names the owner and item without a follow.
+ */
+async function insertCloseNotice(
+  prisma: PrismaClient,
+  filing: PendingCloseRow,
+  target: NoticeTarget,
+  shown: Pick<WorkItem, "status" | "assignee" | "commentCount"> | null,
+) {
   await prisma.$transaction(async (tx) => {
     // Claims the filing's one notice. A failed insert rolls the claim back for the next failure.
     const claimed = await tx.botBoardFiling.updateMany({
@@ -92,19 +131,23 @@ async function insertCloseNotice(prisma: PrismaClient, filing: PendingCloseRow, 
       data: { closeNoticeAt: new Date() },
     });
     if (claimed.count !== 1) return;
-    const follow = await tx.boardFollow.upsert({
-      where: {
-        workspaceId_itemId_userId: { workspaceId, itemId, userId },
-      },
-      create: {
-        workspaceId,
-        itemId,
-        userId,
-        status: "open",
-        commentCount: 0,
-      },
-      update: {},
-    });
+    const notice = { title: BOARD_CLOSE_FAILED_TITLE, changes: ["close"] };
+    const follow =
+      (await tx.boardFollow.findUnique({ where: { workspaceId_itemId_userId: target } })) ??
+      (shown
+        ? await tx.boardFollow.create({
+            data: {
+              ...target,
+              status: shown.status,
+              assignee: shown.assignee,
+              commentCount: shown.commentCount,
+            },
+          })
+        : null);
+    if (!follow) {
+      await tx.boardNotification.create({ data: { ...target, version: 0, ...notice } });
+      return;
+    }
     const version = follow.version + 1;
     const advanced = await tx.boardFollow.updateMany({
       where: { id: follow.id, version: follow.version },
@@ -112,34 +155,41 @@ async function insertCloseNotice(prisma: PrismaClient, filing: PendingCloseRow, 
     });
     if (advanced.count !== 1)
       throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
-    await tx.boardNotification.create({
-      data: {
-        followId: follow.id,
-        version,
-        title: BOARD_CLOSE_FAILED_TITLE,
-        changes: ["close"],
-      },
-    });
+    await tx.boardNotification.create({ data: { followId: follow.id, version, ...notice } });
   });
 }
 
-async function notifyUnclosedBoardItem(prisma: PrismaClient, filing: PendingCloseRow) {
+async function notifyUnclosedBoardItem(
+  prisma: PrismaClient,
+  filing: PendingCloseRow,
+  show?: (itemId: string) => Promise<WorkItem>,
+) {
   if (!filing.workspaceId || !filing.itemId) return;
   const userId = await closeNoticeOwner(prisma, filing);
   if (!userId) return;
+  const target = { workspaceId: filing.workspaceId, itemId: filing.itemId, userId };
+  const following = await prisma.boardFollow.findUnique({
+    where: { workspaceId_itemId_userId: target },
+  });
+  // The follow starts from the item's real state, as the Follow button does.
+  const shown = following || !show ? null : await show(filing.itemId).catch(() => null);
   try {
-    await insertCloseNotice(prisma, filing, userId);
+    await insertCloseNotice(prisma, filing, target, shown);
   } catch (error) {
     if (!isUniqueConflict(error)) throw error;
-    await insertCloseNotice(prisma, filing, userId);
+    await insertCloseNotice(prisma, filing, target, shown);
   }
 }
 
 /**
  * Counts one failed close. From the fifth failure on, each failure sends the owner's notice
- * until one is stored, and none after that.
+ * until one is stored, and none after that. `show` reads the item for a new follow.
  */
-export async function recordPendingCloseFailure(prisma: PrismaClient, filing: PendingCloseRow) {
+export async function recordPendingCloseFailure(
+  prisma: PrismaClient,
+  filing: PendingCloseRow,
+  show?: (itemId: string) => Promise<WorkItem>,
+) {
   if (!filing.closePending) return;
   const previous = filing.closeAttempts ?? 0;
   const attempts = previous + 1;
@@ -155,7 +205,7 @@ export async function recordPendingCloseFailure(prisma: PrismaClient, filing: Pe
     },
   });
   if (claimed.count !== 1 || attempts < CLOSE_NOTIFY_ATTEMPT || filing.closeNoticeAt) return;
-  await notifyUnclosedBoardItem(prisma, filing).catch((error) => {
+  await notifyUnclosedBoardItem(prisma, filing, show).catch((error) => {
     getLogger().error("pending board close notification", error);
   });
 }
