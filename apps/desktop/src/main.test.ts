@@ -237,7 +237,7 @@ describe("local mode failures in the main process", () => {
       showSetupWindow: vi.fn(),
       showResetFailure: vi.fn(),
       localResetFailure,
-      localMode: { start: vi.fn(async () => undefined) },
+      localMode: { start: vi.fn(async () => undefined), state: () => ({ phase: "ready" }) },
     };
     vm.runInNewContext(
       `${stripTypeScriptTypes(source.slice(start, end))}\nthis.reset = resetLocalDataAndStart;`,
@@ -255,7 +255,7 @@ describe("local mode failures in the main process", () => {
     expect(context.showResetFailure).not.toHaveBeenCalled();
   });
 
-  it("says so when the reset fails, offers it again, and starts nothing", async () => {
+  function failedResetFixture(priorPhase: "ready" | "failed") {
     const start = source.indexOf("async function resetLocalDataAndStart(");
     const end = source.slice(start + 1).search(/\n(?:async )?function /u) + start + 1;
     const context = {
@@ -265,13 +265,18 @@ describe("local mode failures in the main process", () => {
       showSetupWindow: vi.fn(),
       showResetFailure: vi.fn(),
       localResetFailure,
-      localMode: { start: vi.fn(async () => undefined) },
+      localMode: { start: vi.fn(async () => undefined), state: () => ({ phase: priorPhase }) },
     };
     vm.runInNewContext(
       `${stripTypeScriptTypes(source.slice(start, end))}\nthis.reset = resetLocalDataAndStart;`,
       context,
     );
     const reset = (context as typeof context & { reset: (win: unknown) => Promise<boolean> }).reset;
+    return { context, reset };
+  }
+
+  it("says so when the reset fails, and restarts the working stack it disturbed", async () => {
+    const { context, reset } = failedResetFixture("ready");
     const win = new WindowFake();
     expect(await reset(win)).toBe(false);
     expect(context.showResetFailure).toHaveBeenCalledWith(
@@ -279,6 +284,20 @@ describe("local mode failures in the main process", () => {
       win,
     );
     expect(context.showSetupWindow).not.toHaveBeenCalled();
+    // Nothing had already failed, so the stack the reset disturbed is not left dead.
+    expect(context.localMode.start).toHaveBeenCalledOnce();
+  });
+
+  it("says so when the reset fails, and starts nothing when a failure was already showing", async () => {
+    const { context, reset } = failedResetFixture("failed");
+    const win = new WindowFake();
+    expect(await reset(win)).toBe(false);
+    expect(context.showResetFailure).toHaveBeenCalledWith(
+      "Could not reset local data. Try again.",
+      win,
+    );
+    expect(context.showSetupWindow).not.toHaveBeenCalled();
+    // An earlier failure is what asked for the reset; today's behaviour is unchanged.
     expect(context.localMode.start).not.toHaveBeenCalled();
   });
 

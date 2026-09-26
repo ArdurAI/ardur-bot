@@ -240,15 +240,24 @@ export class LocalModeController {
     return run;
   }
 
-  /** Postgres is not restarted. The window shows one sentence; Retry calls start(). */
+  /**
+   * Postgres is not restarted. The window shows one sentence; Retry calls start(). A
+   * server this run spawned is stopped right away, as before. An adopted server's handle
+   * is kept instead: the watch that led here can be wrong about a merely slow one, and a
+   * later stop, quit or reset still stops it through the adopted wrapper, which re-checks
+   * that it serves this folder before `pg_ctl stop`. Dropping the handle here instead would
+   * leave a live server nothing ever stops.
+   */
   reportDatabaseDown(): Promise<void> {
     if (this.databaseReported || this.stopped) return Promise.resolve();
     this.databaseReported = true;
     this.publish("failed", DATABASE_STOPPED);
     this.deps.onFailed?.(DATABASE_STOPPED, false);
-    // Never pg_ctl stop a server this run did not start: the watch that led here can be
-    // wrong about a merely slow one, and killing it would drop live connections for nothing.
-    return this.releaseDatabase({ stopAdopted: false });
+    if (this.postgres !== undefined && this.postgres === this.adoptedPostgres) {
+      this.stopWatchingAdopted();
+      return Promise.resolve();
+    }
+    return this.releaseDatabase();
   }
 
   /**
@@ -566,18 +575,17 @@ export class LocalModeController {
     }
   }
 
-  /**
-   * `stopAdopted: false` drops an adopted server without a `pg_ctl stop`: it is not this
-   * run's to stop, and a watch that concluded it is down can be wrong about a busy one.
-   */
-  private async releaseDatabase(options: { stopAdopted?: boolean } = {}): Promise<void> {
+  private async releaseDatabase(): Promise<void> {
     const postgres = this.postgres;
-    const adopted = postgres !== undefined && postgres === this.adoptedPostgres;
     this.postgres = undefined;
     this.adoptedPostgres = undefined;
+    this.stopWatchingAdopted();
+    if (postgres) await stopOwnedPostgres(postgres);
+  }
+
+  private stopWatchingAdopted(): void {
     clearInterval(this.adoptedCheck);
     this.adoptedCheck = undefined;
-    if (postgres && (!adopted || options.stopAdopted !== false)) await stopOwnedPostgres(postgres);
   }
 
   /** Whether the server that owns this data folder still answers for it. */

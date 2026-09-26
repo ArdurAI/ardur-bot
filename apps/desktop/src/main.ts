@@ -792,12 +792,16 @@ function showResetFailure(message: string, parent: BrowserWindow) {
 
 /**
  * Once the person confirms, moves local data aside and starts fresh behind the setup window.
- * A reset that failed moved nothing; the sheet says why and offers it again.
+ * A reset that failed moved nothing; the sheet says why and offers it again. Nothing had
+ * already failed when a working stack asked for this reset, so that stack, still untouched
+ * on disk, is started again behind the sheet instead of being left dead.
  */
 async function resetLocalDataAndStart(parent: BrowserWindow): Promise<boolean> {
+  const hadPriorFailure = localMode.state().phase === "failed";
   try {
     if (!(await confirmLocalReset(parent))) return false;
   } catch (error) {
+    if (!hadPriorFailure) void localMode.start();
     showResetFailure(localResetFailure(error), parent);
     return false;
   }
