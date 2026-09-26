@@ -52,11 +52,11 @@ class MemoryMigrations {
       return { rows: [] };
     }
     if (text.includes("finished_at") && text.includes("UPDATE")) {
-      const [id, appliedStepsCount] = values;
+      const [id] = values;
       const row = this.rows.find((item) => item.id === id);
       if (row) {
         row.finishedAt = "finished";
-        row.appliedStepsCount = Number(appliedStepsCount);
+        row.appliedStepsCount = Number(/"applied_steps_count" = (\d+)/.exec(text)?.[1]);
         row.logs = null;
       }
       return { rows: [] };

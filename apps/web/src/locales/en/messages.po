@@ -1113,6 +1113,10 @@ msgstr "Bots act without asking by default. Add an exception only when you want 
 msgid "Bots are working"
 msgstr "Bots are working"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers."
+msgstr "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers."
+
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Bots keep the board and memory current"
@@ -5146,9 +5150,17 @@ msgstr "On a schedule"
 msgid "on the 1st at {0}"
 msgstr "on the 1st at {0}"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
+msgstr "On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "On this device"
 msgstr "On this device"
+
+#: src/pages/HostComputerSettings.tsx
+msgid "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
+msgstr "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "On your server"

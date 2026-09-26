@@ -97,3 +97,69 @@ it("shows versions and registered folders, and revokes before clearing desktop s
     fake.clear.mock.invocationCallOrder[0]!,
   );
 });
+
+it("in local mode lists the folders this app granted, with Add folder, Remove, and when to add one", async () => {
+  fake.status.mockResolvedValue({
+    configured: false,
+    connected: true,
+    roots: [],
+    health: { platform: "darwin", roots: [], claude: {}, codex: {} },
+  });
+  let folders: string[] = [];
+  const addRoot = vi.fn(async () => {
+    folders = ["/fixture/projects"];
+    return "/fixture/projects";
+  });
+  const removeRoot = vi.fn(async () => {
+    folders = [];
+  });
+  window.ardurbotDesktop = {
+    platform: "darwin",
+    host: {
+      state: async () => ({ configured: false, local: true, roots: folders }),
+      setup: vi.fn(),
+      addRoot,
+      removeRoot,
+      clear: vi.fn(),
+    },
+  } as unknown as NonNullable<Window["ardurbotDesktop"]>;
+  const container = await render();
+  const button = (name: string) =>
+    [...container.querySelectorAll("button")].find((item) => item.textContent === name);
+  expect(button("Set up")).toBeUndefined();
+  expect(button("Disconnect this computer")).toBeUndefined();
+  expect(container.querySelector("li")).toBeNull();
+  expect(container.textContent).toContain(
+    "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers.",
+  );
+  expect(container.textContent).toContain(
+    "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes.",
+  );
+
+  await act(async () => button("Add folder")!.click());
+  expect(addRoot).toHaveBeenCalledOnce();
+  expect([...container.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
+    "/fixture/projectsRemove",
+  ]);
+  await act(async () => button("Remove")!.click());
+  expect(removeRoot).toHaveBeenCalledExactlyOnceWith("/fixture/projects");
+  expect(container.querySelector("li")).toBeNull();
+});
+
+it("says nothing about local folders when paired with a server", async () => {
+  fake.status.mockResolvedValue({ configured: true, connected: true, health: null, roots: [] });
+  window.ardurbotDesktop = {
+    platform: "linux",
+    host: {
+      state: async () => ({ configured: true, roots: [] }),
+      setup: vi.fn(),
+      addRoot: vi.fn(),
+      removeRoot: vi.fn(),
+      clear: vi.fn(),
+    },
+  } as unknown as NonNullable<Window["ardurbotDesktop"]>;
+  const container = await render();
+  expect(container.textContent).toContain("Add folder");
+  expect(container.textContent).not.toContain("Bots can read and change files");
+  expect(container.textContent).not.toContain("a command stops after five minutes");
+});

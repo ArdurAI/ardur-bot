@@ -13,15 +13,19 @@ export function HostComputerSettings() {
     roots: [],
   });
   const [roots, setRoots] = useState<string[]>([]);
+  /** This app keeps the folder list: a pairing it holds, or local mode. */
   const [local, setLocal] = useState(false);
+  const [localMode, setLocalMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const desktop = window.ardurbotDesktop;
   async function refresh() {
     const [remote, host] = await Promise.all([rpc.host.status(), desktop?.host?.state()]);
+    const owned = !!host?.configured || !!host?.local;
     setStatus(remote);
-    setRoots(host?.configured ? host.roots : remote.roots);
-    setLocal(!!host?.configured);
+    setRoots(owned && host ? host.roots : remote.roots);
+    setLocal(owned);
+    setLocalMode(!!host?.local);
   }
   useEffect(() => {
     let active = true;
@@ -47,17 +51,14 @@ export function HostComputerSettings() {
       setBusy(false);
     }
   }
+  const mac = (status.health?.platform ?? desktop?.platform) === "darwin";
   const versions = [
     status.health?.claude.version ? `claude ${status.health.claude.version}` : "",
     status.health?.codex.version ? `codex ${status.health.codex.version}` : "",
   ].filter(Boolean);
   return (
     <section className="space-y-3 py-4" data-testid="host-computer-settings">
-      <h4 className="text-sm font-medium">
-        {(status.health?.platform ?? desktop?.platform) === "darwin"
-          ? t`This Mac`
-          : t`This computer`}
-      </h4>
+      <h4 className="text-sm font-medium">{mac ? t`This Mac` : t`This computer`}</h4>
       <p className="text-sm text-muted-foreground">
         <Trans>Host service:</Trans>{" "}
         {status.connected
@@ -134,6 +135,17 @@ export function HostComputerSettings() {
           </Button>
         ) : null}
       </div>
+      {desktop?.host && localMode ? (
+        <p className="text-sm text-muted-foreground">
+          <Trans>
+            Bots can read and change files in the folders you add here. Avoid adding folders on
+            shared computers.
+          </Trans>{" "}
+          {mac
+            ? t`On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes.`
+            : t`On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes.`}
+        </p>
+      ) : null}
     </section>
   );
 }

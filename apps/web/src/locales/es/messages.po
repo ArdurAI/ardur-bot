@@ -1113,6 +1113,10 @@ msgstr "Los bots actúan sin preguntar de forma predeterminada. Agrega una excep
 msgid "Bots are working"
 msgstr "Los bots están trabajando"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers."
+msgstr ""
+
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Bots keep the board and memory current"
@@ -5146,8 +5150,16 @@ msgstr "Con un horario"
 msgid "on the 1st at {0}"
 msgstr "el día 1 a las {0}"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "On this device"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx

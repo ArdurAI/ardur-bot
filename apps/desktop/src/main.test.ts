@@ -4,6 +4,7 @@ import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { managedLocalOpenUrl, parseSetupInput } from "./setup-config.js";
 
 class WindowFake extends EventEmitter {
   destroyed = false;
@@ -203,17 +204,74 @@ describe("local mode failures in the main process", () => {
     await vi.waitFor(() => expect(closed.serviceFailurePrompt).toBe(false));
     expect(closed.localMode.start).not.toHaveBeenCalled();
   });
+});
 
-  it("reports local service failures through that sheet", () => {
-    const failed = source.slice(source.indexOf("onFailed: (message) =>"));
-    expect(failed.slice(0, failed.indexOf("},"))).toContain("showServiceFailure(message)");
+describe("choosing an existing instance while local mode runs", () => {
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+  const local = "http://127.0.0.1:40123";
+  const team = "https://team.example.test";
+
+  function saveSetupFixture(reachable: boolean) {
+    const start = source.indexOf("async function saveSetup(");
+    expect(start).toBeGreaterThan(-1);
+    const end = source.indexOf("\nfunction ", start + 1);
+    const calls: string[] = [];
+    const context = {
+      setupSaveInProgress: false,
+      currentSetup: { mode: "new", serverUrl: local },
+      currentTargetUrl: local,
+      legacyCompose: false,
+      parseSetupInput,
+      managedLocalOpenUrl,
+      localMode: {
+        origin: () => local,
+        state: () => ({ phase: "ready" }),
+        stop: vi.fn(async () => {
+          calls.push("stop local mode");
+        }),
+      },
+      probeServer: vi.fn(async () => {
+        calls.push("check");
+        return reachable ? { ok: true } : { ok: false, error: "Nothing is listening there." };
+      }),
+      openApp: vi.fn(async () => {
+        calls.push("open");
+        return true;
+      }),
+      mainWindow: null,
+      watchRendererUntilCommitted: () => null,
+      writeSetup: vi.fn(async () => {
+        calls.push("save");
+      }),
+      commitPendingAppSwitch: vi.fn(),
+      destroySetupWindow: vi.fn(),
+      recoverFromCrashedSave: vi.fn(),
+      abandonPendingAppSwitch: vi.fn(),
+    };
+    vm.runInNewContext(
+      `${stripTypeScriptTypes(source.slice(start, end))}\nthis.saveSetup = saveSetup;`,
+      context,
+    );
+    return Object.assign(context, { calls }) as typeof context & {
+      calls: string[];
+      saveSetup: (payload: unknown, userDataDir: string) => Promise<{ ok: boolean }>;
+    };
+  }
+
+  it("keeps local mode running when the new server does not answer", async () => {
+    const f = saveSetupFixture(false);
+    expect(await f.saveSetup({ mode: "existing", serverUrl: team }, "/fixture")).toMatchObject({
+      ok: false,
+    });
+    expect(f.calls).toEqual(["check"]);
+    expect(f.localMode.stop).not.toHaveBeenCalled();
   });
 
-  it("loads embedded Postgres only when local mode starts, never before the setup handlers", () => {
-    const calls = [...source.matchAll(/\bloadEmbeddedPostgres\(/g)];
-    expect(calls).toHaveLength(1);
-    const factory = source.indexOf("postgresFactory:");
-    expect(calls[0]!.index).toBeGreaterThan(factory);
-    expect(calls[0]!.index).toBeLessThan(source.indexOf("allocatePort:", factory));
+  it("stops local mode only after the new server answered, opened, and was saved", async () => {
+    const f = saveSetupFixture(true);
+    expect(await f.saveSetup({ mode: "existing", serverUrl: team }, "/fixture")).toEqual({
+      ok: true,
+    });
+    expect(f.calls).toEqual(["check", "open", "save", "stop local mode"]);
   });
 });

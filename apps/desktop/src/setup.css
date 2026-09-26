@@ -91,11 +91,6 @@ html[data-platform="darwin"] .titlebar {
   color: var(--muted-foreground);
 }
 
-.local-note {
-  margin: 0 0 12px;
-  color: var(--muted-foreground);
-}
-
 .choices {
   border: 0;
   margin: 0 0 18px;

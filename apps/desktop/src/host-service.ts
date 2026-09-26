@@ -1,7 +1,7 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 import { hostRegistrationIdentityText } from "@ardurbot/contracts/host-registration-identity";
@@ -51,8 +51,6 @@ export function hostStorageAvailable(storage: HostSecretStorage, platform = proc
   );
 }
 /** Neither the renderer nor Compose receives the pairing credential. */
-export const HOST_ROOTS_FILE = "host-roots.json";
-
 export class HostServiceStore {
   private file: string;
   constructor(
@@ -81,17 +79,9 @@ export class HostServiceStore {
       this.file,
       this.storage.encryptString(JSON.stringify(config)).toString("base64"),
     );
-    await writeFile(
-      path.join(this.directory, HOST_ROOTS_FILE),
-      `${JSON.stringify(config.hostRoots)}\n`,
-      {
-        mode: 0o600,
-      },
-    );
   }
   async clear() {
     await rm(this.file, { force: true });
-    await rm(path.join(this.directory, HOST_ROOTS_FILE), { force: true });
   }
 }
 export function hostServiceLaunch(options: {

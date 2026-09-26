@@ -177,13 +177,9 @@ describe("desktop host service", () => {
       expect(await readFile(path.join(directory, "host-service.enc"), "utf8")).toEqual(
         encrypted.toString("base64"),
       );
-      expect(JSON.parse(await readFile(path.join(directory, "host-roots.json"), "utf8"))).toEqual(
-        config.hostRoots,
-      );
       expect(await store.read()).toEqual(config);
       await store.clear();
       expect(await store.read()).toBeNull();
-      await expect(readFile(path.join(directory, "host-roots.json"), "utf8")).rejects.toThrow();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

@@ -21,10 +21,11 @@ import { Client } from "pg";
  * schema-engine checksum over the script, so a later `prisma migrate status` on the
  * same database reports nothing pending when the bytes still match.
  *
- * `CREATE INDEX CONCURRENTLY` and `DROP INDEX CONCURRENTLY` cannot run inside a
- * transaction block. Prisma leaves those as the only statement in a file so the
- * simple-query protocol does not wrap them. This runner does the same: those
- * statements run on their own, and every other file runs in one transaction.
+ * Like `prisma migrate deploy`, each `migration.sql` is sent as one query, so a file
+ * Prisma can apply applies here unchanged. Every file runs inside a transaction with
+ * its history row, except one that builds or drops an index `CONCURRENTLY`: that
+ * cannot run in a transaction block, and Prisma keeps it as the only statement in
+ * its file.
  */
 export class MigrationHistoryError extends Error {
   constructor(message: string) {
@@ -197,7 +198,6 @@ function finishedRow(recorded: RecordedMigration[], name: string): boolean {
 
 async function applyOne(client: MigrationSqlClient, migration: SqlMigration): Promise<void> {
   const id = randomUUID();
-  const statements = splitSqlStatements(migration.sql);
   const record = () =>
     client.query(
       `INSERT INTO "_prisma_migrations" ("id", "checksum", "migration_name", "started_at", "applied_steps_count")
@@ -206,13 +206,13 @@ async function applyOne(client: MigrationSqlClient, migration: SqlMigration): Pr
     );
   const finish = () =>
     client.query(
-      `UPDATE "_prisma_migrations" SET "finished_at" = CURRENT_TIMESTAMP, "applied_steps_count" = $2, "logs" = NULL WHERE "id" = $1`,
-      [id, Math.max(statements.length, 1)],
+      `UPDATE "_prisma_migrations" SET "finished_at" = CURRENT_TIMESTAMP, "applied_steps_count" = 1, "logs" = NULL WHERE "id" = $1`,
+      [id],
     );
-  if (statements.some((statement) => isConcurrentIndex(statement))) {
+  if (buildsIndexConcurrently(migration.sql)) {
     await record();
     try {
-      for (const statement of statements) await client.query(statement);
+      await client.query(migration.sql);
     } catch (error) {
       const message = errorMessage(error);
       await client
@@ -229,7 +229,7 @@ async function applyOne(client: MigrationSqlClient, migration: SqlMigration): Pr
   await client.query("BEGIN");
   try {
     await record();
-    for (const statement of statements) await client.query(statement);
+    await client.query(migration.sql);
     await finish();
     await client.query("COMMIT");
   } catch (error) {
@@ -259,87 +259,8 @@ async function readRecorded(client: MigrationSqlClient): Promise<RecordedMigrati
   });
 }
 
-function isConcurrentIndex(statement: string): boolean {
-  return /\b(?:CREATE|DROP)\s+INDEX\s+CONCURRENTLY\b/i.test(stripSqlComments(statement));
+/** Comments are ignored: a file may explain why it does not build an index concurrently. */
+function buildsIndexConcurrently(sql: string): boolean {
+  const code = sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+  return /\bINDEX\s+CONCURRENTLY\b/i.test(code);
 }
-
-export function splitSqlStatements(script: string): string[] {
-  const statements: string[] = [];
-  let current = "";
-  let index = 0;
-  let dollar: string | null = null;
-  while (index < script.length) {
-    if (dollar !== null) {
-      if (script.startsWith(dollar, index)) {
-        current += dollar;
-        index += dollar.length;
-        dollar = null;
-        continue;
-      }
-      current += script[index];
-      index += 1;
-      continue;
-    }
-    if (script.startsWith("--", index)) {
-      const end = script.indexOf("\n", index);
-      const slice = end === -1 ? script.slice(index) : script.slice(index, end + 1);
-      current += slice;
-      index += slice.length;
-      continue;
-    }
-    if (script.startsWith("/*", index)) {
-      const end = script.indexOf("*/", index + 2);
-      const slice = end === -1 ? script.slice(index) : script.slice(index, end + 2);
-      current += slice;
-      index += slice.length;
-      continue;
-    }
-    const quote = script[index];
-    if (quote === "'" || quote === '"') {
-      current += quote;
-      index += 1;
-      while (index < script.length) {
-        const char = script[index] ?? "";
-        current += char;
-        if (quote === "'" && char === "'" && script[index + 1] === "'") {
-          current += script[index + 1];
-          index += 2;
-          continue;
-        }
-        index += 1;
-        if (char === quote) break;
-      }
-      continue;
-    }
-    if (quote === "$") {
-      const tag = /^\$[A-Za-z0-9_]*\$/.exec(script.slice(index));
-      if (tag?.[0]) {
-        dollar = tag[0];
-        current += dollar;
-        index += dollar.length;
-        continue;
-      }
-    }
-    if (quote === ";") {
-      pushStatement(statements, current);
-      current = "";
-      index += 1;
-      continue;
-    }
-    current += quote ?? "";
-    index += 1;
-  }
-  pushStatement(statements, current);
-  return statements;
-}
-
-function pushStatement(statements: string[], raw: string): void {
-  const statement = raw.trim();
-  if (statement !== "" && stripSqlComments(statement).trim() !== "") statements.push(statement);
-}
-
-function stripSqlComments(script: string): string {
-  return script.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
-}
-
-export const migrationsTableSql = MIGRATIONS_TABLE_SQL;

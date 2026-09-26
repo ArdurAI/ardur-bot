@@ -1113,6 +1113,10 @@ msgstr "默认情况下 Bot 会直接执行。只有当你想先审核某类操�
 msgid "Bots are working"
 msgstr "Bot 正在工作"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers."
+msgstr ""
+
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Bots keep the board and memory current"
@@ -5146,8 +5150,16 @@ msgstr "按计划"
 msgid "on the 1st at {0}"
 msgstr "每月 1 日 {0}"
 
+#: src/pages/HostComputerSettings.tsx
+msgid "On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "On this device"
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx

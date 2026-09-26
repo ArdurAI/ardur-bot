@@ -1,5 +1,4 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -47,23 +46,8 @@ describe("packaged main-process imports", () => {
     expect(contractsPackage.exports["./device-paths"]).toBe("./src/device-paths.js");
   });
 
-  it("resolves every runtime workspace import, including migrations, to JavaScript", () => {
-    const dbDir = path.join(__dirname, "../../../packages/db");
-    execFileSync(
-      path.join(__dirname, "../../../node_modules/.bin/tsc"),
-      ["-p", "tsconfig.migrate.json"],
-      {
-        cwd: dbDir,
-        stdio: "pipe",
-      },
-    );
-    const offenders = runtimeTypeScriptImports(path.join(__dirname));
-    expect(offenders).toEqual([]);
-    const migrate = resolveWorkspaceExport("@ardurbot/db", "./migrate");
-    expect(migrate.endsWith(".js")).toBe(true);
-    const built = path.join(dbDir, migrate);
-    expect(existsSync(built)).toBe(true);
-    expect(readFileSync(built, "utf8")).not.toMatch(/:\s*(Promise|string|void)\b/);
+  it("resolves every runtime workspace import to JavaScript", () => {
+    expect(runtimeTypeScriptImports(path.join(__dirname))).toEqual([]);
   });
 });
 

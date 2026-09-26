@@ -1,11 +1,6 @@
 (() => {
   const bridge = window.ardurbotSetup;
   document.documentElement.dataset.platform = bridge?.platform ?? "browser";
-  const hostPosture = document.getElementById("host-posture");
-  if (hostPosture && bridge?.platform === "darwin") {
-    hostPosture.textContent =
-      "On this Mac, approvals, folder allowlists and secret redaction are enforced. Disk and CPU caps are advisory; a command stops after five minutes.";
-  }
 
   const form = document.getElementById("setup");
   const serverUrl = document.getElementById("server-url");
@@ -67,6 +62,12 @@
   let detailsOpenedByFailure = false;
   /** Resolves the poll wait early when the main process pushes a new state. */
   let wakePoll = null;
+  /**
+   * Whether a ready stack is saved as this computer. Only Continue on "This computer" in
+   * this window sets it, or a launch that brings back a saved local instance. Opening
+   * setup from the menu shows the choice and saves nothing until a click.
+   */
+  let saveWhenReady = false;
 
   function selectedMode() {
     const checked = form.querySelector('input[name="mode"]:checked');
@@ -231,7 +232,7 @@
         if (selectedMode() !== "new") return;
         renderStack(stack);
         if (TERMINAL_PHASES.has(stack.phase)) {
-          if (stack.phase === "ready" && selectedMode() === "new") {
+          if (stack.phase === "ready" && saveWhenReady && selectedMode() === "new") {
             const current = await bridge.state();
             if (selectedMode() !== "new") return;
             defaultLocalUrl = current.defaultLocalUrl;
@@ -250,6 +251,7 @@
   }
 
   async function runStack() {
+    saveWhenReady = true;
     setStatus("");
     setBusy(true);
     try {
@@ -292,6 +294,7 @@
 
   form.addEventListener("change", (event) => {
     if (event.target instanceof HTMLInputElement && event.target.name === "mode") {
+      saveWhenReady = false;
       syncPanels();
       // Unlock Continue/Check immediately; followStack exits on its next poll.
       if (selectedMode() !== "new") setBusy(false);
@@ -362,11 +365,14 @@
       const stack = await bridge.stack.state();
       const attached = stack !== null && stack.phase !== "idle";
       if (attached) document.getElementById("mode-new").checked = true;
+      saveWhenReady = state.resume === true && selectedMode() === "new";
       syncPanels();
       if (state.error) setStatus(state.error, "error");
       if (attached) {
         renderStack(stack);
-        if (stack.phase === "ready" || !TERMINAL_PHASES.has(stack.phase)) void followStack();
+        if (!TERMINAL_PHASES.has(stack.phase) || (saveWhenReady && stack.phase === "ready")) {
+          void followStack();
+        }
       } else if (selectedMode() === "existing") {
         serverUrl.focus();
       } else {

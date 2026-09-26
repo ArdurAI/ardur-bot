@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { smokeSkipReason } from "../scripts/service-bundle-smoke.mjs";
@@ -17,9 +16,5 @@ describe("service bundle smoke", () => {
     });
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/No Postgres service is configured/);
-  });
-
-  it("resolves the smoke script from the desktop scripts directory", () => {
-    expect(path.basename(script)).toBe("service-bundle-smoke.mjs");
   });
 });

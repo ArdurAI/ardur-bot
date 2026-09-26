@@ -5,13 +5,13 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopReachability, DesktopSetup } from "@ardurbot/contracts";
 import { LOCAL_SETTINGS_PAGE } from "@ardurbot/contracts/local-settings";
-import { applySqlMigrationsToDatabase, ensureApplicationDatabase } from "@ardurbot/db/migrate";
 import type { Session } from "electron";
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "electron";
 import type { ElectronAutoUpdater } from "./auto-update.js";
 import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
 import { openBrowserAuth } from "./browser-auth.js";
 import { cliVersion } from "./cli.js";
+import { applySqlMigrationsToDatabase, ensureApplicationDatabase } from "./db-migrate.js";
 import { installDevices } from "./devices-ipc.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
 import { installCustomizationIpc } from "./extensions/ipc.js";
@@ -21,11 +21,13 @@ import {
   integrationReturnId,
   registerIntegrationProtocol,
 } from "./integration-return.js";
+import { LocalFolders, localFoldersFile } from "./local-folders.js";
 import { LocalModeController, migrationsDir } from "./local-mode.js";
 import {
   legacyStackEnvExists,
   loadEmbeddedPostgres,
   loopbackPortAvailable,
+  stopWithPgCtl,
 } from "./local-postgres.js";
 import { requestLocalSettings } from "./local-settings.js";
 import {
@@ -109,6 +111,8 @@ let currentSetup: DesktopSetup | null = null;
 let currentTargetUrl: string | null = null;
 let desktopSystem: Awaited<ReturnType<typeof installSystemRuntime>> | undefined;
 let setupError: string | null = null;
+/** Set when launch opened setup to bring back a saved local instance, not when a person opened it. */
+let setupResumesLocal = false;
 let serviceFailurePrompt = false;
 let setupSaveInProgress = false;
 let openAppPromise: Promise<boolean> | null = null;
@@ -700,8 +704,9 @@ function createSetupWindow() {
 }
 
 /** Hide the app while setup is open; do not clear the saved target until a new one opens. */
-function showSetupWindow(error: string | null = null) {
+function showSetupWindow(error: string | null = null, options: { resume?: boolean } = {}) {
   setupError = error;
+  setupResumesLocal = options.resume === true;
 
   let win: BrowserWindow;
   if (setupWindow !== null && !setupWindow.isDestroyed()) {
@@ -1123,6 +1128,98 @@ async function recoverFromCrashedSave(
   return message;
 }
 
+/**
+ * Opens the chosen server before saving it. Local mode keeps running until an existing
+ * server answered, opened, and was saved, so a mistyped address leaves it untouched.
+ */
+async function saveSetup(payload: unknown, userDataDir: string) {
+  if (setupSaveInProgress) return { ok: false, error: "A connection attempt is already running." };
+  setupSaveInProgress = true;
+  const previousSetup = currentSetup;
+  const previousUrl = currentTargetUrl;
+  try {
+    const setup = parseSetupInput(payload);
+    if (setup === null) {
+      return {
+        ok: false,
+        error:
+          "Enter a valid server address. Public servers require HTTPS; a new local instance must use localhost.",
+      };
+    }
+
+    // Only open the exact origin selected and authenticated by the managed stack.
+    let openSetup = setup;
+    if (setup.mode === "new") {
+      const managedBase = legacyCompose ? localStack.webUrl() : localMode.origin();
+      const managedUrl = managedLocalOpenUrl(setup.serverUrl, managedBase);
+      const ready = legacyCompose
+        ? managedUrl !== null && (await localStack.matchesDesiredStack())
+        : managedUrl !== null && localMode.state().phase === "ready";
+      if (!ready || managedUrl === null) {
+        return {
+          ok: false,
+          error: "The app-managed Ardur Bot services are not ready. Retry setup.",
+        };
+      }
+      openSetup = { mode: "new", serverUrl: managedUrl };
+    }
+
+    const reachability = await probeServer(openSetup.serverUrl);
+    if (!reachability.ok) return { ok: false, error: reachability.error };
+
+    // Open before persisting so a failed renderer load keeps the last working setup.
+    currentSetup = openSetup;
+    const opened = await openApp(openSetup.serverUrl);
+    if (!opened) {
+      currentSetup = previousSetup;
+      return {
+        ok: false,
+        error: "Could not open that server. The previous instance was left unchanged.",
+      };
+    }
+
+    const appWindow = mainWindow;
+    const rendererWatch =
+      appWindow !== null && !appWindow.isDestroyed()
+        ? watchRendererUntilCommitted(appWindow)
+        : null;
+    try {
+      await writeSetup(userDataDir, openSetup);
+      if (rendererWatch?.crashed()) {
+        const message = await recoverFromCrashedSave(userDataDir, previousSetup, previousUrl);
+        return { ok: false, error: message };
+      }
+      // Commit while the crash listener is still armed.
+      commitPendingAppSwitch();
+      if (rendererWatch?.crashed()) {
+        const message = await recoverFromCrashedSave(userDataDir, previousSetup, previousUrl);
+        return { ok: false, error: message };
+      }
+      destroySetupWindow();
+      // Final check after setup closes — a crash in this gap still rolls back.
+      if (rendererWatch?.crashed()) {
+        const message = await recoverFromCrashedSave(userDataDir, previousSetup, previousUrl);
+        return { ok: false, error: message };
+      }
+      if (openSetup.mode === "existing" && !legacyCompose) void localMode.stop();
+      return { ok: true };
+    } catch {
+      const outcome = await abandonPendingAppSwitch(previousSetup, previousUrl);
+      return {
+        ok: false,
+        error:
+          outcome === "restored"
+            ? "Could not save setup. The previous instance was restored."
+            : "Connected, but could not save setup for the next launch. Try Continue again.",
+      };
+    } finally {
+      rendererWatch?.dispose();
+    }
+  } finally {
+    setupSaveInProgress = false;
+  }
+}
+
 function localModeOwns(targetUrl: string): boolean {
   if (legacyCompose || localMode === undefined) return false;
   const origin = localMode.origin();
@@ -1148,28 +1245,14 @@ app.whenReady().then(async () => {
   if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
   installCustomizationIpc({ window: () => mainWindow, target: () => currentTargetUrl });
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
-  const host = installHostService({
+  const userDataDir = app.getPath("userData");
+  hostService = installHostService({
     window: () => mainWindow,
     target: () => currentTargetUrl,
     tray: () => desktopTray,
+    local: { owns: localModeOwns, folders: new LocalFolders(localFoldersFile(userDataDir)) },
   });
-  hostService = {
-    get keepRunning() {
-      return host.keepRunning;
-    },
-    windowClosed() {
-      host.windowClosed();
-    },
-    stop() {
-      host.stop();
-    },
-    async activate(target: string) {
-      if (localModeOwns(target)) return;
-      await host.activate(target);
-    },
-  };
   installSessionPermissions(session.defaultSession, permissionTarget);
-  const userDataDir = app.getPath("userData");
   localStack = new LocalStackController({
     platform: process.platform,
     env: process.env,
@@ -1198,7 +1281,16 @@ app.whenReady().then(async () => {
     },
   });
   legacyCompose = await legacyStackEnvExists(userDataDir);
-  let EmbeddedPostgres: Awaited<ReturnType<typeof loadEmbeddedPostgres>> | undefined;
+  let binaries: Awaited<ReturnType<typeof loadEmbeddedPostgres>> | undefined;
+  // Loaded when local mode first starts: a Compose launch never needs these binaries,
+  // and a missing package becomes one sentence in a window whose handlers exist.
+  const postgresBinaries = async () => {
+    binaries ??= await loadEmbeddedPostgres({
+      packaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+    });
+    return binaries;
+  };
   localMode = new LocalModeController({
     userDataDir,
     packaged: app.isPackaged,
@@ -1209,7 +1301,6 @@ app.whenReady().then(async () => {
     env: process.env,
     spawn,
     fetch: (url, init) => net.fetch(url, init),
-    openApp: async () => true,
     migrate: async (databaseUrl) => {
       await ensureApplicationDatabase(databaseUrl);
       await applySqlMigrationsToDatabase({
@@ -1221,15 +1312,9 @@ app.whenReady().then(async () => {
         }),
       });
     },
-    // Loaded when local mode first starts: a Compose launch never needs these binaries,
-    // and a missing package becomes one sentence in a window whose handlers exist.
-    postgresFactory: async (options) => {
-      EmbeddedPostgres ??= await loadEmbeddedPostgres({
-        packaged: app.isPackaged,
-        resourcesPath: process.resourcesPath,
-      });
-      return new EmbeddedPostgres(options);
-    },
+    postgresFactory: async (options) => new (await postgresBinaries()).EmbeddedPostgres(options),
+    stopAdoptedPostgres: async (databaseDir) =>
+      stopWithPgCtl((await postgresBinaries()).pgCtl, databaseDir),
     allocatePort: allocateLoopbackPort,
     portAvailable: loopbackPortAvailable,
     randomHex: (bytes) => randomBytes(bytes).toString("hex"),
@@ -1475,6 +1560,7 @@ app.whenReady().then(async () => {
     return {
       defaultLocalUrl: legacyCompose ? localStack.webUrl() : localMode.origin(),
       saved: currentSetup,
+      resume: setupResumesLocal,
       // A local mode failure is already the stack line; show that sentence once.
       error: (setupError !== localMode.state().message && setupError) || undefined,
     };
@@ -1488,92 +1574,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("desktop.setup.save", async (event, payload: unknown) => {
     if (!fromSetupWindow(event)) return { ok: false, error: "Setup is not active." };
-    if (setupSaveInProgress)
-      return { ok: false, error: "A connection attempt is already running." };
-    setupSaveInProgress = true;
-    const previousSetup = currentSetup;
-    const previousUrl = currentTargetUrl;
-    try {
-      const setup = parseSetupInput(payload);
-      if (setup === null) {
-        return {
-          ok: false,
-          error:
-            "Enter a valid server address. Public servers require HTTPS; a new local instance must use localhost.",
-        };
-      }
-
-      // Only open the exact origin selected and authenticated by the managed stack.
-      let openSetup = setup;
-      if (setup.mode === "existing" && !legacyCompose) await localMode.stop();
-      if (setup.mode === "new") {
-        const managedBase = legacyCompose ? localStack.webUrl() : localMode.origin();
-        const managedUrl = managedLocalOpenUrl(setup.serverUrl, managedBase);
-        const ready = legacyCompose
-          ? managedUrl !== null && (await localStack.matchesDesiredStack())
-          : managedUrl !== null && localMode.state().phase === "ready";
-        if (!ready || managedUrl === null) {
-          return {
-            ok: false,
-            error: "The app-managed Ardur Bot services are not ready. Retry setup.",
-          };
-        }
-        openSetup = { mode: "new", serverUrl: managedUrl };
-      }
-
-      const reachability = await probeServer(openSetup.serverUrl);
-      if (!reachability.ok) return { ok: false, error: reachability.error };
-
-      // Open before persisting so a failed renderer load keeps the last working setup.
-      currentSetup = openSetup;
-      const opened = await openApp(openSetup.serverUrl);
-      if (!opened) {
-        currentSetup = previousSetup;
-        return {
-          ok: false,
-          error: "Could not open that server. The previous instance was left unchanged.",
-        };
-      }
-
-      const appWindow = mainWindow;
-      const rendererWatch =
-        appWindow !== null && !appWindow.isDestroyed()
-          ? watchRendererUntilCommitted(appWindow)
-          : null;
-      try {
-        await writeSetup(userDataDir, openSetup);
-        if (rendererWatch?.crashed()) {
-          const message = await recoverFromCrashedSave(userDataDir, previousSetup, previousUrl);
-          return { ok: false, error: message };
-        }
-        // Commit while the crash listener is still armed.
-        commitPendingAppSwitch();
-        if (rendererWatch?.crashed()) {
-          const message = await recoverFromCrashedSave(userDataDir, previousSetup, previousUrl);
-          return { ok: false, error: message };
-        }
-        destroySetupWindow();
-        // Final check after setup closes — a crash in this gap still rolls back.
-        if (rendererWatch?.crashed()) {
-          const message = await recoverFromCrashedSave(userDataDir, previousSetup, previousUrl);
-          return { ok: false, error: message };
-        }
-        return { ok: true };
-      } catch {
-        const outcome = await abandonPendingAppSwitch(previousSetup, previousUrl);
-        return {
-          ok: false,
-          error:
-            outcome === "restored"
-              ? "Could not save setup. The previous instance was restored."
-              : "Connected, but could not save setup for the next launch. Try Continue again.",
-        };
-      } finally {
-        rendererWatch?.dispose();
-      }
-    } finally {
-      setupSaveInProgress = false;
-    }
+    return saveSetup(payload, userDataDir);
   });
 
   ipcMain.handle("desktop.setup.quit", (event) => {
@@ -1668,7 +1669,7 @@ app.whenReady().then(async () => {
     if (!legacyCompose && process.env.ARDURBOT_FORCE_SETUP !== "1") void localMode.start();
   } else if (target.source === "saved") {
     if (currentSetup?.mode === "new" && !legacyCompose) {
-      showSetupWindow();
+      showSetupWindow(null, { resume: true });
       void localMode.start();
     } else if (currentSetup?.mode === "new") {
       const managedUrl = managedLocalOpenUrl(target.url, localStack.webUrl());
@@ -1683,7 +1684,7 @@ app.whenReady().then(async () => {
         // Missing, stale, foreign, or owned by another process: reconcile the
         // app-managed stack before any API or computer traffic is allowed.
         void localStack.start();
-        showSetupWindow();
+        showSetupWindow(null, { resume: true });
       }
     } else {
       const reachability = await probeServer(target.url);
@@ -1703,6 +1704,9 @@ app.whenReady().then(async () => {
     }
   }
 });
+
+// A normal quit has already stopped them; this covers SIGTERM and crashes.
+process.once("exit", () => localMode?.signalServicesNow());
 
 app.on("window-all-closed", () => {
   // A hidden session probe (defaultSessionHasOriginData) can be the only window

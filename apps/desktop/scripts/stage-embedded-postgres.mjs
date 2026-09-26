@@ -1,5 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
-import { cp, mkdir, rm, stat } from "node:fs/promises";
+import {
+  cp,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  stat,
+  symlink,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,11 +18,16 @@ import { fileURLToPath } from "node:url";
 /**
  * electron-builder's `${platform}` macro expands to darwin, linux, or win32
  * (https://www.electron.build/file-patterns). The Postgres packages are named
- * `@embedded-postgres/windows-x64`, not `win32-x64`, so each release job copies
+ * `@embedded-postgres/windows-x64`, not `win32-x64`, so each packaging run copies
  * only its own optional platform package into extraResources. The wrapper
  * package is not copied; its optional dependencies would otherwise ship every
- * architecture. npm cannot store the binaries' symlinks, so the wrapper
- * postinstall must already have recreated them before this copy.
+ * architecture.
+ *
+ * npm cannot store the binaries' symlinks. The package lists them in
+ * `native/pg-symlinks.json` and a postinstall recreates them, but a package
+ * cache can hold them as plain copies. Staging keeps relative links relative and
+ * recreates every listed link, so the libraries ship once and resolve wherever
+ * the app is installed. electron-builder copies extraResources links as they are.
  */
 const PACKAGES = {
   "darwin-arm64": "@embedded-postgres/darwin-arm64",
@@ -25,16 +41,6 @@ export function embeddedPostgresPackageName(platform, arch) {
   const name = PACKAGES[`${platform}-${arch}`];
   if (!name) throw new Error(`No embedded Postgres binary for ${platform} ${arch}.`);
   return name;
-}
-
-export function stagePlan(platform, arch) {
-  const packageName = embeddedPostgresPackageName(platform, arch);
-  return {
-    packageName,
-    from: "build/postgres-modules",
-    to: "postgres-modules",
-    destination: path.join("build", "postgres-modules", packageName),
-  };
 }
 
 function packageRoot(require, name) {
@@ -55,21 +61,24 @@ function packageRoot(require, name) {
   return null;
 }
 
-function resolveEmbeddedPostgresRoot(desktopDir, packageName) {
-  const desktopRequire = createRequire(path.join(desktopDir, "package.json"));
+function installedRoot(require, name) {
   try {
-    const direct = packageRoot(desktopRequire, packageName);
-    if (direct) return direct;
+    return packageRoot(require, name);
   } catch (error) {
     if (error?.code !== "MODULE_NOT_FOUND") throw error;
+    return null;
   }
-  const wrapperRoot = packageRoot(desktopRequire, "embedded-postgres");
-  if (!wrapperRoot) {
-    throw new Error(`Cannot find ${packageName} to stage beside the desktop app.`);
-  }
+}
+
+function resolveEmbeddedPostgresRoot(desktopDir, packageName) {
+  const desktopRequire = createRequire(path.join(desktopDir, "package.json"));
+  const direct = installedRoot(desktopRequire, packageName);
+  if (direct) return direct;
+  const wrapperRoot = installedRoot(desktopRequire, "embedded-postgres");
+  if (!wrapperRoot) return null;
   const nested = path.join(path.dirname(wrapperRoot), ...packageName.split("/"));
   if (existsSync(path.join(nested, "package.json"))) return nested;
-  return packageRoot(createRequire(path.join(wrapperRoot, "package.json")), packageName);
+  return installedRoot(createRequire(path.join(wrapperRoot, "package.json")), packageName);
 }
 
 function assertPackageMatches(source, platform, arch) {
@@ -88,22 +97,87 @@ function assertPackageMatches(source, platform, arch) {
   }
 }
 
+function inside(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+/** Replaces every link the package lists, whether it arrived as a link or as a copy. */
+async function linkLibraries(root) {
+  let links;
+  try {
+    links = JSON.parse(await readFile(path.join(root, "native", "pg-symlinks.json"), "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  for (const { source, target } of links) {
+    const from = path.resolve(root, source);
+    const to = path.resolve(root, target);
+    if (!inside(root, from) || !inside(root, to)) {
+      throw new Error(`The Postgres link ${target} points outside the package.`);
+    }
+    await stat(from);
+    await rm(to, { force: true });
+    await symlink(path.relative(path.dirname(to), from), to);
+  }
+}
+
+/** A link that is absolute or leaves the staged folder would break once the app is installed. */
+async function assertLinksStayInside(root, dir = root, realRoot = undefined) {
+  const base = realRoot ?? (await realpath(root));
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await assertLinksStayInside(root, file, base);
+      continue;
+    }
+    if (!entry.isSymbolicLink()) continue;
+    const value = await readlink(file);
+    const resolved = await realpath(file).catch(() => null);
+    if (path.isAbsolute(value) || resolved === null || !inside(base, resolved)) {
+      throw new Error(`The Postgres link ${path.relative(root, file)} points outside the package.`);
+    }
+  }
+}
+
 export async function stageEmbeddedPostgres(options = {}) {
   const platform = options.platform ?? process.platform;
   const arch = options.arch ?? process.arch;
   const desktopDir = options.desktopDir ?? fileURLToPath(new URL("..", import.meta.url));
-  const plan = stagePlan(platform, arch);
-  const source = resolveEmbeddedPostgresRoot(desktopDir, plan.packageName);
-  if (!source) throw new Error(`Cannot find ${plan.packageName} to stage beside the desktop app.`);
+  const stagedRoot = path.join(desktopDir, "build", "postgres-modules");
+  // A folder left by another platform or arch must never be packed by mistake.
+  await rm(stagedRoot, { recursive: true, force: true });
+  const packageName = embeddedPostgresPackageName(platform, arch);
+  const found = resolveEmbeddedPostgresRoot(desktopDir, packageName);
+  if (!found) throw new Error(`Cannot find ${packageName} to stage beside the desktop app.`);
+  // pnpm links the package folder itself; copy what it points at.
+  const source = await realpath(found);
   assertPackageMatches(source, platform, arch);
-  const destination = path.join(desktopDir, plan.destination);
-  await rm(path.join(desktopDir, "build", "postgres-modules"), { recursive: true, force: true });
+  const destination = path.join(stagedRoot, ...packageName.split("/"));
   await mkdir(path.dirname(destination), { recursive: true });
-  await cp(source, destination, { recursive: true, verbatimSymlinks: false });
-  const binaryName = platform === "win32" ? "postgres.exe" : "postgres";
-  const binary = path.join(destination, "native", "bin", binaryName);
-  await stat(binary);
-  return { ...plan, source, destination, binary };
+  await cp(source, destination, { recursive: true, verbatimSymlinks: true });
+  await linkLibraries(destination);
+  await assertLinksStayInside(destination);
+  const binary = path.join(
+    destination,
+    "native",
+    "bin",
+    platform === "win32" ? "postgres.exe" : "postgres",
+  );
+  if (!(await lstat(binary)).isFile()) throw new Error(`${packageName} has no postgres binary.`);
+  return { packageName, source, destination, binary };
+}
+
+/** electron-builder `beforePack`: runs for every platform and arch it packs, before extraResources. */
+export default async function beforePack(context) {
+  // Loaded here so the command line does not pay for electron-builder.
+  const { Arch } = await import("electron-builder");
+  await stageEmbeddedPostgres({
+    platform: context.electronPlatformName,
+    arch: Arch[context.arch],
+    desktopDir: context.packager.projectDir,
+  });
 }
 
 function cliOptions(argv) {

@@ -1,5 +1,9 @@
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LocalFolders, localFoldersFile } from "./local-folders.js";
 
 const fake = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, value?: unknown) => Promise<unknown>>(),
@@ -48,6 +52,9 @@ vi.mock("./tray.js", () => ({ updateHostTray: vi.fn() }));
 
 import { installHostService } from "./host-service-ipc.js";
 
+const LOCAL_ORIGIN = "http://127.0.0.1:40123";
+const directories: string[] = [];
+
 beforeEach(() => {
   vi.clearAllMocks();
   fake.handlers.clear();
@@ -55,14 +62,21 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   fake.read.mockResolvedValue({ apiUrl: "https://example.test", hostRoots: [] });
 });
-afterEach(() => vi.restoreAllMocks());
-function fixture() {
-  const frame = { url: "https://example.test/app" };
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(directories.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+function fixture(
+  target = "https://example.test",
+  folders = new LocalFolders("/fixture/unused/local-folders.json"),
+) {
+  const frame = { url: `${target}/app` };
   const window = { webContents: { mainFrame: frame } } as unknown as BrowserWindow;
   const service = installHostService({
     window: () => window,
-    target: () => "https://example.test",
+    target: () => target,
     tray: () => null,
+    local: { owns: (url) => new URL(url).origin === LOCAL_ORIGIN, folders },
   });
   const event = { sender: window.webContents, senderFrame: frame } as unknown as IpcMainInvokeEvent;
   return { event, service, add: fake.handlers.get("desktop.host.addRoot")! };
@@ -123,4 +137,53 @@ it("logs an underlying folder error once and returns only a safe reason to prelo
   expect(console.error).toHaveBeenCalledExactlyOnceWith("Could not add folder.", failure);
   fake.read.mockRejectedValueOnce(new Error("private storage details"));
   await expect(f.add(f.event)).resolves.toEqual({ error: "Could not add folder. Try again." });
+});
+
+describe("local mode folders", () => {
+  async function localFixture() {
+    const userData = await mkdtemp(path.join(tmpdir(), "local-folders-"));
+    directories.push(userData);
+    // A pairing with a team server, made earlier under Existing instance.
+    fake.read.mockResolvedValue({
+      apiUrl: "https://team.example.test",
+      hostRoots: ["/fixture/team-share"],
+    });
+    const file = localFoldersFile(userData);
+    const f = fixture(LOCAL_ORIGIN, new LocalFolders(file));
+    const handler = (name: string) => fake.handlers.get(`desktop.host.${name}`)!;
+    return { ...f, file, state: () => handler("state")(f.event), handler };
+  }
+
+  it("starts with no folders and never lists another server's pairing", async () => {
+    const f = await localFixture();
+    expect(await f.state()).toEqual({
+      configured: false,
+      local: true,
+      roots: [],
+      keepRunning: true,
+    });
+  });
+
+  it("adds the chosen folder to its own private file, and removes it again", async () => {
+    const f = await localFixture();
+    fake.picker.mockResolvedValue({ canceled: false, filePaths: ["/fixture/projects"] });
+    expect(await f.add(f.event)).toBe("/fixture/projects");
+    expect(await f.state()).toMatchObject({ local: true, roots: ["/fixture/projects"] });
+    expect(JSON.parse(await readFile(f.file, "utf8"))).toEqual(["/fixture/projects"]);
+    expect((await stat(f.file)).mode & 0o777).toBe(0o600);
+    expect(fake.write).not.toHaveBeenCalled();
+    expect(fake.start).not.toHaveBeenCalled();
+
+    await f.handler("removeRoot")(f.event, "/fixture/projects");
+    expect(await f.state()).toMatchObject({ roots: [] });
+    expect(JSON.parse(await readFile(f.file, "utf8"))).toEqual([]);
+  });
+
+  it("does not pair local mode with a host service or keep another pairing running", async () => {
+    const f = await localFixture();
+    await expect(f.handler("setup")(f.event)).rejects.toThrow("Host service is unavailable here.");
+    await f.service.activate(LOCAL_ORIGIN);
+    expect(fake.start).not.toHaveBeenCalled();
+    expect(fake.stop).toHaveBeenCalled();
+  });
 });

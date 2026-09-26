@@ -1,14 +1,17 @@
 import type { ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { MigrationApplyError } from "@ardurbot/db/migrate";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { localFoldersFile } from "./local-folders.js";
 import { appendCappedLog, LOG_CAP_BYTES } from "./local-logs.js";
-import { LocalModeController, launchDesktopServices, localServiceLaunch } from "./local-mode.js";
+import { LocalModeController, localServiceLaunch } from "./local-mode.js";
 import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-postgres.js";
-import { MissingDatabaseBinariesError } from "./local-postgres.js";
+import { MissingDatabaseBinariesError, postgresServesFolder } from "./local-postgres.js";
 
 const directories: string[] = [];
 
@@ -54,7 +57,6 @@ describe("local mode start", () => {
     const root = await userData();
     const spawned: string[][] = [];
     const envs: NodeJS.ProcessEnv[] = [];
-    const opened: string[] = [];
     let port = 0;
     const controller = new LocalModeController(
       harness(root, {
@@ -64,10 +66,6 @@ describe("local mode start", () => {
           spawned.push([command, ...args]);
           envs.push(options.env ?? {});
           return fakeChild();
-        },
-        openApp: async (url) => {
-          opened.push(url);
-          return true;
         },
         postgresFactory: (options) => {
           port = options.port;
@@ -79,7 +77,7 @@ describe("local mode start", () => {
     expect(state.phase).toBe("ready");
     expect(spawned.some((args) => args.some((arg) => /docker|compose/.test(arg)))).toBe(false);
     expect(spawned.length).toBeGreaterThan(0);
-    expect(opened).toEqual([`http://127.0.0.1:${port}`]);
+    expect(controller.origin()).toBe(`http://127.0.0.1:${port}`);
     expect(envs.length).toBeGreaterThan(0);
     for (const env of envs) {
       expect(env.ELECTRON_RUN_AS_NODE).toBe("1");
@@ -92,7 +90,8 @@ describe("local mode start", () => {
       expect(env.WEB_ORIGIN).toBe(`http://127.0.0.1:${port}`);
       expect(env.API_URL).toBe(`http://127.0.0.1:${port}`);
       expect(env.SANDBOX_SUPERVISOR_TOKEN?.length).toBeGreaterThanOrEqual(32);
-      expect(env.ARDURBOT_HOST_ROOTS_FILE).toBe(path.join(root, "host-service", "host-roots.json"));
+      // Local mode's own folder list; a pairing with another server is never read.
+      expect(env.ARDURBOT_HOST_ROOTS_FILE).toBe(localFoldersFile(root));
       expect(env.LOG_FORMAT).toBe("json");
     }
     expect(port).not.toBe(5432);
@@ -101,23 +100,6 @@ describe("local mode start", () => {
       args.some((arg) => arg.endsWith("index.ts") || arg.endsWith("api.cjs")),
     );
     expect(api?.join(" ")).not.toMatch(/docker|compose/);
-  });
-
-  it("keeps the Compose controller when stack/.env exists and does not create postgres/", async () => {
-    const root = await userData();
-    await mkdir(path.join(root, "stack"), { recursive: true });
-    await writeFile(path.join(root, "stack", ".env"), "POSTGRES_PASSWORD=fixture\n");
-    const compose = vi.fn(async () => "compose");
-    const local = vi.fn(async () => "local");
-    const kind = await launchDesktopServices({
-      userDataDir: root,
-      local: { start: local },
-      compose: { start: compose },
-    });
-    expect(kind).toBe("compose");
-    expect(compose).toHaveBeenCalledOnce();
-    expect(local).not.toHaveBeenCalled();
-    await expect(readFile(path.join(root, "postgres", "PG_VERSION"), "utf8")).rejects.toThrow();
   });
 });
 
@@ -319,22 +301,21 @@ describe("database lifecycle", () => {
     expect(stops).toBe(1);
   });
 
-  it("retries by attaching to a healthy postmaster instead of starting another", async () => {
+  it("uses a server a previous run left only after it proves it serves this folder", async () => {
     const root = await userData();
     const databaseDir = path.join(root, "postgres");
     await mkdir(databaseDir, { recursive: true });
-    const { writeFile } = await import("node:fs/promises");
-    await writeFile(
-      path.join(databaseDir, "postmaster.pid"),
-      `4321\n${databaseDir}\n0\n23456\n/tmp\n`,
-    );
+    await writeFile(path.join(databaseDir, "postmaster.pid"), `4321\n${databaseDir}\n0\n23999\n`);
     let starts = 0;
+    const stoppedAdopted: string[] = [];
     const controller = new LocalModeController(
       harness(root, {
         allocatePort: async () => 23456,
         portAvailable: async () => true,
-        postmasterAlive: () => true,
-        stopPostmaster: async () => undefined,
+        postgresServes: async ({ port, databaseDir: dir }) => port === 23999 && dir === databaseDir,
+        stopAdoptedPostgres: async (dir) => {
+          stoppedAdopted.push(dir);
+        },
         postgresFactory: () => ({
           initialise: async () => undefined,
           start: async () => {
@@ -344,9 +325,50 @@ describe("database lifecycle", () => {
         }),
       }),
     );
-    const state = await controller.start();
-    expect(state.phase).toBe("ready");
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
     expect(starts).toBe(0);
+    expect(await readFile(path.join(root, "postgres.port"), "utf8")).toBe("23999\n");
+    await controller.stop();
+    expect(stoppedAdopted).toEqual([databaseDir]);
+  });
+
+  it("never signals a process that postmaster.pid names without proof", async () => {
+    const root = await userData();
+    const databaseDir = path.join(root, "postgres");
+    await mkdir(databaseDir, { recursive: true });
+    // After a restart the recorded pid can belong to any process of this user.
+    const unrelated = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], {
+      stdio: "ignore",
+    });
+    const closed = await closedLoopbackPort();
+    await writeFile(
+      path.join(databaseDir, "postmaster.pid"),
+      `${unrelated.pid}\n${databaseDir}\n0\n${closed}\n`,
+    );
+    const kill = vi.spyOn(process, "kill");
+    try {
+      const controller = new LocalModeController(
+        harness(root, {
+          allocatePort: async () => 23456,
+          portAvailable: async () => true,
+          // The real check: nothing answers on the recorded port for this folder.
+          postgresServes: postgresServesFolder,
+          migrate: async () => {
+            throw new Error("Connection terminated unexpectedly");
+          },
+          postgresFactory: () => runningPostgres(),
+        }),
+      );
+      const state = await controller.start();
+      await controller.stop();
+      expect(kill.mock.calls.filter(([pid]) => pid === unrelated.pid)).toEqual([]);
+      expect(unrelated.exitCode).toBeNull();
+      expect(unrelated.signalCode).toBeNull();
+      expect(state).toMatchObject({ phase: "failed", message: "The database stopped." });
+    } finally {
+      kill.mockRestore();
+      unrelated.kill("SIGKILL");
+    }
   });
 
   it("does not start Postgres when quit wins before start", async () => {
@@ -388,7 +410,7 @@ describe("database lifecycle", () => {
       harness(root, {
         allocatePort: async () => 23456,
         portAvailable: async () => true,
-        postmasterAlive: () => true,
+        postgresServes: async () => true,
         migrate: async (url) => {
           migrations.push(url);
           if (broken) {
@@ -432,7 +454,7 @@ describe("database lifecycle", () => {
       harness(root, {
         allocatePort: async () => 23456,
         portAvailable: async () => true,
-        postmasterAlive: () => false,
+        postgresServes: async () => false,
         migrate: async () => {
           throw new Error("Connection terminated unexpectedly");
         },
@@ -460,32 +482,299 @@ describe("database lifecycle", () => {
         },
       }),
     );
-    const sentence = "The database binaries @embedded-postgres/linux-x64 are missing.";
+    const sentence =
+      "The database binaries @embedded-postgres/linux-x64 are missing. Reinstall Ardur Bot.";
     expect(await controller.start()).toMatchObject({ phase: "failed", message: sentence });
     expect(failed).toEqual([sentence]);
     expect(controller.running()).toBe(false);
   });
+});
 
-  it("starts Compose without loading the database binaries when stack/.env exists", async () => {
+describe("stopping", () => {
+  it("does not wait on a database whose process already exited, at Retry or at quit", async () => {
     const root = await userData();
-    await mkdir(path.join(root, "stack"), { recursive: true });
-    await writeFile(path.join(root, "stack", ".env"), "POSTGRES_PASSWORD=fixture\n");
-    const load = vi.fn(async () => {
-      throw new MissingDatabaseBinariesError("@embedded-postgres/linux-x64");
-    });
-    const local = new LocalModeController(
+    // The library keeps the exited child after a failed start and would wait for its
+    // `exit` event forever.
+    const exited = Object.assign(new EventEmitter(), { exitCode: 1, signalCode: null });
+    const stops: string[] = [];
+    const controller = new LocalModeController(
       harness(root, {
         allocatePort: async () => 23456,
         portAvailable: async () => true,
-        postgresFactory: load,
+        postgresFactory: () =>
+          Object.assign(runningPostgres(), {
+            process: exited,
+            stop: () => {
+              stops.push("library");
+              return new Promise<void>(() => undefined);
+            },
+          }),
       }),
     );
-    const compose = vi.fn(async () => undefined);
-    expect(
-      await launchDesktopServices({ userDataDir: root, local, compose: { start: compose } }),
-    ).toBe("compose");
-    expect(compose).toHaveBeenCalledOnce();
-    expect(load).not.toHaveBeenCalled();
+    expect(await within(2_000, controller.start())).toMatchObject({ phase: "ready" });
+    await within(2_000, controller.stop());
+    expect(stops).toEqual([]);
+    expect(controller.running()).toBe(false);
+  });
+
+  it("kills only the server process it spawned when a stop does not finish in ten seconds", async () => {
+    const root = await userData();
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null,
+      signalCode: null,
+      kill: vi.fn(() => true),
+    });
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () =>
+          Object.assign(runningPostgres(), {
+            process: child,
+            stop: () => new Promise<void>(() => undefined),
+          }),
+      }),
+    );
+    await controller.start();
+    vi.useFakeTimers();
+    let done = false;
+    const stopping = controller.stop().then(() => {
+      done = true;
+    });
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(done).toBe(false);
+    expect(child.kill).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await stopping;
+    expect(child.kill).toHaveBeenCalledExactlyOnceWith("SIGKILL");
+  });
+
+  it("signals the API and worker at once when the app exits without a normal quit", async () => {
+    const root = await userData();
+    const children: FakeChild[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        platform: "win32",
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+        spawn: () => {
+          const child = fakeChild();
+          children.push(child);
+          return child;
+        },
+      }),
+    );
+    await controller.start();
+    controller.signalServicesNow();
+    expect(children.map((child) => vi.mocked(child.kill).mock.calls)).toEqual([
+      [["SIGTERM"]],
+      [["SIGTERM"]],
+    ]);
+  });
+
+  it("reports the stack idle once it has stopped", async () => {
+    const root = await userData();
+    const phases: string[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+        onState: (state) => {
+          phases.push(state.phase);
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    await controller.stop();
+    expect(controller.state().phase).toBe("idle");
+    expect(phases.at(-1)).toBe("idle");
+  });
+});
+
+describe("saved database settings", () => {
+  async function cluster(root: string) {
+    await mkdir(path.join(root, "postgres"), { recursive: true });
+    await writeFile(path.join(root, "postgres", "PG_VERSION"), "16\n");
+  }
+
+  it("stops instead of generating new secrets over a database it cannot read the settings for", async () => {
+    const root = await userData();
+    await cluster(root);
+    // Unreadable in a way that holds for every user, including root.
+    await mkdir(path.join(root, "secrets.env"));
+    const randomHex = vi.fn((bytes: number) => "ef".repeat(bytes));
+    let factoryCalls = 0;
+    const controller = new LocalModeController(
+      harness(root, {
+        randomHex,
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => {
+          factoryCalls += 1;
+          return runningPostgres();
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({
+      phase: "failed",
+      message:
+        "The app could not read its saved database settings (it is not a regular file). Check the permissions of the app data folder, then Retry.",
+    });
+    expect(randomHex).not.toHaveBeenCalled();
+    expect(factoryCalls).toBe(0);
+    expect((await stat(path.join(root, "secrets.env"))).isDirectory()).toBe(true);
+  });
+
+  it("does not write new secrets when the file is missing but the database exists", async () => {
+    const root = await userData();
+    await cluster(root);
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+      }),
+    );
+    expect(await controller.start()).toMatchObject({
+      phase: "failed",
+      message:
+        "The app could not read its saved database settings (ENOENT: no such file or directory). Check the permissions of the app data folder, then Retry.",
+    });
+    await expect(stat(path.join(root, "secrets.env"))).rejects.toThrow();
+  });
+
+  it("keeps a saved password and adds only a missing newer secret", async () => {
+    const root = await userData();
+    await cluster(root);
+    await writeFile(
+      path.join(root, "secrets.env"),
+      "POSTGRES_PASSWORD=saved-password\nENCRYPTION_KEY=saved-key\n",
+      { mode: 0o600 },
+    );
+    const seen: EmbeddedPostgresOptions[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: (options) => {
+          seen.push(options);
+          return runningPostgres();
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    expect(seen[0]?.password).toBe("saved-password");
+    const saved = await readFile(path.join(root, "secrets.env"), "utf8");
+    expect(saved).toContain("ENCRYPTION_KEY=saved-key\n");
+    expect(saved).toMatch(/^SANDBOX_SUPERVISOR_TOKEN=[0-9a-f]{64}$/m);
+    await controller.stop();
+  });
+});
+
+describe("failure sentences", () => {
+  it("names a missing free port", async () => {
+    const root = await userData();
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => false,
+        postgresFactory: () => runningPostgres(),
+      }),
+    );
+    expect(await controller.start()).toMatchObject({
+      phase: "failed",
+      message: "No free local port was found. Close other apps, then Retry.",
+    });
+  });
+
+  it("names an app data folder that cannot be written", async () => {
+    const root = await userData();
+    await writeFile(path.join(root, "logs"), "a file where the folder belongs");
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+      }),
+    );
+    expect(await controller.start()).toMatchObject({
+      phase: "failed",
+      message:
+        "The app data folder could not be written (EEXIST: file already exists). Check its permissions and free disk space, then Retry.",
+    });
+  });
+
+  it("names settings that cannot be saved", async () => {
+    const root = await userData();
+    await mkdir(path.join(root, "postgres.port", "occupied"), { recursive: true });
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+      }),
+    );
+    const state = await controller.start();
+    expect(state.phase).toBe("failed");
+    expect(state.message).toMatch(
+      /^The app could not save its database settings \(E[A-Z]+: [^)]+\)\. Check free disk space, then Retry\.$/,
+    );
+  });
+
+  it("names a database that could not start, and does not wait on it", async () => {
+    const root = await userData();
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => ({
+          ...runningPostgres(),
+          start: async () => {
+            throw new Error("postmaster exited");
+          },
+        }),
+      }),
+    );
+    expect(await controller.start()).toMatchObject({
+      phase: "failed",
+      message: "The database could not start. Retry, or restart the computer if it happens again.",
+    });
+    expect(controller.running()).toBe(false);
+  });
+
+  it("treats a service that cannot be spawned like one that exited", async () => {
+    const root = await userData();
+    const failed: string[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        restartDelayMs: () => 0,
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+        fetch: async () => {
+          throw new Error("ECONNREFUSED");
+        },
+        spawn: (_command, args) => {
+          const child = fakeChild();
+          // Node reports EAGAIN or ENOENT with `error` and no `exit`.
+          if (!isWorker(args)) {
+            queueMicrotask(() => child.emit("error", new Error("spawn EAGAIN")));
+          }
+          return child;
+        },
+        onFailed: (message) => {
+          failed.push(message);
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({
+      phase: "failed",
+      message: "The API stopped.",
+    });
+    expect(failed).toEqual(["The API stopped."]);
+    await controller.stop();
   });
 });
 
@@ -602,6 +891,25 @@ function isWorker(args: string[]): boolean {
   return args.some((arg) => arg.includes("worker"));
 }
 
+/** Rejects if `promise` has not settled in time, so a hang fails fast instead of timing out. */
+function within<T>(ms: number, promise: Promise<T>): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`still pending after ${ms} ms`)), ms);
+    }),
+  ]);
+}
+
+async function closedLoopbackPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  if (address === null || typeof address === "string") throw new Error("no port");
+  return address.port;
+}
+
 function runningPostgres(): EmbeddedPostgresLike {
   return {
     initialise: async () => undefined,
@@ -636,8 +944,9 @@ function harness(
       DATABASE_URL: "postgres://keep@127.0.0.1:5433/ardurbot",
     },
     fetch: async () => healthResponse(),
-    openApp: async () => true,
     migrate: async () => undefined,
+    stopAdoptedPostgres: async () => undefined,
+    postgresServes: async () => false,
     randomHex: (bytes) => "cd".repeat(bytes),
     now: () => Date.now(),
     ...overrides,

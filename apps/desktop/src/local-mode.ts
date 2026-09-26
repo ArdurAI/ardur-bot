@@ -1,21 +1,20 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
-import { mkdir, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, lstat, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopLocalStackState } from "@ardurbot/contracts";
-import { HOST_ROOTS_FILE } from "./host-service.js";
+import { localFoldersFile } from "./local-folders.js";
 import { writeServiceLog } from "./local-logs.js";
+import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-postgres.js";
 import {
   DATABASE_NAME,
-  type EmbeddedPostgresLike,
-  type EmbeddedPostgresOptions,
   FORBIDDEN_PORTS,
-  legacyStackEnvExists,
-  livePostmaster,
   MissingDatabaseBinariesError,
   POSTGRES_USER,
-  pidIsAlive,
+  postgresServesFolder,
   readPersistedPort,
-  stopPostmaster,
+  recordedPostmasterPort,
+  stopOwnedPostgres,
   writePersistedPort,
 } from "./local-postgres.js";
 import { isArdurBotHealth } from "./setup-config.js";
@@ -24,6 +23,8 @@ import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 const STOP_TIMEOUT_MS = 5_000;
 const HEALTH_TIMEOUT_MS = 8_000;
 const READY_BUDGET_MS = 60_000;
+/** An unpackaged run compiles the API and worker sources with tsx first, which can take minutes. */
+const SOURCE_READY_BUDGET_MS = 5 * 60_000;
 const RESTART_WINDOW_MS = 5 * 60_000;
 /** The worker's structured log line once its job host is running. */
 const WORKER_READY = '"message":"worker ready"';
@@ -34,9 +35,18 @@ const SECRET_KEYS = {
   SCREEN_PROXY_SECRET: 32,
   SANDBOX_SUPERVISOR_TOKEN: 32,
 } as const;
+/** Replacing either of these would lock the person out of an existing database. */
+const CLUSTER_SECRETS = ["POSTGRES_PASSWORD", "ENCRYPTION_KEY"] as const;
+const DATABASE_STOPPED = "The database stopped.";
+const DATABASE_NOT_STARTED =
+  "The database could not start. Retry, or restart the computer if it happens again.";
+const NO_FREE_PORT = "No free local port was found. Close other apps, then Retry.";
 
 type SecretKey = keyof typeof SECRET_KEYS;
 type ServiceName = "api" | "worker";
+
+/** A step before the services start failed; the message is the sentence the window shows. */
+class LocalModeFailure extends Error {}
 
 export interface LocalModeDependencies {
   userDataDir: string;
@@ -48,35 +58,27 @@ export interface LocalModeDependencies {
   env: NodeJS.ProcessEnv;
   spawn: (command: string, args: string[], options: SpawnOptions) => ChildProcess;
   fetch: (url: string, init: RequestInit) => Promise<Response>;
-  openApp: (url: string) => Promise<boolean>;
   migrate: (databaseUrl: string) => Promise<void>;
   /** May load the embedded binaries first; a missing package rejects with its name. */
   postgresFactory: (
     options: EmbeddedPostgresOptions,
   ) => EmbeddedPostgresLike | Promise<EmbeddedPostgresLike>;
+  /** Stops a server a previous run left in the data folder, once it proved it serves it. */
+  stopAdoptedPostgres: (databaseDir: string) => Promise<void>;
+  /** Whether the server on `port` answers for this data folder; a real connection by default. */
+  postgresServes?: (input: {
+    port: number;
+    password: string;
+    databaseDir: string;
+  }) => Promise<boolean>;
   allocatePort: () => Promise<number>;
   portAvailable: (port: number) => Promise<boolean>;
   randomHex: (bytes: number) => string;
   now: () => number;
   /** Delay before the next restart of a crashed service; doubles from one second by default. */
   restartDelayMs?: (restarts: number) => number;
-  postmasterAlive?: (pid: number) => boolean;
-  stopPostmaster?: (pid: number) => Promise<void>;
   onState?: (state: DesktopLocalStackState) => void;
   onFailed?: (message: string) => void;
-}
-
-export async function launchDesktopServices(input: {
-  userDataDir: string;
-  local: { start: () => Promise<unknown> };
-  compose: { start: () => Promise<unknown> };
-}): Promise<"local" | "compose"> {
-  if (await legacyStackEnvExists(input.userDataDir)) {
-    await input.compose.start();
-    return "compose";
-  }
-  await input.local.start();
-  return "local";
 }
 
 export function migrationsDir(input: {
@@ -174,26 +176,35 @@ export class LocalModeController {
   reportDatabaseDown(): Promise<void> {
     if (this.databaseReported || this.stopped) return Promise.resolve();
     this.databaseReported = true;
-    const postgres = this.postgres;
-    this.postgres = undefined;
-    this.publish("failed", "The database stopped.");
-    this.deps.onFailed?.("The database stopped.");
-    return postgres
-      ? postgres.stop().then(
-          () => undefined,
-          () => undefined,
-        )
-      : Promise.resolve();
+    this.publish("failed", DATABASE_STOPPED);
+    this.deps.onFailed?.(DATABASE_STOPPED);
+    return this.releaseDatabase();
   }
 
+  /**
+   * For the main process's `exit` event, when nothing can be awaited: after a SIGTERM the
+   * database library stops Postgres and exits, and the API and worker must not outlive it.
+   */
+  signalServicesNow(): void {
+    for (const child of this.children.values()) {
+      if (child.exitCode != null || child.signalCode != null) continue;
+      try {
+        if (child.pid && this.deps.platform !== "win32") process.kill(-child.pid, "SIGTERM");
+        else child.kill("SIGTERM");
+      } catch {
+        // Already gone.
+      }
+    }
+  }
+
+  /** Stops the worker, the API, and the database, then reports the stack idle. */
   async stop(): Promise<void> {
     this.stopped = true;
     this.clearRestartTimers();
     await this.stopChild("worker");
     await this.stopChild("api");
-    const postgres = this.postgres;
-    this.postgres = undefined;
-    if (postgres) await postgres.stop();
+    await this.releaseDatabase();
+    this.publish("idle", null);
   }
 
   private async run(): Promise<DesktopLocalStackState> {
@@ -208,18 +219,11 @@ export class LocalModeController {
       if (!this.children.has("api")) this.spawn("api");
       if (!this.children.has("worker")) this.spawn("worker");
       if (!(await this.waitForServices())) return this.current;
-      this.originUrl = `http://127.0.0.1:${this.apiPort}`;
-      const opened = await this.deps.openApp(this.originUrl);
-      if (this.stopped || this.failed()) return this.current;
-      if (!opened) {
-        this.failService("api");
-        return this.current;
-      }
       this.publish("ready", null);
       return this.current;
     } catch (error) {
       if (this.stopped || this.databaseReported) return this.current;
-      if (error instanceof MissingDatabaseBinariesError) {
+      if (error instanceof LocalModeFailure || error instanceof MissingDatabaseBinariesError) {
         this.fail(error.message);
       } else if (this.current.phase === "migrations" && (await this.databaseAlive())) {
         await this.releaseDatabase();
@@ -231,7 +235,13 @@ export class LocalModeController {
     }
   }
 
+  private databaseDir(): string {
+    return path.join(this.deps.userDataDir, "postgres");
+  }
+
   private async ensurePostgres(): Promise<void> {
+    const databaseDir = this.databaseDir();
+    await this.prepareFolders();
     const secrets = await this.loadSecrets();
     this.secrets = secrets;
     this.postgresPort = await this.choosePort(path.join(this.deps.userDataDir, "postgres.port"));
@@ -241,18 +251,20 @@ export class LocalModeController {
     }
     this.originUrl = `http://127.0.0.1:${this.apiPort}`;
     this.databaseUrl = databaseUrl(secrets.POSTGRES_PASSWORD, this.postgresPort);
-    const databaseDir = path.join(this.deps.userDataDir, "postgres");
-    await mkdir(databaseDir, { recursive: true, mode: 0o700 });
-    await mkdir(path.join(this.deps.userDataDir, "data"), { recursive: true, mode: 0o700 });
-    await mkdir(path.join(this.deps.userDataDir, "logs"), { recursive: true, mode: 0o700 });
-    const live = await livePostmaster(databaseDir, this.deps.postmasterAlive ?? pidIsAlive);
-    if (live) {
-      if (live.port >= 1024 && live.port !== this.postgresPort && !FORBIDDEN_PORTS.has(live.port)) {
-        this.postgresPort = live.port;
-        await writePersistedPort(path.join(this.deps.userDataDir, "postgres.port"), live.port);
+    // A server left running by an earlier run is used only if it proves it serves this
+    // folder. Anything else in postmaster.pid is left to Postgres's own lock-file check.
+    const recorded = await recordedPostmasterPort(databaseDir);
+    if (
+      recorded !== null &&
+      !FORBIDDEN_PORTS.has(recorded) &&
+      (await this.serves(recorded, secrets.POSTGRES_PASSWORD))
+    ) {
+      if (recorded !== this.postgresPort) {
+        this.postgresPort = recorded;
+        await this.persistPort(path.join(this.deps.userDataDir, "postgres.port"), recorded);
       }
-      this.databaseUrl = databaseUrl(secrets.POSTGRES_PASSWORD, this.postgresPort);
-      this.postgres = attachedPostgres(live.pid, this.deps.stopPostmaster ?? stopPostmaster);
+      this.databaseUrl = databaseUrl(secrets.POSTGRES_PASSWORD, recorded);
+      this.postgres = this.adopted(recorded, secrets.POSTGRES_PASSWORD);
       if (this.stopped) await this.releaseDatabase();
       return;
     }
@@ -278,11 +290,7 @@ export class LocalModeController {
       return;
     }
     try {
-      try {
-        await stat(path.join(databaseDir, "PG_VERSION"));
-      } catch {
-        await postgres.initialise();
-      }
+      if (!(await exists(path.join(databaseDir, "PG_VERSION")))) await postgres.initialise();
       if (this.stopped) {
         await this.releaseDatabase();
         return;
@@ -290,21 +298,52 @@ export class LocalModeController {
       await postgres.start();
     } catch {
       await this.releaseDatabase();
-      throw new Error("The database stopped.");
+      throw new LocalModeFailure(DATABASE_NOT_STARTED);
     }
     if (this.stopped) await this.releaseDatabase();
+  }
+
+  /** A server this run did not start. It is stopped only after proving, again, that it is ours. */
+  private adopted(port: number, password: string): EmbeddedPostgresLike {
+    const databaseDir = this.databaseDir();
+    return {
+      initialise: async () => undefined,
+      start: async () => undefined,
+      stop: async () => {
+        if (await this.serves(port, password)) await this.deps.stopAdoptedPostgres(databaseDir);
+      },
+    };
+  }
+
+  private serves(port: number, password: string): Promise<boolean> {
+    const serves = this.deps.postgresServes ?? postgresServesFolder;
+    return serves({ port, password, databaseDir: this.databaseDir() });
+  }
+
+  private async prepareFolders(): Promise<void> {
+    for (const name of ["postgres", "data", "logs"]) {
+      const folder = path.join(this.deps.userDataDir, name);
+      try {
+        await mkdir(folder, { recursive: true, mode: 0o700 });
+        await access(folder, constants.W_OK);
+      } catch (error) {
+        throw new LocalModeFailure(
+          `The app data folder could not be written (${errorSummary(error)}). Check its permissions and free disk space, then Retry.`,
+        );
+      }
+    }
   }
 
   private async releaseDatabase(): Promise<void> {
     const postgres = this.postgres;
     this.postgres = undefined;
-    if (postgres) await postgres.stop().catch(() => undefined);
+    if (postgres) await stopOwnedPostgres(postgres);
   }
 
-  /** Whether the postmaster that owns this data directory is still running. */
+  /** Whether the server that owns this data folder still answers for it. */
   private async databaseAlive(): Promise<boolean> {
-    const databaseDir = path.join(this.deps.userDataDir, "postgres");
-    return (await livePostmaster(databaseDir, this.deps.postmasterAlive ?? pidIsAlive)) !== null;
+    if (!this.secrets) return false;
+    return this.serves(this.postgresPort, this.secrets.POSTGRES_PASSWORD);
   }
 
   private spawn(service: ServiceName): void {
@@ -344,6 +383,8 @@ export class LocalModeController {
     };
     child.stdout?.on("data", output);
     child.stderr?.on("data", output);
+    // A process that could not start emits `error` and may never emit `exit`.
+    child.once("error", () => this.onChildExit(service, child));
     child.once("exit", () => this.onChildExit(service, child));
   }
 
@@ -403,12 +444,12 @@ export class LocalModeController {
    * deadline is stopped, so the sentence that names it is true and Retry starts it fresh.
    */
   private async waitForServices(): Promise<boolean> {
-    const deadline = this.deps.now() + READY_BUDGET_MS;
+    const deadline =
+      this.deps.now() + (this.deps.packaged ? READY_BUDGET_MS : SOURCE_READY_BUDGET_MS);
     let apiAnswered = false;
     while (!this.stopped && !this.failed() && this.deps.now() <= deadline) {
       apiAnswered = await this.probe();
       if (apiAnswered && this.workerReady && !this.failed()) return true;
-      if (this.deps.now() === deadline) break;
       await delay(200);
     }
     if (this.stopped || this.failed()) return false;
@@ -441,18 +482,40 @@ export class LocalModeController {
     const saved = await readPersistedPort(file);
     if (saved !== null && (await this.deps.portAvailable(saved))) return saved;
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      const port = await this.deps.allocatePort();
-      if (FORBIDDEN_PORTS.has(port)) continue;
+      const port = await this.deps.allocatePort().catch(() => null);
+      if (port === null || FORBIDDEN_PORTS.has(port)) continue;
       if (!(await this.deps.portAvailable(port))) continue;
-      await writePersistedPort(file, port);
+      await this.persistPort(file, port);
       return port;
     }
-    throw new Error("No loopback port is free.");
+    throw new LocalModeFailure(NO_FREE_PORT);
   }
 
+  private async persistPort(file: string, port: number): Promise<void> {
+    try {
+      await writePersistedPort(file, port);
+    } catch (error) {
+      throw settingsWriteFailure(error);
+    }
+  }
+
+  /**
+   * Secrets are generated once. Over an existing database they are never generated again:
+   * a new password or encryption key would lock the person out of their own data.
+   */
   private async loadSecrets(): Promise<Record<SecretKey, string>> {
     const file = path.join(this.deps.userDataDir, "secrets.env");
-    const parsed = parseSecrets(await readPrivateFile(file, 4096));
+    const saved = await readSecrets(file);
+    if (await exists(path.join(this.databaseDir(), "PG_VERSION"))) {
+      const missing = CLUSTER_SECRETS.find((key) => !saved.values[key]);
+      const problem = saved.problem ?? (missing ? `${missing} is missing` : null);
+      if (problem !== null) {
+        throw new LocalModeFailure(
+          `The app could not read its saved database settings (${problem}). Check the permissions of the app data folder, then Retry.`,
+        );
+      }
+    }
+    const parsed = saved.values;
     let changed = false;
     for (const key of Object.keys(SECRET_KEYS) as SecretKey[]) {
       if (!parsed[key]) {
@@ -464,7 +527,11 @@ export class LocalModeController {
       const body = (Object.keys(SECRET_KEYS) as SecretKey[])
         .map((key) => `${key}=${parsed[key]}`)
         .join("\n");
-      await writePrivateFile(file, `${body}\n`);
+      try {
+        await writePrivateFile(file, `${body}\n`);
+      } catch (error) {
+        throw settingsWriteFailure(error);
+      }
     }
     return parsed as Record<SecretKey, string>;
   }
@@ -491,12 +558,41 @@ export class LocalModeController {
   }
 }
 
-function attachedPostgres(pid: number, stop: (pid: number) => Promise<void>): EmbeddedPostgresLike {
-  return {
-    initialise: async () => undefined,
-    start: async () => undefined,
-    stop: () => stop(pid),
-  };
+function settingsWriteFailure(error: unknown): LocalModeFailure {
+  return new LocalModeFailure(
+    `The app could not save its database settings (${errorSummary(error)}). Check free disk space, then Retry.`,
+  );
+}
+
+/** `EACCES: permission denied`, without the path Node appends. */
+function errorSummary(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.split("\n")[0]!.split(", ")[0]!.trim() || "unknown error";
+}
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await stat(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A missing file reads as empty; anything else that stops the read is named. */
+async function readSecrets(
+  file: string,
+): Promise<{ values: Partial<Record<SecretKey, string>>; problem: string | null }> {
+  try {
+    const info = await lstat(file);
+    if (!info.isFile()) return { values: {}, problem: "it is not a regular file" };
+    await access(file, constants.R_OK);
+  } catch (error) {
+    return { values: {}, problem: errorSummary(error) };
+  }
+  const text = await readPrivateFile(file, 4096);
+  if (text === null) return { values: {}, problem: "it could not be read" };
+  return { values: parseSecrets(text), problem: null };
 }
 
 /** The migration and the database's first line, while the server itself is still up. */
@@ -530,9 +626,8 @@ function databaseUrl(password: string, port: number): string {
   return `postgres://${POSTGRES_USER}:${encodeURIComponent(password)}@127.0.0.1:${port}/${DATABASE_NAME}`;
 }
 
-function parseSecrets(raw: string | null): Partial<Record<SecretKey, string>> {
+function parseSecrets(raw: string): Partial<Record<SecretKey, string>> {
   const parsed: Partial<Record<SecretKey, string>> = {};
-  if (!raw) return parsed;
   for (const line of raw.split("\n")) {
     const separator = line.indexOf("=");
     if (separator <= 0) continue;
@@ -562,7 +657,7 @@ function serviceEnvironment(
     DATABASE_URL: settings.databaseUrl,
     DATA_DIR: settings.dataDir,
     SANDBOX_PROVIDER: "desktop",
-    ARDURBOT_HOST_ROOTS_FILE: path.join(settings.userDataDir, "host-service", HOST_ROOTS_FILE),
+    ARDURBOT_HOST_ROOTS_FILE: localFoldersFile(settings.userDataDir),
     BETTER_AUTH_SECRET: settings.secrets.BETTER_AUTH_SECRET,
     ENCRYPTION_KEY: settings.secrets.ENCRYPTION_KEY,
     SCREEN_PROXY_SECRET: settings.secrets.SCREEN_PROXY_SECRET,

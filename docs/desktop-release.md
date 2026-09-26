@@ -55,9 +55,15 @@ can overwrite the other's ZIP entry. Each feed's version and referenced assets a
 installers, blockmaps, channel feeds, and the generated cask are attached to a GitHub **pre-release**.
 It is never marked latest. The application feed remains `ArdurAI/ardur-bot`.
 
-The desktop entry is `dist/desktop-loader.mjs`. It strips TypeScript that packaging places under
-`node_modules` (the SQL migrator) and then loads `dist/main.js`. Node otherwise refuses those
-files with `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, and the packaged app never reaches ready.
+The desktop build bundles the SQL migrator into `dist/db-migrate.js` with only `pg` left
+external, so `app.asar` carries neither the database package nor Prisma; the API and worker
+bundles under `services` carry their own Prisma runtime.
+
+Every electron-builder run (the release job, `pack`, and `pack:dir`) stages the Postgres binaries
+for the platform and architecture it packs through the `beforePack` hook in
+`apps/desktop/scripts/stage-embedded-postgres.mjs`. It clears any earlier `build/postgres-modules`
+first, keeps the package's library links relative, and fails the build when that platform's
+package is not installed. `pack` builds for the computer it runs on.
 
 The root version is the sole editable input. `scripts/desktop-version.mjs` copies it into the
 desktop package before every desktop build; that package field is derived packaging metadata.
@@ -122,8 +128,7 @@ builds come later and require an explicit change to this policy.
    On this computer, approvals, folder allowlists and secret redaction are enforced. Disk and CPU
    caps are advisory; a command stops after five minutes. Connecting to an existing server is
    unchanged. On Windows, stopping that database uses the embedded Postgres library's forced
-   process-tree kill, and the next start uses Postgres crash recovery. The release job copies only
-   that architecture's Postgres binaries into the app before packaging.
+   process-tree kill, and the next start uses Postgres crash recovery.
 5. Verify a real installed build before deciding whether `main` should move. Do not retag a
    published version; create a new version for fixes.
 

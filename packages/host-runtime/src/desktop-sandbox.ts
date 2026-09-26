@@ -32,6 +32,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { HOST_FILE_BYTES, hostEnvironmentNote } from "@ardurbot/contracts/host-bridge";
+import { parseRegisteredFolders } from "@ardurbot/contracts/host-folders";
 import {
   boundedSandboxCommandTimeoutMs,
   createBoundedCommandOutput,
@@ -461,20 +462,11 @@ export function localDesktopSandbox(root?: string, env: NodeJS.ProcessEnv = proc
   });
 }
 
+/** The folders the desktop app granted. Read on every call, so a change applies to the next command. */
 export async function readRegisteredFolders(file: string | undefined): Promise<string[]> {
   if (!file) return [];
-  try {
-    const parsed = JSON.parse(await readFile(file, "utf8")) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (entry): entry is string =>
-          typeof entry === "string" && path.isAbsolute(entry) && !entry.includes("\0"),
-      )
-      .slice(0, 32);
-  } catch {
-    return [];
-  }
+  const text = await readFile(file, "utf8").catch(() => null);
+  return parseRegisteredFolders(text, path.isAbsolute);
 }
 
 async function boundedDirectoryEntries(target: string) {

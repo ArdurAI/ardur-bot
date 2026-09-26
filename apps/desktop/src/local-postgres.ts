@@ -1,9 +1,11 @@
+import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import { createRequire, registerHooks } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { Client } from "pg";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface EmbeddedPostgresOptions {
@@ -29,9 +31,16 @@ export const DATABASE_NAME = "ardurbot";
 /** 5432 is the library default. 5433 is a common host Postgres and must not be reused. */
 export const FORBIDDEN_PORTS = new Set([5432, 5433]);
 
-export type EmbeddedPostgresConstructor = new (
-  options: EmbeddedPostgresOptions,
-) => EmbeddedPostgresLike;
+type EmbeddedPostgresConstructor = new (options: EmbeddedPostgresOptions) => EmbeddedPostgresLike;
+
+export interface EmbeddedPostgresBinaries {
+  EmbeddedPostgres: EmbeddedPostgresConstructor;
+  /** Postgres's own control program, used only for a server that proved it serves our folder. */
+  pgCtl: string;
+}
+
+/** How long a stop may take before the app kills the server process it spawned. */
+const POSTGRES_STOP_WAIT_MS = 10_000;
 
 /**
  * Packaged builds keep the platform binaries in extraResources, outside asar.
@@ -70,7 +79,7 @@ function registerPostgresModuleHook(): void {
 export async function loadEmbeddedPostgres(input: {
   packaged: boolean;
   resourcesPath: string;
-}): Promise<EmbeddedPostgresConstructor> {
+}): Promise<EmbeddedPostgresBinaries> {
   if (input.packaged) {
     const modules = path.join(input.resourcesPath, "postgres-modules");
     const current = process.env.NODE_PATH?.split(path.delimiter).filter(Boolean) ?? [];
@@ -88,35 +97,40 @@ export async function loadEmbeddedPostgres(input: {
   // when the server starts, so resolve both here, from where the wrapper would.
   const binaries = embeddedPostgresPackage(process.platform, process.arch);
   let wrapper: string;
+  let platformPackage: string;
   let imported: { default?: EmbeddedPostgresConstructor };
+  let programs: { pg_ctl?: unknown };
   try {
     wrapper = createRequire(import.meta.url).resolve("embedded-postgres");
   } catch {
     throw new MissingDatabaseBinariesError("embedded-postgres");
   }
   try {
-    createRequire(wrapper).resolve(binaries);
+    platformPackage = createRequire(wrapper).resolve(binaries);
   } catch {
     throw new MissingDatabaseBinariesError(binaries);
   }
   try {
     imported = (await import("embedded-postgres")) as typeof imported;
+    programs = (await import(pathToFileURL(platformPackage).href)) as typeof programs;
   } catch {
     throw new MissingDatabaseBinariesError(binaries);
   }
-  if (!imported.default) throw new MissingDatabaseBinariesError(binaries);
-  return imported.default;
+  if (!imported.default || typeof programs.pg_ctl !== "string") {
+    throw new MissingDatabaseBinariesError(binaries);
+  }
+  return { EmbeddedPostgres: imported.default, pgCtl: programs.pg_ctl };
 }
 
 export class MissingDatabaseBinariesError extends Error {
   constructor(packageName: string) {
-    super(`The database binaries ${packageName} are missing.`);
+    super(`The database binaries ${packageName} are missing. Reinstall Ardur Bot.`);
     this.name = "MissingDatabaseBinariesError";
   }
 }
 
 /** The optional package `embedded-postgres` imports for this computer. */
-export function embeddedPostgresPackage(platform: NodeJS.Platform, arch: string): string {
+function embeddedPostgresPackage(platform: NodeJS.Platform, arch: string): string {
   return `@embedded-postgres/${platform === "win32" ? "windows" : platform}-${arch}`;
 }
 
@@ -153,51 +167,108 @@ export async function legacyStackEnvExists(userDataDir: string): Promise<boolean
   }
 }
 
-export function pidIsAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
+/**
+ * Stops a server this app started. After a failed start the library still holds the
+ * exited child and would wait for an `exit` event that already fired, so a child that is
+ * gone is released at once. One that is still running gets the library's own stop, and is
+ * killed if it has not exited within the wait. Only that child process is ever signalled.
+ */
+export async function stopOwnedPostgres(postgres: EmbeddedPostgresLike): Promise<void> {
+  // embedded-postgres keeps the spawned server on `process` (pinned version, see package.json).
+  const owned = postgres as EmbeddedPostgresLike & { process?: ChildProcess };
+  const child = owned.process;
+  if (child && exited(child)) {
+    owned.process = undefined;
+    return;
   }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stopped = await Promise.race([
+    postgres.stop().then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), POSTGRES_STOP_WAIT_MS);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (!stopped && child && !exited(child)) child.kill("SIGKILL");
 }
 
-/**
- * A live `postmaster.pid` means a previous process still owns this data directory.
- * A stale pid is left for the library's `start()`, which Postgres itself clears.
- */
-export async function livePostmaster(
-  databaseDir: string,
-  alive: (pid: number) => boolean = pidIsAlive,
-): Promise<{ pid: number; port: number } | null> {
+function exited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
+/** The port a previous server recorded in this folder's `postmaster.pid`, if any. */
+export async function recordedPostmasterPort(databaseDir: string): Promise<number | null> {
   let text: string;
   try {
     text = await readFile(path.join(databaseDir, "postmaster.pid"), "utf8");
   } catch {
     return null;
   }
-  const [pidLine, recordedDir, , portLine] = text.split("\n");
-  const pid = Number(pidLine);
-  const port = Number(portLine);
-  if (!Number.isInteger(pid) || pid <= 0 || !recordedDir) return null;
-  if (path.resolve(recordedDir) !== path.resolve(databaseDir)) return null;
-  if (!alive(pid)) return null;
-  return { pid, port: Number.isInteger(port) && port > 0 ? port : 0 };
+  const port = Number(text.split("\n")[3]);
+  return Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : null;
 }
 
-export async function stopPostmaster(pid: number): Promise<void> {
+/**
+ * Whether the server answering on this port is the one serving this data folder. A pid
+ * in `postmaster.pid` proves nothing: after a restart it can name any process.
+ */
+export async function postgresServesFolder(input: {
+  port: number;
+  password: string;
+  databaseDir: string;
+}): Promise<boolean> {
+  const client = new Client({
+    host: "127.0.0.1",
+    port: input.port,
+    user: POSTGRES_USER,
+    password: input.password,
+    database: "postgres",
+    connectionTimeoutMillis: 3_000,
+  });
+  client.on("error", () => undefined);
   try {
-    if (process.platform === "win32") {
-      spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
+    await client.connect();
+    const result = await client.query<{ data_directory?: unknown }>("SHOW data_directory");
+    const served = result.rows[0]?.data_directory;
+    if (typeof served !== "string") return false;
+    return (await realpath(served)) === (await realpath(input.databaseDir));
+  } catch {
+    return false;
+  } finally {
+    await client.end().catch(() => undefined);
+  }
+}
+
+/**
+ * Stops a server that proved it serves this folder but that this run did not start, with
+ * Postgres's own `pg_ctl`. Only the `pg_ctl` child is ever killed, if it hangs.
+ */
+export function stopWithPgCtl(pgCtl: string, databaseDir: string): Promise<void> {
+  return new Promise((resolve) => {
+    let child: ChildProcess;
+    try {
+      child = spawn(pgCtl, ["stop", "-D", databaseDir, "-m", "fast", "-w", "-t", "10"], {
         shell: false,
         windowsHide: true,
         stdio: "ignore",
       });
+    } catch {
+      resolve();
       return;
     }
-    process.kill(pid, "SIGINT");
-  } catch {
-    return;
-  }
+    // pg_ctl itself gives up after ten seconds (-t 10).
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve();
+    }, POSTGRES_STOP_WAIT_MS + 5_000);
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    child.once("exit", done);
+    child.once("error", done);
+  });
 }

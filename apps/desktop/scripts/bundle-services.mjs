@@ -254,9 +254,41 @@ export async function bundleServices() {
   return { servicesDir, externals: [...externals].sort() };
 }
 
+/**
+ * The main process applies migrations with the database package's SQL migrator. It is
+ * bundled into dist with only `pg` external, so app.asar carries neither that package
+ * nor Prisma. `src/db-migrate.d.ts` gives main.ts the migrator's own types.
+ */
+export async function bundleMigrator(outfile = path.join(desktopDir, "dist", "db-migrate.js")) {
+  const { build } = esbuildRequire("esbuild");
+  const result = await build({
+    absWorkingDir: repoRoot,
+    entryPoints: ["packages/db/src/migrate-sql.ts"],
+    outfile,
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "node22",
+    external: ["pg"],
+    metafile: true,
+    logLevel: "warning",
+  });
+  const externals = new Set();
+  for (const output of Object.values(result.metafile.outputs)) {
+    for (const imported of output.imports) {
+      if (imported.external && !builtinModules.includes(imported.path.replace(/^node:/, ""))) {
+        externals.add(imported.path);
+      }
+    }
+  }
+  return { outfile, externals: [...externals].sort() };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const staged = await bundleServices();
   process.stdout.write(
     `Service bundles staged with ${staged.externals.join(", ")} at ${staged.servicesDir}\n`,
   );
+  const migrator = await bundleMigrator();
+  process.stdout.write(`Migrator bundled with ${migrator.externals.join(", ")}\n`);
 }

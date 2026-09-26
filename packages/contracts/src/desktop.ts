@@ -57,6 +57,8 @@ export interface ArdurBotDesktop {
   host?: {
     state(): Promise<{
       configured: boolean;
+      /** Local mode: `roots` are the folders this app granted to its own bots. */
+      local?: boolean;
       roots: string[];
       registrationId?: string;
       keepRunning?: boolean;

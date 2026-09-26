@@ -4,11 +4,11 @@
   "version": "0.1.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
-  "main": "dist/desktop-loader.mjs",
+  "main": "dist/main.js",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "pnpm --filter @ardurbot/db build:migrate && pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs && node scripts/bundle-services.mjs",
-    "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --mac --win --linux",
+    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs && node scripts/bundle-services.mjs",
+    "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder",
     "pack:dir": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. apps/desktop/src",
@@ -17,13 +17,15 @@
   },
   "dependencies": {
     "@ardurbot/contracts": "workspace:*",
-    "@ardurbot/db": "workspace:*",
     "electron-updater": "6.8.9",
-    "embedded-postgres": "16.14.0-beta.17"
+    "embedded-postgres": "16.14.0-beta.17",
+    "pg": "8.23.0"
   },
   "devDependencies": {
+    "@ardurbot/db": "workspace:*",
     "@ardurbot/ui-tokens": "workspace:*",
     "@playwright/test": "1.63.0",
+    "@types/pg": "8.23.1",
     "electron": "44.3.0",
     "electron-builder": "26.15.3",
     "typescript": "7.0.2",
@@ -40,6 +42,7 @@
       "package.json",
       "!node_modules/@embedded-postgres/**"
     ],
+    "beforePack": "./scripts/stage-embedded-postgres.mjs",
     "extraResources": [
       {
         "from": "../web/dist",
@@ -86,7 +89,7 @@
       }
     ],
     "extraMetadata": {
-      "main": "dist/desktop-loader.mjs"
+      "main": "dist/main.js"
     },
     "mac": {
       "icon": "assets/icon-macos.png",

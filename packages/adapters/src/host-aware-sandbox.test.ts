@@ -191,7 +191,7 @@ describe("host-aware sandbox", () => {
   });
 });
 
-it("restricts the local desktop sandbox to registered folders and picks up a folder when it is added", async () => {
+it("restricts the local desktop sandbox to registered folders and follows each add and remove", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "ardurbot-registered-"));
   const outside = path.join(root, "outside");
   const added = path.join(root, "projects");
@@ -213,6 +213,11 @@ it("restricts the local desktop sandbox to registered folders and picks up a fol
     await expect(
       collect(sandbox.execute(computer, { argv: ["mkdir", "-p", "nested"], cwd: added }, ctx)),
     ).resolves.toEqual([{ type: "exit", code: 0 }]);
+    // Removing the folder applies to the next command.
+    await writeFile(rootsFile, "[]\n");
+    await expect(
+      collect(sandbox.execute(computer, { argv: ["mkdir", "-p", "again"], cwd: added }, ctx)),
+    ).rejects.toThrow("Path escapes registered folders.");
     await sandbox.destroy(computer, ctx);
   } finally {
     vi.unstubAllEnvs();

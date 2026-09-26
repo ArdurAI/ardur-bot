@@ -13,11 +13,10 @@
     "./migrate": {
       "types": "./src/migrate-sql.ts",
       "development": "./src/migrate-sql.ts",
-      "default": "./dist/migrate-sql.js"
+      "default": "./src/migrate-sql.ts"
     }
   },
   "scripts": {
-    "build:migrate": "tsc -p tsconfig.migrate.json",
     "generate": "prisma generate",
     "migrate": "prisma migrate deploy",
     "migrate:dev": "prisma migrate dev",

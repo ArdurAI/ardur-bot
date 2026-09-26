@@ -69,7 +69,14 @@ function freshInstall() {
 it("shows the first owner no host folders until one is added, and never the home directory", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "local-roots-"));
   directories.push(root);
-  const rootsFile = path.join(root, "host-service", "host-roots.json");
+  // The desktop points local mode at its own list. A pairing made with another server
+  // left its folders beside it; they are never read.
+  const rootsFile = path.join(root, "local-folders.json");
+  await mkdir(path.join(root, "host-service"), { recursive: true });
+  await writeFile(
+    path.join(root, "host-service", "host-roots.json"),
+    `${JSON.stringify([path.join(root, "outside")])}\n`,
+  );
   const folder = path.join(root, "projects");
   await mkdir(folder, { recursive: true });
   await mkdir(path.join(root, "outside"), { recursive: true });
@@ -96,7 +103,6 @@ it("shows the first owner no host folders until one is added, and never the home
   expect((await sourceHostStatus(prisma, actor.userId, "desktop"))?.roots).toEqual([]);
   expect(await files.roots(actor)).toEqual([]);
 
-  await mkdir(path.dirname(rootsFile), { recursive: true });
   await writeFile(rootsFile, `${JSON.stringify([folder])}\n`);
   const status = await sourceHostStatus(prisma, actor.userId, "desktop");
   expect(status?.roots).toEqual([folder]);
@@ -107,4 +113,8 @@ it("shows the first owner no host folders until one is added, and never the home
   const rootId = listed[0]!.id;
   expect((await files.read(actor, { rootId, path: "notes.md" })).content).toBe("kept");
   await expect(files.read(actor, { rootId, path: "../outside/private.md" })).rejects.toThrow();
+
+  await writeFile(rootsFile, "[]\n");
+  expect((await sourceHostStatus(prisma, actor.userId, "desktop"))?.roots).toEqual([]);
+  expect(await files.roots(actor)).toEqual([]);
 });
