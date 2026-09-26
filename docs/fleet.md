@@ -27,7 +27,7 @@ Probes are cached for 30 seconds, have time and output limits, and run four at a
 
 | Target | Connection | Work | Capacity | Limits |
 | --- | --- | --- | --- | --- |
-| This Mac | Existing authenticated host bridge | Host tools and supported pinned native runtimes | Host OS CPU, load, free memory, filesystem | Registered folders remain host-only; portable checkpoints contain the computer home |
+| This Mac | The installed app's own services; otherwise the authenticated host bridge | Host tools and supported pinned native runtimes | Host OS CPU, load, free memory, filesystem | Registered folders remain host-only; portable checkpoints contain the computer home |
 | Existing local Docker/Podman computers | Existing supervisor, selected Unix socket | Existing graphical computer | Engine info and supervisor host statistics | Existing supervisor topology and screen rules apply |
 | Added Docker, OrbStack, Colima, Podman targets | Owner host CLI with socket or saved Docker context | Headless container, terminal, isolated named volume | Engine info plus host statistics; Podman reports host free memory | No graphical screen on these added targets; local VM headroom is bounded by host memory |
 | Remote Docker/Podman | System SSH to the remote engine CLI, or TLS engine endpoint | Headless container and engine-owned volume | Engine info plus SSH host statistics; TLS-only Docker free memory is not reported | Selected image must already exist on the engine; no automatic pull or build |
@@ -44,7 +44,8 @@ connectionless E2B, Daytona, or Box computer on another deployment gets its own 
 provider's key is set. E2B, Daytona, and Box report no capacity, so a registered one is listed as
 available with unknown capacity, as a Kubernetes connection is. A computer whose engine is not
 configured is not listed on any row, and a host computer is listed only where the host runs
-computers.
+computers. The host is where new computers start in the installed desktop app;
+[where bots run](self-host.md#where-bots-run) covers each way of installing.
 
 Docker context discovery accepts the CLI's JSON-lines output. OrbStack and Colima sockets are
 found at their standard locations. Podman machine discovery uses its reported socket. Tailscale
@@ -145,7 +146,9 @@ infrastructure charges; the feature does not provision machines or purchase serv
 
 1. Build and start the updated API, worker, web and host service. Apply the generated Fleet
    migration to the development database using the project's migration workflow. Check that
-   **Settings → Computers** shows **This Mac** and its capacity. Keep the host service connected.
+   **Settings → Computers** shows **This Mac** and its capacity. The installed app's local mode
+   has no host service to connect; with a Compose stack or a server, keep the host service
+   connected.
 2. On a Linux test machine, provide a dedicated account with Bash, Python 3 and SFTP. Establish
    and verify its host key from the owner's terminal, and confirm noninteractive SSH succeeds.
    In **Add computer → SSH machine**, enter a label, host and login. Keep **SSH agent**, or choose

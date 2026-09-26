@@ -104,6 +104,7 @@ async function main() {
         "packages/db/src/space-membership.postgres.test.ts",
         "packages/db/src/messaging.postgres.test.ts",
         "packages/db/src/learning.postgres.test.ts",
+        "packages/db/src/command-blocks.postgres.test.ts",
         "packages/adapters/src/board/filing.postgres.test.ts",
         "packages/adapters/src/board/delivery.postgres.test.ts",
         "packages/memory/src/commit.postgres.test.ts",

@@ -7,10 +7,10 @@ import {
   matrixPlan,
 } from "../scoreboard/experiments/catalog.js";
 import {
-  matrixEvidence,
   matrixSourceBinding,
   requireCachedMatrixImages,
   writeMatrixArtifact,
+  writeMatrixEvidence,
 } from "../scoreboard/experiments/evidence.js";
 import { createScoreboardManifest } from "../scoreboard/manifest.js";
 import { redactMatrixDiagnostic } from "../scoreboard/redact.js";
@@ -152,7 +152,7 @@ async function main() {
     }
   }
   const finalBinding = await matrixSourceBinding();
-  reports.push(await writeMatrixArtifact(output, "scoreboard-fragments", matrixEvidence(results)));
+  reports.push(...(await writeMatrixEvidence(output, results)));
   const changed =
     binding.diffDigest !== finalBinding.diffDigest ||
     binding.baseCommit !== finalBinding.baseCommit;

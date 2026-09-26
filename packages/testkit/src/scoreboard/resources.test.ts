@@ -23,6 +23,7 @@ import {
 } from "./packaged/evidence.js";
 import { createPackagedPlan, packagedCoverage } from "./packaged/plan.js";
 import { runPackagedPlan, writeImmutableReport } from "./packaged/runner.js";
+import { replayCancellation } from "./replay/services.js";
 import { collectPackagedArtifacts, inventoryArtifact } from "./resources/artifacts.js";
 import { summarizeResourceAttempts } from "./resources/collector.js";
 import type { ProcessReading, ResourceInventory } from "./resources/contracts.js";
@@ -311,7 +312,7 @@ describe("stabilized profiles", () => {
     expect(result.complete).toBe(false);
     expect(result.attempts).toBe(RESOURCE_PROFILES["mixed-soak"].durationMs / 1000 + 1);
   });
-  it("keeps a fully sampled soak when abort rejects with an ordinary error", async () => {
+  it("counts an unrelated workload failure raised during collector shutdown", async () => {
     let now = 0;
     const result = await collectResourceProfile({
       profile: "mixed-soak",
@@ -325,7 +326,7 @@ describe("stabilized profiles", () => {
       sample: async () => ({ atMs: now, processes: [] }),
       mixedWork: (signal) =>
         new Promise<void>((_resolve, reject) => {
-          const cancel = () => reject(new Error("Synthetic call cancelled"));
+          const cancel = () => reject(new Error("workload state corrupted during shutdown"));
           if (signal.aborted) {
             cancel();
             return;
@@ -337,6 +338,32 @@ describe("stabilized profiles", () => {
     expect(result.attempts).toBe(RESOURCE_PROFILES["mixed-soak"].durationMs / 1000 + 1);
     expect(result.failures).toBe(0);
     expect(result.missed).toBe(0);
+    expect(result.workloadFailures).toBe(1);
+    expect(result.complete).toBe(false);
+  });
+  it("keeps the replay service's signal-bound cancellation shape", async () => {
+    let now = 0;
+    const result = await collectResourceProfile({
+      profile: "mixed-soak",
+      signal: new AbortController().signal,
+      clock: {
+        now: () => now,
+        sleep: async (ms) => {
+          now += ms;
+        },
+      },
+      sample: async () => ({ atMs: now, processes: [] }),
+      mixedWork: (signal) =>
+        new Promise<void>((_resolve, reject) => {
+          const cancel = () => reject(replayCancellation(signal));
+          if (signal.aborted) {
+            cancel();
+            return;
+          }
+          signal.addEventListener("abort", cancel, { once: true });
+        }),
+      onAttempt: async () => {},
+    });
     expect(result.workloadFailures).toBe(0);
     expect(result.complete).toBe(true);
   });

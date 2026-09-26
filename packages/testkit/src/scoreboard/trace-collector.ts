@@ -1,5 +1,6 @@
 import type { TraceBatch, TraceBoundary, TraceOutcome, TracePoint } from "@ardurbot/contracts";
-import { TRACE_BOUNDARIES } from "@ardurbot/contracts";
+import { DEFAULT_CLOCK_UNCERTAINTY_MS, TRACE_BOUNDARIES } from "@ardurbot/contracts";
+import { nextFence } from "@ardurbot/core";
 import type { MetricEvidence, PerformanceEvidenceReport } from "../performance-report.js";
 import { canonicalSerialize, contentDigest } from "./manifest.js";
 
@@ -21,6 +22,10 @@ export const LOCAL_TRACE_BOUNDARIES: readonly TraceBoundary[] = [
   "provider.finished",
   "terminal.committed",
 ];
+/** A scripted runtime never emits provider spans or a published-text boundary. */
+export const SCRIPTED_TRACE_BOUNDARIES: readonly TraceBoundary[] = LOCAL_TRACE_BOUNDARIES.filter(
+  (boundary) => !boundary.startsWith("provider.") && boundary !== "text.published",
+);
 export const CLIENT_TRACE_BOUNDARIES: readonly TraceBoundary[] = [
   "client.submitted",
   "client.acknowledged",
@@ -151,11 +156,32 @@ function validateBatches(batches: readonly TraceBatch[]) {
   const ids = new Set<string>();
   for (const batch of batches) {
     if (
-      Object.keys(batch).some((k) => !["version", "processId", "points", "counters"].includes(k)) ||
+      Object.keys(batch).some(
+        (k) =>
+          ![
+            "version",
+            "processId",
+            "timeOrigin",
+            "clockUncertaintyMs",
+            "points",
+            "counters",
+          ].includes(k),
+      ) ||
       Object.keys(batch.counters).sort().join(",") !== "dropped,invalid,recorded,sampledOut"
     )
       throw new Error("Invalid or unsanitized trace batch");
-    if (batch.version !== 1 || batch.points.length > 1_000_000)
+    if (
+      batch.version !== 1 ||
+      batch.points.length > 1_000_000 ||
+      (batch.timeOrigin !== undefined &&
+        (typeof batch.timeOrigin !== "number" ||
+          !Number.isFinite(batch.timeOrigin) ||
+          batch.timeOrigin < 0)) ||
+      (batch.clockUncertaintyMs !== undefined &&
+        (typeof batch.clockUncertaintyMs !== "number" ||
+          !Number.isFinite(batch.clockUncertaintyMs) ||
+          batch.clockUncertaintyMs < 0))
+    )
       throw new Error("Invalid trace batch");
     for (const n of Object.values(batch.counters))
       if (!Number.isSafeInteger(n) || n < 0) throw new Error("Invalid trace counter");
@@ -169,7 +195,7 @@ function validateBatches(batches: readonly TraceBatch[]) {
         !Number.isSafeInteger(p.sequence) ||
         p.sequence < 0 ||
         ![p.traceId, p.processId, p.operationId ?? "none", p.requestId ?? "none"].every((id) =>
-          /^[a-zA-Z0-9_:-]{1,128}$/.test(id),
+          /^[a-zA-Z0-9_.:-]{1,128}$/.test(id),
         ) ||
         (p.attempt !== undefined && (!Number.isSafeInteger(p.attempt) || p.attempt < 0)) ||
         (p.scheduledMs !== undefined && (!Number.isFinite(p.scheduledMs) || p.scheduledMs < 0)) ||
@@ -228,10 +254,110 @@ function serviceUnion(
   return exact(union + upper - lower);
 }
 
+function operationFinish(
+  points: readonly TracePoint[],
+  start: TracePoint,
+  pairAcrossProcesses: boolean,
+) {
+  const boundary = start.boundary.replace("started", "finished");
+  const sameOperation = (point: TracePoint) =>
+    point.boundary === boundary && point.operationId === start.operationId;
+  const local = points.find(
+    (point) =>
+      sameOperation(point) &&
+      point.attempt === start.attempt &&
+      point.processId === start.processId &&
+      point.sequence > start.sequence,
+  );
+  if (local || !pairAcrossProcesses || start.attempt === undefined) return local;
+  // Recovery leases the next fence and records that fence as the finish attempt. The call may
+  // resume on its own id, or on a new id that names this one as the call it repeats.
+  const recoveredAttempt = nextFence(start.attempt);
+  return points.find(
+    (point) =>
+      point.boundary === boundary &&
+      (point.operationId === start.operationId ||
+        (start.boundary === "tool.started" && point.requestId === start.operationId)) &&
+      point.attempt === recoveredAttempt &&
+      point.processId !== start.processId,
+  );
+}
+
+/**
+ * A crash may finish on the recovering process. The span is a wall-clock interval
+ * (`timeOrigin + at`) widened by both sides' clock uncertainty. Same-process spans stay exact.
+ */
+function operationSpan(
+  start: TracePoint,
+  end: TracePoint | undefined,
+  calibrations: readonly TraceCalibration[],
+  pairAcrossProcesses: boolean,
+  origins: ReadonlyMap<string, number | undefined>,
+  uncertainty: ReadonlyMap<string, number | undefined>,
+): TraceDuration {
+  if (!end)
+    return pairAcrossProcesses
+      ? { value: null, lowerMs: null, upperMs: null, reason: "interrupted" }
+      : missing("boundary-not-observed");
+  if (!pairAcrossProcesses || start.processId === end.processId)
+    return traceDuration(start, end, calibrations);
+  if (start.traceId !== end.traceId) return missing("different-traces");
+  if (![start.at, end.at].every((at) => Number.isFinite(at) && at >= 0))
+    return missing("invalid-clock");
+  const startOrigin = origins.get(start.processId);
+  const endOrigin = origins.get(end.processId);
+  if (startOrigin === undefined || endOrigin === undefined) return missing("clock-not-calibrated");
+  const value = endOrigin + end.at - (startOrigin + start.at);
+  if (value < 0) return missing("clock-skew");
+  // Each side contributes its recorded uncertainty, or the default when it recorded none.
+  // Less recorded data never narrows the interval.
+  const widen =
+    (uncertainty.get(start.processId) ?? DEFAULT_CLOCK_UNCERTAINTY_MS) +
+    (uncertainty.get(end.processId) ?? DEFAULT_CLOCK_UNCERTAINTY_MS);
+  // A lower bound below zero does not show that the finish happened after the start.
+  if (value - widen < 0) return missing("clock-uncertain");
+  return { value, lowerMs: value - widen, upperMs: value + widen, reason: "wall-clock" };
+}
+
+/** Reasons that leave a crash span unmeasured. An interrupted start is one of them. */
+export function crashSpanUnmeasured(reason: string | null) {
+  return (
+    reason === "interrupted" ||
+    reason === "clock-not-calibrated" ||
+    reason === "clock-skew" ||
+    reason === "clock-uncertain"
+  );
+}
+
+/**
+ * The points that end one trace: its `terminal.committed` points or, for a run that ends waiting
+ * for approval, the pause (`wait.approval`) on its last attempt when no later lease resumed it.
+ * A complete trace has exactly one.
+ */
+export function traceTerminals(points: readonly TracePoint[]): TracePoint[] {
+  const committed = points.filter((p) => p.boundary === "terminal.committed");
+  if (committed.length) return committed;
+  const pauses = points.filter((p) => p.boundary === "wait.approval" && p.attempt !== undefined);
+  if (!pauses.length) return [];
+  const last = Math.max(...pauses.map((p) => p.attempt!));
+  const resumed = points.some(
+    (p) => p.boundary === "lease.acquired" && p.attempt !== undefined && p.attempt > last,
+  );
+  return resumed ? [] : pauses.filter((p) => p.attempt === last);
+}
+
 export function deriveTrace(
   points: readonly TracePoint[],
   calibrations: readonly TraceCalibration[] = [],
+  options: {
+    pairAcrossProcesses?: boolean;
+    timeOrigins?: ReadonlyMap<string, number | undefined>;
+    clockUncertainty?: ReadonlyMap<string, number | undefined>;
+  } = {},
 ) {
+  const pairAcrossProcesses = options.pairAcrossProcesses === true;
+  const timeOrigins = options.timeOrigins ?? new Map<string, number | undefined>();
+  const clockUncertainty = options.clockUncertainty ?? new Map<string, number | undefined>();
   if (!points.length || new Set(points.map((p) => p.traceId)).size !== 1)
     throw new Error("Expected one nonempty trace");
   // A first boundary is only ordered when it belongs to a single process.
@@ -290,14 +416,7 @@ export function deriveTrace(
   const operations = points
     .filter((p) => p.boundary === "provider.started" || p.boundary === "tool.started")
     .map((p) => {
-      const end = points.find(
-        (e) =>
-          e.boundary === p.boundary.replace("started", "finished") &&
-          e.processId === p.processId &&
-          e.operationId === p.operationId &&
-          e.attempt === p.attempt &&
-          e.sequence > p.sequence,
-      );
+      const end = operationFinish(points, p, pairAcrossProcesses);
       const text = points.find(
         (e) =>
           e.boundary === "provider.text" &&
@@ -305,12 +424,24 @@ export function deriveTrace(
           e.attempt === p.attempt &&
           e.processId === p.processId,
       );
+      const outcome: TraceOutcome | "interrupted" = end
+        ? (end.outcome ?? "uncertain")
+        : pairAcrossProcesses
+          ? "interrupted"
+          : "uncertain";
       return {
         kind: p.boundary,
         attempt: p.attempt,
         operationId: p.operationId,
-        outcome: end?.outcome ?? "uncertain",
-        duration: traceDuration(p, end),
+        outcome,
+        duration: operationSpan(
+          p,
+          end,
+          calibrations,
+          pairAcrossProcesses,
+          timeOrigins,
+          clockUncertainty,
+        ),
         firstText: traceDuration(p, text),
       };
     });
@@ -370,12 +501,15 @@ export function collectTraceEvidence(
     calibrations?: readonly TraceCalibration[];
     virtual?: boolean;
     expectedTraces?: number;
+    /** Crash evidence only. A recovering process may finish a start recorded before the kill. */
+    pairAcrossProcesses?: boolean;
   },
 ) {
+  const pairAcrossProcesses = options.pairAcrossProcesses === true;
   validateBatches(batches);
   for (const c of options.calibrations ?? []) {
     if (
-      ![c.processId, c.referenceProcessId].every((id) => /^[a-zA-Z0-9_:-]{1,128}$/.test(id)) ||
+      ![c.processId, c.referenceProcessId].every((id) => /^[a-zA-Z0-9_.:-]{1,128}$/.test(id)) ||
       c.processId === c.referenceProcessId ||
       ![c.offsetLowerMs, c.offsetUpperMs, c.validFrom, c.validUntil].every(Number.isFinite) ||
       c.offsetUpperMs < c.offsetLowerMs ||
@@ -407,22 +541,50 @@ export function collectTraceEvidence(
   const artifact = { batches: raw, calibrations };
   const bytes = canonicalSerialize(artifact);
   const sha256 = contentDigest(artifact);
+  const timeOrigins = new Map<string, number | undefined>();
+  const clockUncertainty = new Map<string, number | undefined>();
+  for (const batch of raw) {
+    const origin = typeof batch.timeOrigin === "number" ? batch.timeOrigin : undefined;
+    if (!timeOrigins.has(batch.processId)) timeOrigins.set(batch.processId, origin);
+    else if (timeOrigins.get(batch.processId) !== origin)
+      timeOrigins.set(batch.processId, undefined);
+    const recorded =
+      typeof batch.clockUncertaintyMs === "number" ? batch.clockUncertaintyMs : undefined;
+    if (!clockUncertainty.has(batch.processId)) {
+      clockUncertainty.set(batch.processId, recorded);
+    } else {
+      const prior = clockUncertainty.get(batch.processId);
+      // Disagreeing samples keep the widest bound. A later omission does not erase it.
+      if (typeof prior === "number" && typeof recorded === "number")
+        clockUncertainty.set(batch.processId, Math.max(prior, recorded));
+      else if (prior === undefined) clockUncertainty.set(batch.processId, recorded);
+    }
+  }
   const points = raw.flatMap((b) => b.points);
   const dropped = raw.some((b) => b.counters.dropped > 0 || b.counters.invalid > 0);
   const traces = [...new Set(points.map((p) => p.traceId))].map((id) => {
     const subset = points.filter((p) => p.traceId === id);
-    const derived = deriveTrace(subset, calibrations);
+    const derived = deriveTrace(subset, calibrations, {
+      pairAcrossProcesses,
+      timeOrigins,
+      clockUncertainty,
+    });
+    const terminals = traceTerminals(subset);
+    // A run that ends waiting for approval has its pause as its terminal boundary.
+    const paused = terminals.length === 1 && terminals[0]!.boundary === "wait.approval";
     const missingBoundaries = options.requiredBoundaries.filter(
-      (b) => !subset.some((p) => p.boundary === b),
+      (b) => !subset.some((p) => p.boundary === b) && !(paused && b === "terminal.committed"),
+    );
+    // An allowlist of measured durations (`exact` or `wall-clock`, i.e. a non-null value) fails
+    // closed: every other reason, crash-specific or not, leaves the operation unobserved.
+    const operationsObserved = derived.operations.every(
+      (operation) => operation.duration.value !== null,
     );
     return {
       ...derived,
       missingBoundaries,
       complete:
-        !dropped &&
-        missingBoundaries.length === 0 &&
-        derived.operations.every((o) => o.duration.value !== null) &&
-        subset.filter((p) => p.boundary === "terminal.committed").length === 1,
+        !dropped && missingBoundaries.length === 0 && operationsObserved && terminals.length === 1,
     };
   });
   const expected = options.expectedTraces ?? traces.length;

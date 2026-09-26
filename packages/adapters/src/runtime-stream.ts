@@ -25,3 +25,29 @@ export async function* withRuntimeCleanup(
     }
   }
 }
+
+/**
+ * Reports `true` while its consumer waits on the runtime for the next event, and stays true once
+ * the runtime has no more events. Its consumer asks only after handling every earlier event, so
+ * a wait means everything the runtime emitted so far has been handled.
+ */
+export function reportRuntimeWaits<T>(
+  events: AsyncIterable<T>,
+  waiting: (value: boolean) => void,
+): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      const iterator = events[Symbol.asyncIterator]();
+      return {
+        async next() {
+          waiting(true);
+          const next = await iterator.next();
+          if (!next.done) waiting(false);
+          return next;
+        },
+        ...(iterator.return ? { return: (value?: unknown) => iterator.return!(value) } : {}),
+        ...(iterator.throw ? { throw: (error?: unknown) => iterator.throw!(error) } : {}),
+      };
+    },
+  };
+}

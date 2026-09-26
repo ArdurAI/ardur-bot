@@ -193,6 +193,30 @@ describe("followThreadEvents", () => {
     expect(fanout.unsubscribed).toBe(true);
   });
 
+  it("never sends a tool call's argument digest to a thread reader", async () => {
+    const digest = "a".repeat(64);
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          ...event(0),
+          type: "agent.tool.called",
+          runId: "run-1",
+          payload: { name: "shell", executionId: "call-1", argumentDigest: digest },
+        },
+      ])
+      .mockResolvedValue([]);
+    const prisma = { event: { findMany } } as unknown as PrismaClient;
+    const abort = new AbortController();
+    const stream = followThreadEvents(prisma, "thread-1", -1, undefined, abort.signal, 1);
+
+    const { value } = await stream.next();
+    expect(value?.payload).toEqual({ name: "shell", executionId: "call-1" });
+    expect(JSON.stringify(value)).not.toContain(digest);
+    abort.abort();
+    await stream.return(undefined);
+  });
+
   it("periodically catches up when a signal is missed", async () => {
     const findMany = vi
       .fn()

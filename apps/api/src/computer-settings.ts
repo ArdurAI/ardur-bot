@@ -2,12 +2,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
-import {
-  DockerSandboxProvider,
-  kubernetesContexts,
-  sandboxKindForBot,
-  snapshotKubeconfig,
-} from "@ardurbot/adapters";
+import { DockerSandboxProvider, kubernetesContexts, snapshotKubeconfig } from "@ardurbot/adapters";
 import {
   ComputerConfigurationSchema,
   ComputerConnectionInputSchema,
@@ -15,6 +10,7 @@ import {
   ComputerEngineUnavailableError,
   HOST_MOVE_UNAVAILABLE_MESSAGE,
 } from "@ardurbot/contracts";
+import { sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
 import type { z } from "zod";

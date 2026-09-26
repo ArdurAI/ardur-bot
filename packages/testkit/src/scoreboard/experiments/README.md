@@ -83,7 +83,7 @@ a host command. Stored pins and the model actually passed to the runtime are bot
 | --- | --- | --- |
 | crash-01 admission before enqueue | Automatic recovery | Nonce re-delivery and reconciler recover exactly one accepted run. |
 | crash-02 lease before work | Safe retry | Expired dead-worker lease can be reclaimed without duplicate work. |
-| crash-03 intent before action | Safe retry | Intended effect is executed once; revoked grant requires approval; a changed bot pin cannot replace the run pin. A failed revoke or pin control forces this crash's `safetyPassed` to false. |
+| crash-03 intent before action | Safe retry | Intended effect is executed once; revoked grant requires approval; a changed bot pin cannot replace the run pin. A failed revoke or pin control forces this crash's `safetyPassed` to false; an incomplete one leaves it incomplete. |
 | crash-04 action before receipt | Explicit uncertainty | The action count stays one and the missing receipt is not guessed successful or retried. |
 | crash-05 receipt before terminal | Automatic recovery | Completed effect is replayed from its durable receipt without repeating the action. |
 | crash-06 terminal before UI | Automatic recovery | Terminal state survives nonce re-delivery; UI paint itself is not measured. |
@@ -132,16 +132,51 @@ read-back check. Their binding includes the base commit, deterministic tracked/u
 digest, dependency lock digest, image digests and sizes, environment and complete manifest.
 `matrixEvidence` emits the existing W0-1 `ExperimentEvidence`/`CrashEvidence` fragments for the
 scoreboard workflow. Revoke and pin controls are separate attempts (`crash-03-revoke`,
-`crash-03-pin`). A failed or incomplete control forces that crash's `safetyPassed` to false even
-when the base attempt is incomplete, so the fragment cannot report the boundary safe. An
-incomplete crash may record that failure and must not record a recovery or a passed safety
-result. The evidence schema stays the existing crash keys.
+`crash-03-pin`) and count only when they reached their boundary and passed. An incomplete control
+leaves the crash incomplete with the missing control named. An unsafe effect observed by any
+attempt forces `safetyPassed` to false, even when the base attempt is incomplete. A complete crash
+also cites the traces of every durable run it drove: the interrupted and recovering processes of
+each attempt merge into one trace artifact, written beside the fragments. Each process must
+contribute at least one batch. Those batches are collected again with the required boundaries
+stored for that trace. The fault worker stores the list its runtime can emit. A scripted runtime
+never emits `provider.*` or `text.published`, so those boundaries are not required for a scripted
+crash; a Pi runtime fixture uses the full local list. An empty boundary list is never substituted.
+Crash collection pairs a `provider.started` or `tool.started` on the killed process with a finish
+on the recovering process that has the same operation id and the next lease fence. A tool call the
+runtime minted again under a new id pairs through its link: the executor records
+`agent.tool.resumed { from, to }` before it runs the new call, and that call's trace points carry the
+killed call's id as `requestId`. Runtime ids are never rewritten. A new call without a link does not
+pair, so the killed start stays `interrupted`. A finish on any other fence does not pair and does
+not make the crash complete. Each batch carries that process's
+`timeOrigin` and `clockUncertaintyMs`. The buffer measures the uncertainty once, from a wall-clock
+versus monotonic cross-check, or records the documented default of one second when that check
+cannot be made. A cross-process span is a wall-clock interval (`reason: "wall-clock"`) only when
+the widened lower bound stays at or above zero: the point estimate is the difference of wall times
+(`timeOrigin + at`), and the bounds widen by the sum of both sides: each side contributes its
+batch's recorded `clockUncertaintyMs`, or one second when its batch recorded none. Less recorded
+data therefore never narrows the interval. It is never an exact span. A lower bound below zero is `clock-uncertain`, not `wall-clock`. A batch without
+`timeOrigin` leaves the span `clock-not-calibrated`. Wall time that runs backwards is `clock-skew`.
+None of those cases subtract the process-local clocks, and none is `reversed-boundaries`. A start
+with no finish on the next fence is `interrupted`. An interrupted start, an uncalibrated clock,
+clock skew, or an uncertainty interval that crosses zero makes the crash `incomplete` with
+`crash-span-unmeasured`, and `safetyPassed` and `recovery` stay unset. The merged trace is accepted
+only when both processes contributed a batch and collection is complete: exactly one terminal point,
+every required boundary present on the merged trace, a measured crash span, and no batch that
+dropped or invalidated a point. One process alone, admission points alone, two terminal points, or a dropped terminal stay
+`trace-links-missing`. Ordinary single-process traces still require each start and finish on the
+same process and still report an exact span. An incomplete crash must not record a recovery or a
+passed safety result. The evidence schema stays the existing crash keys.
 Detailed probe results are supplemental raw evidence, not a replacement release schema. All
 experiment variants remain incomplete until their full acceptance closes.
 
 Trace collection reuses W0-4 and preserves unknown/unobserved boundaries. Cross-process timing
-is not combined without clock calibration. Fixture counters do not become provider usage,
-and hashes do not become live cache hits. No priced cost is emitted without dated rate evidence.
+is not combined without a shared clock. Crash spans use each batch's `timeOrigin` as that shared
+wall-clock origin and publish an interval, widened on each side by its recorded clock uncertainty
+or by one second.
+An interval whose lower bound is below zero is unmeasured.
+Fixture counters do not become provider usage, and hashes do not become
+live cache hits. No priced cost is emitted
+without dated rate evidence.
 Background load, uncontrolled OS caches, absent fixed-release evidence, platform coverage,
 subscription quotas and human-review time remain explicit gaps. Follow
 [performance measurement guidance](../../../../../docs/performance.md) for paired timing and

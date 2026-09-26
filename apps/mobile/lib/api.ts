@@ -22,7 +22,7 @@ import {
   aiDataUsesForProcedure,
   cancelResponseBody,
   ensureAiDataConsent,
-  isCommandEvent,
+  isCommandCardEvent,
   isRunTerminalEvent,
   mergeThreadHistory,
   prependThreadHistoryPage,
@@ -1013,6 +1013,7 @@ export async function subscribeThread(
 
 export function isMobileThreadSnapshotEvent(event: ThreadEvent): boolean {
   return (
+    isCommandCardEvent(event.type) ||
     event.type === "run.context" ||
     event.type === "thread.progress" ||
     event.type === "agent.tool.called" ||
@@ -1035,8 +1036,8 @@ export function applyMobileThreadEvent(
 ): MobileSnapshot | null {
   if (!prev) return prev;
   if (event.type === "run.context") return reduceRunContext(prev, event);
-  if (isCommandEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
-  if (isCommandEvent(event.type))
+  if (isCommandCardEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
+  if (isCommandCardEvent(event.type))
     return {
       ...prev,
       cursor: event.seq,

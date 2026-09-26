@@ -1012,7 +1012,13 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           details: { skipped: true },
         };
       }
-      host.queue.push({ type: "tool", name: tool.name, args, executionId });
+      host.queue.push({
+        type: "tool",
+        name: tool.name,
+        args,
+        executionId,
+        ...(host.delegationId ? { delegationId: host.delegationId } : {}),
+      });
       const startedAt = Date.now();
       let result: unknown;
       let failure: unknown;
@@ -1207,6 +1213,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     model: subagentModel,
     apiKey: selectedModel.apiKey,
     depth: 1,
+    delegationId,
   };
   const totals = new ObservedUsageTotals();
   let usageWrites = Promise.resolve();
@@ -1826,6 +1833,8 @@ interface ToolHost {
   abortTurn(): void;
   signal: AbortSignal;
   depth: number;
+  /** Set on a helper's host so its tool events name the delegation. */
+  delegationId?: string;
   pausePending: boolean;
 }
 

@@ -54,7 +54,8 @@ the read-only root. The launcher, cancel script, and idle probe all use that dir
 names cannot start with `ARDURBOT_`. The lane skips the login profile inside that launcher because
 profile startup forks, and fork stays denied. Cancelling a command signals the guest process
 group and waits until the owned container is gone. A stop that exceeds that wait is uncertain.
-List, read, and write refuse a symlink in any path component before resolving it. PATH remains
+List, read, and write refuse a symlink in any path component before resolving it. Listings,
+exports, and snapshots omit links without following them; only the guest reports them. PATH remains
 the container PATH. Product processes keep a separate user id and the relay's shared-group
 creation mask, so the broker can update files and directories the product creates. Helper
 workspace preparation is an admitted artifact directory; fork and git worktrees stay denied. The
@@ -90,6 +91,10 @@ reply for grading, and destroys the owned namespace on cancellation.
 
 The stand-in is labeled `hermes-scripted-container-standin`. It exercises the same adapter and
 relay with a Python double from the cached computer image. It proves no Hermes product capability.
+The cancel and loss probes read the guest workspace before the loss, then read the receipts after
+it from the broker's durable journal. The workspace must hold only the task's unchanged inputs and
+no undeclared symlink. Receipts that cannot be read after the loss fail the probe with "The
+receipts could not be read after the loss."; they are never counted as no receipts.
 The real-image qualification command refuses before startup if the pinned image is missing and
 reports this exact owner-approved acquisition to perform separately:
 
@@ -111,10 +116,18 @@ same revision as the image label and `/opt/hermes/.hermes_build_sha`, and no mis
 (`missingBytes: 0`). Lazy installs stay disabled.
 
 This Hermes build refuses to initialize unless `model.context_length` is at least 64,000. The
-scripted proof therefore declares 64,000 to the product. That declaration is not the approved
-32,768 shared context, and it is above the observed qwen3:8b architecture maximum. The canary
-planner stays blocked on that pin. Rendering outside the captured reply, effective context, and
-real-model tool use remain unqualified. Nothing here enables the guarded live CLI.
+scripted proof therefore declares 64,000 to the product; it serves no model. The canary planner
+requires a declared context between 64,000 and the model's architecture maximum, attested by
+`/api/ps` at planning, again before each trial and model request, and again after each response.
+`/api/ps` lists only loaded models, so load the model with the declared context first by setting
+the server's default context (Ollama's `OLLAMA_CONTEXT_LENGTH`) to that value and issuing one
+request, before running the planner; preloading with a request instead risks the transport
+reloading the model back to the server default before the planner reads it. The observed qwen3:8b
+architecture maximum is below 64,000. The proposed route, llama3.1:8b with 65,536 tokens, is
+pending owner approval. The planner also requires this report's `product-qualified` status, the
+inspected image digest and revision, and every containment and resource check passed. Rendering
+outside the captured reply, effective context, and real-model tool use remain unqualified.
+Nothing here enables the guarded live CLI.
 
 ## Evidence and cleanup
 

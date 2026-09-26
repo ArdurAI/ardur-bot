@@ -12,6 +12,7 @@ import type {
   ScreenRequest,
 } from "@ardurbot/adapter-kit";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
+import { sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "./computer-connections.js";
 import {
@@ -27,11 +28,6 @@ import {
 } from "./remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "./sandbox-factory.js";
 import { createSandboxProvider } from "./sandbox-factory.js";
-
-export function sandboxKindForBot(envKind: string, computerHost: string | null | undefined) {
-  if (envKind === "docker" && computerHost === "this-mac") return "desktop";
-  return envKind;
-}
 
 function once<T>(create: () => T): () => T {
   let value: T | undefined;
@@ -50,7 +46,8 @@ export function createRunSandbox(
   );
   const selected = kind === "desktop" ? host() : createSandboxProvider(kind, opts);
   // Connectionless computers keep the engine of their kind; a hosted one needs its key here.
-  // The host is never one of these: only a desktop deployment, or Docker with This Mac on, has it.
+  // The host is never one of these. It runs computers on a desktop deployment, and on Docker once
+  // the owner chose it, which Set up does on the desktop app's own stack.
   const local: Partial<Record<string, () => SandboxProvider>> = {
     docker: once(() => createSandboxProvider("docker", opts)),
   };
@@ -73,7 +70,7 @@ export function createRunSandbox(
     const settings = await opts.prisma!.deploymentSettings.findUnique({
       where: { id: "default" },
     });
-    return settings?.computerHost === "this-mac";
+    return sandboxKindForBot(kind, settings?.computerHost) === "desktop";
   });
 }
 

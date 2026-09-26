@@ -122,6 +122,8 @@ services:
       NODE_ENV: production
       API_HOST: "0.0.0.0"
       ARDURBOT_HOST_BRIDGE: api
+      # Set by the desktop app when it runs this stack: never ask where bots run; Set up picks the host.
+      ARDURBOT_DESKTOP_STACK: ${ARDURBOT_DESKTOP_STACK:-}
       API_INTERNAL_URL: http://127.0.0.1:3100
       ARDURBOT_DESKTOP_STACK_TOKEN: ${ARDURBOT_DESKTOP_STACK_TOKEN:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:5173}

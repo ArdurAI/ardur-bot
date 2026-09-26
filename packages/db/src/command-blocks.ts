@@ -1,51 +1,130 @@
 import type { CommandBlock, ThreadMessage } from "@ardurbot/contracts";
-import { CommandEventPayloadSchema } from "@ardurbot/contracts";
+import { CommandEventPayloadSchema, ToolResumedPayloadSchema } from "@ardurbot/contracts";
 import {
+  commandCardId,
+  commandJoins,
   commandRecordingIsLive,
   isCommandEvent,
+  nextCommandCard,
   projectCommandBlocks,
+  resumeCommandCard,
+  resumedCardIds,
   settleCommandBlock,
 } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "./client.js";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
+type StoredEvent = {
+  id: string;
+  type: string;
+  payload: unknown;
+  threadId: string;
+  botId: string;
+  runId: string | null;
+};
+
 /** Materialized thread row; ordered command events remain the source of truth. */
-export async function materializeCommandEvent(
-  tx: Prisma.TransactionClient,
-  event: {
-    type: string;
-    payload: unknown;
-    threadId: string;
-    botId: string;
-    runId: string | null;
-  },
-) {
+export async function materializeCommandEvent(tx: Prisma.TransactionClient, event: StoredEvent) {
+  if (event.type === "agent.tool.resumed") return materializeResumedCall(tx, event);
   if (!isCommandEvent(event.type)) return;
   const { block } = CommandEventPayloadSchema.parse(event.payload);
-  const id = `command:${block.commandId}`;
-  const blocks = [{ kind: "command", command: block }] as Prisma.InputJsonValue;
-  const existing = await tx.message.findUnique({ where: { id }, select: { id: true } });
-  if (existing) {
-    await tx.message.update({ where: { id }, data: { blocks } });
-  } else {
-    const thread = await tx.thread.update({
-      where: { id: event.threadId },
-      data: { nextMessageSeq: { increment: 1 } },
-      select: { nextMessageSeq: true },
+  const id = commandCardId(
+    block.commandId,
+    commandJoins(await resumeLinks(tx, event, block.commandId), block.commandId),
+  );
+  // A command id a resumed call took over stays stored as evidence only.
+  if (!id) return;
+  const row = await tx.message.findUnique({ where: { id }, select: { id: true, blocks: true } });
+  const [card] = (row?.blocks ?? []) as MessageBlocks;
+  const command = nextCommandCard(id, card?.kind === "command" ? card.command : undefined, block);
+  // A late event from an attempt that lost the lease stays stored as evidence only.
+  if (!command) return;
+  if (row) {
+    await tx.message.update({
+      where: { id },
+      data: { blocks: [{ kind: "command", command }] as Prisma.InputJsonValue },
     });
-    await tx.message.create({
-      data: {
-        id,
-        threadId: event.threadId,
-        botId: event.botId,
-        runId: event.runId,
-        role: "bot",
-        seq: thread.nextMessageSeq - 1,
-        blocks,
-      },
-    });
+    return;
   }
+  const thread = await tx.thread.update({
+    where: { id: event.threadId },
+    data: { nextMessageSeq: { increment: 1 } },
+    select: { nextMessageSeq: true },
+  });
+  await tx.message.create({
+    data: {
+      id,
+      threadId: event.threadId,
+      botId: event.botId,
+      runId: event.runId,
+      role: "bot",
+      seq: thread.nextMessageSeq - 1,
+      blocks: [{ kind: "command", command }] as Prisma.InputJsonValue,
+    },
+  });
+}
+
+type MessageBlocks = ThreadMessage["blocks"];
+
+/** The run's resume links, other than `except`, that name `commandId` on either side. */
+async function resumeLinks(
+  tx: Prisma.TransactionClient,
+  event: Pick<StoredEvent, "threadId" | "runId">,
+  commandId: string,
+  except?: string,
+) {
+  if (!event.runId) return [];
+  const links = await tx.event.findMany({
+    where: {
+      threadId: event.threadId,
+      runId: event.runId,
+      type: "agent.tool.resumed",
+      ...(except ? { id: { not: except } } : {}),
+      OR: [
+        { payload: { path: ["fromCommandId"], equals: commandId } },
+        { payload: { path: ["toCommandId"], equals: commandId } },
+      ],
+    },
+    select: { payload: true },
+  });
+  return links.map((link) => link.payload);
+}
+
+/** The killed call's card row is renamed for the call that resumes it; no other row changes. */
+async function materializeResumedCall(tx: Prisma.TransactionClient, event: StoredEvent) {
+  const link = ToolResumedPayloadSchema.safeParse(event.payload);
+  if (!link.success || !link.data.fromCommandId) return;
+  const prior = await resumeLinks(tx, event, link.data.fromCommandId, event.id);
+  const ids = resumedCardIds(link.data, (commandId) => commandJoins(prior, commandId));
+  if (!ids || (await tx.message.findUnique({ where: { id: ids.to }, select: { id: true } })))
+    return;
+  const row = await tx.message.findUnique({
+    where: { id: ids.from },
+    select: { id: true, blocks: true },
+  });
+  if (!row) return;
+  const blocks = (row.blocks as MessageBlocks).map((block) =>
+    block.kind === "command"
+      ? { kind: "command" as const, command: resumeCommandCard(block.command, ids.fromCommandId) }
+      : block,
+  );
+  await tx.message.update({
+    where: { id: ids.from },
+    data: { id: ids.to, blocks: blocks as Prisma.InputJsonValue },
+  });
+}
+
+/**
+ * Every commandId a run's `command.finished` events name, so re-leasing can skip an already
+ * settled card without loading any finished command's stdout/stderr payload.
+ */
+export async function finishedCommandIds(db: Db, runId: string): Promise<Set<string>> {
+  const rows = await db.$queryRaw<{ commandId: string | null }[]>`
+    SELECT payload->'block'->>'commandId' AS "commandId"
+    FROM events
+    WHERE "runId" = ${runId} AND type = 'command.finished'`;
+  return new Set(rows.flatMap((row) => (row.commandId ? [row.commandId] : [])));
 }
 
 /** A stale lease or a later attempt must never present an interrupted command as live. */
@@ -91,7 +170,9 @@ export async function addHistoricalCommandBlocks(
   const events = await db.event.findMany({
     where: {
       runId: { in: runIds },
-      type: { in: ["agent.tool.called", "agent.tool.completed", "command.intent"] },
+      type: {
+        in: ["agent.tool.called", "agent.tool.completed", "agent.tool.resumed", "command.intent"],
+      },
     },
     orderBy: { seq: "asc" },
   });

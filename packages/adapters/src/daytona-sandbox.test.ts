@@ -425,6 +425,7 @@ function daytonaCommandFixture(state: string) {
     context: { ...context, botId: "bot", runId: "original-run" },
     threadId: "thread",
     attemptId: "attempt",
+    fence: 1,
     secrets: [],
   });
   const invoke = () =>

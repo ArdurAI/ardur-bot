@@ -7,11 +7,14 @@ import {
 } from "@ardurbot/adapters";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it } from "vitest";
+import { gradeOutcome } from "../../scoreboard/graders/outcome.js";
 import { getTask } from "../../scoreboard/tasks/catalog.js";
+import { referenceSolution } from "../../scoreboard/tasks/reference.js";
 import { BudgetLedger } from "../budget.js";
 import { selfTestBudget } from "../self-test.js";
 import { TrialAdmission } from "./admission.js";
 import { ContainerComputer } from "./computer.js";
+import { SYMLINK_REFUSAL } from "./guest.js";
 import type { ContainerSession } from "./session.js";
 
 const route = `http://127.0.0.1:1/c/cap_${"b".repeat(48)}/v1`;
@@ -127,6 +130,124 @@ describe("container executor contract", () => {
       { path: "reports", kind: "dir", size: 0 },
     ]);
     expect(listed.some((entry) => entry.startsWith("list:"))).toBe(true);
+  });
+
+  it("keeps links out of listings, workspace walks, exports and snapshots", async () => {
+    const session = stubSession();
+    const reads: string[] = [];
+    session.file = async (op: string, file: string) => {
+      if (op !== "list") return true;
+      if (file.endsWith("/reports")) return [{ name: "result.json", kind: "file", size: 2 }];
+      return [
+        { name: "reports", kind: "dir", size: 0 },
+        { name: "leak", kind: "link", size: 0 },
+        { name: "notes.txt", kind: "file", size: 4 },
+      ];
+    };
+    session.read = async (file: string) => {
+      reads.push(file);
+      if (file.endsWith("/leak")) throw new Error(SYMLINK_REFUSAL);
+      return Buffer.from("ok");
+    };
+    const guestSnapshot = {
+      "notes.txt": "ok",
+      "reports/result.json": "{}",
+      leak: { kind: "link" },
+    };
+    session.snapshot = async () => guestSnapshot as unknown as Record<string, string>;
+    const budget = selfTestBudget();
+    const ledger = new BudgetLedger(budget);
+    ledger.open("links");
+    const admission = new TrialAdmission("links", ledger, () => undefined, ["shell"]);
+    admission.bindModel(route, budget.model.id);
+    const computer = new ContainerComputer(session, getTask("task-01"), admission);
+    const current = context();
+    const ref = await computer.provision({ botId: "home-1", homePath: "unused" }, current);
+    expect(await computer.listFiles(ref, "", current)).toEqual([
+      { path: "notes.txt", kind: "file", size: 4 },
+      { path: "reports", kind: "dir", size: 0 },
+    ]);
+    const walked: string[] = [];
+    const pending = [""];
+    while (pending.length)
+      for (const entry of await computer.listFiles(ref, pending.pop()!, current)) {
+        if (entry.kind === "dir") pending.push(entry.path);
+        else {
+          await computer.readFile(ref, entry.path, current);
+          walked.push(entry.path);
+        }
+      }
+    expect(walked.sort()).toEqual(["notes.txt", "reports/result.json"]);
+    expect(reads.some((file) => file.endsWith("/leak"))).toBe(false);
+    const exported: string[] = [];
+    for await (const file of computer.exportWorkspace(ref)) exported.push(file.path);
+    expect(exported.sort()).toEqual(["notes.txt", "reports/result.json"]);
+    const listed = await computer.snapshotFiles("home-1", "bot-1");
+    expect(Object.keys(listed.files).sort()).toEqual(["notes.txt", "reports/result.json"]);
+    expect(listed.links).toEqual(["leak"]);
+  });
+
+  it("sorts snapshot links and throws on an entry kind no guest caller can produce", async () => {
+    const session = stubSession();
+    session.snapshot = async () =>
+      ({ "notes.txt": "ok", zeta: { kind: "link" }, alpha: { kind: "link" } }) as unknown as Record<
+        string,
+        string
+      >;
+    const budget = selfTestBudget();
+    const ledger = new BudgetLedger(budget);
+    ledger.open("snapshot-split");
+    const admission = new TrialAdmission("snapshot-split", ledger, () => undefined, ["shell"]);
+    admission.bindModel(route, budget.model.id);
+    const computer = new ContainerComputer(session, getTask("task-01"), admission);
+    await computer.provision({ botId: "home-1", homePath: "unused" }, context());
+    const listed = await computer.snapshotFiles("home-1", "bot-1");
+    expect(listed.links).toEqual(["alpha", "zeta"]);
+
+    session.snapshot = async () =>
+      ({ weird: { kind: "socket" } }) as unknown as Record<string, string>;
+    await expect(computer.snapshotFiles("home-1", "bot-1")).rejects.toThrow(
+      "Unexpected guest snapshot entry",
+    );
+  });
+
+  it("fails a success grade when the container snapshot contains an undeclared symlink", async () => {
+    const task = getTask("task-01");
+    const solution = referenceSolution(task);
+    const files = {
+      ...task.files,
+      ...solution.files,
+      "result.json": JSON.stringify(solution.result),
+    };
+    const session = stubSession();
+    session.snapshot = async () => ({ ...files, leak: { kind: "link" } });
+    const budget = selfTestBudget();
+    const ledger = new BudgetLedger(budget);
+    ledger.open("symlink-grade");
+    const admission = new TrialAdmission("symlink-grade", ledger, () => undefined, ["shell"]);
+    admission.bindModel(route, budget.model.id);
+    const computer = new ContainerComputer(session, task, admission);
+    await computer.provision({ botId: "home-1", homePath: "unused" }, context());
+    const shot = await computer.snapshotFiles("home-1", "bot-1");
+    const observation = {
+      result: solution.result,
+      reply: "Saved the requested result.",
+      files: shot.files,
+      links: shot.links,
+      state: task.initialState.map((row) => structuredClone(row)),
+      effects: [],
+      tools: ["read_file"],
+      expectedPin: { runtime: "pi" },
+      observedPin: { runtime: "pi" },
+      elapsedMs: 0,
+      terminal: "completed" as const,
+    };
+    const undeclared = gradeOutcome(task, observation);
+    expect(undeclared.passed).toBe(false);
+    expect(undeclared.reasons.join(" ")).toContain("leak");
+    const declared = gradeOutcome({ ...task, links: ["leak"] }, observation);
+    expect(declared.passed).toBe(true);
+    expect(declared.reasons).toEqual([]);
   });
 
   it("prepares a helper workspace through the production callback without a shell fork", async () => {

@@ -114,6 +114,16 @@ describe("the images compose file", () => {
     }
   });
 
+  it("tells the api when the desktop app runs the stack, and nothing else does", () => {
+    expect(compose.services.api?.environment?.ARDURBOT_DESKTOP_STACK).toBe(
+      `\${ARDURBOT_DESKTOP_STACK:-}`,
+    );
+    expect(compose.services.worker?.environment).not.toHaveProperty("ARDURBOT_DESKTOP_STACK");
+    expect(
+      readFileSync(path.resolve(repoRoot, "infra/compose/.env.images.example"), "utf8"),
+    ).not.toContain("ARDURBOT_DESKTOP_STACK");
+  });
+
   it("passes optional HTTP(S)_PROXY / NO_PROXY into api and worker", () => {
     for (const name of ["api", "worker"] as const) {
       const env = compose.services[name]?.environment ?? {};

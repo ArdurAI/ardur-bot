@@ -35,7 +35,10 @@ export interface ProductionApp {
 
 export const FIXTURE_ENCRYPTION_KEY = "scoreboard-synthetic-encryption-key";
 export interface ReplaySandbox extends SandboxProvider {
-  snapshotFiles(homeKey: string, botId: string): Promise<Record<string, string>>;
+  snapshotFiles(
+    homeKey: string,
+    botId: string,
+  ): Promise<{ files: Record<string, string>; links: readonly string[] }>;
 }
 const origin = "http://127.0.0.1:5173";
 
@@ -228,7 +231,8 @@ export async function runProductionTask(options: {
     }
     const elapsedMs = performance.now() - started;
     if (terminal === "timed-out") await fixtureRpc(handles, cookie, "threads/stop", { botId });
-    const files = await sandbox.snapshotFiles(configured.computer.homeKey, botId);
+    const shot = await sandbox.snapshotFiles(configured.computer.homeKey, botId);
+    const files = shot.files;
     let result: unknown = null;
     try {
       result = JSON.parse(files["result.json"] ?? "null");
@@ -286,6 +290,7 @@ export async function runProductionTask(options: {
       result,
       reply,
       files,
+      links: shot.links,
       state: await services.snapshot(),
       effects: await services.effects(),
       tools: toolNames,

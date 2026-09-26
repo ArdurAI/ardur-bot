@@ -16,6 +16,9 @@ export function HostComputerSettings() {
   const [unavailable, setUnavailable] = useState<string[]>([]);
   /** This app keeps the folder list: a pairing it holds, or local mode. */
   const [local, setLocal] = useState(false);
+  /** Local mode: no host service to set up; the Fleet row above shows this computer's state. */
+  const [localMode, setLocalMode] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const desktop = window.ardurbotDesktop;
@@ -26,6 +29,8 @@ export function HostComputerSettings() {
     setRoots(owned && host ? host.roots : remote.roots);
     setUnavailable(owned && host ? (host.unavailable ?? []) : []);
     setLocal(owned);
+    setLocalMode(!!host?.local);
+    setLoaded(true);
   }
   useEffect(() => {
     let active = true;
@@ -59,15 +64,17 @@ export function HostComputerSettings() {
   return (
     <section className="space-y-3 py-4" data-testid="host-computer-settings">
       <h4 className="text-sm font-medium">{mac ? t`This Mac` : t`This computer`}</h4>
-      <p className="text-sm text-muted-foreground">
-        <Trans>Host service:</Trans>{" "}
-        {status.connected
-          ? t`Connected`
-          : status.configured
-            ? t`Not running — open the desktop app`
-            : t`Not set up`}
-        {status.connected && versions.length ? ` · ${versions.join(" · ")}` : ""}
-      </p>
+      {loaded && !localMode ? (
+        <p className="text-sm text-muted-foreground">
+          <Trans>Host service:</Trans>{" "}
+          {status.connected
+            ? t`Connected`
+            : status.configured
+              ? t`Not running — open the desktop app`
+              : t`Not set up`}
+          {status.connected && versions.length ? ` · ${versions.join(" · ")}` : ""}
+        </p>
+      ) : null}
       {status.connected && status.health?.environment ? (
         <>
           <p className="text-sm text-muted-foreground">
@@ -113,7 +120,11 @@ export function HostComputerSettings() {
         </p>
       ) : null}
       <div className="flex gap-2">
-        {desktop?.host && !status.connected && (!status.configured || local) ? (
+        {loaded &&
+        !localMode &&
+        desktop?.host &&
+        !status.connected &&
+        (!status.configured || local) ? (
           <Button disabled={busy} onClick={() => void perform(() => desktop.host!.setup())}>
             <Trans>Set up</Trans>
           </Button>
@@ -127,7 +138,7 @@ export function HostComputerSettings() {
             <Trans>Add folder</Trans>
           </Button>
         ) : null}
-        {status.configured ? (
+        {loaded && !localMode && status.configured ? (
           <Button
             variant="ghost"
             disabled={busy}

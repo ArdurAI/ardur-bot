@@ -1,9 +1,8 @@
 /** One sentence for every list, read, and write that meets a symlink before resolution. */
 export const SYMLINK_REFUSAL = "This path follows a link, so it was not opened.";
 
-/** Trusted PID 1 and loopback HTTP relay. Source is part of the executed TypeScript inventory.
- * It never accepts a command to execute from the guest network; only the host owns exec admission. */
-export const CONTAINER_GUEST = String.raw`
+/** Descriptor-relative file operations shared by the guest and its offline walker tests. */
+export const GUEST_FILE_OPERATIONS = String.raw`
 import base64, errno, http.server, json, os, queue, stat, sys, threading, time, uuid
 ROOT = '/opt/data'
 LIMIT = 2 * 1024 * 1024
@@ -22,9 +21,9 @@ def emit(value):
 def parts_of(name):
     if not isinstance(name, str) or name.startswith('/') or '\x00' in name:
         raise ValueError('invalid trial path')
-    pieces = name.split('/')
-    if any(part in ('.', '..') for part in pieces): raise ValueError('invalid trial path')
-    return [part for part in pieces if part]
+    pieces = [part for part in name.split('/') if part not in ('', '.')]
+    if any(part == '..' for part in pieces): raise ValueError('invalid trial path')
+    return pieces
 def open_tree(parts, create=False):
     fd = os.open(ROOT, DIR_FLAGS)
     try:
@@ -99,8 +98,9 @@ def files(operation):
             for child in sorted(os.listdir(fd)):
                 if child == '.ardurbot-runtime': continue
                 child_info = os.stat(child, dir_fd=fd, follow_symlinks=False)
-                if stat.S_ISLNK(child_info.st_mode): continue
-                if stat.S_ISDIR(child_info.st_mode):
+                if stat.S_ISLNK(child_info.st_mode):
+                    kind, size, executable = 'link', 0, False
+                elif stat.S_ISDIR(child_info.st_mode):
                     kind, size, executable = 'dir', 0, False
                 elif stat.S_ISREG(child_info.st_mode):
                     kind, size, executable = 'file', child_info.st_size, bool(child_info.st_mode & 0o111)
@@ -119,21 +119,51 @@ def files(operation):
         except OSError as error:
             if error.errno == errno.ENOTDIR: return {}
             raise
-        os.close(fd)
-        target = ROOT if not parts else ROOT + '/' + '/'.join(parts)
         result = {}; total = 0
-        for folder, dirs, names in os.walk(target, followlinks=False):
-            if any(os.path.islink(os.path.join(folder, d)) for d in dirs):
-                raise ValueError('symlink in snapshot')
-            for file in names:
-                p = os.path.join(folder, file)
-                if os.path.islink(p) or not os.path.isfile(p): raise ValueError('nonregular snapshot file')
-                with open(p, 'rb') as inp: data = inp.read(LIMIT + 1)
+        def walk(directory, prefix):
+            nonlocal total
+            for child in sorted(os.listdir(directory)):
+                if child == '.ardurbot-runtime': continue
+                relative = child if not prefix else prefix + '/' + child
+                info = os.stat(child, dir_fd=directory, follow_symlinks=False)
+                if stat.S_ISLNK(info.st_mode):
+                    result[relative] = {'kind': 'link'}
+                    continue
+                if stat.S_ISDIR(info.st_mode):
+                    try: nested = os.open(child, DIR_FLAGS, dir_fd=directory)
+                    except OSError as error:
+                        if error.errno in (errno.ELOOP, errno.ENOTDIR):
+                            raise Refused(${JSON.stringify(SYMLINK_REFUSAL)})
+                        raise
+                    try: walk(nested, relative)
+                    finally: os.close(nested)
+                    continue
+                if not stat.S_ISREG(info.st_mode): raise ValueError('nonregular snapshot file')
+                try:
+                    handle = os.open(child, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+                except OSError as error:
+                    if error.errno == errno.ELOOP:
+                        raise Refused(${JSON.stringify(SYMLINK_REFUSAL)})
+                    raise
+                with os.fdopen(handle, 'rb') as inp:
+                    current = os.fstat(inp.fileno())
+                    if not stat.S_ISREG(current.st_mode): raise ValueError('nonregular snapshot file')
+                    data = inp.read(LIMIT + 1)
                 total += len(data)
                 if total > LIMIT: raise ValueError('snapshot limit')
-                result[os.path.relpath(p, target)] = data.decode('utf8')
-        return result
+                result[relative] = data.decode('utf8')
+        try:
+            walk(fd, '')
+            return result
+        finally:
+            os.close(fd)
     raise ValueError('unknown file operation')
+`;
+
+/** Trusted PID 1 and loopback HTTP relay. Source is part of the executed TypeScript inventory.
+ * It never accepts a command to execute from the guest network; only the host owns exec admission. */
+export const CONTAINER_GUEST = `
+${GUEST_FILE_OPERATIONS}
 class Relay(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_): pass
     def forward(self):

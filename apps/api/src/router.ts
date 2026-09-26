@@ -121,8 +121,10 @@ import {
   connectionOverview,
   containsSecret,
   hasMixedOneShotSchedule,
+  isDesktopComposeStack,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
+  sandboxKindForBot,
 } from "@ardurbot/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
@@ -5768,7 +5770,8 @@ async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
       ? setup.credential.defaultModel
       : (setup.settings?.defaultModelId ?? deps.env.defaultModel),
     computerHost: computerHostFor(setup.settings?.computerHost, deps.env.sandboxProvider),
-    canChooseHostComputer: actor.isDeploymentOwner && deps.env.sandboxProvider === "docker",
+    canChooseHostComputer:
+      actor.isDeploymentOwner && canChooseHostComputer(deps.env.sandboxProvider),
     sandboxProvider: deps.env.sandboxProvider,
     avatarStyle: user.avatarStyle === "organic" ? "organic" : "robot",
   };
@@ -5975,19 +5978,26 @@ async function deploymentDto(prisma: PrismaClient, sandboxProvider: string) {
     defaultProvider: settings?.defaultModelProvider ?? null,
     defaultModel: settings?.defaultModelId ?? null,
     computerHost: computerHostFor(settings?.computerHost, sandboxProvider),
-    canChooseHostComputer: sandboxProvider === "docker",
+    canChooseHostComputer: canChooseHostComputer(sandboxProvider),
     sandboxProvider,
   };
 }
 
+/**
+ * Only a Docker server asks its owner. The desktop app already runs work on the computer it is
+ * installed on, so it never asks.
+ */
+function canChooseHostComputer(sandboxProvider: string) {
+  return sandboxProvider === "docker" && !isDesktopComposeStack();
+}
+
+/** Where new computers start; null while a Docker server's owner has not chosen. */
 function computerHostFor(
   stored: string | null | undefined,
   sandboxProvider: string,
 ): "docker" | "this-mac" | null {
-  if (sandboxProvider === "desktop") return "this-mac";
-  if (sandboxProvider !== "docker") return null;
-  if (stored === "this-mac" || stored === "docker") return stored;
-  return null;
+  if (sandboxKindForBot(sandboxProvider, stored) === "desktop") return "this-mac";
+  return sandboxProvider === "docker" && stored === "docker" ? "docker" : null;
 }
 
 async function persistModelCredential(

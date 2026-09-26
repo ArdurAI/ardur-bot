@@ -1,12 +1,183 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { TraceBoundary } from "@ardurbot/contracts";
+import { nextFence } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
+import { createTraceBuffer } from "../../../../adapters/src/scoreboard-trace.js";
 import { CRASH_BOUNDARIES, contentDigest, EXPERIMENT_DEFINITIONS } from "../manifest.js";
+import {
+  collectTraceEvidence,
+  LOCAL_TRACE_BOUNDARIES,
+  SCRIPTED_TRACE_BOUNDARIES,
+} from "../trace-collector.js";
+import type { MatrixResult } from "./catalog.js";
 import { experimentCoverage, matrixExitCode, matrixPlan } from "./catalog.js";
-import { matrixEvidence, writeMatrixArtifact } from "./evidence.js";
+import { matrixEvidence, writeMatrixArtifact, writeMatrixEvidence } from "./evidence.js";
 import { classifyMemoryScale } from "./memory.js";
 
+const SCRIPTED_RECOVERED_BOUNDARIES = [
+  "tool.finished",
+  "terminal.committed",
+] as const satisfies readonly TraceBoundary[];
+const PI_RECOVERED_BOUNDARIES = [
+  "tool.finished",
+  "provider.finished",
+  "terminal.committed",
+] as const satisfies readonly TraceBoundary[];
+/** A recovered attempt that pauses for approval ends at its pause, never at a terminal. */
+const PAUSED_RECOVERED_BOUNDARIES = [
+  "tool.finished",
+  "wait.approval",
+] as const satisfies readonly TraceBoundary[];
+const KILLED_TIME_ORIGIN = 1_700_000_000_000;
+const RECOVERED_TIME_ORIGIN = 1_700_000_004_000;
+
+/**
+ * The interrupted process stops after tool.started. Finishes and the terminal belong to recovery.
+ * `paused`: recovery pauses for approval instead of finishing (crash-03-revoke). `killed-waiting`:
+ * the process dies once its own pause is recorded and recovery runs nothing (crash-07).
+ */
+function crashPhases(
+  run: string,
+  options: {
+    origin?: number;
+    openTool?: string;
+    attempt?: number;
+    recoveredAttempt?: number;
+    killedOrigin?: number;
+    recoveredOrigin?: number;
+    runtime?: "scripted" | "pi";
+    ending?: "paused" | "killed-waiting";
+  } = {},
+) {
+  const stored = options.runtime === "pi" ? LOCAL_TRACE_BOUNDARIES : SCRIPTED_TRACE_BOUNDARIES;
+  const recovered: readonly TraceBoundary[] =
+    options.ending === "paused"
+      ? PAUSED_RECOVERED_BOUNDARIES
+      : options.runtime === "pi"
+        ? PI_RECOVERED_BOUNDARIES
+        : SCRIPTED_RECOVERED_BOUNDARIES;
+  const earlier = stored.filter(
+    (boundary) => !recovered.includes(boundary) && boundary !== "terminal.committed",
+  );
+  const attempt = options.attempt ?? 0;
+  if (options.ending === "killed-waiting")
+    return {
+      before: phaseTrace(
+        `${run}-interrupted`,
+        run,
+        [...stored.filter((boundary) => boundary !== "terminal.committed"), "wait.approval"],
+        stored,
+        { attempt, timeOrigin: options.killedOrigin ?? KILLED_TIME_ORIGIN },
+      ),
+      after: phaseTrace(`${run}-recovered`, run, [], stored, {
+        attempt: options.recoveredAttempt ?? nextFence(attempt),
+        timeOrigin: options.recoveredOrigin ?? RECOVERED_TIME_ORIGIN,
+      }),
+    };
+  return {
+    before: phaseTrace(`${run}-interrupted`, run, earlier, stored, {
+      openTool: options.openTool,
+      attempt,
+      timeOrigin: options.killedOrigin ?? KILLED_TIME_ORIGIN,
+    }),
+    after: phaseTrace(`${run}-recovered`, run, recovered, stored, {
+      origin: options.origin ?? earlier.length,
+      attempt: options.recoveredAttempt ?? nextFence(attempt),
+      timeOrigin: options.recoveredOrigin ?? RECOVERED_TIME_ORIGIN,
+    }),
+  };
+}
+
+/** How each fault-worker run ends: crash-07 and the revoke control end waiting for approval. */
+function endingOf(id: string) {
+  return id === "crash-07"
+    ? ("killed-waiting" as const)
+    : id === "crash-03-revoke"
+      ? ("paused" as const)
+      : undefined;
+}
+
+/** Adds the trace each fault-worker phase reports for one durable run. */
+function traced(result: MatrixResult, run: string): MatrixResult {
+  const phases = crashPhases(run, { ending: endingOf(result.id) });
+  return {
+    ...result,
+    measurements: {
+      ...result.measurements,
+      before: { trace: phases.before },
+      after: { ...(result.measurements.after as object), trace: phases.after },
+    },
+  };
+}
+
+function crashAttempt(
+  id: "crash-03" | "crash-04",
+  measurements: MatrixResult["measurements"],
+): MatrixResult {
+  return {
+    id,
+    experiment: "O9",
+    tier: "T1",
+    status: "passed",
+    checks: { killedAtBoundary: true, noDuplicateEffect: true },
+    measurements,
+    coverage: [],
+    gaps: [],
+  };
+}
+function phaseTrace(
+  processId: string,
+  run: string,
+  points: readonly TraceBoundary[],
+  recorded: readonly TraceBoundary[],
+  options: {
+    capacity?: number;
+    origin?: number;
+    openTool?: string;
+    attempt?: number;
+    timeOrigin?: number;
+  } = {},
+) {
+  const attempt = options.attempt ?? 0;
+  const buffer = createTraceBuffer({
+    processId,
+    capacity: options.capacity,
+    now: () => 1,
+  });
+  let at = options.origin ?? 0;
+  for (const boundary of points) {
+    const operation =
+      boundary.startsWith("provider.") || boundary.startsWith("tool.")
+        ? { operationId: boundary.startsWith("tool.") ? "tool-1" : "provider-1", attempt }
+        : boundary === "wait.approval"
+          ? { attempt }
+          : {};
+    buffer.record(
+      run,
+      boundary,
+      boundary === "terminal.committed" ? { outcome: "success" } : operation,
+      at,
+    );
+    at += 1;
+  }
+  if (options.openTool)
+    buffer.record(run, "tool.started", { operationId: options.openTool, attempt }, at);
+  if (options.capacity !== undefined && points.length > options.capacity)
+    expect(buffer.snapshot().counters.dropped).toBe(points.length - options.capacity);
+  const evidence = collectTraceEvidence([buffer.snapshot()], {
+    sessionId: "matrix-fault",
+    pairId: null,
+    requiredBoundaries: recorded,
+  });
+  if (options.timeOrigin !== undefined)
+    (evidence.raw.batches[0] as { timeOrigin?: number }).timeOrigin = options.timeOrigin;
+  return {
+    ...evidence,
+    requiredBoundaries: [...recorded],
+  };
+}
 describe("matrix selection and evidence", () => {
   it("keeps absent canonical crash results unknown and observed safety failures failed", () => {
     const empty = matrixEvidence([]);
@@ -28,7 +199,8 @@ describe("matrix selection and evidence", () => {
       },
     ]);
     expect(failed.crashes[3]).toMatchObject({
-      status: "complete",
+      status: "incomplete",
+      missingReason: "invalid-trial",
       safetyPassed: false,
       recovery: null,
       taskCompleted: null,
@@ -47,6 +219,21 @@ describe("matrix selection and evidence", () => {
     };
     const crash03 = (results: Parameters<typeof matrixEvidence>[0]) =>
       matrixEvidence(results).crashes.find((row) => row.id === "crash-03");
+    expect(crash03([passed])).toMatchObject({
+      status: "incomplete",
+      missingReason: "missing-revoke-and-pin-controls",
+      safetyPassed: null,
+    });
+    expect(crash03([passed, { ...passed, id: "crash-03-revoke" }])).toMatchObject({
+      status: "incomplete",
+      missingReason: "missing-pin-control",
+      safetyPassed: null,
+    });
+    expect(crash03([passed, { ...passed, id: "crash-03-pin" }])).toMatchObject({
+      status: "incomplete",
+      missingReason: "missing-revoke-control",
+      safetyPassed: null,
+    });
     expect(
       crash03([
         passed,
@@ -58,15 +245,34 @@ describe("matrix selection and evidence", () => {
         },
       ])?.safetyPassed,
     ).toBe(false);
-    // An incomplete control has no failing boolean. Vacuous checks must not stay safe.
+    // An incomplete control observed nothing: vacuous checks are neither safe nor a failure.
     expect(
-      crash03([passed, { ...passed, id: "crash-03-pin", status: "incomplete", checks: {} }])
-        ?.safetyPassed,
-    ).toBe(false);
+      crash03([passed, { ...passed, id: "crash-03-pin", status: "incomplete", checks: {} }]),
+    ).toMatchObject({
+      status: "incomplete",
+      missingReason: "missing-revoke-and-pin-controls",
+      safetyPassed: null,
+    });
     expect(
-      crash03([passed, { ...passed, id: "crash-03-revoke" }, { ...passed, id: "crash-03-pin" }])
-        ?.safetyPassed,
-    ).toBe(true);
+      crash03([passed, { ...passed, id: "crash-03-revoke" }, { ...passed, id: "crash-03-pin" }]),
+    ).toMatchObject({
+      status: "incomplete",
+      missingReason: "trace-links-missing",
+      safetyPassed: null,
+    });
+    expect(
+      crash03([
+        traced(passed, "run-base"),
+        traced({ ...passed, id: "crash-03-revoke" }, "run-revoke"),
+        traced({ ...passed, id: "crash-03-pin" }, "run-pin"),
+      ]),
+    ).toMatchObject({
+      status: "complete",
+      missingReason: null,
+      recovery: "safe-retry",
+      safetyPassed: true,
+      taskCompleted: true,
+    });
     // The base attempt never reached its boundary. A failed pin control is still a failure.
     expect(
       crash03([
@@ -84,6 +290,372 @@ describe("matrix selection and evidence", () => {
       recovery: null,
       taskCompleted: null,
     });
+  });
+  it("counts a revoke or pin control only when it was measured and passed", () => {
+    const passed: MatrixResult = {
+      id: "crash-03",
+      experiment: "O9",
+      tier: "T1",
+      status: "passed",
+      checks: { killedAtBoundary: true, noUnauthorizedEffect: true },
+      measurements: { after: { autonomousCompletion: true } },
+      coverage: [],
+      gaps: [],
+    };
+    const crash03 = (results: MatrixResult[]) =>
+      matrixEvidence(results).crashes.find((row) => row.id === "crash-03");
+    const base = traced(passed, "run-base");
+    const revoke = traced({ ...passed, id: "crash-03-revoke" }, "run-revoke");
+    for (const pin of [
+      { ...passed, id: "crash-03-pin", status: "incomplete" as const, checks: {} },
+      traced(
+        { ...passed, id: "crash-03-pin", status: "incomplete", checks: { killedAtBoundary: true } },
+        "run-pin",
+      ),
+      traced({ ...passed, id: "crash-03-pin", checks: { killedAtBoundary: false } }, "run-pin"),
+    ])
+      expect(crash03([base, revoke, pin])).toEqual({
+        id: "crash-03",
+        status: "incomplete",
+        missingReason: "missing-pin-control",
+        recovery: null,
+        safetyPassed: null,
+        taskCompleted: null,
+        traceIds: [],
+      });
+    expect(
+      crash03([
+        base,
+        revoke,
+        traced(
+          {
+            ...passed,
+            id: "crash-03-pin",
+            status: "finding",
+            checks: { killedAtBoundary: true, noWrongPin: false },
+          },
+          "run-pin",
+        ),
+      ]),
+    ).toMatchObject({ status: "incomplete", safetyPassed: false, recovery: null, traceIds: [] });
+  });
+  it("links a complete crash to the traces of every durable run it drove", async () => {
+    const passed: MatrixResult = {
+      id: "crash-03",
+      experiment: "O9",
+      tier: "T1",
+      status: "passed",
+      checks: { killedAtBoundary: true, noUnauthorizedEffect: true },
+      measurements: { after: { autonomousCompletion: true } },
+      coverage: [],
+      gaps: [],
+    };
+    const results = [
+      traced(passed, "run-base"),
+      traced({ ...passed, id: "crash-03-revoke" }, "run-revoke"),
+      traced({ ...passed, id: "crash-03-pin" }, "run-pin"),
+    ];
+    const evidence = matrixEvidence(results);
+    const crash = evidence.crashes.find((row) => row.id === "crash-03")!;
+    // Interrupted and recovering phases of one run share a single trace.
+    expect(crash.traceIds).toHaveLength(3);
+    expect(evidence.traces.map((trace) => trace.id).sort()).toEqual([...crash.traceIds].sort());
+    expect(evidence.traces.every((trace) => trace.clock === "request-boundary")).toBe(true);
+    expect(evidence.artifacts).toHaveLength(1);
+    expect(
+      evidence.traces.every((trace) => trace.artifactHash === evidence.artifacts[0]!.sha256),
+    ).toBe(true);
+    expect(contentDigest(evidence.rawTraces[0])).toBe(evidence.artifacts[0]!.sha256);
+    const withoutPinTrace = [...results.slice(0, 2), { ...passed, id: "crash-03-pin" }];
+    expect(
+      matrixEvidence(withoutPinTrace).crashes.find((row) => row.id === "crash-03"),
+    ).toMatchObject({ status: "incomplete", missingReason: "trace-links-missing", traceIds: [] });
+    const directory = await mkdtemp(path.join(tmpdir(), "matrix-evidence-test-"));
+    try {
+      const written = await writeMatrixEvidence(directory, results);
+      expect(written.map((file) => file.path.split("-")[0])).toEqual(["trace", "scoreboard"]);
+      expect(written[0]!.sha256).toBe(evidence.artifacts[0]!.sha256);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+  it("leaves a one-sided interrupt or recovery trace unlinked", () => {
+    const terminal = (processId: string) =>
+      phaseTrace(processId, "run-one-sided", ["terminal.committed"], LOCAL_TRACE_BOUNDARIES);
+    const crash = (measurements: MatrixResult["measurements"]) =>
+      matrixEvidence([crashAttempt("crash-04", measurements)]).crashes.find(
+        (row) => row.id === "crash-04",
+      );
+    for (const row of [
+      crash({
+        before: { trace: terminal("interrupted-worker") },
+        after: { autonomousCompletion: false },
+      }),
+      crash({
+        after: { autonomousCompletion: false, trace: terminal("recovered-worker") },
+      }),
+    ])
+      expect(row).toEqual({
+        id: "crash-04",
+        status: "incomplete",
+        missingReason: "trace-links-missing",
+        recovery: null,
+        safetyPassed: null,
+        taskCompleted: null,
+        traceIds: [],
+      });
+  });
+  it.each([
+    [
+      "admission points only",
+      ["admission.started", "admission.committed"],
+      ["admission.committed"],
+      undefined,
+    ],
+    [
+      "two terminal points",
+      ["terminal.committed"],
+      ["admission.started", "terminal.committed"],
+      undefined,
+    ],
+    [
+      "a buffer that dropped the terminal point",
+      ["admission.started", "terminal.committed"],
+      ["admission.committed"],
+      1,
+    ],
+  ] as const)("leaves a pair with %s unlinked", (_label, before, after, capacity) => {
+    const crash = matrixEvidence([
+      crashAttempt("crash-04", {
+        before: {
+          trace: phaseTrace(
+            "interrupted-worker",
+            "run-pair",
+            before,
+            LOCAL_TRACE_BOUNDARIES,
+            capacity ? { capacity } : {},
+          ),
+        },
+        after: {
+          autonomousCompletion: false,
+          trace: phaseTrace("recovered-worker", "run-pair", after, LOCAL_TRACE_BOUNDARIES),
+        },
+      }),
+    ]).crashes.find((row) => row.id === "crash-04");
+    expect(crash).toEqual({
+      id: "crash-04",
+      status: "incomplete",
+      missingReason: "trace-links-missing",
+      recovery: null,
+      safetyPassed: null,
+      taskCompleted: null,
+      traceIds: [],
+    });
+  });
+  it("measures the recovered span and leaves an unpaired start unmeasured", () => {
+    const stored = SCRIPTED_TRACE_BOUNDARIES;
+    const phases = crashPhases("run-pair", { origin: 100, openTool: "tool-cut" });
+    const crash = matrixEvidence([
+      crashAttempt("crash-04", {
+        before: { trace: phases.before },
+        after: { autonomousCompletion: false, trace: phases.after },
+      }),
+    ]).crashes.find((row) => row.id === "crash-04");
+    expect(crash).toMatchObject({
+      status: "incomplete",
+      missingReason: "crash-span-unmeasured",
+      recovery: null,
+      safetyPassed: null,
+      taskCompleted: null,
+    });
+    expect(crash?.traceIds).toHaveLength(0);
+    const batches = [...phases.before.raw.batches, ...phases.after.raw.batches];
+    const started = phases.before.raw.batches[0]!.points.find(
+      (point) => point.boundary === "tool.started",
+    )!;
+    const finished = phases.after.raw.batches[0]!.points.find(
+      (point) => point.boundary === "tool.finished",
+    )!;
+    const paired = collectTraceEvidence(batches, {
+      sessionId: "matrix-fault",
+      pairId: null,
+      requiredBoundaries: stored,
+      pairAcrossProcesses: true,
+    });
+    expect(paired.derived[0]!.complete).toBe(false);
+    expect(paired.derived[0]!.missingBoundaries).toEqual([]);
+    const tools = paired.derived[0]!.operations.filter(
+      (operation) => operation.kind === "tool.started",
+    );
+    const killedOrigin = phases.before.raw.batches[0]!.timeOrigin ?? 0;
+    const recoveredOrigin = phases.after.raw.batches[0]!.timeOrigin ?? 0;
+    expect(
+      tools.find((operation) => operation.duration.reason === "wall-clock")?.duration.value,
+    ).toBe(recoveredOrigin + finished.at - (killedOrigin + started.at));
+    expect(tools.find((operation) => operation.outcome === "interrupted")).toMatchObject({
+      duration: { value: null, reason: "interrupted" },
+    });
+    const ordinary = collectTraceEvidence(batches, {
+      sessionId: "matrix-fault",
+      pairId: null,
+      requiredBoundaries: stored,
+    });
+    expect(ordinary.derived[0]!.complete).toBe(false);
+    expect(
+      ordinary.derived[0]!.operations.some(
+        (operation) => operation.duration.reason === "boundary-not-observed",
+      ),
+    ).toBe(true);
+    const present = stored.filter(
+      (boundary) => boundary !== "tool.finished" && boundary !== "provider.finished",
+    );
+    const single = phaseTrace("only-worker", "run-single", present, present);
+    expect(single.derived[0]!.missingBoundaries).toEqual([]);
+    expect(single.derived[0]!.complete).toBe(false);
+    expect(
+      single.derived[0]!.operations.some(
+        (operation) => operation.duration.reason === "boundary-not-observed",
+      ),
+    ).toBe(true);
+  });
+  it("keeps a Pi runtime fixture complete under the full boundary list", () => {
+    const phases = crashPhases("run-pi", { runtime: "pi" });
+    const crash = matrixEvidence([
+      crashAttempt("crash-04", {
+        before: { trace: phases.before },
+        after: { autonomousCompletion: false, trace: phases.after },
+      }),
+    ]).crashes.find((row) => row.id === "crash-04");
+    expect(crash).toMatchObject({
+      status: "complete",
+      missingReason: null,
+      recovery: "explicit-uncertainty",
+      safetyPassed: true,
+    });
+    expect(phases.before.requiredBoundaries).toEqual(LOCAL_TRACE_BOUNDARIES);
+  });
+  it("completes crashes 03 through 07 when recovery finishes on the next fence in wall time", () => {
+    const attempt = 4;
+    const killedOrigin = 1_700_000_000_000;
+    const recoveredOrigin = 1_700_000_008_000;
+    const recovery = {
+      "crash-03": "safe-retry",
+      "crash-04": "explicit-uncertainty",
+      "crash-05": "automatic-recovery",
+      "crash-06": "automatic-recovery",
+      "crash-07": "automatic-recovery",
+    } as const;
+    for (const id of ["crash-03", "crash-04", "crash-05", "crash-06", "crash-07"] as const) {
+      const base: MatrixResult = {
+        id,
+        experiment: "O9",
+        tier: "T1",
+        status: "passed",
+        checks: { killedAtBoundary: true },
+        measurements: { after: { autonomousCompletion: id !== "crash-04" && id !== "crash-07" } },
+        coverage: [],
+        gaps: [],
+      };
+      const real = (result: MatrixResult, run: string): MatrixResult => {
+        const phases = crashPhases(run, {
+          attempt,
+          recoveredAttempt: nextFence(attempt),
+          killedOrigin,
+          recoveredOrigin,
+          ending: endingOf(result.id),
+        });
+        return {
+          ...result,
+          measurements: {
+            ...result.measurements,
+            before: { trace: phases.before },
+            after: { ...(result.measurements.after as object), trace: phases.after },
+          },
+        };
+      };
+      const results = [real(base, `${id}-run`)];
+      if (id === "crash-03") {
+        results.push(
+          real({ ...base, id: "crash-03-revoke" }, "run-revoke"),
+          real({ ...base, id: "crash-03-pin" }, "run-pin"),
+        );
+      }
+      expect(matrixEvidence(results).crashes.find((row) => row.id === id)).toMatchObject({
+        status: "complete",
+        safetyPassed: true,
+        recovery: recovery[id],
+      });
+    }
+    const phases = crashPhases("run-wall", {
+      attempt,
+      recoveredAttempt: nextFence(attempt),
+      killedOrigin,
+      recoveredOrigin,
+      openTool: "tool-cut",
+    });
+    const started = phases.before.raw.batches[0]!.points.find(
+      (point) => point.boundary === "tool.started",
+    )!;
+    const finished = phases.after.raw.batches[0]!.points.find(
+      (point) => point.boundary === "tool.finished",
+    )!;
+    expect(finished.attempt).toBe(nextFence(started.attempt!));
+    const paired = collectTraceEvidence(
+      [...phases.before.raw.batches, ...phases.after.raw.batches],
+      {
+        sessionId: "matrix-fault",
+        pairId: null,
+        requiredBoundaries: SCRIPTED_TRACE_BOUNDARIES,
+        pairAcrossProcesses: true,
+      },
+    );
+    const tool = paired.derived[0]!.operations.find(
+      (operation) =>
+        operation.kind === "tool.started" && operation.duration.reason === "wall-clock",
+    )!;
+    expect(tool.duration).toMatchObject({
+      value:
+        recoveredOrigin +
+        finished.at -
+        (killedOrigin +
+          phases.before.raw.batches[0]!.points.find((point) => point.boundary === "tool.started")!
+            .at),
+      reason: "wall-clock",
+    });
+    expect(tool.duration.reason).not.toBe("reversed-boundaries");
+  });
+  it("completes crashes 03 through 07 when recovery records the finishes", () => {
+    const recovery = {
+      "crash-03": "safe-retry",
+      "crash-04": "explicit-uncertainty",
+      "crash-05": "automatic-recovery",
+      "crash-06": "automatic-recovery",
+      "crash-07": "automatic-recovery",
+    } as const;
+    for (const id of ["crash-03", "crash-04", "crash-05", "crash-06", "crash-07"] as const) {
+      const base: MatrixResult = {
+        id,
+        experiment: "O9",
+        tier: "T1",
+        status: "passed",
+        checks: { killedAtBoundary: true },
+        measurements: { after: { autonomousCompletion: id !== "crash-04" && id !== "crash-07" } },
+        coverage: [],
+        gaps: [],
+      };
+      const results = [traced(base, `${id}-run`)];
+      if (id === "crash-03") {
+        results.push(
+          traced({ ...base, id: "crash-03-revoke" }, "run-revoke"),
+          traced({ ...base, id: "crash-03-pin" }, "run-pin"),
+        );
+      }
+      expect(matrixEvidence(results).crashes.find((row) => row.id === id)).toMatchObject({
+        status: "complete",
+        safetyPassed: true,
+        recovery: recovery[id],
+      });
+    }
   });
   it("retains every canonical experiment, variant and owner without marking declarations passed", () => {
     const coverage = experimentCoverage();

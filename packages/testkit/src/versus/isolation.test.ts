@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -158,6 +158,22 @@ describe("private semantic effect broker", () => {
     expect((await broker.snapshot()).files).toHaveProperty("unsolicited.json");
     broker.revoke();
     await expect(broker.call("SCOREBOARD_READ", {})).rejects.toThrow("revoked");
+  });
+  it("snapshotReceipts refuses a duplicated journal receipt exactly as recover does", async () => {
+    const { broker, options } = await setup();
+    const args = { id: "case-a", revision: 7, value: { status: "resolved" } };
+    broker.decide(
+      contentDigest({ trialId: options.trialId, name: "SCOREBOARD_UPDATE", args }),
+      true,
+    );
+    await broker.call("SCOREBOARD_UPDATE", args);
+    // Simulate a corrupted or replayed journal: the same receipt line twice.
+    const line = (await readFile(options.journal, "utf8")).trimEnd();
+    await appendFile(options.journal, `${line}\n`);
+    const resumed = new TrialBroker(options);
+    await expect(resumed.recover()).rejects.toThrow("Duplicate journal receipt");
+    const snapshotter = new TrialBroker(options);
+    await expect(snapshotter.snapshotReceipts()).rejects.toThrow("Duplicate journal receipt");
   });
   it("MCP exposes only the task's tools and no grader or foreign trial authority", async () => {
     const { broker } = await setup();

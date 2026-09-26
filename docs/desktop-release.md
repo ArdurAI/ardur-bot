@@ -138,8 +138,11 @@ builds come later and require an explicit change to this policy.
    Connecting to an existing server is
    unchanged. On Windows, stopping that database uses the embedded Postgres library's forced
    process-tree kill, and the next start uses Postgres crash recovery.
-5. Verify a real installed build before deciding whether `main` should move. Do not retag a
-   published version; create a new version for fixes.
+5. Verify a real installed build before deciding whether `main` should move. Create a bot and
+   check that it works on this computer without being asked where bots should run, and that
+   **Settings → Computers** shows this computer with its free memory, CPU and disk. See
+   [where bots run](self-host.md#where-bots-run) for an app that already runs a Compose stack.
+   Do not retag a published version; create a new version for fixes.
 
 For an unsigned host directory build:
 
