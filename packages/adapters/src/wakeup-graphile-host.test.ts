@@ -59,6 +59,28 @@ it("replaces waiting Git pushes per space and serializes their execution", async
   await publisher.close();
 });
 
+it("runs an import request once because its answer has already been delivered", async () => {
+  const addJob = vi.fn(async () => undefined);
+  makeWorkerUtils.mockResolvedValueOnce({ addJob, release: vi.fn() });
+  const publisher = new GraphileJobPublisher({} as Pool);
+  await publisher.enqueue({
+    name: "local-import.run",
+    payload: {
+      requestId: "00000000-0000-4000-8000-00000000aaaa",
+      spaceId: "space",
+      userId: "owner",
+      action: { action: "scan" },
+    },
+    replaceKey: "local-import:request",
+  });
+  expect(addJob).toHaveBeenCalledWith(
+    "local-import.run",
+    expect.anything(),
+    expect.objectContaining({ jobKey: "local-import:request", maxAttempts: 1 }),
+  );
+  await publisher.close();
+});
+
 function handlers(): BackgroundJobHandlers {
   return {
     "board.run": vi.fn(async () => undefined),

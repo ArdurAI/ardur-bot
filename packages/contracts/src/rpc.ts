@@ -148,6 +148,7 @@ import {
   LocalImportSelectionSchema,
   LocalImportStatusSchema,
 } from "./local-import.js";
+import { McpHeadersSchema } from "./mcp.js";
 import {
   MemoryBundleSchema,
   MemoryDocumentHeadSchema,
@@ -1083,6 +1084,7 @@ export const appContract = {
           connection: IntegrationConnectionSchema,
           authorizationUrl: z.string().url().nullable(),
           sessionId: z.string().nullable(),
+          status: z.literal("replaced").optional(),
         }),
       ),
     assign: oc
@@ -1134,6 +1136,7 @@ export const appContract = {
           z.union([
             z.object({ id: Id, config: McpServerConfigInput }),
             z.object({ id: Id, secret: z.string().min(1).max(16384) }),
+            z.object({ id: Id, headers: McpHeadersSchema }),
             z.object({ id: Id, enabled: z.boolean() }),
           ]),
         )
@@ -1172,12 +1175,22 @@ export const appContract = {
             authorizationUrl: z.string().url(),
           }),
           z.object({
-            status: z.enum(["already_connected", "authorization_not_requested"]),
+            status: z.enum(["already_connected", "authorization_not_requested", "replaced"]),
           }),
         ]),
       ),
       complete: oc
         .input(z.object({ sessionId: Id, code: z.string().min(1), state: z.string().min(1) }))
+        .output(
+          z.object({
+            ok: z.literal(true),
+            result: z.enum(["connected", "replaced", "failed"]).default("connected"),
+            /** What discovery recorded when the result is failed. */
+            lastError: z.string().nullable().optional(),
+          }),
+        ),
+      cancel: oc
+        .input(z.object({ serverId: Id, sessionId: Id }))
         .output(z.object({ ok: z.literal(true) })),
       disconnect: oc.input(z.object({ serverId: Id })).output(z.object({ ok: z.literal(true) })),
     },

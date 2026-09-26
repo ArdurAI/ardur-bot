@@ -26,6 +26,24 @@ describe("searchIntegrationCatalog", () => {
                 },
               },
               {
+                kind: "mcp",
+                slug: "github-oauth",
+                url: "https://oauth.example.test/mcp",
+                auth: { kind: "OAuth", header: "Authorization: Bearer {token}" },
+              },
+              {
+                kind: "mcp",
+                slug: "github-oauth2",
+                url: "https://oauth2.example.test/mcp",
+                auth: { kind: "oauth2" },
+              },
+              {
+                kind: "mcp",
+                slug: "github-mixed-header",
+                url: "https://mixed.example.test/mcp",
+                auth: { kind: "mixed", header: "x-api-key: {token}" },
+              },
+              {
                 kind: "openapi",
                 slug: "github-rest",
                 url: "https://example.test/openapi.json",
@@ -57,7 +75,25 @@ describe("searchIntegrationCatalog", () => {
             kind: "mcp",
             slug: "github-mcp",
             source: "https://api.githubcopilot.com/mcp/",
-            auth: { type: "bearer", headerName: null, note: "OAuth or PAT" },
+            auth: { type: "mixed", headerName: null, note: "OAuth or PAT" },
+          },
+          {
+            kind: "mcp",
+            slug: "github-oauth",
+            source: "https://oauth.example.test/mcp",
+            auth: { type: "oauth", headerName: null, note: null },
+          },
+          {
+            kind: "mcp",
+            slug: "github-oauth2",
+            source: "https://oauth2.example.test/mcp",
+            auth: { type: "oauth", headerName: null, note: null },
+          },
+          {
+            kind: "mcp",
+            slug: "github-mixed-header",
+            source: "https://mixed.example.test/mcp",
+            auth: { type: "mixed", headerName: "x-api-key", note: null },
           },
           {
             kind: "openapi",

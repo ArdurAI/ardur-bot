@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
@@ -94,6 +95,7 @@ test("direct MCP connects a catalog result without asking for a URL and assigns 
     serverId = route.request().postDataJSON().json.serverId;
     return route.fulfill({ json: { json: { status: "already_connected" } } });
   });
+  await reportConnected(page, () => serverId);
   await signup(page, `direct-mcp-setup-${Date.now()}@ardurbot.test`, "password12", "Direct MCP");
   await page.getByRole("textbox", { name: "Search apps", exact: true }).fill("Notion");
   await page.getByRole("button", { name: "Search integrations.sh", exact: true }).click();
@@ -126,7 +128,7 @@ test("direct MCP connects a catalog result without asking for a URL and assigns 
   await expect(page.getByRole("combobox", { name: "Message Chief" })).toBeVisible();
 });
 
-test("Executor reconnect saves a replacement token before authorization", async ({ page }) => {
+test("Executor reconnect saves a replacement token before discovery", async ({ page }) => {
   await page.route("**/rpc/integrationSetup/get", (route) =>
     route.fulfill({
       json: {
@@ -180,10 +182,22 @@ test("Executor reconnect saves a replacement token before authorization", async 
     saved = true;
     await route.fulfill({ response });
   });
-  await page.route("**/rpc/mcp/oauth/begin", (route) => {
+  let discovered = "";
+  await page.route("**/rpc/mcp/servers/tools", (route) => {
     expect(saved).toBe(true);
-    return route.fulfill({ json: { json: { status: "already_connected" } } });
+    discovered = route.request().postDataJSON().json.serverId;
+    return route.fulfill({
+      json: {
+        json: {
+          capturedAt: "2026-09-25T00:00:00.000Z",
+          serverVersion: null,
+          account: null,
+          tools: [],
+        },
+      },
+    });
   });
+  await reportConnected(page, () => discovered);
   await page.getByRole("button", { name: "Executor", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Server URL", exact: true })
@@ -266,3 +280,20 @@ test("configured server owners manage providers from settings", async ({ page },
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "server-integrations-configured");
 });
+
+/** These tests fake the API's connection probe, so they also fake the state it records. */
+async function reportConnected(page: Page, serverId: () => string) {
+  await page.route("**/rpc/mcp/servers/list", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: Array<{ id: string }> };
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        json: body.json.map((server) =>
+          server.id === serverId() ? { ...server, connectionState: "connected" } : server,
+        ),
+      },
+    });
+  });
+}

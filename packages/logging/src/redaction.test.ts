@@ -105,4 +105,14 @@ describe("redaction", () => {
     expect(redacted).toContain('"token":"[Redacted]"');
     expect(redacted).toContain('"authorization":"[Redacted]"');
   });
+
+  it("leaves placeholder JSON credential values unchanged", () => {
+    const example =
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal placeholder in an example.
+      '{"email": "[Redacted]", "password": "", "token": "...", "apiKey": "<key>", "secret": "${SECRET}"}';
+    expect(redactSensitiveText(example)).toBe(example);
+    expect(redactSensitiveText('{"email": "[Redacted]", "token": "abc"}')).toBe(
+      '{"email": "[Redacted]", "token":"[Redacted]"}',
+    );
+  });
 });

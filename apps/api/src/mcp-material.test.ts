@@ -29,7 +29,7 @@ describe("buildMcpUpdateMaterial", () => {
     });
     expect(result).toEqual({
       action: "store",
-      material: { secret: "new-token", oauth: { tokens: { access_token: "t" } }, headers: {} },
+      material: { secret: "new-token", oauth: { tokens: { access_token: "t" } } },
     });
   });
 
@@ -113,7 +113,7 @@ describe("buildMcpUpdateMaterial", () => {
 
   it("replaces headers on update and leaves env untouched when the transport cannot express it", () => {
     const result = buildMcpUpdateMaterial(
-      { secret: "s", env: { OLD: "x" }, headers: { Authorization: "a" } },
+      { env: { OLD: "x" }, headers: { Authorization: "a" } },
       {
         transport: "streamable_http",
         slug: "x",
@@ -124,7 +124,40 @@ describe("buildMcpUpdateMaterial", () => {
     );
     expect(result).toEqual({
       action: "store",
-      material: { secret: "s", env: { OLD: "x" }, headers: { Authorization: "b" } },
+      material: { env: { OLD: "x" }, headers: { Authorization: "b" } },
     });
+  });
+
+  it("stores only the named header when a bearer secret is replaced", () => {
+    const result = buildMcpUpdateMaterial(
+      { secret: "old-bearer", oauth: { tokens: { access_token: "t" } } },
+      {
+        transport: "streamable_http",
+        slug: "x",
+        name: "x",
+        endpoint: "https://mcp.example.test",
+        headers: { "x-api-key": "new-key" },
+      },
+    );
+    expect(result).toEqual({
+      action: "store",
+      material: { headers: { "x-api-key": "new-key" }, oauth: { tokens: { access_token: "t" } } },
+    });
+    expect(result.action === "store" && result.material).not.toHaveProperty("secret");
+  });
+
+  it("stores only the bearer when a named header is replaced, even if the old header is echoed", () => {
+    const result = buildMcpUpdateMaterial(
+      { secret: "old-bearer", headers: { "x-api-key": "old-key" } },
+      {
+        transport: "streamable_http",
+        slug: "x",
+        name: "x",
+        endpoint: "https://mcp.example.test",
+        headers: { "x-api-key": "old-key" },
+        secret: "new-bearer",
+      },
+    );
+    expect(result).toEqual({ action: "store", material: { secret: "new-bearer" } });
   });
 });

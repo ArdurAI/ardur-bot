@@ -1,5 +1,5 @@
 import type { EncryptedSecretStore, ImportOwner } from "@ardurbot/adapters";
-import { assertLocalImportOwner } from "@ardurbot/adapters";
+import { assertLocalImportOwner, bumpMcpServerRevision } from "@ardurbot/adapters";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 
@@ -48,20 +48,9 @@ export async function saveImportedServerCredentials(
       },
     );
     await tx.secret.create({ data: { ...stored, ...owner, kind: "mcp" } });
-    await tx.mcpServer.update({
-      where: { id: server.id },
-      data: { secretId: stored.id, revision: { increment: 1 } },
-    });
     // Credential setup does not edit the imported definition; later hash updates may still apply.
-    await tx.localImportRecord.updateMany({
-      where: {
-        targetId: server.id,
-        targetRevision: server.revision,
-        removedAt: null,
-        config: owner,
-      },
-      data: { targetRevision: server.revision + 1 },
-    });
+    if (!(await bumpMcpServerRevision(tx, server.id, owner, { secretId: stored.id })))
+      throw new IsolationError();
     if (previous) await tx.secret.deleteMany({ where: { id: previous.id, ...owner } });
   });
   return { ok: true as const };

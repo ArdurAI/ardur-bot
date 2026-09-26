@@ -2,13 +2,14 @@ import { randomBytes } from "node:crypto";
 import {
   captureIntegrationManifest,
   EncryptedSecretStore,
+  McpClientRegistrationRequiredError,
   McpConnector,
   McpReauthorizationRequiredError,
 } from "@ardurbot/adapters";
 import type { McpServer } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpSession } from "../../../packages/adapters/src/mcp-transport.js";
-import { IntegrationConnections, needsClientRegistration } from "./integration-connections.js";
+import { IntegrationConnections } from "./integration-connections.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -52,13 +53,14 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
   }> = [];
   const mcpServer = {
     findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
-      if (
-        where.id !== row.id ||
-        where.spaceId !== row.spaceId ||
-        where.userId !== row.userId ||
-        (where.enabled === true && !row.enabled)
-      )
-        return null;
+      const mismatches =
+        (where.id !== undefined && where.id !== row.id) ||
+        (where.spaceId !== undefined && where.spaceId !== row.spaceId) ||
+        (where.userId !== undefined && where.userId !== row.userId) ||
+        (where.enabled === true && !row.enabled) ||
+        (where.pendingOauthSessionId !== undefined &&
+          row.pendingOauthSessionId !== where.pendingOauthSessionId);
+      if (mismatches) return null;
       return { ...row };
     }),
     findMany: vi.fn(async () => [{ ...row, assignments: grants }]),
@@ -72,8 +74,31 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
       return { ...row };
     }),
     updateMany: vi.fn(
-      async ({ where, data }: { where: { revision: number }; data: Partial<McpServer> }) => {
-        if (row.revision !== where.revision || !row.enabled) return { count: 0 };
+      async ({
+        where,
+        data,
+      }: {
+        where: {
+          revision?: number;
+          pendingOauthSessionId?: string | null;
+          enabled?: boolean;
+          updatedAt?: Date;
+          OR?: Array<{ pendingOauthSessionId?: string | null }>;
+        };
+        data: Partial<McpServer>;
+      }) => {
+        if (where.revision !== undefined && row.revision !== where.revision) return { count: 0 };
+        if (where.enabled === true && !row.enabled) return { count: 0 };
+        if (
+          where.pendingOauthSessionId !== undefined &&
+          (row.pendingOauthSessionId ?? null) !== where.pendingOauthSessionId
+        )
+          return { count: 0 };
+        if (where.updatedAt !== undefined) {
+          const expected = where.updatedAt instanceof Date ? where.updatedAt.getTime() : Number.NaN;
+          const actual = row.updatedAt instanceof Date ? row.updatedAt.getTime() : undefined;
+          if (actual !== expected) return { count: 0 };
+        }
         const revision = typeof data.revision === "object" ? row.revision + 1 : row.revision;
         row = { ...row, ...data, revision };
         return { count: 1 };
@@ -116,7 +141,10 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
         return { count: data.length };
       }),
     },
-    mcpOAuthSession: { deleteMany: vi.fn(async () => ({ count: 1 })) },
+    mcpOAuthSession: {
+      deleteMany: vi.fn(async () => ({ count: 1 })),
+      findFirst: vi.fn(async () => null),
+    },
     externalEffect: { updateMany: vi.fn(async () => ({ count: 1 })) },
     $executeRaw: vi.fn(async () => 1),
     $transaction: vi.fn(),
@@ -130,6 +158,9 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
     })),
     disconnect: vi.fn(async () => undefined),
     forgetPending: vi.fn(),
+    discardSession: vi.fn(),
+    restorePriorConnected: vi.fn(async () => false),
+    discardPriorConnected: vi.fn(),
   };
   const service = new IntegrationConnections(
     db as never,
@@ -202,6 +233,52 @@ describe("catalog connection lifecycle", () => {
     ]);
     expect(f.row().spaceToolPolicies).toEqual({});
   });
+  it("keeps an imported server's receipt current when discovery or grants bump its revision", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      imported: { tool: "claude-code" },
+      revision: 3,
+      manifest: null,
+    } as unknown as Partial<McpServer>);
+    const receipt = { targetId: "connection", targetRevision: 3 };
+    Object.assign(f.db, {
+      localImportRecord: {
+        findFirst: vi.fn(async () => ({ configId: "config" })),
+        updateMany: vi.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: { targetId: string; targetRevision: number };
+            data: { targetRevision: number };
+          }) => {
+            if (
+              where.targetId !== receipt.targetId ||
+              where.targetRevision !== receipt.targetRevision
+            )
+              return { count: 0 };
+            receipt.targetRevision = data.targetRevision;
+            return { count: 1 };
+          },
+        ),
+      },
+    });
+    vi.spyOn(f.service, "tools").mockResolvedValue(manifest);
+    await f.service.capture(actor, "connection");
+    expect(f.row().revision).toBe(4);
+    expect(receipt.targetRevision).toBe(4);
+    await f.service.assign(
+      actor,
+      { connectionId: "connection", botIds: ["bot"], toolIds: ["synthetic_read"] },
+      "mcp",
+    );
+    expect(f.row().revision).toBe(5);
+    expect(receipt.targetRevision).toBe(5);
+    // Import reads its receipt before the server lock, so these writes take its lock first.
+    const locks = f.db.$executeRaw.mock.calls.map((call: unknown[]) => call[1]);
+    expect(locks.filter((key: unknown) => key === "local-import:config")).toHaveLength(2);
+  });
   it("keeps catalog and MCP permission mutations in their owning sections", async () => {
     const f = fixture();
     const input = { connectionId: "connection", botIds: [], toolIds: [] };
@@ -221,7 +298,11 @@ describe("catalog connection lifecycle", () => {
         redirectUri: "https://app.example.test/mcp/oauth/callback",
       };
       expect(await f.service.beginAuthorization(actor, input)).toEqual({ status });
-      expect(f.oauth.begin).toHaveBeenCalledWith({ ...input, ...actor });
+      expect(f.oauth.begin).toHaveBeenCalledWith({
+        ...input,
+        ...actor,
+        sessionId: expect.any(String),
+      });
       expect(f.service.tools).toHaveBeenCalledWith(actor, "connection");
       expect(f.row()).toMatchObject({ connectionState: "connected", manifest });
     },
@@ -281,6 +362,70 @@ describe("catalog connection lifecycle", () => {
       where: { id: expect.any(String), ...actor },
     });
   });
+  it("returns replaced for the catalog connect that loses the reservation and does not plain-update the pending id", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: "notion",
+      connectionState: "not-connected",
+      pendingOauthSessionId: null,
+      enabled: true,
+      revision: 2,
+      updatedAt: new Date(),
+    });
+    let second:
+      | { status?: string; sessionId: string | null; authorizationUrl: string | null }
+      | undefined;
+    let opened = false;
+    f.oauth.begin.mockImplementation(async (input: { sessionId?: string }) => {
+      if (!opened) {
+        opened = true;
+        second = await f.service.connect(actor, {
+          catalogId: "notion",
+          connectionId: "connection",
+        });
+      }
+      return {
+        status: "authorization_required" as const,
+        sessionId: input.sessionId ?? "session",
+        authorizationUrl: "https://example.test/authorize",
+      };
+    });
+    const first = await f.service.connect(actor, {
+      catalogId: "notion",
+      connectionId: "connection",
+    });
+    expect(second?.authorizationUrl).toBe("https://example.test/authorize");
+    expect(second?.status).not.toBe("replaced");
+    expect(first).toMatchObject({ status: "replaced", authorizationUrl: null, sessionId: null });
+    expect(f.row().pendingOauthSessionId).toBe(second?.sessionId);
+    const plainPendingWrites = f.db.mcpServer.update.mock.calls.filter(
+      (call: [{ data: { pendingOauthSessionId?: string | null } }]) =>
+        typeof call[0].data.pendingOauthSessionId === "string",
+    );
+    expect(plainPendingWrites).toEqual([]);
+  });
+  it("does not mark a catalog row failed when a probe loses the pending id", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: "notion",
+      connectionState: "awaiting-consent",
+      pendingOauthSessionId: null,
+      enabled: true,
+      revision: 2,
+      updatedAt: new Date(),
+    });
+    f.oauth.begin.mockImplementationOnce(async () => {
+      f.setRow({ pendingOauthSessionId: "winner" });
+      throw new Error("probe failed");
+    });
+    const result = await f.service.connect(actor, {
+      catalogId: "notion",
+      connectionId: "connection",
+    });
+    expect(result).toMatchObject({ status: "replaced", authorizationUrl: null });
+    expect(f.row().pendingOauthSessionId).toBe("winner");
+    expect(f.row().connectionState).not.toBe("discovery-failed");
+  });
   it("creates an unassigned connection and delegates OAuth without inventing client parameters", async () => {
     const f = fixture();
     const result = await f.service.connect(actor, { catalogId: "gitlab" });
@@ -296,6 +441,7 @@ describe("catalog connection lifecycle", () => {
       serverId: result.connection.id,
       ...actor,
       redirectUri: "https://app.example.test/api/oauth/done",
+      sessionId: expect.any(String),
     });
     expect(result.connection.state).toBe("awaiting-consent");
     expect(result.authorizationUrl).toBe("https://example.test/authorize");
@@ -309,20 +455,53 @@ describe("catalog connection lifecycle", () => {
       expect(f.oauth.begin).not.toHaveBeenCalled();
     },
   );
-  it("reports client registration needs and redacts other provider failures", async () => {
+  it("reports client registration needs by error type and redacts other provider failures", async () => {
     const f = fixture();
+    f.oauth.begin.mockRejectedValueOnce(
+      new McpClientRegistrationRequiredError(new Error("synthetic provider text")),
+    );
+    expect((await f.service.connect(actor, { catalogId: "notion" })).connection.state).toBe(
+      "needs-client-registration",
+    );
+    // Provider wording never decides the state.
     f.oauth.begin.mockRejectedValueOnce(
       new Error("Incompatible auth server: does not support dynamic client registration"),
     );
     expect((await f.service.connect(actor, { catalogId: "notion" })).connection.state).toBe(
-      "needs-client-registration",
+      "discovery-failed",
     );
     f.oauth.begin.mockRejectedValueOnce(new Error("Bearer fake-secret"));
     const failed = await f.service.connect(actor, { catalogId: "notion" });
     expect(failed.connection.state).toBe("discovery-failed");
     expect(JSON.stringify(failed)).not.toContain("fake-secret");
-    expect(needsClientRegistration(new Error("network failed"))).toBe(false);
   });
+  it.each([
+    ["already_connected", "connected"],
+    ["authorization_not_requested", "discovery-failed"],
+    ["replaced", "awaiting-consent"],
+  ] as const)("releases the reservation when a catalog sign-in ends %s", async (status, state) => {
+    const f = fixture();
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+    f.setRow({ catalogId: "notion", pendingOauthSessionId: null });
+    f.oauth.begin.mockImplementationOnce(async () => ({ status }) as never);
+    const result = await f.service.connect(actor, { catalogId: "notion" });
+    expect(f.row().pendingOauthSessionId).toBeNull();
+    expect(result.connection.state).toBe(state);
+  });
+  it.each(["already_connected", "authorization_not_requested", "replaced"] as const)(
+    "releases the reservation when a sign-in ends %s",
+    async (status) => {
+      const f = fixture();
+      vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+      f.setRow({ catalogId: null, connectionState: "not-connected", pendingOauthSessionId: null });
+      f.oauth.begin.mockImplementationOnce(async () => ({ status }) as never);
+      await f.service.beginAuthorization(actor, {
+        serverId: "connection",
+        redirectUri: "https://app.example.test/api/oauth/done",
+      });
+      expect(f.row().pendingOauthSessionId).toBeNull();
+    },
+  );
   it("stores encrypted token material, discovers before Connected, and revokes it with grants", async () => {
     const f = fixture();
     const token = randomBytes(24).toString("hex");
@@ -444,6 +623,255 @@ describe("catalog connection lifecycle", () => {
     expect(f.row().lastError).toBe("Could not reach this integration. Try again.");
     expect(JSON.stringify(f.row().recentErrors)).not.toContain("fake-secret");
     expect(inspect).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    ["an auth failure", new McpReauthorizationRequiredError("connection"), "needs-sign-in"],
+    ["any other failure", new Error("fake-secret"), "connected"],
+  ])("records %s on every custom server discovery", async (_, failure, state) => {
+    const f = fixture();
+    f.setRow({ catalogId: null });
+    vi.spyOn(McpConnector.prototype, "inspectServer")
+      .mockResolvedValueOnce(manifest)
+      .mockRejectedValueOnce(failure);
+    await f.service.capture(actor, "connection");
+    expect(f.row().connectionState).toBe("connected");
+    await expect(f.service.capture(actor, "connection")).rejects.toThrow();
+    expect(f.row().connectionState).toBe(state);
+    if (state === "connected")
+      expect(f.row().lastError).toBe("Could not reach this integration. Try again.");
+    expect(JSON.stringify(f.row())).not.toContain("fake-secret");
+  });
+  it("keeps a connected custom server connected when re-authorization starts", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: null, connectionState: "connected", revision: 4 });
+    await f.service.beginAuthorization(actor, {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    });
+    expect(f.row()).toMatchObject({ connectionState: "connected", revision: 4 });
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+    await f.service.capture(actor, "connection");
+    expect(f.row().connectionState).toBe("connected");
+  });
+  it("binds a re-authorization to its oauth session without changing a working connection", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: null, connectionState: "connected", revision: 4 });
+    const started = await f.service.beginAuthorization(actor, {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    });
+    expect(started).toMatchObject({ status: "authorization_required" });
+    if (started.status !== "authorization_required") throw new Error("sign-in was not requested");
+    expect(f.row()).toMatchObject({
+      connectionState: "connected",
+      revision: 4,
+      pendingOauthSessionId: started.sessionId,
+    });
+  });
+  it("records a re-authorization only after discovery, and keeps the connection when the old tokens return", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      connectionState: "connected",
+      revision: 4,
+      pendingOauthSessionId: "session",
+    });
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+    await f.service.capture(actor, "connection", "session");
+    expect(f.row()).toMatchObject({
+      connectionState: "connected",
+      pendingOauthSessionId: null,
+      lastError: null,
+    });
+    expect(f.oauth.discardPriorConnected).toHaveBeenCalledWith("session");
+
+    f.setRow({
+      connectionState: "connected",
+      pendingOauthSessionId: "session",
+      lastError: null,
+    });
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockRejectedValue(new Error("fake-secret"));
+    f.oauth.restorePriorConnected.mockResolvedValue(true);
+    await expect(f.service.capture(actor, "connection", "session")).rejects.toThrow();
+    expect(f.oauth.restorePriorConnected).toHaveBeenCalledWith("connection", "session", actor);
+    expect(f.row()).toMatchObject({
+      connectionState: "connected",
+      pendingOauthSessionId: null,
+      lastError: "Could not reach this integration. Try again.",
+    });
+
+    f.setRow({
+      connectionState: "connected",
+      pendingOauthSessionId: "session",
+      lastError: null,
+    });
+    f.oauth.restorePriorConnected.mockResolvedValue(false);
+    await expect(f.service.capture(actor, "connection", "session")).rejects.toThrow();
+    expect(f.row()).toMatchObject({
+      connectionState: "needs-sign-in",
+      pendingOauthSessionId: null,
+      lastError: "Needs sign-in.",
+    });
+  });
+  it("does not let an older oauth session change a newer attempt", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      connectionState: "connected",
+      revision: 4,
+      pendingOauthSessionId: "newer",
+    });
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockRejectedValue(new Error("fake-secret"));
+    await expect(f.service.capture(actor, "connection", "older")).rejects.toThrow();
+    expect(f.row()).toMatchObject({
+      connectionState: "connected",
+      revision: 4,
+      pendingOauthSessionId: "newer",
+    });
+    expect(f.row().lastError).toBeUndefined();
+  });
+  it("does not let a slower begin rebind a server a faster begin already claimed", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      connectionState: "not-connected",
+      pendingOauthSessionId: null,
+    });
+    const input = {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    };
+    f.oauth.begin.mockImplementationOnce(async () => {
+      await f.service.beginAuthorization(actor, input);
+      return {
+        status: "authorization_required" as const,
+        sessionId: "slow",
+        authorizationUrl: "https://example.test/authorize-slow",
+      };
+    });
+    const slow = await f.service.beginAuthorization(actor, input);
+    expect(slow).toEqual({ status: "replaced" });
+    expect(f.row().pendingOauthSessionId).toEqual(expect.any(String));
+    expect(f.oauth.begin).toHaveBeenCalledTimes(2);
+  });
+  it("does not let a slower begin rebind a server after a faster attempt finishes", async () => {
+    const f = fixture();
+    const startedAt = new Date("2026-09-25T12:00:00.000Z");
+    f.setRow({
+      catalogId: null,
+      connectionState: "not-connected",
+      pendingOauthSessionId: null,
+      updatedAt: startedAt,
+    });
+    const input = {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    };
+    f.oauth.begin.mockImplementationOnce(async () => {
+      f.setRow({
+        pendingOauthSessionId: null,
+        connectionState: "connected",
+        updatedAt: new Date("2026-09-25T12:00:02.000Z"),
+      });
+      return {
+        status: "authorization_required" as const,
+        sessionId: "slow",
+        authorizationUrl: "https://example.test/authorize-slow",
+      };
+    });
+    const slow = await f.service.beginAuthorization(actor, input);
+    expect(slow).toEqual({ status: "replaced" });
+    expect(f.row().pendingOauthSessionId).toBeNull();
+  });
+  it("replaces an expired pending sign-in when that id is still the one stored", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      connectionState: "not-connected",
+      pendingOauthSessionId: "stale",
+    });
+    f.db.mcpOAuthSession.findFirst.mockResolvedValue({
+      id: "stale",
+      createdAt: new Date(Date.now() - 11 * 60 * 1000),
+    });
+    const result = await f.service.beginAuthorization(actor, {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    });
+    expect(result).toMatchObject({ status: "authorization_required" });
+    if (result.status !== "authorization_required") throw new Error("sign-in was not requested");
+    expect(f.row().pendingOauthSessionId).toBe(result.sessionId);
+    expect(f.db.mcpServer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.not.objectContaining({ updatedAt: expect.anything() }),
+      }),
+    );
+    expect(f.db.mcpServer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ pendingOauthSessionId: "stale" }),
+      }),
+    );
+  });
+  it("clears only the matching pending session when sign-in is cancelled", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      connectionState: "not-connected",
+      pendingOauthSessionId: "ours",
+    });
+    await f.service.cancelAuthorization(actor, { serverId: "connection", sessionId: "other" });
+    expect(f.row().pendingOauthSessionId).toBe("ours");
+    await f.service.cancelAuthorization(actor, { serverId: "connection", sessionId: "ours" });
+    expect(f.row().pendingOauthSessionId).toBeNull();
+  });
+  it("keeps a connected custom server connected when the sign-in probe times out", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: null, connectionState: "connected", lastError: null });
+    const failure = new Error("timed out");
+    failure.name = "TimeoutError";
+    f.oauth.begin.mockRejectedValue(failure);
+    const read = vi.spyOn(McpConnector.prototype, "resourceTools").mockResolvedValue([]);
+    await expect(
+      f.service.beginAuthorization(actor, {
+        serverId: "connection",
+        redirectUri: "https://app.example.test/mcp/oauth/callback",
+      }),
+    ).rejects.toBe(failure);
+    expect(f.row()).toMatchObject({
+      connectionState: "connected",
+      lastError: "Could not reach this integration. Try again.",
+    });
+    await expect(f.service.resourceTools(actor, "connection", "jira")).resolves.toEqual([]);
+    expect(read).toHaveBeenCalled();
+  });
+  it("clears a custom server's earlier result while its browser sign-in is pending", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: null, connectionState: "discovery-failed" });
+    await f.service.beginAuthorization(actor, {
+      serverId: "connection",
+      redirectUri: "https://app.example.test/mcp/oauth/callback",
+    });
+    expect(f.row().connectionState).toBe("not-connected");
+  });
+  it.each([
+    [
+      "a sign-in challenge without browser authorization",
+      Object.assign(new Error("fake-provider-response"), { code: "MCP_OAUTH_UNAVAILABLE" }),
+      "needs-sign-in",
+    ],
+    ["any other probe failure", new Error("fake-provider-response"), "discovery-failed"],
+  ])("records %s when a custom server's OAuth probe fails", async (_, failure, state) => {
+    const f = fixture();
+    f.setRow({ catalogId: null, connectionState: "not-connected" });
+    f.oauth.begin.mockRejectedValue(failure);
+    await expect(
+      f.service.beginAuthorization(actor, {
+        serverId: "connection",
+        redirectUri: "https://app.example.test/mcp/oauth/callback",
+      }),
+    ).rejects.toBe(failure);
+    expect(f.row().connectionState).toBe(state);
+    expect(JSON.stringify(f.row())).not.toContain("fake-provider-response");
   });
   it("requires a new explicit review when an assigned tool definition changes", async () => {
     const f = fixture();
