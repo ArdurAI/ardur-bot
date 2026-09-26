@@ -14,6 +14,7 @@ export type SettingsSection =
   | "usage"
   | "learning"
   | "system"
+  | "storage"
   | "extensions"
   | "developer"
   | "skills"

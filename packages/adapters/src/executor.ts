@@ -198,7 +198,7 @@ import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-fac
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
 import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
-import { adoptOpenCommands, createCommandRecording } from "./command-recording.js";
+import { adoptOpenCommands, createCommandRecording, sameToolCall } from "./command-recording.js";
 import {
   CommandReplayUnavailableError,
   commandReplayEvents,
@@ -405,19 +405,6 @@ interface OpenToolCall {
   argumentDigest: string | null;
   /** The helper delegation that issued the call. */
   delegationId: string | null;
-}
-
-/** A repeated id is the same call only when its name and argument digest match too. */
-function sameToolCall(
-  recorded: Pick<OpenToolCall, "name" | "argumentDigest"> | undefined,
-  call: Pick<OpenToolCall, "name" | "argumentDigest">,
-) {
-  return (
-    recorded !== undefined &&
-    recorded.argumentDigest !== null &&
-    recorded.name === call.name &&
-    recorded.argumentDigest === call.argumentDigest
-  );
 }
 
 /**

@@ -174,6 +174,10 @@ msgstr "{failed} failed"
 msgid "{hours}h ago"
 msgstr "{hours}h ago"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "{location} · Docker not running"
+msgstr "{location} · Docker not running"
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes}m ago"
@@ -702,6 +706,10 @@ msgstr "API key (optional)"
 msgid "API key header"
 msgstr "API key header"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "App cache"
+msgstr "App cache"
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "App token"
 msgstr "App token"
@@ -811,6 +819,7 @@ msgstr "Ardur Bot tried five times. Close it on the Board, or check that this co
 msgid "Arguments"
 msgstr "Arguments"
 
+#: src/pages/storage/StorageSettings.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Artifacts"
 msgstr "Artifacts"
@@ -884,6 +893,10 @@ msgstr "at {0}"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "at {timeSelect}"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "at least {size}"
+msgstr "at least {size}"
 
 #: src/pages/Shell.tsx
 msgid "Attachment"
@@ -1068,6 +1081,7 @@ msgid "Board status"
 msgstr "Board status"
 
 #: src/pages/settings-sections.ts
+#: src/pages/storage/StorageSettings.tsx
 msgid "Boards"
 msgstr "Boards"
 
@@ -1386,6 +1400,10 @@ msgstr "Checking…"
 msgid "Checkout has local changes. Clean it before updating."
 msgstr "Checkout has local changes. Clean it before updating."
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Checkpoints"
+msgstr "Checkpoints"
+
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
 msgstr "Choose"
@@ -1471,6 +1489,10 @@ msgstr "Clear"
 #: src/pages/shell/dialogs.tsx
 msgid "Clear {0}’s conversation?"
 msgstr "Clear {0}’s conversation?"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Clear caches"
+msgstr "Clear caches"
 
 #: src/pages/BotContextMenu.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1683,6 +1705,10 @@ msgstr "Computer engine is unavailable."
 #: src/pages/Shell.tsx
 msgid "Computer failed to boot"
 msgstr "Computer failed to boot"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Computer homes"
+msgstr "Computer homes"
 
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
@@ -2072,6 +2098,10 @@ msgstr "Could not check teaching status. Refresh the view to continue."
 msgid "Could not check this computer."
 msgstr "Could not check this computer."
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Could not clear caches; try again."
+msgstr "Could not clear caches; try again."
+
 #: src/pages/shell/dialogs.tsx
 msgid "Could not clear conversation"
 msgstr "Could not clear conversation"
@@ -2407,6 +2437,10 @@ msgstr "Could not reach this model server"
 #: src/pages/system/DispatchSetting.tsx
 msgid "Could not read or change Dispatch; reopen System settings."
 msgstr "Could not read or change Dispatch; reopen System settings."
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Could not read storage usage; try again."
+msgstr "Could not read storage usage; try again."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Could not read system settings; try again."
@@ -2825,6 +2859,7 @@ msgid "Dashboard"
 msgstr "Dashboard"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/storage/StorageSettings.tsx
 msgid "Database"
 msgstr "Database"
 
@@ -5670,6 +5705,10 @@ msgstr "Preview migration"
 msgid "Previous"
 msgstr "Previous"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Previous Docker data"
+msgstr "Previous Docker data"
+
 #: src/pages/board/ItemForm.tsx
 msgid "Priority"
 msgstr "Priority"
@@ -5825,6 +5864,10 @@ msgstr "Read replies aloud"
 #: src/pages/KnowledgeSection.tsx
 msgid "read-only"
 msgstr "read-only"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Reading storage usage…"
+msgstr "Reading storage usage…"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
@@ -6226,6 +6269,10 @@ msgstr "Response completions"
 #: src/pages/TeamBoard.tsx
 msgid "Responsible human"
 msgstr "Responsible human"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Restart the desktop app to see storage usage."
+msgstr "Restart the desktop app to see storage usage."
 
 #: src/pages/DevicesSettings.tsx
 #: src/pages/system/SystemPage.tsx
@@ -6783,6 +6830,10 @@ msgstr "Session actions"
 msgid "Session ended — open a new terminal"
 msgstr "Session ended — open a new terminal"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Sessions"
+msgstr "Sessions"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Set up"
 msgstr "Set up"
@@ -7163,6 +7214,10 @@ msgstr "Stopped"
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
 msgstr "Stopping"
+
+#: src/pages/settings-sections.ts
+msgid "Storage"
+msgstr "Storage"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Storage class"

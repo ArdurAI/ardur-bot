@@ -6,6 +6,7 @@ import {
   COMMAND_TRUNCATED,
   CommandEventPayloadSchema,
   CommandRequestSchema,
+  ToolResumedPayloadSchema,
 } from "@ardurbot/contracts";
 import {
   commandCardId,
@@ -54,11 +55,31 @@ type StoredComputer = {
   providerRef: string | null;
 };
 
+export type ToolCallIdentity = { name: string; argumentDigest: string | null };
+
+/**
+ * A repeated id is the same call only when its name and argument digest match. A missing digest
+ * never matches, even another missing one: two calls recorded without a digest may still differ.
+ */
+export function sameToolCall(
+  recorded: ToolCallIdentity | undefined,
+  call: ToolCallIdentity,
+): boolean {
+  return (
+    recorded !== undefined &&
+    recorded.argumentDigest !== null &&
+    recorded.name === call.name &&
+    recorded.argumentDigest === call.argumentDigest
+  );
+}
+
 /**
  * Cards an earlier attempt left waiting or running, by execution id, so a call that resumes
  * on the same id finishes its own card. A card belongs to the latest call recorded on its id:
  * an `agent.tool.called` with a different name or argument digest on that id drops it. A card a
- * resumed call took over by `agent.tool.resumed` is that call's, never adopted again.
+ * resumed call took over by `agent.tool.resumed` is filed under the resumed call's execution id
+ * with the card id the link names, so a later link can hand it on again even when the resumed
+ * call is itself killed before it publishes a card of its own.
  * `finished` names calls that already completed by `agent.tool.completed`.
  * `finishedCommandIds` names a card whose commandId already has a `command.finished`, even when
  * that completion never reached `agent.tool.completed`: a rerun on that id gets its own card and
@@ -71,21 +92,31 @@ export function adoptOpenCommands(
   finished: ReadonlySet<string>,
   finishedCommandIds: ReadonlySet<string> = new Set(),
 ) {
-  const calls = new Map<string, string>();
+  const calls = new Map<string, ToolCallIdentity>();
   const links: unknown[] = [];
   for (const event of events) {
     if (event.type === "agent.tool.resumed") {
+      const link = ToolResumedPayloadSchema.safeParse(event.payload);
       links.push(event.payload);
-      for (const [executionId, block] of target)
-        if (!commandCardId(block.commandId, commandJoins(links, block.commandId)))
-          target.delete(executionId);
+      for (const [executionId, block] of target) {
+        if (commandCardId(block.commandId, commandJoins(links, block.commandId))) continue;
+        target.delete(executionId);
+        // The link names the card it hands off: file it under the resumed call's execution id,
+        // under the card id the link names, so a later link can find and hand it on again.
+        if (link.success && link.data.toCommandId && link.data.fromCommandId === block.commandId)
+          target.set(link.data.to, { ...block, commandId: link.data.toCommandId });
+      }
       continue;
     }
     if (event.type === "agent.tool.called") {
       const call = (event.payload ?? {}) as Record<string, unknown>;
       if (typeof call.executionId !== "string") continue;
-      const identity = JSON.stringify([call.name, call.argumentDigest ?? null]);
-      if (calls.has(call.executionId) && calls.get(call.executionId) !== identity)
+      const identity: ToolCallIdentity = {
+        name: typeof call.name === "string" ? call.name : "",
+        argumentDigest: typeof call.argumentDigest === "string" ? call.argumentDigest : null,
+      };
+      const recorded = calls.get(call.executionId);
+      if (recorded !== undefined && !sameToolCall(recorded, identity))
         target.delete(call.executionId);
       calls.set(call.executionId, identity);
       continue;

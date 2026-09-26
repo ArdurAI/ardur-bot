@@ -1,9 +1,11 @@
 import type {
   CommandBlock as FixtureCommandBlock,
   ProductEvent as FixtureProductEvent,
+  ThreadMessage,
 } from "@ardurbot/contracts";
 import { COMMAND_OUTPUT_LIMIT, COMMAND_TRUNCATED, ProductEventSchema } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
+import type { CommandMessagesState } from "./command-blocks.js";
 import {
   commandSummary,
   createBoundedCommandOutput,
@@ -49,7 +51,7 @@ describe("command projection", () => {
     expect(projectCommandBlocks([event, commandEvent()])).toHaveLength(1);
   });
   it("snapshots the shared thread projection and export", () => {
-    expect(reduceCommandMessages([], commandEvent())).toMatchSnapshot();
+    expect(reduceCommandMessages(emptyState(), commandEvent()).messages).toMatchSnapshot();
     expect(
       exportCommandLog("run-1", [
         commandBlock({
@@ -84,10 +86,10 @@ describe("command projection", () => {
     };
     expect(projectCommandBlocks(events)).toEqual([merged]);
     // The live thread keeps one card: the killed card's row takes the resumed call's output.
-    const live = events.reduce<ReturnType<typeof reduceCommandMessages>>(
-      (messages, event) => reduceCommandMessages(messages, event),
-      [],
-    );
+    const live = events.reduce(
+      (state, event) => reduceCommandMessages(state, event),
+      emptyState(),
+    ).messages;
     expect(live).toHaveLength(1);
     expect(live[0]).toMatchObject({
       id: resumedCommandMessageId("card-b"),
@@ -110,10 +112,10 @@ describe("command projection", () => {
     ]);
     // List, open, export and rerun all read this projection.
     expect(projectCommandBlocks(events)).toEqual([finished]);
-    const live = events.reduce<ReturnType<typeof reduceCommandMessages>>(
-      (messages, event) => reduceCommandMessages(messages, event),
-      [],
-    );
+    const live = events.reduce(
+      (state, event) => reduceCommandMessages(state, event),
+      emptyState(),
+    ).messages;
     expect(live).toEqual([
       expect.objectContaining({
         id: "command:card-a",
@@ -302,6 +304,23 @@ describe("command projection", () => {
       ],
     ]);
   });
+  it("joins a resumed call's card by its link alone, even when the killed call's card is not loaded", () => {
+    // The killed call's own card is on an older page a partially loaded thread never fetched:
+    // the reducer only ever sees the link and the resumed call's own events.
+    const events = sequence([
+      resumedEvent("call-a", "call-b", { fromCommandId: "card-a", toCommandId: "card-b" }),
+      commandEvent("command.intent", {
+        commandId: "card-b",
+        executionId: "call-b",
+        ...open("waiting", "12:00:30"),
+      }),
+      commandEvent("command.finished", { commandId: "card-b", executionId: "call-b" }),
+    ]);
+    const live = events.reduce((state, event) => reduceCommandMessages(state, event), emptyState());
+    // The row carries the same id the server would use, so a later page load of the killed
+    // call's already-renamed row merges into it instead of creating a second card.
+    expect(live.messages.map((message) => message.id)).toEqual([resumedCommandMessageId("card-b")]);
+  });
   it("searches both retained streams and errors", () => {
     const block = commandBlock({ stderr: "Warning", error: "Stopped" });
     expect(searchCommandBlocks([block], "WARN")).toEqual([block]);
@@ -376,10 +395,10 @@ function resumedEvent(
  * projection behind list, open, export and rerun returns, one message per card.
  */
 function liveCards(events: FixtureProductEvent[]) {
-  const live = events.reduce<ReturnType<typeof reduceCommandMessages>>(
-    (messages, event) => reduceCommandMessages(messages, event),
-    [],
-  );
+  const live = events.reduce(
+    (state, event) => reduceCommandMessages(state, event),
+    emptyState(),
+  ).messages;
   const ids = live.map((message) => message.id);
   expect(new Set(ids).size).toBe(ids.length);
   const blocks = live.flatMap((message) =>
@@ -395,6 +414,10 @@ function liveCards(events: FixtureProductEvent[]) {
 
 function sequence(events: FixtureProductEvent[]): FixtureProductEvent[] {
   return events.map((event, index) => ({ ...event, id: `event-${index}`, seq: index + 1 }));
+}
+
+function emptyState(): CommandMessagesState<ThreadMessage> {
+  return { messages: [], links: [] };
 }
 
 function commandEvent(

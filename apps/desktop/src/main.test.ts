@@ -30,6 +30,7 @@ function fixture() {
     "openAppOnce",
     "commitPendingAppSwitch",
     "abandonPendingAppSwitch",
+    "scheduleLaunchCacheMaintenance",
   ];
   const declarations = [...source.matchAll(/^(?:async )?function (\w+)\(/gm)];
   const functions = declarations.flatMap((match, index) =>
@@ -68,7 +69,7 @@ function fixture() {
     markOnce: vi.fn(),
     safeOrigin: (url: string) => new URL(url).origin,
     loadAppUrl: vi.fn(async () => undefined),
-    resolveSessionForTarget: async () => ({ value: {}, partition: null }),
+    resolveSessionForTarget: vi.fn(async () => ({ value: {}, partition: null })),
     probeDocument: async () => null,
     installBundledRenderer: vi.fn(async () => undefined),
     remoteListener: { stop: vi.fn(async () => undefined) },
@@ -76,12 +77,18 @@ function fixture() {
     openFailureDetail: () => "Unavailable.",
     hostService,
     stop,
+    clearOversizedCache: vi.fn(async () => false),
+    console: { error: vi.fn() },
   };
   vm.runInNewContext(stripTypeScriptTypes(code), state);
   return state as typeof state & {
-    openAppOnce: (url: string) => Promise<boolean>;
+    openAppOnce: (
+      url: string,
+      resolved?: { partition: string | null; value: unknown },
+    ) => Promise<boolean>;
     commitPendingAppSwitch: () => void;
     abandonPendingAppSwitch: (setup: null, url: string) => Promise<"restored" | "kept">;
+    scheduleLaunchCacheMaintenance: (sessions: unknown[]) => void;
   };
 }
 
@@ -525,5 +532,72 @@ describe("quitting while local mode runs", () => {
     expect(f.localMode.stop).not.toHaveBeenCalled();
     expect(f.localMode.running()).toBe(true);
     expect(f.mainWindow).not.toBeNull();
+  });
+});
+
+describe("cache limits wiring in the main process", () => {
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+
+  it("caps the disk cache before the app is ready", () => {
+    // Electron ignores `--disk-cache-size` once the app has already become ready.
+    const capIndex = source.indexOf("capDiskCacheSize(app.commandLine)");
+    const readyIndex = source.indexOf("app.whenReady()");
+    expect(capIndex).toBeGreaterThan(-1);
+    expect(readyIndex).toBeGreaterThan(-1);
+    expect(capIndex).toBeLessThan(readyIndex);
+  });
+
+  it("schedules the oversized-cache cleanup without waiting for it, so a slow cleanup never blocks the caller", async () => {
+    const f = fixture();
+    let resolveCleanup!: () => void;
+    const slow = new Promise<void>((resolve) => {
+      resolveCleanup = resolve;
+    });
+    const order: string[] = [];
+    f.clearOversizedCache.mockImplementation(async () => {
+      await slow;
+      order.push("cleanup");
+      return true;
+    });
+    f.loadAppUrl.mockImplementation(async () => {
+      order.push("loaded");
+    });
+    // The window is created and fully loaded before the cleanup is even scheduled here,
+    // matching where `scheduleLaunchCacheMaintenance` is called after the startup dispatch.
+    expect(await f.openAppOnce(url)).toBe(true);
+    f.scheduleLaunchCacheMaintenance([{}]);
+    expect(order).toEqual(["loaded"]);
+    resolveCleanup();
+    await vi.waitFor(() => expect(order).toEqual(["loaded", "cleanup"]));
+  });
+
+  it("logs a failed cleanup instead of letting it surface", async () => {
+    const f = fixture();
+    const error = new Error("disk full");
+    f.clearOversizedCache.mockRejectedValueOnce(error);
+    f.scheduleLaunchCacheMaintenance([{}]);
+    await vi.waitFor(() =>
+      expect(f.console.error).toHaveBeenCalledWith("Could not clear an oversized cache.", error),
+    );
+  });
+
+  it("wires the storage IPC handlers to the shared cache-clearing and usage helpers", () => {
+    expect(source).toContain('ipcMain.handle("desktop.storage.usage"');
+    expect(source).toContain('ipcMain.handle("desktop.storage.clearCaches"');
+    expect(source).toContain("clearAppCaches(win.webContents.session)");
+    expect(source).toContain("collectStorageUsage({");
+  });
+
+  it("never re-resolves the session when the caller already resolved it for this URL", async () => {
+    const f = fixture();
+    const resolved = { partition: null, value: {} };
+    expect(await f.openAppOnce(url, resolved)).toBe(true);
+    expect(f.resolveSessionForTarget).not.toHaveBeenCalled();
+  });
+
+  it("resolves its own session when the caller has none, unchanged from before", async () => {
+    const f = fixture();
+    expect(await f.openAppOnce(url)).toBe(true);
+    expect(f.resolveSessionForTarget).toHaveBeenCalledExactlyOnceWith(url);
   });
 });

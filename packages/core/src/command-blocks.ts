@@ -256,56 +256,136 @@ function messageJoins(
   };
 }
 
+/** A synthetic link for each command id a loaded card's `resumedFrom` already names as continued. */
+function impliedCommandLinks(
+  messages: readonly Pick<ThreadMessage, "blocks">[],
+): ToolResumedPayload[] {
+  const links: ToolResumedPayload[] = [];
+  for (const message of messages) {
+    for (const block of message.blocks) {
+      if (block.kind !== "command") continue;
+      for (const fromCommandId of block.command.resumedFrom ?? []) {
+        links.push({
+          from: fromCommandId,
+          to: block.command.commandId,
+          fromCommandId,
+          toCommandId: block.command.commandId,
+        });
+      }
+    }
+  }
+  return links;
+}
+
+/**
+ * The resume links a reader keeps across a `threads.get` refresh: its own record, carried
+ * forward, unioned with whatever the refresh's own messages already imply. A refresh's messages
+ * can reveal a hop the reader never saw live (a missed event while disconnected); the carried
+ * record covers the opposite case, a hop whose named card is still not among the messages this
+ * refresh loaded. Neither source alone is enough, so both survive every refresh and merge.
+ */
+export function mergeCommandLinks(
+  previousLinks: readonly ToolResumedPayload[],
+  messages: readonly Pick<ThreadMessage, "blocks">[],
+): ToolResumedPayload[] {
+  const seen = new Set<string>();
+  const merged: ToolResumedPayload[] = [];
+  for (const link of [...previousLinks, ...impliedCommandLinks(messages)]) {
+    const key = `${link.fromCommandId}:${link.toCommandId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(link);
+  }
+  return merged;
+}
+
+/**
+ * `messages` plus the resume links seen so far, kept separately because a reader with only part
+ * of the thread loaded may hold a link whose named card is not among its messages.
+ */
+export interface CommandMessagesState<T> {
+  messages: T[];
+  /** Resume links seen so far, in order; a growing record independent of what is loaded. */
+  links: readonly ToolResumedPayload[];
+}
+
+/** Where `commandId` sits: from either loaded messages or a resume link seen since, whichever knows. */
+function readerJoins(
+  messages: readonly Pick<ThreadMessage, "id" | "blocks">[],
+  links: Iterable<unknown>,
+  commandId: string,
+): CommandJoins {
+  const fromMessages = messageJoins(messages, commandId);
+  const fromLinks = commandJoins(links, commandId);
+  return {
+    resumedAway: fromMessages.resumedAway || fromLinks.resumedAway,
+    joined: fromMessages.joined || fromLinks.joined,
+  };
+}
+
 /** Shared by the web and native reducers; command rows never become narration. */
 export function reduceCommandMessages<
   T extends Pick<ThreadMessage, "id" | "role" | "blocks"> & Partial<ThreadMessage>,
->(messages: T[], event: CommandProjectionEvent): Array<T | ThreadMessage> {
+>(
+  state: CommandMessagesState<T>,
+  event: CommandProjectionEvent,
+): CommandMessagesState<T | ThreadMessage> {
+  const { messages, links } = state;
   if (/^run\.(completed|failed|cancelled)$/.test(event.type)) {
-    return messages.map((message) =>
-      message.runId !== event.runId
-        ? message
-        : {
-            ...message,
-            blocks: message.blocks.map((block) =>
-              block.kind === "command"
-                ? { kind: "command" as const, command: settleCommandBlock(block.command) }
-                : block,
-            ),
-          },
-    );
+    return {
+      links,
+      messages: messages.map((message) =>
+        message.runId !== event.runId
+          ? message
+          : {
+              ...message,
+              blocks: message.blocks.map((block) =>
+                block.kind === "command"
+                  ? { kind: "command" as const, command: settleCommandBlock(block.command) }
+                  : block,
+              ),
+            },
+      ),
+    };
   }
   if (event.type === "agent.tool.resumed") {
     const link = ToolResumedPayloadSchema.safeParse(event.payload);
-    if (!link.success) return messages;
-    const ids = resumedCardIds(link.data, (commandId) => messageJoins(messages, commandId));
-    if (!ids || messages.some((message) => message.id === ids.to)) return messages;
-    // The card the killed call published becomes the card its resumed call finishes.
-    return messages.map((message) =>
-      message.id === ids.from
-        ? {
-            ...message,
-            id: ids.to,
-            blocks: message.blocks.map((block) =>
-              block.kind === "command"
-                ? {
-                    kind: "command" as const,
-                    command: resumeCommandCard(block.command, ids.fromCommandId),
-                  }
-                : block,
-            ),
-          }
-        : message,
-    );
+    if (!link.success) return state;
+    const nextLinks = [...links, link.data];
+    const ids = resumedCardIds(link.data, (commandId) => readerJoins(messages, links, commandId));
+    if (!ids || messages.some((message) => message.id === ids.to))
+      return { messages, links: nextLinks };
+    // The card the killed call published becomes the card its resumed call finishes, when that
+    // card is loaded; otherwise the link is still remembered for the cards it joins going forward.
+    return {
+      links: nextLinks,
+      messages: messages.map((message) =>
+        message.id === ids.from
+          ? {
+              ...message,
+              id: ids.to,
+              blocks: message.blocks.map((block) =>
+                block.kind === "command"
+                  ? {
+                      kind: "command" as const,
+                      command: resumeCommandCard(block.command, ids.fromCommandId),
+                    }
+                  : block,
+              ),
+            }
+          : message,
+      ),
+    };
   }
-  if (!isCommandEvent(event.type)) return messages;
+  if (!isCommandEvent(event.type)) return state;
   const [projected] = projectCommandBlocks([event], new Set(event.runId ? [event.runId] : []));
-  if (!projected) return messages;
-  const id = commandCardId(projected.commandId, messageJoins(messages, projected.commandId));
-  if (!id) return messages;
+  if (!projected) return state;
+  const id = commandCardId(projected.commandId, readerJoins(messages, links, projected.commandId));
+  if (!id) return state;
   const previous = messages.find((message) => message.id === id);
   const shown = previous?.blocks[0]?.kind === "command" ? previous.blocks[0].command : undefined;
   const block = nextCommandCard(id, shown, projected);
-  if (!block) return messages;
+  if (!block) return state;
   const next: ThreadMessage = {
     id,
     threadId: event.threadId,
@@ -316,9 +396,12 @@ export function reduceCommandMessages<
     createdAt: previous?.createdAt ?? new Date(event.createdAt).toISOString(),
     blocks: [{ kind: "command", command: block }],
   };
-  return previous
-    ? messages.map((message) => (message.id === id ? next : message))
-    : [...messages, next];
+  return {
+    links,
+    messages: previous
+      ? messages.map((message) => (message.id === id ? next : message))
+      : [...messages, next],
+  };
 }
 
 export function commandSummary(block: CommandBlock): string {

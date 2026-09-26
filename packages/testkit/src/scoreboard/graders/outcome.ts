@@ -1,3 +1,4 @@
+import { WORKSPACE_NOT_INSPECTED } from "../../versus/adapters/hermes-container.js";
 import { canonicalSerialize, contentDigest } from "../manifest.js";
 import type { FixtureRecord, Json, TaskContract } from "../tasks/catalog.js";
 import { immutable } from "../tasks/catalog.js";
@@ -187,7 +188,7 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
       uninspected: true,
       criticalPassed: false,
       withinDeadline: null,
-      reasons: ["The workspace could not be inspected."],
+      reasons: [WORKSPACE_NOT_INSPECTED],
       checks: {
         shape: null,
         facts: null,

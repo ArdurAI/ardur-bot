@@ -3,6 +3,7 @@ import type {
   ProductEvent as FixtureProductEvent,
   ThreadMessage,
 } from "@ardurbot/contracts";
+import type { CommandMessagesState } from "@ardurbot/core";
 import {
   projectCommandBlocks,
   reduceCommandMessages,
@@ -401,10 +402,10 @@ async function storedCards(events: [FixtureProductEvent["type"], Record<string, 
   reloads.forEach((reloaded, cursor) => {
     const live = productEvents
       .slice(cursor)
-      .reduce<ThreadMessage[]>(
-        (messages, event) => reduceCommandMessages(messages, event) as ThreadMessage[],
-        reloaded,
-      );
+      .reduce((state, event) => reduceCommandMessages(state, event), {
+        messages: reloaded,
+        links: [],
+      } as CommandMessagesState<ThreadMessage>).messages as ThreadMessage[];
     expect(shown(live), `live after a reload at event ${cursor}`).toEqual(shown(stored));
   });
   const ids = stored.map((message) => message.id);
