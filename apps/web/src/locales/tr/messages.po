@@ -38,6 +38,11 @@ msgstr " (okunmadı)"
 msgid "{0, plural, one {# model} other {# models}}"
 msgstr "{0, plural, one {# model} other {# model}}"
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
+msgstr ""
+
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
 msgid "{0} {unitLabel}"
@@ -95,11 +100,6 @@ msgstr ""
 #. placeholder {6}: result.failed
 #: src/pages/import/LocalImportPage.tsx
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
-msgstr ""
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "{0} items were not scanned because of the scan limits."
 msgstr ""
 
 #. placeholder {0}: format(size / 1024)

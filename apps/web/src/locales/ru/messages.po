@@ -38,6 +38,11 @@ msgstr " (непрочитано)"
 msgid "{0, plural, one {# model} other {# models}}"
 msgstr "{0, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}"
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
+msgstr "{0, plural, one {Не просканировано элементов из-за ограничений сканирования: #.} few {Не просканировано элементов из-за ограничений сканирования: #.} many {Не просканировано элементов из-за ограничений сканирования: #.} other {Не просканировано элементов из-за ограничений сканирования: #.}}"
+
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
 msgid "{0} {unitLabel}"
@@ -96,11 +101,6 @@ msgstr "Обработка {0}"
 #: src/pages/import/LocalImportPage.tsx
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr "Импортировано: {0}, обновлено: {1}, без изменений: {2}, удалено: {3}, пропущено: {4}, конфликтов: {5}, с ошибкой: {6}."
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
-msgstr "{0, plural, one {Не просканировано элементов из-за ограничений сканирования: #.} few {Не просканировано элементов из-за ограничений сканирования: #.} many {Не просканировано элементов из-за ограничений сканирования: #.} other {Не просканировано элементов из-за ограничений сканирования: #.}}"
 
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
