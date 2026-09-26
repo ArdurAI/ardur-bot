@@ -133,7 +133,7 @@ Host integration accounts use existing CLI configuration/keychains. The database
 stores only the selected identity, workspace and tool grants. No CLI token is
 exported into an API secret or environment variable. The owner remains responsible
 for CLI sign-in and its refresh mechanism. See
-[integration lifecycle](/docs/decisions/integration-lifecycle/) and
+[integration lifecycle](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/decisions/integration-lifecycle.md) and
 [host environment](/docs/host-service/#owner-environment-and-tool-inventory).
 
 ## Related

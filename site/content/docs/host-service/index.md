@@ -170,7 +170,7 @@ status command is not a strictly offline check.
 They run concurrently on the captured login PATH, with an eight-second deadline
 per CLI and a thirty-second inventory cache. The API receives only selected
 identity/workspace fields, state and check time. Raw status output and token
-material stay out of the database. See [integration lifecycle](/docs/decisions/integration-lifecycle/)
+material stay out of the database. See [integration lifecycle](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/decisions/integration-lifecycle.md)
 for commands, provider documentation and the distinction between a configured
 context and verified remote authentication.
 
