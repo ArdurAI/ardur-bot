@@ -15,9 +15,13 @@ const sandboxArg = process.argv.find((arg) => arg.startsWith("--sandbox="));
 const specArg = process.argv.find((arg) => arg.startsWith("--spec="));
 const grepArg = process.argv.find((arg) => arg.startsWith("--grep="));
 const runtimeArg = process.argv.find((arg) => arg.startsWith("--runtime="));
+const workersArg = process.argv.find((arg) => arg.startsWith("--workers="));
+const shardArg = process.argv.find((arg) => arg.startsWith("--shard="));
 const sandboxProvider = sandboxArg?.slice("--sandbox=".length) ?? "fake";
 const e2eSpec = specArg?.slice("--spec=".length);
 const e2eGrep = grepArg?.slice("--grep=".length);
+const e2eWorkers = workersArg?.slice("--workers=".length);
+const e2eShard = shardArg?.slice("--shard=".length);
 const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
 
 if (Number(integration) + Number(e2e) !== 1) {
@@ -215,6 +219,8 @@ async function main() {
             "test",
             ...(e2eSpec ? [e2eSpec] : []),
             ...(e2eGrep ? ["--grep", e2eGrep] : []),
+            ...(e2eWorkers ? ["--workers", e2eWorkers] : []),
+            ...(e2eShard ? ["--shard", e2eShard] : []),
           ],
           {
             ...process.env,

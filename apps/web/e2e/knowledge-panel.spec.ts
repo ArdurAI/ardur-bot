@@ -15,15 +15,14 @@ test("memory and skills are readable and editable in the app", async ({ page }, 
   const userName = `Knowledge ${stamp}`;
   await signup(page, `knowledge-${stamp}@ardurbot.test`, "password12", userName);
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   // Space-wide documents live in Settings → Memory. Open that before bot
   // settings so the Knowledge Memory tab cannot steal this click.
   await openUserSettings(page, "memory");
   await expect(page.getByLabel("Close memory settings")).toBeVisible();
   const spaceDocs = page.getByTestId("space-memory-documents");
-  await expect(spaceDocs.getByText("Shared documents")).toBeVisible();
+  await expect(spaceDocs.getByRole("tab", { name: "Documents", exact: true })).toBeVisible();
   const memoryRow = spaceDocs.getByRole("button", { name: /MEMORY\.md/ });
   await expect(memoryRow).toBeVisible();
   await memoryRow.click();

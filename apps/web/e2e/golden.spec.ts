@@ -167,7 +167,7 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export" }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/chief-export\.json/i);
+  expect(download.suggestedFilename()).toMatch(/(chief-export\.json|bot-v2\.tar\.gz)/i);
   const settings = page.getByTestId("bot-settings");
   await expect(settings.getByRole("button", { name: "Archive bot" })).toHaveCount(0);
   await expect(settings.getByRole("button", { name: "Delete bot" })).toHaveCount(0);

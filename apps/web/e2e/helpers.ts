@@ -11,7 +11,7 @@ export function realSandboxTimeout(real: number, emulated: number) {
 
 export function activeBotId(page: Page) {
   const id = new URL(page.url()).pathname.split("/").filter(Boolean).at(-1);
-  if (!id || id === "app") throw new Error(`missing bot id in ${page.url()}`);
+  if (!id || id === "app" || id === "bots") throw new Error(`missing bot id in ${page.url()}`);
   return id;
 }
 

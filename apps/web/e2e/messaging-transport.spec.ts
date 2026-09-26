@@ -50,8 +50,7 @@ test("labels a Sendblue group message with its actual transport", async ({ page 
   const stamp = Date.now();
   await signup(page, `messaging-transport-${stamp}@ardurbot.test`, "password12", "Transport E2E");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   // Reload hydrates from bootstrap.thread first; threads/get is a second path.
   const fulfillWithInjection = async (route: Parameters<Parameters<typeof page.route>[1]>[0]) => {

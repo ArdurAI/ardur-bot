@@ -8,6 +8,14 @@ import {
 } from "./helpers";
 
 test("computer profiles require confirmation before replacement", async ({ page }, testInfo) => {
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
+    });
+  });
   await signup(page, `profiles-${Date.now()}@ardurbot.test`, "password12", "Builder");
   await completeOnboarding(page);
   const botId = activeBotId(page);

@@ -2,6 +2,14 @@ import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
 test("Computers shows fleet capacity, placement and move consent", async ({ page }, testInfo) => {
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
+    });
+  });
   await signup(page, `fleet-${Date.now()}@ardurbot.test`, "password12", "Builder");
   await completeOnboarding(page);
   const capacity = {

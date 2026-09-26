@@ -94,7 +94,7 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   await settings.getByTestId("settings-nav-devices").click();
   await expect(settings.getByText("Test phone", { exact: true })).toBeVisible();
   await expect(
-    settings.getByLabel("Your phone can reach this Mac on your network."),
+    settings.getByRole("switch", { name: "Your phone can reach this Mac on your network." }),
   ).not.toBeChecked();
   await settings.getByRole("button", { name: "Pair device", exact: true }).click();
   await expect(settings.getByRole("img", { name: "Pair device" })).toBeVisible();

@@ -162,7 +162,6 @@ test("Executor reconnect saves a replacement token before discovery", async ({ p
           transport: "streamable_http",
           endpoint: "http://localhost:8765/mcp",
           secret: "fake-old-token",
-          headers: { "X-Test": "fake-header" },
         },
       }),
     });
@@ -271,7 +270,10 @@ test("configured server owners manage providers from settings", async ({ page },
     .click();
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("settings-nav-account").click();
-  const link = settings.getByRole("link", { name: "Server integrations", exact: true });
+  const link = settings
+    .getByText("Server integrations")
+    .locator("..")
+    .getByRole("link", { name: "Manage", exact: true });
   await expect(link).toBeVisible();
   await captureScreenshot(page, testInfo, "server-integrations-settings");
   await link.click();

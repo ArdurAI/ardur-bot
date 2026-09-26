@@ -26,14 +26,14 @@ test("actions run by default while optional confirmations live in advanced user 
   await expect(page.getByTestId("bot-settings").getByText("Action confirmations")).toHaveCount(0);
   await page.getByRole("button", { name: "Close panel" }).click();
 
-  const settings = await openUserSettings(page);
+  const settings = await openUserSettings(page, "account");
   await expect(settings).toHaveAttribute("role", "dialog");
   await expect(settings).toBeFocused();
-  await expect(settings.getByText("Optional controls most people never need")).toBeVisible();
+  await expect(settings.getByTestId("advanced-settings")).toBeVisible();
   await expect(settings.getByRole("heading", { name: "Action confirmations" })).not.toBeVisible();
   await captureScreenshot(page, testInfo, "51-user-settings-advanced-collapsed");
 
-  await settings.getByText("Advanced", { exact: true }).click();
+  await settings.getByText("Action confirmations", { exact: true }).click();
   await expect(settings.getByRole("heading", { name: "Action confirmations" })).toBeVisible();
   await expect(settings.getByText("No exceptions. Actions run automatically.")).toBeVisible();
   await expect(settings.getByTestId("auto-review-toggle")).toBeVisible();

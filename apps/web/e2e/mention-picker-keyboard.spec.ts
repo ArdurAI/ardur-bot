@@ -15,8 +15,7 @@ test("mention picker completes with Enter and Tab", async ({ page }, testInfo) =
   const stamp = Date.now();
   await signup(page, `mention-keys-${stamp}@ardurbot.test`, "password12", "Mention Keys");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const researcherId = await createBot(page, "Researcher");
   const writerId = await createBot(page, "Research Writer");

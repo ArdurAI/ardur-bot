@@ -7,8 +7,7 @@ test("command palette opens with keyboard, filters, and switches bots", async ({
   const stamp = Date.now();
   await signup(page, `cmdk-bots-${stamp}@ardurbot.test`, "password12", "CmdK Bots");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const chiefId = activeBotId(page);
   const researcher = await rpc<{ id: string }>(page, "bots/create", {

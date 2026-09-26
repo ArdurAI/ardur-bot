@@ -4,7 +4,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { authClient } from "../lib/auth";
+import { authClient, refreshAuthSession } from "../lib/auth";
 import { authReturnPath } from "../lib/auth-return-path";
 import { clearSpaceSelection } from "../lib/rpc";
 
@@ -105,6 +105,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         return;
       }
       clearSpaceSelection();
+      await refreshAuthSession();
       navigate(mode === "up" ? "/onboarding" : authReturnPath(searchParams.get("next")));
     } catch {
       setError(t`Could not reach the server`);

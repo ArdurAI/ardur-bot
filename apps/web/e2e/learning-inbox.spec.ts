@@ -33,7 +33,6 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
 }, testInfo) => {
   await signup(page, `learning-${Date.now()}@ardurbot.test`, "password12", "Learning fixture");
   await completeOnboarding(page);
-  await page.goto("/app");
   let status = "pending";
   const proposal = () => ({
     id: "proposal",

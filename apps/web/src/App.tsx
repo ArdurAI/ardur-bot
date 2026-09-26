@@ -2,7 +2,7 @@ import { LOCAL_SETTINGS_PAGE } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 import { LoadingState } from "./components/ai/primitives";
 import { PreferencesProvider } from "./components/PreferencesProvider";
 import { ShellSkeleton } from "./components/ShellSkeleton";
@@ -112,49 +112,83 @@ function SessionApp() {
           <Route path="/reset-password" element={<PasswordResetPage />} />
           <Route
             path="/onboarding"
-            element={user ? <OnboardingPage /> : <Navigate to="/sign-in" replace />}
+            element={
+              <RequireAuth user={user}>
+                <OnboardingPage />
+              </RequireAuth>
+            }
           />
           <Route
             path="/mcp/oauth/callback"
-            element={user ? <McpOAuthCallbackPage /> : <Navigate to="/sign-in" replace />}
+            element={
+              <RequireAuth user={user}>
+                <McpOAuthCallbackPage />
+              </RequireAuth>
+            }
           />
           <Route
             path="/integrations/setup"
             element={
-              user ? (
+              <RequireAuth user={user}>
                 <IntegrationSetupPage />
-              ) : (
-                <Navigate to="/sign-in?next=/integrations/setup" replace />
-              )
+              </RequireAuth>
             }
           />
           <Route
             path="/app/board"
-            element={user ? <ShellPage dashboard /> : <Navigate to="/sign-in" replace />}
+            element={
+              <RequireAuth user={user}>
+                <ShellPage dashboard />
+              </RequireAuth>
+            }
           />
           <Route
             path="/app/ide"
-            element={user ? <IdePage /> : <Navigate to="/sign-in" replace />}
+            element={
+              <RequireAuth user={user}>
+                <IdePage />
+              </RequireAuth>
+            }
           />
           <Route
             path="/app/team"
-            element={user ? <StartPage team /> : <Navigate to="/sign-in" replace />}
+            element={
+              <RequireAuth user={user}>
+                <StartPage team />
+              </RequireAuth>
+            }
           />
           <Route
             path="/app"
-            element={user ? <StartPage dashboard /> : <Navigate to="/sign-in" replace />}
+            element={
+              <RequireAuth user={user}>
+                <StartPage dashboard />
+              </RequireAuth>
+            }
           />
           <Route
             path="/app/bots"
-            element={user ? <StartPage /> : <Navigate to="/sign-in" replace />}
+            element={
+              <RequireAuth user={user}>
+                <StartPage />
+              </RequireAuth>
+            }
           />
           <Route
             path="/app/g/:groupId"
-            element={user ? <StartPage /> : <Navigate to="/sign-in" replace />}
+            element={
+              <RequireAuth user={user}>
+                <StartPage />
+              </RequireAuth>
+            }
           />
           <Route
             path="/app/:botId"
-            element={user ? <StartPage /> : <Navigate to="/sign-in" replace />}
+            element={
+              <RequireAuth user={user}>
+                <StartPage />
+              </RequireAuth>
+            }
           />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
@@ -221,6 +255,15 @@ function SessionUnavailable({ refetch }: { refetch: () => Promise<void> }) {
       </div>
     </div>
   );
+}
+
+function RequireAuth({ user, children }: { user: unknown; children: React.ReactElement }) {
+  const location = useLocation();
+  if (!user) {
+    const next = location.pathname + location.search;
+    return <Navigate to={`/sign-in?next=${encodeURIComponent(next)}`} replace />;
+  }
+  return children;
 }
 
 function StartPage({ dashboard = false, team = false }: { dashboard?: boolean; team?: boolean }) {

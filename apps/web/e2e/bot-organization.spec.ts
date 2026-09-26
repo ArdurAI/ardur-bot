@@ -5,8 +5,7 @@ test("pinned bots and sidebar sections persist", async ({ page }, testInfo) => {
   const stamp = Date.now();
   await signup(page, `bot-organize-${stamp}@ardurbot.test`, "password12", "Test User");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const sidebar = page.locator("aside").first();
   const bot = sidebar.getByRole("button", { name: /^Chief/ });
@@ -65,8 +64,7 @@ test("bots can be reordered by drag or keyboard and keep that order", async ({ p
   const stamp = Date.now();
   await signup(page, `bot-reorder-${stamp}@ardurbot.test`, "password12", "Bot Order");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const chiefId = activeBotId(page);
   const alpha = await rpc<{ id: string }>(page, "bots/create", {
@@ -182,7 +180,7 @@ test("chat composer controls are vertically centered", async ({ page }) => {
   await completeOnboarding(page);
 
   const centers = await page.getByTestId("composer-bar").evaluate((composer) =>
-    ["Attach file", "Message Chief", "Voice", "Send"].map((label) => {
+    ["Add files or photos", "Message Chief", "Voice", "Send"].map((label) => {
       const element = composer.querySelector<HTMLElement>(`[aria-label="${label}"]`);
       if (!element) throw new Error(`Missing composer control: ${label}`);
       const box = element.getBoundingClientRect();
@@ -197,8 +195,7 @@ test("group chats share every context-menu action", async ({ page }, testInfo) =
   const stamp = Date.now();
   await signup(page, `group-organize-${stamp}@ardurbot.test`, "password12", "Group Menu");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const chiefId = activeBotId(page);
   const partner = await rpc<{ id: string }>(page, "bots/create", {

@@ -5,8 +5,7 @@ test("bot settings open Avatar Studio on the Bot tab", async ({ page }, testInfo
   const stamp = Date.now();
   await signup(page, `avatar-studio-${stamp}@ardurbot.test`, "password12", "Avatar Studio");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   await page.getByTestId("bot-settings-trigger").click();
   const settings = page.getByTestId("bot-settings");

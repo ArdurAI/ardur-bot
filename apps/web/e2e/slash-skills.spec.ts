@@ -5,8 +5,7 @@ test("composer / picker lists skills above actions", async ({ page }, testInfo) 
   const stamp = Date.now();
   await signup(page, `slash-skills-${stamp}@ardurbot.test`, "password12", "Slash Skills");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   await rpc(page, "agentSkills/create", {
     name: "Daily standup",

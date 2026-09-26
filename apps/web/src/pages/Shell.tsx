@@ -4101,7 +4101,7 @@ export function ShellPage({
               if (effectiveSpaceId === targetId) {
                 // The auth boundary changed, so reload like a space switch.
                 if (selectSpace(result.activeSpaceId)) {
-                  window.location.assign("/app");
+                  window.location.assign("/app/bots");
                   return;
                 }
               }
@@ -5903,7 +5903,7 @@ function firstThreadRoute(
 ): string {
   if (bots[0]) return `/app/${bots[0].id}`;
   if (groups[0]) return `/app/g/${groups[0].id}`;
-  return "/app";
+  return "/app/bots";
 }
 
 function applyThreadEvent(

@@ -62,8 +62,7 @@ test("swiping inward from the mobile edge opens the bots sidebar", async ({ page
   const stamp = Date.now();
   await signup(page, `mobile-sidebar-swipe-${stamp}@ardurbot.test`, "password12", "Swipe Test");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const closeNavigation = page.getByRole("button", { name: "Close navigation" });
   await expect(closeNavigation).toHaveCount(0);
@@ -82,8 +81,7 @@ test("the mobile edge swipe follows right-to-left layout direction", async ({ pa
   const stamp = Date.now();
   await signup(page, `mobile-sidebar-rtl-${stamp}@ardurbot.test`, "password12", "Swipe Test");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
   await page.locator("html").evaluate((html) => html.setAttribute("dir", "rtl"));
 
   const edge = page.getByTestId("mobile-sidebar-swipe-edge");
@@ -101,8 +99,7 @@ test("vertical and non-edge swipes leave the mobile sidebar closed", async ({ pa
   const stamp = Date.now();
   await signup(page, `mobile-sidebar-ignore-${stamp}@ardurbot.test`, "password12", "Swipe Test");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const closeNavigation = page.getByRole("button", { name: "Close navigation" });
   await swipe(page, [16, 420], [35, 510]);

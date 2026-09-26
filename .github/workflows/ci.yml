@@ -127,3 +127,32 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:integration
+
+  test-web-e2e:
+    name: Web e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
+      - name: Run Web e2e
+        run: pnpm test:e2e
+      - name: Upload web e2e screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: web-e2e-screenshots
+          path: |
+            apps/web/test-results
+            playwright-report
+          if-no-files-found: ignore
