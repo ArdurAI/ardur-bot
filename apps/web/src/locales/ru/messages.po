@@ -2832,6 +2832,7 @@ msgid "Default board"
 msgstr "Доска по умолчанию"
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 msgid "Default computer"
 msgstr "Компьютер по умолчанию"
 
@@ -3095,10 +3096,14 @@ msgid "Docker limits access to your computer for added security. Using {hostLabe
 msgstr "Docker ограничивает доступ к вашему компьютеру для дополнительной безопасности. С помощью {hostLabel} боты могут работать с локальными файлами и инструментами."
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Docker on this computer"
 msgstr "Docker на этом компьютере"
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Docker on this Mac"
 msgstr "Docker на этом Mac"
 
@@ -7368,8 +7373,10 @@ msgstr "этот компьютер"
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/TeamBoard.tsx
 msgid "This computer"
 msgstr "Этот компьютер"
 
@@ -7387,7 +7394,9 @@ msgstr "этот Mac"
 
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/HostComputerSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "This Mac"
 msgstr "Этот Mac"
 

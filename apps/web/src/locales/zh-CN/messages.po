@@ -2832,6 +2832,7 @@ msgid "Default board"
 msgstr "默认看板"
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 msgid "Default computer"
 msgstr "默认电脑"
 
@@ -3095,10 +3096,14 @@ msgid "Docker limits access to your computer for added security. Using {hostLabe
 msgstr "Docker 限制对你电脑的访问，以提高安全性。使用{hostLabel}时，Bot 可以处理你的本地文件并使用本地工具。"
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Docker on this computer"
 msgstr "这台电脑上的 Docker"
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Docker on this Mac"
 msgstr "这台 Mac 上的 Docker"
 
@@ -7368,8 +7373,10 @@ msgstr "这台电脑"
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/TeamBoard.tsx
 msgid "This computer"
 msgstr "这台电脑"
 
@@ -7387,7 +7394,9 @@ msgstr "这台 Mac"
 
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/HostComputerSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "This Mac"
 msgstr "这台 Mac"
 

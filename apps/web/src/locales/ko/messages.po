@@ -2832,6 +2832,7 @@ msgid "Default board"
 msgstr "기본 보드"
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 msgid "Default computer"
 msgstr ""
 
@@ -3095,10 +3096,14 @@ msgid "Docker limits access to your computer for added security. Using {hostLabe
 msgstr "Docker는 보안을 위해 컴퓨터 접근을 제한합니다. {hostLabel}에서는 Bot이 로컬 파일과 도구로 작업할 수 있습니다."
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Docker on this computer"
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Docker on this Mac"
 msgstr ""
 
@@ -7368,8 +7373,10 @@ msgstr "이 컴퓨터"
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/TeamBoard.tsx
 msgid "This computer"
 msgstr ""
 
@@ -7387,7 +7394,9 @@ msgstr "이 Mac"
 
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/PlacementNotice.tsx
 #: src/pages/HostComputerSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "This Mac"
 msgstr ""
 
