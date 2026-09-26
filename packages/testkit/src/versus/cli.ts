@@ -1,23 +1,32 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { contentDigest } from "../scoreboard/manifest.js";
 import { DEPARTMENT_TASKS } from "../scoreboard/tasks/catalog.js";
+import type { Budget } from "./budget.js";
 import { parseBudget, requireValue } from "./budget.js";
+import { HERMES_CONTAINER_REVISION } from "./containers/policy.js";
+import type { inspectImage } from "./containers/session.js";
 import { writeEvidence } from "./evidence.js";
+import type { LiveRun } from "./live.js";
+import { assessLiveContainerGate, containerHermesIdentity, liveVerdict } from "./live.js";
 import { HERMES_RESEARCH_REVISION } from "./manifest.js";
 import { inspectBuild, inspectHermes, sanitize } from "./provenance.js";
+import type { PairPlan } from "./scheduler.js";
 import { planPairs } from "./scheduler.js";
 
 export const HELP = `Ardur Bot versus Hermes benchmark
 
 pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --dry-run --suite core24 --out ./artifacts/versus/dry
 pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --self-test --out ./artifacts/versus/self-test
-pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --live --budget ./budget.json --suite core24 --expected-hermes-revision <approved-40-hex-revision> --out ./artifacts/versus/live
+pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --live --lane container --budget ./canary-budget.json --container-report ./container-qualification.json --container-cohort-approval approved --out ./artifacts/versus/live
 
 Optional: --hermes-executable <path> --hermes-source <path>
 No arguments prints help. Dry run performs no network or product startup.
 Self-test uses synthetic loopback providers and scripted product doubles.
-Live requires finite budgets and all route/isolation qualification gates.
+Live runs only the owner-approved container canary once every cohort gate passes.
+Exit 0: every run executed and its evidence validated. 1: a cap or deadline stopped a run.
+2: refused or incomplete. Native live stays refused.
 `;
 export interface CliOptions {
   mode: "dry-run" | "self-test" | "live" | "help";
@@ -27,6 +36,9 @@ export interface CliOptions {
   expectedRevision?: string;
   executable?: string;
   source?: string;
+  lane?: "container";
+  containerReport?: string;
+  approval?: string;
 }
 export function parseArguments(args: string[]): CliOptions {
   if (!args.length || (args.length === 1 && ["--help", "-h"].includes(args[0]!)))
@@ -40,6 +52,9 @@ export function parseArguments(args: string[]): CliOptions {
     "--expected-hermes-revision",
     "--hermes-executable",
     "--hermes-source",
+    "--lane",
+    "--container-report",
+    "--container-cohort-approval",
   ]);
   for (let index = 0; index < args.length; index++) {
     const key = args[index]!;
@@ -69,6 +84,23 @@ export function parseArguments(args: string[]): CliOptions {
     mode !== "live" || typeof parsed["--budget"] === "string",
     "--live requires --budget before any startup or provider contact",
   );
+  requireValue(!parsed["--lane"] || parsed["--lane"] === "container", "Unknown live lane");
+  requireValue(
+    parsed["--lane"] === "container" ||
+      (!parsed["--container-report"] && !parsed["--container-cohort-approval"]),
+    "Container cohort flags require --lane container",
+  );
+  requireValue(!parsed["--lane"] || mode === "live", "--lane selects the live lane only");
+  requireValue(
+    !parsed["--container-cohort-approval"] || parsed["--container-cohort-approval"] === "approved",
+    "Container cohort approval must be the explicit value approved",
+  );
+  requireValue(
+    parsed["--lane"] !== "container" ||
+      !parsed["--expected-hermes-revision"] ||
+      parsed["--expected-hermes-revision"] === HERMES_CONTAINER_REVISION,
+    "The container cohort runs only the pinned Linux Hermes revision",
+  );
   if (parsed["--expected-hermes-revision"])
     requireValue(
       /^[a-f0-9]{40}$/.test(String(parsed["--expected-hermes-revision"])),
@@ -82,9 +114,17 @@ export function parseArguments(args: string[]): CliOptions {
     expectedRevision: parsed["--expected-hermes-revision"] as string | undefined,
     executable: parsed["--hermes-executable"] as string | undefined,
     source: parsed["--hermes-source"] as string | undefined,
+    lane: parsed["--lane"] as "container" | undefined,
+    containerReport: parsed["--container-report"] as string | undefined,
+    approval: parsed["--container-cohort-approval"] as string | undefined,
   };
 }
-export async function runCli(args: string[]) {
+/** Test seams for the live lane. Omitted, the real image inspection and products run. */
+export interface LiveDependencies {
+  inspect?: typeof inspectImage;
+  runTrials?: (input: { budget: Budget; plan: PairPlan[]; graderHash: string }) => Promise<LiveRun>;
+}
+export async function runCli(args: string[], live: LiveDependencies = {}) {
   const options = parseArguments(args);
   if (options.mode === "help") {
     console.log(HELP);
@@ -94,6 +134,10 @@ export async function runCli(args: string[]) {
   const budget = options.budget
     ? parseBudget(JSON.parse(await readFile(path.resolve(options.budget), "utf8")))
     : null;
+  if (options.mode === "live" && options.lane === "container") {
+    requireValue(budget, "Live budget missing");
+    return runContainerLive(options, budget, live);
+  }
   const hermes = await inspectHermes({
     executable: options.executable,
     source: options.source,
@@ -213,7 +257,7 @@ export async function runCli(args: string[]) {
   });
   if (options.mode === "live") {
     console.error(
-      "Live refused before product/provider startup: the pinned container release and shared-model/auxiliary-route qualification remain incomplete. Planning evidence was retained.",
+      "Live refused before product/provider startup: native live stays unqualified; use --lane container for the approved container canary. Planning evidence was retained.",
     );
     return 2;
   }
@@ -221,6 +265,89 @@ export async function runCli(args: string[]) {
     `Dry run complete; reports validated; real model calls: 0. Hermes revision match: ${hermes.identity.revisionMatches}.`,
   );
   return 0;
+}
+/** The approved container canary: gate, fixed-order trials, live evidence and a verdict. */
+async function runContainerLive(options: CliOptions, budget: Budget, live: LiveDependencies) {
+  const out = path.resolve(options.out);
+  // A finished canary must never fail on its output directory, so check it before anything runs.
+  const existing = await readdir(out).catch(() => []);
+  requireValue(existing.length === 0, "Evidence output must be empty");
+  const gate = await assessLiveContainerGate({
+    budget,
+    approval: options.approval,
+    reportPath: options.containerReport ? path.resolve(options.containerReport) : undefined,
+    inspect: live.inspect,
+  });
+  const hermes = containerHermesIdentity(gate.pinnedImage);
+  const build = await inspectBuild();
+  const plan = planPairs(budget.cohort);
+  const launchPlan = {
+    mode: "live",
+    lane: "separately-labeled-Linux-container-cohort",
+    startsProducts: gate.ready,
+    endpoint: budget.endpoint,
+    order: plan.map((pair) => ({ pairId: pair.id, taskId: pair.taskId, order: pair.order })),
+    hermes: { image: gate.pinnedImage?.id ?? null, revision: HERMES_CONTAINER_REVISION },
+    ardur: {
+      route: "models/connect -> bots/create -> bots/update -> threads/send -> persisted terminal",
+      computer: "confined Linux container computer",
+    },
+    gate: { stage: gate.stage, gates: gate.gates, ready: gate.ready },
+  };
+  const planning = (prerequisites: string[]) =>
+    writeEvidence(out, {
+      mode: "dry-run",
+      build,
+      hermes,
+      plan,
+      budget,
+      trials: [],
+      results: [],
+      prerequisites,
+      launchPlan,
+    });
+  if (!gate.ready) {
+    await planning(gate.failures);
+    console.error(
+      `Live refused before product start${gate.stage === "offline" ? " or endpoint contact" : " or any model request"}: ${gate.failures.join("; ")}. Planning evidence was retained.`,
+    );
+    return 2;
+  }
+  const input = { budget, plan, graderHash: build.graderHash };
+  let run: LiveRun;
+  try {
+    run = live.runTrials
+      ? await live.runTrials(input)
+      : await (await import("./live-products.js")).runLiveChild(input);
+  } catch (error) {
+    const failure = sanitize(error instanceof Error ? error.message : String(error));
+    await planning([`The live run did not finish: ${failure}`]);
+    console.error(`Live run incomplete: ${failure}. Planning evidence was retained.`);
+    return 2;
+  }
+  const sourceUnchangedDuringRun =
+    contentDigest(build.build) === contentDigest((await inspectBuild()).build);
+  await writeEvidence(out, {
+    mode: "live",
+    build,
+    hermes,
+    plan,
+    budget,
+    trials: run.trials,
+    results: run.results,
+    prerequisites: [
+      ...(sourceUnchangedDuringRun ? [] : ["Harness source changed during the run."]),
+      "Metadata attestation cannot prove the OpenAI-compatible transport served the declared context.",
+      "Request purposes are not observed at the gateway; usage stays raw and is not relabeled as main.",
+      "Resource, timing and paint coverage for either product remain unmeasured.",
+    ],
+    launchPlan,
+    budgetEvidence: run.budgetEvidence,
+    protocolResults: { ...run.protocolResults, sourceUnchangedDuringRun },
+  });
+  const verdict = liveVerdict(run);
+  console.log(verdict.summary);
+  return sourceUnchangedDuringRun ? verdict.code : 2;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   runCli(process.argv.slice(2))

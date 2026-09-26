@@ -123,11 +123,23 @@ requires a declared context between 64,000 and the model's architecture maximum,
 the server's default context (Ollama's `OLLAMA_CONTEXT_LENGTH`) to that value and issuing one
 request, before running the planner; preloading with a request instead risks the transport
 reloading the model back to the server default before the planner reads it. The observed qwen3:8b
-architecture maximum is below 64,000. The proposed route, llama3.1:8b with 65,536 tokens, is
-pending owner approval. The planner also requires this report's `product-qualified` status, the
+architecture maximum is below 64,000. The owner approved llama3.1:8b with 65,536 tokens for a
+four-run canary. The planner also requires this report's `product-qualified` status, the
 inspected image digest and revision, and every containment and resource check passed. Rendering
-outside the captured reply, effective context, and real-model tool use remain unqualified.
-Nothing here enables the guarded live CLI.
+outside the captured reply, effective context, and real-model tool use remain unqualified until the
+canary measures them.
+
+## Live canary
+
+With this report `product-qualified` and the cohort planned, the live CLI runs the approved canary
+in this lane: each Hermes run in a fresh confined container of the pinned image, each Ardur run
+with a fresh confined computer, both through one budget gateway, then destroys both containers and
+grades with the shared graders. See the [harness commands](../README.md) for the gates, exit codes
+and evidence. The run itself:
+
+```sh
+pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --live --lane container --budget ./artifacts/versus/container-cohort/canary-budget.json --container-report ./artifacts/versus/hermes-container-qualification/container-qualification.json --container-cohort-approval approved --out ./artifacts/versus/live
+```
 
 ## Evidence and cleanup
 

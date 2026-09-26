@@ -41,6 +41,8 @@ export class HermesContainerAdapter implements VersusAdapter {
       /** Explicit test double source; this cannot be labeled as the release cohort. */
       standin?: string;
       observedRoute?: () => { endpoint: string; model: string; digest: string } | null;
+      /** Live lane: the task's consent is a standing broker decision, as for Ardur. */
+      preapproveConsent?: boolean;
     },
   ) {
     this.cohort =
@@ -85,6 +87,7 @@ export class HermesContainerAdapter implements VersusAdapter {
         task: context.task,
         ledger: this.options.ledger,
         emit: context.emit,
+        preapproveConsent: this.options.preapproveConsent,
         files: {
           write: (name, content) => session.write(`workspace/${name}`, content),
           read: async (name) => (await session.read(`workspace/${name}`)).toString("utf8"),

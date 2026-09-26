@@ -332,6 +332,11 @@ export interface Reservation {
   currency: number;
 }
 type Counters = Omit<Limits, "wallMs"> & { currency: number };
+/** A cap that refused an admission, retained so a trial that hit it is recorded as such. */
+export interface BudgetRefusal {
+  trialId: string;
+  reason: string;
+}
 const counters = (): Counters => ({
   requests: 0,
   logicalInput: 0,
@@ -346,6 +351,7 @@ const counters = (): Counters => ({
 export class BudgetLedger {
   readonly budget: Budget;
   readonly reservations: Reservation[] = [];
+  readonly refusals: BudgetRefusal[] = [];
   private readonly global = counters();
   private readonly trials = new Map<
     string,
@@ -369,10 +375,16 @@ export class BudgetLedger {
     const trial = this.trials.get(trialId);
     if (trial) trial.closed = true;
   }
+  private exhausted(trialId: string, allowed: boolean, reason: string): asserts allowed {
+    if (allowed) return;
+    this.refusals.push({ trialId, reason });
+    throw new Error(reason);
+  }
   private active(trialId: string) {
     const trial = this.trials.get(trialId);
     requireValue(trial && !trial.closed && !this.poisoned, "Budget trial closed");
-    requireValue(
+    this.exhausted(
+      trialId,
       this.now() - this.start < this.budget.global.wallMs &&
         this.now() - trial.start < this.budget.perTrial.wallMs,
       "budget-exhausted: wall time",
@@ -391,7 +403,11 @@ export class BudgetLedger {
   }
   reserve(trialId: string, purpose: Purpose | null): Reservation {
     const trial = this.active(trialId);
-    requireValue(this.inFlight < this.budget.concurrency, "budget-exhausted: concurrency");
+    this.exhausted(
+      trialId,
+      this.inFlight < this.budget.concurrency,
+      "budget-exhausted: concurrency",
+    );
     const input = this.budget.contextSize;
     const output = this.budget.maxOutputTokens;
     const price = this.budget.currency.priceSchedule;
@@ -400,13 +416,15 @@ export class BudgetLedger {
       : 0;
     const additions = { requests: 1, logicalInput: input, output, totalTokens: input + output };
     for (const [key, value] of Object.entries(additions) as [keyof typeof additions, number][]) {
-      requireValue(
+      this.exhausted(
+        trialId,
         this.global[key] + value <= this.budget.global[key] &&
           trial.counters[key] + value <= this.budget.perTrial[key],
         `budget-exhausted: ${key}`,
       );
     }
-    requireValue(
+    this.exhausted(
+      trialId,
       Number.isFinite(currency) && this.global.currency + currency <= this.budget.currency.cap,
       "budget-exhausted: currency",
     );
@@ -465,7 +483,8 @@ export class BudgetLedger {
   }
   charge(trialId: string, kind: "toolCalls" | "descendants") {
     const trial = this.active(trialId);
-    requireValue(
+    this.exhausted(
+      trialId,
       this.global[kind] < this.budget.global[kind] &&
         trial.counters[kind] < this.budget.perTrial[kind],
       `budget-exhausted: ${kind}`,
@@ -485,6 +504,7 @@ export class BudgetLedger {
       inFlight: this.inFlight,
       poisoned: this.poisoned,
       reservations: structuredClone(this.reservations),
+      refusals: structuredClone(this.refusals),
     };
   }
 }

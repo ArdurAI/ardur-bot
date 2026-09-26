@@ -134,6 +134,11 @@ export interface GatewayRequest {
   missingReason: string | null;
   authoritative: boolean;
 }
+/** A request refused before reservation; nothing reached upstream. */
+export interface GatewayRefusal {
+  trialId: string;
+  reason: string;
+}
 interface Capability {
   trialId: string;
   purpose: Purpose | null;
@@ -171,6 +176,7 @@ export async function startGateway(options: {
   // trial: no further request is admitted on the stale pre-forward reading.
   const failedTrials = new Set<string>();
   const requests: GatewayRequest[] = [];
+  const refusals: GatewayRefusal[] = [];
   const transport = options.transport ?? fetch;
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
@@ -198,8 +204,29 @@ export async function startGateway(options: {
       cap && !cap.controller.signal.aborted && !failedTrials.has(cap.trialId),
       "Unknown or revoked trial capability",
     );
+    let reserved = false;
+    try {
+      await forwardAdmitted(cap, route![2]!, request, response, () => {
+        reserved = true;
+      });
+    } catch (error) {
+      if (!reserved) {
+        const reason = sanitize(error instanceof Error ? error.message : "Gateway refused request");
+        refusals.push({ trialId: cap.trialId, reason });
+        cap.emit("diagnostic", "provider-gateway", { boundary: "gateway-refusal", reason });
+      }
+      throw error;
+    }
+  }
+  async function forwardAdmitted(
+    cap: Capability,
+    operation: string,
+    request: IncomingMessage,
+    response: ServerResponse,
+    markReserved: () => void,
+  ) {
     options.ledger.remainingMs(cap.trialId);
-    if (request.method === "GET" && route![2] === "models") {
+    if (request.method === "GET" && operation === "models") {
       response.setHeader("content-type", "application/json");
       response.end(
         JSON.stringify({
@@ -210,7 +237,7 @@ export async function startGateway(options: {
       return;
     }
     requireValue(
-      request.method === "POST" && route![2] === "chat/completions",
+      request.method === "POST" && operation === "chat/completions",
       "Unsupported provider operation",
     );
     const body = await readJson(request);
@@ -256,6 +283,7 @@ export async function startGateway(options: {
     await options.serving?.attest("model-request", cap.trialId);
     const remainingMs = options.ledger.remainingMs(cap.trialId);
     const reservation = options.ledger.reserve(cap.trialId, cap.purpose);
+    markReserved();
     const requestHash = contentDigest(forward);
     const observation: GatewayRequest = {
       id: reservation.id,
@@ -413,6 +441,7 @@ export async function startGateway(options: {
   return {
     origin,
     requests,
+    refusals,
     /** Opens the trial's budget only while the serving state still matches the declared route. */
     async admit(trialId: string) {
       await options.serving?.attest("trial-admission", trialId);

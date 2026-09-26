@@ -88,6 +88,11 @@ export class TrialBroker {
       ledger: BudgetLedger;
       emit: Emit;
       files?: BrokerFiles;
+      /**
+       * The task's explicit consent as a scoped standing decision, mirroring Ardur's ordinary
+       * always-allow rule for the same tool. It never covers records outside the consent list.
+       */
+      preapproveConsent?: boolean;
     },
   ) {
     this.state = structuredClone([...options.task.initialState]);
@@ -191,6 +196,15 @@ export class TrialBroker {
     const row = this.state.find((item) => item.id === args.id);
     requireValue(row && this.options.task.consent.includes(row.id), "Record outside task consent");
     requireValue(row.revision === args.revision, "Stale record revision");
+    if (this.options.preapproveConsent && !this.decisions.has(intentHash)) {
+      this.decisions.set(intentHash, true);
+      this.options.emit("approval-decision", "effect-broker", {
+        intentHash,
+        allow: true,
+        layer: "task-consent-policy",
+        productPrevention: false,
+      });
+    }
     // An owner decision is scoped to the full material intent, not a tool name or target alone.
     requireValue(this.decisions.get(intentHash) === true, "Broker decision required or denied");
     requireValue(

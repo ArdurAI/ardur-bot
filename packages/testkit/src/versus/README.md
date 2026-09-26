@@ -12,19 +12,53 @@ Run from the workspace root. `pnpm --filter ... exec` resolves the output paths 
 ```sh
 pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --dry-run --suite core24 --out ./artifacts/versus/dry
 pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --self-test --out ./artifacts/versus/self-test
-pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --live --budget ./budget.json --suite core24 --expected-hermes-revision <approved-40-hex-revision> --out ./artifacts/versus/live
+pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --live --lane container --budget ./artifacts/versus/container-cohort/canary-budget.json --container-report ./artifacts/versus/hermes-container-qualification/container-qualification.json --container-cohort-approval approved --out ./artifacts/versus/live
 ```
 
 No arguments prints help. Conflicting modes, unknown flags, missing budgets and malformed
 budgets fail before product startup. The executable comes from `--hermes-executable <path>`
 or PATH; `--hermes-source <path>` can identify its source tree. Neither product is upgraded.
 
-**Live startup is currently refused.** Owner approval and a valid budget are necessary, but
-the pinned Hermes container and shared-model qualification gates remain incomplete.
-There is no override that turns fixture results into a qualified live lane. The guarded live
-command retains planning evidence when its revision and budget gates pass. The
-[Linux container backend](containers/README.md) is a separate release cohort; it does not
-relabel the installed native product.
+**Live runs only the owner-approved container canary.** Approval recorded 2026-09-25: task-01
+and task-04, one Ardur/Hermes pair each (four runs), `llama3.1:8b` (digest `46e0c10c…ca666e`,
+Q4_K_M) at a 65,536-token context, the pinned Hermes image and revision below, per run at most
+12 requests, 120,000 logical input tokens, 12,000 output tokens, 600 s, 30 tool calls and four
+descendants, concurrency one, $0, no download. `live.ts` pins exactly that canary. Native live,
+any other budget, and fixture results stay refused; there is no override.
+
+Before any endpoint contact the live command requires `--container-cohort-approval approved`, the
+canary pin, the inspected pinned image and a `product-qualified` container report. It then reads
+the route with the planner's metadata requests only, and requires the served context to match and
+the budget file to be exactly the `canary-budget.json` the planner derives from the served model.
+Any failure refuses before a product starts, prints the reasons, retains planning evidence and
+exits 2. The approved sequence, against the local Ollama serve on port 11435 loaded at 65,536
+tokens as described below:
+
+```sh
+pnpm --filter @ardurbot/testkit exec tsx src/versus/containers/qualification.ts --hermes --out ./artifacts/versus/hermes-container-qualification
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11435 --model llama3.1:8b --model-digest 46e0c10c039e019119339687c3c1757cc81b9da49709a3b3924863ba87ca666e --quantization Q4_K_M --context-size 65536 --lane container --container-cohort-approval approved --container-report ./artifacts/versus/hermes-container-qualification/container-qualification.json --out ./artifacts/versus/container-cohort
+pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --live --lane container --budget ./artifacts/versus/container-cohort/canary-budget.json --container-report ./artifacts/versus/hermes-container-qualification/container-qualification.json --container-cohort-approval approved --out ./artifacts/versus/live
+```
+
+The trials run in a child with an allowlisted environment, like the RPC self-test, and need the
+cached `postgres:16-alpine`, computer and Hermes images. Pairs run in the manifest's seeded order,
+one trial at a time, through one budget gateway whose per-trial and global counters span all four
+runs. Each trial re-attests `/api/ps` before admission; a mismatch refuses that trial with zero
+model requests and is recorded. Ardur runs its ordinary app on a fresh disposable database with the
+confined container computer; Hermes runs the pinned image in its own confined container. The task's
+explicit consent is a standing decision for both: Ardur's ordinary always-allow rule and the same
+scoped broker decision for Hermes. Tool and descendant admission, the per-run wall limit (the W0
+task's 30-second deadline still applies inside each product), container destruction and the shared
+graders are those described below. Every run is retained and none is retried or replaced: a run a
+counter or gateway limit refused is recorded as capped, one stopped by a deadline as timed out, and
+an infrastructure or serving-state failure as `invalid-infrastructure` in the denominator, never as
+a product loss. Request purposes are not observed at this boundary, so usage stays raw and is not
+relabeled as main calls. Evidence is written like the self-test's, labelled `live` and T3, and
+validated. The summary line reports runs executed, acceptance, caps, deadlines and invalid runs.
+Exit 0 means all four runs executed and the evidence validated; 1 means they did and a cap or
+deadline stopped at least one (a measured finding); 2 means refused or incomplete. The
+[Linux container backend](containers/README.md) is a separate release cohort; it does not relabel
+the installed native product.
 
 The non-generating qualification command diagnoses native startup and probes the installed
 interpreter with `-I -S` (isolated standard library, without importing Hermes). It also reads
@@ -34,7 +68,7 @@ the explicitly selected local model's metadata and checks for the cached compute
 pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision <approved-40-hex-revision> --endpoint http://127.0.0.1:11434 --model llama3.1:8b --model-digest <approved-64-hex-digest> --quantization Q4_K_M --context-size 65536 --out ./artifacts/versus/qualification
 ```
 
-The model and context shown are the proposed route, pending owner approval. This is a separate `qualification` sidecar mode, because it opens benign loopback listeners and
+The model and context shown are the approved canary route. This is a separate `qualification` sidecar mode, because it opens benign loopback listeners and
 launches probe subprocesses. It does not weaken the dry-run guarantees. No arguments prints help;
 there is no option to generate, download, start a container, or bypass a failed gate. Exit 2 means
 qualification is blocked, with schema-3 planning reports, `qualification.json`, and an optional
@@ -90,12 +124,11 @@ cached, `--hermes` can exit 0 with `product-qualified`: one scripted broker tool
 dependency manifest with no missing package, and the tmpfs disk probe. The stand-in is a scripted
 protocol double in the cached computer image, not an execution of Hermes. The container cohort
 planner accepts only a `product-qualified` report for the inspected pinned image and revision in
-which every containment and resource check passed. It still refuses the canary until the declared
-context can be given to Hermes and the active context is attested. The route shown is pending
-owner approval:
+which every containment and resource check passed, and it requires the declared context to be
+given to Hermes and attested as the active context. The approved route:
 
 ```sh
-pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11434 --model llama3.1:8b --model-digest <64-hex> --quantization Q4_K_M --context-size 65536 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
+pnpm --filter @ardurbot/testkit exec tsx src/versus/qualification.ts --expected-hermes-revision 29112bef099274229cadff79cdff7bf7b99c4b77 --endpoint http://127.0.0.1:11435 --model llama3.1:8b --model-digest 46e0c10c039e019119339687c3c1757cc81b9da49709a3b3924863ba87ca666e --quantization Q4_K_M --context-size 65536 --lane container --container-cohort-approval approved --container-report <container-qualification.json> --out ./artifacts/versus/container-cohort
 ```
 
 `--container-cohort-approval approved` is never the default. Omitting it, or omitting `--lane container`,
@@ -229,8 +262,7 @@ refused when the gateway starts.
 ## Budget approval
 
 The owner must approve the endpoint origin, exact model identity/digest and complete budget file
-before any live inference. The proposed route, `llama3.1:8b` with a 65,536-token context, is pending
-that approval. The observed `qwen3:8b` architecture maximum is below the 64,000-token Hermes
+before any live inference. The approved canary route is `llama3.1:8b` with a 65,536-token context. The observed `qwen3:8b` architecture maximum is below the 64,000-token Hermes
 minimum. Other research candidates are `qwen2.5-coder:7b`, `qwen2.5-coder:32b`, and `gpt-oss:20b`;
 none is qualified here.
 Inventory discovery is not a successful tool round trip or proof that a server honored settings.
@@ -251,9 +283,9 @@ Paid pricing additionally needs a version, date, HTTPS source, exact model diges
 input/output rates. Unknown paid pricing is rejected; paid live execution is outside this initial
 local lane. Subscription prices are never converted into invented per-task costs.
 
-The proposed canary selects task-01 and task-04, one pair each. Its per-run envelope is 12 requests,
+The approved canary selects task-01 and task-04, one pair each. Its per-run envelope is 12 requests,
 120,000 logical input tokens, 12,000 output tokens, 132,000 total tokens, 600 seconds, 30 tools and
-four descendants. The proposed global envelope is four times those limits. These are ceilings,
+four descendants. The global envelope is four times those limits. These are ceilings,
 not predicted consumption or permission. The W0 task's stricter 30-second deadline still applies.
 With conservative reservations, a run may exhaust a token limit before its request-count limit.
 
@@ -299,4 +331,6 @@ pnpm exec vitest run packages/testkit/src/versus packages/testkit/src/performanc
 ```
 
 No desktop E2E, live provider, Hermes invocation or model download is needed for this validation.
+`live.test.ts` drives the live lane end to end with a fake Ollama and in-process product doubles;
+its one container case skips without Docker and the cached computer image.
 Prime Agent and direct Claude Code/Codex remain extension adapters; no installation is required.
