@@ -176,6 +176,18 @@ describe("local import discovery", () => {
     expect(JSON.stringify(scan)).not.toContain("fixture-private-value");
   });
 
+  it("counts files the limits left out only when every limit could count them", async () => {
+    await file(".claude/CLAUDE.md", "x".repeat(LOCAL_IMPORT_BYTES + 1));
+    expect(await new LocalImportScanner({ home }).scan()).toMatchObject({
+      limited: true,
+      unscanned: 1,
+    });
+    await file(".claude/projects/p/memory/a/b/c/d/e/deep.md", "Too deep to reach.");
+    const uncounted = await new LocalImportScanner({ home }).scan();
+    expect(uncounted.limited).toBe(true);
+    expect(uncounted.unscanned).toBeUndefined();
+  });
+
   it("inspects sqlite schemas and selects memory text only", async () => {
     await mkdir(path.join(home, ".codex"));
     const db = new DatabaseSync(path.join(home, ".codex/memories_fixture.sqlite"));

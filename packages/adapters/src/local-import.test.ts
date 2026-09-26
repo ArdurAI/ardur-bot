@@ -5,10 +5,11 @@ import path from "node:path";
 import type { MemoryDocumentStore } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { LocalImportScanner } from "@ardurbot/host-runtime/import/scanner";
+import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import type { JournalDocument } from "@ardurbot/memory";
 import { JournalDocumentStore, MemoryService } from "@ardurbot/memory";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LocalImportService } from "./local-import.js";
+import { LocalImportHostError, LocalImportService } from "./local-import.js";
 import { McpOAuthBroker } from "./mcp-oauth.js";
 import { MarkdownFiles } from "./memory/markdown-files.js";
 import { ObsidianDocumentStore } from "./memory/obsidian-store.js";
@@ -161,6 +162,7 @@ async function fixture(options: { obsidian?: boolean } = {}) {
   const oauthSessions = table();
   const assignments = table();
   let failCommit = false;
+  let readFailure: { after: number; error: Error } | undefined;
   const prisma = {
     localImportConfig: config,
     localImportRecord: records,
@@ -197,7 +199,10 @@ async function fixture(options: { obsidian?: boolean } = {}) {
     documents,
     transport: {
       scan: (_owner, roots) => scanner.scan(roots),
-      read: async (_owner, scanId, itemId) => scanner.read(scanId, itemId),
+      read: async (_owner, scanId, itemId) => {
+        if (readFailure && readFailure.after-- <= 0) throw readFailure.error;
+        return scanner.read(scanId, itemId);
+      },
     },
   });
   const scan = async () => (await service.run(owner, { action: "scan" })).manifest!;
@@ -227,6 +232,10 @@ async function fixture(options: { obsidian?: boolean } = {}) {
     restartVault,
     failNextCommit: () => {
       failCommit = true;
+    },
+    /** Every read after the first `after` throws, as when the host goes away mid-run. */
+    failReads: (after: number, error: Error) => {
+      readFailure = { after, error };
     },
     journal: () => journal,
   };
@@ -259,9 +268,9 @@ describe("local import lifecycle", () => {
       if (failure === "receipt")
         f.records.upsert.mockRejectedValueOnce(new Error("Fixture receipt failed."));
       else f.failNextCommit();
-      await expect(
-        f.service.run(owner, { ...action, categories: [...action.categories] }),
-      ).rejects.toThrow(/Fixture/);
+      expect(
+        (await f.service.run(owner, { ...action, categories: [...action.categories] })).result,
+      ).toMatchObject({ created: 0, failed: 1 });
       expect(f.records.rows).toHaveLength(0);
       const before = await f.documents.list({ scope: "user" }, memoryContext());
       expect(before.items).toHaveLength(1);
@@ -293,9 +302,9 @@ describe("local import lifecycle", () => {
     const manifest = await f.scan();
     f.records.upsert.mockRejectedValueOnce(new Error("Fixture receipt failed."));
     const action = { action: "import", scanId: manifest.scanId, categories: ["memories"] } as const;
-    await expect(
-      f.service.run(owner, { ...action, categories: [...action.categories] }),
-    ).rejects.toThrow("Fixture receipt failed.");
+    expect(
+      (await f.service.run(owner, { ...action, categories: [...action.categories] })).result,
+    ).toMatchObject({ updated: 0, failed: 1 });
     expect(f.records.rows.find((row) => row.id === receipt.id)?.targetRevision).toBe(1);
     f.restartVault();
     expect(
@@ -323,9 +332,9 @@ describe("local import lifecycle", () => {
       if (failure === "receipt")
         f.records.upsert.mockRejectedValueOnce(new Error("Fixture receipt failed."));
       else f.failNextCommit();
-      await expect(
-        f.service.run(owner, { ...action, categories: [...action.categories] }),
-      ).rejects.toThrow(/Fixture/);
+      expect(
+        (await f.service.run(owner, { ...action, categories: [...action.categories] })).result,
+      ).toMatchObject({ created: 0, failed: 1 });
       expect(f.records.rows.find((row) => row.documentId === id)).toEqual(removedReceipt);
       f.restartVault();
       expect(
@@ -349,9 +358,9 @@ describe("local import lifecycle", () => {
     const manifest = await f.scan();
     const action = { action: "import", scanId: manifest.scanId, categories: ["memories"] } as const;
     f.records.upsert.mockRejectedValueOnce(new Error("Fixture receipt failed."));
-    await expect(
-      f.service.run(owner, { ...action, categories: [...action.categories] }),
-    ).rejects.toThrow("Fixture receipt failed.");
+    expect(
+      (await f.service.run(owner, { ...action, categories: [...action.categories] })).result,
+    ).toMatchObject({ created: 0, failed: 1 });
     const head = (await f.documents.list({ scope: "user" }, memoryContext())).items[0]!;
     await f.documents.commit(
       {
@@ -754,9 +763,15 @@ describe("local import lifecycle", () => {
     const f = await fixture();
     const scan = await f.scan();
     f.records.upsert.mockRejectedValueOnce(new Error("Fixture persistence failure."));
-    await expect(
-      f.service.run(owner, { action: "import", scanId: scan.scanId, categories: ["memories"] }),
-    ).rejects.toThrow("Fixture persistence failure");
+    const response = await f.service.run(owner, {
+      action: "import",
+      scanId: scan.scanId,
+      categories: ["memories"],
+    });
+    expect(response.result).toMatchObject({ created: 0, failed: 1 });
+    expect(response.failures).toEqual([
+      expect.objectContaining({ category: "memories", reason: "failed" }),
+    ]);
     expect(f.journal()).toHaveLength(0);
     expect(f.records.rows).toHaveLength(0);
   });
@@ -773,5 +788,113 @@ describe("local import lifecycle", () => {
     await expect(
       f.service.run(owner, { action: "preview", scanId: scan.scanId, itemId: scan.items[0]!.id }),
     ).rejects.toThrow("Re-scan");
+  });
+  it("imports skills whose code samples read as credentials only once JSON-encoded", async () => {
+    const f = await fixture();
+    await f.file(
+      ".claude/skills/api/SKILL.md",
+      [
+        "---",
+        "name: api-patterns",
+        "description: Example service handlers",
+        "---",
+        "```python",
+        '@app.post("/items")',
+        "def create_item():",
+        "    return {}",
+        "```",
+        "```go",
+        'req.Header.Set("Authorization", "Bearer "+token)',
+        "```",
+        'curl -H "X-Auth: Bearer $API_TOKEN" https://api.example.test/items',
+        '{"email": "ops@example.test", "password": ""}',
+      ].join("\n"),
+    );
+    const manifest = await f.scan();
+    const response = await f.service.run(owner, {
+      action: "import",
+      scanId: manifest.scanId,
+      categories: ["skills"],
+    });
+    expect(response).toEqual({ result: expect.objectContaining({ created: 2, failed: 0 }) });
+    expect(f.skills.rows.map((row) => row.name)).toContain("api-patterns");
+  });
+  it("records a failed item, imports the rest and keeps the import time and selection", async () => {
+    const f = await fixture();
+    // The scanner keeps this shop key; the memory gate refuses it.
+    await f.file(".claude/projects/example/memory/a-shop.md", "Use ck_live7f3a9b2c for the shop.");
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+    const response = await f
+      .importAll()
+      .finally(() =>
+        installLogger(createLogger({ service: "ardurbot-worker", level: "off", sinks: [] })),
+      );
+    expect(sink.events).toEqual([
+      expect.objectContaining({
+        message: "local-import item failed",
+        "import.tool": "claude-code",
+        "import.path": ".claude/projects/example/memory/a-shop.md",
+        error: expect.objectContaining({ message: expect.stringContaining("Remove credentials") }),
+      }),
+    ]);
+    expect(JSON.stringify(sink.events)).not.toContain("ck_live");
+    expect(response.result).toMatchObject({ created: 3, failed: 1 });
+    expect(response.failures).toEqual([
+      {
+        itemId: expect.any(String),
+        tool: "claude-code",
+        category: "memories",
+        relativePath: ".claude/projects/example/memory/a-shop.md",
+        reason: "credential",
+      },
+    ]);
+    expect(JSON.stringify(response)).not.toContain("ck_live");
+    const status = await f.service.status(owner);
+    expect(status.importedAt).not.toBeNull();
+    expect(status.selection["claude-code"]).toEqual(["memories", "skills", "servers"]);
+    expect(f.records.rows).toHaveLength(3);
+  });
+  it("retries one failed item without changing the saved selection", async () => {
+    const f = await fixture();
+    const manifest = await f.scan();
+    f.records.upsert.mockRejectedValueOnce(new Error("Fixture receipt failed."));
+    const first = await f.service.run(owner, {
+      action: "import",
+      scanId: manifest.scanId,
+      tool: "claude-code",
+      categories: ["memories", "skills"],
+    });
+    expect(first.result).toMatchObject({ created: 1, failed: 1 });
+    const failure = first.failures![0]!;
+    expect(failure.reason).toBe("failed");
+    const retry = await f.service.run(owner, {
+      action: "import",
+      scanId: manifest.scanId,
+      tool: failure.tool,
+      categories: [failure.category],
+      itemId: failure.itemId,
+    });
+    expect(retry).toEqual({
+      result: expect.objectContaining({ created: 1, unchanged: 0, failed: 0 }),
+    });
+    expect(f.records.rows).toHaveLength(2);
+    expect((await f.service.status(owner)).selection).toEqual({
+      "claude-code": ["memories", "skills"],
+    });
+  });
+  it("stops the run when the host goes away but keeps what was already imported", async () => {
+    const f = await fixture();
+    const manifest = await f.scan();
+    f.failReads(1, new LocalImportHostError());
+    await expect(
+      f.service.run(owner, {
+        action: "import",
+        scanId: manifest.scanId,
+        categories: ["memories", "skills", "servers"],
+      }),
+    ).rejects.toBeInstanceOf(LocalImportHostError);
+    expect(f.records.rows).toHaveLength(1);
+    expect((await f.service.status(owner)).importedAt).not.toBeNull();
   });
 });

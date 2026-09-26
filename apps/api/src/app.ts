@@ -486,7 +486,7 @@ export async function createApp(
       apiUrl: process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://127.0.0.1:3100",
       encryptionKey: env.encryptionKey,
       packaged: process.env.ARDURBOT_HOST_BRIDGE === "api",
-      reply: (id, response, failed) => localImportRequests.complete(id, response, failed),
+      reply: (id, response) => localImportRequests.complete(id, response),
     },
     memoryDocuments,
     runtime,
@@ -1039,9 +1039,9 @@ export async function createApp(
     if (Buffer.byteLength(text) > 8 * 1024 * 1024)
       return c.json({ error: "Result too large" }, 413);
     try {
-      const reply = JSON.parse(text) as { requestId: string; response?: unknown; failed?: boolean };
+      const reply = JSON.parse(text) as { requestId: string; response?: unknown };
       if (typeof reply.requestId !== "string") return c.json({ error: "Invalid result" }, 400);
-      localImportRequests.complete(reply.requestId, reply.response, reply.failed === true);
+      localImportRequests.complete(reply.requestId, reply.response);
       return c.json({ ok: true });
     } catch {
       return c.json({ error: "Invalid result" }, 400);

@@ -922,8 +922,17 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Source folder for {tool}": "{tool} 的源文件夹",
   "Update credentials": "更新凭据",
   "Use folder": "使用此文件夹",
-  "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.":
-    "已导入 {created} 项，已更新 {updated} 项，未更改 {unchanged} 项，已移除 {removed} 项，已跳过 {skipped} 项，冲突 {conflicts} 项。",
+  "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts, {failed} failed.":
+    "已导入 {created} 项，已更新 {updated} 项，未更改 {unchanged} 项，已移除 {removed} 项，已跳过 {skipped} 项，冲突 {conflicts} 项，失败 {failed} 项。",
+  "This scan is out of date. Re-scan, then try again.": "此次扫描已过期。请重新扫描，然后重试。",
+  "Import stopped because of an unexpected error. Re-scan, then try again.":
+    "导入因意外错误而停止。请重新扫描，然后重试。",
+  "Looks like it contains a credential. Remove it from the file, then re-scan.":
+    "其中似乎包含凭据。请从文件中删除后重新扫描。",
+  "Could not be saved.": "无法保存。",
+  "Some items exceeded the scan limits ({count} items were not scanned).":
+    "部分项目超出了扫描限制（{count} 项未扫描）。",
+  "Retry {path}": "重试 {path}",
   "Found on this Mac": "在这台 Mac 上发现的内容",
   "Found on this computer": "在此电脑上发现的内容",
   "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.":
@@ -1008,6 +1017,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "In progress": "进行中",
   Blocked: "已阻塞",
   Comment: "评论",
+  "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.":
+    "已导入 {created} 项，已更新 {updated} 项，未更改 {unchanged} 项，已移除 {removed} 项，已跳过 {skipped} 项，冲突 {conflicts} 项。",
   "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
     "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{other} 项已关闭但未完成。",
   "This board item is still open.": "此看板事项仍处于开放状态。",

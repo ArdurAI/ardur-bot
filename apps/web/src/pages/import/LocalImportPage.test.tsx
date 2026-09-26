@@ -94,6 +94,7 @@ it("shows counts and privacy, previews only on request, imports selected categor
         removed: action.action === "undo" ? 1 : 0,
         skipped: 0,
         conflicts: 0,
+        failed: 0,
       },
     };
   });
@@ -117,14 +118,83 @@ it("shows counts and privacy, previews only on request, imports selected categor
   await act(async () => button(node, "Remove imported items from Claude Code").click());
   expect(fake.run).toHaveBeenLastCalledWith({ action: "undo", tool: "claude-code" });
 });
-it("scans automatically on first open and gives a retry action on host failure", async () => {
+it("scans automatically on first open and gives a retry action on failure", async () => {
   fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest: null });
   fake.run.mockRejectedValue(new Error("private diagnostic"));
   const node = await render();
   expect(fake.run).toHaveBeenCalledWith({ action: "scan" });
-  expect(node.querySelector('[role="alert"]')?.textContent).toContain("then re-scan");
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe(
+    "Import stopped because of an unexpected error. Re-scan, then try again.",
+  );
   expect(node.textContent).not.toContain("private diagnostic");
+  expect(node.textContent).not.toContain("connected");
   expect(button(node, "Re-scan").disabled).toBe(false);
+});
+it.each([
+  ["host", "Import could not finish. Check this computer is connected, then re-scan."],
+  ["rescan", "This scan is out of date. Re-scan, then try again."],
+])("says why a stopped import ended (%s)", async (stopped, sentence) => {
+  fake.status.mockResolvedValue(localImportStatusFixture);
+  fake.run.mockResolvedValue({ stopped });
+  const node = await render();
+  await act(async () => button(node, "Import all").click());
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe(sentence);
+});
+it("lists failed items with their reason and retries one without re-importing the rest", async () => {
+  const failure = (item: (typeof localImportFixture.items)[number], reason: string) => ({
+    itemId: item.id,
+    tool: item.tool,
+    category: item.category,
+    relativePath: item.relativePath,
+    reason,
+  });
+  const [memory, skill] = localImportFixture.items;
+  fake.status.mockResolvedValue({
+    ...localImportStatusFixture,
+    manifest: { ...localImportFixture, limited: true, unscanned: 4 },
+  });
+  const counts = { updated: 0, unchanged: 0, removed: 0, skipped: 0, conflicts: 0 };
+  fake.run.mockImplementation(async (action) =>
+    action.itemId
+      ? { result: { ...counts, created: 1, failed: 0 } }
+      : {
+          result: { ...counts, created: 714, failed: 2 },
+          failures: [failure(memory!, "credential"), failure(skill!, "failed")],
+        },
+  );
+  const node = await render();
+  expect(node.textContent).toContain(
+    "Some items exceeded the scan limits (4 items were not scanned).",
+  );
+  await act(async () => button(node, "Import all").click());
+  expect(node.textContent).toContain(
+    "714 imported, 0 updated, 0 unchanged, 0 removed, 0 skipped, 0 conflicts, 2 failed.",
+  );
+  const list = node.querySelector('[aria-label="Failed items"]')!;
+  expect(list.textContent).toContain(memory!.relativePath);
+  expect(list.textContent).toContain(
+    "Looks like it contains a credential. Remove it from the file, then re-scan.",
+  );
+  expect(list.textContent).toContain("Could not be saved.");
+  expect(list.querySelectorAll("button")).toHaveLength(1);
+  await act(async () =>
+    (
+      node.querySelector(`[aria-label="Retry ${skill!.relativePath}"]`) as HTMLButtonElement
+    ).click(),
+  );
+  expect(fake.run).toHaveBeenLastCalledWith({
+    action: "import",
+    scanId: localImportFixture.scanId,
+    tool: "claude-code",
+    categories: ["skills"],
+    itemId: skill!.id,
+  });
+  expect(node.textContent).toContain(
+    "715 imported, 0 updated, 0 unchanged, 0 removed, 0 skipped, 0 conflicts, 1 failed.",
+  );
+  expect(node.querySelector('[aria-label="Failed items"]')?.textContent).not.toContain(
+    skill!.relativePath,
+  );
 });
 it("keeps the first import's selection when enabling automatic import without reopening", async () => {
   let status: LocalImportStatus = { ...localImportStatusFixture };
