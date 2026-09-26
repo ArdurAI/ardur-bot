@@ -96,7 +96,7 @@ it("cleans up its registered keys, blocker, handlers and timer on quit", async (
     await fake.handlers.get("desktop.system.set")!(f.event, "keepAwake", true);
     await fake.handlers.get("desktop.system.set")!(f.event, "quickAccess", "Alt+Space");
     expect(fake.start).toHaveBeenCalledWith("prevent-app-suspension");
-    expect(fake.handlers.size).toBe(4);
+    expect(fake.handlers.size).toBe(5);
     expect(() =>
       fake.handlers.get("desktop.system.set")!({ sender: {} }, "keepAwake", true),
     ).toThrow("Open System settings");

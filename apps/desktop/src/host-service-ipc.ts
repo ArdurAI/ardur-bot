@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { DESKTOP_FOLDER_ERRORS } from "@ardurbot/contracts/desktop-errors";
 import type { BrowserWindow, IpcMainInvokeEvent, Tray } from "electron";
@@ -11,12 +12,32 @@ import {
   hostStorageAvailable,
   selectedHostRoot,
 } from "./host-service.js";
+import type { LocalFolders } from "./local-folders.js";
 import { updateHostTray } from "./tray.js";
+
+/** Said once, where a folder is chosen, instead of standing in Settings. */
+const FOLDER_NOTICE =
+  "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers.";
+
+/** Registered folders that are not a folder right now; commands skip them until they return. */
+export async function unavailableFolders(roots: string[]): Promise<string[]> {
+  const present = await Promise.all(
+    roots.map((root) =>
+      stat(root).then(
+        (info) => info.isDirectory(),
+        () => false,
+      ),
+    ),
+  );
+  return roots.filter((_, index) => !present[index]);
+}
 
 export function installHostService(options: {
   window(): BrowserWindow | null;
   target(): string | null;
   tray(): Tray | null;
+  /** Local mode keeps its own folders; a pairing with another server never applies to it. */
+  local: { owns(target: string): boolean; folders: LocalFolders };
 }) {
   const directory = path.join(app.getPath("userData"), "host-service");
   const store = new HostServiceStore(directory, safeStorage);
@@ -72,11 +93,23 @@ export function installHostService(options: {
   }
   register("state", async (event) => {
     const { target } = trusted(event);
+    if (options.local.owns(target)) {
+      const roots = await options.local.folders.list();
+      return {
+        configured: false,
+        local: true,
+        roots,
+        unavailable: await unavailableFolders(roots),
+        keepRunning: lifecycle.keepRunning,
+      };
+    }
     const config = await store.read();
+    const roots = config?.apiUrl === target ? config.hostRoots : [];
     return {
       configured: config?.apiUrl === target,
       registrationId: config?.apiUrl === target ? hostServiceIdentity(config) : undefined,
-      roots: config?.apiUrl === target ? config.hostRoots : [],
+      roots,
+      unavailable: await unavailableFolders(roots),
       keepRunning: lifecycle.keepRunning,
     };
   });
@@ -87,6 +120,7 @@ export function installHostService(options: {
   });
   register("setup", async (event) => {
     const { window, target } = trusted(event);
+    if (options.local.owns(target)) throw new Error("Host service is unavailable here.");
     if (
       new URL(target).protocol !== "https:" &&
       !["localhost", "127.0.0.1", "[::1]"].includes(new URL(target).hostname)
@@ -122,16 +156,28 @@ export function installHostService(options: {
     await store.write(config);
     supervisor.start(config);
   });
-  register("addRoot", async (event, value) => {
-    const { window, target } = trusted(event);
-    const config = await store.read();
-    if (!config || config.apiUrl !== target) throw new Error("Set up this computer first.");
+  async function pickFolder(window: BrowserWindow, value: unknown) {
     const selected = await dialog.showOpenDialog(window, {
       properties: ["openDirectory"],
+      // macOS shows `message` in the panel; Windows and Linux show `title`.
+      title: FOLDER_NOTICE,
+      message: FOLDER_NOTICE,
       ...(typeof value === "string" && path.isAbsolute(value) ? { defaultPath: value } : {}),
     });
     if (selected.canceled || !selected.filePaths[0]) return null;
-    const root = await selectedHostRoot(selected.filePaths[0]);
+    return selectedHostRoot(selected.filePaths[0]);
+  }
+  register("addRoot", async (event, value) => {
+    const { window, target } = trusted(event);
+    if (options.local.owns(target)) {
+      const root = await pickFolder(window, value);
+      if (root !== null) await options.local.folders.add(root);
+      return root;
+    }
+    const config = await store.read();
+    if (!config || config.apiUrl !== target) throw new Error("Set up this computer first.");
+    const root = await pickFolder(window, value);
+    if (root === null) return null;
     config.hostRoots = [...new Set([...config.hostRoots, root])];
     if (config.hostRoots.length > 32) throw new Error("Remove a folder before adding another.");
     await store.write(config);
@@ -140,6 +186,11 @@ export function installHostService(options: {
   });
   register("removeRoot", async (event, value) => {
     const { target } = trusted(event);
+    if (options.local.owns(target)) {
+      if (typeof value !== "string") throw new Error("Folder unavailable.");
+      await options.local.folders.remove(value);
+      return;
+    }
     const config = await store.read();
     if (!config || config.apiUrl !== target || typeof value !== "string")
       throw new Error("Folder unavailable.");
@@ -161,7 +212,7 @@ export function installHostService(options: {
     },
     async activate(target: string) {
       await ready;
-      const config = await store.read();
+      const config = options.local.owns(target) ? null : await store.read();
       if (config?.apiUrl === target) supervisor.start(config);
       else supervisor.stop();
     },

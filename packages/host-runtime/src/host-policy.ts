@@ -7,10 +7,19 @@ export async function confinedHostCwd(candidate: string, roots: string[]) {
   if (candidate.includes("\0") || candidate.split(/[/\\]/u).includes(".."))
     throw new Error("Path escapes registered folders.");
   const resolved = await realpath(candidate);
-  const registered = await Promise.all(roots.map((root) => realpath(root)));
+  const registered = await resolvedRoots(roots);
   if (!isAllowedDesktopPath(resolved, registered) || !(await stat(resolved)).isDirectory())
     throw new Error("Path escapes registered folders.");
   return resolved;
+}
+
+/**
+ * Folders that resolve now. A registered folder that is gone (an unplugged drive, a renamed
+ * project) is skipped for this command instead of failing every command.
+ */
+export async function resolvedRoots(roots: string[]): Promise<string[]> {
+  const resolved = await Promise.all(roots.map((root) => realpath(root).catch(() => null)));
+  return resolved.filter((root) => root !== null);
 }
 
 /** The executor owns approvals. The host owns executable and environment selection. */

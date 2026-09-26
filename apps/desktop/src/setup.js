@@ -17,6 +17,7 @@
   const status = document.getElementById("status");
   const checkButton = document.getElementById("check");
   const continueButton = document.getElementById("continue");
+  const resetButton = document.getElementById("reset");
   const quitButton = document.getElementById("quit");
 
   const STACK_POLL_MS = 1000;
@@ -26,6 +27,9 @@
     pulling: "Downloading Ardur Bot…",
     starting: "Starting Ardur Bot…",
     "waiting-healthy": "Almost ready…",
+    database: "Starting the database.",
+    migrations: "Preparing the database.",
+    services: "Starting services.",
     ready: "Ardur Bot is ready.",
   };
   const TERMINAL_PHASES = new Set([
@@ -41,6 +45,9 @@
     pulling: 0.2,
     starting: 0.82,
     "waiting-healthy": 0.92,
+    database: 0.25,
+    migrations: 0.55,
+    services: 0.8,
     ready: 1,
   };
   /** Docker reports bytes pulled but never a total, so the bar approaches the next phase without reaching it. */
@@ -56,6 +63,12 @@
   let detailsOpenedByFailure = false;
   /** Resolves the poll wait early when the main process pushes a new state. */
   let wakePoll = null;
+  /**
+   * Whether a ready stack is saved as this computer. Only Continue on "This computer" in
+   * this window sets it, or a launch that brings back a saved local instance. Opening
+   * setup from the menu shows the choice and saves nothing until a click.
+   */
+  let saveWhenReady = false;
 
   function selectedMode() {
     const checked = form.querySelector('input[name="mode"]:checked');
@@ -71,6 +84,7 @@
   function setBusy(busy) {
     checkButton.disabled = busy;
     continueButton.disabled = busy;
+    resetButton.disabled = busy;
   }
 
   /** A save in flight cannot be cancelled, so the choice it commits must not change under it. */
@@ -84,7 +98,13 @@
     panelExisting.hidden = mode === "new";
     checkButton.hidden = mode === "new";
     if (mode !== "new") continueButton.textContent = "Continue";
+    resetButton.hidden = mode !== "new" || !offersReset(lastStack);
     setStatus("");
+  }
+
+  /** Only a failure that nothing but a reset clears offers one. */
+  function offersReset(stack) {
+    return stack !== null && stack.phase === "failed" && stack.offerReset === true;
   }
 
   function isDockerPhase(phase) {
@@ -154,6 +174,7 @@
     lastStack = stack;
     const { phase } = stack;
     stackSection.hidden = phase === "idle";
+    resetButton.hidden = !offersReset(stack);
     if (phase === "idle") {
       continueButton.textContent = "Continue";
       return;
@@ -220,7 +241,7 @@
         if (selectedMode() !== "new") return;
         renderStack(stack);
         if (TERMINAL_PHASES.has(stack.phase)) {
-          if (stack.phase === "ready" && selectedMode() === "new") {
+          if (stack.phase === "ready" && saveWhenReady && selectedMode() === "new") {
             const current = await bridge.state();
             if (selectedMode() !== "new") return;
             defaultLocalUrl = current.defaultLocalUrl;
@@ -239,6 +260,7 @@
   }
 
   async function runStack() {
+    saveWhenReady = true;
     setStatus("");
     setBusy(true);
     try {
@@ -281,6 +303,7 @@
 
   form.addEventListener("change", (event) => {
     if (event.target instanceof HTMLInputElement && event.target.name === "mode") {
+      saveWhenReady = false;
       syncPanels();
       // Unlock Continue/Check immediately; followStack exits on its next poll.
       if (selectedMode() !== "new") setBusy(false);
@@ -290,6 +313,26 @@
   checkButton.addEventListener("click", () => {
     void check();
   });
+
+  resetButton.addEventListener("click", () => {
+    void resetLocalData();
+  });
+
+  /**
+   * Main asks to confirm; once the data has moved aside, this starts fresh like Continue.
+   * A reset that failed answers with the sentence to show.
+   */
+  async function resetLocalData() {
+    setBusy(true);
+    setStatus("");
+    const reset = await bridge.stack.reset().catch(() => "Could not reset local data. Try again.");
+    if (reset !== true) {
+      if (typeof reset === "string") setStatus(reset, "error");
+      setBusy(false);
+      return;
+    }
+    await runStack();
+  }
 
   stackDetails.addEventListener("click", () => {
     detailsOpen = !detailsOpen;
@@ -351,11 +394,14 @@
       const stack = await bridge.stack.state();
       const attached = stack !== null && stack.phase !== "idle";
       if (attached) document.getElementById("mode-new").checked = true;
+      saveWhenReady = state.resume === true && selectedMode() === "new";
       syncPanels();
       if (state.error) setStatus(state.error, "error");
       if (attached) {
         renderStack(stack);
-        if (!TERMINAL_PHASES.has(stack.phase)) void followStack();
+        if (!TERMINAL_PHASES.has(stack.phase) || (saveWhenReady && stack.phase === "ready")) {
+          void followStack();
+        }
       } else if (selectedMode() === "existing") {
         serverUrl.focus();
       } else {

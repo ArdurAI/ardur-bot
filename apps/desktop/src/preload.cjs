@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
     state: () => ipcRenderer.invoke("desktop.system.state"),
     set: (key, value) => ipcRenderer.invoke("desktop.system.set", key, value),
     moveStorage: (recommended) => ipcRenderer.invoke("desktop.system.moveStorage", recommended),
+    resetLocalData: () => ipcRenderer.invoke("desktop.system.resetLocalData"),
     openPermission: (permission) => ipcRenderer.invoke("desktop.system.openPermission", permission),
     quickBot: (identity, botId) => ipcRenderer.invoke("desktop.system.quickBot", identity, botId),
     closeQuick: () => ipcRenderer.invoke("desktop.system.closeQuick"),

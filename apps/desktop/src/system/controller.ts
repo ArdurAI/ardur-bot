@@ -31,6 +31,8 @@ export interface SystemDependencies {
   menuBar(enabled: boolean): void;
   openExternal(url: string): Promise<void>;
   storage?: StorageMove;
+  /** Present in local mode, where this app keeps the database and files. */
+  localData?: { available(): boolean; reset(): Promise<boolean> };
 }
 
 export class SystemController {
@@ -84,6 +86,7 @@ export class SystemController {
         canMove: mode === "new" && Boolean(this.deps.storage),
         progress: this.deps.storage?.progress ?? null,
       },
+      localData: this.deps.localData?.available() ?? false,
       permissions: permissions(this.deps.platform, this.deps.permissions),
       shortcutError: this.shortcutError,
       menuBarError: this.menuBarError,
@@ -148,6 +151,13 @@ export class SystemController {
     )
       throw new Error("This folder is managed by the server.");
     await this.deps.storage.move(recommended);
+    return this.state();
+  }
+
+  async resetLocalData(): Promise<SystemState> {
+    if (this.stopped || !this.deps.localData?.available())
+      throw new Error("This data is managed by the server.");
+    await this.deps.localData.reset();
     return this.state();
   }
 

@@ -47,6 +47,33 @@ describe("host process confinement", () => {
       ).rejects.toThrow();
     }
   });
+  it("skips a registered folder that is gone instead of failing every command", async () => {
+    const root = await fixture(),
+      allowed = path.join(root, "allowed"),
+      gone = path.join(root, "unplugged-drive");
+    await mkdir(gone);
+    const file = path.join(root, "local-folders.json");
+    await writeFile(file, `${JSON.stringify([gone, allowed])}\n`);
+    const provider = new DesktopSandboxProvider({
+      root,
+      restricted: true,
+      registeredFoldersFile: file,
+    });
+    const computer = await provider.provision({ botId: "bot", homePath: "ignored" }, context);
+    const run = (cwd?: string) =>
+      collect(provider.execute(computer, { argv: ["mkdir", "-p", "made"], cwd }, context));
+    await rm(gone, { recursive: true });
+    await expect(run()).resolves.toEqual([{ type: "exit", code: 0 }]);
+    await expect(run(allowed)).resolves.toEqual([{ type: "exit", code: 0 }]);
+    await expect(run(gone)).rejects.toThrow();
+    expect(await confinedHostCwd(allowed, [gone, allowed])).toBe(await realpath(allowed));
+    // Source mode resolves its roots the same way.
+    const source = new DesktopSandboxProvider({ root, hostRoots: [gone, allowed] });
+    const sourceComputer = await source.provision({ botId: "src", homePath: "ignored" }, context);
+    await expect(
+      collect(source.execute(sourceComputer, { argv: ["mkdir", "-p", "made"] }, context)),
+    ).resolves.toEqual([{ type: "exit", code: 0 }]);
+  });
   it.each<CommandRequest>([
     { argv: ["/bin/sh", "-c", "echo bad"] },
     { argv: ["../bin/gh"] },
