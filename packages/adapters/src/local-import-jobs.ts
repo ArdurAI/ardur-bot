@@ -10,8 +10,6 @@ import {
   stopError,
 } from "./local-import.js";
 
-/** The mirror of `localImportStop`: a returned stop needs an error to fail the job with. */
-
 export type LocalImportJobOptions = {
   apiUrl: string;
   encryptionKey: string;

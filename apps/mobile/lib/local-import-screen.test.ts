@@ -393,8 +393,8 @@ it("keeps the Source folder form visible with its error after a stopped re-scan"
     expect(node.textContent).toContain(
       "Import could not finish. Check this computer is connected, then re-scan.",
     );
-    // configure() already cleared the manifest server-side; the screen must not
-    // have refreshed into that empty state and lost the form the user was using.
+    // The previous scan stays valid until a new scan succeeds, so the page keeps
+    // the form and the found items instead of refreshing.
     expect(node.querySelector('[aria-label="Source folder"]')).not.toBeNull();
   } finally {
     await act(async () => root.unmount());

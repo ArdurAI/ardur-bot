@@ -1,4 +1,5 @@
 import type { McpServer } from "@ardurbot/contracts";
+import { errorDataCode } from "@ardurbot/contracts";
 import type {
   LocalImportAction,
   LocalImportCategory,
@@ -121,8 +122,7 @@ export default function LocalImport() {
       if (refresh !== false) setStatus(await localImport.status());
     } catch (error) {
       setError(
-        error instanceof RpcError &&
-          (error.data as { code?: string } | undefined)?.code === LOCAL_IMPORT_INVALID_FOLDER_CODE
+        error instanceof RpcError && errorDataCode(error) === LOCAL_IMPORT_INVALID_FOLDER_CODE
           ? "invalid-folder"
           : "unavailable",
       );
@@ -499,9 +499,8 @@ export default function LocalImport() {
                             const response = await localImport.run({ action: "scan" });
                             if (response.stopped) {
                               setError(response.stopped);
-                              // configure() already cleared the manifest; keep showing this
-                              // form and the rest of what was found instead of refreshing
-                              // into an empty screen.
+                              // The previous scan stays valid until a new scan succeeds, so the
+                              // page keeps the form and the found items instead of refreshing.
                               return false;
                             }
                           })
