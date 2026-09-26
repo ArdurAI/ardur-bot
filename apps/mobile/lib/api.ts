@@ -666,10 +666,12 @@ export async function rpc<T>(
         typeof payload.code === "string"
           ? payload.code
           : undefined;
+      const data =
+        payload && typeof payload === "object" && "data" in payload ? payload.data : undefined;
       const throwRpcError = () =>
         serverMessage !== undefined
-          ? new RpcServerError(serverMessage, code)
-          : new RpcError(message, code);
+          ? new RpcServerError(serverMessage, code, data)
+          : new RpcError(message, code, data);
       const unauthorized = res.status === 401 || /unauthorized/i.test(message);
       // After a delete where SecureStore could not clear the stale id, restart
       // reloads it and the first RPCs 401. Probe once without a Space header:

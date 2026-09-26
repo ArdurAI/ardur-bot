@@ -1,4 +1,9 @@
 import type { CapabilityPreferences } from "@ardurbot/contracts";
+import {
+  ENGINE_MISSING_CODE,
+  errorDataCode,
+  HOST_MOVE_UNAVAILABLE_CODE,
+} from "@ardurbot/contracts";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -26,7 +31,7 @@ export default function Capabilities() {
   const styles = useThemedStyles(createStyles);
   const [data, setData] = useState<Awaited<ReturnType<typeof loadCapabilitySettings>> | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const ticket = useRef(0);
   const locked = useRef(false);
   useFocusEffect(
@@ -36,29 +41,37 @@ export default function Capabilities() {
         .then((value) => {
           if (ticket.current === current) {
             setData(value);
-            setError(false);
+            setError(null);
           }
         })
         .catch(() => {
-          if (ticket.current === current) setError(true);
+          if (ticket.current === current) setError(t("Could not save capabilities. Try again."));
         });
       return () => {
         ticket.current++;
       };
-    }, []),
+    }, [t]),
   );
   async function change(work: () => Promise<unknown>) {
     if (locked.current || !data?.canConfigure) return;
     locked.current = true;
     setBusy(true);
-    setError(false);
+    setError(null);
     const current = ticket.current;
     try {
       await work();
       const value = await loadCapabilitySettings();
       if (ticket.current === current) setData(value);
-    } catch {
-      if (ticket.current === current) setError(true);
+    } catch (caught) {
+      if (ticket.current === current) {
+        const code = errorDataCode(caught);
+        setError(
+          (code === ENGINE_MISSING_CODE || code === HOST_MOVE_UNAVAILABLE_CODE) &&
+            caught instanceof Error
+            ? caught.message
+            : t("Could not save capabilities. Try again."),
+        );
+      }
     } finally {
       locked.current = false;
       if (ticket.current === current) setBusy(false);
@@ -72,7 +85,7 @@ export default function Capabilities() {
       <ScrollView contentContainerStyle={styles.content}>
         {error ? (
           <Text accessibilityRole="alert" style={styles.error}>
-            {t("Could not save capabilities. Try again.")}
+            {error}
           </Text>
         ) : null}
         {!data ? (

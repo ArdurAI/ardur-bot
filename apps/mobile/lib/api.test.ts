@@ -489,6 +489,33 @@ describe("mobile API authentication", () => {
     });
   });
 
+  it("also carries the data payload an error attaches, alongside its top-level code", async () => {
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("session-token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            json: {
+              defined: false,
+              code: "BAD_REQUEST",
+              status: 400,
+              message: "This computer runs on E2B, which is not configured here.",
+              data: { code: "engine-missing" },
+            },
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    const rejection = rpc("capabilities/network", { computerId: "computer" });
+    await rejection.catch((error: unknown) => {
+      expect(error).toBeInstanceOf(RpcError);
+      expect((error as RpcError).code).toBe("BAD_REQUEST");
+      expect((error as RpcError).data).toEqual({ code: "engine-missing" });
+    });
+  });
+
   it("blocks mobile message and attachment submission when AI sharing is declined", async () => {
     vi.mocked(promptAiConsent).mockResolvedValue(false);
     const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
