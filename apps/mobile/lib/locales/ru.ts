@@ -1055,4 +1055,6 @@ export const RU_MESSAGES: Record<string, string> = {
   "In progress": "В работе",
   Blocked: "Заблокировано",
   Comment: "Комментарий",
+  "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.":
+    "Импортировано: {created}, обновлено: {updated}, без изменений: {unchanged}, удалено: {removed}, пропущено: {skipped}, конфликтов: {conflicts}.",
 };

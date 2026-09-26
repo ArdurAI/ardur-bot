@@ -1017,4 +1017,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "In progress": "进行中",
   Blocked: "已阻塞",
   Comment: "评论",
+  "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.":
+    "已导入 {created} 项，已更新 {updated} 项，未更改 {unchanged} 项，已移除 {removed} 项，已跳过 {skipped} 项，冲突 {conflicts} 项。",
 };
