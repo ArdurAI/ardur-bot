@@ -4366,7 +4366,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             computer.kind === "desktop" && !commandReplay
               ? await deps.sandbox.environmentNote?.(computer, context)
               : undefined;
-          // The first lease has no earlier tool calls. Finished command output is never loaded.
+          // The first lease has no earlier tool calls. `command.finished` is loaded only to
+          // let adoption skip a card that already settled, never to feed the model.
           const priorToolEvents =
             fence > 1
               ? await deps.prisma.event.findMany({
@@ -4379,6 +4380,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                         "agent.tool.resumed",
                         "command.intent",
                         "command.started",
+                        "command.finished",
                       ],
                     },
                   },

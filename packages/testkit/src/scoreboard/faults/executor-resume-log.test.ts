@@ -30,6 +30,7 @@ import {
   projectCommandBlocks,
   settleCommandBlock,
 } from "@ardurbot/core";
+import { approvalEffectKey } from "@ardurbot/core/node/approval-effect-key";
 import { afterEach, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "../../../../adapters/src/auto-review.js";
 import type * as ComputerLifecycleModule from "../../../../adapters/src/computer-lifecycle.js";
@@ -152,6 +153,18 @@ function commandBlockOf(event: Logged | undefined): CommandBlock {
   const block = (event?.payload as { block?: CommandBlock } | undefined)?.block;
   if (!block) throw new Error("command block missing");
   return block;
+}
+
+/** A kill leaves committed rows behind, exactly as the database would. */
+function survivorsOf(effects: readonly Effect[]) {
+  return effects
+    .filter(
+      (effect) =>
+        effect.status === "completed" ||
+        effect.status === "executing" ||
+        effect.status === "intended",
+    )
+    .map((effect) => ({ ...effect }));
 }
 
 function harness(mode: Mode) {
@@ -499,11 +512,9 @@ function harness(mode: Mode) {
         log.push(logged);
         if (event.type === "command.intent") intentStored();
         if (cut?.(logged)) {
-          // A killed worker stores nothing more; only effects it had completed survive.
+          // A killed worker stores nothing more; committed effect rows survive.
           persist = false;
-          survivingEffects = effects
-            .filter((effect) => effect.status === "completed")
-            .map((effect) => ({ ...effect }));
+          survivingEffects = survivorsOf(effects);
         }
       }),
       pauseRunForInput: vi.fn(async (input: Record<string, unknown>) => {
@@ -591,9 +602,7 @@ function harness(mode: Mode) {
       const killed = trace.snapshot();
       cut = () => true;
       persist = false;
-      survivingEffects = effects
-        .filter((effect) => effect.status === "completed")
-        .map((effect) => ({ ...effect }));
+      survivingEffects = survivorsOf(effects);
       trace.stop();
       stopTrace = undefined;
       await finishKilled(pending);
@@ -852,6 +861,57 @@ it("resumes a production call killed before its card as one card", async () => {
   expect(blocks.map((block) => [block.executionId, block.outcome])).toEqual([
     [MINTED, "completed"],
   ]);
+});
+
+it("reports unknown, not cancelled, for a linked resume when the killed effect is still executing", async () => {
+  const h = harness("scripted");
+  // Left behind by an attempt that claimed it (intended -> executing) and was killed mid-run.
+  h.effects.push({
+    id: "effect-executing",
+    runId: RUN,
+    kind: "shell",
+    idempotencyKey: approvalEffectKey(RUN, "shell", ARGS_A),
+    status: "intended",
+    request: ARGS_A,
+  });
+  await h.kill(
+    [{ name: "shell", args: ARGS_A, executionId: A }],
+    "interrupted-worker",
+    1_700_000_000_000,
+  );
+  expect(h.effects.find((effect) => effect.id === "effect-executing")?.status).toBe("executing");
+  const killedStart = commandBlockOf(h.log.find(at("command.started", A))).startedAt;
+  await h.resume([{ name: "shell", args: ARGS_A, executionId: MINTED }]);
+  expect(links(h.log)).toEqual([{ from: A, to: MINTED }]);
+  const resumed = projectedCommands(h.log).find((block) => block.executionId === MINTED);
+  // This attempt never started the command itself; the earlier outcome is unknown, not cancelled.
+  expect(resumed).toMatchObject({ outcome: "unknown", durationMs: null, startedAt: killedStart });
+  expect(resumed?.error).toMatch(/interrupted/);
+});
+
+it("reports unknown, not cancelled, for a same-id resume when the killed effect is still executing", async () => {
+  const h = harness("scripted");
+  h.effects.push({
+    id: "effect-executing",
+    runId: RUN,
+    kind: "shell",
+    idempotencyKey: approvalEffectKey(RUN, "shell", ARGS_A),
+    status: "intended",
+    request: ARGS_A,
+  });
+  await h.kill(
+    [{ name: "shell", args: ARGS_A, executionId: A }],
+    "interrupted-worker",
+    1_700_000_000_000,
+  );
+  expect(h.effects.find((effect) => effect.id === "effect-executing")?.status).toBe("executing");
+  const killedStart = commandBlockOf(h.log.find(at("command.started", A))).startedAt;
+  await h.resume([{ name: "shell", args: ARGS_A, executionId: A }]);
+  expect(links(h.log)).toEqual([]);
+  const [resumed, ...rest] = projectedCommands(h.log);
+  expect(rest).toEqual([]);
+  expect(resumed).toMatchObject({ outcome: "unknown", durationMs: null, startedAt: killedStart });
+  expect(resumed?.error).toMatch(/interrupted/);
 });
 
 it("keeps a resumed helper command in the helper workspace, checks and approval", async () => {

@@ -257,6 +257,20 @@ describe("a call resuming after a killed attempt", () => {
     );
     expect([...open.keys()]).toEqual(["execution-1", "execution-2"]);
   });
+  it("skips a card whose commandId already has a command.finished, even when it never reached agent.tool.completed", () => {
+    const open = new Map<string, CommandBlock>();
+    adoptOpenCommands(
+      open,
+      [
+        { type: "command.intent", payload: { block: earlier({ outcome: "waiting" }) } },
+        { type: "command.finished", payload: { block: earlier({ outcome: "unknown" }) } },
+      ],
+      // The completion never reached agent.tool.completed: the worker died, or the audit
+      // append failed, right after this attempt wrote its own command.finished.
+      new Set(),
+    );
+    expect([...open.keys()]).toEqual([]);
+  });
   it("finishes the same call's card under this attempt and keeps its start", async () => {
     const f = fixture([{ type: "exit", code: 0 }], [], undefined, {
       openCommands: new Map([["execution-1", earlier({})]]),

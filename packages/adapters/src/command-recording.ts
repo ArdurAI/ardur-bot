@@ -54,20 +54,29 @@ type StoredComputer = {
 
 /**
  * Cards an earlier attempt left waiting or running, by execution id, so a call that resumes
- * on the same id finishes its own card. Reads intents and starts only; `finished` names calls
- * that already completed.
+ * on the same id finishes its own card. `finished` names calls that already completed by
+ * `agent.tool.completed`. A card whose commandId already has a `command.finished` is skipped
+ * too, even when that completion never reached `agent.tool.completed`: a rerun on that id
+ * gets its own card and its own result instead of reopening a card already settled.
  */
 export function adoptOpenCommands(
   target: Map<string, CommandBlock>,
   events: readonly { type: string; payload: unknown }[],
   finished: ReadonlySet<string>,
 ) {
+  const finishedCommandIds = new Set<string>();
+  for (const event of events) {
+    if (event.type !== "command.finished") continue;
+    const parsed = CommandEventPayloadSchema.safeParse(event.payload);
+    if (parsed.success) finishedCommandIds.add(parsed.data.block.commandId);
+  }
   for (const event of events) {
     if (event.type !== "command.intent" && event.type !== "command.started") continue;
     const parsed = CommandEventPayloadSchema.safeParse(event.payload);
     if (!parsed.success) continue;
     const block = parsed.data.block;
     if (finished.has(block.executionId)) continue;
+    if (finishedCommandIds.has(block.commandId)) continue;
     if (block.outcome === "waiting" || block.outcome === "running")
       target.set(block.executionId, block);
   }
@@ -241,13 +250,16 @@ export function createCommandRecording(input: {
       const value = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
       const executed = entry.block.outcome === "running";
       const code = typeof value.code === "number" ? value.code : null;
+      // The effect survived the kill as executing or intended: this attempt never started the
+      // command itself, and the earlier attempt's outcome is unknown, not this attempt's to cancel.
+      const uncertain = value.uncertain === true;
       entry.block = {
         ...entry.block,
         outcome: input.context.signal.aborted
           ? "cancelled"
           : code !== null
             ? "completed"
-            : executed
+            : executed || uncertain
               ? "unknown"
               : "cancelled",
         durationMs: executed ? Math.max(0, Date.now() - entry.started) : null,
