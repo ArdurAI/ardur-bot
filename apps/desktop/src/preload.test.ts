@@ -45,6 +45,7 @@ describe("desktop preload bridge", () => {
       "notifications",
       "oauth",
       "platform",
+      "storage",
       "system",
       "update",
       "window",
@@ -109,6 +110,7 @@ describe("desktop preload bridge", () => {
       "notifications",
       "oauth",
       "platform",
+      "storage",
       "system",
       "update",
       "window",
@@ -163,6 +165,19 @@ describe("desktop preload bridge", () => {
       "space",
       "/fixture/extension.mcpb",
     );
+  });
+  it("forwards storage usage and cache clearing to the main process", async () => {
+    const { invoke, exposeInMainWorld } = runPreload("preload.cjs");
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [
+      string,
+      { storage: { usage(): Promise<unknown>; clearCaches(): Promise<unknown> } },
+    ];
+    await bridge.storage.usage();
+    await bridge.storage.clearCaches();
+    expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
+      "desktop.storage.usage",
+      "desktop.storage.clearCaches",
+    ]);
   });
 });
 
