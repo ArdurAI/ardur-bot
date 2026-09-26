@@ -128,7 +128,7 @@ export function createLearningService(deps: {
         boardOutcome: {
           closedAt: filing?.closedAt?.toISOString() ?? null,
           outcome,
-          closeReason: outcome === "closed-other" ? closeReason : null,
+          closeReason: outcome === "closed-other" || outcome === "closed" ? closeReason : null,
         },
       };
     });

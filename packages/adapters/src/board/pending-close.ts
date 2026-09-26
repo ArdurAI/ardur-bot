@@ -90,22 +90,18 @@ export async function releaseChangedBoardClose(prisma: PrismaClient, filing: Pen
   });
 }
 
-const ITEM_NOT_FOUND_MESSAGE = "This work item was not found.";
+const FINAL_PENDING_CLOSE_CODES = new Set(["no_board", "access_lost", "item_not_found"]);
 
 /**
- * A pending close that can never succeed: the item was deleted outside the app (`show` fails
- * with `command_failed`, "This work item was not found."), the board was turned off in Settings
- * (`no_board`), or the person who asked for the close lost their own access to it (`forbidden`
- * from `actor`; the scope here is always the person, never a bot, so this cannot be the bot's
- * own board denial). Every other `BoardError`, and anything that is not a `BoardError` such as a
- * database hiccup or a timeout, is transient and keeps its backoff.
+ * A pending close that can never succeed: the item was deleted outside the app (`item_not_found`
+ * from `show`), the board was turned off in Settings (`no_board`), or the person who asked for
+ * the close lost their own access to it (`access_lost` from `actor`, a code `actor` uses only for
+ * that one case, never for a bot's own board denial). A generic `forbidden` — every other reason
+ * `actor`, `workspace` and `run` throw it, none of them permanent — stays transient, as does
+ * anything that is not a `BoardError` such as a database hiccup or a timeout.
  */
 export function isFinalPendingCloseError(error: unknown): boolean {
-  if (!(error instanceof BoardError)) return false;
-  if (error.problem.code === "no_board" || error.problem.code === "forbidden") return true;
-  return (
-    error.problem.code === "command_failed" && error.problem.message === ITEM_NOT_FOUND_MESSAGE
-  );
+  return error instanceof BoardError && FINAL_PENDING_CLOSE_CODES.has(error.problem.code);
 }
 
 /**

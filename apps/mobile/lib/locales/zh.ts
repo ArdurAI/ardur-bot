@@ -1034,6 +1034,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "This board item was already closed on the Board.": "此看板事项已经关闭。",
   "This board item was completed.": "此看板事项已完成。",
   "This board item was closed.": "此看板事项已关闭。",
+  "This board item was closed: {reason}.": "此看板事项已关闭：{reason}。",
   "This board item was closed without being completed. Review it on the Board.":
     "此看板事项已关闭但未完成。请在看板上查看。",
   "This board item was closed without being completed: {reason}. Review it on the Board.":

@@ -1073,6 +1073,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "This board item was already closed on the Board.": "Эта задача на доске уже закрыта.",
   "This board item was completed.": "Эта задача на доске выполнена.",
   "This board item was closed.": "Эта задача на доске закрыта.",
+  "This board item was closed: {reason}.": "Эта задача на доске закрыта: {reason}.",
   "This board item was closed without being completed. Review it on the Board.":
     "Эта задача на доске закрыта без выполнения. Проверьте её на доске.",
   "This board item was closed without being completed: {reason}. Review it on the Board.":

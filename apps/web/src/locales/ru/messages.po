@@ -7417,6 +7417,11 @@ msgstr "Эта задача на доске закрыта без выполне
 msgid "This board item was closed without being completed. Review it on the Board."
 msgstr "Эта задача на доске закрыта без выполнения. Проверьте её на доске."
 
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed: {0}."
+msgstr "Эта задача на доске закрыта: {0}."
+
 #: src/pages/LearningInbox.tsx
 msgid "This board item was closed."
 msgstr "Эта задача на доске закрыта."

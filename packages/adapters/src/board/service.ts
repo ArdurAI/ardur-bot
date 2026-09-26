@@ -103,7 +103,7 @@ export class BoardService {
     ]);
     if (!member || deployment?.ownerUserId !== scope.userId)
       throw new BoardError({
-        code: "forbidden",
+        code: "access_lost",
         message: "This board is only available to this computer's owner.",
       });
     if (scope.botId) {

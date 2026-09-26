@@ -7417,6 +7417,11 @@ msgstr "This board item was closed without being completed: {0}. Review it on th
 msgid "This board item was closed without being completed. Review it on the Board."
 msgstr "This board item was closed without being completed. Review it on the Board."
 
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed: {0}."
+msgstr "This board item was closed: {0}."
+
 #: src/pages/LearningInbox.tsx
 msgid "This board item was closed."
 msgstr "This board item was closed."

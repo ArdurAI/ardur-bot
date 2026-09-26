@@ -1,12 +1,30 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
+import { BoardError } from "@ardurbot/contracts/board";
 import { observeBoardItems } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
 import {
+  isFinalPendingCloseError,
   pendingCloseAction,
   recordPendingCloseFailure,
   releaseChangedBoardClose,
 } from "./pending-close.js";
 import { BoardService } from "./service.js";
+
+it.each(["no_board", "access_lost", "item_not_found"] as const)(
+  "treats a %s BoardError as final",
+  (code) => {
+    expect(isFinalPendingCloseError(new BoardError({ code, message: "x" }))).toBe(true);
+  },
+);
+it.each(["forbidden", "timeout", "busy", "command_failed"] as const)(
+  "treats a %s BoardError as transient",
+  (code) => {
+    expect(isFinalPendingCloseError(new BoardError({ code, message: "x" }))).toBe(false);
+  },
+);
+it("treats a non-BoardError as transient", () => {
+  expect(isFinalPendingCloseError(new Error("network hiccup"))).toBe(false);
+});
 
 it("ends a pending close quietly when a person closed the item with a different reason", () => {
   const filing = {

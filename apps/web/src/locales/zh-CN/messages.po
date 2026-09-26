@@ -7417,6 +7417,11 @@ msgstr "此看板事项已关闭但未完成：{0}。请在看板上查看。"
 msgid "This board item was closed without being completed. Review it on the Board."
 msgstr "此看板事项已关闭但未完成。请在看板上查看。"
 
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed: {0}."
+msgstr "此看板事项已关闭：{0}。"
+
 #: src/pages/LearningInbox.tsx
 msgid "This board item was closed."
 msgstr "此看板事项已关闭。"

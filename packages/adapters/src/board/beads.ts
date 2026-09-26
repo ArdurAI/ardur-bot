@@ -186,7 +186,7 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     BoardItemIdSchema.parse(id);
     const item = (await this.items(["show", "--include-comments", "--include-dependents", id]))[0];
     if (!item)
-      throw new BoardError({ code: "command_failed", message: "This work item was not found." });
+      throw new BoardError({ code: "item_not_found", message: "This work item was not found." });
     const history = records(await this.json(["history", id, "--limit", "100"]));
     item.history = history.map((entry) => {
       const state = rawObject.safeParse(entry.Issue);

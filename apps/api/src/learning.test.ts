@@ -249,7 +249,7 @@ it("reports the recorded outcome for an applied board-item proposal", async () =
   });
 });
 
-it("reports an unclassified closed outcome without calling it done or not done", async () => {
+it("reports an unclassified closed outcome with its reason, without calling it done or not done", async () => {
   const actor = { spaceId: "space", userId: "user" } as Actor;
   const row = boardProposalRow(actor, "proposal", "applied");
   row.body.appliedBoardItem.closeReason = "Готово";
@@ -271,7 +271,11 @@ it("reports an unclassified closed outcome without calling it done or not done",
     jobs: {} as never,
   });
   await expect(service.proposal(actor, "proposal")).resolves.toMatchObject({
-    boardOutcome: { closedAt: "2026-09-25T13:00:00.000Z", outcome: "closed", closeReason: null },
+    boardOutcome: {
+      closedAt: "2026-09-25T13:00:00.000Z",
+      outcome: "closed",
+      closeReason: "Готово",
+    },
   });
 });
 

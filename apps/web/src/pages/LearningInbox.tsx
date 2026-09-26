@@ -517,7 +517,11 @@ function LearningCard({
                 </Trans>
               )
             ) : proposal.boardOutcome.outcome === "closed" ? (
-              <Trans>This board item was closed.</Trans>
+              proposal.boardOutcome.closeReason ? (
+                <Trans>This board item was closed: {proposal.boardOutcome.closeReason}.</Trans>
+              ) : (
+                <Trans>This board item was closed.</Trans>
+              )
             ) : (
               <Trans>This board item is still open.</Trans>
             )}

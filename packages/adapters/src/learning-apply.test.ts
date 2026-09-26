@@ -2121,7 +2121,7 @@ it("drops the filing for good, with no closing marker, when Undo's close can nev
   show.mockImplementation(async () => item);
   close.mockRejectedValueOnce(
     new BoardError({
-      code: "forbidden",
+      code: "access_lost",
       message: "This board is only available to this computer's owner.",
     }),
   );
