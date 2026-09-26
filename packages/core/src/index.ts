@@ -33,6 +33,7 @@ export * from "./composer-commands.js";
 export * from "./composer-mention-picker.js";
 export * from "./composer-mentions.js";
 export * from "./composer-slash.js";
+export * from "./computer-host.js";
 export * from "./computer-updates.js";
 export * from "./connector-rows.js";
 export * from "./cron.js";

@@ -1,8 +1,10 @@
 import { homedir } from "node:os";
 import { nativeHostOwner } from "@ardurbot/adapters";
 import type { HostHealth, HostStatus } from "@ardurbot/contracts/host-bridge";
+import { sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { readRegisteredFolders } from "@ardurbot/host-runtime/desktop-sandbox";
+import { hostCapacity } from "@ardurbot/host-runtime/fleet/capacity";
 import {
   getHostEnvironment,
   inspectHostEnvironment,
@@ -28,8 +30,7 @@ export async function sourceHostStatus(
   if (process.env.ARDURBOT_HOST_BRIDGE === "api") return null;
   const deployment = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
   if (
-    (sandboxKind !== "desktop" &&
-      !(sandboxKind === "docker" && deployment?.computerHost === "this-mac")) ||
+    sandboxKindForBot(sandboxKind, deployment?.computerHost) !== "desktop" ||
     !(await nativeHostOwner(prisma, userId))
   )
     return null;
@@ -56,10 +57,11 @@ export async function sourceHostStatus(
       });
   }
   const file = process.env.ARDURBOT_HOST_ROOTS_FILE;
-  const [current, roots] = await Promise.all([
+  const [current, roots, capacity] = await Promise.all([
     health,
     file ? readRegisteredFolders(file) : [homedir()],
+    hostCapacity(),
   ]);
   // There is no paired registration to disconnect in source mode.
-  return { configured: false, connected: true, roots, health: { ...current, roots } };
+  return { configured: false, connected: true, roots, health: { ...current, roots, capacity } };
 }

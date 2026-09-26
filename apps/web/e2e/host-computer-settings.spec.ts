@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
+import { captureScreenshot } from "./helpers";
 import { installPerformanceFixture } from "./performance-fixture";
 
 test("Computers shows host tools, a failed login profile and registered folders", async ({
   page,
 }, testInfo) => {
+  await installPerformanceFixture(page);
   await page.route("**/rpc/host/status", (route) =>
     route.fulfill({
       json: {
@@ -37,11 +38,25 @@ test("Computers shows host tools, a failed login profile and registered folders"
       },
     }),
   );
-  await signup(page, `host-${Date.now()}@example.test`, "fixture-password-123", "Test operator");
-  await completeOnboarding(page);
-  await openUserSettings(page);
-  await page.getByRole("button", { name: "Computers", exact: true }).click();
-  await page.getByText("This computer", { exact: true }).click();
+  await page.route("**/rpc/fleet/list", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          targets: [],
+          placement: { mode: "free-memory", preferredTargetId: null, minimumFreeGb: 4 },
+          bots: [],
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/fleet/discover", (route) => route.fulfill({ json: { json: [] } }));
+  await page.goto("/app");
+  await page.getByRole("banner").getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByTestId("settings-nav-computer").click();
+  await page
+    .getByTestId("computers-setup-settings")
+    .getByText("This computer", { exact: true })
+    .click();
   await expect(page.getByTestId("host-computer-settings")).toContainText(
     "Connected · claude 2.1.259 · codex 0.156.1",
   );
@@ -55,7 +70,7 @@ test("Computers shows host tools, a failed login profile and registered folders"
   await captureScreenshot(page, testInfo, "host-computer-settings");
 });
 
-test("Computers in local mode lists the folders this app added and marks a missing one", async ({
+test("Computers in local mode shows this computer's capacity and the folders this app added", async ({
   page,
 }, testInfo) => {
   await installPerformanceFixture(page);
@@ -70,6 +85,15 @@ test("Computers in local mode lists the folders this app added and marks a missi
             platform: "darwin",
             roots: ["/fixture/projects", "/fixture/archive"],
             load: 0,
+            capacity: {
+              cpuCount: 8,
+              cpuLoad1m: 1.5,
+              memoryTotal: 16 * 1024 ** 3,
+              memoryFree: 6 * 1024 ** 3,
+              diskFree: 200 * 1024 ** 3,
+              sampledAt: new Date().toISOString(),
+              source: "host",
+            },
             environment: { tools: [{ name: "gh", status: "not checked" }], diagnostic: "" },
             claude: { runtimeKind: "claude-code", available: false, models: [] },
             codex: { runtimeKind: "codex-app-server", available: false, models: [] },
@@ -125,6 +149,17 @@ test("Computers in local mode lists the folders this app added and marks a missi
     .getByText("This computer", { exact: true })
     .click();
   const host = page.getByTestId("host-computer-settings");
+  await expect(host).toContainText("6.0 GB free · 8 CPU · Load 1.5 · Disk 200.0 GB");
+  await expect(host).not.toContainText("Host service");
+  await expect(host.getByRole("button", { name: "Set up", exact: true })).toHaveCount(0);
+  await expect(
+    host.getByRole("button", { name: "Disconnect this computer", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    host.getByRole("button", { name: "Add folder", exact: true }),
+  ).toHaveAccessibleDescription(
+    "Local access lets bots run commands without asking. Avoid it on shared or public servers.",
+  );
   await expect(host.getByRole("listitem")).toHaveCount(2);
   await expect(host.getByRole("listitem").nth(1)).toContainText("This folder is not available.");
   await expect(host.getByRole("listitem").nth(0)).not.toContainText("not available");

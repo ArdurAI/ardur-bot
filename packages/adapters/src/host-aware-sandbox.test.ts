@@ -504,3 +504,99 @@ it("routes the run environment note to the host, leaving container notes alone",
   expect(host.environmentNote).toHaveBeenCalledOnce();
   expect(await sandbox.environmentNote({ ...computer, kind: "docker" }, ctx)).toBeUndefined();
 });
+
+describe("the desktop app's own Compose stack", () => {
+  // Its host bridge reaches the computer the app is installed on.
+  async function stackSandbox(computerHost: string | null, desktopStack = "1") {
+    const { RemoteHostSandboxProvider } = await import("./remote-host-sandbox.js");
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    vi.stubEnv("ARDURBOT_DESKTOP_STACK", desktopStack);
+    const provisions = {
+      docker: vi
+        .spyOn(DockerSandboxProvider.prototype, "provision")
+        .mockImplementation(async (request) => ({
+          id: "container",
+          botId: request.botId,
+          kind: "docker" as const,
+          providerRef: "container",
+        })),
+      host: vi.spyOn(RemoteHostSandboxProvider.prototype, "provision"),
+    };
+    const sandbox = createRunSandbox("docker", {
+      hostClient: {
+        request: vi.fn(),
+        result: vi.fn(async () => undefined),
+        health: vi.fn(async () => null),
+      } as never,
+      prisma: {
+        deploymentSettings: { findUnique: async () => ({ computerHost }) },
+      } as unknown as PrismaClient,
+      secrets: { load: () => "" },
+    });
+    return { sandbox, provisions, RemoteHostSandboxProvider };
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("starts a new computer on this computer through the host bridge when no choice is saved", async () => {
+    const { sandbox, provisions, RemoteHostSandboxProvider } = await stackSandbox(null);
+    const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
+    expect(computer.kind).toBe("desktop");
+    expect(provisions.host).toHaveBeenCalledOnce();
+    expect(provisions.docker).not.toHaveBeenCalled();
+    await expect(owningSandbox(sandbox, computer, ctx)).resolves.toBeInstanceOf(
+      RemoteHostSandboxProvider,
+    );
+  });
+
+  it.each([null, "docker"])(
+    "keeps an existing Docker computer on Docker (host choice %s)",
+    async (computerHost) => {
+      const { sandbox, provisions } = await stackSandbox(computerHost);
+      const computer = await sandbox.provision(
+        { botId: "old", homePath: "/tmp/old", providerRef: "container", providerKind: "docker" },
+        ctx,
+      );
+      expect(computer.kind).toBe("docker");
+      expect(provisions.docker).toHaveBeenCalledWith(
+        expect.objectContaining({ providerRef: "container", providerKind: "docker" }),
+        ctx,
+      );
+      expect(provisions.host).not.toHaveBeenCalled();
+      await expect(owningSandbox(sandbox, { kind: "docker" }, ctx)).resolves.toBeInstanceOf(
+        DockerSandboxProvider,
+      );
+    },
+  );
+
+  it("respects an earlier choice of Docker for new computers", async () => {
+    const { sandbox, provisions } = await stackSandbox("docker");
+    const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
+    expect(computer.kind).toBe("docker");
+    expect(provisions.host).not.toHaveBeenCalled();
+  });
+
+  it("keeps Docker the default on a server whose host bridge is on", async () => {
+    const { sandbox, provisions } = await stackSandbox(null, "");
+    const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
+    expect(computer.kind).toBe("docker");
+    expect(provisions.host).not.toHaveBeenCalled();
+    await expect(owningSandbox(sandbox, { kind: "desktop" }, ctx)).rejects.toBeInstanceOf(
+      MissingComputerProviderError,
+    );
+  });
+});
+
+it("names the kind of a new computer for each deployment shape", () => {
+  const stack = { ARDURBOT_HOST_BRIDGE: "api", ARDURBOT_DESKTOP_STACK: "1" };
+  const server = { ARDURBOT_HOST_BRIDGE: "api" };
+  expect(sandboxKindForBot("desktop", null, {})).toBe("desktop");
+  expect(sandboxKindForBot("docker", null, stack)).toBe("desktop");
+  expect(sandboxKindForBot("docker", "docker", stack)).toBe("docker");
+  expect(sandboxKindForBot("docker", null, server)).toBe("docker");
+  expect(sandboxKindForBot("docker", null, {})).toBe("docker");
+  expect(sandboxKindForBot("e2b", null, stack)).toBe("e2b");
+});

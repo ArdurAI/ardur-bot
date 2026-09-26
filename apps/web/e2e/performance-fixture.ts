@@ -59,7 +59,13 @@ export const tokenEvent = {
   createdAt,
   payload: { text: "First fixture token" },
 };
-export async function installPerformanceFixture(page: Page, trace = false, manualTrace = false) {
+export async function installPerformanceFixture(
+  page: Page,
+  trace = false,
+  manualTrace = false,
+  account: Partial<Record<keyof typeof me, unknown>> = {},
+) {
+  const current = { ...me, ...account };
   let sent = false;
   const snapshot = (index: number) => ({
     botId: bots[index]!.id,
@@ -252,7 +258,7 @@ export async function installPerformanceFixture(page: Page, trace = false, manua
     let result: unknown = [];
     if (name === "bootstrap")
       result = {
-        me,
+        me: current,
         bots,
         groups: [],
         botSections: [],
@@ -262,7 +268,7 @@ export async function installPerformanceFixture(page: Page, trace = false, manua
         routines: [],
         spaces,
       };
-    else if (name === "me") result = me;
+    else if (name === "me") result = current;
     else if (name === "spaces/list") result = { current: { ...spaces[0], bots }, spaces };
     else if (name === "threads/get") result = snapshot(index);
     else if (name === "threads/head")

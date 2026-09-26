@@ -26,8 +26,9 @@ Inherited from Rakazo and working:
 - Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key), OpenAI,
   Google, Vercel AI Gateway, and any OpenAI-compatible server, which covers Kimi Code,
   Z.ai, and local Ollama, LM Studio or llama.cpp
-- Computers: this computer from the installed desktop app, plus Docker, E2B, Daytona, or Box,
-  with a browser, terminal, files and a graphical desktop
+- Computers: the computer Ardur Bot is installed on, plus Docker, Podman, Kubernetes or SSH
+  machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
+  graphical desktop ([where bots run](docs/self-host.md#where-bots-run))
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
@@ -144,8 +145,8 @@ running:
 pnpm --filter @ardurbot/desktop dev
 ```
 
-On first run it asks whether to run the backend on this computer (needs Docker) or connect
-to an existing server.
+On first run it starts its own database and services on this computer; its setup window can
+connect it to an existing server instead.
 
 ## Development
 

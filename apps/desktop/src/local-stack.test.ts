@@ -441,6 +441,8 @@ describe("LocalStackController", () => {
         ARDURBOT_IMAGE_TAG: "v1.2.3",
         ARDURBOT_COMPUTER_IMAGE_TAG: "v1.2.3",
         COMPOSE_PROGRESS: "plain",
+        // Tells the API and worker that new computers start on this computer.
+        ARDURBOT_DESKTOP_STACK: "1",
         HOME: "/home/me",
       });
       expect(call.env).not.toHaveProperty("OPENROUTER_API_KEY");

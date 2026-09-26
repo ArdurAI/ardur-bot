@@ -1,8 +1,10 @@
 import type { HostStatus } from "@ardurbot/contracts";
+import { hostLabel } from "@ardurbot/contracts/fleet";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { CapacitySummary } from "./fleet/FleetSettings";
 
 export function HostComputerSettings() {
   const { t } = useLingui();
@@ -16,8 +18,12 @@ export function HostComputerSettings() {
   const [unavailable, setUnavailable] = useState<string[]>([]);
   /** This app keeps the folder list: a pairing it holds, or local mode. */
   const [local, setLocal] = useState(false);
+  /** Local mode: this computer runs the services, so there is no host service to set up. */
+  const [localMode, setLocalMode] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const warningId = useId();
   const desktop = window.ardurbotDesktop;
   async function refresh() {
     const [remote, host] = await Promise.all([rpc.host.status(), desktop?.host?.state()]);
@@ -26,6 +32,8 @@ export function HostComputerSettings() {
     setRoots(owned && host ? host.roots : remote.roots);
     setUnavailable(owned && host ? (host.unavailable ?? []) : []);
     setLocal(owned);
+    setLocalMode(!!host?.local);
+    setLoaded(true);
   }
   useEffect(() => {
     let active = true;
@@ -51,23 +59,34 @@ export function HostComputerSettings() {
       setBusy(false);
     }
   }
-  const mac = (status.health?.platform ?? desktop?.platform) === "darwin";
+  const mac = hostLabel(status.health?.platform ?? desktop?.platform ?? "") === "This Mac";
   const versions = [
     status.health?.claude.version ? `claude ${status.health.claude.version}` : "",
     status.health?.codex.version ? `codex ${status.health.codex.version}` : "",
   ].filter(Boolean);
+  const versionText = status.connected && versions.length ? ` · ${versions.join(" · ")}` : "";
+  const capacity = status.health?.capacity;
   return (
     <section className="space-y-3 py-4" data-testid="host-computer-settings">
       <h4 className="text-sm font-medium">{mac ? t`This Mac` : t`This computer`}</h4>
-      <p className="text-sm text-muted-foreground">
-        <Trans>Host service:</Trans>{" "}
-        {status.connected
-          ? t`Connected`
-          : status.configured
-            ? t`Not running — open the desktop app`
-            : t`Not set up`}
-        {status.connected && versions.length ? ` · ${versions.join(" · ")}` : ""}
-      </p>
+      {!loaded ? null : localMode ? (
+        capacity ? (
+          <p className="text-sm text-muted-foreground">
+            <CapacitySummary capacity={capacity} />
+            {versionText}
+          </p>
+        ) : null
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          <Trans>Host service:</Trans>{" "}
+          {status.connected
+            ? t`Connected`
+            : status.configured
+              ? t`Not running — open the desktop app`
+              : t`Not set up`}
+          {versionText}
+        </p>
+      )}
       {status.connected && status.health?.environment ? (
         <>
           <p className="text-sm text-muted-foreground">
@@ -113,7 +132,11 @@ export function HostComputerSettings() {
         </p>
       ) : null}
       <div className="flex gap-2">
-        {desktop?.host && !status.connected && (!status.configured || local) ? (
+        {loaded &&
+        !localMode &&
+        desktop?.host &&
+        !status.connected &&
+        (!status.configured || local) ? (
           <Button disabled={busy} onClick={() => void perform(() => desktop.host!.setup())}>
             <Trans>Set up</Trans>
           </Button>
@@ -122,12 +145,13 @@ export function HostComputerSettings() {
           <Button
             variant="outline"
             disabled={busy}
+            aria-describedby={warningId}
             onClick={() => void perform(() => desktop.host!.addRoot())}
           >
             <Trans>Add folder</Trans>
           </Button>
         ) : null}
-        {status.configured ? (
+        {loaded && !localMode && status.configured ? (
           <Button
             variant="ghost"
             disabled={busy}
@@ -142,6 +166,14 @@ export function HostComputerSettings() {
           </Button>
         ) : null}
       </div>
+      {desktop?.host && local ? (
+        <p id={warningId} className="text-xs text-muted-foreground">
+          <Trans>
+            Local access lets bots run commands without asking. Avoid it on shared or public
+            servers.
+          </Trans>
+        </p>
+      ) : null}
     </section>
   );
 }

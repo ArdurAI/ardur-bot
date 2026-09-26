@@ -20,6 +20,9 @@ vi.mock("@ardurbot/ui-web", () => ({
 
 import { HostComputerSettings } from "./HostComputerSettings";
 
+const WARNING =
+  "Local access lets bots run commands without asking. Avoid it on shared or public servers.";
+
 const containers: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of containers.splice(0)) await cleanup();
@@ -129,8 +132,8 @@ it("in local mode lists the folders this app granted, with Add folder and Remove
   expect(button("Set up")).toBeUndefined();
   expect(button("Disconnect this computer")).toBeUndefined();
   expect(container.querySelector("li")).toBeNull();
-  // The folder sentence belongs to the Add folder dialog; nothing explains standing here.
-  expect(container.querySelectorAll("p")).toHaveLength(1);
+  // The only sentence is the warning that belongs to Add folder; nothing explains standing here.
+  expect([...container.querySelectorAll("p")].map((p) => p.textContent)).toEqual([WARNING]);
   expect(container.textContent).not.toMatch(/Bots can read|approvals|advisory/);
 
   await act(async () => button("Add folder")!.click());
@@ -192,4 +195,82 @@ it("says nothing about local folders when paired with a server", async () => {
   expect(container.textContent).toContain("Add folder");
   expect(container.textContent).not.toContain("Bots can read and change files");
   expect(container.textContent).not.toContain("a command stops after five minutes");
+});
+
+function localDesktop() {
+  window.ardurbotDesktop = {
+    platform: "darwin",
+    host: {
+      state: async () => ({ configured: false, local: true, roots: [] }),
+      setup: vi.fn(),
+      addRoot: vi.fn(),
+      removeRoot: vi.fn(),
+      clear: vi.fn(),
+    },
+  } as unknown as NonNullable<Window["ardurbotDesktop"]>;
+}
+const buttons = (container: HTMLElement) =>
+  [...container.querySelectorAll("button")].map((button) => button.textContent);
+
+it("in local mode shows this computer's capacity, not a host service to set up", async () => {
+  localDesktop();
+  fake.status.mockReturnValue(new Promise(() => undefined));
+  const loading = await render();
+  expect(loading.textContent).not.toContain("Host service");
+  expect(buttons(loading)).not.toContain("Set up");
+
+  fake.status.mockResolvedValue({
+    configured: false,
+    connected: true,
+    roots: [],
+    health: {
+      platform: "darwin",
+      roots: [],
+      load: 0,
+      capacity: {
+        cpuCount: 8,
+        cpuLoad1m: 1.5,
+        memoryTotal: 16 * 1024 ** 3,
+        memoryFree: 6 * 1024 ** 3,
+        diskFree: 200 * 1024 ** 3,
+        sampledAt: "2026-09-26T00:00:00.000Z",
+        source: "host",
+      },
+      claude: { version: "2.1.259" },
+      codex: {},
+    },
+  });
+  const container = await render();
+  expect(container.querySelector("h4")?.textContent).toBe("This Mac");
+  expect(container.textContent).toContain("6.0 GB free · 8 CPU · Load 1.5 · Disk 200.0 GB");
+  expect(container.textContent).toContain("claude 2.1.259");
+  expect(container.textContent).not.toContain("Host service");
+  expect(buttons(container)).toEqual(["Add folder"]);
+});
+
+it("in local mode never offers Set up or Disconnect, even when this account cannot inspect the host", async () => {
+  localDesktop();
+  fake.status.mockResolvedValue({ configured: true, connected: false, health: null, roots: [] });
+  const container = await render();
+  expect(container.textContent).not.toMatch(/Host service|Not set up|Not running/);
+  expect(buttons(container)).toEqual(["Add folder"]);
+});
+
+it("puts the local access warning on Add folder and nowhere else", async () => {
+  localDesktop();
+  fake.status.mockResolvedValue({ configured: false, connected: true, health: null, roots: [] });
+  const container = await render();
+  const add = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Add folder",
+  )!;
+  const describedBy = add.getAttribute("aria-describedby");
+  expect(describedBy && document.getElementById(describedBy)?.textContent).toBe(WARNING);
+  expect(container.textContent?.split(WARNING)).toHaveLength(2);
+
+  // A browser has no Add folder, so it has no warning either.
+  delete window.ardurbotDesktop;
+  fake.status.mockResolvedValue({ configured: true, connected: true, health: null, roots: [] });
+  const browser = await render();
+  expect(buttons(browser)).not.toContain("Add folder");
+  expect(browser.textContent).not.toContain(WARNING);
 });

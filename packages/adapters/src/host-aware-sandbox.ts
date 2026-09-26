@@ -12,6 +12,7 @@ import type {
   ScreenRequest,
 } from "@ardurbot/adapter-kit";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
+import { sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "./computer-connections.js";
 import {
@@ -28,10 +29,7 @@ import {
 import type { SandboxProviderOptions } from "./sandbox-factory.js";
 import { createSandboxProvider } from "./sandbox-factory.js";
 
-export function sandboxKindForBot(envKind: string, computerHost: string | null | undefined) {
-  if (envKind === "docker" && computerHost === "this-mac") return "desktop";
-  return envKind;
-}
+export { sandboxKindForBot };
 
 function once<T>(create: () => T): () => T {
   let value: T | undefined;
@@ -73,7 +71,7 @@ export function createRunSandbox(
     const settings = await opts.prisma!.deploymentSettings.findUnique({
       where: { id: "default" },
     });
-    return settings?.computerHost === "this-mac";
+    return sandboxKindForBot(kind, settings?.computerHost) === "desktop";
   });
 }
 
