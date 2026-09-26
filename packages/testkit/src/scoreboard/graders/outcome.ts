@@ -184,24 +184,25 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
   if (!files || observed.snapshot?.error) {
     return {
       passed: false,
+      uninspected: true,
       criticalPassed: false,
-      withinDeadline: false,
-      reasons: [] as string[],
+      withinDeadline: null,
+      reasons: ["The workspace could not be inspected."],
       checks: {
-        shape: false,
-        facts: false,
-        citations: false,
-        conflicts: false,
-        state: false,
-        effects: false,
-        permissions: false,
-        pin: false,
-        files: false,
-        links: false,
-        saved: false,
-        redaction: false,
-        terminal: false,
-        deadline: false,
+        shape: null,
+        facts: null,
+        citations: null,
+        conflicts: null,
+        state: null,
+        effects: null,
+        permissions: null,
+        pin: null,
+        files: null,
+        links: null,
+        saved: null,
+        redaction: null,
+        terminal: null,
+        deadline: null,
       },
       judgment: "human-calibration-required" as const,
     };
@@ -270,12 +271,29 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
     checks.redaction;
   return {
     passed: Object.values(checks).every(Boolean),
+    uninspected: false,
     criticalPassed,
     withinDeadline: checks.deadline,
     reasons: unexpectedLinks.map((path) => `unexpected symlink: ${path}`),
     checks,
     judgment: "human-calibration-required" as const,
   };
+}
+
+const COHORT_CHECKS = ["facts", "citations", "pin", "files"] as const;
+
+/** An unreadable workspace is counted on its own, never as a wrong answer. */
+export function reportOutcomeCohort(grades: readonly ReturnType<typeof gradeOutcome>[]) {
+  const failures = { facts: 0, citations: 0, pin: 0, files: 0 };
+  let uninspected = 0;
+  for (const grade of grades) {
+    if (grade.uninspected) {
+      uninspected += 1;
+      continue;
+    }
+    for (const name of COHORT_CHECKS) if (grade.checks[name] === false) failures[name] += 1;
+  }
+  return { uninspected, failures };
 }
 
 function filesCanonicalRepair() {

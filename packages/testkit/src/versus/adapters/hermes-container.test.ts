@@ -7,7 +7,10 @@ import { contentDigest } from "../../scoreboard/manifest.js";
 import { getTask } from "../../scoreboard/tasks/catalog.js";
 import { referenceSolution } from "../../scoreboard/tasks/reference.js";
 import { BudgetLedger } from "../budget.js";
-import { retainsReceiptsWithoutWorkspace } from "../containers/qualification.js";
+import {
+  probeRetainedWorkspace,
+  retainsReceiptsWithoutWorkspace,
+} from "../containers/qualification.js";
 import { createTrialDirectory, destroyOwnedDirectory } from "../isolation.js";
 import { selfTestBudget } from "../self-test.js";
 import { HermesContainerAdapter } from "./hermes-container.js";
@@ -30,16 +33,29 @@ async function retain(
   snapshot: () => Promise<unknown> = async () => entries,
 ) {
   inspectImage.mockResolvedValue({ id: `sha256:${"ab".repeat(32)}`, revision: null });
+  let active = true;
+  const order: string[] = [];
   const session = {
     policy: {},
     proof: {},
     write: async () => undefined,
     read: async () => Buffer.from(""),
-    snapshot,
+    file: async () => {
+      if (!active) throw new Error("Container closed");
+      return snapshot();
+    },
+    snapshot: async () => {
+      order.push(active ? "snapshot" : "snapshot-closed");
+      return session.file();
+    },
     exec: async () => {
+      if (!active) throw new Error("Container closed");
       throw new Error("must not start");
     },
-    destroy: async () => undefined,
+    destroy: async () => {
+      order.push("destroy");
+      active = false;
+    },
     bindRelay: () => ({
       providerUrl: "http://127.0.0.1:18080/provider",
       brokerUrl: "http://127.0.0.1:18080/broker",
@@ -75,21 +91,32 @@ async function retain(
     const args = referenceSolution(task).updates[0]!;
     adapter.broker!.decide(contentDigest({ trialId: id, name: "SCOREBOARD_UPDATE", args }), true);
     await adapter.broker!.call("SCOREBOARD_UPDATE", args);
-    if (cancelled) await adapter.cancel();
-    else await session.destroy();
-    await adapter.submit();
-    const artifact = await adapter.collect();
-    const links = artifact.observation.links;
+    const probed = await probeRetainedWorkspace(adapter, cancelled);
+    const workspace = probed.workspace;
+    const artifact = probed.artifact;
+    const files = workspace ? workspace.files : artifact.observation.files;
+    const links = workspace ? workspace.links : artifact.observation.links;
     const passed = retainsReceiptsWithoutWorkspace({
       cancelled,
       terminal: artifact.observation.terminal,
-      effects: artifact.observation.effects,
-      files: artifact.observation.files,
+      effects: workspace ? workspace.effects : artifact.observation.effects,
+      files,
       links,
+      snapshot: workspace ? undefined : { error: "The workspace could not be inspected." },
       providerRequests: 0,
-      gradedPassed: gradeOutcome(task, artifact.observation).passed,
+      gradedPassed: gradeOutcome(
+        task,
+        workspace
+          ? {
+              ...artifact.observation,
+              files: workspace.files,
+              links: workspace.links,
+              snapshot: undefined,
+            }
+          : artifact.observation,
+      ).passed,
     });
-    return { links, files: artifact.observation.files, passed, observation: artifact.observation };
+    return { links, files, passed, observation: artifact.observation, order };
   } finally {
     await adapter.destroy();
     await destroyOwnedDirectory(trial);
@@ -102,6 +129,8 @@ it("fails container-cancel-retains-receipts-and-nonsuccess and container-loss-re
     expect(retained.files).toEqual({});
     expect(retained.links).toEqual(["leak"]);
     expect(retained.passed).toBe(false);
+    expect(retained.order.indexOf("snapshot")).toBeGreaterThanOrEqual(0);
+    expect(retained.order.indexOf("snapshot")).toBeLessThan(retained.order.indexOf("destroy"));
   }
 });
 
@@ -147,5 +176,7 @@ it("passes cancel and loss retention when the workspace snapshot is empty", asyn
     const retained = await retain({}, cancelled);
     expect(retained.links).toEqual([]);
     expect(retained.passed).toBe(true);
+    expect(retained.order.indexOf("snapshot")).toBeGreaterThanOrEqual(0);
+    expect(retained.order.indexOf("snapshot")).toBeLessThan(retained.order.indexOf("destroy"));
   }
 });

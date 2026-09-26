@@ -98,6 +98,7 @@ export function createCommandRecording(input: {
     {
       block: CommandBlock;
       started: number;
+      keepStart: boolean;
       suppress: boolean;
       request: { command: string; cwd?: string } | null;
     }
@@ -170,18 +171,22 @@ export function createCommandRecording(input: {
       : createHash("sha256")
           .update(JSON.stringify([input.context.runId, input.attemptId, executionId]))
           .digest("hex");
+    const preservedStartMs =
+      resumeCard?.outcome === "running" && resumeCard.startedAt
+        ? Date.parse(resumeCard.startedAt)
+        : Number.NaN;
+    const keepStart = Number.isFinite(preservedStartMs);
     const block: CommandBlock = {
       commandId,
       runId: input.context.runId,
-      attemptId: resumeCard ? resumeCard.attemptId : input.attemptId,
+      // The recovering attempt is the one whose fence matches the live lease.
+      attemptId: input.attemptId,
       executionId: resumeCard ? resumeCard.executionId : executionId,
       command,
       cwd,
       computerId: input.storedComputer.id,
       computer: safe(`${input.computer.kind}:${input.computer.providerRef ?? input.computer.id}`),
-      startedAt: resumeCard
-        ? (resumeCard.startedAt ?? new Date().toISOString())
-        : new Date().toISOString(),
+      startedAt: keepStart ? resumeCard!.startedAt! : new Date().toISOString(),
       durationMs: null,
       exitCode: null,
       outcome: "waiting",
@@ -198,7 +203,13 @@ export function createCommandRecording(input: {
             ? "This computer did not record its working directory."
             : null,
     };
-    const entry = { block, started: Date.now(), suppress, request };
+    const entry = {
+      block,
+      started: keepStart ? preservedStartMs : Date.now(),
+      keepStart,
+      suppress,
+      request,
+    };
     entries.set(executionId, entry);
     // A second intent for a card the killed attempt already published would open another row.
     if (!resumeCard) {
@@ -275,11 +286,11 @@ export function createCommandRecording(input: {
     const entry = entries.get(executionId);
     if (!entry) throw new Error("Command launch intent is missing.");
     input.context.signal.throwIfAborted();
-    entry.started = Date.now();
+    if (!entry.keepStart) entry.started = Date.now();
     entry.block = {
       ...entry.block,
       outcome: "running",
-      startedAt: new Date(entry.started).toISOString(),
+      ...(entry.keepStart ? {} : { startedAt: new Date(entry.started).toISOString() }),
     };
     await append("command.started", { block: entry.block });
     input.context.signal.throwIfAborted();

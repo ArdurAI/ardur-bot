@@ -11,7 +11,13 @@ vi.mock("../../../../adapters/src/delegation-execution.js", () => ({
 }));
 
 import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
-import { type ActionApprovalRule, projectCommandBlocks } from "@ardurbot/core";
+import type { CommandBlock } from "@ardurbot/contracts";
+import {
+  type ActionApprovalRule,
+  commandRecordingIsLive,
+  projectCommandBlocks,
+  settleCommandBlock,
+} from "@ardurbot/core";
 import { afterEach, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "../../../../adapters/src/auto-review.js";
 import type * as ComputerLifecycleModule from "../../../../adapters/src/computer-lifecycle.js";
@@ -404,6 +410,7 @@ function harness(scripted: boolean) {
 
   return {
     log,
+    run,
     toolEvents,
     hold() {
       barrier = new Promise<void>((resolve) => {
@@ -440,7 +447,10 @@ function harness(scripted: boolean) {
       persist = true;
       return killed;
     },
-    async killAt(next: ToolCall[], eventType: "agent.tool.called" | "command.intent") {
+    async killAt(
+      next: ToolCall[],
+      eventType: "agent.tool.called" | "command.intent" | "command.started",
+    ) {
       calls = next;
       concurrent = false;
       this.hold();
@@ -564,6 +574,14 @@ it("closes identical open shell calls in the order they were called", async () =
   expect(openExecutionIds(ordered)).toEqual([]);
 });
 
+function commandBlockOf(event: Logged | undefined): CommandBlock {
+  if (!event || typeof event.payload !== "object" || event.payload === null)
+    throw new Error("command block missing");
+  const block = (event.payload as { block?: CommandBlock }).block;
+  if (!block) throw new Error("command block missing");
+  return block;
+}
+
 function commandIdentity(events: readonly Logged[]) {
   return events
     .filter((event) => event.type.startsWith("command."))
@@ -644,4 +662,49 @@ it("records a command killed before intent on the original id", async () => {
     "command.started",
     "command.finished",
   ]);
+});
+
+it("keeps a command killed after it started live on the recovering lease", async () => {
+  const h = harness(true);
+  await h.killAt([{ name: "shell", args: ARGS_A, executionId: A }], "command.started");
+  const killedBlock = commandBlockOf(
+    h.log.filter((event) => event.type === "command.started").at(-1),
+  );
+  const preCrashStart = killedBlock.startedAt;
+  expect(preCrashStart).toEqual(expect.any(String));
+  if (!preCrashStart) throw new Error("pre-crash start missing");
+  expect(killedBlock.attemptId).toBe("attempt-1");
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const gapMs = Date.now() - Date.parse(preCrashStart);
+  expect(gapMs).toBeGreaterThanOrEqual(40);
+  await h.resume([{ name: "shell", args: ARGS_A, executionId: MINTED }]);
+  const running = commandBlockOf(h.log.filter((event) => event.type === "command.started").at(-1));
+  const fence = h.run.leaseFence;
+  expect(fence).toBe(2);
+  expect(running).toMatchObject({
+    outcome: "running",
+    attemptId: `attempt-${fence}`,
+    startedAt: preCrashStart,
+    executionId: A,
+  });
+  const live = commandRecordingIsLive(running, {
+    status: "running",
+    leaseFence: fence,
+    leaseExpiresAt: new Date(Date.now() + 60_000),
+    attempts: [
+      { id: "attempt-1", fence: 1 },
+      { id: `attempt-${fence}`, fence },
+    ],
+  });
+  expect(live).toBe(true);
+  expect(settleCommandBlock(running, live).outcome).toBe("running");
+  const finished = projectedCommands(h.log)[0];
+  expect(finished).toMatchObject({
+    outcome: "completed",
+    startedAt: preCrashStart,
+    executionId: A,
+    stdout: "ok",
+  });
+  expect(finished?.durationMs).toBeGreaterThanOrEqual(gapMs);
+  expect(h.log.filter((event) => event.type === "command.intent")).toHaveLength(1);
 });

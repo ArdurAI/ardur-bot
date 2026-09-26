@@ -702,6 +702,80 @@ describe("trace evidence", () => {
     });
     expect(explicit.snapshot().clockUncertaintyMs).toBe(1000);
   });
+
+  it("keeps the widest clock sample when one process disagrees and does not treat a missing side as zero", () => {
+    const attempt = 4;
+    const killedOrigin = 1_700_000_000_000;
+    const span = (
+      wallMs: number,
+      recoveredUncertainty: [number, number] | undefined,
+      killedUncertainty: number | undefined,
+    ) => {
+      const killed = createTraceBuffer({
+        processId: "interrupted-worker",
+        now: () => 1,
+        timeOrigin: killedOrigin,
+        clockUncertaintyMs: killedUncertainty,
+      });
+      const recovered = createTraceBuffer({
+        processId: "recovered-worker",
+        now: () => 1,
+        timeOrigin: killedOrigin + wallMs,
+        clockUncertaintyMs: recoveredUncertainty?.[0] ?? 0,
+      });
+      killed.record("run-a", "tool.started", { operationId: "tool-1", attempt }, 0);
+      recovered.record(
+        "run-a",
+        "tool.finished",
+        { operationId: "tool-1", attempt: nextFence(attempt), outcome: "success" },
+        0,
+      );
+      recovered.record("run-a", "terminal.committed", { outcome: "success" }, 1);
+      const recoveredBatch = recovered.snapshot();
+      const recoveredBatches = recoveredUncertainty
+        ? [
+            {
+              ...recoveredBatch,
+              clockUncertaintyMs: recoveredUncertainty[0],
+              points: recoveredBatch.points.slice(0, 1),
+            },
+            {
+              ...recoveredBatch,
+              clockUncertaintyMs: recoveredUncertainty[1],
+              points: recoveredBatch.points.slice(1),
+            },
+          ]
+        : [recoveredBatch];
+      if (!recoveredUncertainty) delete recoveredBatches[0]!.clockUncertaintyMs;
+      const killedBatch = killed.snapshot();
+      if (killedUncertainty === undefined) delete killedBatch.clockUncertaintyMs;
+      return collectTraceEvidence([killedBatch, ...recoveredBatches], {
+        sessionId: "crash",
+        pairId: null,
+        requiredBoundaries: ["tool.started", "tool.finished"],
+        pairAcrossProcesses: true,
+      }).derived[0]!.operations[0]!.duration;
+    };
+    expect(span(50, [1000, 10], 20)).toEqual({
+      value: null,
+      lowerMs: null,
+      upperMs: null,
+      reason: "clock-uncertain",
+    });
+    expect(span(5_000, [1000, 10], 20)).toEqual({
+      value: 5_000,
+      lowerMs: 5_000 - 1_020,
+      upperMs: 5_000 + 1_020,
+      reason: "wall-clock",
+    });
+    expect(span(50, undefined, 20).reason).toBe("clock-uncertain");
+    expect(span(400, [40, 40], 40)).toEqual({
+      value: 400,
+      lowerMs: 400 - 80,
+      upperMs: 400 + 80,
+      reason: "wall-clock",
+    });
+  });
 });
 
 function fenceCrash(

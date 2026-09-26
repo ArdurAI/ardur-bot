@@ -271,6 +271,7 @@ export async function runOfflineSelfTest(plan: PairPlan[], graderHash: string) {
           },
         });
         const grade = gradeBlind(packet, { fixtureHash, graderHash });
+        if (grade.withinDeadline === null) throw new Error("The workspace could not be inspected.");
         trials.push({
           product,
           taskId: task.id,

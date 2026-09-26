@@ -86,6 +86,26 @@ export function retainsReceiptsWithoutWorkspace(input: {
   );
 }
 
+/**
+ * Read the guest workspace, then stop the container.
+ * A snapshot taken after close is not evidence.
+ */
+export async function probeRetainedWorkspace(adapter: HermesContainerAdapter, cancelled: boolean) {
+  const broker = adapter.broker;
+  const session = adapter.session;
+  requireValue(broker && session, "Container trial not ready");
+  let workspace: Awaited<ReturnType<typeof broker.snapshot>> | undefined;
+  try {
+    workspace = await broker.snapshot();
+  } catch {
+    workspace = undefined;
+  }
+  if (cancelled) await adapter.cancel();
+  else await session.destroy();
+  await adapter.submit();
+  return { workspace, artifact: await adapter.collect() };
+}
+
 /** Explicit opt-in container probes; never pulls an image or invokes an inference endpoint. */
 export async function qualifyContainers(output: string, standin: boolean) {
   await mkdir(output, { recursive: true });
@@ -415,28 +435,34 @@ print(json.dumps(out))
             true,
           );
           await lost.broker!.call("SCOREBOARD_UPDATE", args);
-          if (cancelled) await lost.cancel();
-          else await lost.session!.destroy();
-          await lost.submit();
-          const retained = await lost.collect();
+          const { workspace, artifact: retained } = await probeRetainedWorkspace(lost, cancelled);
           const observed = retained.observation;
-          const uninspected =
-            observed.snapshot?.error !== undefined ||
-            observed.files === undefined ||
-            observed.links === undefined;
-          const passed =
-            !uninspected &&
-            retainsReceiptsWithoutWorkspace({
-              cancelled,
-              terminal: observed.terminal,
-              effects: observed.effects,
-              files: observed.files,
-              links: observed.links,
-              expectedLinks: task.links,
-              snapshot: observed.snapshot,
-              providerRequests: gateway.requests.length,
-              gradedPassed: gradeOutcome(task, observed).passed,
-            });
+          const uninspected = workspace === undefined;
+          const graded = gradeOutcome(
+            task,
+            workspace
+              ? {
+                  ...observed,
+                  files: workspace.files,
+                  links: workspace.links,
+                  snapshot: undefined,
+                }
+              : {
+                  ...observed,
+                  snapshot: observed.snapshot ?? { error: WORKSPACE_NOT_INSPECTED },
+                },
+          );
+          const passed = retainsReceiptsWithoutWorkspace({
+            cancelled,
+            terminal: observed.terminal,
+            effects: workspace ? workspace.effects : observed.effects,
+            files: workspace?.files,
+            links: workspace?.links,
+            expectedLinks: task.links,
+            snapshot: uninspected ? { error: WORKSPACE_NOT_INSPECTED } : undefined,
+            providerRequests: gateway.requests.length,
+            gradedPassed: graded.passed,
+          });
           report.checks.push({
             name: `${id}-retains-receipts-and-nonsuccess`,
             passed,

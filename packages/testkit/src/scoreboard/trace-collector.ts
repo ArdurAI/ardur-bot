@@ -308,10 +308,12 @@ function operationSpan(
   if (value < 0) return missing("clock-skew");
   const startUncertainty = uncertainty.get(start.processId);
   const endUncertainty = uncertainty.get(end.processId);
+  // A missing side uses the default. It does not contribute zero next to a real sample.
   const widen =
     startUncertainty === undefined && endUncertainty === undefined
       ? DEFAULT_CLOCK_UNCERTAINTY_MS
-      : (startUncertainty ?? 0) + (endUncertainty ?? 0);
+      : (startUncertainty ?? DEFAULT_CLOCK_UNCERTAINTY_MS) +
+        (endUncertainty ?? DEFAULT_CLOCK_UNCERTAINTY_MS);
   // A lower bound below zero does not show that the finish happened after the start.
   if (value - widen < 0) return missing("clock-uncertain");
   return { value, lowerMs: value - widen, upperMs: value + widen, reason: "wall-clock" };
@@ -531,9 +533,15 @@ export function collectTraceEvidence(
       timeOrigins.set(batch.processId, undefined);
     const recorded =
       typeof batch.clockUncertaintyMs === "number" ? batch.clockUncertaintyMs : undefined;
-    if (!clockUncertainty.has(batch.processId)) clockUncertainty.set(batch.processId, recorded);
-    else if (clockUncertainty.get(batch.processId) !== recorded)
-      clockUncertainty.set(batch.processId, undefined);
+    if (!clockUncertainty.has(batch.processId)) {
+      clockUncertainty.set(batch.processId, recorded);
+    } else {
+      const prior = clockUncertainty.get(batch.processId);
+      // Disagreeing samples keep the widest bound. A later omission does not erase it.
+      if (typeof prior === "number" && typeof recorded === "number")
+        clockUncertainty.set(batch.processId, Math.max(prior, recorded));
+      else if (prior === undefined) clockUncertainty.set(batch.processId, recorded);
+    }
   }
   const points = raw.flatMap((b) => b.points);
   const dropped = raw.some((b) => b.counters.dropped > 0 || b.counters.invalid > 0);
