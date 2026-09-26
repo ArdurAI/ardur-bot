@@ -209,6 +209,7 @@ import {
   type PluginConnectionRow,
   planLiveConnectionSync,
 } from "./composio-connector.js";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import { backgroundShellArgv, scheduleComputerSleep } from "./computer-idle.js";
 import {
   acquireComputerExecutionLease,
@@ -260,6 +261,7 @@ import {
 } from "./lazy-tool-catalog.js";
 import {
   buildMcpCredentialBlob,
+  mcpCredentialConflict,
   needsOAuthProbe,
   parseMcpServerToolArgs,
 } from "./mcp-server-tool.js";
@@ -3393,6 +3395,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (!deps.secretStore) {
               return finish({ error: "Secret storage is not available in this deployment." });
             }
+            const credentialConflict = mcpCredentialConflict(parsed);
+            if (credentialConflict) return finish({ error: credentialConflict });
             const credentialBlob = buildMcpCredentialBlob(parsed);
             let storedCredential: { id: string; ciphertext: string } | null = null;
             if (credentialBlob) {
@@ -5197,7 +5201,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
       } catch (setupError) {
         if (
           setupError instanceof RuntimePinError ||
-          setupError instanceof CommandReplayUnavailableError
+          setupError instanceof CommandReplayUnavailableError ||
+          setupError instanceof MissingComputerProviderError
         ) {
           const finalized = await deps.events.finalizeRun({
             onCommitted: () =>

@@ -4,7 +4,7 @@ import { ComputerProfileSchema } from "./computer-profiles.js";
 import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "./context.js";
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
-import { RunPlacementSchema } from "./fleet.js";
+import { HostLabelSchema, RunPlacementSchema } from "./fleet.js";
 import { Id, MemoryScope, RunStatus, RunTriggerSchema, SandboxKind } from "./ids.js";
 import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
@@ -674,7 +674,7 @@ export const IntegrationCatalogSurfaceSchema = z.object({
   source: z.string().nullable(),
   auth: z
     .object({
-      type: z.enum(["none", "bearer", "header"]),
+      type: z.enum(["none", "bearer", "header", "oauth", "mixed"]),
       headerName: z.string().nullable(),
       note: z.string().nullable(),
     })
@@ -702,34 +702,47 @@ const McpServerBaseInput = z.object({
    * OAuth state survives so a connected server stays connected. */
   clearCredential: z.boolean().optional(),
 });
-export const McpServerConfigInput = z.discriminatedUnion("transport", [
-  McpServerBaseInput.extend({
-    transport: z.literal("streamable_http"),
-    endpoint: McpRemoteEndpointSchema,
-    headers: McpHeadersSchema.default({}),
-    secret: z.string().max(16384).optional(),
-  }),
-  McpServerBaseInput.extend({
-    transport: z.literal("sse"),
-    endpoint: McpRemoteEndpointSchema,
-    headers: McpHeadersSchema.default({}),
-    secret: z.string().max(16384).optional(),
-  }),
-  McpServerBaseInput.extend({
-    transport: z.literal("stdio"),
-    command: z.string().min(1).max(512),
-    args: z.array(z.string().max(2048)).max(64).default([]),
-    env: z
-      .record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().max(4096))
-      .superRefine((value, ctx) => {
-        if (Object.keys(value).length > 32) {
-          ctx.addIssue({ code: "custom", message: "At most 32 environment variables are allowed" });
-        }
-      })
-      .default({}),
-    secret: z.string().max(16384).optional(),
-  }),
-]);
+export const McpServerConfigInput = z
+  .discriminatedUnion("transport", [
+    McpServerBaseInput.extend({
+      transport: z.literal("streamable_http"),
+      endpoint: McpRemoteEndpointSchema,
+      headers: McpHeadersSchema.default({}),
+      secret: z.string().max(16384).optional(),
+    }),
+    McpServerBaseInput.extend({
+      transport: z.literal("sse"),
+      endpoint: McpRemoteEndpointSchema,
+      headers: McpHeadersSchema.default({}),
+      secret: z.string().max(16384).optional(),
+    }),
+    McpServerBaseInput.extend({
+      transport: z.literal("stdio"),
+      command: z.string().min(1).max(512),
+      args: z.array(z.string().max(2048)).max(64).default([]),
+      env: z
+        .record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().max(4096))
+        .superRefine((value, ctx) => {
+          if (Object.keys(value).length > 32) {
+            ctx.addIssue({
+              code: "custom",
+              message: "At most 32 environment variables are allowed",
+            });
+          }
+        })
+        .default({}),
+      secret: z.string().max(16384).optional(),
+    }),
+  ])
+  .superRefine((value, ctx) => {
+    if (!("headers" in value) || !value.secret?.trim()) return;
+    const named = Object.values(value.headers).some((header) => header.trim());
+    if (!named) return;
+    ctx.addIssue({
+      code: "custom",
+      message: "Choose one credential: a token or a header.",
+    });
+  });
 export type McpServerConfigInput = z.infer<typeof McpServerConfigInput>;
 
 export const McpServerSchema = z.object({
@@ -740,6 +753,8 @@ export const McpServerSchema = z.object({
   managedId: z.string().nullable().optional(),
   placement: z.enum(["worker", "host"]).optional(),
   connectionState: z.string().optional(),
+  pendingOauthSessionId: z.string().nullable().optional(),
+  lastError: z.string().nullable().optional(),
   id: Id,
   spaceId: Id,
   slug: z.string(),
@@ -752,6 +767,8 @@ export const McpServerSchema = z.object({
   envKeys: z.array(z.string()),
   headerKeys: z.array(z.string()),
   hasSecret: z.boolean(),
+  /** A stored credential from before one was enforced still holds a token and a header. */
+  credentialConflict: z.boolean().optional(),
   oauthStatus: z.enum(["none", "connected", "reconnect"]),
   enabled: z.boolean(),
   revision: z.number().int().positive(),
@@ -843,6 +860,7 @@ export const ComputerStatusSchema = z.object({
   homeRevision: z.string().nullable(),
   busyBotName: z.string().nullable(),
   canUpdate: z.boolean(),
+  hostLabel: HostLabelSchema.optional(),
 });
 export type ComputerStatus = z.infer<typeof ComputerStatusSchema>;
 

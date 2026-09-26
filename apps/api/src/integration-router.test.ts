@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { EncryptedSecretStore, McpOAuthBroker } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +15,7 @@ const actor: Actor = {
   isDeploymentOwner: true,
 };
 
-function fixture() {
+function fixture(overrides: Partial<RouterDeps> = {}) {
   const assignment = {
     id: "grant",
     botId: "bot",
@@ -40,12 +42,14 @@ function fixture() {
     complete: vi.fn(async () => "server"),
     begin: vi.fn(),
     statusFor: vi.fn(async () => "none"),
+    recordAttemptFailure: vi.fn(async () => undefined),
   };
   const handler = new RPCHandler(
     createRouter({
       prisma,
       mcpOAuth: oauth,
       env: { webOrigin: "https://app.example.test" },
+      ...overrides,
     } as unknown as RouterDeps),
   );
   const request = async (path: string, input: unknown, caller: Actor | null = actor) => {
@@ -83,7 +87,7 @@ describe("integration RPC boundaries", () => {
   });
   it("refuses write Allow for a custom MCP server at the API boundary", async () => {
     const f = fixture();
-    f.prisma.mcpServer.findFirst.mockResolvedValueOnce({
+    f.prisma.mcpServer.findFirst.mockResolvedValue({
       id: "server",
       catalogId: null,
       enabled: true,
@@ -164,7 +168,7 @@ describe("integration RPC boundaries", () => {
     ["synthetic_read", "Read and delete an item"],
   ])("rejects owner allow for write-classified %s through the API", async (id, description) => {
     const f = fixture();
-    f.prisma.mcpServer.findFirst.mockResolvedValueOnce({
+    f.prisma.mcpServer.findFirst.mockResolvedValue({
       id: "server",
       catalogId: "github",
       enabled: true,
@@ -254,7 +258,7 @@ describe("integration RPC boundaries", () => {
       spaceId: actor.spaceId,
       userId: actor.userId,
     });
-    expect(capture).toHaveBeenCalledWith(actor, "server");
+    expect(capture).toHaveBeenCalledWith(actor, "server", "session");
     capture.mockClear();
     f.oauth.complete.mockRejectedValueOnce(new Error("fake-sensitive-oauth-response"));
     const response = await f.request("mcp/oauth/complete", input);
@@ -262,6 +266,227 @@ describe("integration RPC boundaries", () => {
     expect(await response?.text()).not.toContain("fake-sensitive");
     expect(capture).not.toHaveBeenCalled();
   });
+  it("returns the failure a catalog capture recorded instead of connected", async () => {
+    const f = fixture();
+    vi.spyOn(IntegrationConnections.prototype, "capture").mockResolvedValue();
+    f.prisma.mcpServer.findFirst.mockResolvedValue({
+      id: "server",
+      catalogId: "notion",
+      connectionState: "needs-sign-in",
+      lastError: "Needs sign-in (refresh_unavailable).",
+    } as never);
+    const input = { sessionId: "session", code: "synthetic-code", state: "session" };
+    const response = await f.request("mcp/oauth/complete", input);
+    expect(response?.status).toBe(200);
+    expect(((await response!.json()) as { json: unknown }).json).toEqual({
+      ok: true,
+      result: "failed",
+      lastError: "Needs sign-in (refresh_unavailable).",
+    });
+    f.prisma.mcpServer.findFirst.mockResolvedValue({
+      id: "server",
+      catalogId: "notion",
+      connectionState: "connected",
+      lastError: null,
+    } as never);
+    const connected = await f.request("mcp/oauth/complete", input);
+    expect(((await connected!.json()) as { json: unknown }).json).toEqual({
+      ok: true,
+      result: "connected",
+    });
+  });
+  it("flags a stored credential blob that still holds a bearer and a header", async () => {
+    const store = new EncryptedSecretStore(randomBytes(32).toString("hex"));
+    const context = {
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      operationId: "fixture",
+      traceId: "fixture",
+      signal: AbortSignal.timeout(10_000),
+    };
+    const both = await store.put(
+      JSON.stringify({ secret: "legacy-token", headers: { "X-Api-Key": "legacy-key" } }),
+      context,
+    );
+    const one = await store.put(JSON.stringify({ headers: { "X-Api-Key": "one-key" } }), context);
+    const f = fixture({ mcpOAuth: new McpOAuthBroker({} as never, store) } as never);
+    const server = (id: string, secretId: string) => ({
+      id,
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      catalogId: null,
+      slug: id,
+      name: id,
+      description: "",
+      transport: "streamable_http",
+      endpoint: "https://example.test/mcp",
+      command: null,
+      args: [],
+      env: {},
+      headers: { "X-Api-Key": true },
+      secretId,
+      enabled: true,
+      revision: 1,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    Object.assign(f.prisma.mcpServer, {
+      findMany: vi.fn(async () => [server("both", both.id), server("one", one.id)]),
+    });
+    Object.assign(f.prisma, {
+      secret: {
+        findMany: vi.fn(async () => [
+          { id: both.id, ciphertext: both.ciphertext },
+          { id: one.id, ciphertext: one.ciphertext },
+        ]),
+      },
+    });
+    const response = await f.request("mcp/servers/list", {});
+    expect(response?.status).toBe(200);
+    const text = await response!.text();
+    expect(text).not.toContain("legacy-token");
+    expect(text).not.toContain("legacy-key");
+    const listed = (
+      JSON.parse(text) as { json: Array<{ id: string; credentialConflict?: boolean }> }
+    ).json;
+    expect(listed.find((row) => row.id === "both")?.credentialConflict).toBe(true);
+    expect(listed.find((row) => row.id === "one")?.credentialConflict).toBeFalsy();
+    const config = {
+      slug: "both",
+      name: "Both",
+      transport: "streamable_http",
+      endpoint: "https://example.test/mcp",
+      headers: { "X-Api-Key": "new-key" },
+      secret: "new-token",
+      enabled: true,
+    };
+    const created = await f.request("mcp/servers/create", config);
+    expect(created?.status).toBe(400);
+    expect(await created?.text()).toContain("Choose one credential: a token or a header.");
+    const updated = await f.request("mcp/servers/update", { id: "both", config });
+    expect(updated?.status).toBe(400);
+  });
+  it.each([
+    [
+      "a token replaces a header",
+      { secret: "new-token" },
+      { headers: { "X-Api-Key": "old-key" } },
+      { "X-Api-Key": true },
+      {},
+      { secret: "new-token" },
+    ],
+    [
+      "a header replaces a token",
+      { headers: { "X-Api-Key": "new-key" } },
+      { secret: "old-token" },
+      {},
+      { "X-Api-Key": true },
+      { headers: { "X-Api-Key": "new-key" } },
+    ],
+  ])(
+    "%s: one credential, its header names, and the import receipt follow",
+    async (_, change, before, namesBefore, namesAfter, after) => {
+      const store = new EncryptedSecretStore(randomBytes(32).toString("hex"));
+      const old = await store.put(JSON.stringify(before), {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        operationId: "fixture",
+        traceId: "fixture",
+        signal: AbortSignal.timeout(10_000),
+      });
+      const row: Record<string, unknown> = {
+        id: "server",
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        catalogId: null,
+        managedBy: null,
+        imported: {
+          tool: "codex",
+          relativePath: "config.toml",
+          sourcePathHash: "a".repeat(64),
+          contentHash: "b".repeat(64),
+          modifiedAt: "2026-09-25T00:00:00.000Z",
+          importedAt: "2026-09-25T00:00:00.000Z",
+          kind: "servers",
+          authorizesIntent: false,
+        },
+        slug: "server",
+        name: "Server",
+        description: "",
+        transport: "streamable_http",
+        endpoint: "https://example.test/mcp",
+        command: null,
+        args: [],
+        env: {},
+        headers: namesBefore,
+        secretId: old.id,
+        enabled: true,
+        revision: 1,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
+      const apply = (data: Record<string, unknown>) => {
+        const { revision, ...rest } = data;
+        Object.assign(row, rest);
+        if (revision && typeof revision === "object") row.revision = Number(row.revision) + 1;
+      };
+      const secrets = new Map([[old.id, { id: old.id, ciphertext: old.ciphertext }]]);
+      const receipt = {
+        configId: "config",
+        targetId: "server",
+        targetRevision: 1,
+        removedAt: null,
+      };
+      const prisma = {
+        spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+        mcpServer: {
+          findFirst: vi.fn(async () => ({ ...row })),
+          findFirstOrThrow: vi.fn(async () => ({ ...row })),
+          update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+            apply(data);
+            return { ...row };
+          }),
+          updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+            apply(data);
+            return { count: 1 };
+          }),
+        },
+        secret: {
+          findFirst: vi.fn(async ({ where }: { where: { id: string } }) => secrets.get(where.id)),
+          create: vi.fn(async ({ data }: { data: { id: string; ciphertext: string } }) => {
+            secrets.set(data.id, data);
+            return data;
+          }),
+          deleteMany: vi.fn(async ({ where }: { where: { id: string } }) => {
+            secrets.delete(where.id);
+            return { count: 1 };
+          }),
+        },
+        localImportRecord: {
+          findFirst: vi.fn(async () => receipt),
+          updateMany: vi.fn(
+            async ({ where, data }: { where: { targetRevision: number }; data: object }) => {
+              if (where.targetRevision !== receipt.targetRevision) return { count: 0 };
+              Object.assign(receipt, data);
+              return { count: 1 };
+            },
+          ),
+        },
+        $executeRaw: vi.fn(async () => 1),
+        $transaction: vi.fn(),
+      };
+      prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
+      const f = fixture({ prisma, secrets: store } as never);
+      const response = await f.request("mcp/servers/update", { id: "server", ...change });
+      expect(response?.status).toBe(200);
+      expect(row.headers).toEqual(namesAfter);
+      const saved = secrets.get(String(row.secretId))!;
+      expect(JSON.parse(store.load(saved.ciphertext, saved.id))).toEqual(after);
+      expect(secrets.has(old.id)).toBe(false);
+      expect(row.revision).toBe(2);
+      expect(receipt.targetRevision).toBe(2);
+    },
+  );
   it("does not let generic MCP configuration replace a trusted endpoint or credentials", async () => {
     const f = fixture();
     expect(

@@ -409,6 +409,8 @@ describe("local import lifecycle", () => {
       }),
       { ...owner, operationId: "fixture", traceId: "fixture", signal: AbortSignal.timeout(10_000) },
     );
+    // A real begin reserves this attempt as the server's pending sign-in.
+    server.pendingOauthSessionId = stored.id;
     await f.oauthSessions.create({
       data: {
         ...owner,
@@ -476,6 +478,107 @@ describe("local import lifecycle", () => {
         expect(f.servers.rows).toHaveLength(0);
       }
       expect(f.secrets.rows).toHaveLength(0);
+    },
+  );
+  it.each(["exchange", "discovery"] as const)(
+    "refreshes and undoes a connected imported server after its re-authorization fails at %s",
+    async (phase) => {
+      const f = await fixture();
+      await f.file(
+        ".claude/settings.json",
+        JSON.stringify({ mcpServers: { remote: { url: "https://mcp.example.test/mcp" } } }),
+      );
+      await f.importAll();
+      const server = f.servers.rows[0]!;
+      const secrets = new EncryptedSecretStore("fixture-oauth-encryption-material");
+      const context = {
+        ...owner,
+        operationId: "fixture",
+        traceId: "fixture",
+        signal: AbortSignal.timeout(10_000),
+      };
+      const working = await secrets.put(
+        JSON.stringify({
+          oauth: { tokens: { access_token: "fixture-working", token_type: "bearer" } },
+        }),
+        context,
+      );
+      await f.secrets.create({ data: { ...owner, ...working } });
+      Object.assign(server, { secretId: working.id, connectionState: "connected" });
+      const session = await secrets.put(
+        JSON.stringify({
+          oauth: {
+            authorizationRevision: server.revision,
+            redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+            codeVerifier: "fixture-verifier",
+            clientInformation: { client_id: "fixture-client" },
+            discoveryState: {
+              authorizationServerUrl: "https://auth.example.test",
+              resourceMetadata: {
+                resource: server.endpoint,
+                authorization_servers: ["https://auth.example.test"],
+              },
+              authorizationServerMetadata: {
+                issuer: "https://auth.example.test",
+                authorization_endpoint: "https://auth.example.test/authorize",
+                token_endpoint: "https://auth.example.test/token",
+                response_types_supported: ["code"],
+                grant_types_supported: ["authorization_code"],
+              },
+            },
+          },
+        }),
+        context,
+      );
+      server.pendingOauthSessionId = session.id;
+      await f.oauthSessions.create({
+        data: {
+          ...owner,
+          id: session.id,
+          serverId: server.id,
+          endpoint: server.endpoint,
+          redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+          oauthCiphertext: session.ciphertext,
+        },
+      });
+      const broker = new McpOAuthBroker(f.prisma as unknown as PrismaClient, secrets, {
+        fetch: vi.fn(async () =>
+          phase === "exchange"
+            ? Response.json({ error: "invalid_grant" }, { status: 400 })
+            : Response.json({ access_token: "fixture-next", token_type: "bearer" }),
+        ),
+        resolveHostname: async () => [{ address: "203.0.113.10", family: 4 }],
+      });
+      const attempt = { ...owner, sessionId: session.id };
+      if (phase === "exchange") {
+        await expect(
+          broker.complete({ ...attempt, state: session.id, code: "fixture-code" }),
+        ).rejects.toThrow();
+        // The callback records the failed exchange; the working tokens are written back.
+        await broker.recordAttemptFailure({ ...attempt, kind: "failed" });
+      } else {
+        await broker.complete({ ...attempt, state: session.id, code: "fixture-code" });
+        // Discovery failed after the exchange, so capture puts the working tokens back.
+        expect(await broker.restorePriorConnected(String(server.id), session.id, owner)).toBe(true);
+      }
+      const current = f.servers.rows[0]!;
+      const stored = f.secrets.rows.find((row) => row.id === current.secretId)!;
+      expect(
+        JSON.parse(secrets.load(String(stored.ciphertext), String(stored.id))).oauth.tokens
+          .access_token,
+      ).toBe("fixture-working");
+      expect(f.records.rows.find((row) => row.targetId === current.id)?.targetRevision).toBe(
+        current.revision,
+      );
+      await f.file(
+        ".claude/settings.json",
+        JSON.stringify({ mcpServers: { remote: { url: "https://mcp.example.test/changed" } } }),
+      );
+      expect((await f.importAll()).result).toMatchObject({ updated: 1, conflicts: 0 });
+      expect(
+        (await f.service.run(owner, { action: "undo", tool: "claude-code" })).result,
+      ).toMatchObject({ removed: 3, conflicts: 0 });
+      expect(f.servers.rows).toHaveLength(0);
     },
   );
   it("does not forgive a manual server definition edit when OAuth completes", async () => {
@@ -653,6 +756,14 @@ describe("local import lifecycle", () => {
     await f.service.refresh();
     expect(f.records.rows.filter((row) => row.category === "memories")).toHaveLength(2);
     expect(f.journal().flatMap((doc) => doc.revisions)).toHaveLength(3);
+  });
+  it("fails automatic refresh when the host goes away instead of reporting quiet success", async () => {
+    const f = await fixture();
+    await f.importAll();
+    await f.service.configure(owner, { autoImport: true });
+    await f.file(".claude/projects/example/memory/new.md", "A new fact.");
+    f.failReads(0, new LocalImportHostError());
+    await expect(f.service.refresh()).rejects.toThrow("stopped: host");
   });
   it("splits a changed source from an equal body without overwriting the other source", async () => {
     const f = await fixture();
@@ -887,14 +998,53 @@ describe("local import lifecycle", () => {
     const f = await fixture();
     const manifest = await f.scan();
     f.failReads(1, new LocalImportHostError());
-    await expect(
-      f.service.run(owner, {
-        action: "import",
-        scanId: manifest.scanId,
-        categories: ["memories", "skills", "servers"],
-      }),
-    ).rejects.toBeInstanceOf(LocalImportHostError);
+    const response = await f.service.run(owner, {
+      action: "import",
+      scanId: manifest.scanId,
+      categories: ["memories", "skills", "servers"],
+    });
+    expect(response).toEqual({
+      result: {
+        created: 1,
+        updated: 0,
+        unchanged: 0,
+        removed: 0,
+        skipped: 0,
+        conflicts: 0,
+        failed: 0,
+      },
+      stopped: "host",
+    });
     expect(f.records.rows).toHaveLength(1);
     expect((await f.service.status(owner)).importedAt).not.toBeNull();
+  });
+  it("keeps the failures found before a stop, and returns them with the partial result", async () => {
+    const f = await fixture();
+    const manifest = await f.scan();
+    let calls = 0;
+    const withCustomTransport = new LocalImportService({
+      prisma: f.prisma as unknown as PrismaClient,
+      documents: f.documents,
+      transport: {
+        scan: (_owner, roots) => f.scanner.scan(roots),
+        read: async (_owner, scanId, itemId) => {
+          calls++;
+          if (calls === 1) throw new Error("This item is not available for import.");
+          if (calls === 2) throw new LocalImportHostError();
+          return f.scanner.read(scanId, itemId);
+        },
+      },
+    });
+    const response = await withCustomTransport.run(owner, {
+      action: "import",
+      scanId: manifest.scanId,
+      categories: ["memories", "skills", "servers"],
+    });
+    expect(response).toEqual({
+      result: expect.objectContaining({ created: 0, failed: 1 }),
+      failures: [expect.objectContaining({ reason: "failed" })],
+      stopped: "host",
+    });
+    expect(f.records.rows).toHaveLength(0);
   });
 });

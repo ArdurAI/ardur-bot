@@ -1,16 +1,27 @@
 // @vitest-environment jsdom
 import type { McpServer } from "@ardurbot/contracts";
+import { mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const fake = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn() }));
+const fake = vi.hoisted(() => ({
+  list: vi.fn(),
+  create: vi.fn(),
+  remove: vi.fn(),
+  tools: vi.fn(),
+}));
+const oauth = vi.hoisted(() => vi.fn());
 vi.mock("../lib/rpc", () => ({
   rpc: {
     mcp: { servers: fake, assignments: { all: async () => [] } },
     bots: { list: async () => [] },
   },
+}));
+vi.mock("../lib/mcp-connect", () => ({
+  MCP_OAUTH_CHANNEL: "ardurbot-mcp-oauth",
+  connectMcpOauth: oauth,
 }));
 vi.mock("@lingui/core/macro", () => ({
   t: (parts: TemplateStringsArray, ...values: unknown[]) =>
@@ -51,7 +62,7 @@ afterEach(async () => {
   await cleanup?.();
   vi.unstubAllGlobals();
 });
-async function mount() {
+async function mount(onBusyChange?: (busy: boolean) => void) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -59,7 +70,9 @@ async function mount() {
     await act(async () => root.unmount());
     container.remove();
   };
-  await act(async () => root.render(<McpServersOverlay embedded onClose={vi.fn()} />));
+  await act(async () =>
+    root.render(<McpServersOverlay embedded onClose={vi.fn()} onBusyChange={onBusyChange} />),
+  );
   return container;
 }
 async function click(label: string) {
@@ -129,4 +142,288 @@ it("keeps a failed add editable and lets the user cancel without creating a serv
   await click("Cancel");
   expect(container.querySelector("#mcp-name")).toBeNull();
   expect(fake.create).toHaveBeenCalledOnce();
+});
+
+it("focuses a managed server once and does not scroll again when the list refreshes", async () => {
+  const scroll = vi.fn();
+  HTMLElement.prototype.scrollIntoView = scroll;
+  const channels: Array<{ onmessage: ((event: MessageEvent) => void) | null }> = [];
+  vi.stubGlobal(
+    "BroadcastChannel",
+    class {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor() {
+        channels.push(this);
+      }
+      close() {}
+    },
+  );
+  const server = {
+    id: "reports",
+    name: "Reports",
+    transport: "streamable_http",
+    oauthStatus: "none",
+    connectionState: "not-connected",
+    endpoint: "https://tools.example.test/mcp",
+    enabled: true,
+    catalogId: null,
+  } as McpServer;
+  fake.list.mockResolvedValue([server]);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  cleanup = async () => {
+    await act(async () => root.unmount());
+    container.remove();
+  };
+  await act(async () =>
+    root.render(
+      <McpServersOverlay embedded onClose={vi.fn()} focusServerId="reports" focusRequest={1} />,
+    ),
+  );
+  expect(document.activeElement?.id).toBe("mcp-server-reports");
+  expect(scroll).toHaveBeenCalledTimes(1);
+  scroll.mockClear();
+  fake.list.mockResolvedValue([{ ...server, name: "Reports refreshed" }]);
+  await act(async () => {
+    channels.at(-1)?.onmessage?.({ data: { type: "mcp-oauth-complete" } } as MessageEvent);
+  });
+  expect(container.textContent).toContain("Reports refreshed");
+  expect(scroll).not.toHaveBeenCalled();
+  expect(document.activeElement?.id).toBe("mcp-server-reports");
+});
+
+it("shows the plain sentence when the server offers no browser sign-in", async () => {
+  const provider = "provider-denied-browser-sign-in";
+  const server = {
+    id: "reports",
+    name: "Reports",
+    transport: "streamable_http",
+    oauthStatus: "none",
+    connectionState: "not-connected",
+    endpoint: "https://tools.example.test/mcp",
+    enabled: true,
+    catalogId: null,
+    lastError: null,
+  } as McpServer;
+  fake.list.mockResolvedValue([server]);
+  oauth.mockImplementation(async () => {
+    fake.list.mockResolvedValue([
+      {
+        ...server,
+        connectionState: "needs-sign-in",
+        lastError: mcpSignInDiagnostic("oauth_unavailable"),
+      },
+    ]);
+    throw new Error(provider);
+  });
+  const container = await mount();
+  await click("Connect OAuth");
+  expect(container.textContent).toContain(
+    "This server did not offer browser sign-in. Enter a token instead.",
+  );
+  expect(container.textContent).not.toContain(provider);
+});
+
+it("rejects Add server when a token and a header are both filled", async () => {
+  const container = await mount();
+  await click("Add MCP server");
+  await fill("mcp-name", "Reports");
+  await fill("mcp-endpoint", "https://tools.example.test/mcp");
+  await fill("mcp-secret", "synthetic-token");
+  const header = document.querySelector('[aria-label="Header value"]') as HTMLInputElement;
+  expect(header).not.toBeNull();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      header,
+      "synthetic-header",
+    );
+    header.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await click("Add server");
+  expect(fake.create).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Choose one credential: a token or a header.");
+});
+
+it("shows a recorded discovery failure instead of a connected label", async () => {
+  const server = {
+    id: "reports",
+    name: "Reports",
+    transport: "streamable_http",
+    oauthStatus: "none",
+    connectionState: "not-connected",
+    endpoint: "https://tools.example.test/mcp",
+    enabled: true,
+    catalogId: null,
+    lastError: null,
+  } as McpServer;
+  fake.list.mockResolvedValue([server]);
+  oauth.mockImplementation(async () => {
+    fake.list.mockResolvedValue([
+      {
+        ...server,
+        oauthStatus: "connected",
+        connectionState: "discovery-failed",
+        lastError: "Could not reach this integration. Try again.",
+      },
+    ]);
+    return "sign-in-failed";
+  });
+  const container = await mount();
+  await click("Connect OAuth");
+  expect(container.textContent).toContain("Could not reach this integration. Try again.");
+  expect(container.textContent).not.toContain("OAuth connected");
+});
+
+it("shows an expired sign-in as a sentence, never its diagnostic code", async () => {
+  const server = {
+    id: "reports",
+    name: "Reports",
+    transport: "streamable_http",
+    oauthStatus: "connected",
+    connectionState: "connected",
+    endpoint: "https://tools.example.test/mcp",
+    enabled: true,
+    catalogId: null,
+    lastError: null,
+  } as McpServer;
+  fake.list.mockResolvedValue([server]);
+  oauth.mockImplementation(async () => {
+    fake.list.mockResolvedValue([
+      {
+        ...server,
+        oauthStatus: "reconnect",
+        connectionState: "needs-sign-in",
+        lastError: mcpSignInDiagnostic("refresh_unavailable"),
+      },
+    ]);
+    return "sign-in-failed";
+  });
+  const container = await mount();
+  await click("Reconnect OAuth");
+  expect(container.textContent).toContain("The saved sign-in expired. Sign in again.");
+  expect(container.textContent).not.toContain("refresh_unavailable");
+});
+
+const unchecked = {
+  id: "reports",
+  name: "Reports",
+  transport: "streamable_http",
+  oauthStatus: "none",
+  connectionState: "not-connected",
+  endpoint: "https://tools.example.test/mcp",
+  enabled: true,
+  catalogId: null,
+  lastError: null,
+} as McpServer;
+
+it("says a replaced sign-in window was replaced", async () => {
+  fake.list.mockResolvedValue([unchecked]);
+  oauth.mockResolvedValue("replaced");
+  const container = await mount();
+  await click("Connect OAuth");
+  expect(container.textContent).toContain(
+    "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
+  );
+});
+
+it("stays busy with Cancel while sign-in waits, and stops waiting when the page closes", async () => {
+  fake.list.mockResolvedValue([unchecked]);
+  let signal: AbortSignal | undefined;
+  oauth.mockImplementation(
+    (
+      _serverId: string,
+      options: {
+        signal?: AbortSignal;
+        onWaiting?: (waiting: { sessionId: string; cancel: () => Promise<void> }) => void;
+      },
+    ) =>
+      new Promise((_resolve, reject) => {
+        signal = options.signal;
+        signal?.addEventListener("abort", () => reject(signal?.reason));
+        options.onWaiting?.({ sessionId: "ours", cancel: async () => undefined });
+      }),
+  );
+  const busy = vi.fn();
+  const container = await mount(busy);
+  await click("Connect OAuth");
+  expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+  expect([...container.querySelectorAll("button")].map((item) => item.textContent)).toContain(
+    "Cancel sign-in",
+  );
+  expect(busy).toHaveBeenLastCalledWith(true);
+  expect(signal?.aborted).toBe(false);
+  await cleanup();
+  expect(signal?.aborted).toBe(true);
+});
+
+it.each([
+  ["a token", "mcp-secret"],
+  ["a header", "header"],
+])("checks a server added with %s once and says what the check found", async (_, field) => {
+  const container = await mount();
+  await click("Add MCP server");
+  await fill("mcp-name", "Reports");
+  await fill("mcp-endpoint", "https://tools.example.test/mcp");
+  const input =
+    field === "header"
+      ? (document.querySelector('[aria-label="Header value"]') as HTMLInputElement)
+      : (document.getElementById(field) as HTMLInputElement);
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "synthetic-value",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  fake.create.mockResolvedValue(unchecked);
+  fake.tools.mockImplementation(async () => {
+    fake.list.mockResolvedValue([
+      {
+        ...unchecked,
+        connectionState: "needs-sign-in",
+        lastError: mcpSignInDiagnostic("credential_rejected"),
+      },
+    ]);
+    throw new Error("rejected");
+  });
+  await click("Add server");
+  expect(fake.tools).toHaveBeenCalledExactlyOnceWith({ serverId: "reports" });
+  expect(container.textContent).toContain("That token was not accepted. Check it and try again.");
+});
+
+it("asks to keep one credential when a saved server still has two", async () => {
+  fake.list.mockResolvedValue([
+    {
+      id: "reports",
+      name: "Reports",
+      transport: "streamable_http",
+      oauthStatus: "none",
+      connectionState: "connected",
+      endpoint: "https://tools.example.test/mcp",
+      enabled: true,
+      catalogId: null,
+      hasSecret: true,
+      credentialConflict: true,
+      lastError: null,
+    } as McpServer,
+    {
+      id: "notes",
+      name: "Notes",
+      transport: "streamable_http",
+      oauthStatus: "none",
+      connectionState: "connected",
+      endpoint: "https://notes.example.test/mcp",
+      enabled: true,
+      catalogId: null,
+      hasSecret: true,
+      lastError: null,
+    } as McpServer,
+  ]);
+  const container = await mount();
+  const reports = document.getElementById("mcp-server-reports");
+  const notes = document.getElementById("mcp-server-notes");
+  expect(reports?.textContent).toContain("This server has two credentials. Keep one.");
+  expect(notes?.textContent).not.toContain("two credentials");
+  expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
 });

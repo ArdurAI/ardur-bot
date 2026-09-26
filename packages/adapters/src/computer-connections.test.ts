@@ -1,13 +1,27 @@
 import type { ComputerRef } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
+import {
+  ComputerConnections,
+  ConnectedSandboxProvider,
+  MissingComputerProviderError,
+} from "./computer-connections.js";
 import { fakePodmanSupervisor } from "./docker-test-supervisor.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
+import { createRunSandbox, HostAwareSandbox, owningSandbox } from "./host-aware-sandbox.js";
 import { createKubernetesApi } from "./kubernetes-client.js";
 import { FakeKubernetesApi } from "./kubernetes-test-api.js";
 import { NoneSandboxProvider } from "./none-sandbox.js";
 
+const daytonaSdk = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock("@daytona/sdk", () => ({
+  Daytona: class Daytona {
+    get = daytonaSdk.get;
+  },
+  DaytonaNotFoundError: class DaytonaNotFoundError extends Error {},
+  DaytonaProcessExecutionTimeoutError: class DaytonaProcessExecutionTimeoutError extends Error {},
+  SandboxState: { STARTED: "started", STOPPED: "stopped", ARCHIVED: "archived" },
+}));
 vi.mock("./kubernetes-client.js", () => ({ createKubernetesApi: vi.fn() }));
 const context = {
   operationId: "test",
@@ -60,7 +74,7 @@ describe("saved computer connections", () => {
         id: "computer",
         providerRef: "ref",
         botId: "bot",
-        kind: "daytona",
+        kind: "fake",
         connectionId,
       };
       const routed = connectionId ? connectedCwd : fallbackCwd;
@@ -134,4 +148,96 @@ describe("saved computer connections", () => {
       api.dispose();
     }
   });
+});
+
+function daytonaHandle(id: string) {
+  return {
+    id,
+    state: "stopped",
+    start: vi.fn(async () => undefined),
+    stop: vi.fn(async () => undefined),
+    computerUse: { stop: vi.fn(async () => undefined) },
+    getUserHomeDir: vi.fn(async () => "/home/daytona"),
+    getWorkDir: vi.fn(async () => "/home/daytona"),
+    process: { executeCommand: vi.fn(async () => ({ exitCode: 0, result: "ok" })) },
+  };
+}
+
+it("reuses one Daytona, E2B, and Box provider so a stop and a command share the handle cache", async () => {
+  const keys = { e2bApiKey: "e2b-test", daytonaApiKey: "daytona-test", boxApiKey: "box-test" };
+  const created = createRunSandbox("docker", {
+    prisma: {} as PrismaClient,
+    secrets: { load: () => "" },
+    ...keys,
+  });
+  expect(created).toBeInstanceOf(HostAwareSandbox);
+  const sandbox = created as HostAwareSandbox;
+  const e2b = await sandbox.owner({ kind: "e2b" }, context);
+  const box = await sandbox.owner({ kind: "box" }, context);
+  const daytona = await sandbox.owner({ kind: "daytona" }, context);
+  expect(await sandbox.owner({ kind: "e2b" }, context)).toBe(e2b);
+  expect(await sandbox.owner({ kind: "box" }, context)).toBe(box);
+  expect(await sandbox.owner({ kind: "daytona" }, context)).toBe(daytona);
+  const cache = (daytona as unknown as { boxes: Map<string, ReturnType<typeof daytonaHandle>> })
+    .boxes;
+  const cached = daytonaHandle("sandbox");
+  cached.state = "started";
+  cache.set("sandbox", cached);
+  const reconnect = daytonaHandle("sandbox");
+  daytonaSdk.get.mockResolvedValue(reconnect);
+  const computer: ComputerRef = {
+    id: "sandbox",
+    providerRef: "sandbox",
+    botId: "bot",
+    kind: "daytona",
+  };
+  await sandbox.stop(computer, context);
+  expect(cached.stop).toHaveBeenCalledOnce();
+  expect(cache.has("sandbox")).toBe(false);
+  expect(daytonaSdk.get).not.toHaveBeenCalled();
+  const events = [];
+  for await (const event of sandbox.execute(computer, { argv: ["echo", "ok"] }, context))
+    events.push(event);
+  expect(await sandbox.owner({ kind: "daytona" }, context)).toBe(daytona);
+  expect((daytona as unknown as { boxes: Map<string, unknown> }).boxes).toBe(cache);
+  expect(daytonaSdk.get).toHaveBeenCalledOnce();
+  expect(reconnect.start).toHaveBeenCalledOnce();
+  expect(cached.start).not.toHaveBeenCalled();
+  expect(events).toContainEqual({ type: "stdout", data: "ok" });
+  expect(events).toContainEqual({ type: "exit", code: 0 });
+});
+
+it("treats Docker without its supervisor token as not configured on another deployment", async () => {
+  vi.stubEnv("VITEST", "");
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("ARDURBOT_ALLOW_DEV_SECRETS", "");
+  vi.stubEnv("SANDBOX_SUPERVISOR_TOKEN", "");
+  try {
+    const sandbox = createRunSandbox("e2b-emulator", {
+      prisma: {} as PrismaClient,
+      secrets: { load: () => "" },
+    }) as ConnectedSandboxProvider;
+    await expect(owningSandbox(sandbox, { kind: "docker" }, context)).rejects.toThrow(
+      "This computer runs on Docker, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure Docker again.",
+    );
+    const keepAlive = sandbox.keepAlive({ id: "c", botId: "b", kind: "docker", providerRef: "r" });
+    await expect(keepAlive).rejects.toBeInstanceOf(MissingComputerProviderError);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("runs a hosted deployment's own computers on its one default provider", async () => {
+  for (const [kind, keys] of [
+    ["e2b", { e2bApiKey: "e2b-test" }],
+    ["daytona", { daytonaApiKey: "daytona-test" }],
+    ["box", { boxApiKey: "box-test" }],
+  ] as const) {
+    const sandbox = createRunSandbox(kind, {
+      prisma: {} as PrismaClient,
+      secrets: { load: () => "" },
+      ...keys,
+    }) as ConnectedSandboxProvider;
+    expect(await sandbox.owner({ kind }, context)).toBe(await sandbox.owner({}, context));
+  }
 });

@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "suiteVersion": "scoreboard-1",
+  "manifestHash": "a9d0f05a9be0d915d316816e03cab27a283c9a255bd49bedb51165b7d01a1fca",
+  "releaseTargets": [
+    "desktop-darwin-arm64",
+    "desktop-darwin-x64",
+    "desktop-linux-x64",
+    "desktop-win32-x64"
+  ],
+  "budget": {
+    "mode": "release",
+    "required": {
+      "metricIds": [
+        "m01.acknowledgement",
+        "m01.safe-to-paint",
+        "m01.user-ttft",
+        "m03.durable-terminal",
+        "m04.logical-input",
+        "m05.cache-token-hit",
+        "m06.recall",
+        "m06.task-success",
+        "m07.selection-to-result",
+        "m08.eligible-to-lease",
+        "m10.idle-footprint",
+        "m10.peak-footprint",
+        "m10.post-idle-retained",
+        "m11.download",
+        "m11.initial-js-gzip",
+        "m11.installed",
+        "m11.installer",
+        "m11.lazy-boundary-violations",
+        "m13.cancellation-acknowledgement",
+        "m13.terminal-stop",
+        "m14.idle-power",
+        "m14.task-energy"
+      ],
+      "taskIds": [
+        "task-01",
+        "task-02",
+        "task-03",
+        "task-04",
+        "task-05",
+        "task-06",
+        "task-07",
+        "task-08",
+        "task-09",
+        "task-10",
+        "task-11",
+        "task-12",
+        "task-13",
+        "task-14",
+        "task-15",
+        "task-16",
+        "task-17",
+        "task-18",
+        "task-19",
+        "task-20",
+        "task-21",
+        "task-22",
+        "task-23",
+        "task-24"
+      ],
+      "experimentIds": [],
+      "crashBoundaryIds": [
+        "crash-01",
+        "crash-02",
+        "crash-03",
+        "crash-04",
+        "crash-05",
+        "crash-06",
+        "crash-07",
+        "crash-08",
+        "crash-09",
+        "crash-10"
+      ],
+      "usage": true
+    },
+    "declarations": {
+      "nominalQueue": true,
+      "retainedSessionGrowthBytes": null,
+      "toolTerminationDeadlineMs": null
+    },
+    "seed": 1371581214,
+    "resamples": 480000
+  },
+  "guardrails": [
+    {
+      "id": "effect-safety",
+      "metricIds": [
+        "m11.lazy-boundary-violations",
+        "m13.duplicate-effects",
+        "m13.false-completion",
+        "m13.lost-accepted-work",
+        "m13.unauthorized-effects",
+        "m13.wrong-pin"
+      ],
+      "taskIds": [],
+      "experimentIds": [],
+      "crashBoundaryIds": [],
+      "usage": false
+    },
+    {
+      "id": "deterministic-tasks",
+      "metricIds": [],
+      "taskIds": [
+        "task-01",
+        "task-02",
+        "task-03",
+        "task-04",
+        "task-05",
+        "task-06",
+        "task-07",
+        "task-08",
+        "task-09",
+        "task-10",
+        "task-11",
+        "task-12",
+        "task-13",
+        "task-14",
+        "task-15",
+        "task-16",
+        "task-17",
+        "task-18",
+        "task-19",
+        "task-20",
+        "task-21",
+        "task-22",
+        "task-23",
+        "task-24"
+      ],
+      "experimentIds": [],
+      "crashBoundaryIds": [],
+      "usage": false
+    },
+    {
+      "id": "recovery",
+      "metricIds": [],
+      "taskIds": [],
+      "experimentIds": [],
+      "crashBoundaryIds": [
+        "crash-01",
+        "crash-02",
+        "crash-03",
+        "crash-04",
+        "crash-05",
+        "crash-06",
+        "crash-07",
+        "crash-08",
+        "crash-09",
+        "crash-10"
+      ],
+      "usage": false
+    },
+    {
+      "id": "latency",
+      "metricIds": [
+        "m01.user-ttft",
+        "m03.durable-terminal",
+        "m07.selection-to-result",
+        "m08.eligible-to-lease"
+      ],
+      "taskIds": [],
+      "experimentIds": [],
+      "crashBoundaryIds": [],
+      "usage": false
+    },
+    {
+      "id": "absolute-targets",
+      "metricIds": [
+        "m01.acknowledgement",
+        "m01.safe-to-paint",
+        "m08.eligible-to-lease",
+        "m13.cancellation-acknowledgement",
+        "m13.terminal-stop"
+      ],
+      "taskIds": [],
+      "experimentIds": [],
+      "crashBoundaryIds": [],
+      "usage": false
+    },
+    {
+      "id": "prompt-tokens",
+      "metricIds": ["m04.logical-input"],
+      "taskIds": [],
+      "experimentIds": [],
+      "crashBoundaryIds": [],
+      "usage": true
+    },
+    {
+      "id": "cache-compaction",
+      "metricIds": ["m05.cache-token-hit", "m06.recall", "m06.task-success"],
+      "taskIds": [],
+      "experimentIds": [],
+      "crashBoundaryIds": [],
+      "usage": false
+    },
+    {
+      "id": "bundle",
+      "metricIds": [
+        "m11.download",
+        "m11.initial-js-gzip",
+        "m11.installed",
+        "m11.installer",
+        "m11.lazy-boundary-violations"
+      ],
+      "taskIds": [],
+      "experimentIds": [],
+      "crashBoundaryIds": [],
+      "usage": false
+    },
+    {
+      "id": "memory",
+      "metricIds": ["m10.idle-footprint", "m10.peak-footprint", "m10.post-idle-retained"],
+      "taskIds": [],
+      "experimentIds": [],
+      "crashBoundaryIds": [],
+      "usage": false
+    },
+    {
+      "id": "energy",
+      "metricIds": ["m14.idle-power", "m14.task-energy"],
+      "taskIds": [],
+      "experimentIds": [],
+      "crashBoundaryIds": [],
+      "usage": false
+    }
+  ]
+}

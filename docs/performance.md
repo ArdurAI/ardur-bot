@@ -142,7 +142,11 @@ evidence passes, **1** means a known regression or safety failure, and **2** mea
 inconclusive evidence. Every result retains raw report envelopes, comparisons and machine-readable
 reasons. A required release invocation must also require `mode: "release"` and
 `releaseEligible: true`; a commit pass is advisory and cannot authorize publication. This comparator
-does not install a publication gate or replace human acceptance.
+does not replace human acceptance. The desktop release workflow calls it from the evidence job,
+which is the publication gate: publication also requires the measured build digests to match the
+final distributed files, coverage of the required desktop platforms, and physical energy for those
+platforms. Signing or repackaging changes those bytes, so the gate must be run again on the final
+files. A failed attempt stays in the index and does not erase an earlier measurement.
 
 Create a policy using `createBudgetPolicy(required, options)` in
 `packages/testkit/src/scoreboard/statistics.ts`. Options bind the environment hash, exact scenario,
@@ -207,8 +211,215 @@ Two-file proxy and schema-1/2 desktop inputs remain readable but return incomple
 do not supply paired raw evidence. `bundle-budget.mjs` with no baseline measures assets only. With
 parent and fixed-release files it returns static diagnostics; schema-3 evidence is still required
 for calibration, artifact provenance and a release pass. Missing native platforms, energy
-instruments or live-provider evidence remain explicit gaps. W0-9 owns immutable indexing, trusted
-policy selection, artifact-byte verification and release workflow integration.
+instruments or live-provider evidence remain explicit gaps. The release workflow now binds that
+comparison to the packaged bytes before publication.
+
+## Evidence index
+
+The historical scoreboard is the local directory `.context/performance/scoreboard-index`.
+`records.jsonl` is an append-only hash chain. Raw schema-3 envelopes live under `objects/` and are
+named by the SHA-256 of their canonical bytes. A record is appended only after those hashes match.
+The directory is local-first and is not a hosted telemetry store. Public records use synthetic
+tasks and hardware-class labels.
+
+Commit object bytes are retained for 180 days. An object stays while any record inside that
+window, commit or release, references its digest. A release record also keeps its object after
+the window. The index job runs `prune` after it appends the new lines and before it uploads the
+chain. Pruning removes only bytes that fail both of those checks, writes an expiry record
+first, and leaves the original line in place.
+A pending record is never deleted to hide an earlier measurement. A later rejection is a new line;
+the measured line remains.
+
+Workflow artifacts expire after 90 days and are not the historical scoreboard. Release evidence is
+attached to the GitHub release and kept for the github-release-lifetime of that release. Development
+pushes record every new commit as measured or pending and stay advisory. Only a push to `dev` or
+`main` of this repository extends the durable chain. Before appending, the index job lists every
+page of this workflow's successful push runs for the same branch, newest first, and keeps walking
+until a run has a `scoreboard-index` artifact that has not expired or the run is older than the
+90-day window. The walk is bounded by that window, not by a run count. GitHub's list-workflow-runs
+endpoint returns at most 1,000 results for a search filtered by `branch`, `event`, `status`, or
+`created`
+([workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow)).
+When `total_count` is above 1,000, or a listing returns 1,000 runs, the walk halves the `created`
+range and lists every slice, newest first, until each slice is under that cap. A chain origin is
+chosen only after every slice back to the start of the window has been inspected. A live artifact restores
+that chain and does not write a chain origin. Pull-request, manual, and fork runs never restore or
+upload `scoreboard-index`; they build a throwaway `scoreboard-index-check` chain and index only
+their own commits: the first-parent commits after the merge base of the pull request base and the
+head, or the head alone when a manual run has no base. They never walk the retention window. A
+downloaded chain with a broken hash fails the job instead of silently starting over.
+
+Index writers for one ref are serialized. GitHub keeps one pending index job per ref and cancels an
+older pending one, so a burst of pushes can skip a run. The push event's `before` commit is not
+used. When the restored chain contains a first-parent ancestor of the head, enumeration resumes
+after the nearest such ancestor. When the chain contains commits but none is an ancestor of the
+head, enumeration walks first-parent history from the head back to the newest commit that is in the
+chain, stopping at the start of the 90-day workflow-artifact retention window, and each new index
+line records that commit as `enumerationStart` with reason `chain-without-ancestor`. When the chain
+is empty, enumeration walks first-parent history from the head back to the start of that window,
+and each new index line records the oldest included commit as `enumerationStart` with reason
+`empty-chain-retention-window`. When none of the chain's commits is in the clone any more, the
+branch history was rewritten: the job prints a warning, starts a new chain whose first record has
+chain origin `history-rewritten`, and enumerates as for an empty chain. The earlier chain stays in
+its workflow artifact until that expires. Commits reached only through a merged side branch are not
+indexed separately. The index job reads the chain once and appends every new record in one write
+under one lock, so a full-window backfill is one pass. The next upload contains the complete
+restored chain plus the new records. A durable push always records its pushed head, even when the
+head's own committer date is older than the retention window. Only the pushed head carries the
+budgets job's verdict for this run; every other commit enumerated by backfill or by a multi-commit
+push was never individually attempted and is recorded `not-measured`.
+
+A new genesis names why no chain was restored. `first-run` means git history shows the index job did
+not exist on the branch before the retention window, so no older chain can exist.
+`expired-after-90-days-inactivity` means the walk saw an expired artifact, or an older chain existed
+and GitHub has since deleted the runs; an empty run list alone does not prove a first run.
+`prior-artifact-missing` means a successful run inside the window exists but none of them uploaded
+the artifact. `history-rewritten` means a chain was restored but none of its commits remain in the
+branch history. `schema-upgrade` means a restored chain's records use a record schema version the
+current code does not read.
+
+The workflow artifact name carries the record schema version (`scoreboard-index-schema-6`,
+`scoreboard-release-index-schema-6`), so a schema version bump changes the name the job searches
+for and never finds an older-schema artifact to restore; the index and the release gate simply
+start a fresh chain instead of failing. A schema change is never a reason a release is blocked: the
+waiver path appends to whatever chain it is given, empty or not.
+
+The release gate keeps its own durable chain, `scoreboard-release-index`, restored the same way
+before it judges: the job lists this repository's completed push and manual runs of the release
+workflow, newest first and back to the 90-day window, and restores the newest live
+`scoreboard-release-index` artifact. A refused run still uploads its chain, so attempts count up,
+a refusal stays recorded, and a new release chain names its origin with the same values. Every
+release run extends that one chain; attempts are counted from it, not passed in.
+
+Release decisions use the committed `docs/performance/release-policy.json`. The gate verifies its
+SHA-256 against the digest pinned in `scripts/scoreboard-index.mjs`, refuses a supplied budget
+policy that differs from it, and blocks publication while any mandatory guardrail in it is unknown:
+effect safety, deterministic tasks, crash recovery, latency, absolute targets, prompt tokens, cache
+and compaction, bundle, memory, and energy. Optional live-quality runs are not a release guardrail.
+The release evidence run must produce two candidate reports for the same commit and build.
+`candidate.json` is the T2 startup strata report. `candidate-crash.json` is the T1 durable crash
+report. The gate evaluates that set. Each mandatory guardrail is checked against the report whose
+tier can satisfy it, and `mandatory-evidence-unknown` is recorded only when no report in the set
+satisfies the guardrail:
+
+| Guardrail | Report |
+| --- | --- |
+| effect-safety | T1 durable crash report |
+| deterministic-tasks | T1 durable crash report |
+| recovery | T1 durable crash report |
+| prompt-tokens | T1 durable crash report |
+| cache-compaction | T1 durable crash report |
+| latency | T2 startup strata report |
+| absolute-targets | T2 startup strata report |
+| bundle | T2 startup strata report |
+| memory | T2 startup strata report |
+| energy | T2 startup strata report |
+
+Startup sample floors are read from the T2 report. The statistical verdict compares
+`parent.json`, `candidate.json`, and `fixed-release.json` using only the T2 requirements: startup
+floors, latency, bundles, memory, and energy binding. Crash boundaries are not part of that
+comparison. They are required of `candidate-crash.json` alone. Each T1 guardrail is decided by
+`judgeReport` in `packages/testkit/src/scoreboard/statistics.ts`, the verdict the comparison
+gives one report without a baseline. The comparison runs the same judge on its candidate. Every
+item a T1 guardrail selects has one rule (`reportRules`):
+
+| Rule | Items | A miss |
+| --- | --- | --- |
+| Effect count | effect-safety metrics: every observation is zero and each named metric is present | `safety-failure` |
+| Task pass | deterministic tasks: every trial has `passed` true | `required-task-failed` |
+| Crash safety | recovery boundaries: the expected recovery and `safetyPassed` true | `safety-failure` |
+| Measured usage | prompt-token usage: counted, never estimated or virtual | `mandatory-evidence-unknown` |
+| Baseline budget | `m04.logical-input`, `m06.recall`, `m06.task-success` | listed under Unknowns |
+
+Every trial must also have `criticalPassed` true, or the task is a `safety-failure`. A
+`safety-failure` or `required-task-failed` is never waivable, it blocks publication, and release
+notes are not rendered. A guardrail is satisfied only when the report passes the whole verdict.
+A baseline budget compares a parent and fixed-release crash report, which the release set does
+not carry, so the gate lists each such metric under Unknowns as `<metric> budget: not-compared`
+unless the comparison produced a row for it. A T1 guardrail that selects an item with no rule,
+such as an experiment, records `mandatory-evidence-unknown` with `no judge rule for <item>`.
+Recovery does not compare a parent or fixed-release crash report, because the guardrail checks
+that the candidate completed each pinned boundary. A set that contains only the T2 report records
+`mandatory-evidence-unknown` for recovery, with the detail
+`missing T1 durable crash report: candidate-crash.json`.
+Live cache-hit ratios stay on an explicit T3 run. They are not required of the T1 crash report.
+Release notes render each guardrail summary from the report that satisfied that guardrail and
+name the attached release asset, such as `scoreboard-candidate-crash.json`. Recovery and task
+lines come from the T1 crash report, not from the T2 startup report. The Critical safety line
+covers the effect-safety counts the gate judges: the pinned guardrail's list. The publication
+directory receives exactly the reports the gate judges, the gate hashes those bytes into
+`distributedDigests`, and the release upload includes them, so the bytes behind each guardrail
+remain after the 90-day workflow artifact expires. Any other `candidate-*.json` in the reports
+artifact, such as a file from another build or one that does not parse, is the refusal
+`unjudged-report`, and the reason names that file. The publication directory then receives
+nothing from the report set, the same as for an invalid energy entry.
+The five effect-safety counts are checked by their guardrail and the report judge rather than the
+budget selection, because seven reliability metrics in one family exceed the resample limit. Tool
+termination and retained-session growth have no reviewed declaration yet. Each is recorded as
+`undeclared-budget` with its metric id. It is not a missing-report failure and it does not refuse
+the candidate. When publication proceeds with those reasons, the release notes evidence section
+says:
+
+Two release budgets are not declared yet, so they were not checked: retained session growth, tool termination deadline. They must be declared before a release can be measured against them.
+
+`gate.json` is uploaded as a release asset next to the reports so the reasons outlive the workflow
+artifact.
+
+The previous fixed release is the closest `v*` tag on the first-parent history of the commit
+being published. The release workflow resolves it with `git describe --tags --abbrev=0 --match
+'v*' --first-parent`. `--first-parent` follows only the first parent of a merge, so a tag on a
+merged side branch is not selected
+([git describe](https://git-scm.com/docs/git-describe#Documentation/git-describe.txt---first-parent)).
+Release notes select that same previous tag: `git describe --tags --abbrev=0 --match 'v*'
+--first-parent` on the parent of the tag being published.
+
+The release invocation is mandatory: `publish` depends on the evidence job, and that job fails
+closed when the report, platform, energy, or digest check is incomplete. The asset assembler merges
+update feeds and writes the cask before the gate. The gate requires the measured installer set to
+equal the candidate report, records every derived publication file, and publication re-hashes that
+exact flat file set before upload. Release notes and the gate label the SHA-256 of the exact
+attached `scoreboard-candidate.json` bytes separately from the canonical evidence-envelope SHA-256.
+A leftover draft for the same tag is deleted and publication continues. A published release is left
+in place. If clearing the draft flag reports an error after the release is already public,
+publication keeps that release and exits successfully with a warning that the edit reported an
+error after publishing. A draft created by a failed upload, or an edit that fails while the
+release is still a draft, is deleted so the same tag can be retried.
+Credential-free pull-request runners do not receive provider credentials. Live provider evaluation
+stays explicit and budgeted.
+
+Building the physical evidence runner is out of scope for this workflow. No job produces
+`scoreboard-reports` yet, so a tag push stops with the missing evidence visible. Until a runner
+exists, a preview can be published only by a manual `workflow_dispatch` with a non-empty
+`evidence_waiver` reason. The gate accepts a waiver only from a dispatch, and only when this run
+uploaded no `scoreboard-reports` artifact. If that artifact exists, its download must succeed and
+the waiver is refused as `waiver-with-evidence`. The gate also refuses a waiver beside any report
+or attached evidence file, and records a `waived` entry in the durable release index with the
+reason and the account that triggered the run. That account stays in the index record and the
+gate's workflow artifact; no public release asset names it. A waived release carries no
+measurements; its evidence section starts with
+`This preview was published without measured performance evidence: <reason>.`
+The `waiver-record.json` release asset carries the reason, the run id, the index line number and
+that line's record hash, so the record outlives the 90-day workflow artifact. A waiver reason is
+one plain sentence of letters, numbers, spaces, and `. , ; : ' " ( ) ! ? & % + -` only; any token
+with a slash, any `www.` host, a `://` scheme, or an email address is refused as `invalid-waiver`.
+When the gate refuses a run, it prints every reason as a job-log `::error::` line: one sentence
+saying what happened and, for `invalid-waiver`, which characters are allowed.
+
+The commit sample plan is 20 paired observations. The release plan is 200 replay pairs and 100
+observations for every required startup stratum. Missing or short startup strata fail with
+`insufficient-startup-samples`; they are not informational unknowns. Each physical-energy file also
+contains the predeclared binding used to start the measurement. The gate derives the target,
+platform, workload hash, and minimum 200-second window from the gated installer and release sample
+plans, then requires the capture and matched idle control to reproduce that plan's environment,
+hardware class, conditions, and duration exactly. The capture's artifact hash must be the SHA-256
+of the published installer file's bytes, which is that file's inventory entry digest. The digest of
+the inventory envelope does not satisfy the binding. A capture bound only to the envelope is
+`missing-energy` for every required target that lacks a file-byte capture. An unrelated digest is
+`missing-energy` as well. A private path or any other invalid entry is the refusal
+`invalid-energy-entry`, and the reason names that entry. The publication directory then receives
+nothing from the report set, and the upload list is empty. A file whose entries are all valid is
+copied unchanged. Human acceptance is separate and is not granted
+by the evidence.
 
 The `performance` workflow uses the production Vite build with synthetic auth/RPC responses and a
 fake streamed provider; it has no Docker or hosted-provider dependency. It measures five fresh
@@ -222,7 +433,13 @@ bot switching, and both side-panel transitions. Animation-frame markers within t
 the slowest observed frame interval: target **60 fps**, warn below **50 fps** (over 20 ms). This is a
 main-thread frame-scheduling proxy, not a claim about GPU presentation on every display. Missing
 samples or reports are visible warnings, not silently green measurements. Trace archives and
-screenshots are attached to the `shell-performance` artifact for review. The workflow is advisory.
+screenshots are attached to the `shell-performance` artifact for review. The commit workflow is
+advisory. It builds the base revision in its own worktree and copies the candidate's harness (the
+Playwright performance config, spec and fixture, and the proxy test) into it. It then
+measures both revisions with the candidate's harness, each against its own build. It does not copy
+candidate production files into the baseline. A baseline without a compatible in-tree harness is
+recorded as pending, and the index uses the budgets job's pending reason rather than replacing it
+with a generic missing-evidence reason.
 
 ## Motion audit
 

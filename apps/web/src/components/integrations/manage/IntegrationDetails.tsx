@@ -2,6 +2,7 @@ import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/con
 import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useState } from "react";
+import { mcpFailureSentence } from "../../../lib/mcp-sign-in";
 import { rpc } from "../../../lib/rpc";
 import { IntegrationManage } from "../catalog/IntegrationManage";
 
@@ -73,7 +74,7 @@ export function IntegrationDetails({
       </dl>
       {connection.lastError || failed ? (
         <p role="alert" className="text-sm text-destructive">
-          {connection.lastError ?? t`Could not test this integration.`}
+          {mcpFailureSentence(connection.lastError) ?? t`Could not test this integration.`}
         </p>
       ) : null}
       {connection.recentErrors?.length ? (

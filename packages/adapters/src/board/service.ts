@@ -111,11 +111,7 @@ export class BoardService {
         where: { id: scope.botId, spaceId: scope.spaceId, userId: scope.userId, archivedAt: null },
         include: { computer: true },
       });
-      if (
-        !bot ||
-        (bot.computer?.kind !== "desktop" &&
-          (deployment.computerHost !== "this-mac" || bot.computer?.connectionId))
-      )
+      if (bot?.computer?.kind !== "desktop")
         throw new BoardError({
           code: "forbidden",
           message: "This bot cannot reach this board's computer.",

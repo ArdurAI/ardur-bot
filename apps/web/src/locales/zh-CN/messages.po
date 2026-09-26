@@ -96,6 +96,11 @@ msgstr ""
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr "已导入 {0} 项，已更新 {1} 项，未更改 {2} 项，已移除 {3} 项，已跳过 {4} 项，冲突 {5} 项，失败 {6} 项。"
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0} items were not scanned because of the scan limits."
+msgstr "由于扫描限制，有 {0} 个项目未被扫描。"
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -292,6 +297,7 @@ msgstr ""
 msgid "Access token"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "访问令牌（可选）"
@@ -1248,6 +1254,14 @@ msgstr "取消新建群组"
 msgid "Cancel reply"
 msgstr "取消回复"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Cancel sign-in"
+msgstr "取消登录"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1344,6 +1358,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "聊天设置"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Check"
+msgstr "检查"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -1395,6 +1413,10 @@ msgstr "选择机器人形状和颜色，或上传图片"
 msgid "Choose a bot…"
 msgstr "选择 Bot…"
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Choose a folder inside your home folder."
+msgstr "选择主文件夹内的一个文件夹。"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr ""
@@ -1426,6 +1448,10 @@ msgstr "选择文件"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Choose folder"
 msgstr ""
+
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
+msgstr "请只选择一种凭据：令牌或请求头。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
@@ -1727,6 +1753,7 @@ msgstr "由部署配置"
 msgid "Confirm"
 msgstr "确认"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -2086,13 +2113,13 @@ msgstr ""
 msgid "Could not complete this action."
 msgstr ""
 
-#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
 msgstr "无法连接"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
 
@@ -2333,6 +2360,8 @@ msgid "Could not load the server configuration."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpServersOverlay.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -2528,6 +2557,10 @@ msgstr "无法保存此选择"
 msgid "Could not search catalog"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
+msgid "Could not search integrations."
+msgstr "无法搜索集成。"
+
 #: src/pages/Auth.tsx
 msgid "Could not send reset email"
 msgstr "无法发送重置邮件"
@@ -2721,6 +2754,7 @@ msgstr ""
 msgid "Creating…"
 msgstr "正在创建…"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "凭据"
@@ -2833,6 +2867,10 @@ msgstr "默认（{0}）"
 msgid "Default board"
 msgstr "默认看板"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Default computer"
+msgstr "默认电脑"
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "默认范围"
@@ -2850,6 +2888,7 @@ msgstr ""
 msgid "Deferred"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -2921,10 +2960,13 @@ msgstr ""
 msgid "Deploy private key"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "部署默认"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Deployment default ({defaultLabel})"
+msgstr "部署默认（{defaultLabel}）"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Describe what this bot does"
@@ -3089,6 +3131,14 @@ msgstr "Docker"
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker 限制对你电脑的访问，以提高安全性。使用{hostLabel}时，Bot 可以处理你的本地文件并使用本地工具。"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this computer"
+msgstr "这台电脑上的 Docker"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this Mac"
+msgstr "这台 Mac 上的 Docker"
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
 msgstr ""
@@ -3221,9 +3271,8 @@ msgstr ""
 msgid "Engine endpoint"
 msgstr ""
 
-#. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine: {0}"
+msgid "Engine: {label}"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
@@ -3237,6 +3286,10 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
 msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Enter a valid token."
+msgstr "请输入有效的令牌。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -3782,6 +3835,10 @@ msgstr "无法完成导入。请确认此电脑已连接，然后重新扫描。
 msgid "Import from {name}"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import is not available right now. Try again in a moment."
+msgstr "导入现在不可用，请稍后再试。"
+
 #: src/pages/MemoryImportExport.tsx
 msgid "Import memory bundle"
 msgstr ""
@@ -4061,6 +4118,7 @@ msgid "Label"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Labels"
 msgstr ""
 
@@ -4333,6 +4391,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "请确认这台电脑上没有仍在运行的任务。"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4702,7 +4761,7 @@ msgstr "把它们移到共享记忆。"
 msgid "Move to"
 msgstr "移动到"
 
-#. placeholder {0}: targets.find((target) => target.id === bot.pending?.targetId)?.name ?? t`computer`
+#. placeholder {0}: pendingName(bot.pending.targetId) ?? t`computer`
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move to {0}?"
 msgstr ""
@@ -4715,6 +4774,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
+msgstr "暂时无法将电脑移到运行 Ardur Bot 的机器上。请选择已保存的连接，或保留当前引擎。"
 
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
@@ -4766,6 +4829,7 @@ msgid "Needs reconnection"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
 msgid "Needs sign-in"
 msgstr ""
@@ -5046,6 +5110,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not checked"
 msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not checked yet"
+msgstr "尚未检查"
 
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
@@ -5775,6 +5843,7 @@ msgstr ""
 msgid "Recheck"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -6162,6 +6231,7 @@ msgid "Restricted"
 msgstr ""
 
 #: src/components/Context.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -6812,6 +6882,10 @@ msgstr ""
 msgid "Sign up"
 msgstr "注册"
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in did not finish. Try again."
+msgstr "登录未完成。请重试。"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in expired. Connect Codex again."
 msgstr ""
@@ -6820,9 +6894,21 @@ msgstr ""
 msgid "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only."
 msgstr ""
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in is needed. Connect again."
+msgstr "需要登录。请重新连接。"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was cancelled."
+msgstr "登录已取消。"
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was declined."
+msgstr "登录被拒绝。"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
@@ -6879,11 +6965,6 @@ msgstr "软件更新"
 #: src/pages/ide/IdePage.tsx
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "部分条目的名称不受支持，已隐藏（{hiddenCount}）。"
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Some items exceeded the scan limits ({0} items were not scanned)."
-msgstr "部分项目超出了扫描限制（{0} 项未扫描）。"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Some items exceeded the scan limits."
@@ -7232,6 +7313,11 @@ msgstr ""
 msgid "That shortcut is already in use; choose another."
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/lib/mcp-sign-in.ts
+msgid "That token was not accepted. Check it and try again."
+msgstr "该令牌未被接受。请检查后再试。"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API 未恢复。请刷新此页面。"
@@ -7247,6 +7333,14 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in expired. Sign in again."
+msgstr "已保存的登录已过期。请重新登录。"
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in is no longer accepted. Sign in again."
+msgstr "已保存的登录不再被接受。请重新登录。"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
@@ -7338,11 +7432,13 @@ msgstr "这台电脑"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
-msgstr ""
+msgstr "这台电脑"
 
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
@@ -7356,13 +7452,19 @@ msgstr ""
 msgid "this Mac"
 msgstr "这台 Mac"
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "This Mac"
-msgstr ""
+msgstr "这台 Mac"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?"
+msgstr "这将把电脑从 {sourceLabel} 移到 {destinationLabel}，并替换其中的文件。要继续吗？"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "This path is on your server, which may be a different machine."
@@ -7389,9 +7491,17 @@ msgstr "此次扫描已过期。请重新扫描，然后重试。"
 msgid "This server cannot be assigned without a bot."
 msgstr "没有 Bot 就无法分配此服务器。"
 
+#: src/lib/mcp-sign-in.ts
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr "此服务器未提供浏览器登录。请改为输入令牌。"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "This server did not request browser authorization."
 msgstr "此服务器未请求浏览器授权。"
+
+#: src/pages/McpServersOverlay.tsx
+msgid "This server has two credentials. Keep one."
+msgstr "此服务器有两种凭据。请只保留一种。"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "This server is already connected. Disconnect it first to authorize again."
@@ -7406,8 +7516,14 @@ msgid "This server is managed by an extension"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "This service needs client registration before you can connect."
 msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpOAuthCallback.tsx
+msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
+msgstr "此登录窗口已被新的登录窗口替换。请在新窗口中完成登录，或重新开始。"
 
 #: src/pages/account/AccountSettings.tsx
 msgid "This signs out every other session and keeps this one signed in."
@@ -7772,6 +7888,14 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
 msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Waiting for sign-in in the other window."
+msgstr "正在另一个窗口中等待登录。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

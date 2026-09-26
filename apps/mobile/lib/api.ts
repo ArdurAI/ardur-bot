@@ -44,6 +44,7 @@ import type { EndpointResult } from "./endpoint";
 import { defaultApiBase, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
+import { RpcError } from "./rpc-error";
 import {
   clearSessionToken,
   loadSessionToken,
@@ -569,7 +570,7 @@ export async function deleteAccount(password: string) {
 }
 
 /** The message came from the server's own response body, not a client-side transport failure. */
-export class RpcServerError extends Error {}
+export class RpcServerError extends RpcError {}
 
 export async function rpc<T>(
   proc: string,
@@ -658,8 +659,17 @@ export async function rpc<T>(
           ? payload.message
           : undefined);
       const message = serverMessage ?? `rpc ${proc} failed`;
+      const code =
+        payload &&
+        typeof payload === "object" &&
+        "code" in payload &&
+        typeof payload.code === "string"
+          ? payload.code
+          : undefined;
       const throwRpcError = () =>
-        serverMessage !== undefined ? new RpcServerError(serverMessage) : new Error(message);
+        serverMessage !== undefined
+          ? new RpcServerError(serverMessage, code)
+          : new RpcError(message, code);
       const unauthorized = res.status === 401 || /unauthorized/i.test(message);
       // After a delete where SecureStore could not clear the stale id, restart
       // reloads it and the first RPCs 401. Probe once without a Space header:

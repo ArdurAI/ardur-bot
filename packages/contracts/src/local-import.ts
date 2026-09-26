@@ -159,6 +159,8 @@ export type LocalImportFailure = z.infer<typeof LocalImportFailureSchema>;
 /** Why a whole run stopped: the host transport failed, the scan is stale, or anything else. */
 export const LocalImportStopSchema = z.enum(["host", "rescan", "failed"]);
 export type LocalImportStop = z.infer<typeof LocalImportStopSchema>;
+/** RPC error code for a custom folder outside the owner's home; clients name the fix. */
+export const LOCAL_IMPORT_INVALID_FOLDER_CODE = "LOCAL_IMPORT_INVALID_FOLDER";
 export const LocalImportStatusSchema = z.strictObject({
   manifest: LocalImportManifestSchema.nullable(),
   autoImport: z.boolean(),

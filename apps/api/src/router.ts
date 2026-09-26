@@ -38,6 +38,7 @@ import {
   autoReviewConfigurationWarning,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
+  bumpMcpServerRevision,
   CodexConnections,
   ComputerBusyError,
   cancelComputerRunWork,
@@ -49,6 +50,7 @@ import {
   defaultCatalogModelId,
   deletePushToken,
   deploymentAutoReviewDefault,
+  deploymentHostLabel,
   destroyBot,
   displayBotWorkspacePath,
   enqueueLearningReview,
@@ -60,12 +62,17 @@ import {
   isSandboxGoneError,
   isScratchpadStatus,
   kubernetesContexts,
+  LocalImportInvalidFolderError,
   LocalImportService,
   listPiCatalog,
   listScratchpadItems,
   loadPushToken,
+  lockMcpServerRevision,
+  McpOAuthAttemptReplacedError,
   McpOAuthBroker,
+  MissingComputerProviderError,
   mapScratchpadItem,
+  mcpCredentialConflict,
   modelCredentialDto,
   NATIVE_HOST_OWNER_MESSAGE,
   nativeHostOwner,
@@ -101,11 +108,13 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
+  HOST_MOVE_UNAVAILABLE_MESSAGE,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@ardurbot/contracts";
+import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import { appContract } from "@ardurbot/contracts/rpc";
 import {
   ACTIVE_RUN_STATUSES,
@@ -1993,13 +2002,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId, archivedAt: null },
           include: { computer: true },
         });
+        const hostLabel = await deploymentHostLabel(deps.prisma);
         const seen = new Set<string>();
         return bots.flatMap((bot) => {
           if (!bot.computer || seen.has(bot.computer.id)) return [];
           seen.add(bot.computer.id);
-          return [
-            { botId: bot.id, name: bot.name, status: toComputerStatus(bot.id, bot.computer) },
-          ];
+          const status = { ...toComputerStatus(bot.id, bot.computer), hostLabel };
+          return [{ botId: bot.id, name: bot.name, status }];
         });
       }),
       connections: authed.computer.connections.handler(({ context }) =>
@@ -2025,6 +2034,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           deps.prisma,
           context.actor.spaceId,
           input,
+          deps.env.sandboxProvider,
         );
         try {
           await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
@@ -2035,9 +2045,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           throw error;
         }
       }),
-      status: authed.computer.status.handler(async ({ context, input }) =>
-        computerStatus(deps, context.actor, input.botId),
-      ),
+      status: authed.computer.status.handler(async ({ context, input }) => ({
+        ...(await computerStatus(deps, context.actor, input.botId)),
+        hostLabel: await deploymentHostLabel(deps.prisma),
+      })),
       boot: authed.computer.boot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
@@ -2070,7 +2081,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (error instanceof ComputerBusyError) {
             throw new ORPCError("CONFLICT", { message: "Computer is busy" });
           }
-          throw error;
+          throw engineRefusal(error);
         } finally {
           await releaseComputerExecutionLease(deps.prisma, lease);
         }
@@ -2644,9 +2655,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       status: authed.localImport.status.handler(({ context }) =>
         localImport.status(importOwner(context.actor)),
       ),
-      configure: authed.localImport.configure.handler(({ context, input }) =>
-        localImport.configure(importOwner(context.actor), input),
-      ),
+      configure: authed.localImport.configure.handler(async ({ context, input }) => {
+        try {
+          return await localImport.configure(importOwner(context.actor), input);
+        } catch (error) {
+          if (error instanceof LocalImportInvalidFolderError)
+            throw new ORPCError(LOCAL_IMPORT_INVALID_FOLDER_CODE, { message: error.message });
+          throw error;
+        }
+      }),
       run: authed.localImport.run.handler(async ({ context, input }) => {
         const owner = importOwner(context.actor);
         await assertLocalImportOwner(deps.prisma, owner);
@@ -3473,17 +3490,21 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               })
             : [];
           const ciphertextById = new Map(secrets.map((secret) => [secret.id, secret.ciphertext]));
-          return rows.map((row) =>
-            mcpServerDto(
-              row,
-              mcpOAuth.statusForCiphertext(
-                row.secretId ? ciphertextById.get(row.secretId) : undefined,
-                row.secretId ?? undefined,
-              ),
-            ),
-          );
+          return rows.map((row) => {
+            const status = mcpOAuth.statusForCiphertext(
+              row.secretId ? ciphertextById.get(row.secretId) : undefined,
+              row.secretId ?? undefined,
+            );
+            return mcpServerDto(row, status.oauthStatus, status.credentialConflict);
+          });
         }),
         create: authed.mcp.servers.create.handler(async ({ context, input }) => {
+          const credentialConflict = mcpCredentialConflict({
+            secret: "secret" in input ? input.secret : undefined,
+            headers: "headers" in input ? input.headers : undefined,
+          });
+          if (credentialConflict)
+            throw new ORPCError("BAD_REQUEST", { message: credentialConflict });
           const secretPayload = buildMcpCredentialBlob(input);
           const stored = secretPayload
             ? await deps.secrets.put(
@@ -3533,10 +3554,14 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           return mcpServerDto(row, await mcpOAuth.statusFor(row, context.actor));
         }),
         update: authed.mcp.servers.update.handler(async ({ context, input }) => {
+          // A token or header on its own replaces the credential, not the definition.
+          const credentialOnly = "secret" in input || "headers" in input;
           const row = await deps.prisma.$transaction(async (tx) => {
             // Share the OAuth broker's per-server lock so a stale authorization
             // snapshot cannot overwrite a simultaneous credential edit.
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${input.id}))`;
+            if (credentialOnly) await lockMcpServerRevision(tx, input.id, context.actor);
+            else
+              await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${input.id}))`;
             const existing = await tx.mcpServer.findFirst({
               where: {
                 id: input.id,
@@ -3604,8 +3629,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                     enabled: existing.enabled,
                     transport: existing.transport as "streamable_http" | "sse",
                     endpoint: existing.endpoint!,
-                    headers: (existingMaterial.headers ?? {}) as Record<string, string>,
-                    secret: input.secret,
+                    // One credential: the new one replaces the other kind, header names included.
+                    headers: "headers" in input ? input.headers : {},
+                    secret: "secret" in input ? input.secret : undefined,
                   };
             if (!("config" in input) && existing.transport === "stdio") {
               throw new ORPCError("BAD_REQUEST", { message: "A remote MCP server is required" });
@@ -3633,32 +3659,35 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 },
               });
             }
-            const updated = await tx.mcpServer.update({
-              where: { id: existing.id },
-              data: {
-                slug: config.slug,
-                name: config.name,
-                description: config.description,
-                transport: config.transport,
-                endpoint: nextEndpoint,
-                command: "command" in config ? config.command : null,
-                args: ("args" in config
-                  ? redactMcpArguments(config.args, [
-                      ...Object.values(config.env),
-                      ...(config.secret ? [config.secret] : []),
-                    ])
-                  : []) as Prisma.InputJsonValue,
-                env: ("env" in config
-                  ? Object.fromEntries(Object.keys(config.env).map((key) => [key, true]))
-                  : {}) as Prisma.InputJsonValue,
-                headers: ("headers" in config
-                  ? Object.fromEntries(Object.keys(config.headers).map((key) => [key, true]))
-                  : {}) as Prisma.InputJsonValue,
-                enabled: config.enabled,
-                revision: { increment: 1 },
-                ...(stored ? { secretId: stored.id } : clearing ? { secretId: null } : {}),
-              },
-            });
+            const data = {
+              slug: config.slug,
+              name: config.name,
+              description: config.description,
+              transport: config.transport,
+              endpoint: nextEndpoint,
+              command: "command" in config ? config.command : null,
+              args: ("args" in config
+                ? redactMcpArguments(config.args, [
+                    ...Object.values(config.env),
+                    ...(config.secret ? [config.secret] : []),
+                  ])
+                : []) as Prisma.InputJsonValue,
+              env: ("env" in config
+                ? Object.fromEntries(Object.keys(config.env).map((key) => [key, true]))
+                : {}) as Prisma.InputJsonValue,
+              headers: ("headers" in config
+                ? Object.fromEntries(Object.keys(config.headers).map((key) => [key, true]))
+                : {}) as Prisma.InputJsonValue,
+              enabled: config.enabled,
+              ...(stored ? { secretId: stored.id } : clearing ? { secretId: null } : {}),
+            };
+            if (credentialOnly) await bumpMcpServerRevision(tx, existing.id, context.actor, data);
+            const updated = credentialOnly
+              ? await tx.mcpServer.findFirstOrThrow({ where: { id: existing.id } })
+              : await tx.mcpServer.update({
+                  where: { id: existing.id },
+                  data: { ...data, revision: { increment: 1 } },
+                });
             if (stored) {
               if (existing.secretId)
                 await tx.secret.deleteMany({
@@ -3855,13 +3884,32 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               spaceId: context.actor.spaceId,
               userId: context.actor.userId,
             });
-            if (serverId) await integrations.capture(context.actor, serverId);
-            return { ok: true as const };
-          } catch {
+            await integrations.capture(context.actor, serverId, input.sessionId);
+            // A catalog capture records a failed discovery instead of throwing.
+            const recorded = await integrations.owned(context.actor, serverId);
+            return recorded.connectionState === "connected" && !recorded.lastError
+              ? { ok: true as const, result: "connected" as const }
+              : { ok: true as const, result: "failed" as const, lastError: recorded.lastError };
+          } catch (error) {
+            if (error instanceof McpOAuthAttemptReplacedError) {
+              return { ok: true as const, result: "replaced" as const };
+            }
+            await mcpOAuth
+              .recordAttemptFailure({
+                sessionId: input.sessionId,
+                spaceId: context.actor.spaceId,
+                userId: context.actor.userId,
+                kind: "failed",
+              })
+              .catch(() => undefined);
             throw new ORPCError("BAD_REQUEST", {
               message: "Could not complete authorization. Try connecting again.",
             });
           }
+        }),
+        cancel: authed.mcp.oauth.cancel.handler(async ({ context, input }) => {
+          await integrations.cancelAuthorization(context.actor, input);
+          return { ok: true as const };
         }),
         disconnect: authed.mcp.oauth.disconnect.handler(async ({ context, input }) => {
           await mcpOAuth.disconnect({
@@ -5785,11 +5833,19 @@ async function runComputerReplace(
     if (error instanceof ComputerBusyError) {
       throw new ORPCError("CONFLICT", { message: "Computer is busy" });
     }
-    throw error;
+    throw engineRefusal(error);
   } finally {
     await releaseComputerExecutionLease(deps.prisma, lease);
   }
   return computerStatus(deps, context.actor, botId);
+}
+
+/** A missing engine or a refused host move already says what to do, so it reaches the user. */
+function engineRefusal(error: unknown) {
+  return error instanceof MissingComputerProviderError ||
+    (error instanceof Error && error.message === HOST_MOVE_UNAVAILABLE_MESSAGE)
+    ? new ORPCError("BAD_REQUEST", { message: error.message })
+    : error;
 }
 
 async function expireStaleComputerControl(

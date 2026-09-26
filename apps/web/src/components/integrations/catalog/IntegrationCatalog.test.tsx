@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/contracts";
+import { mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -11,8 +12,11 @@ const api = vi.hoisted(() => ({
   servers: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  remove: vi.fn(),
+  tools: vi.fn(),
   approve: vi.fn(),
   connect: vi.fn(),
+  status: vi.fn(),
   grants: vi.fn(),
   assign: vi.fn(),
   revoke: vi.fn(),
@@ -34,7 +38,13 @@ vi.mock("../../../lib/rpc", () => ({
     computer: { list: api.computers },
     capabilities: { catalogSearch: api.catalogSearch },
     mcp: {
-      servers: { list: api.servers, create: api.create, update: api.update },
+      servers: {
+        list: api.servers,
+        create: api.create,
+        update: api.update,
+        remove: api.remove,
+        tools: api.tools,
+      },
       assignments: { approve: api.approve },
     },
   },
@@ -43,6 +53,10 @@ vi.mock("../../../lib/mcp-connect", () => ({
   MCP_OAUTH_CHANNEL: "test",
   waitForMcpOauth: api.consent,
   connectMcpOauth: api.oauth,
+}));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray, ...values: unknown[]) =>
+    parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
 }));
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
@@ -184,6 +198,7 @@ const connected: IntegrationConnection = {
 let connections: IntegrationConnection[];
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+let broadcast: { onmessage: ((event: MessageEvent) => void) | null };
 beforeEach(() => {
   vi.clearAllMocks();
   connections = [];
@@ -192,6 +207,9 @@ beforeEach(() => {
     "BroadcastChannel",
     class {
       onmessage = null;
+      constructor() {
+        broadcast = this;
+      }
       close() {}
     },
   );
@@ -226,6 +244,8 @@ beforeEach(() => {
   });
   api.consent.mockResolvedValue("connected");
   api.oauth.mockResolvedValue("connected");
+  api.remove.mockResolvedValue({ ok: true });
+  api.tools.mockResolvedValue({ capturedAt: "", serverVersion: null, account: null, tools: [] });
   api.catalogSearch.mockResolvedValue({ enabled: true, results: [] });
   api.revoke.mockImplementation(async () => {
     connections = [{ ...connected, state: "not-connected", manifest: null }];
@@ -242,8 +262,9 @@ afterEach(async () => {
 });
 const button = (text: string, within: Element = container) =>
   [...within.querySelectorAll("button")].find((button) => button.textContent === text)!;
+const openMcp = vi.fn();
 const mount = async () => {
-  await act(async () => root.render(<IntegrationCatalog />));
+  await act(async () => root.render(<IntegrationCatalog onOpenMcp={openMcp} />));
 };
 const click = async (element: HTMLElement) => {
   await act(async () => element.click());
@@ -450,6 +471,886 @@ describe("Settings integration catalog", () => {
     expect(resultConnect("Figma")).toBeDefined();
   });
 
+  it("keeps a directory query on a built-in path as a custom server", async () => {
+    api.list.mockResolvedValue({
+      catalog: [
+        {
+          ...catalog[0]!,
+          id: "notion",
+          name: "Notion",
+          endpoint: "https://mcp.notion.com/mcp",
+        },
+      ],
+      connections: [],
+    });
+    api.catalogSearch.mockResolvedValue({
+      enabled: true,
+      results: [
+        {
+          ...publicResult,
+          name: "Community Notion listing",
+          surfaces: [
+            {
+              kind: "mcp",
+              slug: "notion",
+              source: "https://mcp.notion.com/mcp/?source=directory",
+              auth: null,
+            },
+          ],
+        },
+      ],
+    });
+    createdServers();
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "notion");
+    await click(button("Search integrations.sh"));
+    expect(resultConnect("Notion")).toBeUndefined();
+    await click(resultConnect("Community Notion listing")!);
+    expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: "https://mcp.notion.com/mcp/?source=directory" }),
+    );
+    expect(api.connect).not.toHaveBeenCalled();
+  });
+
+  it("asks for a bearer value and discovers without starting OAuth", async () => {
+    const added: Array<Record<string, unknown>> = [];
+    api.catalogSearch.mockResolvedValue({
+      enabled: true,
+      results: [
+        {
+          ...publicResult,
+          surfaces: [
+            {
+              ...publicResult.surfaces[0]!,
+              auth: { type: "bearer", headerName: null, note: null },
+            },
+          ],
+        },
+      ],
+    });
+    api.create.mockImplementation(async (input: { name: string; endpoint: string }) => {
+      const server = {
+        id: "bearer-server",
+        name: input.name,
+        endpoint: input.endpoint,
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "none",
+        connectionState: "not-connected",
+        catalogId: null,
+      };
+      added.push(server);
+      return server;
+    });
+    api.tools.mockImplementation(async () => {
+      added[0]!.connectionState = "connected";
+      return { capturedAt: "", serverVersion: null, account: null, tools: [] };
+    });
+    api.servers.mockImplementation(async () => added);
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.querySelector('[aria-label="Credential"]')).not.toBeNull();
+    await fill("Credential", "synthetic-test-value");
+    await click(resultConnect("Figma")!);
+    expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({ secret: "synthetic-test-value" }),
+    );
+    expect(api.tools).toHaveBeenCalledWith({ serverId: "bearer-server" });
+    expect(api.oauth).not.toHaveBeenCalled();
+  });
+
+  it("keeps a just-created custom server when sign-in is declined and offers reconnect", async () => {
+    const polls: Array<() => void> = [];
+    const setInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, ms?: number) => {
+      if (ms !== 5000) return setInterval(handler, ms);
+      polls.push(handler);
+      return 0;
+    }) as typeof window.setInterval);
+    const added = createdServers();
+    api.oauth.mockImplementation(async (serverId: string) => {
+      const server = added.find((entry) => entry.id === serverId)!;
+      server.connectionState = "cancelled";
+      return "cancelled";
+    });
+    await openResults([publicResult]);
+    await click(resultConnect("Figma")!);
+    expect(api.create).toHaveBeenCalled();
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(api.update).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Sign-in was declined.");
+    await act(async () => polls[0]!());
+    const row = serverRow("Figma");
+    expect(row?.textContent).toContain("Needs sign-in");
+    expect(row?.textContent).toContain("Reconnect");
+    expect(row?.textContent).toContain("Manage");
+    expect(row?.textContent).toContain("Delete");
+  });
+
+  it("does not report authorization-not-requested when discovery failed", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    api.create.mockResolvedValue({
+      id: "failed-server",
+      name: "Figma",
+      endpoint: "https://mcp.figma.example.test/mcp",
+      transport: "streamable_http",
+      enabled: true,
+      oauthStatus: "none",
+      connectionState: "not-connected",
+      catalogId: null,
+    });
+    api.oauth.mockResolvedValueOnce("authorization_not_requested");
+    let serverLists = 0;
+    api.servers.mockImplementation(async () => {
+      serverLists += 1;
+      return serverLists < 3
+        ? []
+        : [
+            {
+              id: "failed-server",
+              name: "Figma",
+              endpoint: "https://mcp.figma.example.test/mcp",
+              transport: "streamable_http",
+              enabled: true,
+              oauthStatus: "none",
+              connectionState: "discovery-failed",
+              catalogId: null,
+            },
+          ];
+    });
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain("Could not connect or load integrations.");
+    expect(container.textContent).not.toContain("Connected");
+  });
+
+  it("shows a custom server's recorded discovery failure even when it holds OAuth tokens", async () => {
+    api.servers.mockResolvedValue([
+      {
+        id: "persisted-server",
+        name: "Persisted server",
+        endpoint: "https://custom.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "connected",
+        connectionState: "discovery-failed",
+        catalogId: null,
+      },
+    ]);
+    await mount();
+    const row = [...container.querySelectorAll("tbody tr")].find((entry) =>
+      entry.textContent?.includes("Persisted server"),
+    );
+    expect(row?.textContent).not.toContain("Connected");
+    expect(button("Reconnect")).toBeDefined();
+  });
+
+  it("opens the credential field when Reconnect follows a rejected token", async () => {
+    const onOpenMcp = vi.fn();
+    api.servers.mockResolvedValue([
+      {
+        id: "rejected-token",
+        name: "Rejected token",
+        endpoint: "https://rejected.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "none",
+        hasSecret: true,
+        connectionState: "needs-sign-in",
+        lastError: mcpSignInDiagnostic("credential_rejected"),
+        catalogId: null,
+      },
+    ]);
+    await act(async () => root.render(<IntegrationCatalog onOpenMcp={onOpenMcp} />));
+    expect(serverRow("Rejected token")?.textContent).toContain(
+      "That token was not accepted. Check it and try again.",
+    );
+    await click(button("Reconnect"));
+    expect(onOpenMcp).toHaveBeenCalledExactlyOnceWith("rejected-token");
+    expect(api.oauth).not.toHaveBeenCalled();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["invalid_token", "The saved sign-in is no longer accepted. Sign in again."],
+    ["refresh_unavailable", "The saved sign-in expired. Sign in again."],
+  ])("signs in again in the browser when the saved sign-in is %s", async (code, sentence) => {
+    const onOpenMcp = vi.fn();
+    api.servers.mockResolvedValue([
+      {
+        ...customServer("expired", "Expired sign-in", "needs-sign-in"),
+        oauthStatus: "reconnect",
+        lastError: mcpSignInDiagnostic(code),
+      },
+    ]);
+    await act(async () => root.render(<IntegrationCatalog onOpenMcp={onOpenMcp} />));
+    expect(serverRow("Expired sign-in")?.textContent).toContain(sentence);
+    await click(button("Reconnect", serverRow("Expired sign-in")!));
+    expect(api.oauth).toHaveBeenCalledWith("expired", expect.anything());
+    expect(onOpenMcp).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["needs-sign-in", null, "Sign-in did not finish. Try again."],
+    ["cancelled", null, "Sign-in was declined."],
+    [
+      "replaced",
+      null,
+      "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
+    ],
+    [
+      "sign-in-failed",
+      "Could not complete sign-in. Connect again.",
+      "Could not complete sign-in. Connect again.",
+    ],
+  ])(
+    "says what happened when a custom row's Reconnect ends %s",
+    async (result, recorded, sentence) => {
+      const server = {
+        ...customServer("failed", "Failed server", "discovery-failed"),
+        slug: "failed",
+        description: "",
+        lastError: null as string | null,
+      };
+      api.servers.mockImplementation(async () => [server]);
+      api.oauth.mockImplementation(async () => {
+        server.lastError = recorded;
+        return result;
+      });
+      await mount();
+      await click(button("Reconnect", serverRow("Failed server")!));
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(sentence);
+      expect(api.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("shows no Manage or token Reconnect where MCP settings cannot open", async () => {
+    api.servers.mockResolvedValue([
+      {
+        ...customServer("rejected", "Rejected server", "needs-sign-in"),
+        lastError: mcpSignInDiagnostic("credential_rejected"),
+      },
+      customServer("failed", "Failed server", "discovery-failed"),
+    ]);
+    await act(async () => root.render(<IntegrationCatalog />));
+    expect(button("Manage")).toBeUndefined();
+    expect(button("Reconnect", serverRow("Rejected server")!)).toBeUndefined();
+    expect(button("Reconnect", serverRow("Failed server")!)).toBeDefined();
+  });
+
+  it("opens the credential field when a server offers no browser sign-in", async () => {
+    const onOpenMcp = vi.fn();
+    api.servers.mockResolvedValue([
+      {
+        id: "no-browser",
+        name: "No browser",
+        endpoint: "https://nobrowser.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "reconnect",
+        connectionState: "needs-sign-in",
+        lastError: mcpSignInDiagnostic("oauth_unavailable"),
+        catalogId: null,
+      },
+    ]);
+    await act(async () => root.render(<IntegrationCatalog onOpenMcp={onOpenMcp} />));
+    await click(button("Reconnect"));
+    expect(onOpenMcp).toHaveBeenCalledExactlyOnceWith("no-browser");
+    expect(api.oauth).not.toHaveBeenCalled();
+  });
+
+  it("offers Reconnect, Manage, and a confirmed Delete for a failed custom server", async () => {
+    const onOpenMcp = vi.fn();
+    api.servers.mockResolvedValue([
+      {
+        id: "failed-custom",
+        name: "Failed custom server",
+        endpoint: "https://failed.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "reconnect",
+        connectionState: "discovery-failed",
+        catalogId: null,
+      },
+    ]);
+    await act(async () => root.render(<IntegrationCatalog onOpenMcp={onOpenMcp} />));
+    expect(button("Reconnect")).toBeDefined();
+    await click(button("Manage"));
+    expect(onOpenMcp).toHaveBeenCalledWith("failed-custom");
+    await click(button("Delete"));
+    expect(api.remove).not.toHaveBeenCalled();
+    await click(button("Confirm delete"));
+    expect(api.remove).toHaveBeenCalledExactlyOnceWith({ id: "failed-custom" });
+  });
+
+  it("does not start a poll while a list request is in flight", async () => {
+    const polls: Array<() => void> = [];
+    const setInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, ms?: number) => {
+      if (ms !== 5000) return setInterval(handler, ms);
+      polls.push(handler);
+      return 0;
+    }) as typeof window.setInterval);
+    let resolveFirst!: (value: Array<Record<string, unknown>>) => void;
+    api.servers.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    await mount();
+    expect(api.servers).toHaveBeenCalledTimes(1);
+    await act(async () => polls[0]!());
+    expect(api.servers).toHaveBeenCalledTimes(1);
+    await act(async () =>
+      resolveFirst([
+        {
+          id: "slow-server",
+          name: "Slow server",
+          endpoint: "https://slow.example.test/mcp",
+          transport: "streamable_http",
+          enabled: true,
+          oauthStatus: "none",
+          connectionState: "connected",
+          catalogId: null,
+        },
+      ]),
+    );
+    expect(container.textContent).toContain("Slow server");
+    await act(async () => polls[0]!());
+    expect(api.servers).toHaveBeenCalledTimes(2);
+  });
+
+  it("never carries one result's credential to another result", async () => {
+    const added = createdServers();
+    await openResults([
+      listing("Alpha", "https://alpha.example.test/mcp", bearer),
+      listing("Beta", "https://beta.example.test/mcp", bearer),
+    ]);
+    await click(resultConnect("Alpha")!);
+    await fill("Credential", "synthetic-alpha");
+    await click(resultConnect("Beta")!);
+    expect(container.querySelectorAll('[aria-label="Credential"]')).toHaveLength(1);
+    expect(container.querySelector<HTMLInputElement>('[aria-label="Credential"]')?.value).toBe("");
+    await fill("Credential", "synthetic-beta");
+    await click(resultConnect("Beta")!);
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        endpoint: "https://beta.example.test/mcp",
+        secret: "synthetic-beta",
+      }),
+    );
+    expect(added).toHaveLength(1);
+  });
+
+  it("reuses a saved server only when its whole address, including the query, matches", async () => {
+    const added = createdServers([
+      {
+        id: "saved",
+        slug: "saved",
+        name: "Workspace A",
+        description: "",
+        endpoint: "https://mcp.example.test/mcp?workspace=a&region=eu",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "none",
+        connectionState: "connected",
+        catalogId: null,
+      },
+    ]);
+    await openResults([
+      listing("Workspace B", "https://mcp.example.test/mcp?workspace=b", bearer),
+      listing("Workspace A again", "https://MCP.example.test/mcp/?region=eu&workspace=a", bearer),
+    ]);
+    await click(resultConnect("Workspace B")!);
+    await fill("Credential", "synthetic-b");
+    await click(resultConnect("Workspace B")!);
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        endpoint: "https://mcp.example.test/mcp?workspace=b",
+        secret: "synthetic-b",
+      }),
+    );
+    expect(api.update).not.toHaveBeenCalled();
+    await click(resultConnect("Workspace A again")!);
+    await fill("Credential", "synthetic-a");
+    await click(resultConnect("Workspace A again")!);
+    expect(api.update).toHaveBeenCalledExactlyOnceWith({ id: "saved", secret: "synthetic-a" });
+    expect(added).toHaveLength(2);
+  });
+
+  it("never reuses an imported server at the same address", async () => {
+    const added = createdServers([
+      {
+        id: "imported",
+        slug: "imported",
+        name: "Imported",
+        description: "",
+        endpoint: "https://keyed.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "none",
+        connectionState: "connected",
+        catalogId: null,
+        imported: { tool: "codex" },
+      },
+    ]);
+    await openResults([listing("Keyed", "https://keyed.example.test/mcp", bearer)]);
+    await click(resultConnect("Keyed")!);
+    await fill("Credential", "synthetic-key");
+    await click(resultConnect("Keyed")!);
+    expect(api.update).not.toHaveBeenCalled();
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ endpoint: "https://keyed.example.test/mcp" }),
+    );
+    expect(added).toHaveLength(2);
+  });
+
+  it("sends a header credential under the advertised header name", async () => {
+    createdServers();
+    await openResults([
+      listing("Keyed", "https://keyed.example.test/mcp", {
+        type: "header",
+        headerName: "x-api-key",
+        note: null,
+      }),
+    ]);
+    await click(resultConnect("Keyed")!);
+    expect(
+      container.querySelector<HTMLInputElement>('[aria-label="Credential"]')?.placeholder,
+    ).toBe("x-api-key");
+    await fill("Credential", "synthetic-key");
+    await click(resultConnect("Keyed")!);
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ headers: { "x-api-key": "synthetic-key" } }),
+    );
+    expect(api.create.mock.calls[0]![0]).not.toHaveProperty("secret");
+    expect(api.tools).toHaveBeenCalledOnce();
+    expect(api.oauth).not.toHaveBeenCalled();
+  });
+
+  it("signs in first for a mixed listing and asks for a token only when sign-in is unavailable", async () => {
+    const added = createdServers();
+    api.oauth.mockImplementationOnce(async (serverId: string) => {
+      added.find((server) => server.id === serverId)!.connectionState = "needs-sign-in";
+      throw new Error("fake-provider-response");
+    });
+    await openResults([
+      listing("Either", "https://either.example.test/mcp", {
+        type: "mixed",
+        headerName: null,
+        note: null,
+      }),
+    ]);
+    await click(resultConnect("Either")!);
+    expect(api.oauth).toHaveBeenCalledExactlyOnceWith(
+      "created-1",
+      expect.objectContaining({ onWaiting: expect.any(Function) }),
+    );
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    await fill("Credential", "synthetic-token");
+    await click(resultConnect("Either")!);
+    expect(api.create).toHaveBeenCalledOnce();
+    expect(api.update).toHaveBeenCalledExactlyOnceWith({
+      id: "created-1",
+      secret: "synthetic-token",
+    });
+    expect(api.tools).toHaveBeenCalledExactlyOnceWith({ serverId: "created-1" });
+    expect(api.oauth).toHaveBeenCalledOnce();
+    expect(resultConnect("Either")).toBeUndefined();
+  });
+
+  it("starts the sign-in probe for a typed URL without a token", async () => {
+    createdServers();
+    await mount();
+    await click(button("Find apps"));
+    await fill("Server URL", "https://typed.example.test/mcp");
+    const form = container.querySelector('[aria-label="Server URL"]')!.parentElement!;
+    await click(button("Connect", form));
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.not.objectContaining({ secret: expect.anything() }),
+    );
+    expect(api.oauth).toHaveBeenCalledExactlyOnceWith(
+      "created-1",
+      expect.objectContaining({ onWaiting: expect.any(Function) }),
+    );
+    expect(api.tools).not.toHaveBeenCalled();
+  });
+
+  it("shows the plain sentence when a custom server offers no browser sign-in", async () => {
+    const provider = "provider-denied-browser-sign-in";
+    const servers = createdServers();
+    api.oauth.mockImplementation(async () => {
+      const server = servers[0];
+      if (server) {
+        server.connectionState = "needs-sign-in";
+        server.lastError = mcpSignInDiagnostic("oauth_unavailable");
+      }
+      throw new Error(provider);
+    });
+    await openResults([publicResult]);
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain(
+      "This server did not offer browser sign-in. Enter a token instead.",
+    );
+    expect(container.textContent).not.toContain(provider);
+  });
+
+  it("shows a declined catalog sign-in and a failed one in Find apps", async () => {
+    const notion = {
+      ...catalog[0]!,
+      id: "notion",
+      name: "Notion",
+      authKind: "oauth" as const,
+      endpoint: "https://mcp.notion.example.test/mcp",
+    };
+    api.list.mockImplementation(async () => ({ catalog: [notion], connections: [] }));
+    vi.spyOn(window, "open").mockReturnValue({
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    vi.useFakeTimers();
+    try {
+      api.connect.mockResolvedValue({
+        connection: {
+          ...connected,
+          id: "notion-1",
+          catalogId: "notion",
+          state: "awaiting-consent",
+          lastError: null,
+        },
+        authorizationUrl: "https://auth.example.test/authorize",
+        sessionId: "session",
+      });
+      api.status.mockResolvedValue({
+        ...connected,
+        id: "notion-1",
+        catalogId: "notion",
+        state: "cancelled",
+        lastError: "Sign-in was declined.",
+      });
+      await openResults([
+        listing("Notion", "https://mcp.notion.example.test/mcp", {
+          type: "oauth",
+          headerName: null,
+          note: null,
+        }),
+      ]);
+      await click(resultConnect("Notion")!);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(container.textContent).toContain("Sign-in was declined.");
+      expect(resultConnect("Notion")?.textContent).toBe("Connect");
+
+      api.status.mockResolvedValue({
+        ...connected,
+        id: "notion-1",
+        catalogId: "notion",
+        state: "discovery-failed",
+        lastError: "Could not complete sign-in. Connect again.",
+      });
+      await click(resultConnect("Notion")!);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(container.textContent).toContain("Could not complete sign-in. Connect again.");
+      expect(resultConnect("Notion")?.textContent).toBe("Connect");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("disables Connect until sign-in starts and shows an expired sign-in as a sentence", async () => {
+    const notion = {
+      ...catalog[0]!,
+      id: "notion",
+      name: "Notion",
+      authKind: "oauth" as const,
+      endpoint: "https://mcp.notion.example.test/mcp",
+    };
+    api.list.mockImplementation(async () => ({ catalog: [notion], connections: [] }));
+    vi.spyOn(window, "open").mockReturnValue({
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    vi.useFakeTimers();
+    try {
+      let started: (value: unknown) => void = () => undefined;
+      api.connect.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            started = resolve;
+          }),
+      );
+      api.status.mockResolvedValue({
+        ...connected,
+        id: "notion-1",
+        catalogId: "notion",
+        state: "needs-sign-in",
+        lastError: mcpSignInDiagnostic("refresh_unavailable"),
+      });
+      await openResults([
+        listing("Notion", "https://mcp.notion.example.test/mcp", {
+          type: "oauth",
+          headerName: null,
+          note: null,
+        }),
+      ]);
+      await click(resultConnect("Notion")!);
+      expect(resultConnect("Notion")?.disabled).toBe(true);
+      await act(async () => {
+        started({
+          connection: {
+            ...connected,
+            id: "notion-1",
+            catalogId: "notion",
+            state: "awaiting-consent",
+            lastError: null,
+          },
+          authorizationUrl: "https://auth.example.test/authorize",
+          sessionId: "session",
+        });
+      });
+      expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+      expect(resultConnect("Notion")?.disabled).toBe(false);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(container.textContent).toContain("The saved sign-in expired. Sign in again.");
+      expect(container.textContent).not.toContain("refresh_unavailable");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["mixed", "bearer"])(
+    "goes straight to browser sign-in for a sign-in-only built-in app listed as %s",
+    async (type) => {
+      const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+      api.list.mockImplementation(async () => ({ catalog: [notion], connections: [] }));
+      await openResults([
+        listing("Notion directory", "https://mcp.notion.example.test/mcp", {
+          type,
+          headerName: null,
+          note: null,
+        }),
+      ]);
+      await click(resultConnect("Notion")!);
+      expect(container.querySelector('[aria-label="Credential"]')).toBeNull();
+      expect(api.connect).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ catalogId: "notion", authKind: "oauth", token: undefined }),
+      );
+    },
+  );
+
+  it("shows Connected with Manage for a connected built-in app and never replaces it", async () => {
+    const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+    const github = {
+      ...remoteApp("github", "GitHub", "https://api.githubcopilot.com/mcp/"),
+      hostCli: { command: "test-cli", installUrl: "https://example.test/install" },
+    };
+    connections = [
+      { ...connected, id: "notion-1", catalogId: "notion", transport: "streamable_http" },
+      { ...connected, id: "github-host", catalogId: "github", transport: "host-cli" },
+    ];
+    api.list.mockImplementation(async () => ({ catalog: [notion, github], connections }));
+    await openResults([
+      listing("Notion directory", "https://mcp.notion.example.test/mcp"),
+      listing("GitHub directory", "https://api.githubcopilot.com/mcp/"),
+    ]);
+    const notionResult = resultBlock("Notion");
+    expect(notionResult?.textContent).toContain("Connected");
+    expect(resultConnect("Notion")).toBeUndefined();
+    // A host sign-in is a different connection, so GitHub on the web is still new.
+    await click(resultConnect("GitHub")!);
+    expect(api.connect).toHaveBeenCalledExactlyOnceWith(
+      expect.not.objectContaining({ connectionId: expect.anything() }),
+    );
+    await click(button("Manage", notionResult!));
+    expect(api.connect).toHaveBeenCalledOnce();
+    expect(api.revoke).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Synthetic fixture read");
+  });
+
+  it("asks for a GitHub token before connecting and shows the API sentence", async () => {
+    const github = {
+      ...catalog[0]!,
+      authKind: "token" as const,
+      endpoint: "https://api.githubcopilot.com/mcp/",
+    };
+    api.list.mockImplementation(async () => ({ catalog: [github], connections: [] }));
+    api.catalogSearch.mockResolvedValue({
+      enabled: true,
+      results: [listing("GitHub directory", "https://api.githubcopilot.com/mcp/")],
+    });
+    api.connect.mockRejectedValue(new Error("Enter a valid token."));
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "GitHub");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("GitHub")!);
+    expect(api.connect).not.toHaveBeenCalled();
+    expect(container.querySelector('[aria-label="Credential"]')).not.toBeNull();
+    expect(resultConnect("GitHub")?.disabled).toBe(true);
+    expect(container.textContent).not.toContain("Could not connect or load integrations.");
+    await fill("Credential", "synthetic-token");
+    await click(resultConnect("GitHub")!);
+    expect(api.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogId: "github", authKind: "token", token: "synthetic-token" }),
+    );
+    expect(container.textContent).toContain("Enter a valid token.");
+    expect(container.textContent).not.toContain("Could not connect or load integrations.");
+  });
+
+  it("re-enables Connect when sign-in does not finish", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    createdServers();
+    api.oauth.mockResolvedValue("needs-sign-in");
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "Figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain("Sign-in did not finish. Try again.");
+    expect(resultConnect("Figma")?.disabled).toBe(false);
+  });
+
+  it("keeps Connect enabled while sign-in waits in the other window", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    createdServers();
+    let resolveSignIn: (value: string) => void = () => undefined;
+    api.oauth.mockImplementation(
+      (
+        _serverId: string,
+        options?: { onWaiting?: (waiting: { cancel: () => Promise<void> }) => void },
+      ) =>
+        new Promise<string>((resolve) => {
+          resolveSignIn = resolve;
+          options?.onWaiting?.({
+            cancel: async () => {
+              resolve("cancelled");
+            },
+          });
+        }),
+    );
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "Figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+    expect(resultConnect("Figma")?.disabled).toBe(false);
+    expect(button("Cancel sign-in")).toBeDefined();
+    await click(button("Cancel sign-in"));
+    expect(container.textContent).toContain("Sign-in was cancelled.");
+    expect(resolveSignIn).toBeTypeOf("function");
+  });
+  it("shows the replaced-window sentence and leaves Connect available", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    createdServers();
+    api.oauth.mockResolvedValue("replaced");
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "Figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain(
+      "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
+    );
+    expect(resultConnect("Figma")?.disabled).toBe(false);
+  });
+
+  it("starts the catalog flow with a token typed beside a built-in URL", async () => {
+    const github = {
+      ...remoteApp("github", "GitHub", "https://api.githubcopilot.com/mcp/"),
+      authKind: "token" as const,
+    };
+    api.list.mockImplementation(async () => ({ catalog: [github], connections }));
+    api.connect.mockResolvedValue({
+      connection: { ...connected, catalogId: "github", state: "connected" },
+      authorizationUrl: null,
+      sessionId: null,
+    });
+    await mount();
+    await click(button("Find apps"));
+    const details = container.querySelector("details")!;
+    await fill("Server URL", "https://api.githubcopilot.com/mcp/");
+    expect(details.textContent).toContain("GitHub");
+    await fill("Access token (optional)", "synthetic-test-value");
+    await click(button("Connect", details));
+    expect(api.connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catalogId: "github",
+        authKind: "token",
+        token: "synthetic-test-value",
+      }),
+    );
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it("hides the token field for a built-in app that uses sign-in only", async () => {
+    api.list.mockImplementation(async () => ({
+      catalog: [remoteApp("atlassian", "Atlassian", "https://mcp.atlassian.com/v2/mcp?tools=all")],
+      connections,
+    }));
+    await mount();
+    await click(button("Find apps"));
+    const details = container.querySelector("details")!;
+    await fill("Server URL", "https://mcp.atlassian.com/v2/mcp?tools=all");
+    expect(details.textContent).toContain("Atlassian");
+    expect(details.querySelector('[aria-label="Access token (optional)"]')).toBeNull();
+  });
+
+  it("ignores an older server-list response that resolves after a refresh", async () => {
+    let resolveOld!: (value: Array<Record<string, unknown>>) => void;
+    const old = new Promise<Array<Record<string, unknown>>>((resolve) => {
+      resolveOld = resolve;
+    });
+    api.servers
+      .mockImplementationOnce(() => old)
+      .mockResolvedValueOnce([
+        {
+          id: "new-server",
+          name: "Newest server",
+          endpoint: "https://new.example.test/mcp",
+          transport: "streamable_http",
+          enabled: true,
+          oauthStatus: "none",
+          connectionState: "connected",
+          catalogId: null,
+        },
+      ]);
+    await act(async () => root.render(<IntegrationCatalog />));
+    await act(async () => {
+      broadcast.onmessage?.(new MessageEvent("message"));
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain("Newest server"));
+    await act(async () => resolveOld([]));
+    expect(container.textContent).toContain("Newest server");
+  });
+
+  it("shows a plain search failure with Retry and hides the handler message", async () => {
+    api.catalogSearch.mockRejectedValueOnce(new Error("Integration catalog returned HTTP 503"));
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "notion");
+    await click(button("Search integrations.sh"));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Could not search integrations.",
+    );
+    expect(container.textContent).not.toContain("HTTP 503");
+    expect(button("Retry")).toBeDefined();
+  });
+
   it("connecting a public catalog result refreshes the table", async () => {
     const added: Array<Record<string, unknown>> = [];
     api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
@@ -500,6 +1401,261 @@ describe("Settings integration catalog", () => {
       }),
     );
   });
+
+  it("keeps a custom server that is waiting for sign-in or was cancelled", async () => {
+    const polls: Array<() => void> = [];
+    const setInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, ms?: number) => {
+      if (ms !== 5000) return setInterval(handler, ms);
+      polls.push(handler);
+      return 0;
+    }) as typeof window.setInterval);
+    const pending = customServer("pending", "Pending server", "not-connected");
+    const declined = customServer("declined", "Declined server", "cancelled");
+    api.servers.mockResolvedValue([pending, declined]);
+    await mount();
+    expect(serverRow("Pending server")?.textContent).toContain("Not checked yet");
+    expect(serverRow("Pending server")?.textContent).not.toContain("Needs sign-in");
+    expect(button("Check", serverRow("Pending server")!)).toBeDefined();
+    expect(serverRow("Declined server")?.textContent).toContain("Needs sign-in");
+    expect(button("Reconnect", serverRow("Declined server")!)).toBeDefined();
+    for (const name of ["Pending server", "Declined server"]) {
+      const row = serverRow(name);
+      expect(row?.textContent).toContain("Manage");
+      expect(row?.textContent).toContain("Delete");
+    }
+    await act(async () => polls[0]!());
+    expect(serverRow("Pending server")).toBeDefined();
+    expect(serverRow("Declined server")).toBeDefined();
+    await click(button("Delete", serverRow("Pending server")!));
+    expect(api.remove).not.toHaveBeenCalled();
+    await click(button("Confirm delete", serverRow("Pending server")!));
+    expect(api.remove).toHaveBeenCalledExactlyOnceWith({ id: "pending" });
+  });
+
+  it("checks a server nothing has checked yet and shows what discovery recorded", async () => {
+    const server = customServer("added", "Added server", "not-connected");
+    const rejected = customServer("keyed", "Keyed server", "not-connected");
+    api.servers.mockImplementation(async () => [server, rejected]);
+    api.tools.mockImplementation(async ({ serverId }: { serverId: string }) => {
+      if (serverId === "added") {
+        server.connectionState = "connected";
+        return { capturedAt: "", serverVersion: null, account: null, tools: [] };
+      }
+      Object.assign(rejected, {
+        connectionState: "needs-sign-in",
+        lastError: mcpSignInDiagnostic("credential_rejected"),
+      });
+      throw new Error("rejected");
+    });
+    await mount();
+    await click(button("Check", serverRow("Added server")!));
+    expect(api.tools).toHaveBeenCalledExactlyOnceWith({ serverId: "added" });
+    expect(serverRow("Added server")?.textContent).toContain("Connected");
+    expect(serverRow("Added server")?.textContent).not.toContain("Not checked yet");
+    await click(button("Check", serverRow("Keyed server")!));
+    expect(serverRow("Keyed server")?.textContent).toContain(
+      "That token was not accepted. Check it and try again.",
+    );
+    await click(button("Reconnect", serverRow("Keyed server")!));
+    expect(openMcp).toHaveBeenCalledExactlyOnceWith("keyed");
+    expect(api.oauth).not.toHaveBeenCalled();
+  });
+
+  it("matches a built-in app only when the query is empty or the catalog query", async () => {
+    const atlassian = "https://mcp.atlassian.com/v2/mcp?tools=all";
+    const aws = "https://aws-mcp.us-east-1.api.aws/mcp?oauth=initialize";
+    api.list.mockResolvedValue({
+      catalog: [
+        remoteApp("atlassian", "Atlassian", atlassian),
+        remoteApp("aws", "AWS", aws),
+        remoteApp("boards", "Boards", "https://boards.example.test/mcp?b=1&a=2"),
+      ],
+      connections: [],
+    });
+    api.connect.mockResolvedValue({
+      connection: { ...connected, state: "connected" },
+      authorizationUrl: null,
+      sessionId: null,
+    });
+    createdServers();
+    await openResults([
+      listing("Jira tools", "https://mcp.atlassian.com/v2/mcp?tools=jira"),
+      listing("All tools", atlassian),
+      listing("AWS other", "https://aws-mcp.us-east-1.api.aws/mcp?oauth=start"),
+      listing("AWS init", aws),
+    ]);
+    await click(resultConnect("Jira tools")!);
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ endpoint: "https://mcp.atlassian.com/v2/mcp?tools=jira" }),
+    );
+    expect(api.connect).not.toHaveBeenCalled();
+    await click(resultConnect("Atlassian")!);
+    expect(api.connect).toHaveBeenCalledWith(expect.objectContaining({ catalogId: "atlassian" }));
+    await click(resultConnect("AWS other")!);
+    expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: "https://aws-mcp.us-east-1.api.aws/mcp?oauth=start",
+      }),
+    );
+    await click(resultConnect("AWS")!);
+    expect(api.connect).toHaveBeenCalledWith(expect.objectContaining({ catalogId: "aws" }));
+
+    const details = container.querySelector("details")!;
+    await fill("Server URL", "https://mcp.atlassian.com/v2/mcp");
+    expect(details.textContent).toContain("Atlassian");
+    await fill("Server URL", "https://MCP.atlassian.com/v2/mcp/?tools=all");
+    expect(details.textContent).toContain("Atlassian");
+    await fill("Server URL", "https://aws-mcp.us-east-1.api.aws/mcp");
+    expect(details.textContent).toContain("AWS");
+    await fill("Server URL", "https://boards.example.test/mcp?a=2&b=1");
+    expect(details.textContent).toContain("Boards");
+    await fill("Server URL", "https://mcp.atlassian.com/v2/mcp?tools=jira");
+    expect(details.textContent).not.toContain("Atlassian");
+    await fill("Server URL", "https://boards.example.test/mcp?a=2&b=3");
+    expect(details.textContent).not.toContain("Boards");
+    const creates = api.create.mock.calls.length;
+    await click(button("Connect", details));
+    expect(api.create.mock.calls.length).toBe(creates + 1);
+    expect(api.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ endpoint: "https://boards.example.test/mcp?a=2&b=3" }),
+    );
+  });
+
+  it("lists a custom server whose query differs from the built-in app", async () => {
+    api.list.mockResolvedValue({
+      catalog: [
+        remoteApp("atlassian", "Atlassian", "https://mcp.atlassian.com/v2/mcp?tools=all"),
+        remoteApp("aws", "AWS", "https://aws-mcp.us-east-1.api.aws/mcp?oauth=initialize"),
+      ],
+      connections: [],
+    });
+    api.servers.mockResolvedValue([
+      customServer("jira", "Jira only", "connected", "https://mcp.atlassian.com/v2/mcp?tools=jira"),
+      customServer(
+        "all",
+        "All tools custom",
+        "connected",
+        "https://mcp.atlassian.com/v2/mcp?tools=all",
+      ),
+      customServer("bare", "Bare path", "connected", "https://mcp.atlassian.com/v2/mcp"),
+      customServer(
+        "aws-other",
+        "AWS other account",
+        "connected",
+        "https://aws-mcp.us-east-1.api.aws/mcp?oauth=start",
+      ),
+    ]);
+    await mount();
+    expect(container.textContent).toContain("Jira only");
+    expect(container.textContent).toContain("AWS other account");
+    expect(container.textContent).not.toContain("All tools custom");
+    expect(container.textContent).not.toContain("Bare path");
+  });
+
+  it("reports a rejected token on a mixed or bearer listing and keeps the server", async () => {
+    const added = createdServers();
+    api.oauth.mockImplementationOnce(async (serverId: string) => {
+      const server = added.find((entry) => entry.id === serverId)!;
+      server.connectionState = "needs-sign-in";
+      server.lastError = mcpSignInDiagnostic("oauth_unavailable");
+      throw new Error("fake-provider-response");
+    });
+    api.tools.mockImplementation(async ({ serverId }: { serverId: string }) => {
+      const server = added.find((entry) => entry.id === serverId)!;
+      server.connectionState = "needs-sign-in";
+      server.lastError = mcpSignInDiagnostic("credential_rejected");
+      throw new Error("rejected");
+    });
+    await openResults([
+      listing("Either", "https://either.example.test/mcp", {
+        type: "mixed",
+        headerName: null,
+        note: null,
+      }),
+      listing("Bearer", "https://bearer.example.test/mcp", bearer),
+    ]);
+    await click(resultConnect("Either")!);
+    expect(container.textContent).not.toContain(
+      "That token was not accepted. Check it and try again.",
+    );
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(api.remove).not.toHaveBeenCalled();
+    await fill("Credential", "synthetic-token");
+    await click(resultConnect("Either")!);
+    const kept = added.find((entry) => entry.id === "created-1");
+    expect(kept).toMatchObject({
+      connectionState: "needs-sign-in",
+      lastError: mcpSignInDiagnostic("credential_rejected"),
+    });
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(api.update).toHaveBeenCalledWith({ id: "created-1", secret: "synthetic-token" });
+    const either = resultBlock("Either");
+    expect(either?.textContent).toContain("That token was not accepted. Check it and try again.");
+    expect(container.textContent).not.toContain("Could not connect or load integrations.");
+    expect(either?.querySelector<HTMLInputElement>('[aria-label="Credential"]')?.value).toBe(
+      "synthetic-token",
+    );
+
+    await click(resultConnect("Bearer")!);
+    await fill("Credential", "synthetic-bearer");
+    await click(resultConnect("Bearer")!);
+    expect(added.find((entry) => entry.id === "created-2")).toMatchObject({
+      connectionState: "needs-sign-in",
+      lastError: mcpSignInDiagnostic("credential_rejected"),
+    });
+    expect(api.remove).not.toHaveBeenCalledWith({ id: "created-2" });
+    expect(resultBlock("Bearer")?.textContent).toContain(
+      "That token was not accepted. Check it and try again.",
+    );
+  });
+
+  it("clears a load error after a poll or sign-in broadcast succeeds", async () => {
+    const polls: Array<() => void> = [];
+    const setInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation(((handler: () => void, ms?: number) => {
+      if (ms !== 5000) return setInterval(handler, ms);
+      polls.push(handler);
+      return 0;
+    }) as typeof window.setInterval);
+    api.servers.mockRejectedValueOnce(new Error("offline"));
+    await mount();
+    expect(container.textContent).toContain("Could not connect or load integrations.");
+    api.servers.mockResolvedValue([
+      customServer(
+        "recovered",
+        "Recovered server",
+        "connected",
+        "https://recovered.example.test/mcp",
+      ),
+    ]);
+    await act(async () => polls[0]!());
+    expect(container.textContent).toContain("Recovered server");
+    expect(container.textContent).not.toContain("Could not connect or load integrations.");
+
+    api.servers.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => {
+      broadcast.onmessage?.(new MessageEvent("message"));
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Could not connect or load integrations."),
+    );
+    api.servers.mockResolvedValue([
+      customServer(
+        "recovered",
+        "Recovered server",
+        "connected",
+        "https://recovered.example.test/mcp",
+      ),
+    ]);
+    await act(async () => {
+      broadcast.onmessage?.(new MessageEvent("message"));
+    });
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("Recovered server");
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+    });
+  });
 });
 
 const publicResult = {
@@ -517,11 +1673,105 @@ const publicResult = {
   ],
 };
 
+const bearer = { type: "bearer", headerName: null, note: null };
+
+function listing(name: string, source: string, auth: Record<string, unknown> | null = null) {
+  const slug = name.toLowerCase().replaceAll(" ", "-");
+  return {
+    ...publicResult,
+    domain: `${slug}.example.test`,
+    name,
+    surfaces: [{ kind: "mcp" as const, slug, source, auth }],
+  };
+}
+
+async function openResults(results: unknown[]) {
+  api.catalogSearch.mockResolvedValue({ enabled: true, results });
+  await mount();
+  await click(button("Find apps"));
+  await fill("Search apps", "app");
+  await click(button("Search integrations.sh"));
+}
+
+type ServerFixture = Record<string, unknown> & { id: string; connectionState: string };
+
+/** A server list the API mocks keep in step: discovery and sign-in record "connected". */
+function createdServers(initial: ServerFixture[] = []) {
+  const servers = [...initial];
+  let created = 0;
+  api.servers.mockImplementation(async () => servers);
+  api.create.mockImplementation(async (input: { name: string; endpoint: string }) => {
+    created += 1;
+    const server = {
+      id: `created-${created}`,
+      slug: `created-${created}`,
+      name: input.name,
+      description: "",
+      endpoint: input.endpoint,
+      transport: "streamable_http",
+      enabled: true,
+      oauthStatus: "none",
+      connectionState: "not-connected",
+      catalogId: null,
+    };
+    servers.push(server);
+    return server;
+  });
+  const record = (serverId: string) => {
+    const server = servers.find((entry) => entry.id === serverId);
+    if (server) server.connectionState = "connected";
+  };
+  api.tools.mockImplementation(async ({ serverId }: { serverId: string }) => {
+    record(serverId);
+    return { capturedAt: "", serverVersion: null, account: null, tools: [] };
+  });
+  api.oauth.mockImplementation(async (serverId: string) => {
+    record(serverId);
+    return "connected";
+  });
+  api.remove.mockImplementation(async ({ id }: { id: string }) => {
+    servers.splice(
+      servers.findIndex((entry) => entry.id === id),
+      1,
+    );
+    return { ok: true };
+  });
+  return servers;
+}
+
 function resultConnect(name: string) {
   const label = [...container.querySelectorAll("span")].find((node) => node.textContent === name);
   return [...(label?.parentElement?.querySelectorAll("button") ?? [])].find(
     (node) => node.textContent === "Connect",
   );
+}
+
+function resultBlock(name: string) {
+  const label = [...container.querySelectorAll("span")].find((node) => node.textContent === name);
+  return label?.parentElement?.parentElement ?? undefined;
+}
+
+function serverRow(name: string) {
+  return [...container.querySelectorAll("tbody tr")].find((entry) =>
+    entry.textContent?.includes(name),
+  );
+}
+
+function remoteApp(id: string, name: string, endpoint: string): IntegrationDescriptor {
+  return { ...catalog[0]!, id, name, vendor: id, endpoint };
+}
+
+function customServer(id: string, name: string, connectionState: string, endpoint?: string) {
+  return {
+    id,
+    name,
+    endpoint: endpoint ?? `https://${id}.example.test/mcp`,
+    transport: "streamable_http",
+    enabled: true,
+    oauthStatus: "none",
+    connectionState,
+    catalogId: null,
+  };
 }
 
 async function fill(label: string, value: string) {

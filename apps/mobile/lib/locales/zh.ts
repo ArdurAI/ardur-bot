@@ -137,6 +137,10 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Task contracts": "任务约定",
   "The export could not finish; try again.": "导出未能完成，请重试。",
   "This computer": "此电脑",
+  "This Mac": "这台 Mac",
+  "Docker on this Mac": "这台 Mac 上的 Docker",
+  "Docker on this computer": "此电脑上的 Docker",
+  "Default computer": "默认电脑",
   Timeline: "时间线",
   Undo: "撤销",
   Undone: "已撤销",
@@ -930,8 +934,10 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Looks like it contains a credential. Remove it from the file, then re-scan.":
     "其中似乎包含凭据。请从文件中删除后重新扫描。",
   "Could not be saved.": "无法保存。",
-  "Some items exceeded the scan limits ({count} items were not scanned).":
-    "部分项目超出了扫描限制（{count} 项未扫描）。",
+  "{count} items were not scanned because of the scan limits.":
+    "由于扫描限制，有 {count} 个项目未被扫描。",
+  "Import is not available right now. Try again in a moment.": "导入现在不可用，请稍后再试。",
+  "Choose a folder inside your home folder.": "选择主文件夹内的一个文件夹。",
   "Retry {path}": "重试 {path}",
   "Found on this Mac": "在这台 Mac 上发现的内容",
   "Found on this computer": "在此电脑上发现的内容",
@@ -1012,7 +1018,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "No registered folders": "暂无已注册文件夹",
   "Binary file": "二进制文件",
   Label: "标签",
-  Labels: "标签",
   Assignee: "负责人",
   Deferred: "已推迟",
   "In progress": "进行中",
@@ -1020,6 +1025,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   Comment: "评论",
   "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.":
     "已导入 {created} 项，已更新 {updated} 项，未更改 {unchanged} 项，已移除 {removed} 项，已跳过 {skipped} 项，冲突 {conflicts} 项。",
+  "Some items exceeded the scan limits ({count} items were not scanned).":
+    "部分项目超出了扫描限制（{count} 项未扫描）。",
+  Labels: "标签",
   "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
     "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{other} 项已关闭但未完成。",
   "This board item is still open.": "此看板事项仍处于开放状态。",

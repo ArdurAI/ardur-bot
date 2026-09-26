@@ -6,5 +6,13 @@ const McpServersOverlay = lazy(() =>
 );
 
 export default function McpSection(props: SettingsPageProps) {
-  return <McpServersOverlay embedded onClose={props.onClose} onBusyChange={props.onBusyChange} />;
+  return (
+    <McpServersOverlay
+      embedded
+      onClose={props.onClose}
+      onBusyChange={props.onBusyChange}
+      focusServerId={props.initialIntegration}
+      focusRequest={props.mcpFocusRequest}
+    />
+  );
 }

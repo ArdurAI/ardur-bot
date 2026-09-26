@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { BuiCard, SuccessPop } from "../../components/ai/primitives";
 import { type ArtifactTarget, decodeArtifactBase64 } from "../../lib/artifact-open";
 import { chartViewport } from "../../lib/chart-viewport";
-import { connectMcpOauth } from "../../lib/mcp-connect";
+import { mcpOutcomeSentence, mcpSignIn } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
 
 export function ChoiceCard({
@@ -323,7 +323,7 @@ function ChartCanvas({
   );
 }
 
-type McpApprovalState = "pending" | "connecting" | "connected" | "dismissed";
+type McpApprovalState = "pending" | "connecting" | "waiting" | "connected" | "dismissed";
 
 /** Approval card for an agent-created MCP server: the user completes browser
  * OAuth (or confirms no authorization is needed) without leaving the chat. */
@@ -345,26 +345,57 @@ export function McpApprovalCard({
   const { t } = useLingui();
   const [state, setState] = useState<McpApprovalState>("pending");
   const [error, setError] = useState<string | null>(null);
+  const waitCancel = useRef<(() => Promise<void>) | null>(null);
+  const userCancelled = useRef(false);
+  const attempt = useRef(0);
+
+  const recordedError = () =>
+    rpc.mcp.servers
+      .list()
+      .then((servers) => servers.find((server) => server.id === serverId)?.lastError)
+      .catch(() => null);
 
   async function authorize() {
     if (!botId) {
       setError(t`This server cannot be assigned without a bot.`);
       return;
     }
+    const mine = ++attempt.current;
     setState("connecting");
     setError(null);
+    userCancelled.current = false;
     try {
       if (needsOAuth) {
-        const result = await connectMcpOauth(serverId);
-        if (result === "cancelled") {
+        const { connectMcpOauth } = await import("../../lib/mcp-connect");
+        const result = await connectMcpOauth(serverId, {
+          onWaiting: (waiting) => {
+            if (mine !== attempt.current) return;
+            waitCancel.current = waiting.cancel;
+            setState("waiting");
+          },
+        });
+        if (mine !== attempt.current) return;
+        // A server that needs no browser sign-in, or is already connected, is approved.
+        if (
+          result !== "connected" &&
+          result !== "already_connected" &&
+          result !== "authorization_not_requested"
+        ) {
+          const recorded = result === "sign-in-failed" ? await recordedError() : null;
+          setError(mcpOutcomeSentence(result, userCancelled.current, recorded));
           setState("pending");
           return;
         }
       }
       await rpc.mcp.assignments.approve({ botId, serverId });
+      if (mine !== attempt.current) return;
       setState("connected");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Could not approve this server`);
+      if (mine !== attempt.current) return;
+      setError(
+        mcpSignIn(await recordedError())?.sentence ??
+          (err instanceof Error ? err.message : t`Could not approve this server`),
+      );
       setState("pending");
     }
   }
@@ -381,12 +412,14 @@ export function McpApprovalCard({
         </span>
       </div>
       <p className="mt-1.5 truncate text-[12px] text-muted-foreground">{summary}</p>
-      {state === "pending" || state === "connecting" ? (
+      {state === "pending" || state === "connecting" || state === "waiting" ? (
         <>
           <p className="mt-2 text-[13px] leading-[1.5] text-foreground/75">
-            {needsOAuth
-              ? t`Authorize this server so agents can use its tools. A popup opens.`
-              : t`Approve this server to let your agent use its tools.`}
+            {state === "waiting"
+              ? t`Waiting for sign-in in the other window.`
+              : needsOAuth
+                ? t`Authorize this server so agents can use its tools. A popup opens.`
+                : t`Approve this server to let your agent use its tools.`}
           </p>
           {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
           <div className="mt-3 flex gap-2">
@@ -397,13 +430,27 @@ export function McpApprovalCard({
             >
               {state === "connecting" ? t`Connecting…` : needsOAuth ? t`Authorize` : t`Approve`}
             </Button>
-            <Button
-              variant="secondary"
-              className="rounded-full"
-              onClick={() => setState("dismissed")}
-            >
-              <Trans>Not now</Trans>
-            </Button>
+            {state === "waiting" ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-full"
+                onClick={() => {
+                  userCancelled.current = true;
+                  void waitCancel.current?.();
+                }}
+              >
+                {t`Cancel sign-in`}
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                className="rounded-full"
+                onClick={() => setState("dismissed")}
+              >
+                <Trans>Not now</Trans>
+              </Button>
+            )}
           </div>
         </>
       ) : null}
