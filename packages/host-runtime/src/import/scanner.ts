@@ -83,6 +83,13 @@ type Candidate = {
   metadata?: { size: number; mtime: Date };
 };
 
+/** The scan a request names is gone or was replaced; only a fresh scan can continue. */
+export class LocalImportRescanError extends Error {
+  constructor(message = "Re-scan this computer before previewing or importing.") {
+    super(message);
+    this.name = "LocalImportRescanError";
+  }
+}
 /** Only this host-owned object retains sanitized bodies. The manifest contains metadata only. */
 export class LocalImportScanner {
   private home = "";
@@ -91,7 +98,13 @@ export class LocalImportScanner {
   private bytes = 0;
   private visited = 0;
   private limited = false;
+  /** Files a limit left out; undefined once a limit stops before it can count them. */
+  private unscanned: number | undefined = 0;
   private scanning = false;
+  private limit(counted = false) {
+    this.limited = true;
+    this.unscanned = counted && this.unscanned !== undefined ? this.unscanned + 1 : undefined;
+  }
   constructor(private readonly options: Options) {}
 
   private contained(value: string) {
@@ -149,7 +162,7 @@ export class LocalImportScanner {
   }
   private async entries(dir: string) {
     if (++this.visited > MAX_DIRECTORIES) {
-      this.limited = true;
+      this.limit();
       return [];
     }
     try {
@@ -158,7 +171,7 @@ export class LocalImportScanner {
       const directory = await opendir(resolved);
       for await (const entry of directory) {
         if (entries.length >= LOCAL_IMPORT_ITEMS) {
-          this.limited = true;
+          this.limit();
           break;
         }
         entries.push(entry.name);
@@ -181,7 +194,7 @@ export class LocalImportScanner {
   }
   private async add(candidate: Candidate) {
     if (this.items.size >= LOCAL_IMPORT_ITEMS || this.bytes >= MAX_RETAINED_BYTES) {
-      this.limited = true;
+      this.limit(true);
       return;
     }
     try {
@@ -201,7 +214,7 @@ export class LocalImportScanner {
           : safeText(raw);
       const size = Buffer.byteLength(content);
       if (size > LOCAL_IMPORT_BYTES || this.bytes + size > MAX_RETAINED_BYTES) {
-        this.limited = true;
+        this.limit(true);
         candidate.reason = "This item exceeds the import size limit.";
       }
       const relative = path.relative(this.home, candidate.file).split(path.sep).join("/");
@@ -259,7 +272,7 @@ export class LocalImportScanner {
     folder?: string,
   ) {
     if (depth > 4) {
-      this.limited = true;
+      this.limit();
       return;
     }
     for (const name of await this.entries(dir)) {
@@ -277,7 +290,7 @@ export class LocalImportScanner {
   }
   private async skills(tool: LocalImportTool, root: string, depth = 0) {
     if (depth > 4) {
-      this.limited = true;
+      this.limit();
       return;
     }
     for (const name of await this.entries(root)) {
@@ -495,7 +508,7 @@ export class LocalImportScanner {
               `SELECT rowid AS import_row, ${fields.map((field) => `substr("${field}",1,${LOCAL_IMPORT_BYTES + 1}) AS "${field}"`).join(",")} FROM "${table}" ORDER BY rowid LIMIT 1025`,
             )
             .all();
-          if (rows.length > 1024) this.limited = true;
+          if (rows.length > 1024) this.limit();
           for (const memory of rows.slice(0, 1024)) {
             const content = fields
               .flatMap((field) =>
@@ -551,6 +564,7 @@ export class LocalImportScanner {
     this.bytes = 0;
     this.visited = 0;
     this.limited = false;
+    this.unscanned = 0;
     try {
       this.home = await realpath(this.options.home);
       const platform = this.options.platform ?? (process.platform as Options["platform"]);
@@ -690,6 +704,7 @@ export class LocalImportScanner {
         sources,
         items,
         limited: this.limited,
+        ...(this.limited && this.unscanned ? { unscanned: this.unscanned } : {}),
       });
       return structuredClone(this.manifest);
     } finally {
@@ -698,7 +713,7 @@ export class LocalImportScanner {
   }
   read(scanId: string, itemId: string): LocalImportRead {
     if (this.scanning || !this.manifest || this.manifest.scanId !== scanId)
-      throw new Error("Re-scan this computer before previewing or importing.");
+      throw new LocalImportRescanError();
     const value = this.items.get(itemId);
     if (!value?.item.importable) throw new Error("This item is not available for import.");
     return LocalImportReadSchema.parse(structuredClone(value));

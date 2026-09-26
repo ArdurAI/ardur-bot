@@ -82,9 +82,10 @@ msgstr "Обработка {0}"
 #. placeholder {3}: result.removed
 #. placeholder {4}: result.skipped
 #. placeholder {5}: result.conflicts
+#. placeholder {6}: result.failed
 #: src/pages/import/LocalImportPage.tsx
-msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts."
-msgstr ""
+msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
+msgstr "Импортировано: {0}, обновлено: {1}, без изменений: {2}, удалено: {3}, пропущено: {4}, конфликтов: {5}, с ошибкой: {6}."
 
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
@@ -1966,6 +1967,10 @@ msgstr ""
 msgid "Could not authorize this app"
 msgstr "Не удалось авторизовать это приложение"
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Could not be saved."
+msgstr "Не удалось сохранить."
+
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Could not change memory generation. Try again."
 msgstr ""
@@ -3389,6 +3394,10 @@ msgstr "Ошибка"
 msgid "Failed — {0}"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Failed items"
+msgstr "Элементы с ошибкой"
+
 #: src/pages/Shell.tsx
 msgid "Failed to send message"
 msgstr "Не удалось отправить сообщение"
@@ -3744,7 +3753,7 @@ msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Import could not finish. Check this computer is connected, then re-scan."
-msgstr ""
+msgstr "Не удалось завершить импорт. Убедитесь, что этот компьютер подключён, затем повторите сканирование."
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Import from {name}"
@@ -3765,6 +3774,10 @@ msgstr "Импортировать OpenAPI JSON"
 #: src/pages/memory/MemoryImport.tsx
 msgid "Import prompt"
 msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import stopped because of an unexpected error. Re-scan, then try again."
+msgstr "Импорт остановлен из-за непредвиденной ошибки. Повторите сканирование и попробуйте снова."
 
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[selected.imported.tool]
@@ -4279,6 +4292,10 @@ msgstr "Выйти"
 #: src/pages/account/AccountSettings.tsx
 msgid "Log out of all devices"
 msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Looks like it contains a credential. Remove it from the file, then re-scan."
+msgstr "Похоже, здесь есть учётные данные. Удалите их из файла и повторите сканирование."
 
 #: src/lib/thinking-level-options.ts
 msgid "low — quick, with a little checking"
@@ -6133,6 +6150,7 @@ msgstr ""
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/GitMemorySettings.tsx
+#: src/pages/import/LocalImportPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
@@ -6143,7 +6161,12 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Retry"
-msgstr ""
+msgstr "Повторить"
+
+#. placeholder {0}: failure.relativePath
+#: src/pages/import/LocalImportPage.tsx
+msgid "Retry {0}"
+msgstr "Повторить: {0}"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -6838,9 +6861,14 @@ msgstr "Обновление программного обеспечения"
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Некоторые записи имеют неподдерживаемые имена и скрыты ({hiddenCount})."
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "Some items exceeded the scan limits ({0} items were not scanned)."
+msgstr "Некоторые элементы превысили ограничения сканирования (не просканировано элементов: {0})."
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Some items exceeded the scan limits."
-msgstr ""
+msgstr "Некоторые элементы превысили ограничения сканирования."
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
@@ -7316,6 +7344,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Эта ссылка для сброса недействительна или срок ее действия истек."
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "This scan is out of date. Re-scan, then try again."
+msgstr "Результаты сканирования устарели. Повторите сканирование и попробуйте снова."
 
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."

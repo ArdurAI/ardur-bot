@@ -54,8 +54,9 @@ const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const BEARER = /\bBearer\s+[^\s"',;&]+/gi;
 const SECRET_ASSIGNMENT =
   /\b([A-Za-z0-9_]*(?:password|secret|token|authorization|apikey|api_key)[A-Za-z0-9_]*)\s*[:=]\s*\S+/gi;
+// Empty, redacted, elided and template values ("", "...", "<token>", "${TOKEN}") are placeholders.
 const JSON_SECRET_FIELD =
-  /"(password|passwd|secret|token|authorization|apikey|api_key|accesstoken|refreshtoken|email|cookie)"\s*:\s*"(?:\\.|[^"\\])*"/gi;
+  /"(password|passwd|secret|token|authorization|apikey|api_key|accesstoken|refreshtoken|email|cookie)"\s*:\s*"(?!(?:|\[Redacted\]|[.*…]+|<[^"<>]+>|\$\{[^"{}]+\}|\{\{[^"{}]+\}\})")(?:\\.|[^"\\])*"/gi;
 const BARE_SECRET =
   /\b(?:sk-(?:or-v1-)?[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|(?:ak_|ck_)[A-Za-z0-9]+)\b/g;
 
