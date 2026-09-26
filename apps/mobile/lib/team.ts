@@ -1,15 +1,29 @@
-import type { TeamBoard, TeamRow } from "@ardurbot/contracts";
+import type { HostLabel, TeamBoard, TeamRow } from "@ardurbot/contracts";
 import { TeamBoardSchema } from "@ardurbot/contracts";
 import { sortTeamRows, teamRowText } from "@ardurbot/core";
 import { rpc } from "./api";
 export async function loadTeamRows() {
-  return sortTeamRows(TeamBoardSchema.parse(await rpc<TeamBoard>("team/board", {})).rows);
+  const board = TeamBoardSchema.parse(await rpc<TeamBoard>("team/board", {}));
+  return { rows: sortTeamRows(board.rows), hostLabel: board.hostLabel };
 }
-export function mobileTeamRow(row: TeamRow, translate: (text: string) => string) {
+/** A computer without a saved connection is named here, in the reader's language. */
+export function mobileTeamRow(
+  row: TeamRow,
+  translate: (text: string) => string,
+  hostLabel?: HostLabel,
+) {
+  const mac = hostLabel === "This Mac";
+  const computerName =
+    row.computerBuiltin === "host"
+      ? translate(mac ? "This Mac" : "This computer")
+      : row.computerBuiltin === "local-docker"
+        ? translate(mac ? "Docker on this Mac" : "Docker on this computer")
+        : row.computerName;
   return {
     id: row.botId,
     name: row.botName,
     text: teamRowText(row, translate),
+    computerName,
     stop: row.canStop,
     accept: row.canAccept,
   };

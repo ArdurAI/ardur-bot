@@ -1,4 +1,4 @@
-import type { TeamRow } from "@ardurbot/contracts";
+import type { HostLabel, TeamRow } from "@ardurbot/contracts";
 import { runtimeEffortLabel, TEAM_REFRESH_MS } from "@ardurbot/core";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -12,6 +12,7 @@ export default function TeamScreen() {
   const tokens = useMobileTokens();
   const router = useRouter();
   const [rows, setRows] = useState<TeamRow[]>([]);
+  const [hostLabel, setHostLabel] = useState<HostLabel>();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -26,7 +27,8 @@ export default function TeamScreen() {
         try {
           const next = await loadTeamRows();
           if (active) {
-            setRows(next);
+            setRows(next.rows);
+            setHostLabel(next.hostLabel);
             setLoaded(true);
             setError(false);
           }
@@ -49,7 +51,9 @@ export default function TeamScreen() {
     setBusy(row.botId);
     try {
       await (action === "stop" ? stopTeamTask(row) : acceptTeamTask(row));
-      setRows(await loadTeamRows());
+      const next = await loadTeamRows();
+      setRows(next.rows);
+      setHostLabel(next.hostLabel);
     } catch {
       Alert.alert(t("Could not update this task; try again."));
     } finally {
@@ -73,14 +77,14 @@ export default function TeamScreen() {
         data={rows}
         keyExtractor={(row) => row.botId}
         renderItem={({ item: row }) => {
-          const item = mobileTeamRow(row, t);
+          const item = mobileTeamRow(row, t, hostLabel);
           return (
             <View
               style={[styles.row, { borderColor: tokens.border, backgroundColor: tokens.card }]}
             >
               <Text style={[styles.name, { color: tokens.foreground }]}>{item.name}</Text>
-              {row.computerName ? (
-                <Text style={{ color: tokens.mutedForeground }}>{row.computerName}</Text>
+              {item.computerName ? (
+                <Text style={{ color: tokens.mutedForeground }}>{item.computerName}</Text>
               ) : null}
               <Text numberOfLines={2} style={{ color: tokens.foreground }}>
                 {item.text}

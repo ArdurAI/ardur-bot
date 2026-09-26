@@ -68,6 +68,50 @@ it("returns the host refusal sentence through the RPC handler Settings calls", a
   expect(body.json?.message).not.toBe("Internal server error");
 });
 
+it("rejects a configure request that changes neither the profile nor the connection", async () => {
+  const prisma = {
+    bot: {
+      findFirst: async () => ({
+        id: "bot",
+        spaceId: "space",
+        userId: "owner",
+        archivedAt: null,
+        thread: { id: "thread" },
+        computer: { id: "computer", kind: "docker", connectionId: null },
+      }),
+    },
+  } as unknown as PrismaClient;
+  const handler = new RPCHandler(
+    createRouter({
+      prisma,
+      env: {
+        sandboxProvider: "docker",
+        defaultProvider: "fake",
+        defaultModel: "fake-model",
+        webOrigin: "http://127.0.0.1:5173",
+        screenProxySecret: "fake-test-secret",
+        agentRuntime: "scripted",
+      },
+      dataDir: "/tmp/ardurbot-router-test",
+    } as unknown as RouterDeps),
+    {
+      clientInterceptors: [onError((error, { path }) => logUnexpectedRpcError(error, path))],
+    },
+  );
+  const { response } = await handler.handle(
+    new Request("http://127.0.0.1/rpc/computer/configure", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ json: { botId: "bot", confirmed: true } }),
+    }),
+    { prefix: "/rpc", context: { actor } },
+  );
+  expect(response?.status).toBe(400);
+  const body = (await response?.json()) as { json?: { code?: string; message?: string } };
+  expect(body.json?.code).toBe("BAD_REQUEST");
+  expect(body.json?.message).not.toBe("Internal server error");
+});
+
 it("returns the paired desktop's host label with the computer list", async () => {
   const computer = {
     id: "computer",

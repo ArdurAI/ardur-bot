@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 import { DelegationRecordSchema, DelegationSnapshotSchema } from "./delegation.js";
+import { HostLabelSchema } from "./fleet.js";
 import { RuntimeInfoSchema } from "./runtime-pins.js";
 export const TeamStateSchema = z.enum([
   "idle",
@@ -15,6 +16,8 @@ export const TeamRowSchema = z.object({
   botId: z.string(),
   botName: z.string(),
   computerName: z.string().nullable().optional(),
+  /** A built-in computer, named by clients in their own language instead of computerName. */
+  computerBuiltin: z.enum(["host", "local-docker"]).nullable().optional(),
   threadId: z.string().nullable(),
   groupId: z.string().nullable().optional(),
   cursor: z.number().int(),
@@ -44,6 +47,9 @@ export const TeamRowSchema = z.object({
   }),
 });
 export type TeamRow = z.infer<typeof TeamRowSchema>;
-export const TeamBoardSchema = z.object({ rows: z.array(TeamRowSchema) });
+export const TeamBoardSchema = z.object({
+  rows: z.array(TeamRowSchema),
+  hostLabel: HostLabelSchema,
+});
 export type TeamBoard = z.infer<typeof TeamBoardSchema>;
 export const teamContract = { board: oc.input(z.object({})).output(TeamBoardSchema) };

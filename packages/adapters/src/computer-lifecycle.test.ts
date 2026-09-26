@@ -9,6 +9,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { clearThread, type PrismaClient, type ThreadEvents } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import { expireComputerControl, extendActiveComputerControl } from "./computer-control.js";
 import {
   acquireComputerExecutionLease,
@@ -24,6 +25,7 @@ import {
 import { checkpointComputerWorkspace } from "./computer-workspace.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
 import { LocalAgentHomeStore } from "./home.js";
+import { createRunSandbox, HostAwareSandbox } from "./host-aware-sandbox.js";
 
 const context = {
   operationId: "test",
@@ -2724,6 +2726,78 @@ describe("computer replacement", () => {
     expect(prisma.computer.updateMany).not.toHaveBeenCalled();
   });
 
+  it("releases an expired control lease and resets a host computer once This Mac is off", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-host-release-reset-"));
+    try {
+      const row: Record<string, unknown> = {
+        id: "computer-1",
+        homeKey: "bot-1",
+        providerRef: "provider-1",
+        kind: "desktop",
+        connectionId: null,
+        networkEgress: true,
+        imageProfile: "base",
+        scope: "dedicated",
+        state: "running",
+        maintenanceId: null,
+        controlHolder: "user",
+        controlLeaseId: "lease-1",
+        controlLeaseExpiresAt: new Date(Date.now() - 60_000),
+        controlBotId: "bot-1",
+        controlRunId: null,
+        spaceId: "workspace-1",
+        userId: "user-1",
+        updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+        homeRevision: null,
+      };
+      const updateMany = vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        Object.assign(row, data);
+        return { count: 1 };
+      });
+      const prisma = {
+        computer: {
+          findUniqueOrThrow: vi.fn(async () => ({ ...row })),
+          findUnique: vi.fn(async () => ({ ...row })),
+          updateMany,
+        },
+        run: { findFirst: vi.fn(async () => null) },
+        deploymentSettings: { findUnique: vi.fn(async () => ({ computerHost: null })) },
+        thread: { findFirst: vi.fn(async () => null) },
+        $transaction: async (work: (tx: unknown) => unknown) => work(prisma),
+      } as unknown as PrismaClient;
+
+      const isolated = new FakeSandboxProvider();
+      const host = Object.assign(new FakeSandboxProvider(), {
+        setScreenControl: vi.fn(async () => undefined),
+      });
+      const sandbox = new HostAwareSandbox(isolated, host, async () => false);
+
+      await replaceComputer(
+        {
+          prisma,
+          sandbox,
+          home: new LocalAgentHomeStore(dataDir),
+          jobs: { enqueue: vi.fn().mockResolvedValue(undefined) } as unknown as JobPublisher,
+          events: {
+            notify: vi.fn().mockResolvedValue(undefined),
+            finalizeComputerControlRelease: vi.fn().mockResolvedValue({ runId: null }),
+          } as unknown as ThreadEvents,
+        },
+        "computer-1",
+        "reset",
+        context,
+      );
+
+      expect(host.setScreenControl).not.toHaveBeenCalled();
+      expect(row.controlLeaseId).toBeNull();
+      expect(row.controlHolder).toBe("none");
+      expect(row.state).toBe("running");
+      expect(row.kind).toBe("fake");
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects replacement when control is claimed before the suspending lock", async () => {
     const prisma = {
       computer: {
@@ -3091,6 +3165,57 @@ describe("computer replacement", () => {
       await rm(dataDir, { recursive: true, force: true });
       await rm(homeRoot, { recursive: true, force: true });
     }
+  });
+
+  it("refuses a network-only change on a lost-engine computer instead of moving it", async () => {
+    const row = {
+      id: "computer-1",
+      homeKey: "bot-1",
+      providerRef: "e2b-ref",
+      kind: "e2b",
+      connectionId: null,
+      networkEgress: true,
+      imageProfile: "base",
+      scope: "dedicated",
+      state: "running",
+      maintenanceId: null,
+      controlHolder: "none",
+      controlLeaseId: null,
+      controlLeaseExpiresAt: null,
+      controlBotId: null,
+      controlRunId: null,
+      spaceId: "workspace-1",
+      userId: "user-1",
+      updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+      homeRevision: "1",
+    };
+    const prisma = {
+      computer: {
+        findUniqueOrThrow: vi.fn(async () => ({ ...row })),
+        updateMany: vi.fn(),
+      },
+      run: { findFirst: vi.fn(async () => null) },
+    } as unknown as PrismaClient;
+    const sandbox = createRunSandbox("docker", { prisma, secrets: { load: () => "" } });
+
+    await expect(
+      replaceComputer(
+        {
+          prisma,
+          sandbox,
+          home: {} as AgentHomeStore,
+          jobs: {} as JobPublisher,
+          events: {} as ThreadEvents,
+        },
+        "computer-1",
+        "update",
+        context,
+        "none",
+        undefined,
+        { networkEgress: false },
+      ),
+    ).rejects.toBeInstanceOf(MissingComputerProviderError);
+    expect(prisma.computer.updateMany).not.toHaveBeenCalled();
   });
 });
 

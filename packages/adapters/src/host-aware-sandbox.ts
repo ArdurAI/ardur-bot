@@ -11,12 +11,14 @@ import type {
   SandboxProvider,
   ScreenRequest,
 } from "@ardurbot/adapter-kit";
-import { unknownCapacity } from "@ardurbot/contracts/fleet";
+import type { HostLabel } from "@ardurbot/contracts";
+import { hostLabel, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "./computer-connections.js";
 import {
   ComputerConnections,
   ConnectedSandboxProvider,
+  deploymentHostLabel,
   MissingComputerProviderError,
 } from "./computer-connections.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
@@ -28,10 +30,7 @@ import {
 import type { SandboxProviderOptions } from "./sandbox-factory.js";
 import { createSandboxProvider } from "./sandbox-factory.js";
 
-export function sandboxKindForBot(envKind: string, computerHost: string | null | undefined) {
-  if (envKind === "docker" && computerHost === "this-mac") return "desktop";
-  return envKind;
-}
+export { sandboxKindForBot } from "@ardurbot/contracts/fleet";
 
 function once<T>(create: () => T): () => T {
   let value: T | undefined;
@@ -66,15 +65,21 @@ export function createRunSandbox(
           selected,
           new ComputerConnections(opts.prisma, opts.secrets, opts),
           local,
+          () => deploymentHostLabel(opts.prisma!),
         )
       : selected;
   if (kind !== "docker" || !opts.prisma) return primary;
-  return new HostAwareSandbox(primary, host(), async () => {
-    const settings = await opts.prisma!.deploymentSettings.findUnique({
-      where: { id: "default" },
-    });
-    return settings?.computerHost === "this-mac";
-  });
+  return new HostAwareSandbox(
+    primary,
+    host(),
+    async () => {
+      const settings = await opts.prisma!.deploymentSettings.findUnique({
+        where: { id: "default" },
+      });
+      return settings?.computerHost === "this-mac";
+    },
+    () => deploymentHostLabel(opts.prisma!),
+  );
 }
 
 export type ComputerRouter = HostAwareSandbox | ConnectedSandboxProvider;
@@ -103,6 +108,7 @@ export class HostAwareSandbox implements SandboxProvider {
     private readonly isolated: SandboxProvider,
     private readonly host: SandboxProvider,
     private readonly hostEnabled: () => Promise<boolean>,
+    private readonly hostName: () => Promise<HostLabel> = async () => hostLabel(process.platform),
   ) {
     if (isolated.pageBrowser || host.pageBrowser) {
       this.pageBrowser = async (computer, request, context) => {
@@ -138,7 +144,7 @@ export class HostAwareSandbox implements SandboxProvider {
     if (hostSelected !== undefined) return hostSelected ? this.host : this.isolated;
     if (subject.kind !== "desktop") return this.isolated;
     if (await this.hostEnabled()) return this.host;
-    throw new MissingComputerProviderError("desktop");
+    throw new MissingComputerProviderError("desktop", { hostLabel: await this.hostName() });
   }
 
   async owner(computer: ComputerIdentity, context: AdapterContext): Promise<SandboxProvider> {

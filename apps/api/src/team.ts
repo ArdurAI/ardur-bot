@@ -42,15 +42,24 @@ export function teamState(input: {
 }
 
 /** A computer without a saved connection is named by the engine of its kind. */
-function engineName(kind: string, host: HostLabel) {
-  if (kind === "desktop") return host;
+function engineName(
+  kind: string,
+  host: HostLabel,
+): { name: string | null; builtin?: "host" | "local-docker" } {
+  if (kind === "desktop") return { name: host, builtin: "host" };
   if (kind === "docker")
-    return host === "This Mac" ? "Docker on this Mac" : "Docker on this computer";
-  return ENGINE_LABELS[kind] ?? null;
+    return {
+      name: host === "This Mac" ? "Docker on this Mac" : "Docker on this computer",
+      builtin: "local-docker",
+    };
+  return { name: ENGINE_LABELS[kind] ?? null };
 }
 
 /** No messages, prompt text or current model settings participate in this projection. */
-export async function teamBoard(prisma: PrismaClient, actor: Actor): Promise<{ rows: TeamRow[] }> {
+export async function teamBoard(
+  prisma: PrismaClient,
+  actor: Actor,
+): Promise<{ rows: TeamRow[]; hostLabel: HostLabel }> {
   await requireMember(prisma, actor);
   const scope = { spaceId: actor.spaceId, userId: actor.userId };
   const [bots, activeRuns, latestRuns, openCards, latestCards] = await Promise.all([
@@ -171,15 +180,16 @@ export async function teamBoard(prisma: PrismaClient, actor: Actor): Promise<{ r
       selected ? item.delegationId === selected.id : item.runId === run?.id,
     );
     const coordinatorName = bots.find((bot) => bot.id === root?.coordinatorBotId)?.name;
+    const engine =
+      bot.computer && !bot.computer.connectionId ? engineName(bot.computer.kind, host) : null;
     return {
       botId: bot.id,
       botName: bot.name,
       computerName: bot.computer?.connectionId
         ? (computers.find((connection) => connection.id === bot.computer?.connectionId)
             ?.displayName ?? null)
-        : bot.computer
-          ? engineName(bot.computer.kind, host)
-          : null,
+        : (engine?.name ?? null),
+      computerBuiltin: engine?.builtin ?? null,
       threadId: bot.thread?.id ?? null,
       groupId: run?.thread?.groupId ?? null,
       cursor: (bot.thread?.nextEventSeq ?? 0) - 1,
@@ -253,7 +263,7 @@ export async function teamBoard(prisma: PrismaClient, actor: Actor): Promise<{ r
       },
     };
   });
-  return { rows };
+  return { rows, hostLabel: host };
 }
 export async function acceptTeamTask(prisma: PrismaClient, actor: Actor, id: string) {
   await requireMember(prisma, actor);

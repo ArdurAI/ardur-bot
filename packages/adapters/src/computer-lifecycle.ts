@@ -8,7 +8,7 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { ComputerUpdate } from "@ardurbot/contracts";
-import { HOST_MOVE_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
+import { HostMoveUnavailableError } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, parseScreenLeaseId, screenLeaseId } from "@ardurbot/core";
 import {
   appendEventInTransaction,
@@ -691,10 +691,10 @@ async function deploymentEngine(
       where: { id: "default" },
     });
     if (sandboxKindForBot(engine, deployment?.computerHost) === "desktop")
-      throw new Error(HOST_MOVE_UNAVAILABLE_MESSAGE);
+      throw new HostMoveUnavailableError();
   }
   const provider = await owningSandbox(deps.sandbox, { kind: engine }, context);
-  if (provider.describe().kind === "desktop") throw new Error(HOST_MOVE_UNAVAILABLE_MESSAGE);
+  if (provider.describe().kind === "desktop") throw new HostMoveUnavailableError();
   return provider;
 }
 
@@ -845,20 +845,28 @@ export async function replaceComputer(
     if (activeBootRun) throw new ComputerBusyError();
   }
 
-  // A computer whose engine is not configured here has no reachable machine: its last saved
-  // workspace is restored without calling that engine.
-  const source = await owningSandbox(deps.sandbox, existing, context).catch((error: unknown) => {
-    if (error instanceof MissingComputerProviderError) return null;
-    throw error;
-  });
+  // A computer whose engine is not configured here has no reachable machine: Reset and Recover
+  // restore its last saved workspace without calling that engine. Update and a network-only
+  // change are never an explicit Move, so they fail with the same sentence instead.
+  let source: SandboxProvider | null;
+  let engineMissing: MissingComputerProviderError | undefined;
+  try {
+    source = await owningSandbox(deps.sandbox, existing, context);
+  } catch (error) {
+    if (!(error instanceof MissingComputerProviderError)) throw error;
+    source = null;
+    engineMissing = error;
+  }
   const chosenDefault = configuration?.connectionId === null;
   const connectionId = chosenDefault
     ? null
     : (configuration?.connectionId ?? existing.connectionId);
+  const lostEngine = connectionId === null && !source;
+  if (lostEngine && !chosenDefault && mode === "update") throw engineMissing;
   // Choosing the deployment default, or losing the engine, starts on the deployment's own engine.
   const destination =
     target ??
-    (chosenDefault || (connectionId === null && !source)
+    (chosenDefault || lostEngine
       ? await deploymentEngine(deps, chosenDefault, context)
       : undefined);
   const moving =

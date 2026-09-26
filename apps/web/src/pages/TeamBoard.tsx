@@ -1,4 +1,4 @@
-import type { TeamRow } from "@ardurbot/contracts";
+import type { HostLabel, TeamRow } from "@ardurbot/contracts";
 import { runtimeEffortLabel, sortTeamRows, TEAM_REFRESH_MS } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -13,6 +13,7 @@ import { useThreadRefresh } from "./dashboard/use-thread-refresh";
 
 export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
   const [rows, setRows] = useState<TeamRow[]>([]);
+  const [hostLabel, setHostLabel] = useState<HostLabel>();
   const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const alive = useRef(true);
@@ -24,6 +25,7 @@ export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
       const result = await rpc.team.board({});
       if (alive.current) {
         setRows(sortTeamRows(result.rows));
+        setHostLabel(result.hostLabel);
         setLoaded(true);
         setError(false);
       }
@@ -87,17 +89,36 @@ export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
       <ComparisonList />
       <div ref={list} className="space-y-2">
         {rows.map((row) => (
-          <TeamBoardRow key={row.botId} row={row} refresh={refresh} />
+          <TeamBoardRow key={row.botId} row={row} hostLabel={hostLabel} refresh={refresh} />
         ))}
       </div>
     </section>
   );
 }
-export function TeamBoardRow({ row, refresh }: { row: TeamRow; refresh: () => Promise<void> }) {
+export function TeamBoardRow({
+  row,
+  hostLabel,
+  refresh,
+}: {
+  row: TeamRow;
+  hostLabel?: HostLabel;
+  refresh: () => Promise<void>;
+}) {
   const { t } = useLingui();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const card = row.delegations.find((item) => item.id === row.delegationId)?.card;
+  const mac = hostLabel === "This Mac";
+  const computerName =
+    row.computerBuiltin === "host"
+      ? mac
+        ? t`This Mac`
+        : t`This computer`
+      : row.computerBuiltin === "local-docker"
+        ? mac
+          ? t`Docker on this Mac`
+          : t`Docker on this computer`
+        : row.computerName;
   const act = async (action: "stop" | "accept") => {
     setBusy(true);
     setError(false);
@@ -121,8 +142,8 @@ export function TeamBoardRow({ row, refresh }: { row: TeamRow; refresh: () => Pr
       <details>
         <summary className="flex h-20 cursor-pointer items-center gap-3 px-4">
           <span className="w-28 shrink-0 truncate font-medium">{row.botName}</span>
-          {row.computerName ? (
-            <span className="truncate text-xs text-muted-foreground">{row.computerName}</span>
+          {computerName ? (
+            <span className="truncate text-xs text-muted-foreground">{computerName}</span>
           ) : null}
           <span className="min-w-0 flex-1 truncate text-sm">
             <TeamStatus row={row} />

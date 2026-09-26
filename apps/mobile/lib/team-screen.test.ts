@@ -54,9 +54,12 @@ vi.mock("react-native", () => ({
     ),
 }));
 it("renders the native list and wires both shared task controls", async () => {
-  vi.mocked(loadTeamRows).mockResolvedValue([
-    { botId: "worker", botName: "Reviewer", state: "completed", canStop: true, canAccept: true },
-  ] as TeamRow[]);
+  vi.mocked(loadTeamRows).mockResolvedValue({
+    rows: [
+      { botId: "worker", botName: "Reviewer", state: "completed", canStop: true, canAccept: true },
+    ] as TeamRow[],
+    hostLabel: "This Mac",
+  });
   const node = document.createElement("div");
   const root = createRoot(node);
   await act(async () => root.render(createElement(TeamScreen)));
@@ -73,19 +76,22 @@ it("renders the native list and wires both shared task controls", async () => {
 it.each([false, true, undefined])(
   "renders the native run effort with evidence %s",
   async (effortAttested) => {
-    vi.mocked(loadTeamRows).mockResolvedValue([
-      {
-        botId: "worker",
-        botName: "Reviewer",
-        state: "completed",
-        canStop: false,
-        canAccept: false,
-        executing: {
-          pin: { runtimeKind: "claude-code", modelId: "claude-opus-5", effort: "high" },
-          runtimeInfo: { runtimeKind: "claude-code", effortAttested },
+    vi.mocked(loadTeamRows).mockResolvedValue({
+      rows: [
+        {
+          botId: "worker",
+          botName: "Reviewer",
+          state: "completed",
+          canStop: false,
+          canAccept: false,
+          executing: {
+            pin: { runtimeKind: "claude-code", modelId: "claude-opus-5", effort: "high" },
+            runtimeInfo: { runtimeKind: "claude-code", effortAttested },
+          },
         },
-      },
-    ] as TeamRow[]);
+      ] as TeamRow[],
+      hostLabel: "This Mac",
+    });
     const node = document.createElement("div");
     const root = createRoot(node);
     await act(async () => root.render(createElement(TeamScreen)));

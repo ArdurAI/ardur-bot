@@ -1,5 +1,5 @@
 import { computerControlExpireJobKey } from "@ardurbot/adapter-kit";
-import { ComputerBusyError, toComputerRef } from "@ardurbot/adapters";
+import { ComputerBusyError, MissingComputerProviderError, toComputerRef } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import type { RouterDeps } from "./router.js";
 
@@ -38,20 +38,27 @@ export async function releaseMaintenanceControl(
     data: { controlHolder: "none" },
   });
   if (claimed.count !== 1) throw new ComputerBusyError();
-  if (computer.providerRef)
-    await deps.sandbox.setScreenControl?.(
-      toComputerRef(computer),
-      false,
-      {
-        operationId: "computer.maintenance",
-        traceId: "computer.maintenance",
-        spaceId: actor.spaceId,
-        userId: actor.userId,
-        botId: owner.id,
-        signal: new AbortController().signal,
-      },
-      leaseId,
-    );
+  if (computer.providerRef) {
+    try {
+      await deps.sandbox.setScreenControl?.(
+        toComputerRef(computer),
+        false,
+        {
+          operationId: "computer.maintenance",
+          traceId: "computer.maintenance",
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          botId: owner.id,
+          signal: new AbortController().signal,
+        },
+        leaseId,
+      );
+    } catch (error) {
+      if (!(error instanceof MissingComputerProviderError)) throw error;
+      // Its own engine is not configured here: there is nothing to revoke on the
+      // provider side, so finish releasing the lease record.
+    }
+  }
   const released = await deps.events.finalizeComputerControlRelease({
     spaceId: actor.spaceId,
     computerId,

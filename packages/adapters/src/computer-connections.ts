@@ -4,6 +4,7 @@ import type {
   SandboxProvider,
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
+import type { HostLabel } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import { ENGINE_LABELS, hostLabel, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
@@ -82,12 +83,26 @@ export function ownsKind(provider: SandboxProvider, kind: string) {
   return described.kind === kind || described.id === kind;
 }
 
+/** The paired desktop names the host; without one, the server running Ardur Bot does. */
+export async function deploymentHostLabel(prisma: PrismaClient): Promise<HostLabel> {
+  const paired = await prisma.hostRegistration.findUnique({
+    where: { id: "default" },
+    select: { platform: true },
+  });
+  return hostLabel(paired?.platform ?? process.platform);
+}
+
 /** A computer whose engine is not configured here: one sentence with the fix. */
 export class MissingComputerProviderError extends Error {
-  constructor(kind: string) {
-    const engine = kind === "desktop" ? hostLabel(process.platform) : (ENGINE_LABELS[kind] ?? kind);
+  constructor(kind: string, options: { resetAvailable?: boolean; hostLabel?: HostLabel } = {}) {
+    const engine =
+      kind === "desktop"
+        ? (options.hostLabel ?? hostLabel(process.platform))
+        : (ENGINE_LABELS[kind] ?? kind);
     super(
-      `This computer runs on ${engine}, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure ${engine} again.`,
+      options.resetAvailable === false
+        ? `This computer runs on ${engine}, which is not configured here. Configure ${engine} again.`
+        : `This computer runs on ${engine}, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure ${engine} again.`,
     );
     this.name = "MissingComputerProviderError";
   }
@@ -100,6 +115,8 @@ export class ConnectedSandboxProvider implements SandboxProvider {
     private readonly connections: ComputerConnections,
     /** Engines for connectionless computers of other kinds, keyed by the kind they create. */
     private readonly local: Partial<Record<string, () => SandboxProvider>> = {},
+    /** Names the host in the missing-engine sentence; defaults to this server's own platform. */
+    private readonly hostName: () => Promise<HostLabel> = async () => hostLabel(process.platform),
   ) {
     const sessions = new Map<string, TerminalProvider>();
     const session = (id: string) => {
@@ -129,7 +146,10 @@ export class ConnectedSandboxProvider implements SandboxProvider {
     };
   }
   async keepAlive(computer: Parameters<NonNullable<SandboxProvider["keepAlive"]>>[0]) {
-    if (!computer.connectionId) await this.connectionless(computer.kind).keepAlive?.(computer);
+    if (!computer.connectionId) {
+      const provider = await this.connectionless(computer.kind);
+      await provider.keepAlive?.(computer);
+    }
   }
   describe() {
     return this.fallback.describe();
@@ -144,7 +164,7 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   target(subject: { connectionId?: string | null }, context: AdapterContext) {
     return this.owner({ connectionId: subject.connectionId }, context);
   }
-  private connectionless(kind: string | null | undefined): SandboxProvider {
+  private async connectionless(kind: string | null | undefined): Promise<SandboxProvider> {
     // A computer with no saved kind is created on the deployment default.
     if (!kind || ownsKind(this.fallback, kind)) return this.fallback;
     try {
@@ -153,7 +173,13 @@ export class ConnectedSandboxProvider implements SandboxProvider {
     } catch {
       // An engine that cannot be built here, such as Docker without its supervisor token.
     }
-    throw new MissingComputerProviderError(kind);
+    // Reset resolves to the deployment's own engine. When that is itself the host or
+    // unconfigured, Reset cannot fix this computer either.
+    const deploymentKind = this.fallback.describe().kind;
+    throw new MissingComputerProviderError(kind, {
+      resetAvailable: deploymentKind !== "desktop" && deploymentKind !== null,
+      hostLabel: kind === "desktop" ? await this.hostName() : undefined,
+    });
   }
   async capacity(context: AdapterContext) {
     return this.fallback.capacity?.(context) ?? unknownCapacity();

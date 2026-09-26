@@ -25,8 +25,8 @@ const row: TeamRow = TeamRowSchema.parse({
   usage: { tokens: 150, costs: [] },
 });
 it("renders shared board copy and dispatches Stop and Accept with scoped ids", async () => {
-  vi.mocked(rpc).mockResolvedValue({ rows: [row] });
-  expect(await loadTeamRows()).toEqual([row]);
+  vi.mocked(rpc).mockResolvedValue({ rows: [row], hostLabel: "This Mac" });
+  expect(await loadTeamRows()).toEqual({ rows: [row], hostLabel: "This Mac" });
   expect(mobileTeamRow(row, (text) => text)).toMatchObject({
     name: "Reviewer",
     text: "Done — waiting for your OK",
@@ -41,4 +41,20 @@ it("renders shared board copy and dispatches Stop and Accept with scoped ids", a
   await stopTeamTask(row);
   await acceptTeamTask({ ...row, canAccept: false });
   expect(rpc).not.toHaveBeenCalled();
+});
+it("translates a built-in computer name from its key and the deployment's host label", () => {
+  const translate = (text: string) => `[${text}]`;
+  expect(
+    mobileTeamRow({ ...row, computerBuiltin: "host" }, translate, "This Mac").computerName,
+  ).toBe("[This Mac]");
+  expect(
+    mobileTeamRow({ ...row, computerBuiltin: "host" }, translate, "This computer").computerName,
+  ).toBe("[This computer]");
+  expect(
+    mobileTeamRow({ ...row, computerBuiltin: "local-docker" }, translate, "This Mac").computerName,
+  ).toBe("[Docker on this Mac]");
+  expect(
+    mobileTeamRow({ ...row, computerName: "office", computerBuiltin: null }, translate)
+      .computerName,
+  ).toBe("office");
 });

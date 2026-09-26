@@ -5,7 +5,7 @@ import type {
   Me,
 } from "@ardurbot/contracts";
 import { COMPUTER_PROFILES, HOST_MOVE_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
-import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
+import { ENGINE_LABELS, sandboxKindForBot } from "@ardurbot/contracts/fleet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,7 +29,7 @@ type Connection = { id: string; name: string; settings: ComputerConnectionSettin
 export function deploymentDefaultEngine(
   me: Pick<Me, "computerHost" | "sandboxProvider">,
 ): string | null {
-  return me.sandboxProvider === "desktop" || me.computerHost === "this-mac"
+  return sandboxKindForBot(me.sandboxProvider, me.computerHost) === "desktop"
     ? null
     : me.sandboxProvider;
 }

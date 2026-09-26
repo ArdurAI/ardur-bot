@@ -115,6 +115,11 @@ export type HostLabel = z.infer<typeof HostLabelSchema>;
 export function hostLabel(platform: string): HostLabel {
   return platform === "darwin" ? "This Mac" : "This computer";
 }
+/** A saved kind of "docker" is really the host when it was created with This Mac chosen. */
+export function sandboxKindForBot(envKind: string, computerHost: string | null | undefined) {
+  if (envKind === "docker" && computerHost === "this-mac") return "desktop";
+  return envKind;
+}
 export const FleetTargetSchema = /* @__PURE__ */ (() =>
   z.object({
     id: z.string(),
@@ -136,6 +141,8 @@ export type FleetTarget = z.infer<typeof FleetTargetSchema>;
 export const PlacementDecisionSchema = z.object({
   targetId: z.string(),
   targetName: z.string().optional(),
+  /** A built-in target, named by clients in their own language instead of targetName. */
+  targetBuiltin: z.enum(["host", "local-docker", "default"]).optional(),
   connectionId: z.string().nullable(),
   reason: z.string(),
   fromTargetId: z.string(),
@@ -212,6 +219,7 @@ export function choosePlacement(
   return {
     targetId: best.id,
     targetName: best.name,
+    targetBuiltin: best.builtin,
     connectionId: best.connectionId,
     reason,
     fromTargetId: currentTargetId,

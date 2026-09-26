@@ -193,13 +193,15 @@ describe("team.board", () => {
       connection: { findMany: vi.fn(async () => [{ id: "office", displayName: "Office" }]) },
       hostRegistration: { findUnique: vi.fn(async () => ({ platform: "linux" })) },
     });
-    const { rows } = await teamBoard(f.prisma, actor);
+    const { rows, hostLabel } = await teamBoard(f.prisma, actor);
     expect(rows.map((row) => row.computerName)).toEqual([
       "E2B",
       "Docker on this computer",
       "This computer",
       "Office",
     ]);
+    expect(rows.map((row) => row.computerBuiltin)).toEqual([null, "local-docker", "host", null]);
+    expect(hostLabel).toBe("This computer");
   });
   it("rejects non-members before reading any records or accepting a task", async () => {
     const f = fixture();

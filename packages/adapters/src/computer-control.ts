@@ -7,6 +7,7 @@ import {
 } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import { toComputerRef } from "./computer-support.js";
 
 export const DEFAULT_TAKEOVER_LEASE_MS = 15 * 60 * 1000;
@@ -162,19 +163,23 @@ export async function expireComputerControl(
       };
       try {
         await deps.sandbox.setScreenControl?.(toComputerRef(computer), false, context, leaseId);
-      } catch {
-        // Keep the lease id and try to reschedule so reconciler/status can retry.
-        try {
-          await scheduleComputerControlExpiry(
-            deps.jobs,
-            computer.id,
-            leaseId,
-            new Date(now.getTime() + 30_000),
-          );
-        } catch (error) {
-          getLogger().error("orphan computer control expiry reschedule", error);
+      } catch (error) {
+        if (!(error instanceof MissingComputerProviderError)) {
+          // Keep the lease id and try to reschedule so reconciler/status can retry.
+          try {
+            await scheduleComputerControlExpiry(
+              deps.jobs,
+              computer.id,
+              leaseId,
+              new Date(now.getTime() + 30_000),
+            );
+          } catch (rescheduleError) {
+            getLogger().error("orphan computer control expiry reschedule", rescheduleError);
+          }
+          return false;
         }
-        return false;
+        // Its own engine is not configured here: there is nothing to revoke on the
+        // provider side, so clear the lease record directly.
       }
     }
     const cleared = await deps.prisma.computer.updateMany({
@@ -217,7 +222,13 @@ export async function expireComputerControl(
       botId,
       signal: new AbortController().signal,
     };
-    await deps.sandbox.setScreenControl?.(toComputerRef(computer), false, context, leaseId);
+    try {
+      await deps.sandbox.setScreenControl?.(toComputerRef(computer), false, context, leaseId);
+    } catch (error) {
+      if (!(error instanceof MissingComputerProviderError)) throw error;
+      // Its own engine is not configured here: there is nothing to revoke on the
+      // provider side, so finish clearing the lease record.
+    }
   }
 
   const released = await deps.events.finalizeComputerControlRelease({

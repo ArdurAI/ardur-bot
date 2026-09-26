@@ -1,16 +1,19 @@
 import type { AdapterContext, SandboxProvider } from "@ardurbot/adapter-kit";
-import type { CapacitySnapshot, FleetTarget, HostLabel } from "@ardurbot/contracts";
+import type { CapacitySnapshot, FleetTarget } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import {
   ENGINE_LABELS,
   FLEET_KINDS,
-  hostLabel,
   PlacementSettingsSchema,
   unknownCapacity,
 } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "../computer-connections.js";
-import { ComputerConnections, ConnectedSandboxProvider } from "../computer-connections.js";
+import {
+  ComputerConnections,
+  ConnectedSandboxProvider,
+  deploymentHostLabel,
+} from "../computer-connections.js";
 import { DockerSandboxProvider } from "../docker-sandbox.js";
 import type { ComputerRouter } from "../host-aware-sandbox.js";
 import { isComputerRouter, sandboxKindForBot } from "../host-aware-sandbox.js";
@@ -37,15 +40,6 @@ async function probeInBatches<T, R>(items: T[], probe: (item: T) => Promise<R>):
   for (let offset = 0; offset < items.length; offset += 4)
     results.push(...(await Promise.all(items.slice(offset, offset + 4).map(probe))));
   return results;
-}
-
-/** The paired desktop names the host; without one, the server running Ardur Bot does. */
-export async function deploymentHostLabel(prisma: PrismaClient): Promise<HostLabel> {
-  const paired = await prisma.hostRegistration.findUnique({
-    where: { id: "default" },
-    select: { platform: true },
-  });
-  return hostLabel(paired?.platform ?? process.platform);
 }
 
 /** Built-in row for a computer with no saved connection. Each fleet kind keeps its own row. */

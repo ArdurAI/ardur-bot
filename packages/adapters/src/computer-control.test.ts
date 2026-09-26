@@ -2,6 +2,7 @@ import type { BackgroundJob, JobPublisher, SandboxProvider } from "@ardurbot/ada
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import { describe, expect, it, vi } from "vitest";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import {
   clearInactiveUserComputerControl,
   DEFAULT_TAKEOVER_LEASE_MS,
@@ -148,6 +149,19 @@ describe("computer control leases", () => {
     expect(harness.events.finalizeComputerControlRelease).not.toHaveBeenCalled();
   });
 
+  it("clears an owned lease when the computer's engine is not configured here", async () => {
+    const harness = controlHarness({
+      revokeError: new MissingComputerProviderError("desktop"),
+    });
+
+    await expect(expireComputerControl(harness.deps, "computer-id", "lease-1")).resolves.toBe(true);
+
+    expect(harness.setScreenControl).toHaveBeenCalledOnce();
+    expect(harness.events.finalizeComputerControlRelease).toHaveBeenCalledWith(
+      expect.objectContaining({ computerId: "computer-id", leaseId: "lease-1", holder: "none" }),
+    );
+  });
+
   it("retries atomic lease cleanup when release-event persistence fails", async () => {
     const harness = controlHarness({ finalizeError: new Error("event unavailable") });
 
@@ -228,6 +242,27 @@ describe("computer control leases", () => {
     );
     expect(harness.prisma.computer.updateMany).not.toHaveBeenCalled();
     expect(harness.enqueue).toHaveBeenCalled();
+  });
+
+  it("clears an orphaned lease when the computer's engine is not configured here", async () => {
+    const harness = controlHarness({
+      controlBotId: null,
+      revokeError: new MissingComputerProviderError("desktop"),
+    });
+    await expect(expireComputerControl(harness.deps, "computer-id", "lease-1")).resolves.toBe(true);
+    expect(harness.prisma.computer.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "computer-id",
+        controlLeaseId: "lease-1",
+      },
+      data: {
+        controlHolder: "none",
+        controlLeaseId: null,
+        controlLeaseExpiresAt: null,
+        controlBotId: null,
+        controlRunId: null,
+      },
+    });
   });
 
   it("keeps an orphaned lease when revoke and reschedule both fail", async () => {

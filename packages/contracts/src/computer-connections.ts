@@ -58,13 +58,26 @@ export const ComputerConnectionInputSchema = z.object({
 });
 export const HOST_MOVE_UNAVAILABLE_MESSAGE =
   "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.";
-export const ComputerConfigurationSchema = z.object({
+/** A computer can never be moved onto the host: one typed error, detected by class, not text. */
+export class HostMoveUnavailableError extends Error {
+  constructor() {
+    super(HOST_MOVE_UNAVAILABLE_MESSAGE);
+    this.name = "HostMoveUnavailableError";
+  }
+}
+const ComputerConfigurationFieldsSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema.optional(),
   /** Omitted keeps the computer where it is; null chooses the deployment default. */
   connectionId: z.string().nullable().optional(),
   confirmed: z.boolean().default(false),
 });
+/** A configuration that changes neither the profile nor the connection is not a request. */
+export const ComputerConfigurationSchema = ComputerConfigurationFieldsSchema.refine(
+  (configuration) =>
+    configuration.imageProfile !== undefined || configuration.connectionId !== undefined,
+  { message: "Choose an image profile or a connection to change." },
+);
 export function computerCapabilities(kind: string) {
   return {
     graphical: !["desktop", "kubernetes", "ssh", "remote-docker"].includes(kind),
@@ -72,6 +85,6 @@ export function computerCapabilities(kind: string) {
   };
 }
 
-export const ComputerReplacementConfigurationSchema = ComputerConfigurationSchema.omit({
+export const ComputerReplacementConfigurationSchema = ComputerConfigurationFieldsSchema.omit({
   botId: true,
 }).extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });

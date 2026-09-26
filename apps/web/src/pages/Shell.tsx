@@ -3374,7 +3374,11 @@ export function ShellPage({
           ? currentRuns.map((run) =>
               run.status === "waiting_input" && run.placement?.status === "pending" ? (
                 <Suspense key={run.id} fallback={null}>
-                  <PlacementNotice run={run} onOpen={() => openSettings("computer")} />
+                  <PlacementNotice
+                    run={run}
+                    hostLabel={computer?.hostLabel}
+                    onOpen={() => openSettings("computer")}
+                  />
                 </Suspense>
               ) : null,
             )

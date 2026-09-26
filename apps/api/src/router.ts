@@ -108,7 +108,7 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
-  HOST_MOVE_UNAVAILABLE_MESSAGE,
+  HostMoveUnavailableError,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -2432,12 +2432,18 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           data: { controlHolder: "none" },
         });
         if (bot.computer.providerRef) {
-          await deps.sandbox.setScreenControl?.(
-            toComputerRef(bot.computer),
-            false,
-            computerContext(context.actor, controlBotId, "screen.release"),
-            controlLeaseId,
-          );
+          try {
+            await deps.sandbox.setScreenControl?.(
+              toComputerRef(bot.computer),
+              false,
+              computerContext(context.actor, controlBotId, "screen.release"),
+              controlLeaseId,
+            );
+          } catch (error) {
+            if (!(error instanceof MissingComputerProviderError)) throw error;
+            // Its own engine is not configured here: there is nothing to revoke on the
+            // provider side, so finish releasing the lease record.
+          }
         }
 
         const released = await deps.events.finalizeComputerControlRelease({
@@ -5837,8 +5843,7 @@ async function runComputerReplace(
 
 /** A missing engine or a refused host move already says what to do, so it reaches the user. */
 function engineRefusal(error: unknown) {
-  return error instanceof MissingComputerProviderError ||
-    (error instanceof Error && error.message === HOST_MOVE_UNAVAILABLE_MESSAGE)
+  return error instanceof MissingComputerProviderError || error instanceof HostMoveUnavailableError
     ? new ORPCError("BAD_REQUEST", { message: error.message })
     : error;
 }

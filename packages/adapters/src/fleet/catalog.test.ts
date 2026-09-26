@@ -9,7 +9,7 @@ import type {
   ProcessEvent,
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema, HostMoveUnavailableError } from "@ardurbot/contracts";
 import { choosePlacement, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { afterEach, expect, it, vi } from "vitest";
@@ -1207,6 +1207,7 @@ function lostEngineDeps(
     computer,
     run: { findFirst: async () => null },
     deploymentSettings: { findUnique: async () => ({ computerHost }) },
+    hostRegistration: { findUnique: async () => null },
     thread: {
       findFirst: async () => ({ id: "thread" }),
       update: async () => ({ nextEventSeq: 2, nextMessageSeq: 2 }),
@@ -1254,6 +1255,9 @@ it("never restores a computer whose engine is gone onto the host", async () => {
           }),
         homeRoot,
         null,
+      );
+      await expect(replaceComputer(deps, "computer", mode, runContext)).rejects.toBeInstanceOf(
+        HostMoveUnavailableError,
       );
       await expect(replaceComputer(deps, "computer", mode, runContext)).rejects.toThrow(
         "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",

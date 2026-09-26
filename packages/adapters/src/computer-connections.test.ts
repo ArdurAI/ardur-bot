@@ -227,6 +227,50 @@ it("treats Docker without its supervisor token as not configured on another depl
   }
 });
 
+it("never tells the operator to Reset when the deployment's own provider has no key", async () => {
+  const sandbox = createRunSandbox("e2b", {
+    prisma: {} as PrismaClient,
+    secrets: { load: () => "" },
+  }) as ConnectedSandboxProvider;
+  await expect(owningSandbox(sandbox, { kind: "daytona" }, context)).rejects.toThrow(
+    "This computer runs on Daytona, which is not configured here. Configure Daytona again.",
+  );
+});
+
+it("names the paired desktop, not the server's own platform, when the host is missing", async () => {
+  // Disagrees with this test runner's own platform, so a fallback to process.platform is
+  // caught regardless of which OS runs the suite.
+  const injectedLabel = process.platform === "darwin" ? "This computer" : "This Mac";
+  const sandbox = new HostAwareSandbox(
+    new FakeSandboxProvider(),
+    new FakeSandboxProvider(),
+    async () => false,
+    async () => injectedLabel,
+  );
+  await expect(
+    owningSandbox(sandbox, { kind: "desktop", connectionId: null }, context),
+  ).rejects.toThrow(
+    `This computer runs on ${injectedLabel}, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure ${injectedLabel} again.`,
+  );
+});
+
+it("names the paired desktop, not the server's own platform, for a stale host computer on a non-Docker deployment", async () => {
+  // Pick a paired platform that always disagrees with this test runner's own platform, so a
+  // fallback to process.platform is caught regardless of which OS runs the suite.
+  const pairedPlatform = process.platform === "darwin" ? "linux" : "darwin";
+  const expectedLabel = pairedPlatform === "darwin" ? "This Mac" : "This computer";
+  const sandbox = createRunSandbox("e2b", {
+    e2bApiKey: "e2b-test",
+    prisma: {
+      hostRegistration: { findUnique: async () => ({ platform: pairedPlatform }) },
+    } as unknown as PrismaClient,
+    secrets: { load: () => "" },
+  }) as ConnectedSandboxProvider;
+  await expect(owningSandbox(sandbox, { kind: "desktop" }, context)).rejects.toThrow(
+    `This computer runs on ${expectedLabel}, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure ${expectedLabel} again.`,
+  );
+});
+
 it("runs a hosted deployment's own computers on its one default provider", async () => {
   for (const [kind, keys] of [
     ["e2b", { e2bApiKey: "e2b-test" }],

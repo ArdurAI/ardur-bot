@@ -83,6 +83,34 @@ it.each([false, true, undefined])(
     await act(async () => root.unmount());
   },
 );
+it.each([
+  ["host", "This Mac", "This Mac"],
+  ["host", "This computer", "This computer"],
+  ["local-docker", "This Mac", "Docker on this Mac"],
+  ["local-docker", "This computer", "Docker on this computer"],
+] as const)(
+  "translates a built-in computer of kind %s under host label %s",
+  async (computerBuiltin, hostLabel, expected) => {
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <TeamBoardRow
+            row={{ ...row, computerName: "ignored", computerBuiltin }}
+            hostLabel={hostLabel}
+            refresh={async () => {}}
+          />
+        </MemoryRouter>,
+      ),
+    );
+    expect(node.textContent).toContain(expected);
+    expect(node.textContent).not.toContain("ignored");
+    await act(async () => root.unmount());
+    node.remove();
+  },
+);
 it("renders a board row with expansion, quiet completion and distinct native actions", async () => {
   const node = document.createElement("div");
   document.body.append(node);

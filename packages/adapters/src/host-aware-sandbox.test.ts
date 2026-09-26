@@ -312,14 +312,19 @@ describe("host-aware sandbox", () => {
         },
         prisma: {
           deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
+          hostRegistration: { findUnique: async () => null },
         } as unknown as PrismaClient,
         secrets: { load: () => "" },
       });
       try {
         const owner = owningSandbox(sandbox, { kind: "desktop" }, ctx);
         await expect(owner).rejects.toBeInstanceOf(MissingComputerProviderError);
+        // A "none" deployment has no working engine at all, so Reset would only fail again;
+        // every other deployment here has a real destination Reset can reach.
         await expect(owner).rejects.toThrow(
-          /^This computer runs on This (Mac|computer), which is not configured here\. Reset it in Settings, Computers to start it on this deployment's engine, or configure This (Mac|computer) again\.$/,
+          kind === "none"
+            ? /^This computer runs on This (Mac|computer), which is not configured here\. Configure This (Mac|computer) again\.$/
+            : /^This computer runs on This (Mac|computer), which is not configured here\. Reset it in Settings, Computers to start it on this deployment's engine, or configure This (Mac|computer) again\.$/,
         );
         await expect(
           sandbox.provision(
@@ -346,6 +351,7 @@ describe("host-aware sandbox", () => {
       const sandbox = createRunSandbox(kind, {
         prisma: {
           deploymentSettings: { findUnique: async () => ({ computerHost }) },
+          hostRegistration: { findUnique: async () => null },
         } as unknown as PrismaClient,
         secrets: { load: () => "" },
       });
