@@ -139,9 +139,7 @@ jobs:
       candidate_sha: ${{ needs.validate.outputs.sha }}
       base_sha: ${{ needs.validate.outputs.parent }}
       fixed_release_sha: ${{ needs.validate.outputs.fixed_release }}
-      suite_version: scoreboard-1
       environment: release-packaged
-      mode: release
       gate: required
       release_version: ${{ needs.validate.outputs.version }}
       evidence_waiver: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}
