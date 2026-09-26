@@ -1,0 +1,107 @@
+name: site
+
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "**/*.md"
+      - ".github/workflows/site.yml"
+  push:
+    branches: [dev, main]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "**/*.md"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Validate and build the Hugo site
+    runs-on: ubuntu-latest
+    env:
+      HUGO_VERSION: 0.164.0
+      HUGO_PARAMS_SOURCEREF: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify the docs mirror is up to date
+        run: |
+          set -euo pipefail
+          python3 site/scripts/sync_docs.py --check
+
+      - name: Guard against unbacked marketing claims
+        run: |
+          set -euo pipefail
+          python3 site/scripts/validate_claims.py
+
+      - name: Guard against a hard-coded product name
+        run: |
+          set -euo pipefail
+          python3 site/scripts/validate_no_hardcoded_name.py
+
+      - name: Install Hugo (extended, checksum-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "${HOME}/.local/bin"
+          asset="hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz"
+          curl -sSLO "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/${asset}"
+          curl -sSLO "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_checksums.txt"
+          grep " ${asset}\$" "hugo_${HUGO_VERSION}_checksums.txt" | sha256sum -c -
+          tar -C "${HOME}/.local/bin" -xzf "${asset}" hugo
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+      - name: Build the site
+        run: |
+          set -euo pipefail
+          hugo --source site --gc --minify
+
+      - name: Verify no doc already hosted under /docs/ links back out to GitHub
+        run: |
+          set -euo pipefail
+          python3 site/scripts/validate_rendered_docs_links.py site/public
+
+      - name: Verify every source-ref placeholder was resolved
+        run: |
+          set -euo pipefail
+          if grep -RIn '__ARDUR_BOT_SOURCE_REF__' site/public; then
+            echo "::error::Rendered site still contains an unresolved source-ref placeholder."
+            exit 1
+          fi
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/public
+
+  deploy:
+    name: Deploy GitHub Pages
+    # Never automatic from dev: only an explicit dispatch, or a push to main after the
+    # owner has verified a build there.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
