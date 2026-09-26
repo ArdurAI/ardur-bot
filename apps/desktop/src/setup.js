@@ -318,17 +318,16 @@
     void resetLocalData();
   });
 
-  /** Main asks to confirm; once the data has moved aside, this starts fresh like Continue. */
+  /**
+   * Main asks to confirm; once the data has moved aside, this starts fresh like Continue.
+   * A reset that failed answers with the sentence to show.
+   */
   async function resetLocalData() {
     setBusy(true);
     setStatus("");
-    try {
-      if (!(await bridge.stack.reset())) {
-        setBusy(false);
-        return;
-      }
-    } catch {
-      setStatus("Could not reset local data. Try again.", "error");
+    const reset = await bridge.stack.reset().catch(() => "Could not reset local data. Try again.");
+    if (reset !== true) {
+      if (typeof reset === "string") setStatus(reset, "error");
       setBusy(false);
       return;
     }

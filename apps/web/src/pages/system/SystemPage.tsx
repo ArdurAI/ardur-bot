@@ -265,7 +265,6 @@ export function SystemPage({ bridge = systemBridge() }: { bridge?: SystemBridge 
         {state.localData && bridge.resetLocalData ? (
           <Row id="system-local-data" label={t`Local data`}>
             <Button
-              id="system-local-data"
               variant="outline"
               disabled={busy}
               onClick={() => void act(() => bridge.resetLocalData!())}

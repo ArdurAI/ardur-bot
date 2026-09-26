@@ -172,6 +172,42 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
     await expect(stat(path.join(databaseDir, "postmaster.pid"))).rejects.toThrow();
   });
 
+  it("says the database stopped when a server an earlier run left stops after ready", {
+    timeout: 120_000,
+  }, async () => {
+    const userData = await temporary("local-mode-");
+    const password = "a".repeat(32);
+    await writeFile(
+      path.join(userData, "secrets.env"),
+      `POSTGRES_PASSWORD=${password}\nENCRYPTION_KEY=${"b".repeat(64)}\n`,
+      { mode: 0o600 },
+    );
+    const left = await cluster({ databaseDir: path.join(userData, "postgres"), password });
+    const failed: string[] = [];
+    const controller = new LocalModeController(
+      dependencies(userData, {
+        allocatePort: async () => left.port + 1,
+        portAvailable: async (port) => port !== left.port,
+        adoptedCheckMs: 200,
+        onFailed: (message) => {
+          failed.push(message);
+        },
+        postgresFactory: () => {
+          throw new Error("a second server must not start");
+        },
+      }),
+    );
+    expect(await within(60_000, controller.start())).toMatchObject({ phase: "ready" });
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    expect(controller.state().phase).toBe("ready");
+
+    await left.postgres.stop();
+    await until(30_000, async () => controller.state().phase === "failed");
+    expect(controller.state()).toMatchObject({ message: "The database stopped." });
+    expect(failed).toEqual(["The database stopped."]);
+    await within(30_000, controller.stop());
+  });
+
   it("runs as its own application role, and keeps initdb's password out of the system temp folder", {
     timeout: 180_000,
   }, async () => {

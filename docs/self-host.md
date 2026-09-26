@@ -33,9 +33,10 @@ shared temp folder, and removed afterwards. For maintenance while the app runs, 
 superuser, for example `psql "postgres://ardurbot:<POSTGRES_PASSWORD>@127.0.0.1:<port>/ardurbot"`.
 
 **Reset local data** (in Settings, System, and beside the message when only a reset fixes a failed
-start) stops the database and services and moves `postgres/`, `data/` and
-`secrets.env` into `backups/local-data-<time>/` before starting fresh. To undo it, quit the app and
-move them back.
+start) stops the database, the services and any bot command they started, and moves `postgres/`,
+`data/` and `secrets.env` together into `backups/local-data-<time>/` before starting fresh. If one
+of them cannot move because a file is in use, nothing moves and the app says so. To undo a reset,
+quit the app and move them back.
 
 ## Published images (no checkout)
 
@@ -322,7 +323,7 @@ Optional messaging platforms (iMessage, Slack, WhatsApp, Telegram, Feishu/Lark) 
 
 ## Choosing a computer provider
 
-The Electron desktop app is a client of the same API. Docker and E2B still apply to a Compose server. The installed app's **This computer** path runs the API and worker with `SANDBOX_PROVIDER=desktop`, which always runs commands on that machine.
+The Electron desktop app is a client of the same API. Docker and E2B still apply. On first launch, Electron asks the deployment owner whether bots should keep using Docker or run on this Mac as you. `SANDBOX_PROVIDER=desktop` is a separate, explicit provider that always runs commands on the service host. The installed app's **This computer** path runs its API and worker with that provider and a folder list of its own.
 
 - **Published images** (`docker-compose.images.yml`) default to `SANDBOX_PROVIDER=docker` with a
   local supervisor and published `ghcr.io/ardurai/ardur-bot/computer` image. No E2B account required.
@@ -340,7 +341,11 @@ The Electron desktop app is a client of the same API. Docker and E2B still apply
   workspace under `/home/user/ardurbot-home`, and refreshes a two-hour TTL. Box uses the shared Linux
   desktop runtime and protected port routes for concurrent bot desktops. Each bot has its own
   persistent Chrome profile; logins are not shared between bots.
-- **Desktop provider** / **This computer** is what the installed app uses for **This computer**.
+- **Desktop provider** / **This Mac** runs commands on the API/worker host. Docker stays the default.
+  The Electron app asks once; if you choose This Mac, bots can use working directories under your home
+  folder. Do not enable it on a public or shared service. macOS does not show its own permission
+  dialog for this.
+- **This computer** in the installed app uses the desktop provider with the app's own folder list.
   The API and worker run on that machine. On this computer, commands start in the bot's own folder
   or a folder you add, and file tools stay inside those folders; the approvals you require are what
   keep a command away from other files. Known secrets are hidden from command output. Disk and CPU

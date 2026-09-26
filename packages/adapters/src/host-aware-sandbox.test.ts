@@ -447,6 +447,31 @@ it("restricts the local desktop sandbox to registered folders and follows each a
   }
 });
 
+it("keeps a source checkout's host computer on the home folder when no folder list is set", async () => {
+  const home = mkdtempSync(path.join(tmpdir(), "ardurbot-source-home-"));
+  const project = path.join(home, "projects", "app");
+  const { mkdir, stat } = await import("node:fs/promises");
+  await mkdir(project, { recursive: true });
+  await mkdir(path.join(home, "data"));
+  // os.homedir() reads HOME, or USERPROFILE on Windows.
+  vi.stubEnv("HOME", home);
+  vi.stubEnv("USERPROFILE", home);
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  vi.stubEnv("ARDURBOT_HOST_ROOTS_FILE", undefined);
+  try {
+    const sandbox = createRunSandbox("desktop", { dataDir: path.join(home, "data") });
+    const computer = await sandbox.provision({ botId: "source", homePath: "/tmp/ignored" }, ctx);
+    await expect(
+      collect(sandbox.execute(computer, { argv: ["mkdir", "-p", "nested"], cwd: project }, ctx)),
+    ).resolves.toEqual([{ type: "exit", code: 0 }]);
+    expect((await stat(path.join(project, "nested"))).isDirectory()).toBe(true);
+    await sandbox.destroy(computer, ctx);
+  } finally {
+    vi.unstubAllEnvs();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 async function collect<T>(source: AsyncIterable<T>) {
   const values: T[] = [];
   for await (const value of source) values.push(value);

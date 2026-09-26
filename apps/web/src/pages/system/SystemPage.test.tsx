@@ -193,6 +193,8 @@ it("offers Reset local data only when this app keeps the data", async () => {
   f.state.localData = true;
   const local = await render(<SystemPage bridge={f.bridge} />);
   expect(local.querySelector("label[for='system-local-data']")?.textContent).toBe("Local data");
+  // The row's label names the row; the button keeps its action as its name.
+  expect(resetButton(local)!.id).toBe("");
   await act(async () => resetButton(local)!.click());
   expect(f.bridge.resetLocalData).toHaveBeenCalledOnce();
 });

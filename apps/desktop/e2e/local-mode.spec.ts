@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -86,5 +86,25 @@ test("a fresh install starts its own database and services, and opens the app af
   expect((await savedSetup()).serverUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   await appWindow.screenshot({
     path: path.join(import.meta.dirname, "screenshots", "12-local-mode-app.png"),
+  });
+});
+
+test("a database without its settings offers Reset local data in the setup window", async () => {
+  test.setTimeout(120_000);
+  // A database is there but secrets.env is not; only a reset clears that.
+  await mkdir(path.join(userData, "postgres"), { recursive: true });
+  await writeFile(path.join(userData, "postgres", "PG_VERSION"), "18\n");
+  const env = { ...process.env, ARDURBOT_PERFORMANCE_USER_DATA: userData };
+  delete env.ARDURBOT_WEB_URL;
+  app = await electron.launch({ args: ["."], cwd: desktopDir, env });
+  const setup = await app.firstWindow();
+
+  await expect(setup.locator("#stack-phase")).toHaveText(
+    "The app's database settings are missing. Choose Reset local data, or restore secrets.env from a backup.",
+    { timeout: 60_000 },
+  );
+  await expect(setup.getByRole("button", { name: "Reset local data", exact: true })).toBeVisible();
+  await setup.screenshot({
+    path: path.join(import.meta.dirname, "screenshots", "13-setup-local-mode-reset.png"),
   });
 });

@@ -9,7 +9,7 @@ import { MigrationApplyError, MigrationHistoryError } from "@ardurbot/db/migrate
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localFoldersFile } from "./local-folders.js";
 import { appendCappedLog, LOG_CAP_BYTES } from "./local-logs.js";
-import { LocalModeController, localServiceLaunch } from "./local-mode.js";
+import { LocalModeController, localResetFailure, localServiceLaunch } from "./local-mode.js";
 import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-postgres.js";
 import { MissingDatabaseBinariesError, postgresServesFolder } from "./local-postgres.js";
 
@@ -396,6 +396,42 @@ describe("stopping during a start", () => {
     expect(controller.running()).toBe(false);
   });
 
+  it("starts nothing while the app quits, and starts again after a cancelled quit", async () => {
+    const root = await userData();
+    let servers = 0;
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => {
+          servers += 1;
+          // The first server takes a while to stop; later ones stop at once.
+          return { ...runningPostgres(), stop: () => (servers === 1 ? held : Promise.resolve()) };
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    const quitting = controller.quit();
+    // Retry in a failure sheet, or the setup window, while the stop winds down.
+    const refused = controller.start();
+    release();
+    await quitting;
+    await refused;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(controller.state().phase).toBe("idle");
+    expect(controller.running()).toBe(false);
+    expect(servers).toBe(1);
+    // The quit was cancelled (unsaved changes); the person starts local mode again.
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    expect(servers).toBe(2);
+    await within(2_000, controller.quit());
+    expect(controller.running()).toBe(false);
+  });
+
   it("ends a database start that is under way, so the stop settles", async () => {
     const root = await userData();
     const child = Object.assign(new EventEmitter(), {
@@ -470,6 +506,45 @@ describe("database watch", () => {
     expect(starts).toBe(2);
     await controller.stop();
   });
+
+  it("says the database stopped once a server an earlier run left fails two checks in a row", async () => {
+    const root = await userData();
+    const databaseDir = path.join(root, "postgres");
+    await mkdir(databaseDir, { recursive: true });
+    await writeFile(path.join(databaseDir, "postmaster.pid"), `4321\n${databaseDir}\n0\n23999\n`);
+    // The first answer adopts the server; the rest are the checks after ready.
+    const answers = [true];
+    let checks = 0;
+    const failedAt: number[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        adoptedCheckMs: 10,
+        postgresServes: async () => {
+          checks += 1;
+          return answers.shift() ?? false;
+        },
+        postgresFactory: () => {
+          throw new Error("a second server must not start");
+        },
+        onFailed: (message) => {
+          failedAt.push(checks);
+          expect(message).toBe("The database stopped.");
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    expect(checks).toBe(1);
+    // One missed answer is not enough; two in a row are.
+    answers.push(false, true, false, false);
+    await vi.waitFor(() => expect(controller.state().phase).toBe("failed"));
+    expect(controller.state()).toMatchObject({ message: "The database stopped." });
+    expect(failedAt).toEqual([5]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(failedAt).toEqual([5]);
+    await controller.stop();
+  });
 });
 
 describe("reset", () => {
@@ -505,7 +580,155 @@ describe("reset", () => {
     expect(await readFile(path.join(root, "secrets.env"), "utf8")).toMatch(/^POSTGRES_PASSWORD=/m);
     await controller.stop();
   });
+
+  const unmovable =
+    process.platform === "win32"
+      ? "Folder permissions do not stop a move on Windows."
+      : process.getuid?.() === 0
+        ? "Folder permissions do not stop root."
+        : null;
+  it.skipIf(unmovable !== null)(
+    `moves nothing when one item cannot move, and a second reset uses one backup folder${unmovable ? ` (${unmovable})` : ""}`,
+    async () => {
+      const root = await userData();
+      await mkdir(path.join(root, "postgres"), { recursive: true });
+      await writeFile(path.join(root, "postgres", "PG_VERSION"), "16\n");
+      await mkdir(path.join(root, "data"), { recursive: true });
+      await writeFile(path.join(root, "data", "note.txt"), "kept");
+      await writeFile(path.join(root, "secrets.env"), "POSTGRES_PASSWORD=a\n");
+      let minute = 0;
+      const controller = new LocalModeController(
+        harness(root, {
+          allocatePort: async () => 23456,
+          portAvailable: async () => true,
+          now: () => Date.UTC(2026, 8, 25, 10, minute++),
+          postgresFactory: () => runningPostgres(),
+        }),
+      );
+      // A folder that cannot leave its parent, as a folder a running program holds on Windows.
+      await chmod(path.join(root, "data"), 0o500);
+      let failure: unknown;
+      try {
+        await controller.resetData();
+      } catch (error) {
+        failure = error;
+      } finally {
+        await chmod(path.join(root, "data"), 0o700);
+      }
+      expect(failure).toBeDefined();
+      expect(await readdir(root)).toEqual(
+        expect.arrayContaining(["data", "postgres", "secrets.env"]),
+      );
+      expect(await readFile(path.join(root, "postgres", "PG_VERSION"), "utf8")).toBe("16\n");
+      expect(await readdir(path.join(root, "backups"))).toEqual([]);
+      expect(localResetFailure(failure)).toBe(
+        "A local data file is in use; close whatever is using it and try again.",
+      );
+
+      const backup = await controller.resetData();
+      expect(await readdir(path.join(root, "backups"))).toEqual([path.basename(backup)]);
+      expect((await readdir(backup)).sort()).toEqual(["data", "postgres", "secrets.env"]);
+      expect(await readFile(path.join(backup, "data", "note.txt"), "utf8")).toBe("kept");
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "ends bot commands still running in the data folder before it moves anything",
+    { timeout: 30_000 },
+    async () => {
+      const root = await userData();
+      let command = 0;
+      const worker = [
+        'const { spawn } = require("node:child_process");',
+        // Like a bot command: its own process group, working in the data folder.
+        'const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { cwd: process.env.DATA_DIR, detached: true, stdio: "ignore" });',
+        'process.stdout.write("command " + child.pid + "\\n");',
+        "process.on('SIGINT', () => process.exit(0));",
+        "setInterval(() => {}, 1000);",
+      ].join("\n");
+      const controller = new LocalModeController(
+        harness(root, {
+          allocatePort: async () => 23456,
+          portAvailable: async () => true,
+          postgresFactory: () => runningPostgres(),
+          spawn: (_command, args, options) => {
+            if (!isWorker(args)) return fakeChild();
+            const child = spawn(process.execPath, ["-e", worker], options);
+            child.stdout?.on("data", (chunk: Buffer) => {
+              const found = /command (\d+)/u.exec(chunk.toString());
+              if (found) command = Number(found[1]);
+            });
+            return child;
+          },
+        }),
+      );
+      try {
+        expect(await controller.start()).toMatchObject({ phase: "ready" });
+        await vi.waitFor(() => expect(command).toBeGreaterThan(0));
+        expect(alive(command)).toBe(true);
+        await controller.resetData();
+        await vi.waitFor(() => expect(alive(command)).toBe(false), { timeout: 5_000 });
+      } finally {
+        if (command && alive(command)) process.kill(command, "SIGKILL");
+      }
+    },
+  );
+
+  it("ends each service's process tree with taskkill on Windows before it moves anything", async () => {
+    const root = await userData();
+    const calls: string[][] = [];
+    const services: FakeChild[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        platform: "win32",
+        env: { PATH: "C:\\Windows\\System32", SystemRoot: "C:\\Windows" },
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => runningPostgres(),
+        spawn: (command, args) => {
+          calls.push([command, ...args]);
+          if (command.endsWith("taskkill.exe")) {
+            const killer = fakeChild();
+            const target = services.find((service) => String(service.pid) === args[1]);
+            queueMicrotask(() => {
+              target?.emit("exit", 1, null);
+              killer.emit("exit", 0, null);
+            });
+            return killer;
+          }
+          const service = Object.assign(fakeChild(), { pid: 4000 + services.length });
+          services.push(service);
+          return service;
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    await controller.resetData();
+    const killed = calls.filter(([command]) => command!.endsWith("taskkill.exe"));
+    // The worker first, then the API, as a stop orders them.
+    expect(killed).toEqual(
+      [...services]
+        .reverse()
+        .map((service) => [
+          path.win32.join("C:\\Windows", "System32", "taskkill.exe"),
+          "/pid",
+          String(service.pid),
+          "/t",
+          "/f",
+        ]),
+    );
+    for (const service of services) expect(service.kill).not.toHaveBeenCalled();
+  });
 });
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("packaged and unpackaged service launch", () => {
   it("starts packaged services from api.mjs and worker.mjs with the loader and NODE_PATH", async () => {

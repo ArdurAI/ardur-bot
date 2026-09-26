@@ -1,3 +1,4 @@
+import { DEFAULT_USER_PREFERENCES } from "@ardurbot/contracts";
 import type { Page } from "@playwright/test";
 
 const createdAt = "2026-09-23T00:00:00.000Z";
@@ -274,6 +275,7 @@ export async function installPerformanceFixture(page: Page, trace = false, manua
     else if (name === "memory/list") result = [];
     else if (name === "runtimes/availability") result = [];
     else if (name === "delegations/policy") result = { mode: "any" };
+    else if (name === "preferences/get") result = DEFAULT_USER_PREFERENCES;
     await route.fulfill({ json: { json: result } });
   });
 }

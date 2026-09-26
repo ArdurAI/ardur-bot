@@ -1,6 +1,7 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
+import { execFile } from "node:child_process";
 import { constants } from "node:fs";
-import { access, lstat, mkdir, rename, stat } from "node:fs/promises";
+import { access, lstat, mkdir, rename, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopLocalStackState } from "@ardurbot/contracts";
 import { localFoldersFile } from "./local-folders.js";
@@ -29,6 +30,8 @@ const READY_BUDGET_MS = 60_000;
 /** An unpackaged run compiles the API and worker sources with tsx first, which can take minutes. */
 const SOURCE_READY_BUDGET_MS = 5 * 60_000;
 const RESTART_WINDOW_MS = 5 * 60_000;
+/** How often a server an earlier run left is asked whether it still serves this folder. */
+const ADOPTED_CHECK_MS = 10_000;
 /** The worker's structured log line once its job host is running. */
 const WORKER_READY = '"message":"worker ready"';
 const SECRET_KEYS = {
@@ -58,6 +61,8 @@ const SETTINGS_MISSING =
   "The app's database settings are missing. Choose Reset local data, or restore secrets.env from a backup.";
 /** What a reset moves aside; ports and granted folders are kept. */
 const LOCAL_DATA = ["postgres", "data", "secrets.env"] as const;
+const RESET_FAILED = "Could not reset local data. Try again.";
+const DATA_IN_USE = "A local data file is in use; close whatever is using it and try again.";
 
 type SecretKey = keyof typeof SECRET_KEYS;
 type ServiceName = "api" | "worker";
@@ -109,6 +114,8 @@ export interface LocalModeDependencies {
   now: () => number;
   /** Delay before the next restart of a crashed service; doubles from one second by default. */
   restartDelayMs?: (restarts: number) => number;
+  /** Interval of the check on an adopted server after ready; ten seconds by default. */
+  adoptedCheckMs?: number;
   onState?: (state: DesktopLocalStackState) => void;
   /** `offerReset`: only Reset local data clears this failure, so the sentence names it. */
   onFailed?: (message: string, offerReset: boolean) => void;
@@ -163,6 +170,9 @@ export class LocalModeController {
   private current: DesktopLocalStackState = idleState();
   private inflight: Promise<DesktopLocalStackState> | null = null;
   private postgres: EmbeddedPostgresLike | undefined;
+  /** The server an earlier run left, while this run uses it; it has no process to watch. */
+  private adoptedPostgres: EmbeddedPostgresLike | undefined;
+  private adoptedCheck: ReturnType<typeof setInterval> | undefined;
   private postgresPort = 0;
   private apiPort = 0;
   private originUrl = "";
@@ -172,6 +182,9 @@ export class LocalModeController {
   private runAbort: AbortController | null = null;
   private stopping: Promise<void> | null = null;
   private stopRequests = 0;
+  private quitting = false;
+  /** A reset ends every process the services started, so nothing holds a file it moves. */
+  private stopTrees = false;
   private readonly children = new Map<ServiceName, ChildProcess>();
   private readonly restartMarks = new Map<ServiceName, number[]>();
   private readonly restartTimers = new Map<ServiceName, ReturnType<typeof setTimeout>>();
@@ -199,6 +212,7 @@ export class LocalModeController {
    * was asked for in the meantime.
    */
   start(): Promise<DesktopLocalStackState> {
+    if (this.quitting) return Promise.resolve(this.current);
     if (this.stopping) {
       const requests = this.stopRequests;
       return this.stopping.then(() =>
@@ -263,20 +277,50 @@ export class LocalModeController {
     return stopping;
   }
 
+  /** stop() for quitting the app: nothing starts until it settles. */
+  quit(): Promise<void> {
+    this.quitting = true;
+    return this.stop().finally(() => {
+      this.quitting = false;
+    });
+  }
+
   /**
-   * Stops everything, then moves the database, the files and the settings into
-   * `backups/local-data-<time>` in the app data folder, so the next start begins fresh.
+   * Stops everything, bot commands included, then moves the database, the files and the
+   * settings into `backups/local-data-<time>` in the app data folder, so the next start
+   * begins fresh. All or nothing: if one cannot move, those already moved go back.
    */
   async resetData(): Promise<string> {
-    await this.stop();
+    this.stopTrees = true;
+    try {
+      await this.stop();
+    } finally {
+      this.stopTrees = false;
+    }
     const stamp = new Date(this.deps.now()).toISOString().replace(/[:.]/g, "-");
     const backup = path.join(this.deps.userDataDir, "backups", `local-data-${stamp}`);
-    await mkdir(backup, { recursive: true, mode: 0o700 });
+    try {
+      await mkdir(backup, { recursive: true, mode: 0o700 });
+    } catch (error) {
+      this.log(`Reset local data: ${errorSummary(error)}`);
+      throw new LocalResetError(RESET_FAILED);
+    }
+    const moved: string[] = [];
     for (const name of LOCAL_DATA) {
       try {
         await rename(path.join(this.deps.userDataDir, name), path.join(backup, name));
+        moved.push(name);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        this.log(`Reset local data: ${name} did not move: ${errorSummary(error)}`);
+        for (const back of moved.reverse()) {
+          await rename(path.join(backup, back), path.join(this.deps.userDataDir, back)).catch(
+            (undo: unknown) =>
+              this.log(`Reset local data: ${back} did not move back: ${errorSummary(undo)}`),
+          );
+        }
+        await rmdir(backup).catch(() => undefined);
+        throw new LocalResetError(DATA_IN_USE);
       }
     }
     return backup;
@@ -309,6 +353,7 @@ export class LocalModeController {
       if (!this.children.has("worker")) this.spawn("worker");
       if (!(await this.waitForServices(signal))) return this.current;
       this.publish("ready", null);
+      this.watchAdopted();
       return this.current;
     } catch (error) {
       if (this.stopped || this.databaseReported) return this.current;
@@ -374,6 +419,7 @@ export class LocalModeController {
       }
       this.useDatabasePort(recorded);
       this.postgres = this.adopted(recorded, secrets.POSTGRES_PASSWORD);
+      this.adoptedPostgres = this.postgres;
       return;
     }
     const postgres = await this.deps.postgresFactory({
@@ -428,6 +474,28 @@ export class LocalModeController {
   }
 
   /**
+   * An adopted server's exit cannot be watched, so after ready it is asked every ten seconds
+   * whether it still serves this folder. Two failed checks in a row are reported like an exit.
+   */
+  private watchAdopted(): void {
+    const postgres = this.postgres;
+    if (!postgres || postgres !== this.adoptedPostgres || this.adoptedCheck) return;
+    let failures = 0;
+    let checking = false;
+    this.adoptedCheck = setInterval(() => {
+      if (checking) return;
+      checking = true;
+      void this.databaseAlive().then((alive) => {
+        checking = false;
+        if (this.postgres !== postgres) return;
+        failures = alive ? 0 : failures + 1;
+        if (failures >= 2) void this.reportDatabaseDown();
+      });
+    }, this.deps.adoptedCheckMs ?? ADOPTED_CHECK_MS);
+    this.adoptedCheck.unref?.();
+  }
+
+  /**
    * Whether the server this controller holds is still up: the process it spawned has not
    * exited, or, for one it adopted, that server still answers for this folder.
    */
@@ -471,6 +539,9 @@ export class LocalModeController {
   private async releaseDatabase(): Promise<void> {
     const postgres = this.postgres;
     this.postgres = undefined;
+    this.adoptedPostgres = undefined;
+    clearInterval(this.adoptedCheck);
+    this.adoptedCheck = undefined;
     if (postgres) await stopOwnedPostgres(postgres);
   }
 
@@ -684,7 +755,46 @@ export class LocalModeController {
     const child = this.children.get(service);
     this.children.delete(service);
     if (!child) return;
-    await signalChild(child, "SIGINT", STOP_TIMEOUT_MS);
+    if (this.stopTrees) await this.endProcessTree(child);
+    else await signalChild(child, "SIGINT", STOP_TIMEOUT_MS);
+  }
+
+  /**
+   * Ends a service and everything it started. On Windows, taskkill ends the tree. Elsewhere
+   * the service's group is paused so it starts nothing new, then each process below it is
+   * killed with its own group (bot commands run in groups of their own), then the service.
+   */
+  private async endProcessTree(child: ChildProcess): Promise<void> {
+    const pid = child.pid;
+    if (child.exitCode != null || child.signalCode != null) return;
+    const exited = new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+    });
+    const systemRoot = this.deps.env.SystemRoot ?? this.deps.env.WINDIR ?? "";
+    if (pid && this.deps.platform !== "win32") {
+      signalGroup(pid, "SIGSTOP");
+      for (const descendant of await descendants(pid)) signalGroup(descendant, "SIGKILL");
+      signalGroup(pid, "SIGKILL");
+    } else if (pid && path.win32.isAbsolute(systemRoot)) {
+      const killer = this.deps.spawn(
+        path.win32.join(systemRoot, "System32", "taskkill.exe"),
+        ["/pid", String(pid), "/t", "/f"],
+        { shell: false, windowsHide: true, stdio: "ignore" },
+      );
+      await atMost(
+        STOP_TIMEOUT_MS,
+        new Promise<void>((resolve) => {
+          killer.once("exit", () => resolve());
+          killer.once("error", () => {
+            child.kill("SIGKILL");
+            resolve();
+          });
+        }),
+      );
+    } else {
+      child.kill("SIGKILL");
+    }
+    await atMost(STOP_TIMEOUT_MS, exited);
   }
 
   private publish(
@@ -702,6 +812,58 @@ export class LocalModeController {
     };
     this.deps.onState?.(this.current);
   }
+}
+
+/** A reset that moved nothing. The message is the sentence to show. */
+class LocalResetError extends Error {}
+
+/** The sentence for a reset that did not happen. */
+export function localResetFailure(error: unknown): string {
+  return error instanceof LocalResetError ? error.message : RESET_FAILED;
+}
+
+/** Signals a process's group and the process itself; either may be gone already. */
+function signalGroup(pid: number, signal: NodeJS.Signals): void {
+  for (const target of [-pid, pid]) {
+    try {
+      process.kill(target, signal);
+    } catch {
+      // Not a group leader, or already gone.
+    }
+  }
+}
+
+/** Every process below `pid`, from one `ps` listing; none if `ps` cannot run. */
+function descendants(pid: number): Promise<number[]> {
+  return new Promise((resolve) => {
+    execFile(
+      "/bin/ps",
+      ["-A", "-o", "pid=", "-o", "ppid="],
+      { timeout: 5_000 },
+      (error, stdout) => {
+        if (error) {
+          resolve([]);
+          return;
+        }
+        const children = new Map<number, number[]>();
+        for (const line of stdout.split("\n")) {
+          const [child, parent] = line.trim().split(/\s+/u).map(Number);
+          if (!Number.isInteger(child) || !Number.isInteger(parent)) continue;
+          children.set(parent!, [...(children.get(parent!) ?? []), child!]);
+        }
+        const found: number[] = [];
+        const queue = [pid];
+        for (const parent of queue) {
+          for (const child of children.get(parent) ?? []) {
+            if (found.includes(child)) continue;
+            found.push(child);
+            queue.push(child);
+          }
+        }
+        resolve(found);
+      },
+    );
+  });
 }
 
 function settingsWriteFailure(error: unknown): LocalModeFailure {
@@ -870,6 +1032,17 @@ function signalChild(
       resolve();
     });
   });
+}
+
+/** Settles when `promise` does, or after `ms`. */
+function atMost(ms: number, promise: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 function delay(ms: number): Promise<void> {

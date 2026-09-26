@@ -22,7 +22,7 @@ import {
   registerIntegrationProtocol,
 } from "./integration-return.js";
 import { LocalFolders, localFoldersFile } from "./local-folders.js";
-import { LocalModeController, migrationsDir } from "./local-mode.js";
+import { LocalModeController, localResetFailure, migrationsDir } from "./local-mode.js";
 import {
   legacyStackEnvExists,
   loadEmbeddedPostgres,
@@ -745,11 +745,7 @@ function showServiceFailure(message: string, offerReset = false) {
     })
     .then(({ response }) => {
       if (response === 0) void localMode.start();
-      else if (offerReset && response === 1) {
-        resetLocalDataAndStart(win).catch(() =>
-          showServiceFailure("Could not reset local data. Try again.", true),
-        );
-      }
+      else if (offerReset && response === 1) void resetLocalDataAndStart(win);
     });
 }
 
@@ -769,9 +765,17 @@ async function confirmLocalReset(parent: BrowserWindow): Promise<boolean> {
   return true;
 }
 
-/** Once the person confirms, moves local data aside and starts fresh behind the setup window. */
+/**
+ * Once the person confirms, moves local data aside and starts fresh behind the setup window.
+ * A reset that failed moved nothing; the sheet says why and offers it again.
+ */
 async function resetLocalDataAndStart(parent: BrowserWindow): Promise<boolean> {
-  if (!(await confirmLocalReset(parent))) return false;
+  try {
+    if (!(await confirmLocalReset(parent))) return false;
+  } catch (error) {
+    showServiceFailure(localResetFailure(error), true);
+    return false;
+  }
   showSetupWindow(null, { resume: true });
   void localMode.start();
   return true;
@@ -1622,7 +1626,8 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("desktop.setup.stack.reset", async (event) => {
     if (!fromSetupWindow(event) || legacyCompose || setupWindow === null) return false;
-    return confirmLocalReset(setupWindow);
+    // A reset that failed moved nothing; the setup window shows the sentence.
+    return confirmLocalReset(setupWindow).catch(localResetFailure);
   });
   ipcMain.handle("desktop.setup.stack.start", (event) => {
     if (!fromSetupWindow(event)) return null;
@@ -1777,14 +1782,15 @@ app.on("before-quit", (event) => {
     }
     unsavedFiles.set(mainWindow, false);
   }
-  if (!legacyCompose && localMode?.running()) {
+  if (!legacyCompose && (localShutdown !== null || localMode?.running())) {
     event.preventDefault();
     quitting = false;
-    if (localShutdown === null) {
-      localShutdown = localMode.stop().then(() => {
-        app.quit();
-      });
-    }
+    // Cleared once the stop settles, so a later quit stops again if this one is cancelled.
+    const settled = () => {
+      localShutdown = null;
+      app.quit();
+    };
+    localShutdown ??= localMode.quit().then(settled, settled);
     return;
   }
   hostService?.stop();

@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import type {
   AdapterContext,
   CommandRequest,
@@ -45,7 +46,7 @@ export function createRunSandbox(
   const host = once(() =>
     usesHostBridge()
       ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
-      : localDesktopSandbox(opts.dataDir),
+      : localDesktopSandbox(opts.dataDir, [homedir()]),
   );
   const selected = kind === "desktop" ? host() : createSandboxProvider(kind, opts);
   // Connectionless computers keep the engine of their kind; a hosted one needs its key here.

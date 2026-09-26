@@ -166,6 +166,14 @@ it("offers Reset local data only for a failure that needs it, then starts fresh"
   await settle();
   expect(setup.bridge.stack.start).not.toHaveBeenCalled();
 
+  // A file in use: nothing moved, and the window says what to do.
+  const inUse = "A local data file is in use; close whatever is using it and try again.";
+  setup.bridge.stack.reset.mockResolvedValueOnce(inUse as never);
+  reset().click();
+  await vi.waitFor(() => expect(setup.text("#status")).toBe(inUse));
+  expect(setup.bridge.stack.start).not.toHaveBeenCalled();
+  expect(reset().disabled).toBe(false);
+
   reset().click();
   await vi.waitFor(() => expect(setup.bridge.stack.start).toHaveBeenCalledOnce());
   setup.push(modes["local mode"].stack("database"));

@@ -453,12 +453,20 @@ export class DesktopSandboxProvider implements SandboxProvider {
   }
 }
 
-export function localDesktopSandbox(root?: string, env: NodeJS.ProcessEnv = process.env) {
-  return new DesktopSandboxProvider({
-    root,
-    restricted: true,
-    registeredFoldersFile: env.ARDURBOT_HOST_ROOTS_FILE,
-  });
+/**
+ * Commands on this computer. Local mode supplies the folders a person added
+ * (`ARDURBOT_HOST_ROOTS_FILE`) and gets the restricted provider. A source checkout sets no
+ * list and keeps the unrestricted one, with `sourceRoots` beside each computer's own folder.
+ */
+export function localDesktopSandbox(
+  root?: string,
+  sourceRoots?: string[],
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const registeredFoldersFile = env.ARDURBOT_HOST_ROOTS_FILE;
+  return registeredFoldersFile
+    ? new DesktopSandboxProvider({ root, restricted: true, registeredFoldersFile })
+    : new DesktopSandboxProvider({ root, hostRoots: sourceRoots });
 }
 
 /** The folders the desktop app granted. Read on every call, so a change applies to the next command. */

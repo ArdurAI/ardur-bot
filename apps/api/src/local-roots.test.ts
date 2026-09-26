@@ -118,3 +118,35 @@ it("shows the first owner no host folders until one is added, and never the home
   expect((await sourceHostStatus(prisma, actor.userId, "desktop"))?.roots).toEqual([]);
   expect(await files.roots(actor)).toEqual([]);
 });
+
+it("lists the home folder, as before, when a source checkout sets no folder list", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "source-home-"));
+  directories.push(home);
+  // os.homedir() reads HOME, or USERPROFILE on Windows.
+  vi.stubEnv("HOME", home);
+  vi.stubEnv("USERPROFILE", home);
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  vi.stubEnv("ARDURBOT_HOST_ROOTS_FILE", undefined);
+  await writeFile(path.join(home, "notes.md"), "kept");
+  const prisma = freshInstall();
+  await bootstrapUserSpace(
+    prisma,
+    { id: "owner-1" },
+    { signupsEnabled: "true", signupAllowlist: undefined },
+  );
+  const actor = await requireMembership(prisma, "owner-1");
+  const files = createIdeFiles({
+    prisma,
+    sandbox: {} as SandboxProvider,
+    home: {} as AgentHomeStore,
+    env: { sandboxProvider: "desktop" },
+  });
+  const status = await sourceHostStatus(prisma, actor.userId, "desktop");
+  expect(status?.roots).toEqual([homedir()]);
+  expect(status?.health?.roots).toEqual([homedir()]);
+  const listed = await files.roots(actor);
+  expect(listed.map((entry) => entry.path)).toEqual([home]);
+  expect((await files.read(actor, { rootId: listed[0]!.id, path: "notes.md" })).content).toBe(
+    "kept",
+  );
+});
