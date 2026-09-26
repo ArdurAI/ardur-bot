@@ -276,14 +276,30 @@ export class TrialBroker {
     } else await scan("");
     return { ...(await this.snapshotReceipts()), files, links };
   }
-  /** Durable synthetic state remains observable even when the guest filesystem is lost. */
+  /**
+   * Synthetic state and receipts read back from the durable journal, which outlives the guest.
+   * A journal that cannot be read throws; it is never reported as no receipts.
+   */
   async snapshotReceipts() {
     await this.tail;
-    return {
-      state: structuredClone(this.state),
-      effects: this.effects.map(({ id, revision, authorized }) => ({ id, revision, authorized })),
-      tools: [...this.tools],
-    };
+    let journal = "";
+    try {
+      journal = await readFile(this.options.journal, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    let state: FixtureRecord[] = structuredClone([...this.options.task.initialState]);
+    const effects: { id: string; revision: number; authorized: boolean }[] = [];
+    for (const line of journal.split("\n").filter(Boolean)) {
+      const item = JSON.parse(line) as { state: FixtureRecord; receipt: EffectReceipt };
+      state = state.map((row) => (row.id === item.state.id ? item.state : row));
+      effects.push({
+        id: item.receipt.id,
+        revision: item.receipt.revision,
+        authorized: item.receipt.authorized,
+      });
+    }
+    return { state, effects, tools: [...this.tools] };
   }
 }
 

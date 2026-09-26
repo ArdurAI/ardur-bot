@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { getTask } from "../tasks/catalog.js";
-import { gradeOutcome, reportOutcomeCohort } from "./outcome.js";
+import { gradeOutcome } from "./outcome.js";
 
 const SENTENCE = "The workspace could not be inspected.";
 
@@ -24,7 +24,7 @@ function observation(files: Record<string, string> | undefined, error?: string) 
   };
 }
 
-it("grades a snapshot error as uninspected and leaves it out of the check failures", () => {
+it("grades a snapshot error as uninspected with no check result", () => {
   const hidden = observation({ "brief.md": "synthetic" }, "read failed");
   const grade = gradeOutcome(hidden.task, hidden.observed);
   expect(grade.uninspected).toBe(true);
@@ -40,13 +40,4 @@ it("grades a snapshot error as uninspected and leaves it out of the check failur
   const missed = gradeOutcome(wrong.task, wrong.observed);
   expect(missed.uninspected).toBe(false);
   expect(missed.checks.facts).toBe(false);
-  expect(reportOutcomeCohort([grade, missed])).toEqual({
-    uninspected: 1,
-    failures: {
-      facts: 1,
-      citations: missed.checks.citations === false ? 1 : 0,
-      pin: missed.checks.pin === false ? 1 : 0,
-      files: missed.checks.files === false ? 1 : 0,
-    },
-  });
 });

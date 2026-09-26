@@ -43,6 +43,15 @@ export async function readMetadata(
   return record(JSON.parse(Buffer.concat(chunks).toString("utf8")));
 }
 
+/** `/api/ps` lists only loaded models, and Ollama unloads idle ones; the researcher loads it first. */
+export class ModelNotLoadedError extends Error {
+  constructor(model: string, contextSize: number) {
+    super(
+      `Load ${model} with a context of ${contextSize} tokens first, for example by running one request with that context, then run qualification again.`,
+    );
+  }
+}
+
 /** Read-only Ollama serving-state attestation. It never loads or extends a model lease. */
 export function parseServingContext(value: unknown, expected: RouteExpectation): number {
   const state = record(value);
@@ -50,6 +59,7 @@ export function parseServingContext(value: unknown, expected: RouteExpectation):
   const matches = state.models
     .map(record)
     .filter((item) => item.name === expected.model && item.digest === expected.digest);
+  if (!matches.length) throw new ModelNotLoadedError(expected.model, expected.contextSize);
   requireValue(matches.length === 1, "Expected model is not uniquely loaded");
   const context = matches[0]!.context_length;
   requireValue(

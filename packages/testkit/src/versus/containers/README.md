@@ -91,6 +91,10 @@ reply for grading, and destroys the owned namespace on cancellation.
 
 The stand-in is labeled `hermes-scripted-container-standin`. It exercises the same adapter and
 relay with a Python double from the cached computer image. It proves no Hermes product capability.
+The cancel and loss probes read the guest workspace before the loss, then read the receipts after
+it from the broker's durable journal. The workspace must hold only the task's unchanged inputs and
+no undeclared symlink. Receipts that cannot be read after the loss fail the probe with "The
+receipts could not be read after the loss."; they are never counted as no receipts.
 The real-image qualification command refuses before startup if the pinned image is missing and
 reports this exact owner-approved acquisition to perform separately:
 
@@ -114,7 +118,9 @@ same revision as the image label and `/opt/hermes/.hermes_build_sha`, and no mis
 This Hermes build refuses to initialize unless `model.context_length` is at least 64,000. The
 scripted proof therefore declares 64,000 to the product; it serves no model. The canary planner
 requires a declared context between 64,000 and the model's architecture maximum, attested by
-`/api/ps` at planning and again before each trial and model request. The observed qwen3:8b
+`/api/ps` at planning and again before each trial and model request. `/api/ps` lists only loaded
+models, so load the model with the declared context first, for example by running one request with
+that context, before running the planner. The observed qwen3:8b
 architecture maximum is below 64,000. The proposed route, llama3.1:8b with 65,536 tokens, is
 pending owner approval. The planner also requires this report's `product-qualified` status, the
 inspected image digest and revision, and every containment and resource check passed. Rendering

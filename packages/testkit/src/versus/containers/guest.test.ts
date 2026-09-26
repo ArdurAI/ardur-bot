@@ -22,15 +22,21 @@ async function fixture() {
   return root;
 }
 
+/** The walker runs against a temporary root by substituting the guest's fixed root in its source. */
+function walkerSource(root: string) {
+  const fixed = "ROOT = '/opt/data'\n";
+  if (!GUEST_FILE_OPERATIONS.includes(fixed)) throw new Error("The guest root moved");
+  return GUEST_FILE_OPERATIONS.replace(fixed, `ROOT = ${JSON.stringify(root)}\n`);
+}
+
 async function operation(root: string, value: Record<string, unknown>) {
-  const source = `${GUEST_FILE_OPERATIONS}
+  const source = `${walkerSource(root)}
 try:
     print(json.dumps({'value': files(json.loads(sys.argv[1]))}, separators=(',', ':')))
 except Refused as error:
     print(json.dumps({'refused': str(error)}, separators=(',', ':')))
 `;
   const result = await exec("python3", ["-I", "-S", "-c", source, JSON.stringify(value)], {
-    env: { ...process.env, ARDURBOT_GUEST_TEST_ROOT: root },
     maxBuffer: 1024 * 1024,
   });
   return JSON.parse(result.stdout) as {
@@ -38,6 +44,11 @@ except Refused as error:
     refused?: string;
   };
 }
+
+it("reads no environment for its root", () => {
+  expect(GUEST_FILE_OPERATIONS).toContain("ROOT = '/opt/data'\n");
+  expect(GUEST_FILE_OPERATIONS).not.toMatch(/environ/);
+});
 
 it("normalizes dot components while the descriptor walker refuses parent and link traversal", async () => {
   const root = await fixture();

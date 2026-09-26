@@ -13,6 +13,8 @@ import type { TrialArtifacts, TrialContext, VersusAdapter } from "./types.js";
 
 /** Cancel and loss probes use this sentence when the guest workspace was not read. */
 export const WORKSPACE_NOT_INSPECTED = "The workspace could not be inspected.";
+/** A lost guest's receipts come from the broker journal; this is the failure when they cannot. */
+export const RECEIPTS_NOT_READ = "The receipts could not be read after the loss.";
 
 /** File contents stay in `files`. Symlink paths stay in `links` and are never followed. */
 export function guestWorkspace(entries: Record<string, string | { kind: "link" }>) {
@@ -44,6 +46,7 @@ export class HermesContainerAdapter implements VersusAdapter {
         snapshot: { error: string };
       })
     | null = null;
+  private receiptsLost = false;
   constructor(
     private readonly options: {
       ledger: BudgetLedger;
@@ -191,12 +194,9 @@ export class HermesContainerAdapter implements VersusAdapter {
             snapshot: { error: WORKSPACE_NOT_INSPECTED },
           };
         } catch {
-          return {
-            state: [],
-            effects: [],
-            tools: [],
-            snapshot: { error: WORKSPACE_NOT_INSPECTED },
-          };
+          // Unread receipts are not an empty receipt list.
+          this.receiptsLost = true;
+          return null;
         }
       });
       // Killing a docker client alone cannot cancel its guest process. Destroy the owned namespace.
@@ -220,6 +220,7 @@ export class HermesContainerAdapter implements VersusAdapter {
   async collect(): Promise<TrialArtifacts> {
     requireValue(this.context && this.operation, "No submitted container trial");
     await this.operation.catch(() => undefined);
+    if (this.receiptsLost) throw new Error(RECEIPTS_NOT_READ);
     const snapshot = this.snapshot ?? { files: {}, links: [], state: [], effects: [], tools: [] };
     const files = "files" in snapshot ? snapshot.files : undefined;
     let result: unknown = null;

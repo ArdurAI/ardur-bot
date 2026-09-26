@@ -43,6 +43,10 @@ qualification is blocked, with schema-3 planning reports, `qualification.json`, 
 Redirects, paid origins, absent tokenizer metadata, digest/quantization drift, and oversized
 responses fail closed.
 
+`/api/ps` lists only loaded models, and Ollama unloads idle ones. Load the declared model with the
+declared context first, for example by running one request with that context, then run
+qualification. An unloaded model fails with that instruction.
+
 The generated canary budget selects task-01 and task-04 with the frozen analysis seed. Its global
 ceiling is four times the per-run ceiling. The declared context includes output; the request
 output cap remains 2,048. These are declared ceilings, not measured consumption. The W0 fixture's
@@ -179,8 +183,8 @@ sampling. CLI text cannot prove durable admission, product approval or first con
 PTY approval usability and user TTFT are unsupported. Default route observation remains unknown
 unless a gateway witness is supplied; configured identity is not observed identity. The witness is
 bound to the gateway budget: its origin, model, digest and context must match the route being
-served. A difference, including another loopback port, is refused at startup and again at each
-admission, with code `serving-witness-mismatch`.
+served. Both are fixed for the gateway's life, so the gateway checks this once, at startup. A
+difference, including another loopback port, is refused there with code `serving-witness-mismatch`.
 
 Ardur uses `models/connect`, `bots/create`, `bots/update`, ordinary `threads/send`, persisted
 admission/terminal reads, `threads/stop`, and `threads/answer`. Learning is explicitly disabled.
@@ -216,7 +220,7 @@ measurements. The scripted Hermes round trip does not prove that a declared cont
 the image requires at least 64,000 tokens, attested by `/api/ps` at planning and again at admission.
 The witness that reads `/api/ps` must name the same origin, model, digest and context as the budget
 the gateway serves. A witness built for a different route, including another loopback port, is
-refused before a trial is admitted.
+refused when the gateway starts.
 
 ## Budget approval
 

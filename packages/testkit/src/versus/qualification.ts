@@ -25,9 +25,16 @@ import { diagnoseNativeIsolation } from "./native-diagnostics.js";
 import { findExecutable, inspectBuild, inspectHermes, sanitize } from "./provenance.js";
 import { planPairs } from "./scheduler.js";
 import type { RouteExpectation } from "./serving.js";
-import { parseServingContext, readMetadata } from "./serving.js";
+import { ModelNotLoadedError, parseServingContext, readMetadata } from "./serving.js";
 
 const exec = promisify(execFile);
+
+/** An unloaded model is one sentence with its action; other metadata failures keep their detail. */
+export function routeFailure(error: unknown) {
+  return error instanceof ModelNotLoadedError
+    ? error.message
+    : sanitize(`Model metadata: ${String(error)}`);
+}
 
 /** Metadata only: no generation, pull, load, copy, create, delete, or keep-alive operation. */
 export async function inspectLocalRoute(expected: RouteExpectation, transport = fetch) {
@@ -394,7 +401,7 @@ export async function runQualification(args: string[]) {
         contextSize: Number(options["--context-size"]),
       });
     } catch (error) {
-      failures.push(sanitize(`Model metadata: ${String(error)}`));
+      failures.push(routeFailure(error));
     }
     try {
       const docker = await findExecutable("docker");

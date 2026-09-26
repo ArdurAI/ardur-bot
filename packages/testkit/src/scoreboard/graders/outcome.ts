@@ -280,22 +280,6 @@ export function gradeOutcome(task: TaskContract, observed: OutcomeObservation) {
   };
 }
 
-const COHORT_CHECKS = ["facts", "citations", "pin", "files"] as const;
-
-/** An unreadable workspace is counted on its own, never as a wrong answer. */
-export function reportOutcomeCohort(grades: readonly ReturnType<typeof gradeOutcome>[]) {
-  const failures = { facts: 0, citations: 0, pin: 0, files: 0 };
-  let uninspected = 0;
-  for (const grade of grades) {
-    if (grade.uninspected) {
-      uninspected += 1;
-      continue;
-    }
-    for (const name of COHORT_CHECKS) if (grade.checks[name] === false) failures[name] += 1;
-  }
-  return { uninspected, failures };
-}
-
 function filesCanonicalRepair() {
   return '{"pageSize":25,"sort":"ascending"}';
 }

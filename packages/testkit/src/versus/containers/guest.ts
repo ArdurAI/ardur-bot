@@ -4,7 +4,7 @@ export const SYMLINK_REFUSAL = "This path follows a link, so it was not opened."
 /** Descriptor-relative file operations shared by the guest and its offline walker tests. */
 export const GUEST_FILE_OPERATIONS = String.raw`
 import base64, errno, http.server, json, os, queue, stat, sys, threading, time, uuid
-ROOT = os.environ.get('ARDURBOT_GUEST_TEST_ROOT', '/opt/data')
+ROOT = '/opt/data'
 LIMIT = 2 * 1024 * 1024
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 os.umask(0o007)

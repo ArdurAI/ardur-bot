@@ -11,6 +11,7 @@ import {
   assessContainerCohort,
   inspectLocalRoute,
   parseQualificationArguments,
+  routeFailure,
   runQualification,
 } from "./qualification.js";
 import { planPairs } from "./scheduler.js";
@@ -366,38 +367,10 @@ describe("non-generating live prerequisites", () => {
     } catch (error) {
       startCode = (error as { code?: string }).code ?? "error";
     }
-    const serving = new ServingWitness(route.budget, metadata);
-    const ledger = new BudgetLedger(route.budget);
-    const gateway = await startGateway({
-      budget: route.budget,
-      ledger,
-      transport: upstream,
-      evidenceKind: "provider-live",
-      serving,
-    });
-    const identity = serving as ServingWitness & {
-      identity: () => { origin?: string; model: string; digest: string; contextSize: number };
-    };
-    identity.identity = () => ({
-      origin: "http://127.0.0.1:11435",
-      model: route.budget.model.id,
-      digest: route.budget.model.digest,
-      contextSize: route.budget.contextSize,
-    });
-    let admitCode = "accepted";
-    try {
-      await gateway.admit("trial-port");
-    } catch (error) {
-      admitCode = (error as { code?: string }).code ?? "error";
-    } finally {
-      await gateway.close();
-    }
-    expect({ startCode, admitCode, upstream: upstream.mock.calls.length }).toEqual({
+    expect({ startCode, upstream: upstream.mock.calls.length }).toEqual({
       startCode: "serving-witness-mismatch",
-      admitCode: "serving-witness-mismatch",
       upstream: 0,
     });
-    expect(ledger.snapshot()).toMatchObject({ trials: [], reservations: [] });
   });
   it("refuses a serving witness built for a different model, digest, or context", async () => {
     const f = fixture();
@@ -430,26 +403,15 @@ describe("non-generating live prerequisites", () => {
       ).rejects.toMatchObject({ code: "serving-witness-mismatch" });
     }
     expect(upstream).not.toHaveBeenCalled();
-    const serving = new ServingWitness(route.budget, metadata);
-    const identity = serving as ServingWitness & {
-      identity: () => { origin: string; model: string; digest: string; contextSize: number };
-    };
+    // A matching witness is checked once when the gateway starts; admission re-reads only `/api/ps`.
     const ledger = new BudgetLedger(route.budget);
     const gateway = await startGateway({
       budget: route.budget,
       ledger,
       transport: upstream,
       evidenceKind: "provider-live",
-      serving,
+      serving: new ServingWitness(route.budget, metadata),
     });
-    const send = (url: string) =>
-      fetch(`${url}/chat/completions`, {
-        method: "POST",
-        body: JSON.stringify({
-          model: expected.model,
-          messages: [{ role: "user", content: "synthetic" }],
-        }),
-      });
     upstream.mockImplementation(
       async () =>
         new Response(
@@ -462,61 +424,36 @@ describe("non-generating live prerequisites", () => {
         ),
     );
     try {
-      identity.identity = () => ({
-        origin: route.budget.endpoint.origin,
-        model: "other:8b",
-        digest: route.budget.model.digest,
-        contextSize: route.budget.contextSize,
-      });
-      await expect(gateway.admit("trial-split")).rejects.toMatchObject({
-        code: "serving-witness-mismatch",
-      });
-      expect(ledger.snapshot()).toMatchObject({ trials: [], reservations: [] });
-      identity.identity = () => ({
-        origin: route.budget.endpoint.origin,
-        model: route.budget.model.id,
-        digest: contentDigest("other-model"),
-        contextSize: route.budget.contextSize,
-      });
-      await expect(gateway.admit("trial-digest")).rejects.toMatchObject({
-        code: "serving-witness-mismatch",
-      });
-      identity.identity = () => ({
-        origin: route.budget.endpoint.origin,
-        model: route.budget.model.id,
-        digest: route.budget.model.digest,
-        contextSize: 32768,
-      });
-      await expect(gateway.admit("trial-context")).rejects.toMatchObject({
-        code: "serving-witness-mismatch",
-      });
-      identity.identity = () => ({
-        origin: route.budget.endpoint.origin,
-        model: route.budget.model.id,
-        digest: route.budget.model.digest,
-        contextSize: route.budget.contextSize,
-      });
       await gateway.admit("trial-match");
       const url = gateway.capability("trial-match", "main", () => undefined);
-      identity.identity = () => ({
-        origin: route.budget.endpoint.origin,
-        model: "other:8b",
-        digest: route.budget.model.digest,
-        contextSize: route.budget.contextSize,
+      const response = await fetch(`${url}/chat/completions`, {
+        method: "POST",
+        body: JSON.stringify({
+          model: expected.model,
+          messages: [{ role: "user", content: "synthetic" }],
+        }),
       });
-      expect((await send(url)).status).toBe(403);
-      expect(upstream).not.toHaveBeenCalled();
-      identity.identity = () => ({
-        origin: route.budget.endpoint.origin,
-        model: route.budget.model.id,
-        digest: route.budget.model.digest,
-        contextSize: route.budget.contextSize,
-      });
-      expect((await send(url)).status).toBe(200);
+      expect(response.status).toBe(200);
       expect(upstream).toHaveBeenCalledTimes(1);
     } finally {
       await gateway.close();
     }
+  });
+  it("tells the researcher to load the model when it is not loaded", async () => {
+    const f = fixture();
+    f.responses[3] = { models: [] };
+    const sentence =
+      "Load qwen3:8b with a context of 64000 tokens first, for example by running one request with that context, then run qualification again.";
+    const failure = await inspectLocalRoute(expected, f.transport).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(sentence);
+    expect(routeFailure(failure)).toBe(sentence);
+    expect(routeFailure(new Error("Model digest drift"))).toBe(
+      "Model metadata: Error: Model digest drift",
+    );
   });
   it("parses recorded serving-state fixtures without loading a model", () => {
     const tag = { name: expected.model, digest: expected.digest };

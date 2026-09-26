@@ -160,6 +160,7 @@ export async function startGateway(options: {
     options.evidenceKind === "virtual" || options.serving,
     "Live inference requires serving-state attestation at admission",
   );
+  // The witness and the budget are both fixed, so their route identity is checked once, here.
   assertServingWitness(budget, options.serving);
   const capabilities = new Map<string, Capability>();
   const admitted = new Set<string>();
@@ -185,7 +186,6 @@ export async function startGateway(options: {
     );
     const cap = route ? capabilities.get(route[1]!) : undefined;
     requireValue(cap && !cap.controller.signal.aborted, "Unknown or revoked trial capability");
-    assertServingWitness(budget, options.serving);
     options.ledger.remainingMs(cap.trialId);
     if (request.method === "GET" && route![2] === "models") {
       response.setHeader("content-type", "application/json");
@@ -393,7 +393,6 @@ export async function startGateway(options: {
     requests,
     /** Opens the trial's budget only while the serving state still matches the declared route. */
     async admit(trialId: string) {
-      assertServingWitness(budget, options.serving);
       await options.serving?.attest("trial-admission", trialId);
       options.ledger.open(trialId);
       admitted.add(trialId);

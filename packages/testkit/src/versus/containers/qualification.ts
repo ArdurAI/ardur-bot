@@ -6,7 +6,11 @@ import { gradeOutcome, unexpectedSymlinkPaths } from "../../scoreboard/graders/o
 import { contentDigest } from "../../scoreboard/manifest.js";
 import { getTask } from "../../scoreboard/tasks/catalog.js";
 import { referenceSolution } from "../../scoreboard/tasks/reference.js";
-import { HermesContainerAdapter, WORKSPACE_NOT_INSPECTED } from "../adapters/hermes-container.js";
+import {
+  HermesContainerAdapter,
+  RECEIPTS_NOT_READ,
+  WORKSPACE_NOT_INSPECTED,
+} from "../adapters/hermes-container.js";
 import type { VersusEvent } from "../adapters/types.js";
 import { BudgetLedger, requireValue } from "../budget.js";
 import { startGateway } from "../gateway.js";
@@ -62,12 +66,17 @@ assert not result['result'].get('isError'), result
 print('╭─⚕ Hermes──╮\n  Saved the requested result.\n╰────────────╯')
 `;
 
-/** Cancel and loss probes fail a symlink the task did not declare, the same rule as a success grade. */
+/**
+ * Cancel and loss pass when the workspace read before the loss holds only the task's unchanged
+ * inputs and no undeclared symlink, and the receipts read after the loss still show the effect.
+ */
 export function retainsReceiptsWithoutWorkspace(input: {
   cancelled: boolean;
   terminal: string;
+  /** Read after the loss from the broker's durable journal. */
   effects: readonly unknown[];
   files?: Record<string, string>;
+  inputs: Readonly<Record<string, string>>;
   links?: readonly string[];
   expectedLinks?: readonly string[];
   snapshot?: { error?: string };
@@ -79,7 +88,7 @@ export function retainsReceiptsWithoutWorkspace(input: {
   return (
     input.terminal === (input.cancelled ? "cancelled" : "uncertain") &&
     input.effects.length === 1 &&
-    Object.keys(input.files).length === 0 &&
+    Object.entries(input.files).every(([name, content]) => input.inputs[name] === content) &&
     unexpectedSymlinkPaths(input.expectedLinks, input.links).length === 0 &&
     input.providerRequests === 0 &&
     !input.gradedPassed
@@ -87,23 +96,30 @@ export function retainsReceiptsWithoutWorkspace(input: {
 }
 
 /**
- * Read the guest workspace, then stop the container.
- * A snapshot taken after close is not evidence.
+ * Read the guest workspace, stop the container, then collect the receipts the loss left behind.
+ * A snapshot taken after close is not evidence, and unread receipts are a failure, never none.
  */
 export async function probeRetainedWorkspace(adapter: HermesContainerAdapter, cancelled: boolean) {
   const broker = adapter.broker;
   const session = adapter.session;
   requireValue(broker && session, "Container trial not ready");
-  let workspace: Awaited<ReturnType<typeof broker.snapshot>> | undefined;
+  let workspace: { files: Record<string, string>; links: string[] } | undefined;
   try {
-    workspace = await broker.snapshot();
+    const { files, links } = await broker.snapshot();
+    workspace = { files, links };
   } catch {
     workspace = undefined;
   }
   if (cancelled) await adapter.cancel();
   else await session.destroy();
   await adapter.submit();
-  return { workspace, artifact: await adapter.collect() };
+  try {
+    return { workspace, artifact: await adapter.collect(), failure: null };
+  } catch (error) {
+    if (error instanceof Error && error.message === RECEIPTS_NOT_READ)
+      return { workspace, artifact: null, failure: RECEIPTS_NOT_READ };
+    throw error;
+  }
 }
 
 /** Explicit opt-in container probes; never pulls an image or invokes an inference endpoint. */
@@ -435,7 +451,16 @@ print(json.dumps(out))
             true,
           );
           await lost.broker!.call("SCOREBOARD_UPDATE", args);
-          const { workspace, artifact: retained } = await probeRetainedWorkspace(lost, cancelled);
+          const probe = await probeRetainedWorkspace(lost, cancelled);
+          const { workspace, artifact: retained } = probe;
+          if (!retained) {
+            report.checks.push({
+              name: `${id}-retains-receipts-and-nonsuccess`,
+              passed: false,
+              evidence: { failure: probe.failure, ledger: ledger.snapshot() },
+            });
+            continue;
+          }
           const observed = retained.observation;
           const uninspected = workspace === undefined;
           const graded = gradeOutcome(
@@ -455,8 +480,9 @@ print(json.dumps(out))
           const passed = retainsReceiptsWithoutWorkspace({
             cancelled,
             terminal: observed.terminal,
-            effects: workspace ? workspace.effects : observed.effects,
+            effects: observed.effects,
             files: workspace?.files,
+            inputs: task.files,
             links: workspace?.links,
             expectedLinks: task.links,
             snapshot: uninspected ? { error: WORKSPACE_NOT_INSPECTED } : undefined,
@@ -468,7 +494,7 @@ print(json.dumps(out))
             passed,
             evidence: uninspected
               ? { failure: WORKSPACE_NOT_INSPECTED, ...retained, ledger: ledger.snapshot() }
-              : { ...retained, ledger: ledger.snapshot() },
+              : { workspace, ...retained, ledger: ledger.snapshot() },
           });
         } finally {
           await lost.destroy();
