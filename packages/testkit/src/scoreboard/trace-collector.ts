@@ -329,6 +329,23 @@ export function crashSpanUnmeasured(reason: string | null) {
   );
 }
 
+/**
+ * The points that end one trace: its `terminal.committed` points or, for a run that ends waiting
+ * for approval, the pause (`wait.approval`) on its last attempt when no later lease resumed it.
+ * A complete trace has exactly one.
+ */
+export function traceTerminals(points: readonly TracePoint[]): TracePoint[] {
+  const committed = points.filter((p) => p.boundary === "terminal.committed");
+  if (committed.length) return committed;
+  const pauses = points.filter((p) => p.boundary === "wait.approval" && p.attempt !== undefined);
+  if (!pauses.length) return [];
+  const last = Math.max(...pauses.map((p) => p.attempt!));
+  const resumed = points.some(
+    (p) => p.boundary === "lease.acquired" && p.attempt !== undefined && p.attempt > last,
+  );
+  return resumed ? [] : pauses.filter((p) => p.attempt === last);
+}
+
 export function deriveTrace(
   points: readonly TracePoint[],
   calibrations: readonly TraceCalibration[] = [],
@@ -552,8 +569,11 @@ export function collectTraceEvidence(
       timeOrigins,
       clockUncertainty,
     });
+    const terminals = traceTerminals(subset);
+    // A run that ends waiting for approval has its pause as its terminal boundary.
+    const paused = terminals.length === 1 && terminals[0]!.boundary === "wait.approval";
     const missingBoundaries = options.requiredBoundaries.filter(
-      (b) => !subset.some((p) => p.boundary === b),
+      (b) => !subset.some((p) => p.boundary === b) && !(paused && b === "terminal.committed"),
     );
     // An allowlist of measured durations (`exact` or `wall-clock`, i.e. a non-null value) fails
     // closed: every other reason, crash-specific or not, leaves the operation unobserved.
@@ -564,10 +584,7 @@ export function collectTraceEvidence(
       ...derived,
       missingBoundaries,
       complete:
-        !dropped &&
-        missingBoundaries.length === 0 &&
-        operationsObserved &&
-        subset.filter((p) => p.boundary === "terminal.committed").length === 1,
+        !dropped && missingBoundaries.length === 0 && operationsObserved && terminals.length === 1,
     };
   });
   const expected = options.expectedTraces ?? traces.length;

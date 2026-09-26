@@ -738,6 +738,33 @@ describe("trace evidence", () => {
     expect(trace.complete).toBe(false);
   });
 
+  it("completes a run that ends waiting for approval at its pause, and only there", () => {
+    const required = [
+      "lease.acquired",
+      "tool.started",
+      "tool.finished",
+      "terminal.committed",
+    ] as const;
+    const paused = [
+      point("lease.acquired", 0, 0, { attempt: 1 }),
+      point("tool.started", 1, 1, { attempt: 1, operationId: "tool-1" }),
+      point("tool.finished", 2, 2, { attempt: 1, operationId: "tool-1", outcome: "uncertain" }),
+      point("wait.approval", 3, 3, { attempt: 1 }),
+    ];
+    const evidence = (points: TracePoint[]) =>
+      collectTraceEvidence(
+        [{ ...createTraceBuffer({ processId: "worker", now: () => 1 }).snapshot(), points }],
+        { sessionId: "pause", pairId: null, requiredBoundaries: required },
+      ).derived[0]!;
+    expect(evidence(paused)).toMatchObject({ complete: true, missingBoundaries: [] });
+    // A later lease resumed the run: the pause no longer ends it, and no terminal does.
+    const resumed = [...paused, point("lease.acquired", 4, 4, { attempt: 2 })];
+    expect(evidence(resumed)).toMatchObject({
+      complete: false,
+      missingBoundaries: ["terminal.committed"],
+    });
+  });
+
   it("records clock uncertainty on every trace batch, re-sampled and never narrowed", () => {
     const buffer = createTraceBuffer({ processId: "worker-a", now: () => 1 });
     const first = buffer.snapshot();

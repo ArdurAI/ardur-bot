@@ -45,7 +45,7 @@ const FIXTURE_PIN = {
 let activeTrace: ReturnType<typeof startScoreboardTrace> | undefined;
 function traceEvidence() {
   if (!activeTrace) return null;
-  return faultTraceEvidence(activeTrace.snapshot(), "scripted");
+  return faultTraceEvidence(activeTrace.snapshot());
 }
 export async function reached(measurements: Record<string, unknown>) {
   process.send?.({
@@ -94,7 +94,12 @@ async function main(input: Input) {
         (input.id === "crash-03" && effect?.status === "intended") ||
         (input.id === "crash-05" && effect?.status === "completed" && run.status === "running") ||
         (input.id === "crash-06" && run.status === "completed") ||
-        (input.id === "crash-07" && run.status === "waiting_input");
+        // The pause commits before the executor records it; die once both happened.
+        (input.id === "crash-07" &&
+          run.status === "waiting_input" &&
+          Boolean(
+            activeTrace?.snapshot().points.some((point) => point.boundary === "wait.approval"),
+          ));
       if (match) {
         armed = false;
         await reached({

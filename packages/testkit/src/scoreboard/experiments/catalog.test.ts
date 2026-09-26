@@ -25,10 +25,19 @@ const PI_RECOVERED_BOUNDARIES = [
   "provider.finished",
   "terminal.committed",
 ] as const satisfies readonly TraceBoundary[];
+/** A recovered attempt that pauses for approval ends at its pause, never at a terminal. */
+const PAUSED_RECOVERED_BOUNDARIES = [
+  "tool.finished",
+  "wait.approval",
+] as const satisfies readonly TraceBoundary[];
 const KILLED_TIME_ORIGIN = 1_700_000_000_000;
 const RECOVERED_TIME_ORIGIN = 1_700_000_004_000;
 
-/** The interrupted process stops after tool.started. Finishes and the terminal belong to recovery. */
+/**
+ * The interrupted process stops after tool.started. Finishes and the terminal belong to recovery.
+ * `paused`: recovery pauses for approval instead of finishing (crash-03-revoke). `killed-waiting`:
+ * the process dies once its own pause is recorded and recovery runs nothing (crash-07).
+ */
 function crashPhases(
   run: string,
   options: {
@@ -39,13 +48,34 @@ function crashPhases(
     killedOrigin?: number;
     recoveredOrigin?: number;
     runtime?: "scripted" | "pi";
+    ending?: "paused" | "killed-waiting";
   } = {},
 ) {
   const stored = options.runtime === "pi" ? LOCAL_TRACE_BOUNDARIES : SCRIPTED_TRACE_BOUNDARIES;
   const recovered: readonly TraceBoundary[] =
-    options.runtime === "pi" ? PI_RECOVERED_BOUNDARIES : SCRIPTED_RECOVERED_BOUNDARIES;
-  const earlier = stored.filter((boundary) => !recovered.includes(boundary));
+    options.ending === "paused"
+      ? PAUSED_RECOVERED_BOUNDARIES
+      : options.runtime === "pi"
+        ? PI_RECOVERED_BOUNDARIES
+        : SCRIPTED_RECOVERED_BOUNDARIES;
+  const earlier = stored.filter(
+    (boundary) => !recovered.includes(boundary) && boundary !== "terminal.committed",
+  );
   const attempt = options.attempt ?? 0;
+  if (options.ending === "killed-waiting")
+    return {
+      before: phaseTrace(
+        `${run}-interrupted`,
+        run,
+        [...stored.filter((boundary) => boundary !== "terminal.committed"), "wait.approval"],
+        stored,
+        { attempt, timeOrigin: options.killedOrigin ?? KILLED_TIME_ORIGIN },
+      ),
+      after: phaseTrace(`${run}-recovered`, run, [], stored, {
+        attempt: options.recoveredAttempt ?? nextFence(attempt),
+        timeOrigin: options.recoveredOrigin ?? RECOVERED_TIME_ORIGIN,
+      }),
+    };
   return {
     before: phaseTrace(`${run}-interrupted`, run, earlier, stored, {
       openTool: options.openTool,
@@ -60,9 +90,18 @@ function crashPhases(
   };
 }
 
+/** How each fault-worker run ends: crash-07 and the revoke control end waiting for approval. */
+function endingOf(id: string) {
+  return id === "crash-07"
+    ? ("killed-waiting" as const)
+    : id === "crash-03-revoke"
+      ? ("paused" as const)
+      : undefined;
+}
+
 /** Adds the trace each fault-worker phase reports for one durable run. */
 function traced(result: MatrixResult, run: string): MatrixResult {
-  const phases = crashPhases(run);
+  const phases = crashPhases(run, { ending: endingOf(result.id) });
   return {
     ...result,
     measurements: {
@@ -112,7 +151,9 @@ function phaseTrace(
     const operation =
       boundary.startsWith("provider.") || boundary.startsWith("tool.")
         ? { operationId: boundary.startsWith("tool.") ? "tool-1" : "provider-1", attempt }
-        : {};
+        : boundary === "wait.approval"
+          ? { attempt }
+          : {};
     buffer.record(
       run,
       boundary,
@@ -521,6 +562,7 @@ describe("matrix selection and evidence", () => {
           recoveredAttempt: nextFence(attempt),
           killedOrigin,
           recoveredOrigin,
+          ending: endingOf(result.id),
         });
         return {
           ...result,

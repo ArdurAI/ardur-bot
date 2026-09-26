@@ -19,6 +19,7 @@ import {
   collectTraceEvidence,
   crashSpanUnmeasured,
   LOCAL_TRACE_BOUNDARIES,
+  traceTerminals,
 } from "../trace-collector.js";
 import type { MatrixResult } from "./catalog.js";
 
@@ -66,13 +67,15 @@ function sameBoundaries(left: readonly TraceBoundary[], right: readonly TraceBou
   return left.length === right.length && left.every((boundary, index) => boundary === right[index]);
 }
 /**
- * Both processes must contribute a batch. Crash recollection pairs a start with a finish
- * on the recovering process whose attempt is the next lease fence. A finish on any other fence
- * does not pair. A cross-process span is a wall-clock interval only when its lower bound stays
- * at or above zero. The merged trace is complete when that recollection reports exactly one
- * terminal, every stored boundary, no drop, and a measured crash span. An interrupted start,
- * a clock that was not calibrated, clock skew, or an uncertainty interval that crosses zero
- * leaves the span unmeasured.
+ * Both processes must contribute a batch with points, except that the recovering process has
+ * nothing to trace when the killed process's own trace already reached the run's terminal
+ * boundary, such as a run killed while it waits for approval. Crash recollection pairs a start
+ * with a finish on the recovering process whose attempt is the next lease fence. A finish on any
+ * other fence does not pair. A cross-process span is a wall-clock interval only when its lower
+ * bound stays at or above zero. The merged trace is complete when that recollection reports
+ * exactly one terminal, every stored boundary, no drop, and a measured crash span. An
+ * interrupted start, a clock that was not calibrated, clock skew, or an uncertainty interval
+ * that crosses zero leaves the span unmeasured.
  */
 function crashTraces(
   boundaryId: string,
@@ -81,18 +84,29 @@ function crashTraces(
   | { status: "complete"; fragment: ReturnType<typeof collectTraceEvidence> }
   | { status: "unmeasured" }
   | { status: "missing" } {
-  const phases = attempts.flatMap((attempt) =>
-    (["before", "after"] as const).map((phase) => {
-      const trace = phaseTrace(attempt, phase);
-      return { batches: batchesOf(trace), recorded: recordedBoundaries(trace?.requiredBoundaries) };
-    }),
-  );
+  const phaseOf = (attempt: MatrixResult, phase: "before" | "after") => {
+    const trace = phaseTrace(attempt, phase);
+    return { batches: batchesOf(trace), recorded: recordedBoundaries(trace?.requiredBoundaries) };
+  };
+  const runs = attempts.map((attempt) => ({
+    before: phaseOf(attempt, "before"),
+    after: phaseOf(attempt, "after"),
+  }));
+  const traced = (phase: { batches: TraceBatch[] }) =>
+    phase.batches.some((batch) => batch.points.length);
   if (
-    phases.some(
-      (phase) => phase.recorded === null || !phase.batches.some((batch) => batch.points.length),
+    runs.some(
+      ({ before, after }) =>
+        before.recorded === null ||
+        after.recorded === null ||
+        !after.batches.length ||
+        !traced(before) ||
+        (!traced(after) &&
+          traceTerminals(before.batches.flatMap((batch) => batch.points)).length !== 1),
     )
   )
     return { status: "missing" };
+  const phases = runs.flatMap(({ before, after }) => [before, after]);
   const boundaries = phases.map((phase) => phase.recorded ?? LOCAL_TRACE_BOUNDARIES);
   const requiredBoundaries = boundaries[0];
   if (!requiredBoundaries || boundaries.some((list) => !sameBoundaries(requiredBoundaries, list)))
