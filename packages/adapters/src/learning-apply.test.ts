@@ -1878,7 +1878,7 @@ it("owns an item created inside the reservation window when it has no filer", as
   expect(close).toHaveBeenCalledWith(["board-owned"], "Undone from Learning");
 });
 
-it("deletes a hollow reservation older than 15 minutes and creates a new item", async () => {
+it("links an open item as reused when its hollow reservation is older than 15 minutes", async () => {
   const f = fixture();
   const reservedAt = new Date(Date.now() - 20 * 60_000);
   const { apply, create, close } = listedBoard(f, {
@@ -1888,15 +1888,15 @@ it("deletes a hollow reservation older than 15 minutes and creates a new item", 
   const proposal = await hollowProposal(f, reservedAt);
   const applied = await apply.approve(proposal.id, actor);
   expect(f.filings.some((row) => row.id === "reservation")).toBe(false);
-  expect(create).toHaveBeenCalledOnce();
+  expect(create).not.toHaveBeenCalled();
   expect(applied.proposal.appliedBoardItem).toMatchObject({
-    itemId: "board-new",
-    duplicate: false,
+    itemId: "board-later",
+    duplicate: true,
   });
-  expect(f.filings.some((row) => row.itemId === "board-later" && row.reused === false)).toBe(false);
+  expect(f.filings.some((row) => row.itemId === "board-later" && row.reused === true)).toBe(true);
   const undone = await apply.revert(proposal.id, actor);
   expect(undone.proposal.status).toBe("reverted");
-  expect(close).toHaveBeenCalledWith(["board-new"], "Undone from Learning");
+  expect(close).not.toHaveBeenCalled();
 });
 
 it("leaves the item open and the filing intact when Undo's learning save loses the compaction generation", async () => {
@@ -2095,6 +2095,7 @@ function ownedFiling(proposalId: string, reason: string) {
     learningProposalId: proposalId,
     reused: false,
     closePending: reason,
+    closeUpdatedAt: "2026-09-25T12:00:00.000Z",
     createdAt: new Date(),
   };
 }
@@ -2198,6 +2199,83 @@ it("the board notification tick closes a pending filing and frees its hourly slo
   expect(f.filings).toEqual([]);
 });
 
+it("leaves a person's close in place when the pending close runs after they edited the item", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    createdAt: new Date(),
+  });
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  const pending = await apply.reject(proposal.id, actor);
+  expect(pending.sentence).toBe(BOARD_CLOSE_SOON);
+  item.updatedAt = "2026-09-25T13:00:00.000Z";
+  item.status = "closed";
+  item.closeReason = "Kept for the shop";
+  close.mockReset();
+  close.mockImplementation(async () => {
+    item.closeReason = "Rejected from Learning";
+    return [{ ...item }];
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  await runBoardTick(board, f.deps.prisma);
+  expect(close).not.toHaveBeenCalled();
+  expect(item.closeReason).toBe("Kept for the shop");
+  expect(f.filings).toEqual([]);
+  expect(f.proposals[0]?.body).toMatchObject({ boardChanged: true });
+});
+
+it("a later Reject leaves an item someone else closed and shows that it changed", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    createdAt: new Date(),
+  });
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  await apply.reject(proposal.id, actor);
+  item.updatedAt = "2026-09-25T13:00:00.000Z";
+  item.status = "closed";
+  item.closeReason = "Kept for the shop";
+  close.mockReset();
+  const again = await apply.reject(proposal.id, actor);
+  expect(close).not.toHaveBeenCalled();
+  expect(item.closeReason).toBe("Kept for the shop");
+  expect(f.filings).toEqual([]);
+  expect(again.sentence).toBeUndefined();
+  expect(again.proposal.boardClosing).toBeUndefined();
+  expect(again.proposal.boardChanged).toBe(true);
+});
+
 it("surfaces a board notification after five failed closes", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-09-25T12:00:00.000Z"));
@@ -2224,14 +2302,6 @@ it("surfaces a board notification after five failed closes", async () => {
   close.mockRejectedValue(new Error("beads down"));
   await apply.reject(proposal.id, actor).catch(() => undefined);
   Object.assign(f.deps.prisma, {
-    boardNotification: {
-      findMany: async () => [],
-      create: async ({ data }: { data: { title: string; changes: string[] } }) => {
-        notices.push(data);
-        return data;
-      },
-      update: async () => ({}),
-    },
     boardFollow: {
       upsert: async ({ create: data }: { create: Record<string, unknown> }) => ({
         id: "follow",
@@ -2239,10 +2309,25 @@ it("surfaces a board notification after five failed closes", async () => {
         ...data,
       }),
       update: async () => ({}),
+      updateMany: async () => ({ count: 1 }),
+      findMany: async () => [],
+    },
+    boardNotification: {
+      findMany: async () => [],
+      findFirst: async () => null,
+      create: async ({ data }: { data: { title: string; changes: string[] } }) => {
+        notices.push(data);
+        return data;
+      },
+      update: async () => ({}),
     },
     boardWorkspace: {
       findUnique: async () => ({ id: "workspace", ownerUserId: actor.userId }),
     },
+  });
+  Object.assign(f.db, {
+    boardFollow: f.deps.prisma.boardFollow,
+    boardNotification: f.deps.prisma.boardNotification,
   });
   const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
   vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);

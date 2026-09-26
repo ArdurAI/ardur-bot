@@ -16,7 +16,11 @@ import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
 import type { PendingCloseRow } from "./pending-close.js";
-import { recordPendingCloseFailure } from "./pending-close.js";
+import {
+  pendingCloseAction,
+  recordPendingCloseFailure,
+  releaseChangedBoardClose,
+} from "./pending-close.js";
 import {
   normalizeBoardTitle,
   RUN_FILING_CAP,
@@ -394,8 +398,15 @@ export class BoardService {
     if (!userId) throw new Error("This board close has no owner.");
     const provider = await this.provider({ userId, spaceId: filing.spaceId }, filing.workspaceId);
     const item = await provider.show(filing.itemId);
-    const done = item.status === "closed" && item.closeReason === filing.closePending;
-    if (!done) await provider.close([item.id], filing.closePending);
+    const action = pendingCloseAction(item, {
+      closePending: filing.closePending,
+      closeUpdatedAt: filing.closeUpdatedAt,
+    });
+    if (action === "changed") {
+      await releaseChangedBoardClose(this.options.prisma, filing);
+      return;
+    }
+    if (action === "close") await provider.close([item.id], filing.closePending);
     await this.options.prisma.botBoardFiling.deleteMany({
       where: { id: filing.id, spaceId: filing.spaceId },
     });
@@ -605,7 +616,7 @@ export class BoardService {
    * This run's fresh reservation for the same normalized title, when it never received an item id.
    * Claims only an open item with no filer, no filing row, and a created time from the
    * reservation's second through the next 15 minutes. A reservation older than 15 minutes
-   * is left for discardStaleHollow.
+   * is deleted. That delete permits a new item only when no open item has the title.
    */
   async claimHollowFiling(
     scope: BoardScope,
@@ -718,7 +729,7 @@ export class BoardService {
       titleKey: title,
       reused: false,
     };
-    if (existing && !stale) {
+    if (existing) {
       await prisma.botBoardFiling.create({
         data: { ...link, itemId: existing.id, reused: true },
       });

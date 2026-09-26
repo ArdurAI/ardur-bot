@@ -203,6 +203,7 @@ export const LearningProposalSchema = z
       .strict()
       .optional(),
     boardClosing: z.boolean().optional(),
+    boardChanged: z.boolean().optional(),
     documentId: z.string().optional(),
     blockedReason: z.string().optional(),
     settingBefore: z.boolean().optional(),

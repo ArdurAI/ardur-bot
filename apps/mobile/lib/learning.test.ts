@@ -271,6 +271,47 @@ it("shows Closing on the Board until the pending close clears", async () => {
     await act(async () => root.unmount());
   }
 });
+it("shows the changed sentence after a pending close was left with the person", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    diff: "+Finish the import follow-up",
+    status: "rejected",
+    boardChanged: true,
+  };
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/journey") return [];
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    return { reviews: [], proposals: [board], pendingCount: 0, appliedThisWeek: 0 };
+  });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    expect(container.textContent).toContain(
+      "This board item changed after it was filed. Review it on the Board.",
+    );
+    expect(container.textContent).not.toContain("Closing on the Board.");
+    i18n.locale = "ru";
+    i18n.messages = RU_MESSAGES;
+    await act(async () => root.render(createElement(Learning)));
+    expect(container.textContent).toContain(
+      RU_MESSAGES["This board item changed after it was filed. Review it on the Board."],
+    );
+  } finally {
+    i18n.locale = "en";
+    i18n.messages = {};
+    await act(async () => root.unmount());
+  }
+});
 it("says a board item was closed without being completed and what to do", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const board = {

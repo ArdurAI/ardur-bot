@@ -265,11 +265,13 @@ export default function Learning() {
                       </>
                     ) : (
                       <Text style={styles.secondary}>
-                        {proposal.boardClosing
-                          ? t("Closing on the Board.")
-                          : proposal.status === "reverted"
-                            ? t("Undone")
-                            : proposal.status}
+                        {proposal.boardChanged
+                          ? t("This board item changed after it was filed. Review it on the Board.")
+                          : proposal.boardClosing
+                            ? t("Closing on the Board.")
+                            : proposal.status === "reverted"
+                              ? t("Undone")
+                              : proposal.status}
                       </Text>
                     )}
                   </View>

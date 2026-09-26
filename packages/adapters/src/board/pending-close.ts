@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 
 export const BOARD_CLOSE_SOON = "The board item will be closed shortly.";
@@ -14,8 +14,52 @@ export type PendingCloseRow = {
   itemId: string | null;
   learningProposalId: string | null;
   closePending: string | null;
+  closeUpdatedAt?: string | null;
   closeAttempts?: number | null;
 };
+
+/** Close only while the item is still the one Reject or Undo decided to close. */
+export function pendingCloseAction(
+  item: { status: string; updatedAt?: string | null; closeReason?: string | null },
+  filing: { closePending: string; closeUpdatedAt?: string | null },
+): "close" | "done" | "changed" {
+  if (item.status === "closed" && item.closeReason === filing.closePending) return "done";
+  if (
+    item.status !== "closed" &&
+    typeof filing.closeUpdatedAt === "string" &&
+    item.updatedAt === filing.closeUpdatedAt
+  )
+    return "close";
+  return "changed";
+}
+
+/** Drops a close the person has since changed, and records that on the proposal. */
+export async function releaseChangedBoardClose(prisma: PrismaClient, filing: PendingCloseRow) {
+  if (filing.learningProposalId) {
+    const row = await prisma.learningProposal.findUnique({
+      where: { id: filing.learningProposalId },
+      select: { body: true },
+    });
+    const body = row?.body;
+    if (body && typeof body === "object" && !Array.isArray(body))
+      await prisma.learningProposal.update({
+        where: { id: filing.learningProposalId },
+        data: {
+          body: {
+            ...(body as Record<string, unknown>),
+            boardChanged: true,
+          } as Prisma.InputJsonValue,
+        },
+      });
+  }
+  await prisma.botBoardFiling.updateMany({
+    where: { id: filing.id, closePending: filing.closePending },
+    data: { closePending: null, closeNextAt: null },
+  });
+  await prisma.botBoardFiling.deleteMany({
+    where: { id: filing.id, spaceId: filing.spaceId },
+  });
+}
 
 /** Attempt 1 is ready for the next tick. Later attempts wait 30s, 60s, 120s, then at most 15 minutes. */
 export function pendingCloseRetryAt(attempts: number, now = Date.now()): Date {
@@ -24,46 +68,75 @@ export function pendingCloseRetryAt(attempts: number, now = Date.now()): Date {
   return new Date(now + delay);
 }
 
-async function notifyUnclosedBoardItem(prisma: PrismaClient, filing: PendingCloseRow) {
-  if (!filing.workspaceId || !filing.itemId) return;
+function isUniqueConflict(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
+}
+
+async function closeNoticeOwner(prisma: PrismaClient, filing: PendingCloseRow) {
+  if (!filing.workspaceId) return null;
   const workspace = await prisma.boardWorkspace.findUnique({
     where: { id: filing.workspaceId },
     select: { ownerUserId: true },
   });
-  let userId = workspace?.ownerUserId ?? null;
-  if (!userId && filing.learningProposalId) {
-    const proposal = await prisma.learningProposal.findUnique({
-      where: { id: filing.learningProposalId },
-      select: { userId: true },
-    });
-    userId = proposal?.userId ?? null;
-  }
-  if (!userId) return;
-  const follow = await prisma.boardFollow.upsert({
-    where: {
-      workspaceId_itemId_userId: {
-        workspaceId: filing.workspaceId,
-        itemId: filing.itemId,
-        userId,
+  if (workspace?.ownerUserId) return workspace.ownerUserId;
+  if (!filing.learningProposalId) return null;
+  const proposal = await prisma.learningProposal.findUnique({
+    where: { id: filing.learningProposalId },
+    select: { userId: true },
+  });
+  return proposal?.userId ?? null;
+}
+
+async function insertCloseNotice(prisma: PrismaClient, filing: PendingCloseRow, userId: string) {
+  if (!filing.workspaceId || !filing.itemId) return;
+  const workspaceId = filing.workspaceId;
+  const itemId = filing.itemId;
+  await prisma.$transaction(async (tx) => {
+    const follow = await tx.boardFollow.upsert({
+      where: {
+        workspaceId_itemId_userId: { workspaceId, itemId, userId },
       },
-    },
-    create: {
-      workspaceId: filing.workspaceId,
-      itemId: filing.itemId,
-      userId,
-      status: "open",
-      commentCount: 0,
-    },
-    update: {},
+      create: {
+        workspaceId,
+        itemId,
+        userId,
+        status: "open",
+        commentCount: 0,
+      },
+      update: {},
+    });
+    const already = await tx.boardNotification.findFirst({
+      where: { followId: follow.id, title: BOARD_CLOSE_FAILED_TITLE },
+    });
+    if (already) return;
+    const version = follow.version + 1;
+    const advanced = await tx.boardFollow.updateMany({
+      where: { id: follow.id, version: follow.version },
+      data: { version },
+    });
+    if (advanced.count !== 1)
+      throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+    await tx.boardNotification.create({
+      data: {
+        followId: follow.id,
+        version,
+        title: BOARD_CLOSE_FAILED_TITLE,
+        changes: ["close"],
+      },
+    });
   });
-  await prisma.boardNotification.create({
-    data: {
-      followId: follow.id,
-      version: follow.version + 1,
-      title: BOARD_CLOSE_FAILED_TITLE,
-      changes: ["close"],
-    },
-  });
+}
+
+async function notifyUnclosedBoardItem(prisma: PrismaClient, filing: PendingCloseRow) {
+  if (!filing.workspaceId || !filing.itemId) return;
+  const userId = await closeNoticeOwner(prisma, filing);
+  if (!userId) return;
+  try {
+    await insertCloseNotice(prisma, filing, userId);
+  } catch (error) {
+    if (!isUniqueConflict(error)) throw error;
+    await insertCloseNotice(prisma, filing, userId);
+  }
 }
 
 /** Counts one failed close. The fifth failure is the one that notifies the owner. */

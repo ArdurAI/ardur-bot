@@ -1499,7 +1499,26 @@ it("claims a hollow reservation for an item created inside the window with no fi
   expect(provider.create).not.toHaveBeenCalled();
 });
 
-it("deletes a hollow reservation older than 15 minutes and creates a new item on the tool path", async () => {
+it("creates a new item when a hollow reservation is older than 15 minutes and nothing is open", async () => {
+  const reservedAt = new Date(Date.now() - 20 * 60_000);
+  const { board, provider, filings } = service();
+  filings.push(
+    filingRow({ id: "hollow", itemId: null, titleKey: "ship the board", createdAt: reservedAt }),
+  );
+  const result = await executeBoardTool(
+    board,
+    scope,
+    "board_create",
+    { workspaceId: "workspace", item: { title: "Ship the board" } },
+    { upkeep: true },
+  );
+  expect(filings.some((row) => row.id === "hollow")).toBe(false);
+  expect(provider.create).toHaveBeenCalledOnce();
+  expect(result).toMatchObject({ id: "board-a" });
+  expect(result).not.toMatchObject({ duplicate: true });
+});
+
+it("returns the open item when a hollow reservation is older than 15 minutes", async () => {
   const reservedAt = new Date(Date.now() - 20 * 60_000);
   const later = item("Ship the board");
   later.id = "board-later";
@@ -1516,8 +1535,11 @@ it("deletes a hollow reservation older than 15 minutes and creates a new item on
     { upkeep: true },
   );
   expect(filings.some((row) => row.id === "hollow")).toBe(false);
-  expect(provider.create).toHaveBeenCalledOnce();
-  expect(result).toMatchObject({ id: "board-a" });
-  expect(result).not.toMatchObject({ duplicate: true });
+  expect(provider.create).not.toHaveBeenCalled();
+  expect(result).toMatchObject({
+    duplicate: true,
+    item: { id: "board-later" },
+    message: "An open item already has this title: board-later.",
+  });
   expect(filings.some((row) => row.itemId === "board-later")).toBe(false);
 });

@@ -51,6 +51,12 @@ it("records close retries without rewriting existing filing rows", () => {
   expect(retry).not.toMatch(/\bNOT NULL\b|\bDROP TABLE\b|\bDELETE FROM\b|\bTRUNCATE\b/);
 });
 
+it("records the item timestamp a pending close must still match", () => {
+  const updated = migration("20260925230000_board_filing_close_updated_at");
+  expect(updated).toContain('ADD COLUMN "closeUpdatedAt" TEXT');
+  expect(updated).not.toMatch(/\bNOT NULL\b|\bDROP TABLE\b|\bDELETE FROM\b|\bTRUNCATE\b/);
+});
+
 it("names every Board migration in the operator checklist", () => {
   const docs = readFileSync(new URL("../../../docs/board.md", import.meta.url), "utf8");
   const named = [...docs.matchAll(/`(\d{14}_[a-z_]+)`/g)].map((match) => match[1]);
@@ -61,6 +67,7 @@ it("names every Board migration in the operator checklist", () => {
     "20260925200000_board_filing_title_key",
     "20260925210000_board_filing_close_pending",
     "20260925220000_board_filing_close_retry",
+    "20260925230000_board_filing_close_updated_at",
   ])
     expect(named).toContain(name);
   for (const name of named)

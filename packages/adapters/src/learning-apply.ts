@@ -16,7 +16,11 @@ import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
-import { BOARD_CLOSE_SOON } from "./board/pending-close.js";
+import {
+  BOARD_CLOSE_SOON,
+  pendingCloseAction,
+  releaseChangedBoardClose,
+} from "./board/pending-close.js";
 import type { BoardService } from "./board/service.js";
 import {
   learningMember,
@@ -491,8 +495,15 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         filing.workspaceId,
       );
       const item = await provider.show(filing.itemId);
-      const done = item.status === "closed" && item.closeReason === reason;
-      if (!done) await provider.close([item.id], reason);
+      const action = pendingCloseAction(item, {
+        closePending: reason,
+        closeUpdatedAt: filing.closeUpdatedAt,
+      });
+      if (action === "changed") {
+        await releaseChangedBoardClose(deps.prisma, filing);
+        return { proposal: { ...proposal, boardChanged: true } };
+      }
+      if (action === "close") await provider.close([item.id], reason);
       await deps.prisma.botBoardFiling.deleteMany({
         where: { id: filing.id, spaceId: actor.spaceId },
       });
@@ -545,7 +556,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         if (filing && !undone)
           await tx.botBoardFiling.update({
             where: { id: filing.id },
-            data: { closePending: BOARD_UNDO_REASON },
+            data: { closePending: BOARD_UNDO_REASON, closeUpdatedAt: item.updatedAt },
           });
         if (filing && undone)
           await tx.botBoardFiling.deleteMany({
@@ -851,6 +862,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         let leftOpen: { itemId: string; sentence: string } | undefined;
         let willClose = false;
         let alreadyClosed = false;
+        let closeUpdatedAt: string | undefined;
         const hollow = Boolean(filing && !filing.itemId);
         let provider: Awaited<ReturnType<BoardService["provider"]>> | undefined;
         if (filing?.itemId && filing.workspaceId && !filing.reused) {
@@ -864,6 +876,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
             filing.workspaceId,
           );
           const item = await provider.show(filing.itemId);
+          closeUpdatedAt = item.updatedAt;
           const rejected = item.status === "closed" && item.closeReason === BOARD_REJECT_REASON;
           const changed =
             !rejected && (item.status === "closed" || item.updatedAt !== item.createdAt);
@@ -886,7 +899,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
           if (willClose && filing)
             await tx.botBoardFiling.update({
               where: { id: filing.id },
-              data: { closePending: BOARD_REJECT_REASON },
+              data: { closePending: BOARD_REJECT_REASON, closeUpdatedAt },
             });
           if ((hollow || alreadyClosed) && filing)
             await tx.botBoardFiling.deleteMany({

@@ -132,16 +132,16 @@ async function fileUpkeepItem(
   if (existing) {
     if (!existing.filedBy && (await service.claimHollowFiling(scope, workspaceId, existing, title)))
       return noteFiling(service, provider, scope, existing);
-    if (!(await service.discardStaleHollow(scope, title))) {
-      const repair =
-        !existing.filedBy && (await service.runFiling(scope, workspaceId, existing.id));
-      return {
-        item: repair ? await noteFiling(service, provider, scope, existing) : existing,
-        duplicate: true,
-        message: duplicateBoardItemMessage(existing.id),
-      };
-    }
-  } else await service.discardStaleHollow(scope, title);
+    // An open item that cannot be claimed stays the only item, including after a stale hollow is dropped.
+    await service.discardStaleHollow(scope, title);
+    const repair = !existing.filedBy && (await service.runFiling(scope, workspaceId, existing.id));
+    return {
+      item: repair ? await noteFiling(service, provider, scope, existing) : existing,
+      duplicate: true,
+      message: duplicateBoardItemMessage(existing.id),
+    };
+  }
+  await service.discardStaleHollow(scope, title);
   const reserved = await service.reserveBotFiling(scope, title);
   if (!reserved.ok) return { error: reserved.message };
   let created: WorkItem | undefined;

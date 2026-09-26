@@ -262,6 +262,34 @@ it("shows Closing on the Board until the pending close clears", async () => {
     vi.useRealTimers();
   }
 });
+it("shows the changed sentence after a pending close was left with the person", async () => {
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+    status: "rejected",
+    boardChanged: true,
+  };
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [board],
+    pendingCount: 0,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  expect(container.textContent).toContain(
+    "This board item changed after it was filed. Review it on the Board.",
+  );
+  expect(container.textContent).not.toContain("Closing on the Board.");
+  expect(
+    catalogTranslation("ru", "This board item changed after it was filed. Review it on the Board."),
+  ).toBe("Эта задача на доске изменилась после создания. Проверьте её на доске.");
+});
 it("says a board item was closed without being completed and what to do", async () => {
   const board = {
     ...proposal,

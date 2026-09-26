@@ -391,7 +391,9 @@ function LearningCard({
           </>
         ) : (
           <span className="text-sm">
-            {proposal.boardClosing ? (
+            {proposal.boardChanged ? (
+              <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
+            ) : proposal.boardClosing ? (
               <Trans>Closing on the Board.</Trans>
             ) : proposal.status === "reverted" ? (
               t`Undone`

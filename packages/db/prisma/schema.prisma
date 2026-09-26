@@ -2236,6 +2236,8 @@ model BotBoardFiling {
   outcome String?
   // The close reason after Undo or Reject has committed and the board close has not finished.
   closePending String?
+  // The item's updatedAt when that close was requested. A later retry closes only while it still matches.
+  closeUpdatedAt String?
   // How many times that close has failed, and when the next retry is allowed.
   closeAttempts Int?
   closeNextAt DateTime?
