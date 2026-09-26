@@ -9,6 +9,7 @@ import type {
   Connection,
   ConnectionCatalogItem,
   Group,
+  InsightAction,
   Me,
   MessageReaction,
   ModelCatalogEntry,
@@ -171,6 +172,7 @@ import {
 } from "../lib/computer-screen";
 import { desktopBridge } from "../lib/desktop";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
+import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
 import { copyableMessageText } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
@@ -2225,6 +2227,39 @@ export function ShellPage({
     setSettingsSection(section);
     setSettingsOpen(true);
   }
+
+  // An insight opens the exact place to act; the bot-scoped ones wait for that bot to be active.
+  const [insightAction, setInsightAction] = useState<InsightAction | null>(null);
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const action = (event as CustomEvent<InsightAction>).detail;
+      if (action.kind === "memory-settings") openSettings("memory");
+      else if (action.kind === "learning-settings") openSettings("learning");
+      else if (action.kind === "connection") openSettings("models", action.provider);
+      else if (action.kind === "bot-model" || action.kind === "routine") {
+        setSettingsOpen(false);
+        setInsightAction(action);
+        navigate(`/app/${action.botId}`);
+      }
+    };
+    window.addEventListener(INSIGHT_ACTION_EVENT, listener);
+    return () => window.removeEventListener(INSIGHT_ACTION_EVENT, listener);
+    // openSettings and navigate only forward to state setters here; nothing this
+    // listener reads goes stale, so it mounts once like the file's other listeners.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!insightAction || !("botId" in insightAction) || active?.id !== insightAction.botId) return;
+    setInsightAction(null);
+    if (insightAction.kind === "bot-model") openBotModelSettings();
+    else if (insightAction.kind === "routine") {
+      const name = insightAction.prompt.split("\n")[0]!.slice(0, 60);
+      setRoutineDraft({ ...emptyRoutineDraft(), name, prompt: insightAction.prompt });
+      setRoutineWebhookSecret(null);
+      setEditingRoutine(null);
+      setPanel("routine");
+    }
+  }, [insightAction, active?.id]);
 
   async function createBot(input: {
     name: string;

@@ -161,6 +161,7 @@ present and decisions under [docs/decisions/](docs/decisions/).
 
 ## Community
 
+- Website: [bot.ardur.ai](https://bot.ardur.ai)
 - Bugs and feature requests: [Issues](https://github.com/ArdurAI/ardur-bot/issues)
 - Questions, ideas, roadmap: [Discussions](https://github.com/ArdurAI/ardur-bot/discussions)
 - Security reports: [SECURITY.md](SECURITY.md)

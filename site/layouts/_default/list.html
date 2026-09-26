@@ -1,0 +1,23 @@
+{{ define "main" }}
+  <section class="page-shell">
+    <header class="page-heading">
+      {{ with .Params.eyebrow }}<p class="eyebrow">{{ . }}</p>{{ end }}
+      <h1>{{ .Title }}</h1>
+      {{ with .Description }}<p>{{ . }}</p>{{ end }}
+    </header>
+    <div class="prose">
+      {{ .Content }}
+    </div>
+    {{ $pages := .Pages }}
+    {{ if $pages }}
+      <div class="doc-list">
+        {{ range $pages.ByTitle }}
+          <article class="doc-list-item">
+            <a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a>
+            {{ with .Description }}<p>{{ . }}</p>{{ else }}<p>{{ .Summary }}</p>{{ end }}
+          </article>
+        {{ end }}
+      </div>
+    {{ end }}
+  </section>
+{{ end }}

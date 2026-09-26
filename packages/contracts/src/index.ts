@@ -28,6 +28,7 @@ export * from "./ids.js";
 export * from "./integration-catalog.js";
 export * from "./integration-settings.js";
 export * from "./learning.js";
+export * from "./learning-insights.js";
 export type * from "./local-import.js";
 export * from "./local-settings.js";
 export * from "./mcp.js";

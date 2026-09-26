@@ -21,7 +21,10 @@
       "!**/verify-report",
       "!**/data",
       "!**/*.astro",
-      "!**/apps/www"
+      "!**/apps/www",
+      "!**/site/public",
+      "!**/site/resources",
+      "!**/site/layouts/**/*.html"
     ]
   },
   "formatter": {
@@ -101,6 +104,16 @@
         "rules": {
           "suspicious": {
             "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["site/assets/css/main.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
           }
         }
       }

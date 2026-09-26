@@ -17,6 +17,12 @@ const payloadSchemas = {
     requestedBy: z.string().min(1).optional(),
     requestId: z.string().min(1).optional(),
   }),
+  "learning.insights": z
+    .object({
+      spaceId: z.string().min(1).optional(),
+      userId: z.string().min(1).optional(),
+    })
+    .strict(),
   "memory.git-push": z.object({
     spaceId: z.string().min(1),
     userId: z.string().min(1),

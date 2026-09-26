@@ -1,0 +1,13 @@
+{{- $repo := .Site.Params.repoURL -}}
+{{- $path := .Get 0 -}}
+{{- if $path -}}
+  {{- $frag := "" -}}
+  {{- if strings.Contains $path "#" -}}
+    {{- $parts := split $path "#" -}}
+    {{- $path = index $parts 0 -}}
+    {{- $frag = printf "#%s" (index $parts 1) -}}
+  {{- end -}}
+  {{- printf "%s/blob/%s/%s%s" $repo .Site.Params.sourceRef $path $frag -}}
+{{- else -}}
+  {{- $repo -}}
+{{- end -}}

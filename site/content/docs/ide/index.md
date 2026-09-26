@@ -1,0 +1,51 @@
+---
+title: "Inbuilt IDE P1"
+description: "The builder can inspect, edit and hand off code without leaving the app. The operator can inspect a reachable computer and use its existing terminal. Researchers can inspect…"
+source_path: "docs/ide.md"
+---
+
+> [Source: docs/ide.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/ide.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
+
+The builder can inspect, edit and hand off code without leaving the app. The operator can inspect a reachable computer and use its existing terminal. Researchers can inspect scripts and recorded file changes. The page runs in the web UI that Electron hosts; mobile navigation is unchanged.
+
+Open `/app/ide` in the authenticated app. The computer picker offers the deployment owner's registered host folders and the current space's accessible sandbox computer homes. Without a paired host service, a source checkout offers the home folder. The installed app's local mode instead sets `ARDURBOT_HOST_ROOTS_FILE` to its own list, which **Add folder** under Settings, Computers edits: those are the same folders commands may use, there are none until a folder is added, and folders paired with another server never appear. A tree expansion lists one directory. Quick open searches file names by walking directories on demand. It stops when the dialog closes. Change notifications use the existing thread event streams; there is no filesystem polling.
+
+The top navigation registry is absent in this branch. When `apps/web/src/pages/shell/top-nav.ts` arrives, register `IDE` with `registerTopNavItem` at order 40. This change deliberately adds only the route until that registry exists.
+
+## Editor and dependencies
+
+`apps/web/src/pages/ide/editor.tsx` owns every CodeMirror import. `App.tsx` imports the IDE page lazily. The page imports its editor so that the editor is ready before a file read starts. The Vite group `ide-codemirror` keeps CodeMirror and its parser dependencies in one lazy chunk. The diff viewer and shared terminal session have their own lazy entries. `ide-imports.test.ts` checks the static import graph from `main.tsx`. The browser test checks that the Bots page does not fetch these entries. `apps/api/src/ide-files.ts` is server code and never belongs in the browser graph.
+
+The only added direct dependencies are the exact CodeMirror versions in `apps/web/package.json`. All are MIT licensed. JavaScript support includes TypeScript. Shell uses `@codemirror/legacy-modes/mode/shell` with `StreamLanguage.define`; there is no official `@codemirror/lang-shell` package. Package versions and licenses were checked against each published npm manifest and installed package metadata. See the [official CodeMirror site](https://codemirror.net/), [language and editor reference](https://codemirror.net/docs/ref/), [state package metadata](https://registry.npmjs.org/@codemirror/state/6.7.6) and [legacy modes metadata](https://registry.npmjs.org/@codemirror/legacy-modes/6.5.4).
+
+Split sizes are stored in this device's local storage. Editor tabs keep their buffer, selection and undo history while switching between open files. Unsaved buffers prompt before tab closure, computer changes and in-app navigation. Browser unload uses the browser's native guard. Electron retains dirty hidden windows and asks before discarding them during reload or quit.
+
+## File and approval boundaries
+
+`createIdeFiles` checks current space membership, ownership, computer scope and maintenance state. Relative paths cannot traverse outside the selected root. Host operations also revalidate pairing generation, current deployment owner, membership and registered roots at the bridge. The runtime keeps its existing confined file writer and Windows native-handle policy.
+
+Owner file grants are in-process capabilities; workers cannot forge them by supplying an editor flag. No bot run or runtime pin is created or changed. Larger editor write frames are allowed only for explicit editor file writes. Normal host frames, stream windows and bot file limits retain their limits.
+
+Save uses the existing `write_file` approval rules. A required approval prompts for the exact current save before the API receives `approved: true`. A content digest prevents a stale buffer from silently overwriting a file that changed before the save check. This is an optimistic preflight check, not an atomic compare-and-swap against external writers. The write keeps executable metadata supplied by the provider. Bridge refusal reasons are returned to the page.
+
+The text limit is 2 MiB of UTF-8 bytes. Larger files get a bounded, read-only preview of the first 2 MiB. NUL bytes and invalid UTF-8 in the preview mark the file as binary. The IDE never opens binary data as an editable buffer. Stopped computers use their stored home; running computers use their configured provider. Remote previews use a fixed, bounded Python reader without shell interpolation.
+
+## Terminal and bot hand-off
+
+The drawer reuses `ComputerTerminalSession` and `rpc.terminal`. An optional `workspace: "computer"` opens at the selected computer's home instead of the chat bot's subdirectory. Terminal authorization, control leases, origin checks, fencing, reconnect and transport are unchanged. Taking control is explicit, and Release returns it. A lease acquired by the IDE is released when its terminal leaves the page. Computers without the existing interactive-terminal capability, including the current host bridge, display the existing unavailable state.
+
+Ask a bot sends the selected path, exact selected text, line range and typed instruction through normal `threads.send`. It does not change the chosen bot's computer or runtime pin. The selected bot must already be able to reach that path. Review and continue the turn in its normal conversation.
+
+Changes lists recorded file changes for the local calendar day in conversations the current user can access. `write_file` records a bounded, redacted before/after snapshot; attached workspace files record their after-image. Command blocks contribute recorded unified-diff hunks. The view does not infer changes from arbitrary shell commands or invent missing before-images. Existing artifacts have no original workspace path, so historical artifacts cannot be backfilled reliably. Snapshot limits are 128 KiB per side; unknown content is shown as Not recorded. This is recorded history, not Git working-tree status or a filesystem watcher.
+
+## Verification and copy
+
+Offline tests exercise file roots, lazy listing, approvals, refusals, metadata, stale saves, binary and large previews, tab and navigation guards, quick open, selected-line hand-off, recorded changes, terminal scope, shortcuts, and host and desktop boundaries. `apps/web/e2e/ide.spec.ts` uses the real editor and shared terminal with fake RPC and terminal transport. It captures the editor in both themes, a side-by-side diff and the terminal drawer, and measures a 192 KB file after its read response completes.
+
+New visible messages are IDE, Ask a bot, Binary file, Changes, Quick open, Unsaved changes, Read only: file is larger than 2 MB, Load more, and the accessible Close {filename} label. The first seven name actions or explain a relevant state. Load more is shown only when history has another page. The close label names the target of an icon-only control. Existing Save, Saved, Open, Before, After, Not recorded, terminal control and error messages are reused. Save can also return the specific stale-file reason: The file changed. Open it again before saving.
+
+`main.tsx` retains `BrowserRouter`. `useUnsavedChanges` loads with the IDE and installs its guard only while a buffer is dirty. It temporarily wraps the router navigator's `push` and `replace`, so existing `Link` and `useNavigate` callers share the guard without adding a provider at startup. A small dispatcher registered before `BrowserRouter` forwards Back and Forward to the active guard. Window listeners can run in registration order even when a later listener requests capture, so registering only from the lazy page is too late in Chromium. The dispatcher has no active guard outside a dirty IDE. Cancelling restores the previous indexed history entry while keeping the editor mounted; it does not add duplicate entries. An unindexed same-document entry is replaced with the retained URL and state when cancelled. Saving or unmounting restores the original navigator methods, clears the active guard, and removes the IDE's unload listener. The small startup dispatcher remains idle. Reload and window close use `beforeunload`; desktop quit uses the existing `window.setUnsavedChanges` IPC.
+
+The hook uses the [internal `UNSAFE_NavigationContext` export](https://api.reactrouter.com/v7/variables/react-router.UNSAFE_NavigationContext.html) in the pinned React Router version. Keep the BrowserRouter navigation tests when upgrading that dependency. They cover links, programmatic push and replace, repeated Back cancellation, Forward cancellation, discard, save and cleanup. The browser fixture also exercises cancelled links and repeated Forward cancellation against the production build.
+
+For the IDE performance gate, build the exact `dev` commit that is the merge's second parent in an isolated checkout. Run `scripts/bundle-budget.mjs` on both production builds; it sums initial JavaScript with gzip level 9 and follows static manifest imports without counting dynamic imports. The IDE delta must be at most 1,024 bytes. The repository's separate 10 KiB advisory baseline remains unchanged. Report the IDE route and CodeMirror chunks separately and verify that the diff viewer and terminal session remain outside the initial graph.

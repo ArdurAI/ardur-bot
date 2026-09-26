@@ -114,6 +114,42 @@ describe("createBackgroundJobHandlers", () => {
     installLogger(createLogger({ service: "ardurbot-worker", level: "off", sinks: [] }));
   });
 
+  it.each([
+    ["completed", 1],
+    ["failed", 1],
+    ["waiting_input", 0],
+  ] as const)("schedules one debounced insight pass after a %s run", async (status, passes) => {
+    const enqueue = vi.fn(async (_job: { name: string }) => undefined);
+    const findUnique = vi.fn(async ({ select }: { select: Record<string, boolean> }) =>
+      select.status ? { spaceId: "space", userId: "user", status } : null,
+    );
+    const handlers = createBackgroundJobHandlers({
+      executor: { continueRun: vi.fn(async () => undefined) } as unknown as ReturnType<
+        typeof createRunExecutor
+      >,
+      prisma: { run: { findUnique } } as unknown as PrismaClient,
+      sandbox: {} as SandboxProvider,
+      home: {} as AgentHomeStore,
+      jobs: { enqueue } as unknown as JobPublisher,
+      events: {} as ThreadEvents,
+      workerId: "worker",
+      runtime: {} as AgentRuntime,
+      secretStore: {} as EncryptedSecretStore,
+      memoryProviders: { resolve: vi.fn(async () => null) },
+    });
+    await handlers["run.continue"]({ runId: "run" });
+    const insightJobs = enqueue.mock.calls
+      .map(([job]) => job)
+      .filter((job) => job.name === "learning.insights");
+    expect(insightJobs).toHaveLength(passes);
+    if (passes)
+      expect(insightJobs[0]).toMatchObject({
+        payload: { spaceId: "space", userId: "user" },
+        replaceKey: "learning.insights:space:user",
+        preserveRunAt: true,
+      });
+  });
+
   it("compacts the requested thread with the runtime, job publisher, and model key it was given", async () => {
     const prisma = {} as unknown as PrismaClient;
     const runtime = {} as unknown as AgentRuntime;

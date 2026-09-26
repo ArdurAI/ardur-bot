@@ -59,6 +59,30 @@ it("replaces waiting Git pushes per space and serializes their execution", async
   await publisher.close();
 });
 
+it("debounces insight passes by keeping a pending job's run time", async () => {
+  const addJob = vi.fn(async () => undefined);
+  makeWorkerUtils.mockResolvedValueOnce({ addJob, release: vi.fn() });
+  const publisher = new GraphileJobPublisher({} as Pool);
+  const runAt = new Date(Date.now() + 900_000);
+  await publisher.enqueue({
+    name: "learning.insights",
+    payload: { spaceId: "space", userId: "user" },
+    replaceKey: "learning.insights:space:user",
+    preserveRunAt: true,
+    availableAt: runAt,
+  });
+  expect(addJob).toHaveBeenCalledWith(
+    "learning.insights",
+    expect.anything(),
+    expect.objectContaining({
+      jobKey: "learning.insights:space:user",
+      jobKeyMode: "preserve_run_at",
+      runAt,
+    }),
+  );
+  await publisher.close();
+});
+
 it("runs an import request once because its answer has already been delivered", async () => {
   const addJob = vi.fn(async () => undefined);
   makeWorkerUtils.mockResolvedValueOnce({ addJob, release: vi.fn() });
@@ -86,6 +110,7 @@ function handlers(): BackgroundJobHandlers {
     "board.run": vi.fn(async () => undefined),
     "briefs.maintain": async () => undefined,
     "learning.curate": async () => undefined,
+    "learning.insights": async () => undefined,
     "learning.review": async () => undefined,
     "memory.git-push": async () => undefined,
     "memory.deliver": async () => undefined,
@@ -160,6 +185,7 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
       };
       expect(crontab.split("\n")).toEqual([
         "0 3 * * 1 learning_curate ?id=learningCurator&fill=1w",
+        "30 4 * * * learning_insights ?id=learningInsights&fill=1d",
         "0 * * * * local_import_refresh ?id=localImport&fill=1h",
         "*/10 * * * * briefs_maintain ?id=briefMaintenance",
       ]);
@@ -208,7 +234,7 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
     expect(run).toHaveBeenLastCalledWith(
       expect.objectContaining({
         crontab:
-          "0 3 * * 1 learning_curate ?id=learningCurator&fill=1w\n*/10 * * * * briefs_maintain ?id=briefMaintenance",
+          "0 3 * * 1 learning_curate ?id=learningCurator&fill=1w\n30 4 * * * learning_insights ?id=learningInsights&fill=1d\n*/10 * * * * briefs_maintain ?id=briefMaintenance",
         taskList: expect.objectContaining({ learning_curate: expect.any(Function) }),
       }),
     );

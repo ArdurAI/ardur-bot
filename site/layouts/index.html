@@ -1,0 +1,132 @@
+{{ define "main" }}
+  {{ $product := .Site.Params.productName }}
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Open source &middot; self-hosted &middot; your keys</p>
+      <h1>Bots pinned to your own AI subscriptions</h1>
+      <p class="hero-sub">
+        {{ $product }} gives you named bots that keep their memory, talk to each other in
+        group chats, run routines on a schedule, use connectors, and ask before doing anything
+        consequential. Each bot is pinned to a provider, model and effort level you choose, and
+        that pin never silently changes.
+      </p>
+      <div class="action-row">
+        <a class="btn btn-primary" href="{{ "download/" | relURL }}">Install {{ $product }}</a>
+        <a class="btn btn-secondary" href="{{ "docs/" | relURL }}">Read the docs</a>
+        <a class="btn btn-secondary" href="{{ .Site.Params.repoURL }}">Source on GitHub</a>
+      </div>
+    </div>
+    <div class="hero-media">
+      {{ with resources.Get "images/hero.png" }}
+        {{ $resized := .Resize "1040x" }}
+        {{ $webp := $resized.Resize "1040x webp" }}
+        <figure>
+          <picture>
+            <source srcset="{{ $webp.RelPermalink }}" type="image/webp">
+            <img src="{{ $resized.RelPermalink }}" width="{{ $resized.Width }}" height="{{ $resized.Height }}"
+                 alt="The {{ $product }} desktop app: a list of named bots on the left, a chat with a bot named Inbox Manager summarizing inbox triage in the center, and that bot's routines and connected computer on the right." loading="eager">
+          </picture>
+          <figcaption>A bot working through its inbox, with its routines and connected computer alongside the chat.</figcaption>
+        </figure>
+      {{ end }}
+    </div>
+  </section>
+
+  <section class="section section-border-top">
+    <div class="section-heading">
+      <p class="eyebrow">What you get</p>
+      <h2>A team of bots that keeps working between chats</h2>
+      <p>Inherited from Rakazo and working today; see <a href="{{ "status/" | relURL }}">Status</a> for what is still in progress.</p>
+    </div>
+    <div class="card-grid">
+      <article class="card">
+        <h3>Group chats</h3>
+        <p>Bots and people talk in the same thread, with delegation between bots and short-lived subagents for one-off help.</p>
+      </article>
+      <article class="card">
+        <h3>Routines</h3>
+        <p>Recurring jobs run on a schedule against a bot's own conversation, memory and computer.</p>
+      </article>
+      <article class="card">
+        <h3>Board</h3>
+        <p>Dependent work items an operator can create, assign and review, backed by a local Beads database.</p>
+      </article>
+      <article class="card">
+        <h3>Memory</h3>
+        <p>Durable, readable memory per bot, with git-repository and semantic-provider backends.</p>
+      </article>
+      <article class="card">
+        <h3>Fleet</h3>
+        <p>Move a bot's computer to another engine with a checkpoint, instead of losing its workspace.</p>
+      </article>
+      <article class="card">
+        <h3>IDE</h3>
+        <p>Inspect and edit code on a reachable computer, with a terminal, diff viewer and file tree, without leaving the app.</p>
+      </article>
+      <article class="card">
+        <h3>Local mode</h3>
+        <p>The installed desktop app starts its own database and services on your machine; Ollama and other local models are first-class.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section section-border-top">
+    <div class="section-heading">
+      <p class="eyebrow">Who it's for</p>
+      <h2>Five kinds of people run {{ $product }}</h2>
+      <p>See <a href="{{ .Site.Params.repoURL }}/blob/{{ .Site.Params.sourceRef }}/VISION.md">VISION.md</a> for the full detail behind each of these.</p>
+    </div>
+    <div class="persona-grid">
+      <article class="card">
+        <h3>The operator</h3>
+        <p>Runs a team or a household, pays for ChatGPT or Claude already, and has never opened a terminal.</p>
+      </article>
+      <article class="card">
+        <h3>The builder</h3>
+        <p>Developer or ops engineer who wants control: provider and model per bot, MCP servers, cron routines, logs, cost.</p>
+      </article>
+      <article class="card">
+        <h3>The researcher</h3>
+        <p>Runs several bots in parallel on different models, compared side by side, with sources and provenance kept.</p>
+      </article>
+      <article class="card">
+        <h3>The team lead</h3>
+        <p>Shares bots across a space with colleagues: approval policies, an audit trail, cost by bot and provider.</p>
+      </article>
+      <article class="card">
+        <h3>The local-first user</h3>
+        <p>Runs Ollama and keeps data at home, with a clear line for what leaves the machine and what does not.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section section-border-top">
+    <div class="section-heading">
+      <p class="eyebrow">Computers</p>
+      <h2>Bots use a browser, a terminal, and files</h2>
+      <p>A bot's computer can be this machine, Docker, or a remote provider, with approvals before anything consequential.</p>
+    </div>
+    {{ with resources.Get "images/web-computer.png" }}
+      {{ $resized := .Resize "960x" }}
+      {{ $webp := $resized.Resize "960x webp" }}
+      <figure>
+        <picture>
+          <source srcset="{{ $webp.RelPermalink }}" type="image/webp">
+          <img src="{{ $resized.RelPermalink }}" width="{{ $resized.Width }}" height="{{ $resized.Height }}"
+               loading="lazy"
+               alt="A bot's connected computer panel showing a running browser next to the chat, with a routines list and a Take control button.">
+        </picture>
+        <figcaption>The computer panel next to a bot's chat: a live browser, its routines, and a handoff to take control.</figcaption>
+      </figure>
+    {{ end }}
+  </section>
+
+  <section class="cta-band">
+    <h2>Install a desktop preview</h2>
+    <p>Unsigned pre-releases exist for macOS, Windows and Linux, plus a source checkout and self-hosted server.</p>
+    <div class="action-row">
+      <a class="btn btn-primary" href="{{ "download/" | relURL }}">See install options</a>
+      <a class="btn btn-secondary" href="{{ "status/" | relURL }}">Read the current status</a>
+    </div>
+  </section>
+{{ end }}

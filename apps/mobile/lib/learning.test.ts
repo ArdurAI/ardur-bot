@@ -40,7 +40,9 @@ vi.mock("./native", () => ({
   native: { page: "white", label: "black", secondaryLabel: "gray" },
   useThemedStyles: (fn: () => unknown) => fn(),
 }));
+const push = vi.hoisted(() => vi.fn());
 vi.mock("expo-router", () => ({
+  useRouter: () => ({ push }),
   useLocalSearchParams: () => ({ botId: "bot" }),
   useFocusEffect: (effect: () => void) => useEffect(effect, [effect]),
 }));
@@ -126,6 +128,86 @@ afterEach(() => {
   i18n.messages = {};
   vi.resetAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("shows the bot's insights on the Learning screen, dismisses one and opens its model setting", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const sonnet = { key: "pi|anthropic|sonnet|", label: "Claude Sonnet", local: false };
+  const gpt = { key: "pi|openai|gpt|", label: "GPT-4.1", local: false };
+  const insight = {
+    id: "insight",
+    botId: "bot",
+    status: "active",
+    evidence: {
+      kind: "model-choice",
+      variant: "completion",
+      taskKind: "coding",
+      botName: "Coder",
+      better: sonnet,
+      other: gpt,
+      rows: [
+        {
+          model: sonnet,
+          completed: 9,
+          total: 10,
+          thumbsUp: 0,
+          thumbsDown: 0,
+          medianMs: 1,
+          medianTokens: 1,
+          costUsd: null,
+        },
+        {
+          model: gpt,
+          completed: 3,
+          total: 7,
+          thumbsUp: 0,
+          thumbsDown: 0,
+          medianMs: 1,
+          medianTokens: 1,
+          costUsd: null,
+        },
+      ],
+      runs: 17,
+      days: 30,
+    },
+    action: { kind: "bot-model", botId: "bot" },
+    createdAt: "2026-09-26T00:00:00.000Z",
+    expiresAt: "2026-09-28T00:00:00.000Z",
+  };
+  let insights = [insight];
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/insights") return { insights };
+    if (path === "learning/dismissInsight") {
+      insights = [];
+      return { ok: true };
+    }
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    if (path === "learning/actOnInsight") return { ok: true };
+    return { reviews: [], proposals: [], pendingCount: 0, appliedThisWeek: 0 };
+  });
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    expect(request).toHaveBeenCalledWith("learning/insights", { botId: "bot" });
+    expect(container.textContent).toContain(
+      "For coding, Claude Sonnet finished 9 of 10 runs in your runs; GPT-4.1 finished 3 of 7.",
+    );
+    const button = (title: string) =>
+      [...container.querySelectorAll("button")].find((node) => node.textContent === title)!;
+    await act(async () => button("Change model").click());
+    expect(request).toHaveBeenCalledWith("learning/actOnInsight", { insightId: "insight" });
+    expect(push).toHaveBeenCalledWith({
+      pathname: "/bot-settings",
+      params: { botId: "bot", focus: "model" },
+    });
+    await act(async () => button("Dismiss").click());
+    expect(request).toHaveBeenCalledWith("learning/dismissInsight", { insightId: "insight" });
+    expect(container.textContent).not.toContain("Claude Sonnet");
+  } finally {
+    act(() => root.unmount());
+  }
 });
 
 const LEFT_OPEN =
@@ -391,6 +473,7 @@ it("shows Closing on the Board as soon as Reject answers with the closing code",
       return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
     if (path === "learning/reject")
       return { proposal: { ...pendingBoard, status: "rejected" }, code: "board-closing" };
+    if (path === "learning/insights") return { insights: [] };
     // The reload after Reject has not answered yet.
     if (reloads++ > 0) return new Promise(() => undefined);
     return { reviews: [], proposals: [pendingBoard], pendingCount: 1, appliedThisWeek: 0 };
