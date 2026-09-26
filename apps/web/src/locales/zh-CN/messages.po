@@ -70,10 +70,11 @@ msgstr ""
 #. placeholder {1}: row.filed
 #. placeholder {2}: row.done
 #. placeholder {3}: row.open
-#. placeholder {4}: row.other
+#. placeholder {4}: row.closed
+#. placeholder {5}: row.other
 #: src/pages/dashboard/WorkPanel.tsx
-msgid "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
-msgstr "{0} 提交了 {1} 项：{2} 项完成，{3} 项开放，{4} 项已关闭但未完成。"
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed, {5} closed without being completed."
+msgstr "{0} 提交了 {1} 项：{2} 项完成，{3} 项开放，{4} 项已关闭，{5} 项已关闭但未完成。"
 
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
 #: src/pages/fleet/FleetSettings.tsx
@@ -7415,6 +7416,15 @@ msgstr "此看板事项已关闭但未完成：{0}。请在看板上查看。"
 #: src/pages/LearningInbox.tsx
 msgid "This board item was closed without being completed. Review it on the Board."
 msgstr "此看板事项已关闭但未完成。请在看板上查看。"
+
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed: {0}."
+msgstr "此看板事项已关闭：{0}。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed."
+msgstr "此看板事项已关闭。"
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."

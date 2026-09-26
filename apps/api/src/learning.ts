@@ -115,8 +115,10 @@ export function createLearningService(deps: {
         : {};
       if (!(proposal.status === "applied" && proposal.appliedBoardItem))
         return boardClosing ? { ...proposal, ...closing } : proposal;
-      const outcome: "completed" | "closed-other" | null =
-        filing?.outcome === "completed" || filing?.outcome === "closed-other"
+      const outcome: "completed" | "closed" | "closed-other" | null =
+        filing?.outcome === "completed" ||
+        filing?.outcome === "closed" ||
+        filing?.outcome === "closed-other"
           ? filing.outcome
           : null;
       const closeReason = proposal.appliedBoardItem?.closeReason?.trim() || null;
@@ -126,7 +128,7 @@ export function createLearningService(deps: {
         boardOutcome: {
           closedAt: filing?.closedAt?.toISOString() ?? null,
           outcome,
-          closeReason: outcome === "closed-other" ? closeReason : null,
+          closeReason: outcome === "closed-other" || outcome === "closed" ? closeReason : null,
         },
       };
     });

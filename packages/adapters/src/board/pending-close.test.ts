@@ -1,12 +1,30 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
+import { BoardError } from "@ardurbot/contracts/board";
 import { observeBoardItems } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
 import {
+  isFinalPendingCloseError,
   pendingCloseAction,
   recordPendingCloseFailure,
   releaseChangedBoardClose,
 } from "./pending-close.js";
 import { BoardService } from "./service.js";
+
+it.each(["no_board", "access_lost", "item_not_found"] as const)(
+  "treats a %s BoardError as final",
+  (code) => {
+    expect(isFinalPendingCloseError(new BoardError({ code, message: "x" }))).toBe(true);
+  },
+);
+it.each(["forbidden", "timeout", "busy", "command_failed"] as const)(
+  "treats a %s BoardError as transient",
+  (code) => {
+    expect(isFinalPendingCloseError(new BoardError({ code, message: "x" }))).toBe(false);
+  },
+);
+it("treats a non-BoardError as transient", () => {
+  expect(isFinalPendingCloseError(new Error("network hiccup"))).toBe(false);
+});
 
 it("ends a pending close quietly when a person closed the item with a different reason", () => {
   const filing = {
@@ -511,6 +529,33 @@ it.each(["outcome", "changed"] as const)(
     });
   },
 );
+
+it("writes nothing when the filing no longer matches the close being released", async () => {
+  const deleteMany = vi.fn(async () => ({ count: 0 }));
+  const update = vi.fn(async () => undefined);
+  const tx = {
+    $executeRaw: async () => undefined,
+    learningProposal: {
+      findUnique: async () => ({ body: { boardClosing: true } }),
+      update,
+    },
+    botBoardFiling: { deleteMany },
+  };
+  const prisma = { $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(tx) };
+  const filing = {
+    id: "filing",
+    spaceId: "space",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: "proposal",
+    closePending: "Undone from Learning",
+  };
+  await releaseChangedBoardClose(prisma as never, filing);
+  expect(deleteMany).toHaveBeenCalledWith({
+    where: { id: "filing", spaceId: "space", closePending: "Undone from Learning" },
+  });
+  expect(update).not.toHaveBeenCalled();
+});
 
 it("releases a pending close when someone commented, even though the comment left updatedAt alone", async () => {
   const previous = process.env.ARDURBOT_HOST_BRIDGE;

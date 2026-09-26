@@ -1,4 +1,5 @@
 import type { WorkItem } from "@ardurbot/contracts/board";
+import { BoardError } from "@ardurbot/contracts/board";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { lockedProposalBody } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -69,23 +70,47 @@ export function pendingCloseAction(
   return "changed";
 }
 
-/** Drops a close the person has since changed, and records that on the proposal. */
+/**
+ * Drops a close the person has since changed, and records that on the proposal. One
+ * transaction: the filing is deleted only while it still matches the close being released,
+ * and the proposal is written only when that delete actually removed the row.
+ */
 export async function releaseChangedBoardClose(prisma: PrismaClient, filing: PendingCloseRow) {
   await prisma.$transaction(async (tx) => {
     const proposalId = filing.learningProposalId;
     const body = proposalId ? await lockedProposalBody(tx, proposalId) : null;
-    if (proposalId && body)
-      await tx.learningProposal.update({
-        where: { id: proposalId },
-        data: { body: { ...body, boardChanged: true } as Prisma.InputJsonValue },
-      });
-    await tx.botBoardFiling.updateMany({
-      where: { id: filing.id, closePending: filing.closePending },
-      data: { closePending: null, closeNextAt: null },
+    const deleted = await tx.botBoardFiling.deleteMany({
+      where: { id: filing.id, spaceId: filing.spaceId, closePending: filing.closePending },
+    });
+    if (deleted.count !== 1 || !proposalId || !body) return;
+    await tx.learningProposal.update({
+      where: { id: proposalId },
+      data: { body: { ...body, boardChanged: true } as Prisma.InputJsonValue },
     });
   });
+}
+
+const FINAL_PENDING_CLOSE_CODES = new Set(["no_board", "access_lost", "item_not_found"]);
+
+/**
+ * A pending close that can never succeed: the item was deleted outside the app (`item_not_found`
+ * from `show`), the board was turned off in Settings (`no_board`), or the person who asked for
+ * the close lost their own access to it (`access_lost` from `actor`, a code `actor` uses only for
+ * that one case, never for a bot's own board denial). A generic `forbidden` — every other reason
+ * `actor`, `workspace` and `run` throw it, none of them permanent — stays transient, as does
+ * anything that is not a `BoardError` such as a database hiccup or a timeout.
+ */
+export function isFinalPendingCloseError(error: unknown): boolean {
+  return error instanceof BoardError && FINAL_PENDING_CLOSE_CODES.has(error.problem.code);
+}
+
+/**
+ * Drops a pending close that can never succeed. The proposal stays exactly as Reject or Undo
+ * left it: no boardChanged flag, no failure notice, and the sweep does not see this filing again.
+ */
+export async function dropPendingCloseFiling(prisma: PrismaClient, filing: PendingCloseRow) {
   await prisma.botBoardFiling.deleteMany({
-    where: { id: filing.id, spaceId: filing.spaceId },
+    where: { id: filing.id, spaceId: filing.spaceId, closePending: filing.closePending },
   });
 }
 

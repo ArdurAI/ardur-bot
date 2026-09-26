@@ -176,7 +176,7 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
     }
   });
 
-  it("ends a pending close from a board read without waiting on a writer that holds the proposal row", async () => {
+  it("ends a pending close from a board read without waiting on a writer that holds the proposal row, and leaves a since-superseded release with nothing to write", async () => {
     const { id, workspace, proposal } = await fixture();
     const filing = await db.prisma.botBoardFiling.create({
       data: {
@@ -210,7 +210,8 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
       learningProposalId: proposal.id,
       closePending: "Undone from Learning",
     });
-    // A person closed the item meanwhile: the next read ends the pending close at once.
+    // A person closed the item meanwhile: the next read ends the pending close at once, without
+    // waiting on the proposal row the queued release is blocked on.
     await observeBoardItems(other.prisma, workspace.id, [
       closedItem("work-a", "Kept for the shop"),
     ]);
@@ -219,11 +220,13 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
     ).resolves.toBeNull();
     holder.resolve();
     await blocking;
+    // The release's own guarded delete now matches no row (the board read already removed it),
+    // so it writes nothing: the person's own close is the real, and only, recorded outcome.
     await changed;
     const saved = await db.prisma.learningProposal.findUniqueOrThrow({
       where: { id: proposal.id },
     });
-    expect(saved.body).toMatchObject({ boardChanged: true });
+    expect(saved.body).not.toHaveProperty("boardChanged");
   });
 
   it("records an outcome with one read, and clears it when the item reopens", async () => {
@@ -294,6 +297,7 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
       data: [
         row("done", { outcome: "completed", closedAt: new Date() }),
         row("other", { outcome: "closed-other", closedAt: new Date() }),
+        row("unclassified", { outcome: "closed", closedAt: new Date() }),
         row("open", {}),
         row("reused", { reused: true, outcome: "completed" }),
         row("old", { createdAt: new Date(Date.now() - 31 * 86_400_000) }),
@@ -304,8 +308,8 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
     const service = new BoardService({ prisma: db.prisma, dataDir: "/fixture" });
     expect(await service.filingOutcomes(scope)).toEqual({
       bots: [
-        { botId: other.id, name: "Analyst", filed: 1, done: 1, open: 0, other: 0 },
-        { botId: bot.id, name: "Builder", filed: 3, done: 1, open: 1, other: 1 },
+        { botId: other.id, name: "Analyst", filed: 1, done: 1, open: 0, closed: 0, other: 0 },
+        { botId: bot.id, name: "Builder", filed: 4, done: 1, open: 1, closed: 1, other: 1 },
       ],
     });
   });

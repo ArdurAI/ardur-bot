@@ -166,8 +166,10 @@ export const BoardProblemSchema = z.object({
     "busy",
     "timeout",
     "forbidden",
+    "access_lost",
     "invalid_response",
     "command_failed",
+    "item_not_found",
     "created_incomplete",
     "dolt_missing",
   ]),
@@ -187,6 +189,16 @@ export class BoardDeniedError extends BoardError {
     super({ code: "forbidden", message: "This bot is not allowed on this board." });
     this.name = "BoardDeniedError";
   }
+}
+/**
+ * `forbidden` (a bot's own admission, a human-only action, process/connection topology) and
+ * `access_lost` (the person's own board access is gone for good) are both refusals of this
+ * identity, not a data problem — callers outside the pending-close classifier that need to tell
+ * "access denied" apart from "something about this request is wrong" should use this instead of
+ * comparing `code === "forbidden"` directly, so the two codes cannot drift apart.
+ */
+export function isBoardAccessDenied(problem: Pick<BoardProblem, "code">): boolean {
+  return problem.code === "forbidden" || problem.code === "access_lost";
 }
 
 const workspaceTarget = z.discriminatedUnion("kind", [
@@ -260,6 +272,7 @@ export const BoardFilingOutcomeCountSchema = z.object({
   filed: z.number().int().nonnegative(),
   done: z.number().int().nonnegative(),
   open: z.number().int().nonnegative(),
+  closed: z.number().int().nonnegative(),
   other: z.number().int().nonnegative(),
 });
 export type BoardFilingOutcomeCount = z.infer<typeof BoardFilingOutcomeCountSchema>;

@@ -29,22 +29,24 @@ const LEADING_COMPLETION =
  * "Resolved as won't fix"). A reason that starts with fixed, done, completed, implemented,
  * removed, added, shipped, merged or resolved is otherwise done, whatever it goes on to name
  * ("Fixed duplicate header row"). Elsewhere a negation up to three words before any completion
- * word means closed otherwise. Completion words are done, complete, completed, fixed,
- * resolved, implemented, shipped, merged, finished, delivered and landed. Negations are not,
- * never, no, nothing, nobody, none, nowhere, cannot, can't, couldn't, won't, didn't, isn't,
- * wasn't, hasn't, haven't, and unable to ("not done", "can't get it fixed", "never shipped").
- * "no" followed by a number is a label, not a negation ("ticket no 12 resolved"). A completion
- * word with an un- prefix (unresolved, unfinished, undone) is negated. Every other reason is
- * closed otherwise.
+ * word, or a completion word with an un- prefix (unresolved, unfinished, undone), means closed
+ * otherwise. Completion words are done, complete, completed, fixed, resolved, implemented,
+ * shipped, merged, finished, delivered and landed. Negations are not, never, no, nothing, nobody,
+ * none, nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't, and
+ * unable to ("not done", "can't get it fixed", "never shipped"). "no" followed by a number is a
+ * label, not a negation ("ticket no 12 resolved"). Every other reason — including one with no
+ * recognized English completion or negation word, such as a reason written in another language
+ * or one that just names what happened ("Closed via PR #12") — is closed, neither done nor not
+ * done: there is nothing here that says which.
  */
-export function boardFilingOutcome(reason = ""): "completed" | "closed-other" {
+export function boardFilingOutcome(reason = ""): "completed" | "closed" | "closed-other" {
   const trimmed = reason.trim();
   if (!trimmed || trimmed.toLowerCase() === "closed") return "completed";
   if (NEGATIVE_RESOLUTION.test(trimmed)) return "closed-other";
   if (LEADING_COMPLETION.test(trimmed)) return "completed";
-  return COMPLETION.test(trimmed.replace(UN_COMPLETION, " ")) && !NEGATED_COMPLETION.test(trimmed)
-    ? "completed"
-    : "closed-other";
+  const negated = NEGATED_COMPLETION.test(trimmed);
+  if (COMPLETION.test(trimmed.replace(UN_COMPLETION, " ")) && !negated) return "completed";
+  return negated || UN_COMPLETION.test(trimmed) ? "closed-other" : "closed";
 }
 
 /**

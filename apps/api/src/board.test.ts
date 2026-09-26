@@ -145,6 +145,25 @@ it("preserves the snapshot and reports only the selected-item failure for a stal
   expect(cleared.snapshot.items).toEqual([item]);
   expect(provider.show).not.toHaveBeenCalled();
 });
+it("rethrows a lost-access selected-item failure as the view's own problem, not a selection problem", async () => {
+  const { board, provider, prisma } = fixture();
+  vi.spyOn(BoardService.prototype, "configured").mockResolvedValue([
+    { id: "workspace", initialized: true, enabled: true, allowAllBots: true } as never,
+  ]);
+  Object.assign(prisma, { boardFollow: { findMany: vi.fn(async () => []) } });
+  Object.assign(prisma.bot, { findMany: vi.fn(async () => []) });
+  provider.show.mockRejectedValue(
+    new BoardError({
+      code: "access_lost",
+      message: "This board is only available to this computer's owner.",
+    }),
+  );
+  const result = await board.view(actor, { workspaceId: "workspace", itemId: "board-a" });
+  expect(result.selectionProblem).toBeNull();
+  expect(result.selected).toBeNull();
+  expect(result.snapshot.items).toEqual([]);
+  expect(result).toMatchObject({ problem: { code: "access_lost" } });
+});
 it("persists only the acting user's follow and authorizes before reading or writing it", async () => {
   const { board, prisma } = fixture();
   const follows = { upsert: vi.fn(), deleteMany: vi.fn() };
@@ -271,11 +290,11 @@ it("returns one grouped 30-day filing outcome query scoped to the space", async 
   const { board, prisma } = fixture();
   Object.assign(prisma, {
     $queryRaw: vi.fn(async () => [
-      { botId: "builder", name: "Builder", filed: 4n, done: 2n, open: 1n, other: 1n },
+      { botId: "builder", name: "Builder", filed: 5n, done: 2n, open: 1n, closed: 1n, other: 1n },
     ]),
   });
   await expect(board.service.filingOutcomes(actor)).resolves.toEqual({
-    bots: [{ botId: "builder", name: "Builder", filed: 4, done: 2, open: 1, other: 1 }],
+    bots: [{ botId: "builder", name: "Builder", filed: 5, done: 2, open: 1, closed: 1, other: 1 }],
   });
   expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
 });

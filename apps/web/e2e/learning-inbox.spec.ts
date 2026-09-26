@@ -221,7 +221,7 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
   });
   await page.goto("/app");
   await expect(page.locator('[data-panel="work"]')).toContainText(
-    "Reviewer filed 3: 1 done, 1 open, 1 closed without being completed.",
+    "Reviewer filed 3: 1 done, 1 open, 0 closed, 1 closed without being completed.",
   );
   await page.locator('[data-panel="learning"]').getByRole("button", { name: "Inbox (1)" }).click();
   const dialog = page.getByRole("dialog");

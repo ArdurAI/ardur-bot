@@ -66,12 +66,12 @@ it("binds actor and workspace lookup to the owner, space and bot computer", asyn
     problem: { code: "no_board" },
   });
   prisma.spaceMember.findUnique.mockResolvedValueOnce(null as never);
-  await expect(service.actor(scope)).rejects.toMatchObject({ problem: { code: "forbidden" } });
+  await expect(service.actor(scope)).rejects.toMatchObject({ problem: { code: "access_lost" } });
   prisma.deploymentSettings.findUnique.mockResolvedValueOnce({
     ownerUserId: "someone-else",
     computerHost: "this-mac",
   });
-  await expect(service.actor(scope)).rejects.toMatchObject({ problem: { code: "forbidden" } });
+  await expect(service.actor(scope)).rejects.toMatchObject({ problem: { code: "access_lost" } });
   prisma.bot.findFirst.mockResolvedValueOnce({
     name: "Builder",
     computer: { kind: "remote", connectionId: "remote" },

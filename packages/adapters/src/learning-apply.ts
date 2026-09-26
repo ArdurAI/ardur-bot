@@ -17,7 +17,7 @@ import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { IsolationError, lockLearningProposal } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
-import { boardItemUnchanged } from "./board/pending-close.js";
+import { boardItemUnchanged, isFinalPendingCloseError } from "./board/pending-close.js";
 import type { BoardService } from "./board/service.js";
 import {
   learningMember,
@@ -499,6 +499,11 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         ? { proposal: { ...proposal, boardChanged: true } }
         : { proposal };
     } catch (error) {
+      if (isFinalPendingCloseError(error)) {
+        // This close can never succeed. Drop it quietly and leave the proposal as it is.
+        await service.dropFinalPendingClose(filing.id).catch(() => undefined);
+        return { proposal };
+      }
       getLogger().error("board close", error);
       await rememberCloseFailure(service, filing.id);
       return closingSoon(proposal);
@@ -564,6 +569,11 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
           });
         return saved;
       } catch (error) {
+        if (filing && isFinalPendingCloseError(error)) {
+          // This close can never succeed. Drop it quietly and leave the proposal as it is.
+          await service.dropFinalPendingClose(filing.id).catch(() => undefined);
+          return saved;
+        }
         getLogger().error("board close", error);
         await rememberCloseFailure(service, filing?.id);
         return { ...saved, ...closingSoon(saved.proposal) };
@@ -908,6 +918,11 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
               where: { id: filing.id, spaceId: identity.spaceId },
             });
           } catch (error) {
+            if (isFinalPendingCloseError(error)) {
+              // This close can never succeed. Drop it quietly and leave the proposal as it is.
+              await boardService.dropFinalPendingClose(filing.id).catch(() => undefined);
+              return result;
+            }
             getLogger().error("board close", error);
             await rememberCloseFailure(boardService, filing.id);
             return { ...result, ...closingSoon(result.proposal) };

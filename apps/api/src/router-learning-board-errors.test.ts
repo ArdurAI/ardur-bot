@@ -93,6 +93,25 @@ for (const [action, path] of [
       json: expect.objectContaining({ code: "FORBIDDEN", message: BOT_UNREACHABLE }),
     });
   });
+
+  it(`surfaces FORBIDDEN, not BAD_REQUEST, when ${action} finds the person's own board access is gone`, async () => {
+    const { call } = await routerFixture({
+      [action]: vi.fn().mockRejectedValue(
+        new BoardError({
+          code: "access_lost",
+          message: "This board is only available to this computer's owner.",
+        }),
+      ),
+    });
+    const response = await call(path, { proposalId: "proposal-1" });
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      json: expect.objectContaining({
+        code: "FORBIDDEN",
+        message: "This board is only available to this computer's owner.",
+      }),
+    });
+  });
 }
 
 it("sends only a generic code for an error it has no sentence for, so screens show their own", async () => {

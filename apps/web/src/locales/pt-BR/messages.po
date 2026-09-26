@@ -70,9 +70,10 @@ msgstr ""
 #. placeholder {1}: row.filed
 #. placeholder {2}: row.done
 #. placeholder {3}: row.open
-#. placeholder {4}: row.other
+#. placeholder {4}: row.closed
+#. placeholder {5}: row.other
 #: src/pages/dashboard/WorkPanel.tsx
-msgid "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed, {5} closed without being completed."
 msgstr ""
 
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
@@ -7414,6 +7415,15 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item was closed without being completed. Review it on the Board."
+msgstr ""
+
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed: {0}."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed."
 msgstr ""
 
 #: src/pages/LearningInbox.tsx

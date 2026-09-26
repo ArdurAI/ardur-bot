@@ -1028,11 +1028,13 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Some items exceeded the scan limits ({count} items were not scanned).":
     "部分项目超出了扫描限制（{count} 项未扫描）。",
   Labels: "标签",
-  "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
-    "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{other} 项已关闭但未完成。",
+  "{name} filed {filed}: {done} done, {open} open, {closed} closed, {other} closed without being completed.":
+    "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{closed} 项已关闭，{other} 项已关闭但未完成。",
   "This board item is still open.": "此看板事项仍处于开放状态。",
   "This board item was already closed on the Board.": "此看板事项已经关闭。",
   "This board item was completed.": "此看板事项已完成。",
+  "This board item was closed.": "此看板事项已关闭。",
+  "This board item was closed: {reason}.": "此看板事项已关闭：{reason}。",
   "This board item was closed without being completed. Review it on the Board.":
     "此看板事项已关闭但未完成。请在看板上查看。",
   "This board item was closed without being completed: {reason}. Review it on the Board.":

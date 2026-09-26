@@ -249,6 +249,36 @@ it("reports the recorded outcome for an applied board-item proposal", async () =
   });
 });
 
+it("reports an unclassified closed outcome with its reason, without calling it done or not done", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const row = boardProposalRow(actor, "proposal", "applied");
+  row.body.appliedBoardItem.closeReason = "Готово";
+  const service = createLearningService({
+    prisma: {
+      spaceMember: { findUnique: async () => ({ role: "member" }) },
+      bot: { findFirst: async () => ({ id: "bot" }) },
+      learningProposal: { findFirst: async () => row },
+      botBoardFiling: {
+        findMany: async () => [
+          {
+            learningProposalId: "proposal",
+            closedAt: new Date("2026-09-25T13:00:00.000Z"),
+            outcome: "closed",
+          },
+        ],
+      },
+    } as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  await expect(service.proposal(actor, "proposal")).resolves.toMatchObject({
+    boardOutcome: {
+      closedAt: "2026-09-25T13:00:00.000Z",
+      outcome: "closed",
+      closeReason: "Готово",
+    },
+  });
+});
+
 it("loads board outcomes for every listed proposal in one query", async () => {
   const actor = { spaceId: "space", userId: "user" } as Actor;
   const rows = [
